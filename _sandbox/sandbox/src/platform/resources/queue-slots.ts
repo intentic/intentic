@@ -23,10 +23,19 @@ export interface HeldSlot {
     readonly command: string | undefined;
     // Where it runs, as this namespace resolves /proc/<pid>/cwd.
     readonly cwd: string | undefined;
+    // How long its own rule lets it hold the slot (queue-run's INTENTIC_QUEUE_MAX_HOLD); 0 is forever, undefined unknown.
+    readonly maxHoldSeconds?: number | undefined;
 }
 
 // Who holds a pool's longest-held slot, so a stuck pool names its command.
-export type QueueHolder = Pick<HeldSlot, "pid" | "command" | "cwd">;
+export type QueueHolder = Pick<HeldSlot, "pid" | "command" | "cwd" | "maxHoldSeconds">;
+
+// The max-hold queue-run stamped into the holder's environment, fixed at exec like every stamp.
+const holderMaxHold = async (pid: number): Promise<number | undefined> => {
+    const stamped = (await readText(`/proc/${pid}/environ`))?.split("\0").find((entry) => entry.startsWith("INTENTIC_QUEUE_MAX_HOLD="));
+    const value = Number(stamped?.slice("INTENTIC_QUEUE_MAX_HOLD=".length));
+    return stamped !== undefined && Number.isInteger(value) && value >= 0 ? value : undefined;
+};
 
 export interface QueuePoolSummary {
     // Slot files that exist, not the pool's configured limit; the wrapper creates them lazily.
@@ -91,12 +100,13 @@ export const heldSlots = async (root = queueRoot()): Promise<HeldSlot[]> => {
             if (slot === undefined) {
                 return undefined;
             }
-            const [age, command, cwd] = await Promise.all([
+            const [age, command, cwd, maxHoldSeconds] = await Promise.all([
                 holderAgeSeconds(pid, uptimeSeconds, ticksPerSecond),
                 holderCommand(pid),
                 readlink(`/proc/${pid}/cwd`).catch(() => undefined),
+                holderMaxHold(pid),
             ]);
-            return age === undefined ? undefined : { ...slot, pid, holderAgeSeconds: age, command, cwd };
+            return age === undefined ? undefined : { ...slot, pid, holderAgeSeconds: age, command, cwd, maxHoldSeconds };
         }),
     );
     return oldestPerSlot(found.filter((slot) => slot !== undefined));
@@ -129,7 +139,9 @@ export const summarisePools = (slotCounts: ReadonlyMap<string, number>, held: re
             slots,
             held: mine.length,
             longestHoldSeconds: longest?.holderAgeSeconds ?? 0,
-            ...(longest === undefined ? {} : { longestHolder: { pid: longest.pid, command: longest.command, cwd: longest.cwd } }),
+            ...(longest === undefined
+                ? {}
+                : { longestHolder: { pid: longest.pid, command: longest.command, cwd: longest.cwd, maxHoldSeconds: longest.maxHoldSeconds } }),
         };
     }
     return summary;

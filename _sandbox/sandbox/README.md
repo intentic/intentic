@@ -45,6 +45,10 @@ flowchart LR
 - A process the daemon starts is put in a workload class by whoever starts it (`workload/workload-class.ts`,
   `spawnAs`): its niceness, IO class and rank for the kernel's OOM killer, inherited by everything it forks. Builds
   go first, agent runtimes last, children before their parents. Nothing ranks a process by its command line.
+- A heavy program (a build, a test run, a typecheck) is recognised by what it is as it starts, not by the words of
+  the line that started it: the daemon hands every agent command the table (`platform/resources/heavy-commands.ts`,
+  the shared rules in `@intentic/constants/heavy-rules`), and the program queues itself through `bin/queue-run`.
+  Agent commands reach their pane by file (`bin/tmux-run -f`), so no command line carries their words.
 - One `ResourceBudget` (`workload/resource-budget.ts`) decides whether there is room for more work: the turn door, a
   child waiting for room, heavy commands (over the local `room.sock`) and the editor's memory gauge all read its one
   snapshot, taken by the formula in `@intentic/constants/memory-room`.

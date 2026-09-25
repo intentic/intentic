@@ -56,7 +56,7 @@ export interface RunnerCommandDeps {
     // The parent's git door for a repo, and the environment that authenticates a fetch through it.
     readonly gitUrl: (repo: string) => string;
     readonly gitEnv: NodeJS.ProcessEnv;
-    // Wraps a line behind this runner's heavy queue (agent-terminals.ts queueWhole), identity when nothing matches.
+    // Runs a line under this runner's heavy table (agent-terminals.ts queueWhole): its heavy programs queue here as they start.
     readonly queue: (line: string) => Promise<string>;
 }
 

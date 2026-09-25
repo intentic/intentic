@@ -7,10 +7,12 @@ import { spawn } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { TEST_PROCESS_BYTES } from "../../constants/src/memory-room.mjs";
 
 const GIB = 1024 ** 3;
-// Twice the largest worker measured, so a heavy suite on a busy day never meets it and a leaking one does within a minute.
-export const DEFAULT_CEILING_BYTES = 6 * GIB;
+// Twice the largest worker measured, so a heavy suite on a busy day never meets it and a leaking one does within a minute
+// (memory-room.mjs keeps the measurement).
+export const DEFAULT_CEILING_BYTES = TEST_PROCESS_BYTES.ceiling;
 const NUMERIC = /^\d+$/u;
 
 // `TEST_MEMORY_CEILING_MB`, when a caller sets one; 0 turns the watch off.

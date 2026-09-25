@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# tmux-run [-e NAME]... [-c AGENT-COMMAND] [-b JOB-DIR] <session> <command-string> [window-name]
+# tmux-run [-e NAME]... [-b JOB-DIR] <session> <command-string> [window-name]
+# tmux-run [-e NAME]... [-b JOB-DIR] -f <dir>/line <session>
 #
 # Runs <command-string> inside a new window of tmux session <session> so the web terminal panel can watch
 # it live (and type into it — the command's stdin is the pane tty), while this wrapper streams the combined
@@ -14,11 +15,12 @@
 # already have the values in this wrapper's environment, which is also what the no-tmux fallback path sees.
 # Invalid or unset names are skipped (fail open).
 #
-# -c is the command AS THE AGENT WROTE IT, for the output filter alone — <command-string> by then carries the
-# daemon's wrapping (a namespace hop, the nice/ionice demotion, `bash -c`), and everything the filter is asked
-# about is a property of the agent's line: which cleaners match it, and which un-cleaned commands are worth a
-# new handler. Without it that report read `nsenter --mount=/proc/<pid>/ns/mnt … nice -n 10 ionice …` on every
-# row. Absent (the daemon's own terminal runner) the two are the same string, so it defaults to <command-string>.
+# -f hands the command over BY FILE, which is how the agent's hook calls it: `line` is what the pane runs, and beside
+# it `said` is the command as the agent wrote it (the output filter's subject: which cleaners match, which un-cleaned
+# commands deserve a handler) and `name` the window's name. None of it rides an argv — not this wrapper's, not the
+# CLI's shell that starts it, not the pane's — because `pkill -f PATTERN` matches every process's whole command line,
+# and an agent command naming a pattern used to kill its own call through whichever of those carried it. The file's
+# directory is this run's capture dir, owned and removed like one this wrapper made (or the job dir under -b).
 #
 # -b names the capture dir for a BACKGROUND JOB (Bash `run_in_background: true`), minted by the caller
 # instead of by mktemp here, because the daemon has to be able to read the job's completion after this
@@ -39,21 +41,32 @@ set -u
 envflags=()
 agentcmd=""
 jobdir=""
-while getopts e:c:b: opt; do
+cmdfile=""
+while getopts e:b:f: opt; do
     case "$opt" in
         # Regex first: [[ ]] short-circuits, so an invalid name never reaches the (fatal under bash) indirect
         # expansion. Indirection, not printenv: command substitution would strip trailing newlines.
         e) [[ "$OPTARG" =~ ^[A-Za-z_][A-Za-z0-9_]*$ && -n "${!OPTARG+x}" ]] && envflags+=(-e "$OPTARG=${!OPTARG}") ;;
-        c) agentcmd="$OPTARG" ;;
         b) jobdir="$OPTARG" ;;
+        f) cmdfile="$OPTARG" ;;
         *) exit 2 ;;
     esac
 done
 shift $((OPTIND - 1))
 
 session="$1"
-cmd="$2"
-name="${3:-run}"
+if [ -n "$cmdfile" ]; then
+    # -f: everything about the command comes from files beside the line, never from argv (see the header). A name or
+    # words file that is not there reads as the defaults below.
+    cmddir="$(dirname "$cmdfile")"
+    cmd="$(cat "$cmdfile" 2>/dev/null)"
+    name="$(cat "$cmddir/name" 2>/dev/null)"
+    name="${name:-run}"
+    agentcmd="$(cat "$cmddir/said" 2>/dev/null)"
+else
+    cmd="$2"
+    name="${3:-run}"
+fi
 # What the filter is told this command IS. Only the filter sees it — the pane runs, logs and reports $cmd.
 : "${agentcmd:=$cmd}"
 
@@ -82,14 +95,17 @@ fallback() {
     # A background job's status file is the daemon's ONLY completion signal, so even the degraded path publishes
     # one — otherwise an adopted watch polls for a file no path left behind and reports a timeout for a command
     # that finished. Same atomic rename the pane runner uses, for the same reason.
+    # A command handed over by file runs from that file, so the degraded path puts it in no argv either.
+    run=(bash -c "$cmd")
+    [ -n "$cmdfile" ] && run=(bash "$cmdfile")
     if [ -n "$jobdir" ]; then
         mkdir -p "$jobdir" 2>/dev/null
-        bash -c "$cmd" 2>&1 | tee -a "$jobdir/out"
+        "${run[@]}" 2>&1 | tee -a "$jobdir/out"
         code=${PIPESTATUS[0]}
         echo "$code" > "$jobdir/status.part" && mv "$jobdir/status.part" "$jobdir/status"
         exit "$code"
     fi
-    exec bash -c "$cmd"
+    exec "${run[@]}"
 }
 
 # EVERY tmux call below is made from the mount namespace named by $INTENTIC_TMUX_NS (set per turn by
@@ -119,6 +135,9 @@ tmux() { ${hop[@]+"${hop[@]}"} "$tmuxbin" "$@"; }
 if [ -n "$jobdir" ]; then
     mkdir -p "$jobdir" || fallback "job capture dir $jobdir could not be created"
     d="$jobdir"
+elif [ -n "$cmdfile" ]; then
+    # The caller's own intentic-run- dir, which this wrapper then owns and removes like one it made.
+    d="$cmddir"
 else
     d="$(mktemp -d "${TMPDIR:-/tmp}/intentic-run-XXXXXXXX")" || fallback "no capture dir under ${TMPDIR:-/tmp}"
 fi

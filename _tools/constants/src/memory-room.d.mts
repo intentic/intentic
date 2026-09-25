@@ -3,6 +3,7 @@ export type RoomWorkload = "agentRuntime" | "service" | "panel" | "install" | "c
 
 export const COST_BYTES: Readonly<Record<RoomWorkload, number>>;
 export const PERSON_RESERVE_BYTES: number;
+export const TEST_PROCESS_BYTES: Readonly<{ fanOutWorker: number; standaloneWorker: number; typecheck: number; ceiling: number }>;
 export const STALL_PERCENT: number;
 export const RESERVATION_MS: number;
 export const ROOM_SOCKET: string;

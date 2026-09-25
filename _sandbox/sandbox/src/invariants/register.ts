@@ -16,6 +16,7 @@ import { checks as areaChecks, owner as areaOwner, type AreaRosterDeps } from ".
 import { checks as fenceChecks, owner as fenceOwner } from "../fences/invariant.js";
 import { checks as runtimeChecks, owner as runtimeOwner } from "../runtimes/invariant.js";
 import { checks as seamChecks, owner as seamOwner } from "../seams/invariant.js";
+import { checks as workloadChecks, owner as workloadOwner } from "../workload/invariant.js";
 import { checks as tunnelChecks, owner as tunnelOwner } from "../tunnel/invariant.js";
 import { checks as webextChecks, owner as webextOwner } from "../webext/invariant.js";
 import type { InvariantRegistry } from "./invariants.js";
@@ -56,5 +57,6 @@ export const registerDaemonInvariants = (registry: InvariantRegistry, deps: Daem
     registry.register(fenceOwner, fenceChecks());
     registry.register(runtimeOwner, runtimeChecks());
     registry.register(seamOwner, seamChecks());
+    registry.register(workloadOwner, workloadChecks());
     registry.register(tunnelOwner, tunnelChecks());
 };

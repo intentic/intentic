@@ -10,21 +10,15 @@
 // THE BOX IS NOT ALWAYS THIS JOB'S ALONE, and at the moment six jobs start nothing any of them reads says so: each sees
 // the same free memory. `CI_HOST_JOBS` is how the caller supplies the part that cannot be measured.
 import { availableParallelism, freemem } from "node:os";
-import { askFreeSync } from "../../constants/src/memory-room.mjs";
+import { askFreeSync, TEST_PROCESS_BYTES } from "../../constants/src/memory-room.mjs";
 import { pathToFileURL } from "node:url";
 
 // turbo.json `concurrency`: tasks running at once, each forking its own workers.
 const TURBO_CONCURRENCY = 4;
-const GIB = 1024 ** 3;
-// One bun worker's share in the fan-out: two of the four concurrent tasks are the heavy packages, so this is between
-// the web worker's 3 GiB and the rest.
-const WORKER_BYTES = 1.5 * GIB;
-// One bun worker on the web package at its peak (measured 2026-09-25: 2.4 to 3.2 GiB over the web suite), the size a
-// lone `suites` run sizes to.
-const STANDALONE_WORKER_BYTES = 3 * GIB;
-// One typecheck task's share: most packages' tsgo or vue-tsc settle under 1 GiB, the web package's vue-tsc may take its
-// 4 GiB heap, and at most one of those runs among the others.
-const TYPECHECK_BYTES = 2 * GIB;
+// Peak sizes per worker and per typecheck task, measured, in the one place the sizes live.
+const WORKER_BYTES = TEST_PROCESS_BYTES.fanOutWorker;
+const STANDALONE_WORKER_BYTES = TEST_PROCESS_BYTES.standaloneWorker;
+const TYPECHECK_BYTES = TEST_PROCESS_BYTES.typecheck;
 const FAN_OUT_SHARE = 0.5;
 
 // How many jobs run beside this one on the same machine, which no cgroup reports and nothing here can measure: the CI

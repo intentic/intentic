@@ -387,6 +387,14 @@
     ],
     "overrides": [
         {
+            // A CommonJS file has no `import`: it exists because it is loaded by `node --require` into programs of any
+            // Node version an agent's project pins (@intentic/constants heavy-hook.cjs), which `--import` is not.
+            "files": ["**/*.cjs"],
+            "rules": {
+                "typescript/no-require-imports": "off"
+            }
+        },
+        {
             // Tooling whose output IS stdout: CLIs, build scripts, benchmarks, e2e harnesses. console.log is
             // the product here, not a leftover.
             "files": [

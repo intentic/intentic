@@ -1,34 +1,29 @@
-import { rmSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
+import { mergeHeavyRules, type HeavyCommandOverrides } from "@intentic/constants/heavy-rules";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { syncHookOutput, memoryFleet } from "../../testing.js";
-import { DEFAULT_HEAVY_COMMANDS, type HeavyCommands, HeavyCommandsSchema } from "../../platform/resources/heavy-commands.js";
-import { OOM_SCORE } from "../../workload/workload-class.js";
+import { OOM_SCORE, priorityOf } from "../../workload/workload-class.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";
+import { queueRunEnabled } from "../../terminal/terminal-run.js";
 import { bashTmuxHooks, PIPESTATUS_TRAP } from "./agent-terminals.js";
 import { backgroundJobOf, type BackgroundJob, noteJobShell, settledBackgroundJobs } from "./background-jobs.js";
 
 // One fleet's actors, and the cards a turn here parks in them.
 const actors = memoryFleet().conversations;
 
-// The `bash -c` the pane runs: the command behind the trap that records its last pipeline's statuses.
-const shell = (command: string): string => `bash -c ${shellQuote(`${PIPESTATUS_TRAP}${command}`)}`;
+// The command's own file, as the pane runs it: behind the trap that records its last pipeline's statuses.
+const script = (command: string): string => `${PIPESTATUS_TRAP}${command}\n`;
 
-// Demotes a command via nice/ionice, ranks it for the OOM killer, and runs it as one `bash -c` tree, before tmux-run sees
-// it.
-const demoted = (command: string): string => `nice -n 19 ionice -c 2 -n 7 choom -n ${String(OOM_SCORE.command)} -- ${shell(command)}`;
+// Demotes a command via nice/ionice and ranks it for the OOM killer, then `bash` runs its file, before tmux-run sees it.
+const demoted = (file: string, heavyEnv = ""): string => `nice -n 19 ionice -c 2 -n 7 choom -n ${String(OOM_SCORE.command)} -- ${heavyEnv}bash ${shellQuote(file)}`;
 
 // Carries the conversation id; every forked process inherits it, marking the run as agent-started, not the sandbox's
 // own.
 const born = (inner: string): string => `INTENTIC_AGENT_SESSION=${shellQuote("3f2a9b1c-0000-0000-0000-000000000000")} ${inner}`;
-
-// The full line the hook emits: `-c` carries the agent's own command for the output filter, then the session, the
-// wrapped command, and the window name.
-const wrap = (agentCommand: string, inner: string, name: string, envFlags = ``): string =>
-    `/usr/local/bin/tmux-run ${envFlags}-c ${shellQuote(agentCommand)} agent-3f2a9b1c ${shellQuote(inner)} ${name}`;
 
 const hookOf = (hooks: ReturnType<typeof bashTmuxHooks>) => {
     const hook = hooks.PreToolUse?.[0]?.hooks[0];
@@ -59,14 +54,45 @@ const rewritten = async (toolInput: unknown, hooks?: ReturnType<typeof bashTmuxH
     return updated?.["command"] as string | undefined;
 };
 
-test("wraps the command in tmux-run under the session's agent-* tmux session, demoted", async () => {
-    const command = await rewritten({ command: "echo hi", description: "Say Hi!" });
-    expect(command).toBe(wrap("echo hi", born(demoted("echo hi")), "say-hi"));
+// What the hook handed tmux-run: the command it rewrote the call to, and the files beside `line` it named with `-f`.
+interface Handover {
+    readonly command: string;
+    readonly dir: string;
+    readonly line: string;
+    readonly agent: string;
+    readonly said: string;
+    readonly name: string;
+}
+
+const handover = async (toolInput: unknown, hooks?: ReturnType<typeof bashTmuxHooks>): Promise<Handover> => {
+    const command = (await rewritten(toolInput, hooks)) ?? "";
+    const file = / -f (\S+) /u.exec(command)?.[1] ?? "";
+    const dir = dirname(file.replaceAll("'", ""));
+    const read = (name: string): string => readFileSync(join(dir, name), "utf8");
+    const files = { command, dir, line: read("line"), agent: read("agent"), said: read("said"), name: read("name") };
+    rmSync(dir, { recursive: true, force: true });
+    return files;
+};
+
+// The whole rewritten call: tmux-run, the env flags, then the one file every other fact about the command is in.
+const call = (dir: string, envFlags = ""): string => `/usr/local/bin/tmux-run ${envFlags}-f ${shellQuote(join(dir, "line"))} agent-3f2a9b1c`;
+
+test("wraps the command in tmux-run under the session's agent-* tmux session, demoted, handed over by file", async () => {
+    const files = await handover({ command: "echo hi", description: "Say Hi!" });
+    expect(files).toEqual({
+        command: call(files.dir),
+        dir: files.dir,
+        line: `${born(demoted(join(files.dir, "agent")))}\n`,
+        agent: script("echo hi"),
+        said: "echo hi",
+        name: "say-hi",
+    });
+    expect(files.dir).toStartWith(join(tmpdir(), "intentic-run-"));
 });
 
-test("single-quotes in the command survive the rewrite", async () => {
-    const command = await rewritten({ command: "echo 'a b'" });
-    expect(command).toBe(wrap("echo 'a b'", born(demoted("echo 'a b'")), "run"));
+test("single-quotes in the command survive the handover, which quotes nothing", async () => {
+    const files = await handover({ command: "echo 'a b'" });
+    expect([files.agent, files.said, files.name]).toEqual([script("echo 'a b'"), "echo 'a b'", "run"]);
 });
 
 test("keeps the tool input's other fields", async () => {
@@ -84,62 +110,61 @@ test("leaves non-string commands and already-wrapped commands alone", async () =
 
 test("stamps the pane command with the conversation owner, and refuses one outside the safe charset", async () => {
     // INTENTIC_TURN_OWNER stamps the pane so its whole process tree is attributable to the conversation.
-    const owned = await rewritten({ command: "echo hi" }, bashTmuxHooks([], undefined, "conv-1"));
-    expect(owned).toBe(
-        wrap(
-            "echo hi",
-            `INTENTIC_AGENT_SESSION=${shellQuote("3f2a9b1c-0000-0000-0000-000000000000")} INTENTIC_TURN_OWNER=conv-1 ${demoted("echo hi")}`,
-            "run",
-        ),
+    const owned = await handover({ command: "echo hi" }, bashTmuxHooks([], undefined, "conv-1"));
+    expect(owned.line).toBe(
+        `INTENTIC_AGENT_SESSION=${shellQuote("3f2a9b1c-0000-0000-0000-000000000000")} INTENTIC_TURN_OWNER=conv-1 ${demoted(join(owned.dir, "agent"))}\n`,
     );
     // Unquoted in the shell line, so an id with unsafe characters is dropped rather than substituted.
-    const unsafe = await rewritten({ command: "echo hi" }, bashTmuxHooks([], undefined, "conv;rm -rf /"));
-    expect(unsafe).toBe(wrap("echo hi", born(demoted("echo hi")), "run"));
+    const unsafe = await handover({ command: "echo hi" }, bashTmuxHooks([], undefined, "conv;rm -rf /"));
+    expect(unsafe.line).toBe(`${born(demoted(join(unsafe.dir, "agent")))}\n`);
 });
 
 // A background job is the one command whose pane must outlive the turn's CLI, so it carries `-b <dir>`: that flag is
 // what stops tmux-run killing the pane when the turn's exit SIGTERMs the wrapper, and the dir is where the daemon
-// reads the completion nobody is left to see.
-test("a background command carries a job dir, and is filed for the turn's ending to adopt", async () => {
+// reads the completion nobody is left to see. The command's files go in that same dir.
+test("a background command carries a job dir, holds its files, and is filed for the turn's ending to adopt", async () => {
     const jobs = { conversationId: "conv-bg", profile: {}, conversations: actors };
     const command = await rewritten(
         { command: "pnpm build", description: "Build the app", run_in_background: true },
         bashTmuxHooks([], undefined, undefined, undefined, undefined, undefined, jobs),
     );
-    const dir = /tmux-run -b (\S+) -c /.exec(command ?? "")?.[1];
+    const dir = /tmux-run -b (\S+) -f /.exec(command ?? "")?.[1] ?? "";
     expect(dir).toStartWith(join(tmpdir(), "intentic-run-job-"));
+    expect(command).toBe(`/usr/local/bin/tmux-run -b ${shellQuote(dir)} -f ${shellQuote(join(dir, "line"))} agent-3f2a9b1c`);
+    expect(readFileSync(join(dir, "agent"), "utf8")).toBe(script("pnpm build"));
     noteJobShell(actors, "tu-1", "bsh42");
-    expect(backgroundJobOf(actors, "conv-bg", "bsh42")?.dir).toBe(dir as string);
-    // What tmux-run writes first; without it the settle would read the job as one that never ran.
-    writeFileSync(join(dir as string, "cmd"), "pnpm build\n");
+    expect(backgroundJobOf(actors, "conv-bg", "bsh42")?.dir).toBe(dir);
+    // What tmux-run writes first (the handover's own file is `line`, so its presence says nothing about a start);
+    // without it the settle would read the job as one that never ran.
+    writeFileSync(join(dir, "cmd"), "pnpm build\n");
     // The registry holds the same job, so the settle that follows can hand it to a watch.
     const filed = settledBackgroundJobs(actors, "conv-bg").running;
-    expect(filed.map((job: BackgroundJob) => job.dir)).toEqual([dir as string]);
+    expect(filed.map((job: BackgroundJob) => job.dir)).toEqual([dir]);
     expect(filed[0]?.command).toBe("pnpm build");
     // What the chat shows the job as: the agent's own words for the call, not its command.
     expect(filed[0]?.label).toBe("Build the app");
-    rmSync(dir as string, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
 });
 
 test("an ordinary command, and a background one with nowhere to deliver a wake, carry no job dir", async () => {
     const jobs = { conversationId: "conv-bg-none", profile: {}, conversations: actors };
     // Foreground: dies with the turn as everything else does, which is what its timeout semantics need.
-    expect(await rewritten({ command: "pnpm build" }, bashTmuxHooks([], undefined, undefined, undefined, undefined, undefined, jobs))).not.toContain("-b ");
+    expect((await handover({ command: "pnpm build" }, bashTmuxHooks([], undefined, undefined, undefined, undefined, undefined, jobs))).command).not.toContain(
+        "-b ",
+    );
     // No conversation: a job that outlived the turn would have nobody to report to.
-    expect(await rewritten({ command: "pnpm build", run_in_background: true })).not.toContain("-b ");
+    expect((await handover({ command: "pnpm build", run_in_background: true })).command).not.toContain("-b ");
     expect(settledBackgroundJobs(actors, "conv-bg-none")).toEqual({ running: [], unseen: [] });
 });
 
-test("forwards env key NAMES as sorted -e flags before the session: never values", async () => {
-    const hooks = bashTmuxHooks(["IMAP_PASSWORD_IMAP", "DISCORD_BOT_TOKEN_DISCORD"]);
-    const command = await rewritten({ command: "echo hi", description: "Say Hi!" }, hooks);
-    expect(command).toBe(wrap("echo hi", born(demoted("echo hi")), "say-hi", "-e DISCORD_BOT_TOKEN_DISCORD -e IMAP_PASSWORD_IMAP "));
+test("forwards env key NAMES as sorted -e flags before the file: never values", async () => {
+    const files = await handover({ command: "echo hi", description: "Say Hi!" }, bashTmuxHooks(["IMAP_PASSWORD_IMAP", "DISCORD_BOT_TOKEN_DISCORD"]));
+    expect(files.command).toBe(call(files.dir, "-e DISCORD_BOT_TOKEN_DISCORD -e IMAP_PASSWORD_IMAP "));
 });
 
 test("drops env keys that are not plain identifiers: they land unquoted in every rewritten command", async () => {
-    const hooks = bashTmuxHooks(["PATH", "bad key", "1BAD", "A=B"]);
-    const command = await rewritten({ command: "echo hi" }, hooks);
-    expect(command).toBe(wrap("echo hi", born(demoted("echo hi")), "run", "-e PATH "));
+    const files = await handover({ command: "echo hi" }, bashTmuxHooks(["PATH", "bad key", "1BAD", "A=B"]));
+    expect(files.command).toBe(call(files.dir, "-e PATH "));
 });
 
 test("agentSessionName derives the same agent-* name the hook routes commands through", () => {
@@ -158,32 +183,28 @@ test("an isolated turn's Bash joins the turn's namespace, inside the tmux wrappe
         fence: undefined,
     };
     const anchor = { pid: 4321, cwd: WORKSPACE_ROOT, plan, dispose: () => {} };
-    const command = await rewritten({ command: "sed -i s/a/b/ x.ts", description: "edit" }, bashTmuxHooks([], { plan, anchor }));
-    // tmux-run stays outside the namespace; only the command the pane runs crosses in, already demoted.
-    expect(command).toBe(
-        wrap(
-            "sed -i s/a/b/ x.ts",
-            // Unsets PWD/OLDPWD, whose daemon-side values would resolve relative paths outside the mirrors.
-            born(`nsenter --mount=/proc/4321/ns/mnt --wdns=${shellQuote("/work")} -- env -u PWD -u OLDPWD ${demoted("sed -i s/a/b/ x.ts")}`),
-            "edit",
-        ),
+    const files = await handover({ command: "sed -i s/a/b/ x.ts", description: "edit" }, bashTmuxHooks([], { plan, anchor }));
+    // tmux-run stays outside the namespace; only the line the pane runs crosses in, already demoted.
+    expect(files.line).toBe(
+        // Unsets PWD/OLDPWD, whose daemon-side values would resolve relative paths outside the mirrors.
+        `${born(`nsenter --mount=/proc/4321/ns/mnt --wdns=${shellQuote("/work")} -- env -u PWD -u OLDPWD ${demoted(join(files.dir, "agent"))}`)}\n`,
     );
+    expect(files.agent).toBe(script("sed -i s/a/b/ x.ts"));
 });
 
-// `-c` carries the agent's own command, not the wrapped line the pane actually runs: the output filter matches cleaners
+// `said` is the agent's own command, not the wrapped line the pane actually runs: the output filter matches cleaners
 // against and records that string.
-test("-c carries the agent's own command, never the wrapper the pane runs", async () => {
+test("the filter's words are the agent's own command, never the wrapper the pane runs", async () => {
     const plan = { worktree: "/wt", root: WORKSPACE_ROOT, mirrors: [], overlays: `${HISTORY_ROOT}/overlays/abc`, fence: undefined };
     const anchor = { pid: 4321, cwd: WORKSPACE_ROOT, plan, dispose: () => {} };
-    const command = await rewritten({ command: "grep -rn needle src", description: "search" }, bashTmuxHooks([], { plan, anchor }));
-    expect(command?.startsWith("/usr/local/bin/tmux-run -c 'grep -rn needle src' ")).toBe(true);
+    const files = await handover({ command: "grep -rn needle src", description: "search" }, bashTmuxHooks([], { plan, anchor }));
+    expect(files.said).toBe("grep -rn needle src");
     // The wrapper is still what runs: it just no longer stands in for the command in the ledger.
-    expect(command).toContain("nsenter --mount=/proc/4321/ns/mnt");
+    expect(files.line).toContain("nsenter --mount=/proc/4321/ns/mnt");
 });
 
-// Unanchored isolation rewrites paths into the worktree; `-c` follows, since the redirected line is the one that
-// actually ran.
-test("-c carries the redirected command when an isolated turn has no namespace to join", async () => {
+// Unanchored isolation rewrites paths into the worktree; the words follow, since the redirected line is what ran.
+test("the filter's words are the redirected command when an isolated turn has no namespace to join", async () => {
     const plan = {
         worktree: `${HISTORY_ROOT}/worktrees/abc`,
         root: WORKSPACE_ROOT,
@@ -191,8 +212,8 @@ test("-c carries the redirected command when an isolated turn has no namespace t
         overlays: `${HISTORY_ROOT}/overlays/abc`,
         fence: undefined,
     };
-    const command = await rewritten({ command: "wc -l /work/intentic/x.ts" }, bashTmuxHooks([], { plan }));
-    expect(command?.startsWith("/usr/local/bin/tmux-run -c 'wc -l /history/worktrees/abc/intentic/x.ts' ")).toBe(true);
+    const files = await handover({ command: "wc -l /work/intentic/x.ts" }, bashTmuxHooks([], { plan }));
+    expect(files.said).toBe("wc -l /history/worktrees/abc/intentic/x.ts");
 });
 
 // No-namespace fallback: without CAP_SYS_ADMIN the mounts cannot be built, so paths are substituted directly instead of
@@ -205,11 +226,10 @@ test("without an anchor, an isolated turn's Bash has its main-tree paths rewritt
         overlays: `${HISTORY_ROOT}/overlays/abc`,
         fence: undefined,
     };
-    const command = await rewritten({ command: "sed -i s/a/b/ /work/intentic/x.ts" }, bashTmuxHooks([], { plan }));
-    expect(command).toContain("/history/worktrees/abc/intentic/x.ts");
-    expect(command).not.toContain("/work/intentic/x.ts");
+    const files = await handover({ command: "sed -i s/a/b/ /work/intentic/x.ts" }, bashTmuxHooks([], { plan }));
+    expect(files.agent).toBe(script("sed -i s/a/b/ /history/worktrees/abc/intentic/x.ts"));
     // No namespace to join, so nothing wraps the command: only its paths moved.
-    expect(command).not.toContain("nsenter");
+    expect(files.line).not.toContain("nsenter");
 });
 
 test("the Bash rewrite leaves the shared subtrees and any path that merely starts with the root alone", async () => {
@@ -220,7 +240,7 @@ test("the Bash rewrite leaves the shared subtrees and any path that merely start
         overlays: `${HISTORY_ROOT}/overlays/abc`,
         fence: undefined,
     };
-    const rewrite = async (command: string): Promise<string | undefined> => rewritten({ command }, bashTmuxHooks([], { plan }));
+    const rewrite = async (command: string): Promise<string> => (await handover({ command }, bashTmuxHooks([], { plan }))).agent;
     // Dependency trees and the untracked state dir resolve to the main checkout, not the worktree.
     expect(await rewrite("/work/intentic/node_modules/.bin/tsgo")).toContain("/work/intentic/node_modules/.bin/tsgo");
     expect(await rewrite("cat /work/.intentic/records/sessions/claude/projects/x.jsonl")).toContain(
@@ -236,168 +256,122 @@ test("the Bash rewrite leaves the shared subtrees and any path that merely start
 // The badge marks every command, not just risky ones: anything forked from here, however many levels down, must be able
 // to tell it started inside a conversation.
 test("every command is born carrying the conversation that ran it, ahead of the namespace hop", async () => {
-    expect(await rewritten({ command: "echo hi" })).toContain(born("nice"));
+    expect((await handover({ command: "echo hi" })).line).toContain(born("nice"));
 
     // An env assignment is a shell construct: placed after nsenter it would be exec'd as a program name.
     const plan = { worktree: "/wt", root: WORKSPACE_ROOT, mirrors: [], overlays: "/ov", fence: undefined };
-    const anchored = await rewritten(
+    const anchored = await handover(
         { command: "pnpm exec tsx src/main.ts" },
         bashTmuxHooks([], { plan, anchor: { pid: 4242, cwd: WORKSPACE_ROOT, plan, dispose: () => {} } }),
     );
-    expect(anchored).toContain(born("nsenter"));
+    expect(anchored.line).toContain(born("nsenter"));
 });
 
-// Position of the heavy-command queue is what these tests pin:
-// - inside the namespace hop, not queued against the wrong tree
-// - inside the demotion, not at normal priority
-// - outside `bash -c`, not inside an already-forked shell
+// THE HEAVY TABLE RIDES DOWN; NOTHING IS DECIDED FROM THE LINE. Whether a program queues is judged as it starts
+// (@intentic/constants heavy-hook.cjs, heavy-exec.cjs): here the hook only hands every program of the line the table,
+// inside the namespace hop and the demotion, so what it starts is judged in the tree it runs in.
 
-const heavy = (over: Partial<HeavyCommands> = {}) => {
-    const config = HeavyCommandsSchema.parse({ ...DEFAULT_HEAVY_COMMANDS, ...over });
+const heavy = (overrides: HeavyCommandOverrides = {}) => {
+    const config = mergeHeavyRules(overrides);
     return () => Promise.resolve(config);
 };
 
-// The demoted form, with the queue between demotion and shell and the heavy rank inside the queue: position is the
-// assertion.
-const queued = (command: string, label: string, pool = "heavy", limit = 2, onDeadline = DEFAULT_HEAVY_COMMANDS.onDeadline): string =>
-    `nice -n 19 ionice -c 2 -n 7 choom -n ${String(OOM_SCORE.command)} -- /usr/local/bin/queue-run --pool ${shellQuote(pool)} --limit ${String(limit)} --wait 900 --memory-gate 120 --max-hold ${String(DEFAULT_HEAVY_COMMANDS.maxHoldSeconds)} --on-deadline ${onDeadline} --label ${shellQuote(label)} -- nice -n 19 ionice -c 2 -n 7 choom -n ${String(OOM_SCORE.heavy)} -- ${shell(command)}`;
+// The JSON table a line carries, read back out of its INTENTIC_HEAVY assignment.
+const tableOf = (line: string): Record<string, unknown> => {
+    const quoted = /INTENTIC_HEAVY=('(?:[^']|'\\'')*')/u.exec(line)?.[1] ?? "''";
+    return JSON.parse(quoted.slice(1, -1).replaceAll(`'\\''`, "'")) as Record<string, unknown>;
+};
 
-test("a rule's deadline answer reaches the wrapper, so the one shipped rule that skips is the only one that does", async () => {
-    const command = await rewritten({ command: "pnpm verify:turn" }, bashTmuxHooks([], undefined, undefined, undefined, heavy()));
-    expect(command).toBe(wrap("pnpm verify:turn", born(queued("pnpm verify:turn", "repo-verify", "heavy", 1, "skip")), "run"));
+test("every line carries the heavy table, between the demotion and the shell it runs in", async () => {
+    const files = await handover({ command: "git status" }, bashTmuxHooks([], undefined, undefined, undefined, heavy()));
+    // Whatever the words: `git status` gets the same table as `pnpm test`, because the words decide nothing.
+    const at = files.line.indexOf("env INTENTIC_HEAVY=");
+    expect(at).toBeGreaterThan(files.line.indexOf("choom"));
+    expect(at).toBeLessThan(files.line.indexOf(`bash ${shellQuote(join(files.dir, "agent"))}`));
+    expect(files.line).toContain(`NODE_OPTIONS="--require `);
+    expect(tableOf(files.line)).toEqual({
+        rules: mergeHeavyRules(),
+        queue: queueRunEnabled(),
+        ...(queueRunEnabled() ? { queueRun: "/usr/local/bin/queue-run" } : {}),
+        offloadRun: "/usr/local/bin/offload-run",
+        offload: {},
+        klass: priorityOf({ class: "toolchain" }),
+    });
 });
 
-test("a heavy command is queued, between the demotion and the shell it runs in", async () => {
-    const command = await rewritten({ command: "pnpm test" }, bashTmuxHooks([], undefined, undefined, undefined, heavy()));
-    expect(command).toBe(wrap("pnpm test", born(queued("pnpm test", "package-script")), "run"));
+// Switching the queue off must not also drop what a build is to the OOM killer: the class still rides down.
+test("a table with the queue switched off still ranks heavy programs", async () => {
+    const files = await handover({ command: "pnpm test" }, bashTmuxHooks([], undefined, undefined, undefined, heavy({ queue: false })));
+    expect(tableOf(files.line)).toMatchObject({ queue: false, klass: { oomScoreAdj: OOM_SCORE.heavy, nice: 19, lowIo: true } });
 });
 
-test("a rule's own hold ceiling reaches the wrapper, so one command can be loosened without loosening all", async () => {
-    const command = await rewritten(
-        { command: "pnpm test" },
-        bashTmuxHooks([], undefined, undefined, undefined, heavy({ rules: [{ id: "slow", pattern: "pnpm test", maxHoldSeconds: 7200 }] })),
+test("the owner's own rule and hold ceiling reach the programs as the merged table", async () => {
+    const files = await handover(
+        { command: "make all" },
+        bashTmuxHooks([], undefined, undefined, undefined, heavy({ ruleEdits: [{ id: "slow-make", pattern: "^make\\b", maxHoldSeconds: 7200 }] })),
     );
-    expect(command).toContain("--max-hold 7200");
+    expect((tableOf(files.line)["rules"] as { rules: unknown[] }).rules[0]).toEqual({ id: "slow-make", pattern: "^make\\b", maxHoldSeconds: 7200 });
 });
 
-test("an ordinary command is not queued at all", async () => {
-    // Ordinary commands get no wrapper, no lock file, no extra process.
-    const command = await rewritten({ command: "git status" }, bashTmuxHooks([], undefined, undefined, undefined, heavy()));
-    expect(command).not.toContain("queue-run");
-    expect(command).toBe(wrap("git status", born(demoted("git status")), "run"));
+test("a sandbox with no table configured runs the line with no table at all", async () => {
+    expect((await handover({ command: "pnpm test" })).line).not.toContain("INTENTIC_HEAVY");
 });
 
-test("a sandbox with no queue configured rewrites exactly as it always did", async () => {
-    // Without bin/queue-run baked into the image, queueRunEnabled() is false and nothing is queued.
-    expect(await rewritten({ command: "pnpm test" })).toBe(wrap("pnpm test", born(demoted("pnpm test")), "run"));
-});
-
-test("the queue rides inside the namespace hop, so its slot is held in the tree the command runs in", async () => {
+test("the table rides inside the namespace hop, so a slot is held in the tree the command runs in", async () => {
     const plan = { worktree: "/wt", root: WORKSPACE_ROOT, mirrors: [], overlays: "/ov", fence: undefined };
-    const command = await rewritten(
+    const files = await handover(
         { command: "pnpm test" },
         bashTmuxHooks([], { plan, anchor: { pid: 4242, cwd: WORKSPACE_ROOT, plan, dispose: () => {} } }, undefined, undefined, heavy()),
     );
-    expect(command).toContain("nsenter");
-    expect(command?.indexOf("nsenter")).toBeLessThan(command?.indexOf("queue-run") ?? -1);
+    expect(files.line.indexOf("nsenter")).toBeLessThan(files.line.indexOf("INTENTIC_HEAVY"));
 });
 
-// A heavy line whose kind the owner sends to a runner (settings `offload.commands`) gets offload-run where the queue
-// was, holding the queue's own prefix for when the runner cannot take it (bin/offload-run).
+// The kinds the owner sends to a runner (settings `offload.commands`) travel with the table; a program of such a kind
+// goes there as it starts (heavy-turn.cjs), keeping the queue for running it here when the runner cannot take it.
 const offloadTo = (map: Record<string, string>) => () => Promise.resolve(map);
 
-test("a heavy line whose kind goes to a runner is handed to offload-run, which keeps the queue for running it here", async () => {
-    const command = await rewritten({ command: "pnpm test" }, bashTmuxHooks([], undefined, undefined, undefined, heavy(), offloadTo({ "package-script": "runner-omen" })));
-    const queue = `/usr/local/bin/queue-run --pool heavy --limit 2 --wait 900 --memory-gate 120 --max-hold ${String(DEFAULT_HEAVY_COMMANDS.maxHoldSeconds)} --on-deadline ${DEFAULT_HEAVY_COMMANDS.onDeadline} --label package-script -- nice -n 19 ionice -c 2 -n 7 choom -n ${String(OOM_SCORE.heavy)} -- `;
-    const offloaded = `nice -n 19 ionice -c 2 -n 7 choom -n ${String(OOM_SCORE.command)} -- /usr/local/bin/offload-run --to runner-omen --label package-script --here ${shellQuote(queue)} -- ${shell("pnpm test")}`;
-    expect(command).toBe(wrap("pnpm test", born(offloaded), "run"));
+test("the kinds sent to a runner travel with the table", async () => {
+    const files = await handover({ command: "pnpm test" }, bashTmuxHooks([], undefined, undefined, undefined, heavy(), offloadTo({ "package-script": "runner-omen" })));
+    expect(tableOf(files.line)).toMatchObject({ offloadRun: "/usr/local/bin/offload-run", offload: { "package-script": "runner-omen" } });
 });
 
-test("only the kinds sent to a runner leave; every other heavy line queues here as before", async () => {
-    const command = await rewritten({ command: "pnpm verify" }, bashTmuxHooks([], undefined, undefined, undefined, heavy(), offloadTo({ "package-script": "runner-omen" })));
-    expect(command).not.toContain("offload-run");
-    expect(command).toContain("--label repo-verify");
-});
-
-test("a line that resolved a secret never leaves, whatever its kind", async () => {
+test("a line that resolved a secret sends nothing to a runner, whatever its kind", async () => {
     const bundle: SecretAccess = {
         list: async () => [{ name: "TOKEN", value: "t0k3n", source: "env" }],
         used: () => {},
         release: async () => ({ ok: true }),
     };
     const reference = `{{secret:${"TOKEN"}}}`;
-    const command = await rewritten(
+    const files = await handover(
         { command: `TOKEN=${reference} pnpm test` },
         bashTmuxHooks([], undefined, undefined, bundle, heavy(), offloadTo({ "package-script": "runner-omen" })),
     );
-    expect(command).not.toContain("offload-run");
-    expect(command).toContain("queue-run");
+    expect(tableOf(files.line)).toMatchObject({ offload: {} });
+    // The pane runs the resolved line from its own 0600 file; the filter is told the reference form.
+    expect([files.agent, files.said]).toEqual([script("TOKEN=t0k3n pnpm test"), `TOKEN=${reference} pnpm test`]);
 });
 
-test("the agent's own line still reaches the output filter unwrapped", async () => {
-    // `-c` feeds cleaner matching and the un-cleaned-commands report; the queue must not appear there either.
-    const command = await rewritten({ command: "pnpm test" }, bashTmuxHooks([], undefined, undefined, undefined, heavy()));
-    expect(command).toContain(`-c ${shellQuote("pnpm test")} agent-3f2a9b1c`);
+test("a table that cannot be read costs the command nothing", async () => {
+    const files = await handover({ command: "pnpm test" }, bashTmuxHooks([], undefined, undefined, undefined, () => Promise.reject(new Error("nope"))));
+    expect(files.line).toBe(`${born(demoted(join(files.dir, "agent")))}\n`);
 });
 
-test("a pool or label out of the config file is quoted, not interpreted", async () => {
-    // Config values are agent-writable and reach `bash -c`; treated as data only, never as code.
+test("a pool or label out of the config file is data in the table, never shell", async () => {
+    // Config values are agent-writable and reach a shell line; single-quoted JSON is data only.
     const label = "x'; touch /tmp/pwned; '";
-    const nasty = heavy({ rules: [{ id: label, pattern: "\\bmake\\b", pool: "$(id)" }] });
-    const command = await rewritten({ command: "make all" }, bashTmuxHooks([], undefined, undefined, undefined, nasty));
-    // Exact match: quoting only proves itself against the whole line, both values surviving two levels of it.
-    expect(command).toBe(wrap("make all", born(queued("make all", label, "$(id)")), "run"));
-    expect(command).not.toContain("--pool $(id) ");
-    expect(command).not.toContain("touch /tmp/pwned; ' --limit");
-});
-
-test("matching reads the agent's reference form, never the resolved secret", async () => {
-    // Order matters: heavy-command matching must run before secret resolution, or a resolved credential could reach a
-    // user-authored regex or a logged rule id.
-    const bundle: SecretAccess = {
-        list: async () => [{ name: "TOKEN", value: "pnpm test", source: "env" }],
-        used: () => {},
-        release: async () => ({ ok: true }),
-    };
-    const reference = `{{secret:${"TOKEN"}}}`;
-    const command = await rewritten({ command: `curl -H ${reference}` }, bashTmuxHooks([], undefined, undefined, bundle, heavy()));
-    // The pane's line does carry the resolved value; only the earlier reference form decided whether to queue.
-    expect(command).toContain("pnpm test");
-    expect(command).not.toContain("queue-run");
-});
-
-test("a config that cannot be read costs the command nothing", async () => {
-    // The store falls back to the shipped rules; a further throw drops the queue rather than failing the tool call.
-    const command = await rewritten(
-        { command: "pnpm test" },
-        bashTmuxHooks([], undefined, undefined, undefined, () => Promise.reject(new Error("nope"))),
+    const files = await handover(
+        { command: "make all" },
+        bashTmuxHooks([], undefined, undefined, undefined, heavy({ ruleEdits: [{ id: label, pattern: "\\bmake\\b", pool: "$(id)" }] })),
     );
-    expect(command).toBe(wrap("pnpm test", born(demoted("pnpm test")), "run"));
+    expect((tableOf(files.line)["rules"] as { rules: { id: string; pattern: string; pool?: string }[] }).rules[0]).toEqual({ id: label, pattern: "\\bmake\\b", pool: "$(id)" });
 });
 
-// `pkill -f vite` matched its own call's command line and killed it: 161 results with no output and exit 144.
-test("a full-line pkill pattern is bracketed in every copy of the command, so it cannot match its own call", async () => {
-    const command = await rewritten({ command: "pkill -f vite; echo stopped", description: "Stop the dev server" });
-    expect(command).toBe(wrap(String.raw`pkill -f \[v]ite; echo stopped`, born(demoted(String.raw`pkill -f \[v]ite; echo stopped`)), "stop-the-dev-server"));
-});
-
-test("a window name that would repeat the pattern is dropped for the neutral one", async () => {
-    expect(await rewritten({ command: "pkill -f 'vite'", description: "Kill vite" })).toBe(wrap("pkill -f '[v]ite'", born(demoted("pkill -f '[v]ite'")), "run"));
-    // `kill-vite-dev` does not contain "vite dev", so that name stays.
-    expect(await rewritten({ command: "pkill -f 'vite dev'", description: "Kill vite dev" })).toBe(
-        wrap("pkill -f '[v]ite dev'", born(demoted("pkill -f '[v]ite dev'")), "kill-vite-dev"),
-    );
-});
-
-test("a pkill whose pattern the command repeats elsewhere is refused, and files no background job", async () => {
-    const jobs = { conversationId: "conv-pkill", profile: {}, conversations: actors };
-    const output = syncHookOutput(
-        await preToolUse(
-            { command: "pkill -f vite; rm -rf node_modules/.vite && pnpm dev", run_in_background: true },
-            bashTmuxHooks([], undefined, undefined, undefined, undefined, undefined, jobs),
-        ),
-    ).hookSpecificOutput;
-    expect(output).toMatchObject({ hookEventName: "PreToolUse", permissionDecision: "deny" });
-    expect(output?.hookEventName === "PreToolUse" ? output.permissionDecisionReason : undefined).toContain("pkill -f 'vite' would kill this Bash call's own shell");
-    expect(settledBackgroundJobs(actors, "conv-pkill")).toEqual({ running: [], unseen: [] });
+// `pkill -f vite` matched its own call's command line and killed it: 161 results with no output and exit 144. With the
+// command handed over by file, no argv carries it — nor the window name, nor the words the filter reads.
+test("a pkill pattern the command names appears in no argv of its own call, and runs as written", async () => {
+    const files = await handover({ command: "pkill -f vite; rm -rf node_modules/.vite && pnpm dev", description: "Kill vite" });
+    expect(files.command).not.toContain("vite");
+    expect(files.agent).toBe(script("pkill -f vite; rm -rf node_modules/.vite && pnpm dev"));
+    expect(files.name).toBe("kill-vite");
+    expect(files.line).not.toContain("vite");
 });

@@ -122,19 +122,26 @@ const probeModule = async (target: ModuleProbeTarget): Promise<Probe> => {
 // `ii` is dpkg's installed-and-configured; anything else (removed, config-only, half-installed) is not on disk.
 const DPKG_FORMAT = "${Package}|${db:Status-Abbrev}|${Version}\\n";
 
-// dpkg exits 1 when any name is unknown yet still prints the rest, so the output is read either way; no dpkg at all
-// (a non-Debian host) reads as nothing installed.
-const queryDpkg = async (packages: readonly string[]): Promise<string> => {
+// dpkg exits 1 when any name is unknown yet still prints the rest, so that output is an answer; no dpkg at all (a
+// non-Debian host) is one too, of nothing installed. A query killed at the timeout, or one that failed any other way,
+// answered nothing: `answered` is false, and what it printed is read for this call only.
+export const queryDpkg = async (
+    packages: readonly string[],
+    run: typeof execFileAsync = execFileAsync,
+): Promise<{ readonly stdout: string; readonly answered: boolean }> => {
     try {
-        return (await execFileAsync("dpkg-query", ["-W", `-f=${DPKG_FORMAT}`, ...packages], { timeout: PROBE_TIMEOUT_MS, maxBuffer: MAX_BUFFER })).stdout;
+        return { stdout: (await run("dpkg-query", ["-W", `-f=${DPKG_FORMAT}`, ...packages], { timeout: PROBE_TIMEOUT_MS, maxBuffer: MAX_BUFFER })).stdout, answered: true };
     } catch (error) {
-        return (error as { stdout?: string }).stdout ?? "";
+        const { code, killed, stdout } = error as { code?: unknown; killed?: boolean; stdout?: string };
+        return { stdout: stdout ?? "", answered: code === "ENOENT" || (typeof code === "number" && killed !== true) };
     }
 };
 
 // An apt package by name, for the ones whose name is no command (imagemagick ships `magick`, sysstat `iostat`); the
 // version is the package's own with its epoch dropped, so `8:7.1.1.43+dfsg1` reads 7.1.1.
-export const probePackages = async (packages: Iterable<string>): Promise<Map<string, Probe>> => {
+// Like probeVersion, a query that did not answer is never cached: one busy moment must not hold an installed package at
+// "not installed" for the rest of the window.
+export const probePackages = async (packages: Iterable<string>, query: typeof queryDpkg = queryDpkg): Promise<Map<string, Probe>> => {
     const now = Date.now();
     const result = new Map<string, Probe>();
     const stale: string[] = [];
@@ -150,7 +157,8 @@ export const probePackages = async (packages: Iterable<string>): Promise<Map<str
         return result;
     }
     const installed = new Map<string, string>();
-    for (const line of (await queryDpkg(stale)).split("\n")) {
+    const answer = await query(stale);
+    for (const line of answer.stdout.split("\n")) {
         const [name, status, version] = line.split("|");
         if (name !== undefined && status?.startsWith("ii") === true) {
             installed.set(name, version ?? "");
@@ -159,7 +167,9 @@ export const probePackages = async (packages: Iterable<string>): Promise<Map<str
     for (const name of stale) {
         const version = installed.get(name);
         const probe: Probe = { version: version === undefined ? undefined : parseVersion(version.replace(/^\d+:/, "")), found: version !== undefined, at: now };
-        packageCache.set(name, probe);
+        if (answer.answered) {
+            packageCache.set(name, probe);
+        }
         result.set(name, probe);
     }
     return result;

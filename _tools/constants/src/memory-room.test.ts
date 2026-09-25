@@ -39,15 +39,17 @@ test("used is the working set plus swap: current less the inactive file cache, p
             [`${CG}/memory.events`]: "low 0\nhigh 4\nmax 12\noom 1\noom_kill 2\n",
         }),
     );
-    expect(reading).toEqual({ limitBytes: 16 * GIB, usedBytes: 9 * GIB, swapBytes: 2 * GIB, stallPercent: 0, oomKills: 2 });
+    expect(reading).toEqual({ limitBytes: 16 * GIB, usedBytes: 9 * GIB, swapBytes: 2 * GIB, availableBytes: 60 * GIB, stallPercent: 0, oomKills: 2 });
     expect(freeBytesOf(reading)).toBe(7 * GIB);
+    // A machine with less available than the limit leaves is what binds: the sandbox cannot take memory it does not have.
+    expect(freeBytesOf({ ...reading, availableBytes: 3 * GIB })).toBe(3 * GIB);
 });
 
 // A hosted machine's daemon may sit in the root cgroup, which keeps no memory.current or memory.max: the machine's own
 // figures are then the sandbox's.
 test("at a root cgroup the machine's used memory and swap stand in for the cgroup's", () => {
     const reading = readingFrom(files({ "/proc/meminfo": meminfo(8, 3, 2, 1.5), "/proc/pressure/memory": "some avg10=40.00\nfull avg10=25.50 avg60=1\n" }));
-    expect(reading).toEqual({ limitBytes: 8 * GIB, usedBytes: 5.5 * GIB, swapBytes: 0.5 * GIB, stallPercent: 25.5, oomKills: undefined });
+    expect(reading).toEqual({ limitBytes: 8 * GIB, usedBytes: 5.5 * GIB, swapBytes: 0.5 * GIB, availableBytes: 3 * GIB, stallPercent: 25.5, oomKills: undefined });
 });
 
 test("the stall is PSI `full`, the cgroup's where it keeps one, and 0 where nothing reports it", () => {

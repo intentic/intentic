@@ -34,6 +34,23 @@ export const COST_BYTES = Object.freeze({
     toolchain: GIB,
 });
 
+// What one test or typecheck process holds at its peak, for the scripts that size a fan-out to the free memory
+// (_tools/scripts/verify/test-workers.mjs) and the ceiling that stops a runaway one (_tools/scripts/lib/memory-ceiling.mjs).
+export const TEST_PROCESS_BYTES = Object.freeze({
+    // One bun worker's share in a turbo fan-out: two of the four concurrent tasks are the heavy packages, so between the
+    // web worker's 3 GiB and the rest.
+    fanOutWorker: 1.5 * GIB,
+    // One bun worker on the web package at its peak (measured 2026-09-25: 2.4 to 3.2 GiB over the web suite), the size a
+    // lone `suites` run sizes to.
+    standaloneWorker: 3 * GIB,
+    // One typecheck task: most packages' tsgo or vue-tsc settle under 1 GiB, the web package's vue-tsc may take its 4 GiB
+    // heap, and at most one of those runs among the others.
+    typecheck: 2 * GIB,
+    // Past this one process is a leak, not a suite: twice the largest worker measured. On 2026-09-25 a single bun process
+    // reached 14.7 GiB resident plus 31 GiB of swap, twice in one day, and stalled every conversation on the sandbox.
+    ceiling: 6 * GIB,
+});
+
 // Work nobody is waiting on must leave room for a person's turn on top of its own cost, so it loses every tie.
 export const PERSON_RESERVE_BYTES = COST_BYTES.agentRuntime;
 // Percent of full avg10 at which the sandbox counts as grinding, whatever its byte count says.

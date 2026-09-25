@@ -17,9 +17,13 @@ flowchart LR
 - `./node` holds `repoRoot` and `packageRoot`, which find the monorepo by walking up to `pnpm-workspace.yaml`
   instead of counting `../..`. The `paths` check refuses counted roots.
 - The `.mjs` modules (`control-bytes`, `contract-shrink`, `assertion-measure`, `mirror-roots`, `test-suites`,
-  `vocabulary`, `ci-infra-steps`, `memory-room`, `allow`) are plain JavaScript with `.d.mts` types, so the checks and
-  the verify scripts import them by path before any install or build, and the daemon applies the same rule from the
-  same file.
+  `vocabulary`, `ci-infra-steps`, `memory-room`, `allow`, `heavy-rules`) are plain JavaScript with `.d.mts` types, so
+  the checks and the verify scripts import them by path before any install or build, and the daemon applies the same
+  rule from the same file.
+- `heavy-rules.cjs` is the one heavy-command table (which programs queue, their pools, max-holds and deadlines, and
+  the owner's overrides merged on top); `heavy-hook.cjs` (a `node --require` preload) and `heavy-exec.cjs` (behind the
+  sandbox's wrappers for native programs) judge a program by what it is as it starts. CommonJS, so the hook loads
+  on any Node an agent's project pins.
 - `memory-room` is the one formula for whether the sandbox has room (limit, used, free, stall, and what each workload
   class costs). The daemon's resource budget judges by it, and it is also the `memory-room` command `queue-run` asks:
   it asks the daemon's room socket, and applies the formula itself where no daemon answers.

@@ -9,11 +9,22 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { mergeHeavyRules, QUEUE_SKIPPED_EXIT_CODE, queueArgs, ruleById } from "../../constants/src/heavy-rules.cjs";
 
-// The settings of the `repo-verify` rule (heavy-commands.ts), so a script queued this way competes for the same slot as
-// the same command typed by an agent: one at a time, a wait of up to 15 minutes, then not run at all rather than beside
-// the holder.
-const RULE = { pool: "heavy", limit: "1", wait: "900", memoryGate: "120", maxHold: "1800", onDeadline: "skip" };
+// The `repo-verify` rule as shipped (@intentic/constants heavy-rules.cjs, the table the daemon reads too), so a script
+// queued this way competes for the same slot as the same command run by an agent: one at a time, a wait of up to 15
+// minutes, then not run at all rather than beside the holder.
+const SHIPPED = mergeHeavyRules();
+const REPO_VERIFY = (() => {
+    const rule = ruleById(SHIPPED, "repo-verify");
+    return {
+        id: "repo-verify",
+        pool: rule?.pool ?? SHIPPED.defaultPool,
+        limit: rule?.limit ?? SHIPPED.limit,
+        maxHold: rule?.maxHoldSeconds ?? SHIPPED.maxHoldSeconds,
+        onDeadline: rule?.onDeadline ?? SHIPPED.onDeadline,
+    };
+})();
 const QUEUE_RUN = "/usr/local/bin/queue-run";
 // Set on the re-run so it can never queue itself twice: queue-run that could not take a slot (no flock, an unwritable
 // directory) runs the command anyway, and that run must not go round again.
@@ -24,7 +35,7 @@ const queueRoot = (env) => env.INTENTIC_QUEUE_DIR ?? join(env.TMPDIR ?? tmpdir()
 // The heavy slot this process runs inside, or undefined: queue-run names it in the environment of what it starts, and
 // keeps it open as fd 9 (the only sign an older queue-run gives).
 export const heldHeavySlot = (env = process.env, fd9 = "/proc/self/fd/9") => {
-    const pool = join(queueRoot(env), RULE.pool);
+    const pool = join(queueRoot(env), REPO_VERIFY.pool);
     const named = env.INTENTIC_QUEUE_SLOT;
     if (named !== undefined && named.startsWith(`${pool}/`)) {
         return named;
@@ -43,20 +54,18 @@ export const runInHeavySlot = (label, { env = process.env, argv = process.argv, 
     if (heldHeavySlot(env) !== undefined || env[REQUEUED] === "1" || !existsSync(queueRun)) {
         return;
     }
-    const { pool, limit, wait, memoryGate, maxHold, onDeadline } = RULE;
-    const run = spawnSync(
-        queueRun,
-        ["--pool", pool, "--limit", limit, "--wait", wait, "--memory-gate", memoryGate, "--max-hold", maxHold, "--on-deadline", onDeadline, "--label", label, "--", process.execPath, ...argv.slice(1)],
-        { stdio: "inherit", env: { ...env, [REQUEUED]: "1" } },
-    );
+    // The rule's own flags, then this script's label in place of the rule's id, so the pane names what waits.
+    const flags = queueArgs(REPO_VERIFY, SHIPPED);
+    flags[flags.indexOf("--label") + 1] = label;
+    const run = spawnSync(queueRun, [...flags, "--", process.execPath, ...argv.slice(1)], { stdio: "inherit", env: { ...env, [REQUEUED]: "1" } });
     if (run.error !== undefined) {
         // A queue that cannot start is no reason to measure nothing: the run goes ahead unqueued, as queue-run itself
         // does when it cannot take a slot.
         console.error(`${label}: could not wait for the heavy slot (${run.error.message}); running without it`);
         return;
     }
-    if (run.status === 75) {
-        console.error(`${label}: the sandbox's heavy slot stayed taken for ${Number(wait) / 60} minutes, so nothing was measured; run it again later`);
+    if (run.status === QUEUE_SKIPPED_EXIT_CODE) {
+        console.error(`${label}: the sandbox's heavy slot stayed taken for ${SHIPPED.waitSeconds / 60} minutes, so nothing was measured; run it again later`);
     }
     process.exit(run.status ?? 1);
 };

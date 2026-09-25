@@ -1,5 +1,6 @@
+import { readFileSync, rmSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { shellQuote } from "@intentic/sandbox-run/quote";
 import type { NamedSecret } from "../../secrets/secret-registry.js";
 import { syncHookOutput } from "../../testing.js";
 import { resolveCommandSecrets, type SecretAccess, type SecretUseReport } from "../../secrets/secret-access.js";
@@ -94,17 +95,24 @@ test("a registry that cannot be read refuses rather than passing the token throu
     expect(await resolveCommandSecrets("echo {{secret:X}}", broken)).toEqual({ refusal: expect.stringContaining("could not be read") });
 });
 
-test("inside the tmux wrapper, the pane executes the value while -c keeps the agent's reference", async () => {
+test("inside the tmux wrapper, the pane executes the value while the filter keeps the agent's reference, and no argv carries either", async () => {
     const { bundle, uses } = access();
     const agentLine = 'curl -d \'{"token":"{{secret:CLOUDFLARE_API_TOKEN}}"}\' https://api';
     const output = await outputOf(fire({ command: agentLine, description: "call api" }, bashTmuxHooks([], undefined, undefined, bundle)));
-    const command = output?.hookEventName === "PreToolUse" ? (output.updatedInput?.["command"] as string) : undefined;
-    // The ledger/cleaner copy is the agent's own line.
-    expect(command?.startsWith(`/usr/local/bin/tmux-run -c ${shellQuote(agentLine)} `)).toBe(true);
-    // The executed half carries the value instead of the token.
-    expect(command).toContain(TOKEN);
-    expect(command?.indexOf(TOKEN)).toBeGreaterThan(command?.indexOf("agent-3f2a9b1c") ?? 0);
-    expect(uses.map((use) => use.name)).toEqual(["CLOUDFLARE_API_TOKEN"]);
+    const command = output?.hookEventName === "PreToolUse" ? ((output.updatedInput?.["command"] as string | undefined) ?? "") : "";
+    const dir = dirname(/ -f '?([^' ]+)'? /u.exec(command)?.[1] ?? "");
+    try {
+        // Handed over by file: the value is in no process's command line, readable by anything running as this user.
+        expect(command).not.toContain(TOKEN);
+        expect(command).not.toContain("secret:");
+        // The ledger/cleaner copy is the agent's own line; the file the pane runs carries the value.
+        expect(readFileSync(join(dir, "said"), "utf8")).toBe(agentLine);
+        expect(readFileSync(join(dir, "agent"), "utf8")).toContain(`{"token":"${TOKEN}"}`);
+        expect(statSync(join(dir, "agent")).mode & 0o777).toBe(0o600);
+        expect(uses.map((use) => use.name)).toEqual(["CLOUDFLARE_API_TOKEN"]);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
 });
 
 test("inside the tmux wrapper, an unknown name denies the command", async () => {

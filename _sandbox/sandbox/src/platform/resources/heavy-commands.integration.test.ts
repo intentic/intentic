@@ -1,54 +1,45 @@
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_HEAVY_COMMANDS, fileHeavyCommandsStore, type HeavyCommands, matchHeavyCommand } from "./heavy-commands.js";
+import { EARLIER_SHIPPED_RULES, matchInvocation, mergeHeavyRules } from "@intentic/constants/heavy-rules";
+import { fileHeavyCommandsStore } from "./heavy-commands.js";
 
-// The file half: what .intentic/config/heavy-commands.json does on disk, separate from heavy-commands.test.ts since
-// these open real temp trees under the longer integration hang-detector budget.
+// The file half: what .intentic/config/heavy-commands.json does on disk. It holds only the owner's overrides, and a file
+// of the earlier shape (the whole table, seeded once and never updated) is read as the overrides it amounts to.
 
 const dir = async (): Promise<string> => mkdtemp(join(tmpdir(), "heavy-"));
 
-test("an absent file reads as the shipped defaults", async () => {
-    const store = fileHeavyCommandsStore(join(await dir(), "heavy-commands.json"));
-    expect(await store.read()).toEqual(DEFAULT_HEAVY_COMMANDS);
+test("an absent file reads as the shipped table, and nothing is written for it", async () => {
+    const path = join(await dir(), "heavy-commands.json");
+    expect(await fileHeavyCommandsStore(path).read()).toEqual(mergeHeavyRules());
+    await expect(readFile(path, "utf8")).rejects.toThrow();
 });
 
-test("seed writes the defaults once, and never touches a file that already exists", async () => {
+test("overrides on disk sit on top of the shipped table, so a fix to a shipped rule still reaches this sandbox", async () => {
     const path = join(await dir(), "heavy-commands.json");
-    const store = fileHeavyCommandsStore(path);
-    await store.seed();
-    const written = JSON.parse(await readFile(path, "utf8")) as HeavyCommands;
-    expect(written.limit).toBe(2);
-
-    await writeFile(path, JSON.stringify({ limit: 1, rules: [{ id: "mine", pattern: "make" }] }));
-    await store.seed();
-    expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ limit: 1, rules: [{ id: "mine", pattern: "make" }] });
-    expect((await store.read()).limit).toBe(1);
-});
-
-test("a hand-edited file decides what is heavy, including making something new heavy", async () => {
-    const path = join(await dir(), "heavy-commands.json");
-    await writeFile(path, JSON.stringify({ limit: 1, rules: [{ id: "gradle", pattern: "\\bgradlew?\\b" }] }));
+    await writeFile(path, JSON.stringify({ limit: 1, ruleEdits: [{ id: "gradle", pattern: "\\bgradlew?\\b" }] }));
     const loaded = await fileHeavyCommandsStore(path).read();
-    // The file names no ceiling and no deadline answer, so the schema's defaults are what a rule inherits.
-    expect(matchHeavyCommand("./gradlew assembleRelease", loaded)).toEqual({
-        id: "gradle",
-        pool: "heavy",
-        limit: 1,
-        maxHold: DEFAULT_HEAVY_COMMANDS.maxHoldSeconds,
-        onDeadline: DEFAULT_HEAVY_COMMANDS.onDeadline,
-    });
-    // The shipped rules are replaced, not merged, so an owner can shrink the list too.
-    expect(matchHeavyCommand("pnpm test", loaded)).toBeUndefined();
+    expect(matchInvocation("gradlew assembleRelease", loaded)?.id).toBe("gradle");
+    expect(matchInvocation("pnpm test", loaded)).toEqual({ id: "package-script", pool: "heavy", limit: 1, maxHold: 1800, onDeadline: "run" });
 });
 
-test("an unreadable file reports and falls back to the defaults rather than queueing nothing", async () => {
+test("a seeded file of the earlier shape reads as today's rules, keeping only what the owner added", async () => {
+    const path = join(await dir(), "heavy-commands.json");
+    const ownRule = { id: "bun-test", pattern: "\\bbun\\s+test\\b|(?<![-.])\\bsuites\\b(?![-.])", pool: "tests", limit: 4 };
+    await writeFile(
+        path,
+        JSON.stringify({ limit: 2, defaultPool: "heavy", waitSeconds: 900, memoryGateSeconds: 120, maxHoldSeconds: 1800, rules: [...EARLIER_SHIPPED_RULES.slice(0, 3), ownRule] }),
+    );
+    expect(await fileHeavyCommandsStore(path).read()).toEqual(mergeHeavyRules({ ruleEdits: [ownRule] }));
+});
+
+test("an unreadable file reports and falls back to the shipped table rather than queueing nothing", async () => {
     const path = join(await dir(), "heavy-commands.json");
     await writeFile(path, "{ not json");
     const reasons: string[] = [];
     const store = fileHeavyCommandsStore(path, (reason) => reasons.push(reason));
-    expect(await store.read()).toEqual(DEFAULT_HEAVY_COMMANDS);
+    expect(await store.read()).toEqual(mergeHeavyRules());
     await writeFile(path, JSON.stringify({ limit: -4 }));
-    expect(await store.read()).toEqual(DEFAULT_HEAVY_COMMANDS);
-    expect(reasons.length).toBeGreaterThan(0);
+    expect(await store.read()).toEqual(mergeHeavyRules());
+    expect(reasons).toEqual([expect.stringContaining("limit")]);
 });

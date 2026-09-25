@@ -27,7 +27,12 @@
         "src/memory-room.mjs",
         "src/memory-room.d.mts",
         "src/allow.mjs",
-        "src/allow.d.mts"
+        "src/allow.d.mts",
+        "src/heavy-rules.cjs",
+        "src/heavy-rules.d.cts",
+        "src/heavy-turn.cjs",
+        "src/heavy-hook.cjs",
+        "src/heavy-exec.cjs"
     ],
     "exports": {
         ".": {
@@ -76,7 +81,13 @@
         "./allow": {
             "types": "./src/allow.d.mts",
             "default": "./src/allow.mjs"
-        }
+        },
+        "./heavy-rules": {
+            "types": "./src/heavy-rules.d.cts",
+            "default": "./src/heavy-rules.cjs"
+        },
+        "./heavy-hook": "./src/heavy-hook.cjs",
+        "./heavy-exec": "./src/heavy-exec.cjs"
     },
     "scripts": {
         "build": "tsgo",

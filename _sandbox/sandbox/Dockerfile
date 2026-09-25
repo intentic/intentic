@@ -492,13 +492,17 @@ COPY _sandbox/sandbox/seed-skills /root/.claude/skills
 # flows through it, so commands run live-visible in tmux sessions — and the agent's output filter, which
 # strips noise from what the model sees.
 COPY --chmod=755 _sandbox/sandbox/bin/tmux-run /usr/local/bin/tmux-run
-# The heavy-command queue the same hook splices in front of a command matching a rule in
-# .intentic/config/heavy-commands.json, so several sessions' test/typecheck fan-outs take turns instead of
-# pinning the cgroup together (src/platform/resources/heavy-commands.ts carries the measurement). It holds an flock, so
-# `flock` (util-linux) and, for the ceiling that takes a slot back from a command that hangs, `timeout`
-# (coreutils) are its dependencies; both are already in the base, and a missing one degrades to running the
-# command plainly — unqueued, or unbounded. Not on PATH ⇒ the daemon never inserts it at all (terminal-run.ts queueRunEnabled).
+# The heavy-command queue a heavy program becomes as it starts (heavy-turn.cjs in @intentic/constants, matched by the
+# program that really runs against the shared table plus .intentic/config/heavy-commands.json), so several sessions'
+# test/typecheck fan-outs take turns instead of pinning the cgroup together. It holds an flock, so `flock`
+# (util-linux) and, for the ceiling that takes a slot back from a command that hangs, `timeout` (coreutils) are its
+# dependencies; both are already in the base, and a missing one degrades to running the command plainly — unqueued,
+# or unbounded. Not on PATH ⇒ nothing queues, and heavy programs are still ranked (terminal-run.ts queueRunEnabled).
 COPY --chmod=755 _sandbox/sandbox/bin/queue-run /usr/local/bin/queue-run
+# The thin wrappers for heavy programs that are not node scripts (pnpm's own binary, bun, cargo), first on an agent
+# command's PATH (src/platform/resources/heavy-commands.ts heavyEnvPrefix); node programs are judged by the hook
+# node loads for them instead. Each name is a link to the one wrapper.
+COPY --chmod=755 _sandbox/sandbox/bin/heavy-shims /opt/sandbox/heavy-shims
 COPY --chmod=755 _sandbox/sandbox/bin/agent-output-filter.mjs /usr/local/bin/agent-output-filter
 # The cleaner registry the filter imports (./cleaners.mjs resolves next to the renamed binary at /usr/local/bin).
 COPY --chmod=755 _sandbox/sandbox/bin/cleaners.mjs /usr/local/bin/cleaners.mjs

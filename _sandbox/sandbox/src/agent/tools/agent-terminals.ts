@@ -1,4 +1,6 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { forkedExec } from "@intentic/scaffold";
 import { nsenterPrefix, type TurnPlacement } from "../../agents/worktrees/isolation.js";
@@ -8,13 +10,13 @@ import { redirectCommand } from "../../agents/worktrees/worktree-redirect.js";
 import { resolveCommandSecrets, type SecretAccess } from "../../secrets/secret-access.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { QUEUE_RUN_BIN, queueRunEnabled, TMUX_RUN_BIN } from "../../terminal/terminal-run.js";
-import { offloadPrefix } from "../../offload/offload-prefix.js";
-import { type HeavyCommands, type HeavyMatch, matchHeavyCommand } from "../../platform/resources/heavy-commands.js";
+import { OFFLOAD_RUN_BIN } from "../../offload/offload-prefix.js";
+import { type HeavyCommands, heavyEnvPrefix } from "../../platform/resources/heavy-commands.js";
+import { queueArgs, ruleById } from "@intentic/constants/heavy-rules";
 import { shellPrefix } from "../../workload/workload-class.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { type BackgroundJob, backgroundJobOf, type BackgroundJobSeed, jobCommandLine, openBackgroundJob, stopBackgroundJob } from "./background-jobs.js";
 import { turnRunOf } from "../../agents/actor/conversation-holdings.js";
-import { guardSelfMatch, selfKillRefusal } from "./self-kill-guard.js";
 
 // Rewrites every Bash tool command through bin/tmux-run so it runs visibly in the `agent-<sdk session>` tmux session
 // the terminal panel attaches to; subagent Bash calls land in the same session as extra windows.
@@ -65,66 +67,46 @@ const envKeyFlags = (envKeys: readonly string[]): string =>
         .join("");
 
 // Puts every agent command in the `command` class (workload-class.ts): demoted, and ranked for the OOM killer above every
-// runtime; `bash -c` wraps it since `nice` execs a binary not a keyword. Panes hang off the tmux server, so no runtime's
-// class reaches them by fork.
+// runtime; `bash` runs the command's file since `nice` execs a binary, not a keyword. Panes hang off the tmux server, so
+// no runtime's class reaches them by fork.
 const POLITE_PREFIX = shellPrefix({ class: "command" });
 
 // Leaves the last pipeline's per-stage statuses where bin/tmux-run's pane exports INTENTIC_PIPESTATUS_FILE. An EXIT
 // trap on the command's first line: its text, line numbers and exit status stay the agent's own.
 export const PIPESTATUS_TRAP = `trap 'printf "%s " "\${PIPESTATUS[@]}" 2>/dev/null >"\${INTENTIC_PIPESTATUS_FILE:-/dev/null}"' EXIT; `;
 
-// Bounds concurrent heavy commands via bin/queue-run, since demotion rations CPU but not memory, and puts each in the
-// `toolchain` class, the first thing the OOM killer takes. Spliced inside the namespace hop and the demotion, so both cover the forked tree.
-const queuePrefix = (command: string, config: HeavyCommands | undefined): string => {
-    const match = config === undefined ? undefined : matchHeavyCommand(command, config);
-    return match === undefined || config === undefined ? "" : queuePrefixOf(match, config);
-};
+// Heavy programs are judged as they start, by what they are (platform/resources/heavy-commands.ts heavyEnvPrefix): the
+// line only carries the table down. Queueing is only on where queue-run is, and a program that matches keeps its
+// toolchain class whether or not it queues.
+const queueRunOf = (): string | undefined => (queueRunEnabled() ? QUEUE_RUN_BIN : undefined);
 
-const queuePrefixOf = (match: HeavyMatch, config: HeavyCommands): string => {
-    const flags = [
-        `--pool ${shellQuote(match.pool)}`,
-        `--limit ${String(match.limit)}`,
-        `--wait ${String(config.waitSeconds)}`,
-        `--memory-gate ${String(config.memoryGateSeconds)}`,
-        `--max-hold ${String(match.maxHold)}`,
-        `--on-deadline ${match.onDeadline}`,
-        `--label ${shellQuote(match.id)}`,
-    ].join(" ");
-    return `${QUEUE_RUN_BIN} ${flags} -- ${shellPrefix({ class: "toolchain" })}`;
-};
-
-// Where a heavy line runs instead of here (settings `offload`): its matched rule's runner, when the owner sends that kind
-// of work to one. `offload-run` then stands in for the queue, holding the queue's own prefix for when the runner cannot
-// take it (bin/offload-run). A line that resolved a secret stays here: the value would travel to another machine.
-// The prefix a heavy line gets: offload-run when its rule's kind goes to a runner, else the local queue, else nothing.
-const heavyPrefix = (command: string, config: HeavyCommands | undefined, offload: Readonly<Record<string, string>>, secretResolved: boolean): string => {
-    const match = config === undefined ? undefined : matchHeavyCommand(command, config);
-    if (match === undefined || config === undefined) {
-        return "";
-    }
-    const queue = queuePrefixOf(match, config);
-    const runner = offload[match.id];
-    return runner === undefined || secretResolved ? queue : offloadPrefix(runner, match.id, queue);
-};
-
-// The queue prefix a whole command line would get, "" when none: for a caller that hands the line to offload-run, which
-// keeps it for running the line here when the runner cannot take it.
+// The check after landing's queue prefix: the daemon knows which line that is, so it takes the `repo-verify` rule by
+// name rather than recognising it; "" when that rule is disabled or nothing queues. The line waits for its slot here, so
+// the time it waits is never charged to its own ceiling (workspace/deps/verify-deps.ts).
 export const queuePrefixFor =
     (heavy: () => Promise<HeavyCommands>) =>
-    async (command: string): Promise<string> =>
-        queueRunEnabled() ? queuePrefix(command, await heavy()) : "";
+    async (_command: string): Promise<string> => {
+        const config = await heavy();
+        const rule = ruleById(config, "repo-verify");
+        if (!queueRunEnabled() || !config.queue || rule === undefined) {
+            return "";
+        }
+        const match = {
+            id: rule.id,
+            pool: rule.pool ?? config.defaultPool,
+            limit: rule.limit ?? config.limit,
+            maxHold: rule.maxHoldSeconds ?? config.maxHoldSeconds,
+            onDeadline: rule.onDeadline ?? config.onDeadline,
+        };
+        return `${QUEUE_RUN_BIN} ${queueArgs(match, config).map(shellQuote).join(" ")} -- ${shellPrefix({ class: "toolchain" })}`;
+    };
 
-// Wraps a whole command line behind the queue, for a caller that runs one command directly rather than rewriting an
-// agent's. Same rules and the same queueRunEnabled standing-down; an unmatched command returns unchanged.
+// A whole line run under the heavy table, for a caller that runs one command directly rather than rewriting an agent's
+// (a runner running a line its parent offloaded): its programs queue here as they start, and none goes on elsewhere.
 export const queueWhole =
     (heavy: () => Promise<HeavyCommands>) =>
-    async (command: string): Promise<string> => {
-        if (!queueRunEnabled()) {
-            return command;
-        }
-        const prefix = queuePrefix(command, await heavy());
-        return prefix === "" ? command : `${prefix}bash -c ${shellQuote(command)}`;
-    };
+    async (command: string): Promise<string> =>
+        `${heavyEnvPrefix(await heavy(), { queueRun: queueRunOf() })}bash -c ${shellQuote(command)}`;
 
 // The start row is written inside the live turn, since the settle that adopts the job runs after the record closes.
 const startJob = (
@@ -213,13 +195,9 @@ export const bashTmuxHooks = (
                         }
                         // Path rewrite runs first, on the agent's words; what follows names no workspace path of its
                         // own.
-                        const redirected =
+                        const command =
                             isolation !== undefined && isolation.anchor === undefined ? redirectCommand(tool.command, isolation.plan) : tool.command;
-                        // Every copy below, `-c` included, carries the rewritten pattern: each is some process's
-                        // command line.
-                        const guarded = guardSelfMatch(redirected);
-                        const command = guarded.command;
-                        // A secret reference resolves into the executed line's value; `-c` below keeps the
+                        // A secret reference resolves into the executed line's value; the filter is told the
                         // reference-form `command`.
                         let executed = command;
                         if (secrets !== undefined) {
@@ -238,53 +216,49 @@ export const bashTmuxHooks = (
                         // Rides the namespace hop so every forked process carries it; lets the daemon tell an
                         // agent-started run apart.
                         const stamp = `${AGENT_SESSION_ENV}=${shellQuote(input.session_id)} ${owner !== undefined && /^[A-Za-z0-9_-]+$/u.test(owner) ? `${WORKLOAD_ENV}=${owner} ` : ""}`;
-                        // Matched against the agent's own `command`, never `executed` (a resolved secret) or the
-                        // wrapped string.
-                        const queue = await (async (): Promise<string> => {
+                        // The table every program of the line is judged by as it starts; a line that resolved a
+                        // secret offloads nothing, since the value would travel to another machine.
+                        const heavyEnv = await (async (): Promise<string> => {
                             try {
-                                return heavy === undefined ? "" : heavyPrefix(command, await heavy(), (await offload?.().catch(() => ({}))) ?? {}, executed !== command);
+                                if (heavy === undefined) {
+                                    return "";
+                                }
+                                const routes = executed === command ? ((await offload?.().catch(() => ({}))) ?? {}) : {};
+                                return heavyEnvPrefix(await heavy(), { queueRun: queueRunOf(), offloadRun: OFFLOAD_RUN_BIN, offload: routes });
                             } catch {
                                 return "";
                             }
                         })();
-                        const shell = `bash -c ${shellQuote(`${PIPESTATUS_TRAP}${executed}`)}`;
-                        // Namespace hop and demotion sit inside the wrapper; the forked tree inherits both, tmux-run
-                        // stays outside.
-                        const inner =
-                            isolation?.anchor !== undefined
-                                ? `${stamp}${nsenterPrefix(isolation.anchor.pid, isolation.anchor.cwd)}${POLITE_PREFIX}${queue}${shell}`
-                                : `${stamp}${POLITE_PREFIX}${queue}${shell}`;
-                        // The window name rides the wrapper's command line too, where a pattern it contains matches.
-                        const slug = windowSlug(tool.description);
-                        const name = guarded.matches.some((match) => match.pattern.test(slug)) ? "run" : slug;
-                        // `-c` carries the command as written; cleaner matching reads it too, not the wrapped line
-                        // tmux-run executes.
-                        const line = (jobFlag: string): string =>
-                            `${TMUX_RUN_BIN} ${envFlags}${jobFlag}-c ${shellQuote(command)} ${session} ${shellQuote(inner)} ${name}`;
-                        // Judged before a job is filed, so a refusal leaves nothing behind.
-                        const suicidal = guarded.matches.find((match) => match.kills && match.pattern.test(line("")));
-                        if (suicidal !== undefined) {
-                            return {
-                                hookSpecificOutput: {
-                                    hookEventName: "PreToolUse",
-                                    permissionDecision: "deny",
-                                    permissionDecisionReason: selfKillRefusal(suicidal),
-                                },
-                            };
-                        }
-                        // Filed before the command is rewritten, so the flag and the registry entry cannot disagree
-                        // about which dir holds this job's completion. A dir that cannot be made leaves the call
-                        // ordinary rather than failing it.
+                        // Filed first, so the flag and the registry entry cannot disagree about which dir holds this
+                        // job's completion. A dir that cannot be made leaves the call ordinary rather than failing it.
                         const job =
                             jobs === undefined || tool.run_in_background !== true
                                 ? undefined
                                 : startJob(jobs, { command, session, description: tool.description, toolUseId: input.tool_use_id });
+                        // THE COMMAND TRAVELS BY FILE. `pkill -f` and `pgrep -f` match every process's whole command
+                        // line, so a pattern that sat in any wrapper's argv (the CLI's shell, tmux-run, the pane's
+                        // shell) killed the agent's own call. Written to files, it is in no argv at all: the CLI runs
+                        // `tmux-run -f <dir>/line <session>`, the pane runs `bash <dir>/agent`, and the window name and
+                        // the words the output filter reads sit beside them.
+                        const dir = job?.dir ?? mkdtempSync(join(tmpdir(), "intentic-run-"));
+                        mkdirSync(dir, { recursive: true, mode: 0o700 });
+                        const agentFile = join(dir, "agent");
+                        writeFileSync(agentFile, `${PIPESTATUS_TRAP}${executed}\n`, { mode: 0o600 });
+                        const run = `${POLITE_PREFIX}${heavyEnv}bash ${shellQuote(agentFile)}`;
+                        // Namespace hop and demotion sit inside the wrapper; the forked tree inherits both, tmux-run
+                        // stays outside.
+                        const inner =
+                            isolation?.anchor !== undefined ? `${stamp}${nsenterPrefix(isolation.anchor.pid, isolation.anchor.cwd)}${run}` : `${stamp}${run}`;
+                        writeFileSync(join(dir, "line"), `${inner}\n`, { mode: 0o600 });
+                        writeFileSync(join(dir, "said"), command, { mode: 0o600 });
+                        writeFileSync(join(dir, "name"), windowSlug(tool.description), { mode: 0o600 });
+                        const jobFlag = job === undefined ? "" : `-b ${shellQuote(job.dir)} `;
                         return {
                             hookSpecificOutput: {
                                 hookEventName: "PreToolUse",
                                 updatedInput: {
                                     ...(tool as Record<string, unknown>),
-                                    command: line(job === undefined ? "" : `-b ${shellQuote(job.dir)} `),
+                                    command: `${TMUX_RUN_BIN} ${envFlags}${jobFlag}-f ${shellQuote(join(dir, "line"))} ${session}`,
                                 },
                             },
                         };

@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { requires } from "@intentic/testing/requires";
 import { agentShellBusy, PIPESTATUS_TRAP } from "./agent-terminals.js";
-import { guardSelfMatch } from "./self-kill-guard.js";
 
 // Runs against a real tmux server: the dead-vs-running window distinction (remain-on-exit) needs a real process, not a
 // stub.
@@ -118,20 +117,23 @@ test("the pipeline trap leaves the last pipeline's statuses and the command's ow
     }
 });
 
-// pgrep, never pkill: the same full-line match, without killing anything on a shared machine.
-test.skipIf(!pgrep.runs)(pgrep.title("a bracketed pattern still finds its process, and no longer finds the shell that names it"), async () => {
+// pgrep, never pkill: the same full-line match, without killing anything on a shared machine. The pane runs the
+// agent's command from its file (`bash <file>`), so the shell running it names no pattern of its own; `bash -c`, which
+// carried the words in its argv, matched itself.
+test.skipIf(!pgrep.runs)(pgrep.title("a command run from its file finds its target and not the shell that names it"), async () => {
     const marker = `zz-self-match-${String(process.pid)}`;
     const target = spawn("bash", ["-c", `exec -a ${marker} sleep 30`], { stdio: "ignore" });
     const pid = String(target.pid);
+    const scratch = await mkdtemp(join(tmpdir(), "self-match-"));
     try {
         await settle(async () => readFileSync(`/proc/${pid}/cmdline`, "utf8").startsWith(marker));
-        const found = (command: string): string[] =>
-            spawnSync("bash", ["-c", `${command}; echo end`], { encoding: "utf8" })
-                .stdout.trim()
-                .split("\n");
-        expect(found(guardSelfMatch(`pgrep -f ${marker}`).command)).toEqual([pid, "end"]);
-        expect(found(`pgrep -f ${marker}`)).toEqual([pid, expect.any(String), "end"]);
+        const script = join(scratch, "agent");
+        await writeFile(script, `pgrep -f ${marker}; echo end\n`);
+        const lines = (argv: readonly string[]): string[] => spawnSync("bash", [...argv], { encoding: "utf8" }).stdout.trim().split("\n");
+        expect(lines([script])).toEqual([pid, "end"]);
+        expect(lines(["-c", `pgrep -f ${marker}; echo end`])).toEqual([pid, expect.any(String), "end"]);
     } finally {
         target.kill();
+        await rm(scratch, { recursive: true, force: true });
     }
 });

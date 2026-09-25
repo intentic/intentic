@@ -134,20 +134,32 @@ out="$(INTENTIC_RUN_FILTER=1 PATH="$F:$PATH" bash "$W" "$S" ": pnpm install; $no
 case "$out" in *"Progress: resolved"*) echo "FAIL: pnpm progress survived the filter: '$out'"; exit 1;; esac
 case "$out" in *"done in 4s"*"filtered to"*) ;; *) echo "FAIL: filtered success missing summary/footer: '$out'"; exit 1;; esac
 
-# -c names the command the FILTER is told this is: by the time tmux-run runs it, the executed line carries the
-# daemon's wrapping (namespace hop, nice/ionice, bash -c), while everything the filter is asked about — which
-# cleaners match, which un-cleaned commands deserve a handler — is a property of what the AGENT wrote.
+# -f hands the command over by file: `line` is what runs, `said` what the FILTER is told the command is (by then the
+# executed line carries the daemon's wrapping: namespace hop, nice/ionice, the heavy table), `name` the window's name.
 #
 # Asserted through a stub filter rather than the real one, because the question here is purely "which string
 # reaches argv[1]". Routing it through the cleaners instead would make the assertion depend on their matching,
 # the session cache and the size guard above, none of which this flag has anything to do with.
 printf '#!/usr/bin/env bash\nprintf "ARGV1=%%s\\n" "$1"\n' > "$F/echo-argv1"
 chmod +x "$F/echo-argv1"
-out="$(INTENTIC_RUN_FILTER=1 INTENTIC_FILTER_CMD="$F/echo-argv1" bash "$W" -c 'pnpm install' "$S" 'echo ignored' run)"
-[ "$out" = "ARGV1=pnpm install" ] || { echo "FAIL: -c did not reach the filter, got '$out'"; exit 1; }
-# Without it the two are the same string — the daemon's own terminal runner has no wrapping to see past.
+C="$(mktemp -d "${TMPDIR:-/tmp}/intentic-run-XXXXXXXX")"
+printf 'echo ignored\n' > "$C/line"; printf 'pnpm install' > "$C/said"; printf 'install' > "$C/name"
+out="$(INTENTIC_RUN_FILTER=1 INTENTIC_FILTER_CMD="$F/echo-argv1" bash "$W" -f "$C/line" "$S")"
+[ "$out" = "ARGV1=pnpm install" ] || { echo "FAIL: -f said did not reach the filter, got '$out'"; exit 1; }
+[ ! -d "$C" ] || { echo "FAIL: -f run left its capture dir behind"; exit 1; }
+# Without a file the two are the same string — the daemon's own terminal runner has no wrapping to see past.
 out="$(INTENTIC_RUN_FILTER=1 INTENTIC_FILTER_CMD="$F/echo-argv1" bash "$W" "$S" 'echo ignored' run)"
-[ "$out" = "ARGV1=echo ignored" ] || { echo "FAIL: filter got '$out' with no -c (want the executed command)"; exit 1; }
+[ "$out" = "ARGV1=echo ignored" ] || { echo "FAIL: filter got '$out' with no said file (want the executed command)"; exit 1; }
+
+# THE REASON -f EXISTS: an agent command that pkills a pattern it names must not kill its own call. Every place the
+# pattern could sit — the line, the words, the window name — is a file, so no wrapper's argv matches it.
+C="$(mktemp -d "${TMPDIR:-/tmp}/intentic-run-XXXXXXXX")"
+pat="selfkill-probe-$$"
+printf "pkill -f '%s'; pgrep -f '%s' >/dev/null && echo matched || echo survived\n" "$pat" "$pat" > "$C/line"
+printf 'pkill -f %s' "$pat" > "$C/said"; printf '%s' "$pat" > "$C/name"
+out="$(INTENTIC_RUN_FILTER=0 bash "$W" -f "$C/line" "$S")"; rc=$?
+[ "$rc" = 0 ] || { echo "FAIL: pkill of a pattern the command names killed its own call (exit $rc): '$out'"; exit 1; }
+case "$out" in *survived*) ;; *) echo "FAIL: self-kill probe got '$out' (want survived)"; exit 1;; esac
 
 # The pane exports where the agent hook's EXIT trap leaves the last pipeline's statuses; the filter gets them as
 # argv[5], which is what lets it report a failure `| tail` hid behind an exit 0. Written by hand here: the trap
@@ -172,4 +184,4 @@ grep -q 'ran outside a terminal pane' "$err" || { echo "FAIL: degraded run said 
 # And it names the CAUSE rather than only the symptom: the namespace it was told to reach tmux from is gone.
 grep -q 'is unreachable' "$err" || { echo "FAIL: degraded run did not name the unreachable namespace: '$(cat "$err")'"; exit 1; }
 
-echo "PASS: tmux-run returns full output + real exit code, -e env, -c filter command, pipeline statuses, output cap, soft timeout + filter, honest fallback"
+echo "PASS: tmux-run returns full output + real exit code, -e env, -f command files, pkill-proof, pipeline statuses, output cap, soft timeout + filter, honest fallback"

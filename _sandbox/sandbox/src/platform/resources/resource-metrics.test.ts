@@ -64,9 +64,9 @@ describe("queue slot alarm", () => {
         const busy = snapshot({ heavy: { slots: 2, held: 2, longestHoldSeconds: 120, longestHolder: holder } });
         const stuck = snapshot({ heavy: { slots: 2, held: 1, longestHoldSeconds: 1_800, longestHolder: holder } });
         // A pool at its limit with commands that are getting on with it is not an alarm.
-        expect(longHeldPools(busy, 900)).toEqual([]);
+        expect(longHeldPools(busy)).toEqual([]);
         // The alarm names what is stuck, so a thirty-minute hold is attributable from the log line alone.
-        expect(longHeldPools(stuck, 900)).toStrictEqual([{ pool: "heavy", heldSeconds: 1_800, holder }]);
+        expect(longHeldPools(stuck)).toStrictEqual([{ pool: "heavy", heldSeconds: 1_800, holder }]);
     });
 
     test("pools are judged one at a time, and a pool with nothing held never reports", () => {
@@ -74,12 +74,22 @@ describe("queue slot alarm", () => {
             heavy: { slots: 2, held: 1, longestHoldSeconds: 2_400 },
             quiet: { slots: 1, held: 0, longestHoldSeconds: 0 },
         });
-        expect(longHeldPools(mixed, 900)).toStrictEqual([{ pool: "heavy", heldSeconds: 2_400, holder: undefined }]);
+        expect(longHeldPools(mixed)).toStrictEqual([{ pool: "heavy", heldSeconds: 2_400, holder: undefined }]);
+    });
+
+    // The shipped rule's half hour is not every rule's: a hold is judged against what its own rule allows it.
+    test("a holder is reported at half of its own rule's max-hold, and never when its rule lets it hold forever", () => {
+        const holding = (seconds: number, maxHoldSeconds: number) =>
+            snapshot({ tests: { slots: 4, held: 1, longestHoldSeconds: seconds, longestHolder: { pid: 9, command: "bun test", cwd: "/", maxHoldSeconds } } });
+        expect(longHeldPools(holding(299, 600))).toEqual([]);
+        expect(longHeldPools(holding(300, 600)).map((held) => held.heldSeconds)).toEqual([300]);
+        expect(longHeldPools(holding(3_599, 7_200))).toEqual([]);
+        expect(longHeldPools(holding(86_400, 0))).toEqual([]);
     });
 
     test("a sample from a daemon that never measured the queue is not an alarm", () => {
-        expect(longHeldPools(snapshot({}), 900)).toEqual([]);
+        expect(longHeldPools(snapshot({}))).toEqual([]);
         // A pool whose summary lost its field is unknown, not zero and not stuck.
-        expect(longHeldPools(snapshot({ heavy: { slots: 2, held: 1 } }), 900)).toEqual([]);
+        expect(longHeldPools(snapshot({ heavy: { slots: 2, held: 1 } }))).toEqual([]);
     });
 });

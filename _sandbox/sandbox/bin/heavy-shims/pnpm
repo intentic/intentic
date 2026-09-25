@@ -1,0 +1,20 @@
+#!/bin/sh
+# A thin wrapper for a heavy program that is not a node script, first on an agent's PATH (the daemon puts this directory
+# there, src/agent/tools/agent-terminals.ts). Under the daemon's heavy table and not yet covered, the program is judged
+# by heavy-exec.cjs (@intentic/constants): queued, or offloaded, by the program and arguments it really got. Otherwise,
+# or without node, it is the real program at once. Every name in this directory is this same file.
+here=$(cd "$(dirname "$0")" && pwd)
+name=$(basename "$0")
+exec_js=${INTENTIC_HEAVY_EXEC:-/opt/sandbox/node_modules/@intentic/constants/src/heavy-exec.cjs}
+if [ -n "${INTENTIC_HEAVY:-}" ] && [ -z "${INTENTIC_HEAVY_HELD:-}${INTENTIC_QUEUE_SLOT:-}" ] && [ -f "$exec_js" ] && command -v node >/dev/null 2>&1; then
+    exec node "$exec_js" "$here" "$name" "$@"
+fi
+# The real one: the first of that name on the PATH past this directory.
+old_ifs=$IFS
+IFS=:
+for dir in $PATH; do
+    [ -n "$dir" ] && [ "$(cd "$dir" 2>/dev/null && pwd)" != "$here" ] && [ -x "$dir/$name" ] && { IFS=$old_ifs; exec "$dir/$name" "$@"; }
+done
+IFS=$old_ifs
+echo "$name: command not found" >&2
+exit 127

@@ -3,8 +3,11 @@
 #
 # Runs <command> once a slot in <pool> is free, so the expensive commands several agent sessions each decide to
 # run — a repo-wide test fan-out, a type check across 74 packages — take turns instead of landing on the box at
-# once. The agent's PreToolUse hook (src/agent/tools/agent-terminals.ts) inserts this in front of any Bash command
-# matching a rule in .intentic/config/heavy-commands.json; every other command is untouched and never sees it.
+# once. A heavy program becomes this as it starts (heavy-turn.cjs in @intentic/constants, loaded into every program
+# an agent's command runs), with the flags its rule in the shared table gives (heavy-rules.cjs, with the owner's
+# overrides from .intentic/config/heavy-commands.json); the check after landing and the repository's own verify
+# scripts call it the same way. The defaults below are for a hand call only: every caller passes each value from that
+# table, so none of them is a second copy of it.
 #
 # WHY A LOCK AND NOT A COUNTER IN THE DAEMON. The slot has to be released by a command that is killed, that
 # backgrounds itself, or that dies with its whole session — and by one running when the daemon restarts under
@@ -105,6 +108,9 @@ held_run() {
     # Names the slot to everything the command starts. fd 9 says the same to the command itself, but a Node parent does
     # not pass it on, and a script deciding whether it must queue (heavy-slot.mjs) may sit several spawns down.
     [ -n "${slot:-}" ] && export INTENTIC_QUEUE_SLOT="$slot"
+    # How long this holder may keep the slot, read back by the daemon's minute log to say when a hold has gone on
+    # too long for its own rule (src/platform/resources/queue-slots.ts), not by one number for every pool.
+    [ -n "${slot:-}" ] && export INTENTIC_QUEUE_MAX_HOLD="$max_hold"
     if [ "$max_hold" -gt 0 ] && command -v timeout >/dev/null 2>&1; then
         exec timeout --kill-after="$kill_grace" "$max_hold" "$@"
     fi

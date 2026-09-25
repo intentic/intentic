@@ -10,6 +10,7 @@ import { logsRoot } from "../../logs/log-files.js";
 import { flatKeyed, readCgroup, readText } from "./cgroup.js";
 import { scanProcesses, type ScannedProcess } from "./process-scan.js";
 import { queueSnapshot } from "./queue-slots.js";
+import { holdWarnSeconds, SHIPPED_HEAVY_COMMANDS } from "@intentic/constants/heavy-rules";
 
 // Durable, one-line-per-minute account of the sandbox's resources: what was growing before an event-loop stall,
 // including healthy periods with no warning. Stored under the logs tree's retention and /logs/file access policy.
@@ -368,9 +369,14 @@ export interface ResourceMetricsOptions {
 // the first sample after a restart has nothing to diff and is skipped.
 const OOM_EVENTS = ["event_oom_kill", "event_oom_group_kill"] as const;
 
-// When a slot holder becomes worth a line in the log. Half of heavy-commands' shipped `maxHoldSeconds`, so a stuck
-// command is named while there is still as long again before the ceiling takes the slot back by force.
-const SLOT_HOLD_WARN_SECONDS = 15 * 60;
+// When a slot holder becomes worth a line in the log: half of what its own rule lets it hold (holdWarnSeconds), so a
+// stuck command is named while there is still as long again before the ceiling takes the slot back by force. A holder
+// whose limit cannot be read (a queue-run older than the stamp) is judged by the shipped limit; one allowed to hold
+// forever is never a warning.
+const warnAfterSeconds = (holder: unknown): number | undefined => {
+    const own = numberAt(holder, ["maxHoldSeconds"]);
+    return holdWarnSeconds(own ?? SHIPPED_HEAVY_COMMANDS.maxHoldSeconds);
+};
 
 const valueAt = (source: unknown, path: readonly string[]): unknown =>
     path.reduce<unknown>((held, key) => (held !== null && typeof held === "object" ? (held as Record<string, unknown>)[key] : undefined), source);
@@ -418,15 +424,12 @@ export const oomSinceSample = (
 
 // Pools whose oldest holder has been in place too long. Reads the sample rather than the queue directly, so the line
 // in the log and the line on disk can never disagree about what was held.
-export const longHeldPools = (
-    snapshot: ResourceSnapshot,
-    thresholdSeconds: number,
-): { readonly pool: string; readonly heldSeconds: number; readonly holder: unknown }[] =>
+export const longHeldPools = (snapshot: ResourceSnapshot): { readonly pool: string; readonly heldSeconds: number; readonly holder: unknown }[] =>
     Object.entries(snapshot.queue).flatMap(([pool, summary]) => {
         const longest = numberAt(summary, ["longestHoldSeconds"]);
-        return longest === undefined || longest < thresholdSeconds
-            ? []
-            : [{ pool, heldSeconds: longest, holder: valueAt(summary, ["longestHolder"]) }];
+        const holder = valueAt(summary, ["longestHolder"]);
+        const threshold = warnAfterSeconds(holder);
+        return longest === undefined || threshold === undefined || longest < threshold ? [] : [{ pool, heldSeconds: longest, holder }];
     });
 
 const resourceMetricsPath = (historyRoot: string): string => join(logsRoot(historyRoot), RESOURCE_METRICS_FILE);
@@ -470,7 +473,7 @@ export const startResourceMetrics = ({
             }
             // Once per spell, per pool: a command that legitimately runs an hour is one line, not sixty. A pool
             // drops out of the set when its oldest holder goes, so the next stuck one is reported again.
-            const longHeld = longHeldPools(snapshot, SLOT_HOLD_WARN_SECONDS);
+            const longHeld = longHeldPools(snapshot);
             for (const held of longHeld) {
                 if (!warnedPools.has(held.pool)) {
                     logger.warn(

@@ -4,7 +4,7 @@ import { unstubbed } from "@intentic/testing";
 import type { OrpcContext } from "../app-env.js";
 import type { OffloadDeps } from "./offload.routes.js";
 import { createOffloadRoutes } from "./offload.routes.js";
-import { DEFAULT_HEAVY_COMMANDS } from "../platform/resources/heavy-commands.js";
+import { mergeHeavyRules } from "@intentic/constants/heavy-rules";
 
 // This sandbox's side of an offloaded command: whether a runner can take it, the runner's frames relayed unchanged, and
 // every way a runner cannot take it after all answering with one refusal, which sends the line back here.
@@ -45,7 +45,7 @@ const world = (runners: Record<string, FakeRunner | "offline">) => {
             },
         }),
         logger: unstubbed<OffloadDeps["logger"]>("logger", { warn: () => undefined }),
-        heavyCommands: unstubbed<OffloadDeps["heavyCommands"]>("heavyCommands", { read: async () => DEFAULT_HEAVY_COMMANDS }),
+        heavyCommands: unstubbed<OffloadDeps["heavyCommands"]>("heavyCommands", { read: async () => mergeHeavyRules() }),
     };
     return createOffloadRoutes(deps);
 };
@@ -107,5 +107,5 @@ describe("an offloaded run", () => {
 
 test("the kinds that can run elsewhere are the rules that queue, never the ones that exempt a line", async () => {
     const { kinds } = await call(world({}).kinds, undefined, { context });
-    expect(kinds.map(({ id }) => id)).toEqual(["repo-verify", "vitest", "typechecker", "turbo-fanout", "package-script"]);
+    expect(kinds.map(({ id }) => id)).toEqual(["repo-verify", "vitest", "typechecker", "turbo-fanout", "package-script", "cargo"]);
 });
