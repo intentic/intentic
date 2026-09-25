@@ -12,8 +12,8 @@ import { DOCK_DEFAULT_HEIGHT, DOCK_MAX_HEIGHT, DOCK_MIN_HEIGHT, type DockSegment
 // segment swaps it in. The reader sets its height on the seam above it, and the host remembers both (dockState.ts).
 // The dock is opaque: a skin's backdrop (Sanctum's temples along the window's foot) must not show through the bar.
 //
-// Slots, per segment id: `summary-<id>` (the bar's words, inside the toggle), `aside-<id>` (a bar action beside the
-// toggle, never inside it), `actions-<id>` (the panel header's own controls), `panel-<id>` (the panel's body).
+// Slots, per segment id: `summary-<id>` (the bar's words, inside the toggle), `actions-<id>` (the panel header's own
+// controls), `panel-<id>` (the panel's body). The toggle explains nothing on hover: its chevron says it opens.
 
 const t = useT();
 
@@ -75,15 +75,6 @@ const close = (id: string): void => {
                     <h3 :id="headingId(shown.id)" class="min-w-0 truncate text-2xs font-medium uppercase tracking-wide text-muted">
                         {{ shown.title }}
                     </h3>
-                    <Icon
-                        v-if="shown.hint !== undefined"
-                        name="info-circle"
-                        tabindex="0"
-                        role="note"
-                        :aria-label="shown.hint"
-                        v-tooltip.top="shown.hint"
-                        class="shrink-0 cursor-help text-2xs text-subtle hover:text-muted"
-                    />
                     <div class="ml-auto flex shrink-0 items-center gap-1">
                         <slot :name="`actions-${shown.id}`" />
                         <button
@@ -103,26 +94,24 @@ const close = (id: string): void => {
             </section>
         </div>
         <div class="flex min-h-7 flex-wrap items-center gap-x-1 gap-y-0.5 px-1.5 py-0.5" :class="shown !== undefined ? `border-t border-line-subtle` : ``">
-            <template v-for="segment in ordered" :key="segment.id">
-                <button
-                    :id="segmentId(segment.id)"
-                    type="button"
-                    :data-segment="segment.id"
-                    :aria-expanded="isOpen(segment.id)"
-                    :aria-controls="isOpen(segment.id) ? panelId(segment.id) : undefined"
-                    class="flex h-6 min-w-0 items-center gap-2 overflow-hidden rounded-md px-1.5 text-left transition-colors"
-                    :class="[
-                        isOpen(segment.id) ? `bg-content/8 text-content` : `text-muted hover:bg-content/5 hover:text-content`,
-                        segment.id === firstEnd ? `ml-auto` : ``,
-                    ]"
-                    v-tooltip.top="isOpen(segment.id) ? t(`agents.dock.hide`, { title: segment.title }) : t(`agents.dock.show`, { title: segment.title })"
-                    @click="toggle(segment.id)"
-                >
-                    <slot :name="`summary-${segment.id}`" />
-                    <Icon :name="isOpen(segment.id) ? `chevron-down` : `chevron-up`" class="shrink-0 text-2xs text-subtle" />
-                </button>
-                <slot :name="`aside-${segment.id}`" />
-            </template>
+            <button
+                v-for="segment in ordered"
+                :id="segmentId(segment.id)"
+                :key="segment.id"
+                type="button"
+                :data-segment="segment.id"
+                :aria-expanded="isOpen(segment.id)"
+                :aria-controls="isOpen(segment.id) ? panelId(segment.id) : undefined"
+                class="flex h-6 min-w-0 items-center gap-2 overflow-hidden rounded-md px-1.5 text-left transition-colors"
+                :class="[
+                    isOpen(segment.id) ? `bg-content/8 text-content` : `text-muted hover:bg-content/5 hover:text-content`,
+                    segment.id === firstEnd ? `ml-auto` : ``,
+                ]"
+                @click="toggle(segment.id)"
+            >
+                <slot :name="`summary-${segment.id}`" />
+                <Icon :name="isOpen(segment.id) ? `chevron-down` : `chevron-up`" class="shrink-0 text-2xs text-subtle" />
+            </button>
         </div>
     </div>
 </template>

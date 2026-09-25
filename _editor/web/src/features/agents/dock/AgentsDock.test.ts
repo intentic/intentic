@@ -166,52 +166,66 @@ describe(`the main line, at rest`, () => {
         expect(element.querySelector(`[data-panel]`)).toBeNull();
     });
 
-    it(`names what is running without a click: the project, how long, the command and whose work it measures`, async () => {
+    // Health and activity side by side; what the check runs and whose work it measures are the panel's to say.
+    it(`says whether main passes and what the check is doing, in two short answers`, async () => {
         const { element } = mount(runningStatus());
-        expect(wordsOf(segment(element).querySelector(`[data-item="running"]`))).toBe(`Checking main web 1m 5s pnpm verify Add Stripe checkout +1`);
+        expect(wordsOf(segment(element))).toBe(`Main passing Checking web 1m 5s`);
+        expect(wordsOf(segment(element).querySelector(`[data-item="health"]`))).toBe(`Main passing`);
+        expect(wordsOf(segment(element).querySelector(`[data-item="running"]`))).toBe(`Checking web 1m 5s`);
+        expect(segment(element).textContent).not.toContain(`pnpm verify`);
+        expect(segment(element).textContent).not.toContain(`Add Stripe checkout`);
 
         jest.advanceTimersByTime(1_000);
         await nextTick();
-        expect(wordsOf(segment(element))).toContain(`1m 6s`);
+        expect(wordsOf(segment(element).querySelector(`[data-item="running"]`))).toBe(`Checking web 1m 6s`);
     });
 
-    it(`says main is red, since when, and who has it, with the conversation one press away`, async () => {
-        const onOpened = jest.fn((_id: string) => undefined);
-        const { element } = mount(redStatus(), { onOpened });
-        expect(wordsOf(segment(element).querySelector(`[data-item="red"]`))).toBe(`web red since ${sinceWhen(RED.at)} 2 failures`);
-        // The queue is a count beside the red rather than a sentence of its own.
-        expect(wordsOf(segment(element).querySelector(`[data-item="waiting"]`))).toBe(`1 waiting`);
-        const routing = element.querySelector<HTMLElement>(`[data-routing]`)!;
-        expect(routing.textContent).toContain(`A fresh conversation is fixing it`);
-        // Beside the segment, never inside it: a button inside a button is two presses a reader cannot tell apart.
-        expect(segment(element).contains(routing)).toBe(false);
-
-        const open = routing.querySelector<HTMLButtonElement>(`button[aria-label^="Open "]`)!;
-        expect(open.getAttribute(`aria-label`)).toBe(`Open Fix main after "Release notes"`);
-        open.click();
-        await nextTick();
-        expect(opened).toHaveBeenCalledWith(`land-fix-web-abc`);
-        expect(onOpened).toHaveBeenCalledWith(`land-fix-web-abc`);
-    });
-
-    it(`keeps a red on the line while a check elsewhere runs`, () => {
-        const status = redStatus();
-        const { element } = mount({
-            ...status,
-            projects: [...status.projects, { project: `api`, running: { command: `pnpm test`, startedAt: NOW - 5_000, lands: [] }, queued: [] }],
-        });
-        expect(wordsOf(segment(element).querySelector(`[data-item="running"]`))).toBe(`Checking main api 5s pnpm test re-check`);
-        expect(wordsOf(segment(element).querySelector(`[data-item="red"]`))).toBe(`web red`);
-        expect(element.textContent).toContain(`A fresh conversation is fixing it`);
-    });
-
-    it(`says main is green and when it was last checked, only while nothing else has news`, () => {
-        const { element } = mount({ projects: [{ project: `web`, queued: [], last: green() }], recent: [green()] });
-        expect(wordsOf(segment(element))).toMatch(/^Main green checked 1\dm ago$/);
+    it(`says which project fails and who has it, with nothing to press beside it`, () => {
+        const { element } = mount(redStatus());
+        expect(wordsOf(segment(element))).toBe(`web failing · fixing 1 queued`);
+        expect(wordsOf(segment(element).querySelector(`[data-item="health"]`))).toBe(`web failing · fixing`);
+        expect(wordsOf(segment(element).querySelector(`[data-item="queued"]`))).toBe(`1 queued`);
+        // The bar is its toggles and nothing else: who has the red is one press away, in the panel.
+        expect([...element.querySelectorAll<HTMLButtonElement>(`button`)].map((button) => button.dataset[`segment`])).toEqual([`mainline`]);
         expect(element.querySelector(`[data-routing]`)).toBeNull();
     });
 
-    it(`counts the lands waiting for the next check, each once`, () => {
+    it(`asks for the reader's eye only when a red waits for them`, () => {
+        const spent: MainlineRun = { ...RED, routing: { kind: `spent`, at: NOW - 5 * MINUTE, detail: `Still red after 2 fresh attempt(s); it waits for you.` } };
+        const { element } = mount({ projects: [{ project: `web`, queued: [], last: spent, redSince: spent.at }], recent: [spent] });
+        const health = segment(element).querySelector(`[data-item="health"]`)!;
+        expect(wordsOf(health)).toBe(`web failing · needs you`);
+        expect(health.querySelector(`.text-warning`)?.textContent?.trim()).toBe(`· needs you`);
+        app?.unmount();
+
+        const { element: fixing } = mount(redStatus());
+        expect(segment(fixing).querySelector(`.text-warning`)).toBeNull();
+    });
+
+    it(`counts the projects failing when there is more than one, and keeps a red on the line while another check runs`, () => {
+        const apiRed: MainlineRun = { ...RED, project: `api`, at: NOW - 20 * MINUTE, routing: undefined };
+        const status = redStatus();
+        const { element } = mount({
+            projects: [
+                ...status.projects,
+                { project: `api`, running: { command: `pnpm test`, startedAt: NOW - 5_000, lands: [] }, queued: [], last: apiRed, redSince: apiRed.at },
+            ],
+            recent: [apiRed, ...status.recent],
+        });
+        expect(wordsOf(segment(element))).toBe(`2 projects failing Checking api 5s 1 queued`);
+    });
+
+    it(`says main passes once something was checked, and nothing about health before`, () => {
+        const { element } = mount({ projects: [{ project: `web`, queued: [], last: green() }], recent: [green()] });
+        expect(wordsOf(segment(element))).toBe(`Main passing`);
+        app?.unmount();
+
+        const first = mount({ projects: [{ project: `web`, running: { command: `pnpm verify`, startedAt: NOW - 5_000, lands: [] }, queued: [] }], recent: [] });
+        expect(wordsOf(segment(first.element))).toBe(`Checking web 5s`);
+        expect(first.element.querySelector(`[data-item="health"]`)).toBeNull();
+    });
+
+    it(`counts the lands queued for the next check, each once`, () => {
         const waiting = { conversationId: `a`, at: NOW - 5_000 };
         const { element } = mount({
             projects: [
@@ -221,12 +235,18 @@ describe(`the main line, at rest`, () => {
             ],
             recent: [green()],
         });
-        expect(wordsOf(segment(element))).toBe(`2 lands waiting for main's check`);
+        expect(wordsOf(segment(element))).toBe(`Main passing 2 queued`);
     });
 });
 
 describe(`the main line's panel`, () => {
-    it(`opens docked above the bar onto the red run's failures, what became of them, the queue and the record`, async () => {
+    const sections = (element: HTMLElement): string[] =>
+        [...panel(element)!.querySelectorAll<HTMLElement>(`[data-section]`)].map((section) => section.dataset[`section`] ?? ``);
+    const section = (element: HTMLElement, id: string): HTMLElement => panel(element)!.querySelector<HTMLElement>(`[data-section="${id}"]`)!;
+    const buttonNamed = (within: HTMLElement, words: string): HTMLButtonElement =>
+        [...within.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => wordsOf(button) === words)!;
+
+    it(`opens docked above the bar onto the road a land travels: queued, checking, result, then the record`, async () => {
         const { element, state } = mount(redStatus());
         segment(element).click();
         await nextTick();
@@ -235,43 +255,113 @@ describe(`the main line's panel`, () => {
         expect(segment(element).getAttribute(`aria-expanded`)).toBe(`true`);
         const docked = panel(element)!;
         expect(segment(element).getAttribute(`aria-controls`)).toBe(docked.id);
-        expect(docked.textContent).toContain(`No check running`);
-        expect(docked.textContent).toContain(`web red since ${sinceWhen(RED.at)}`);
-        expect(docked.textContent).toContain(`changelog.test.ts › lists every release`);
-        expect(docked.textContent).toContain(`Its conversation had gone cold.`);
-        expect(docked.textContent).toContain(`Waiting for the next check`);
-        expect(docked.textContent).toContain(`Add Stripe checkout`);
-        expect(docked.textContent).toContain(`Recent checks`);
+        // Nothing in it is explained on hover: the panel's header carries no note.
+        expect(docked.querySelector(`[role="note"]`)).toBeNull();
+        expect(sections(element)).toEqual([`queued`, `checking`, `result`, `history`]);
+        expect(wordsOf(section(element, `queued`).querySelector(`h4`))).toBe(`Queued 1`);
+        expect(wordsOf(section(element, `queued`).querySelector(`button`))).toBe(`Add Stripe checkout`);
+        expect(wordsOf(section(element, `checking`))).toBe(`Checking Idle`);
+        expect(wordsOf(section(element, `history`))).toBe(`History failed Release notes 30m ago passed Add Stripe checkout 1h ago`);
     });
 
-    it(`lists every land the running check measures`, () => {
+    it(`says of a failing project who has it, what it is laid at, then what failed, test names first`, () => {
+        const { element } = mount(redStatus(), { state: freshState(`mainline`) });
+        const web = section(element, `result`).querySelector<HTMLElement>(`[data-result="web"]`)!;
+        expect(wordsOf(web.firstElementChild)).toBe(`web failing since ${sinceWhen(RED.at)} Logs`);
+        expect(wordsOf(web.querySelector(`[data-fix]`))).toBe(`Being fixed in Fix main after "Release notes"`);
+        expect(wordsOf(web.querySelector(`[data-cause]`))).toBe(`Likely cause Release notes`);
+        expect([...web.querySelectorAll(`[data-failures] li`)].map((item) => wordsOf(item))).toEqual([
+            `lists every release changelog.test.ts`,
+            `links each tag changelog.test.ts`,
+        ]);
+        // Why it went to a fresh conversation is the sandbox's business: nothing the reader has to act on.
+        expect(web.textContent).not.toContain(`Its conversation had gone cold.`);
+        expect(web.querySelector(`[data-fix]`)?.classList.contains(`text-muted`)).toBe(true);
+    });
+
+    it(`lists every land the running check measures, and says a project with nothing failing passes`, () => {
         const { element } = mount(runningStatus(), { state: freshState(`mainline`) });
-        const now = panel(element)!.querySelector(`[data-section="now"]`)!;
-        expect(now.textContent).toContain(`Checking web now`);
-        expect(now.textContent).toContain(`pnpm verify`);
-        expect(now.textContent).toContain(`Add Stripe checkout`);
-        expect(now.textContent).toContain(`Tighten the pricing copy`);
+        expect(wordsOf(section(element, `queued`))).toBe(`Queued Nothing queued`);
+        expect(wordsOf(section(element, `checking`))).toBe(`Checking web 1m 5s Logs Add Stripe checkout Tighten the pricing copy`);
+        expect(wordsOf(section(element, `result`))).toBe(`Result web passing 11m ago`);
+    });
+
+    it(`gives a red one line on who has it, in the words a reader acts on`, () => {
+        const redWith = (routing: MainlineRun[`routing`]): MainlineStatus => {
+            const run: MainlineRun = { ...RED, routing };
+            return { projects: [{ project: `web`, queued: [], last: run, redSince: run.at }], recent: [run] };
+        };
+        const lineOf = (routing: MainlineRun[`routing`]): { words: string; tone: string; detail: string } => {
+            const { element } = mount(redWith(routing), { state: freshState(`mainline`) });
+            const web = section(element, `result`).querySelector<HTMLElement>(`[data-result="web"]`)!;
+            const fix = web.querySelector<HTMLElement>(`[data-fix]`)!;
+            const line = { words: wordsOf(fix), tone: [`text-muted`, `text-warning`, `text-success`].find((ink) => fix.classList.contains(ink)) ?? ``, detail: wordsOf(fix.nextElementSibling?.tagName === `P` ? fix.nextElementSibling : null) };
+            app?.unmount();
+            app = undefined;
+            document.body.innerHTML = ``;
+            return line;
+        };
+        const at = NOW - 5 * MINUTE;
+        expect(lineOf({ kind: `held`, conversationId: `land-fix-web-abc`, at })).toEqual({ words: `Waiting for Fix main after "Release notes"`, tone: `text-muted`, detail: `` });
+        expect(lineOf({ kind: `waiting`, at })).toEqual({ words: `Waiting for the next check`, tone: `text-muted`, detail: `` });
+        expect(lineOf({ kind: `original`, conversationId: `notes`, at })).toEqual({ words: `Being fixed in notes`, tone: `text-muted`, detail: `` });
+        expect(lineOf(undefined)).toEqual({ words: `Deciding who fixes it`, tone: `text-muted`, detail: `` });
+        // Left to the reader: the only lines in the warning ink, and the only ones that say why.
+        expect(lineOf({ kind: `reported`, at, detail: `Repairs after landing are switched off.` })).toEqual({
+            words: `Nobody is fixing it`,
+            tone: `text-warning`,
+            detail: `Repairs after landing are switched off.`,
+        });
+        expect(lineOf({ kind: `spent`, at, detail: `Still red after 2 fresh attempt(s); it waits for you.` })).toEqual({
+            words: `Out of fix attempts`,
+            tone: `text-warning`,
+            detail: `Still red after 2 fresh attempt(s); it waits for you.`,
+        });
     });
 
     // Opened to be watched: nothing but the reader closes it.
-    it(`stays open through a click elsewhere, a conversation opened from it, and a terminal watched from it`, async () => {
-        const { element, state } = mount(redStatus(), { state: freshState(`mainline`) });
+    it(`stays open through a click elsewhere, a conversation opened from it, and its logs opened`, async () => {
+        const onOpened = jest.fn((_id: string) => undefined);
+        const { element, state } = mount(redStatus(), { state: freshState(`mainline`), onOpened });
 
         document.body.click();
         document.body.dispatchEvent(new PointerEvent(`pointerdown`, { bubbles: true }));
         await nextTick();
         expect(panel(element)).not.toBeNull();
 
-        panel(element)!.querySelector<HTMLButtonElement>(`button[aria-label="Open Release notes"]`)!.click();
+        buttonNamed(section(element, `result`), `Release notes`).click();
         await nextTick();
         expect(opened).toHaveBeenCalledWith(`notes`, `Release notes`);
+        expect(onOpened).toHaveBeenCalledWith(`notes`);
         expect(panel(element)).not.toBeNull();
 
-        panel(element)!.querySelector<HTMLButtonElement>(`button[aria-label="Watch in terminal"]`)!.click();
+        buttonNamed(section(element, `result`), `Fix main after "Release notes"`).click();
+        await nextTick();
+        expect(opened).toHaveBeenLastCalledWith(`land-fix-web-abc`, undefined);
+
+        buttonNamed(section(element, `queued`), `Add Stripe checkout`).click();
+        await nextTick();
+        expect(opened).toHaveBeenLastCalledWith(`checkout`, `Add Stripe checkout`);
+
+        buttonNamed(section(element, `result`), `Logs`).click();
         await nextTick();
         expect(watched).toHaveBeenCalledWith(`panel-web--verify`);
         expect(panel(element)).not.toBeNull();
         expect(state.open.value).toBe(`mainline`);
+    });
+
+    // One terminal per project: while it is being checked again, its Logs sit with the running check.
+    it(`opens a project's logs from the running check while it runs, and from its red while it does not`, () => {
+        const status = redStatus();
+        const checking: MainlineStatus = {
+            ...status,
+            projects: [{ ...status.projects[0]!, queued: [], running: { command: `pnpm verify`, startedAt: NOW - 5_000, lands: [] } }],
+        };
+        const { element } = mount(checking, { state: freshState(`mainline`) });
+        expect(buttonNamed(section(element, `result`), `Logs`)).toBeUndefined();
+        buttonNamed(section(element, `checking`), `Logs`).click();
+        expect(watched).toHaveBeenCalledWith(`panel-web--verify`);
+        expect(wordsOf(section(element, `checking`))).toBe(`Checking web 5s Logs Re-check`);
     });
 
     it(`closes on its segment, its ×, or Escape inside it, and hands focus back to the segment`, async () => {

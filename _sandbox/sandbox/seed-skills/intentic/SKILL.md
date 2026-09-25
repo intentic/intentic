@@ -146,8 +146,8 @@ over a window you choose. They cannot write, and nothing in this playbook restar
   (`only: "failed"`, or a `conversationId`): which model ran, the error code, the provider's own sentence.
 - A turn changed code and ran no check after its last edit, or its last check failed →
   `mcp__diagnostics__turns` with `only: "unproven"`. That is the turn's own record, since nothing checks a turn
-  when it ends. Whether the work passed once it landed is the main-line check's answer: the strip at the top of
-  the chat rail, and each project's last log in `/work/.intentic/local/verify/`.
+  when it ends. Whether the work passed once it landed is the main-line check's answer: **Main line** in the
+  Agents board's status bar, and each project's last log in `/work/.intentic/local/verify/`.
 - Something errored in the daemon (an automation, a sync, a land, a refused provider) →
   `mcp__diagnostics__errors` (`sinceMinutes`; `contains` a conversation id, route or code; `level`).
 - The editor white-screened, stalled or felt slow → `mcp__diagnostics__errors` with `source: "browser"`.
@@ -173,12 +173,13 @@ rebuild, a daemon restart from the host). Say plainly that nothing was changed.
 ## The editor, in the owner's words
 
 - **Chat** (`/`): one conversation. Question cards (`AskUserQuestion`), plan approval, capability asks and
-  payment approvals render here. The strip at the top of the chat rail is the main-line check: what it is
-  measuring, what waits, the last verdict, and who is working on a red one. Each session card shows its
-  land's status (checking, waiting, passed, or broke N and who is fixing it) and a badge for what its last turn
-  showed of its own work.
+  payment approvals render here. Each session card shows its land's status (checking, waiting, passed, or
+  broke N and who is fixing it) and a badge for what its last turn showed of its own work.
 - **Agents** (`/agents`): the fleet board, every conversation as an agent with its branch and status.
-  **Land** applies a conversation's delta to the main tree; a conflict card names the paths.
+  **Land** applies a conversation's delta to the main tree; a conflict card names the paths. The board's status
+  bar carries **Main line**, the check main gets after every land: at rest, whether main passes (or which
+  project fails, and whether someone is fixing it, it is on hold, or it needs you) and what the check is doing.
+  Opened, it reads left to right as the road a land travels: Queued → Checking → Result, then History.
 - **Capabilities** (`/capabilities`): the connections; each card is a connector, account, device or service.
 - **Sandbox** (`/sandbox/<tab>`): Overview, Status (running turns), Usage, Environment, Secrets, Agent (the
   settings above), Extensions, Discover, Access, Personas, Devices.

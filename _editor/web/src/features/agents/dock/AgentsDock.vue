@@ -3,7 +3,6 @@ import type { MainlineStatus, SandboxMetrics } from "@intentic/sandbox-contract"
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import MainlinePanel from "../mainline/MainlinePanel.vue";
-import MainlineRouting from "../mainline/MainlineRouting.vue";
 import MainlineSummary from "../mainline/MainlineSummary.vue";
 import { mainlineSummary } from "../mainline/mainlineView";
 import SandboxMetricsDetails from "../metrics/SandboxMetricsDetails.vue";
@@ -30,9 +29,7 @@ const emit = defineEmits<{ opened: [conversationId: string] }>();
 const summary = computed(() => mainlineSummary(props.mainline));
 
 const segments = computed<DockSegment[]>(() => [
-    ...(summary.value === undefined
-        ? []
-        : [{ id: `mainline`, title: t(`agents.mainline.title`), icon: `list-check` as const, hint: t(`agents.mainline.explain`) }]),
+    ...(summary.value === undefined ? [] : [{ id: `mainline`, title: t(`agents.mainline.title`), icon: `list-check` as const }]),
     ...(props.metrics === undefined
         ? []
         : [{ id: `metrics`, title: t(`agents.liveMetrics.sandboxLabel`), icon: `server` as const, end: true }]),
@@ -43,9 +40,6 @@ const segments = computed<DockSegment[]>(() => [
     <StatusDock v-if="segments.length > 0" v-model:open="state.open.value" v-model:height="state.height.value" :segments="segments" :label="label">
         <template #summary-mainline>
             <MainlineSummary v-if="summary !== undefined" :summary="summary" />
-        </template>
-        <template #aside-mainline>
-            <MainlineRouting :red="summary?.reds[0]" @opened="(id: string) => emit(`opened`, id)" />
         </template>
         <template #panel-mainline>
             <MainlinePanel

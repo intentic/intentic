@@ -128,8 +128,8 @@ const markOf = (row: HTMLElement, check: string): HTMLElement | null => row.quer
 it(`says a card's land broke main, how badly and who has it, in words on its own line`, async () => {
     const row = rowOf(await mountRail(), `breaker`);
     const land = markOf(row, `land`)!;
-    expect(land.textContent?.trim()).toBe(`Broke 3 · fix-up`);
-    expect(land.getAttribute(`aria-label`)).toBe(`Broke 3 · fix-up`);
+    expect(land.textContent?.trim()).toBe(`Broke 3 · fixing`);
+    expect(land.getAttribute(`aria-label`)).toBe(`Broke 3 · fixing`);
     expect(land.querySelector(`[data-icon="exclamation-circle"]`)).not.toBeNull();
     // Not the corner: that stays the standing's, and a read, settled card has none to say.
     expect(row.querySelector(`span.ui-status-pill`)).toBeNull();
@@ -154,7 +154,7 @@ it(`badges what the last turn showed of its own work`, async () => {
 it(`leaves the main line's bar to the board`, async () => {
     const el = await mountRail();
     expect(el.querySelector(`[role="region"]`)).toBeNull();
-    expect(el.textContent).not.toContain(`A fresh conversation is fixing it`);
+    expect(el.textContent).not.toContain(`web failing`);
 });
 
 // The board spells it out and can open the conversation the red was handed to, which the rail's row (a button) cannot.
@@ -176,7 +176,7 @@ it(`spells the same reading out on the board's card, with the fix-up one press a
     await settle();
 
     const land = el.querySelector<HTMLElement>(`[data-check="land"]`)!;
-    expect(land.textContent).toContain(`Broke 3 · fix-up`);
+    expect(land.textContent).toContain(`Broke 3 · fixing`);
     expect(land.querySelector(`button[aria-label="Open the conversation working on it"]`)).not.toBeNull();
     expect(el.querySelector(`[data-check="verification"]`)?.textContent).toContain(`Unverified`);
     expect(el.querySelector(`[data-check="unviewed"]`)?.textContent).toContain(`Changed 2 interface files without looking`);

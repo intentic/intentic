@@ -3,9 +3,12 @@ import type { IconName } from "@intentic/ui";
 import { formatClock, formatDate, formatDayMonthTime } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 
-// THE MAIN LINE AS ONE READOUT: which of the main tree's checks a reader hears about first, and in what words. Pure over
-// the status the daemon serves (workspace.mainline); the status dock draws it, and a card's mark borrows its words for
-// what became of a red run, so the rail, the board and the dock never name one decision two ways.
+// THE MAIN LINE AS ONE READOUT: what the main tree's own check says, in the order and the words a reader takes it in.
+// Pure over the status the daemon serves (workspace.mainline); the status dock draws it, and a card's mark borrows its
+// words for what became of a red run, so the rail, the board and the dock never name one decision two ways.
+//
+// Two questions are kept apart everywhere it is drawn, because one sentence answering both is what made it unreadable:
+// HEALTH (is main passing, and if not, who has it) and ACTIVITY (what the check is doing now, and what queues for it).
 
 // One project red right now: the run that says so, when its streak began, and the latest decision about it.
 export interface MainlineRed {
@@ -53,16 +56,16 @@ export interface MainlineRunning {
     readonly lands: readonly MainlineLand[];
 }
 
-// WHAT THE STATUS BAR SAYS AT REST, every part a reader watches for at once rather than one headline standing for the
-// rest: the check running now and whose work it measures, every red project, how many lands wait, and, only while none
-// of those says anything, when main was last seen green. Undefined while no land was ever checked, so a sandbox that
-// never landed anything carries no main line at all.
+// WHAT THE STATUS BAR SAYS AT REST: health (every red, or passing once anything was checked) and activity (the check
+// running now, how many lands queue behind it). Undefined while nothing was ever checked, run or queued, so a sandbox
+// that never landed anything carries no main line at all.
 export interface MainlineSummary {
     readonly running: MainlineRunning | undefined;
     // Longest red first (redsOf).
     readonly reds: readonly MainlineRed[];
-    readonly waiting: number;
-    readonly greenAt: number | undefined;
+    readonly queued: number;
+    // Some project has a settled check, so "passing" is said about something that was measured.
+    readonly checked: boolean;
 }
 
 export const mainlineSummary = (status: MainlineStatus | undefined): MainlineSummary | undefined => {
@@ -72,13 +75,30 @@ export const mainlineSummary = (status: MainlineStatus | undefined): MainlineSum
     const project = status.projects.find((candidate) => candidate.running !== undefined);
     const running = project?.running === undefined ? undefined : { project: project.project, ...project.running };
     const reds = redsOf(status);
-    const waiting = queuedLands(status).length;
-    const lastAt = Math.max(0, ...status.projects.map((candidate) => candidate.last?.at ?? 0));
-    const quiet = running === undefined && reds.length === 0 && waiting === 0;
-    if (quiet && lastAt === 0) {
+    const queued = queuedLands(status).length;
+    const checked = status.projects.some((candidate) => candidate.last !== undefined);
+    if (running === undefined && reds.length === 0 && queued === 0 && !checked) {
         return undefined;
     }
-    return { running, reds, waiting, greenAt: quiet ? lastAt : undefined };
+    return { running, reds, queued, checked };
+};
+
+// One project's line in the panel's Result column: its last settled check, and the red streak when it is in one.
+export interface MainlineResult {
+    readonly project: string;
+    readonly run: MainlineRun;
+    readonly red: MainlineRed | undefined;
+}
+
+// Every project that has been checked, the reds first in the bar's order, then the rest in folder order.
+export const resultsOf = (status: MainlineStatus): MainlineResult[] => {
+    const reds = redsOf(status);
+    const rest = status.projects.flatMap((project): MainlineResult[] =>
+        project.last === undefined || reds.some((red) => red.project === project.project)
+            ? []
+            : [{ project: project.project, run: project.last, red: undefined }],
+    );
+    return [...reds.map((red) => ({ project: red.project, run: red.run, red })), ...rest];
 };
 
 // The lands a red run's failures were laid at: the suspects when the sandbox named any (a suspect may have landed in an
@@ -87,6 +107,34 @@ export const blamedLands = (run: MainlineRun): { readonly conversationId: string
     run.suspects === undefined || run.suspects.length === 0
         ? run.lands
         : run.suspects.map((conversationId) => run.lands.find((land) => land.conversationId === conversationId) ?? { conversationId });
+
+// The work a red streak is laid at: the suspects the sandbox named on any run of the streak, newest first, else the lands
+// of the run that turned the project red. A later red run with nobody named only found main red, since nothing new
+// failed in it, so its lands are never offered as the cause; nor is anything when the record no longer reaches back to
+// the streak's first run.
+export const causeOf = (status: MainlineStatus, red: MainlineRed): { readonly conversationId: string; readonly title?: string }[] => {
+    const streak = status.recent.filter((run) => run.project === red.project && run.status === `red` && run.at >= red.since);
+    const named = streak.find((run) => run.suspects !== undefined && run.suspects.length > 0);
+    if (named !== undefined) {
+        return blamedLands(named);
+    }
+    const first = streak.at(-1);
+    return first === undefined || first.attempt > 1 ? [] : first.lands;
+};
+
+// A failure as a reader scans it: a failing test by its name first and its file after, since a test's full location
+// ("@acme/web#test web/src/pages/changelog.test.ts › lists every release") would spend a narrow column on the path and cut
+// the name. Anything that is not a test (a type error, a whole failed task) is kept whole.
+export const failureParts = (failure: string): { readonly name: string; readonly file?: string } => {
+    const cut = failure.indexOf(` › `);
+    if (cut === -1) {
+        return { name: failure };
+    }
+    // The location's last word past its last slash: "@acme/web#test web/src/pages/changelog.test.ts" is "changelog.test.ts".
+    const file = failure.slice(0, cut).trim().split(/[\s/]/).at(-1) ?? ``;
+    const name = failure.slice(cut + ` › `.length).trim();
+    return name === `` ? { name: failure } : { name, ...(file === `` ? {} : { file }) };
+};
 
 // The terminal a project's check runs in: the daemon's verify panel (verifyPanelKey), as the terminal names its session.
 export const verifySession = (project: string): string => `panel-${project === `` ? `root` : project.replaceAll(/[^a-zA-Z0-9_-]/g, `_`)}--verify`;
@@ -97,29 +145,56 @@ export const projectName = (project: string): string => (project === `` ? t(`age
 // The wall-clock minute a streak began, with its day once it is not today's: "14:02", "Sep 24, 09:10".
 export const sinceWhen = (at: number, now: number = Date.now()): string => (formatDate(at) === formatDate(now) ? formatClock(at) : formatDayMonthTime(at));
 
+// WHO HAS A RED, in the answers a reader acts on: somebody is fixing it, it waits on purpose, or it waits for you (and,
+// in the record, a later check cleared it before anybody was sent). The daemon tells seven decisions apart; which road a
+// fix took (back to the conversation that landed it, or a fresh one) changes nothing the reader does, so they share words.
+export type FixState = `fixing` | `on-hold` | `needs-you` | `fixed`;
+
 export interface RoutingMeta {
+    readonly state: FixState;
     readonly icon: IconName;
-    // A clause, for the status bar beside a red and a card's hover.
+    // The whole clause: the panel's line under a red, a card's hover.
     readonly words: string;
-    // One or two words, for the rail card beside "Broke 2".
+    // One or two words: beside a red in the status bar, beside "Broke 2" on a card. Undefined while still deciding.
     readonly short: string | undefined;
+    // The clause a conversation's title follows in the panel, for a decision that names one: "Being fixed in …".
+    readonly lead: string | undefined;
 }
 
 // One entry per kind, so a kind the contract adds is a build error here rather than a blank on screen.
-const routingTable = () =>
-    ({
-        waiting: { icon: `clock`, words: t(`agents.mainline.routingWaiting`), short: t(`agents.mainline.shortWaiting`) },
-        held: { icon: `clock`, words: t(`agents.mainline.routingHeld`), short: t(`agents.mainline.shortHeld`) },
-        original: { icon: `wrench`, words: t(`agents.mainline.routingOriginal`), short: t(`agents.mainline.shortOriginal`) },
-        "fix-up": { icon: `wrench`, words: t(`agents.mainline.routingFixUp`), short: t(`agents.mainline.shortFixUp`) },
-        reported: { icon: `info-circle`, words: t(`agents.mainline.routingReported`), short: t(`agents.mainline.shortReported`) },
-        resolved: { icon: `check`, words: t(`agents.mainline.routingResolved`), short: t(`agents.mainline.shortResolved`) },
-        spent: { icon: `exclamation-triangle`, words: t(`agents.mainline.routingSpent`), short: t(`agents.mainline.shortSpent`) },
-    }) as const satisfies Record<MainlineRoutingKind, RoutingMeta>;
+const routingTable = () => {
+    const fixing: RoutingMeta = {
+        state: `fixing`,
+        icon: `wrench`,
+        words: t(`agents.mainline.routingFixing`),
+        short: t(`agents.mainline.shortFixing`),
+        lead: t(`agents.mainline.leadFixing`),
+    };
+    const onHold = t(`agents.mainline.shortOnHold`);
+    const needsYou = t(`agents.mainline.shortNeedsYou`);
+    return {
+        waiting: { state: `on-hold`, icon: `pause`, words: t(`agents.mainline.routingWaiting`), short: onHold, lead: undefined },
+        held: { state: `on-hold`, icon: `pause`, words: t(`agents.mainline.routingHeld`), short: onHold, lead: t(`agents.mainline.leadHeld`) },
+        original: fixing,
+        "fix-up": fixing,
+        reported: { state: `needs-you`, icon: `exclamation-triangle`, words: t(`agents.mainline.routingReported`), short: needsYou, lead: undefined },
+        resolved: {
+            state: `fixed`,
+            icon: `check`,
+            words: t(`agents.mainline.routingResolved`),
+            short: t(`agents.mainline.shortFixed`),
+            lead: undefined,
+        },
+        spent: { state: `needs-you`, icon: `exclamation-triangle`, words: t(`agents.mainline.routingSpent`), short: needsYou, lead: undefined },
+    } as const satisfies Record<MainlineRoutingKind, RoutingMeta>;
+};
 
 // Undecided reads as the sandbox still deciding, which it is until the lands queued behind the red have had their check.
 // The `??` is for a newer daemon's kind this build has no words for: a clause about deciding beats a blank.
 export const routingMeta = (kind: MainlineRoutingKind | undefined): RoutingMeta => {
-    const deciding: RoutingMeta = { icon: `clock`, words: t(`agents.mainline.routingDeciding`), short: undefined };
+    const deciding: RoutingMeta = { state: `on-hold`, icon: `clock`, words: t(`agents.mainline.routingDeciding`), short: undefined, lead: undefined };
     return kind === undefined ? deciding : (routingTable()[kind] ?? deciding);
 };
+
+// The ink a decision is said in: only one that waits for the reader asks for their eye.
+export const fixTone = (state: FixState): string => (state === `needs-you` ? `text-warning` : state === `fixed` ? `text-success` : `text-muted`);

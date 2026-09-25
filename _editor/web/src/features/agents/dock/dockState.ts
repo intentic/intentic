@@ -11,8 +11,6 @@ export interface DockSegment {
     // The panel's heading, and what its segment is named for a screen reader.
     readonly title: string;
     readonly icon: IconName;
-    // What the panel is about, one hover away from its heading rather than a paragraph under every reading.
-    readonly hint?: string;
     // Sits at the bar's far end.
     readonly end?: boolean;
 }
