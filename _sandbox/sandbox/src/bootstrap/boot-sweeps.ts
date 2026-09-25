@@ -154,4 +154,6 @@ export const startBootSweeps = (phase: BootPhase): void => {
     startContainerSweeps(phase);
     // Registered whether or not this role started it, so every role unwinds cleanly.
     shutdown.push(() => services.reaper.stop());
+    // Turns' browsers are this daemon's children: a restart must not leave them driving pages nobody can reach.
+    shutdown.push(() => services.browserRouters.closeAll());
 };

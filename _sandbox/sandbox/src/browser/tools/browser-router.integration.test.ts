@@ -1,24 +1,19 @@
-import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { createServer, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { type BrowserRouter, createBrowserRouter, createSchemaCache, type Prepared, type RpcMessage } from "./browser-router.js";
 
-// The router's contract, driven over real stdio against real child processes:
-// 1. handshake and tools/list are answered with no backend and no daemon round trip; every listed tool gains an
-//    injected `account` parameter.
-// 2. a tool call resolves `account` to its owner, asks the daemon for that owner's spawn spec once, spawns it, strips
-//    the parameter, and pipes back the reply.
-// 3. an id outside the manifest is refused with the granted set named, and asks the daemon nothing.
-// 4. a daemon that refuses an owner turns into a tool error, not a dead pipe.
+// The router's contract, driven in-process against real child processes:
+// 1. handshake and tools/list are answered with no backend and no prepare; every listed tool gains an injected
+//    `account` parameter.
+// 2. a tool call resolves `account` to its owner, prepares that owner once, spawns it, strips the parameter, and
+//    returns the reply.
+// 3. an id outside the manifest is refused with the granted set named, and prepares nothing.
+// 4. a prepare that refuses an owner turns into a tool error, not a dead call.
 // 5. a sole-owner manifest serves tools with no `account` at all and routes everything to that owner.
-// 6. stdin closing kills the backends.
+// 6. closing the router (the turn ending) kills the backends.
 // The backend is a canary standing in for @playwright/mcp; it writes a marker file on spawn and echoes call arguments
-// back. The daemon is a real loopback server standing in for /system/browser/prepare.
-
-const ROUTER = fileURLToPath(new URL("../../bin/browser-router.mjs", import.meta.url));
+// back.
 
 const CANARY = `
 const fs = require("fs");
@@ -48,49 +43,12 @@ interface Harness {
     readonly dir: string;
     readonly markers: Record<string, string>;
     readonly schemaCachePath: string;
-    readonly router: ChildProcess;
-    // Owners the router asked the daemon to bring up, in order: the record that proves what was paid for and when.
+    readonly router: BrowserRouter;
+    // Owners the router asked to bring up, in order: the record that proves what was paid for and when.
     readonly prepares: string[];
-    // Owners the stand-in daemon refuses instead of handing back a spec.
+    // Owners the stand-in prepare refuses instead of handing back a spec.
     readonly refusals: Map<string, string>;
 }
-
-const PREPARE_TOKEN = "test-bridge-token";
-
-// Stands in for the daemon's prepare route: same bearer, same two answer shapes.
-const startPrepareDaemon = (
-    canaryPath: string,
-    markers: Record<string, string>,
-    prepares: string[],
-    refusals: Map<string, string>,
-): Promise<{ readonly url: string; readonly server: Server }> => {
-    const server = createServer((request, response) => {
-        let body = "";
-        request.on("data", (chunk: Buffer) => {
-            body += chunk.toString();
-        });
-        request.on("end", () => {
-            if (request.headers.authorization !== `Bearer ${PREPARE_TOKEN}`) {
-                response.writeHead(401).end("{}");
-                return;
-            }
-            const owner = (JSON.parse(body) as { owner: string }).owner;
-            prepares.push(owner);
-            const refusal = refusals.get(owner);
-            response.writeHead(200, { "content-type": "application/json" });
-            response.end(
-                JSON.stringify(
-                    refusal === undefined ? { command: process.execPath, args: [canaryPath, markers[owner]], env: { ...process.env } } : { refusal },
-                ),
-            );
-        });
-    });
-    return new Promise((resolve) => {
-        server.listen(0, "127.0.0.1", () => {
-            resolve({ url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/prepare`, server });
-        });
-    });
-};
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -103,7 +61,7 @@ const startRouter = async (soleOwner?: string): Promise<Harness> => {
     const dir = await mkdtemp(join(tmpdir(), "intentic-router-test-"));
     const canaryPath = join(dir, "canary.cjs");
     await writeFile(canaryPath, CANARY);
-    const markers =
+    const markers: Record<string, string> =
         soleOwner === undefined
             ? { "identity-1": join(dir, "identity-1.pid"), standalone: join(dir, "standalone.pid") }
             : { [soleOwner]: join(dir, `${soleOwner}.pid`) };
@@ -111,58 +69,35 @@ const startRouter = async (soleOwner?: string): Promise<Harness> => {
     const schemaCachePath = join(dir, "tools.json");
     const prepares: string[] = [];
     const refusals = new Map<string, string>();
-    const daemon = await startPrepareDaemon(canaryPath, markers, prepares, refusals);
-    const manifest = {
-        schemaCachePath,
-        probe: { command: process.execPath, args: [canaryPath, probeMarker] },
-        // Two accounts of one identity plus the identity itself share a backend; a standalone owns its own.
-        accounts: soleOwner === undefined ? { "identity-1": "identity-1", "born-acct": "identity-1", standalone: "standalone" } : {},
-        // A port per owner, reserved by the turn; the spec the daemon hands back is pinned to it.
-        owners: Object.fromEntries(Object.keys(markers).map((owner, index) => [owner, { port: 41_000 + index }])),
-        prepare: { url: daemon.url, token: PREPARE_TOKEN },
-        backendEnv: {},
-        ...(soleOwner === undefined ? {} : { soleOwner }),
-    };
-    const manifestPath = join(dir, "manifest.json");
-    await writeFile(manifestPath, JSON.stringify(manifest));
-    const router = spawn(process.execPath, [ROUTER, manifestPath], { stdio: ["pipe", "pipe", "inherit"] });
+    const schemas = createSchemaCache();
+    const router = createBrowserRouter(
+        {
+            // Two accounts of one identity plus the identity itself share a backend; a standalone owns its own.
+            accounts: soleOwner === undefined ? { "identity-1": "identity-1", "born-acct": "identity-1", standalone: "standalone" } : {},
+            owners: Object.fromEntries(Object.keys(markers).map((owner, index) => [owner, { port: 41_000 + index }])),
+            backendEnv: {},
+            ...(soleOwner === undefined ? {} : { soleOwner }),
+        },
+        {
+            toolSchemas: () => schemas(schemaCachePath, { command: process.execPath, args: [canaryPath, probeMarker] }),
+            prepare: async (owner): Promise<Prepared> => {
+                prepares.push(owner);
+                const refusal = refusals.get(owner);
+                return refusal === undefined
+                    ? { command: process.execPath, args: [canaryPath, markers[owner] as string], env: { ...process.env } as Record<string, string> }
+                    : { refusal };
+            },
+        },
+    );
     cleanups.push(async () => {
-        router.kill("SIGKILL");
-        await new Promise((resolve) => daemon.server.close(resolve));
+        router.close();
         await rm(dir, { recursive: true, force: true });
     });
     return { dir, markers, schemaCachePath, router, prepares, refusals };
 };
 
-// One JSON-RPC exchange over the router's stdio: send, await the response carrying the same id.
-const rpc = (router: ChildProcess, message: Record<string, unknown>): Promise<Record<string, unknown>> =>
-    new Promise((resolve, reject) => {
-        let buffer = "";
-        const onData = (chunk: Buffer): void => {
-            buffer += chunk.toString();
-            let at;
-            while ((at = buffer.indexOf("\n")) !== -1) {
-                const line = buffer.slice(0, at);
-                buffer = buffer.slice(at + 1);
-                if (!line.trim()) {
-                    continue;
-                }
-                const parsed = JSON.parse(line) as Record<string, unknown>;
-                if (parsed["id"] === message["id"]) {
-                    router.stdout?.off("data", onData);
-                    clearTimeout(timer);
-                    resolve(parsed);
-                    return;
-                }
-            }
-        };
-        const timer = setTimeout(() => {
-            router.stdout?.off("data", onData);
-            reject(new Error(`no response to ${String(message["method"])}`));
-        }, 10_000);
-        router.stdout?.on("data", onData);
-        router.stdin?.write(`${JSON.stringify(message)}\n`);
-    });
+const rpc = async (router: BrowserRouter, message: RpcMessage): Promise<Record<string, unknown>> =>
+    (await router.handle(message)) as unknown as Record<string, unknown>;
 
 const handshake = async (harness: Harness): Promise<void> => {
     await rpc(harness.router, {
@@ -171,7 +106,7 @@ const handshake = async (harness: Harness): Promise<void> => {
         method: "initialize",
         params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } },
     });
-    harness.router.stdin?.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
+    expect(await harness.router.handle({ jsonrpc: "2.0", method: "notifications/initialized" })).toBeUndefined();
 };
 
 const exists = async (path: string): Promise<boolean> =>
@@ -255,7 +190,7 @@ test("an account outside the manifest is refused with the granted set named, and
     expect(harness.prepares).toEqual([]);
 });
 
-test("the turn ending, stdin closing: kills the backends", async () => {
+test("the turn ending, the router closing: kills the backends, and a later call is refused", async () => {
     const harness = await startRouter();
     await handshake(harness);
     await rpc(harness.router, {
@@ -265,19 +200,27 @@ test("the turn ending, stdin closing: kills the backends", async () => {
         params: { name: "browser_probe", arguments: { account: "identity-1" } },
     });
     expect(await exists(harness.markers["identity-1"] as string)).toBe(true);
-    harness.router.stdin?.end();
+    harness.router.close();
     for (let waited = 0; (await exists(harness.markers["identity-1"] as string)) && waited < 5_000; waited += 50) {
         await new Promise((resolve) => setTimeout(resolve, 50));
     }
     // SIGTERM: the canary unlinks its marker on the way out.
     expect(await exists(harness.markers["identity-1"] as string)).toBe(false);
+    const after = await rpc(harness.router, {
+        jsonrpc: "2.0",
+        id: 71,
+        method: "tools/call",
+        params: { name: "browser_probe", arguments: { account: "identity-1" } },
+    });
+    expect((after["result"] as ToolResult).isError).toBe(true);
+    expect(harness.prepares).toEqual(["identity-1"]);
 });
 
 test("a second turn's router answers tools/list straight from the cache: no probe, no backend", async () => {
     const first = await startRouter();
     await handshake(first);
     await rpc(first.router, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
-    first.router.stdin?.end();
+    first.router.close();
 
     const second = await startRouter();
     await writeFile(second.schemaCachePath, await readFile(first.schemaCachePath, "utf8"));

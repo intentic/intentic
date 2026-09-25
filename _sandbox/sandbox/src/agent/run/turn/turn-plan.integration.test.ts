@@ -96,6 +96,11 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
         // every plan, so every arm needs it.
         hostReach: async () => undefined,
         webextReach: async () => undefined,
+        // Opened on every plan whose browser stack mounts; nothing here calls a browser tool.
+        browserRouters: unstubbed<Services["browserRouters"]>("browserRouters", {
+            open: () => ({ id: "router", url: "http://127.0.0.1:1/mcp/browser/router", token: "test-router-token" }),
+            close: () => undefined,
+        }),
         config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
             accounts: async () => ({ codex: [{ name: "sub", label: "sub" }], grok: [], kimi: [], gemini: [] }),

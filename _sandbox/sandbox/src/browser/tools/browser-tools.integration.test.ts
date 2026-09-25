@@ -1,8 +1,9 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
+import type { BrowserRouterHub, RouterManifest } from "./browser-router.js";
 import { browserServerSpec, browserServersOf, isolatedBrowserSpec, prepareBrowserOwner, writeBrowserConfig } from "./browser-tools.js";
 import { chromiumWindowArgs, type Display, DISPLAY_HEIGHT, DISPLAY_WIDTH } from "../cast/display.js";
 import { browserFingerprint } from "../sessions/fingerprint.js";
@@ -12,9 +13,20 @@ import { acquireProfileLock, markConnected, releaseProfileLock } from "../sessio
 const DISPLAY: Display = { name: ":99", width: DISPLAY_WIDTH, height: DISPLAY_HEIGHT };
 
 const tempRoot = (): string => mkdtempSync(join(tmpdir(), "browser-tools-"));
-// Where a router would ask the daemon to bring an owner up. Never dialled here: these tests only check what a turn
-// declares, and declaring is the half that now costs nothing.
-const BRIDGE = { url: "http://127.0.0.1:1/system/browser/prepare", token: "test-token" };
+// Records the manifest each mounted router was opened with. Never dialled: these tests only check what a turn
+// declares, and declaring is the half that costs nothing.
+const opened: RouterManifest[] = [];
+const closed: string[] = [];
+const BRIDGE: Pick<BrowserRouterHub, "open" | "close"> = {
+    open: (manifest) => {
+        opened.push(manifest);
+        const id = `router-${opened.length}`;
+        return { id, url: `http://127.0.0.1:1/mcp/browser/${id}`, token: `token-${id}` };
+    },
+    close: (id) => {
+        closed.push(id);
+    },
+};
 const reddit: Capability = { id: "reddit", kind: "browser", config: { platform: "reddit" } };
 
 // Any owner works: these tests check wiring, not device values.
@@ -121,10 +133,31 @@ test("config directories left by dead daemons are swept, and the live one is kep
     const { servers } = await browserServersOf([], tempRoot(), BRIDGE);
 
     expect(existsSync(dead)).toBe(false);
-    // This turn's own router manifest survives the same sweep pass. It is the only file a turn writes now: the
-    // browser config is written when a call arrives, by prepareBrowserOwner.
-    const args = (servers["web"] as { args: string[] }).args;
-    expect(existsSync(args[1] as string)).toBe(true);
+    // A turn writes no file at all now: its router lives in the daemon, and the browser config is written when a call
+    // arrives, by prepareBrowserOwner.
+    expect(servers["web"]).toMatchObject({ type: "http", url: expect.stringContaining("/mcp/browser/") });
+});
+
+test("each mount is a router in the daemon, reached over HTTP with its own bearer, and released together", async () => {
+    if (!(await chromiumInstalled())) {
+        return;
+    }
+    const before = opened.length;
+    const tools = await browserServersOf([reddit], tempRoot(), BRIDGE, true, "conversation-1");
+    const web = tools.servers["web"] as { type: string; url: string; headers: Record<string, string> };
+    const routed = tools.servers["browser"] as { type: string; url: string; headers: Record<string, string> };
+    expect(web.type).toBe("http");
+    expect(routed.type).toBe("http");
+    expect(web.headers["Authorization"]).not.toBe(routed.headers["Authorization"]);
+    // The backends a router spawns carry the turn's stamp, so the process scan charges them to the conversation.
+    expect(opened.slice(before).map((manifest) => manifest.backendEnv)).toEqual([
+        { INTENTIC_TURN_OWNER: "conversation-1" },
+        { INTENTIC_TURN_OWNER: "conversation-1" },
+    ]);
+    expect(opened[before]?.soleOwner).toBe("web");
+    tools.release();
+    tools.release();
+    expect(closed.slice(-2).toSorted()).toEqual([`router-${before + 1}`, `router-${before + 2}`]);
 });
 
 test("browserServerSpec is a HEADED stdio server bound to the profile + stealth + display", () => {
@@ -256,20 +289,12 @@ test("accounts of the same site each stand behind one server, declared without b
     // The prompt pays for one server however many accounts stand behind it.
     expect(Object.keys(servers).toSorted()).toEqual(["browser", "web"]);
     expect(accounts).toEqual({ "reddit-work": "reddit-work", "reddit-personal": "reddit-personal" });
-    const manifestPath = (servers["browser"] as { args: string[] }).args[1] as string;
-    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
-        accounts: Record<string, string>;
-        owners: Record<string, { port: number; command?: string }>;
-        prepare: { url: string; token: string };
-    };
+    const manifest = opened.at(-1) as RouterManifest & { owners: Record<string, { port: number; command?: string }> };
     expect(manifest.accounts).toEqual(accounts);
-    expect(manifest.prepare).toEqual(BRIDGE);
     // An owner is a reserved port and nothing else: no argv, so nothing here could spawn a browser without asking.
     expect(manifest.owners["reddit-work"]?.command).toBeUndefined();
     expect(manifest.owners["reddit-work"]?.port).toBeGreaterThan(0);
     expect(manifest.owners["reddit-personal"]?.port).not.toBe(manifest.owners["reddit-work"]?.port);
-    // And no browser config was written for either of them: that file is what a launched Chromium reads.
-    expect(readdirSync(dirname(manifestPath)).filter((name) => name.startsWith("reddit-"))).toEqual([]);
     // Their software security keys are separate too: one account's second factor is not the other's.
     expect(passkeys["reddit-work"]).not.toBe(passkeys["reddit-personal"]);
 });
@@ -332,5 +357,5 @@ test("no Chromium on disk means no browser servers at all", async () => {
     }
     const root = tempRoot();
     await markConnected(root, "reddit");
-    expect(await browserServersOf([reddit], root, BRIDGE)).toEqual({ servers: {}, accounts: {}, ports: {}, passkeys: {} });
+    expect(await browserServersOf([reddit], root, BRIDGE)).toMatchObject({ servers: {}, accounts: {}, ports: {}, passkeys: {} });
 });

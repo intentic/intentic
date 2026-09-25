@@ -1,6 +1,6 @@
 import { type AgentTurn, type Capability, profileOf, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { browserOutputDir } from "../../../browser/cast/browser-artifacts.js";
-import { browserPrepareBridge } from "../../../browser/tools/browser-prepare.js";
+import { releasingBrowsers } from "../../../browser/tools/browser-fields.js";
 import { browserServersOf, type BrowserTurnTools } from "../../../browser/tools/browser-tools.js";
 import { pluginDirsOf } from "../../../capabilities/plugin-dirs.js";
 import type { Services } from "../../../composition.js";
@@ -36,7 +36,9 @@ export type HarnessPlanDeps = HarnessCredentialDeps &
     Pick<
         Services,
         | "agent"
-        | "browserBridgeToken"
+        | "capabilities"
+        | "extensionMcpToken"
+        | "browserRouters"
         | "files"
         | "heavyCommands"
         | "hostBridgeToken"
@@ -75,7 +77,7 @@ const harnessMounts = (deps: HarnessPlanDeps, input: AgentTurn, granted: readonl
     Promise.all([
         deps.perf.track("turn.plan.extensions", {}, () => extensionAgentDirsOf(deps)),
         deps.perf.track("turn.plan.browser", {}, () =>
-            browserServersOf(granted, deps.workspace.root, browserPrepareBridge(deps), persona.powers.browser, input.conversationId),
+            browserServersOf(granted, deps.workspace.root, deps.browserRouters, persona.powers.browser, input.conversationId),
         ),
         persona.persona === undefined ? Promise.resolve(undefined) : personaKitPlugin(deps.workspace.root, persona.persona.id),
     ]);
@@ -187,7 +189,7 @@ export const planHarnessTurn = async (
     if (!resolved.ok) {
         return { ok: false, ...opt("code", resolved.code), message: resolved.message };
     }
-    const remote = turnToolsOf(deps, granted, input.conversationId);
+    const remote = await turnToolsOf(deps, granted, input.conversationId);
     // What this turn may reach out of the container, and the owner's own browsers: the cards peerToolsOf just mounted,
     // through Services, since the hosts and webext subsystems reach back into this one.
     const hostDevices = await deps.hostReach(granted);
@@ -225,7 +227,7 @@ export const planHarnessTurn = async (
         }),
     );
     return armPlan(
-        deps.agent,
+        releasingBrowsers(deps.agent, browser),
         {
             ...context.base,
             ...gated,

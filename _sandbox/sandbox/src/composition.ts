@@ -122,6 +122,8 @@ import {
     type ProvenCaller,
 } from "./auth/auth.js";
 import { fileBrowserAccess } from "./auth/browser-access.js";
+import { createBrowserRouters } from "./browser/tools/browser-prepare.js";
+import type { BrowserRouterHub } from "./browser/tools/browser-router.js";
 import { createAuthConnections, type AuthConnections } from "./auth/connections.js";
 import { createSessions, type MintedSession } from "./auth/session.js";
 
@@ -373,11 +375,13 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // The desktop-sync enrollments, for the same reason and in the same shape: the devices view merges them with host
     // pulls without the hosts subsystem importing the platform's sync store.
     readonly syncFleet: () => Promise<SyncFleet>;
-    // Per-boot secret a turn's browser routers carry to ask this daemon to bring one profile up; its own, so one
-    // leaking can't open a peer's door.
-    readonly browserBridgeToken: string;
+    // Every live turn's browser router, reached at /mcp/browser/:id with a bearer of its own.
+    readonly browserRouters: BrowserRouterHub;
     // Same pair for the user's own browsers; a separate bridge token so one leaking can't open the other's door.
     readonly webextBridgeToken: string;
+    // Per-boot secret a turn's tool config carries to reach /mcp/extensions/:id, an extension card's MCP endpoint on
+    // the shared backend host; its own token so a leak opens only the extension MCP door, not a peer's.
+    readonly extensionMcpToken: string;
     readonly webexts: WebExtStore;
     readonly webextHub: WebExtHub;
     // Which of the owner's own browsers a turn may work in, and what each of them is, for the same reason hostReach
@@ -1283,8 +1287,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         hostReach: (granted) => hostDeviceReach(services, granted),
         syncFleet: () => enrolledFleet(config.historyRoot),
         hostHub: createPeerHub<HostClient, HostAnnounced, DeviceFacts, DeviceScopes>(HOST_PEER.hub, logger, peerTools),
-        browserBridgeToken: randomBytes(32).toString("hex"),
+        browserRouters: createBrowserRouters(() => services),
         webextBridgeToken: randomBytes(32).toString("hex"),
+        extensionMcpToken: randomBytes(32).toString("hex"),
         webexts: filePeerStore(config.historyRoot, WEBEXT_PEER.store),
         webextHub: createPeerHub<WebExtClient, WebExtAnnounced, WebExtFacts, WebExtScopes>(WEBEXT_PEER.hub, logger, peerTools),
         // Held readings only (webext/webext-peer.ts), like hostReach: a browser that is closed costs the turn nothing.

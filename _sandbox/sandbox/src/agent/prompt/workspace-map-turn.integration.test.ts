@@ -102,6 +102,10 @@ const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, ov
         // every plan, so every arm needs it.
         hostReach: async () => undefined,
         webextReach: async () => undefined,
+        browserRouters: unstubbed<Services["browserRouters"]>("browserRouters", {
+            open: () => ({ id: "router", url: "http://127.0.0.1:1/mcp/browser/router", token: "test-router-token" }),
+            close: () => undefined,
+        }),
         async *codexAgent() {},
         async *grokAgent() {},
         async *agent() {},

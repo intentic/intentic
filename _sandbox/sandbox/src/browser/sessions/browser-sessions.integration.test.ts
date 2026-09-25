@@ -47,7 +47,10 @@ test(
         const root = mkdtempSync(join(tmpdir(), "browser-sessions-"));
         // The turn reserves the port; the call that names the browser is what builds it. Driven here without the router
         // in between, since what is under test is the session the browser becomes, not how a call reaches it.
-        const { ports } = await browserServersOf([], root, { url: "http://127.0.0.1:1/system/browser/prepare", token: "t" });
+        const { ports } = await browserServersOf([], root, {
+            open: () => ({ id: "r", url: "http://127.0.0.1:1/mcp/browser/r", token: "t" }),
+            close: () => undefined,
+        });
         const port = ports["web"];
         if (port === undefined) {
             return; // no Chromium on disk — nothing to drive

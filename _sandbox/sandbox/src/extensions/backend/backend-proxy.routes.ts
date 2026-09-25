@@ -65,7 +65,13 @@ const stalledCount = (calls: ReadonlySet<WaitingCall>, now: number): number => {
     return stalled;
 };
 
-const forward = async (c: Context<AppEnv>, target: { port: number; hostToken: string }, url: URL, extension: string): Promise<Response> => {
+// Also the extension MCP door's way in (extension-mcp.ts), with `url` rewritten onto the card's /x path.
+export const forwardToBackend = async (
+    c: Context<AppEnv>,
+    target: { port: number; hostToken: string },
+    url: URL,
+    extension: string,
+): Promise<Response> => {
     const headers = endToEndHeaders(c.req.raw.headers);
     headers.delete("authorization");
     headers.set("x-intentic-backend", target.hostToken);
@@ -115,7 +121,7 @@ export const createBackendProxyRoute = (services: Pick<Services, "extensionBacke
         calls.add(call);
         waiting.set(extension, calls);
         try {
-            return await forward(c, target, url, extension);
+            return await forwardToBackend(c, target, url, extension);
         } finally {
             calls.delete(call);
             if (calls.size === 0) {

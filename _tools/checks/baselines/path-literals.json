@@ -17,8 +17,6 @@
     "_sandbox/sandbox/src/agent/tools/agent-redaction.test.ts": 3,
     "_sandbox/sandbox/src/agent/verification/watchers.test.ts": 1,
     "_sandbox/sandbox/src/agents/land/landed-subject.test.ts": 1,
-    "_sandbox/sandbox/src/browser/browser-router.integration.test.ts": 1,
-    "_sandbox/sandbox/src/browser/tools/browser-tools.ts": 1,
     "_sandbox/sandbox/src/capabilities/handlers/localmodel.handler.integration.test.ts": 2,
     "_sandbox/sandbox/src/derived/sidecar-service.test.ts": 1,
     "_sandbox/sandbox/src/endpoints/endpoint-catalog.integration.test.ts": 1,

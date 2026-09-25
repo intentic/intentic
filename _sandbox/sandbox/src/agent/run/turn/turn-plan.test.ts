@@ -316,14 +316,8 @@ test("Codex receives the connected browser granted to its persona, and no other 
     const plan = await planTurn(services, turn({ agent: "codex", actsAs: "reddit-writer", conversationId: "reddit-conversation" }), context);
     const request = (plan as { request: AgentRequest }).request;
 
-    // The bridge is this daemon's own loopback door, so the turn's router can ask it to bring that profile up later.
-    expect(browserServers).toHaveBeenCalledWith(
-        [reddit],
-        ROOT,
-        { url: `http://127.0.0.1:${testConfig.sandbox.port}/system/browser/prepare`, token: "test-browser-bridge-token" },
-        true,
-        "reddit-conversation",
-    );
+    // The routers open in this daemon's own hub, so the turn's router can bring that profile up later.
+    expect(browserServers).toHaveBeenCalledWith([reddit], ROOT, services.browserRouters, true, "reddit-conversation");
     expect(request.tools.sdkServers).toEqual({
         identity: { type: "stdio", command: "/usr/bin/socat", args: ["STDIO", "UNIX-CONNECT:/tmp/identity.sock"] },
     });

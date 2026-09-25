@@ -1,8 +1,7 @@
 import { join } from "node:path";
 import type { AgentEvent, AgentTurn, Capability } from "@intentic/sandbox-contract";
 import type { Config } from "../../env.config.js";
-import { browserFields } from "../../browser/tools/browser-fields.js";
-import { browserPrepareBridge } from "../../browser/tools/browser-prepare.js";
+import { browserFields, releasingBrowsers } from "../../browser/tools/browser-fields.js";
 import { browserServersOf } from "../../browser/tools/browser-tools.js";
 import {
     attemptProbe,
@@ -52,7 +51,7 @@ export const createCodexSlice = (input: { readonly config: Config; readonly auth
 };
 
 // What a native Codex turn is planned from: the translator's accounts, the catalog, and the browser bridge.
-export type CodexPlanDeps = Pick<Services, "browserBridgeToken" | "cliProxy" | "codexAgent" | "codexModels" | "config" | "workspace">;
+export type CodexPlanDeps = Pick<Services, "browserRouters" | "cliProxy" | "codexAgent" | "codexModels" | "config" | "workspace">;
 
 // Native Codex turns ride app-server behind the translator, with process-backed MCP servers from the persona-filtered
 // manifest. Mid-turn steering rides a real queue (`turn/steer`), like Pi's.
@@ -81,7 +80,7 @@ export const planCodexTurn = async (
             ? Promise.resolve(input.model)
             : services.codexModels.models().then((catalog) => catalog.default),
         // Plan emulation restarts app-server between review and execution; a fresh process rereads the same manifest.
-        browserServersOf(granted, services.workspace.root, browserPrepareBridge(services), persona.powers.browser, input.conversationId),
+        browserServersOf(granted, services.workspace.root, services.browserRouters, persona.powers.browser, input.conversationId),
     ]);
     const request: AgentRequest<CodexCredential> = {
         ...context.base,
@@ -93,7 +92,11 @@ export const planCodexTurn = async (
             : { kind: "container" },
     };
     // Attribution key: the shared subscription serving every Codex turn, else undefined for the api-key fallback.
-    return armPlan(services.codexAgent, withAttachments(request, context.attachmentPaths), translatorReady ? "codex-subscription" : undefined);
+    return armPlan(
+        releasingBrowsers(services.codexAgent, browser),
+        withAttachments(request, context.attachmentPaths),
+        translatorReady ? "codex-subscription" : undefined,
+    );
 };
 
 // What the Codex adapter reads: its arm's deps, the readiness answer's, and the thread store a resume asks.

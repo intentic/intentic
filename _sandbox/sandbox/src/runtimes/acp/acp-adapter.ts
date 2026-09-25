@@ -18,7 +18,10 @@ import type { Services } from "../../composition.js";
 // catalog, credentials and packs are the capability system's business.
 
 // What the ACP adapter reads: the installed manifest, the daemon's tools it passes through, and the warm connection pool.
-export type AcpAdapterDeps = Pick<Services, "acpAgent" | "capabilities" | "config" | "hostBridgeToken" | "tools" | "webextBridgeToken">;
+export type AcpAdapterDeps = Pick<
+    Services,
+    "acpAgent" | "capabilities" | "config" | "extensionMcpToken" | "files" | "hostBridgeToken" | "tools" | "webextBridgeToken" | "workspace"
+>;
 
 // Harness doesn't apply here, the agent is its own loop, and neither do the Claude-only request fields; MCP tools pass
 // through when the agent advertises support.
@@ -34,7 +37,7 @@ export const planAcpTurn = async (
         return { ok: false, message: `Unknown agent provider "${provider}", add it as an Agent capability first.` };
     }
     const acpConfig = capability.config;
-    const tools = turnToolsOf(services, granted, input.conversationId);
+    const tools = await turnToolsOf(services, granted, input.conversationId);
     return armPlan(
         (request) => services.acpAgent(provider, acpConfig, request),
         withAttachments(

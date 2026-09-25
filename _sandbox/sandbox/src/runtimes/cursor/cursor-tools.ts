@@ -136,9 +136,7 @@ const spawnTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool 
             ...(description !== undefined ? { description } : {}),
             ...(effort !== undefined ? { effort } : {}),
         });
-        return JSON.stringify(
-            result.ok ? { ok: true, child: result.id, note: spawnedNote(result.id) } : result,
-        );
+        return JSON.stringify(result.ok ? { ok: true, child: result.id, note: spawnedNote(result.id) } : result);
     },
 });
 
@@ -332,6 +330,11 @@ export const cursorMcpServers = (request: AgentRequest): Record<string, CursorMc
         };
     }
     for (const [name, server] of Object.entries(request.tools.sdkServers ?? {})) {
+        // The daemon-hosted browser routers.
+        if (server.type === "http") {
+            servers[name] = { type: "http", url: server.url, ...(server.headers !== undefined ? { headers: server.headers } : {}) };
+            continue;
+        }
         if (server.type !== undefined && server.type !== "stdio") {
             continue;
         }

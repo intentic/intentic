@@ -67,12 +67,21 @@ const withRuntimeConfig = (
 // session id differ between turns.
 type CodexTurnBase = Pick<CodexTurn, "env" | "modelProvider" | "config" | "namespace">;
 
-// Projects the browser layer's stdio MCP specs (built for the Claude SDK) into Codex's per-thread config instead of a
-// second browser stack; SDK-instance servers are skipped, since app-server can't spawn a live object. Only env deltas
-// from the inherited turn environment ride the config, to avoid re-serializing every credential.
+// Projects the browser layer's MCP specs (built for the Claude SDK) into Codex's per-thread config instead of a second
+// browser stack: the daemon-hosted routers as Streamable HTTP servers, anything stdio as a process. SDK-instance servers
+// are skipped, since app-server can't reach a live object. Only env deltas from the inherited turn environment ride the
+// config, to avoid re-serializing every credential.
 const codexMcpConfig = (servers: TurnTools["sdkServers"], inheritedEnv: Readonly<Record<string, string>>): Record<string, JsonValue> => {
     const config: Record<string, JsonValue> = {};
     for (const [name, server] of Object.entries(servers ?? {})) {
+        if (server.type === "http") {
+            config[`mcp_servers.${name}`] = {
+                url: server.url,
+                ...(server.headers === undefined ? {} : { http_headers: server.headers }),
+                ...(server.timeout === undefined ? {} : { tool_timeout_sec: Math.ceil(server.timeout / 1_000) }),
+            };
+            continue;
+        }
         if (server.type !== undefined && server.type !== "stdio") {
             continue;
         }

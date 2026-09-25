@@ -1,8 +1,7 @@
 import { join } from "node:path";
 import type { AgentEvent, AgentTurn, Capability } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import { browserFields } from "../../browser/tools/browser-fields.js";
-import { browserPrepareBridge } from "../../browser/tools/browser-prepare.js";
+import { browserFields, releasingBrowsers } from "../../browser/tools/browser-fields.js";
 import { browserServersOf } from "../../browser/tools/browser-tools.js";
 import {
     attemptProbe,
@@ -65,11 +64,14 @@ export const createCursorSlice = (input: { readonly authRoot: string; readonly l
 // and the seams its MCP tools and browser stack are mounted from.
 export type CursorPlanDeps = Pick<
     Services,
-    | "browserBridgeToken"
+    | "browserRouters"
+    | "capabilities"
     | "config"
     | "cursorAgent"
     | "cursorModels"
     | "cursorStore"
+    | "extensionMcpToken"
+    | "files"
     | "hostBridgeToken"
     | "observedLimits"
     | "tools"
@@ -95,7 +97,7 @@ export const planCursorTurn = async (
     // Never empty, so this always resolves: keeps the pinned model while offered, else the catalog default.
     const [catalog, browser] = await Promise.all([
         services.cursorModels.models(),
-        browserServersOf(granted, services.workspace.root, browserPrepareBridge(services), persona.powers.browser, input.conversationId),
+        browserServersOf(granted, services.workspace.root, services.browserRouters, persona.powers.browser, input.conversationId),
     ]);
     const model = input.model !== undefined && catalog.models.some((entry) => entry.id === input.model) ? input.model : catalog.default;
     // Placed after the model resolves, because which connection can still serve is a question about that model's own
@@ -103,11 +105,12 @@ export const planCursorTurn = async (
     const account = await cursorAccountForTurn(services, input.account, model);
     if (account === undefined) {
         // Reachable only if disconnected after the readiness check, or a pinned id never existed; both mean pick one.
+        browser.release();
         return { ok: false, message: "That Cursor account is no longer connected. Pick another one, or connect it again in Sandbox ▸ Agent." };
     }
     // The same remote MCP set the harness and ACP arms mount, which cursorMcpServers turns into http servers: a machine,
     // a connected browser or an mcp capability the owner granted must reach a Cursor turn like any other.
-    const tools = turnToolsOf(services, granted, input.conversationId);
+    const tools = await turnToolsOf(services, granted, input.conversationId);
     const request: AgentRequest<CursorCredential> = {
         ...context.base,
         spec: { ...context.base.spec, model, ...opt("steering", context.steering) },
@@ -121,7 +124,7 @@ export const planCursorTurn = async (
     };
     // Real account id, not a shared marker: usage and rate-limit frames can name which connection paid. Attachments fold
     // into the prompt as a file list; Cursor's read tool takes them off disk, like OpenCode/Pi.
-    return armPlan(services.cursorAgent, withAttachments(request, context.attachmentPaths), account.id);
+    return armPlan(releasingBrowsers(services.cursorAgent, browser), withAttachments(request, context.attachmentPaths), account.id);
 };
 
 // Nothing to probe on PATH, no server to reach: what can be missing is the SDK module (a pack) or a usable credential,
@@ -166,7 +169,9 @@ export const cursorProvider: ProviderModule<CursorProviderDeps> = {
     // door and the credential is a key this sandbox owns. An expired key reads as not-ready: a turn on it would be
     // refused.
     ready: async (services) =>
-        (await services.cursorStore.credentials()).some((account) => account.apiKeyExpiresAtMs === undefined || account.apiKeyExpiresAtMs > Date.now()),
+        (await services.cursorStore.credentials()).some(
+            (account) => account.apiKeyExpiresAtMs === undefined || account.apiKeyExpiresAtMs > Date.now(),
+        ),
     // Started unconditionally, not gated on the Cursor pack: there's no process to ENOENT on, just a socket and two
     // files, a few KB on an image with none. So the gate is armed the moment a pack installs, not only after the next
     // restart.

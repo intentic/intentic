@@ -292,6 +292,12 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         hostReach: async () => undefined,
         // Same for the owner's own browsers: none connected, asked by every planned turn.
         webextReach: async () => undefined,
+        // Opened by every planned turn whose browser stack mounts; no suite here calls a browser tool through it.
+        browserRouters: unstubbed<Services["browserRouters"]>("browserRouters", {
+            open: () => ({ id: "router", url: "http://127.0.0.1:1/mcp/browser/router", token: "test-router-token" }),
+            close: () => undefined,
+            closeAll: () => undefined,
+        }),
         // Both composed exactly as composition.ts composes them, over this harness's own history root and stores, so a
         // suite exercises the real reader and the real queue rather than a second description of them.
         syncFleet: () => enrolledFleet((rest.config ?? testConfig).historyRoot),

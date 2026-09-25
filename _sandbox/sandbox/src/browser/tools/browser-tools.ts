@@ -2,7 +2,6 @@ import { existsSync, mkdtempSync } from "node:fs";
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { randomBytes } from "node:crypto";
-import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
@@ -11,6 +10,7 @@ import type { Capability } from "@intentic/sandbox-contract";
 import { workloadStamp } from "../../seams/workload-stamp.js";
 import { freePort as bindEphemeral } from "../../processes/free-port.js";
 import { browserOutputDir } from "../cast/browser-artifacts.js";
+import { type BrowserBackendSpec, type BrowserRouterHub, createSchemaCache, type McpToolSchema, type RouterManifest } from "./browser-router.js";
 import { type ProfileExit, resolveProfileExit } from "../sessions/browser-exit.js";
 import { chromiumWindowArgs, type Display, ensureDisplay } from "../cast/display.js";
 import { acceptLanguage, browserFingerprint, type BrowserFingerprint } from "../sessions/fingerprint.js";
@@ -219,9 +219,6 @@ const BROWSER_CALL_TIMEOUT_MS = 120_000;
 // Budget for bringing a bound owner's cold exit up; paid once by the first turn after a cold start.
 const EXIT_START_BUDGET_MS = 10_000;
 
-// One router replaces one @playwright/mcp per account, answering startup handshake from a schema cache.
-const ROUTER_SCRIPT = fileURLToPath(new URL("../../../bin/browser-router.mjs", import.meta.url));
-
 // What both server kinds need before either can run.
 interface BrowserRuntime {
     readonly cli: string;
@@ -250,22 +247,9 @@ export interface BrowserTurnTools {
     readonly ports: Record<string, number>;
     // Owner to passkey store path; absent for `web`, which holds no identity.
     readonly passkeys: Record<string, string>;
-}
-
-
-// Where the router asks this daemon to bring one owner up, mid-turn. The token is the daemon's per-boot browser bridge
-// secret, not a capability's own; it authorizes the ask, the manifest decides which owners may be asked for.
-export interface PrepareBridge {
-    readonly url: string;
-    readonly token: string;
-}
-
-// What a prepared owner takes to spawn: the full environment, not a delta, so a headless backend can be handed an
-// environment with DISPLAY removed rather than one the router would merge its own back into.
-export interface BrowserBackendSpec {
-    readonly command: string;
-    readonly args: readonly string[];
-    readonly env: Record<string, string>;
+    // Ends this turn's browsing: closes its routers in the daemon, killing any browser they started. Called once the
+    // turn's loop ends (releasingBrowsers); a router nobody releases holds no process until a call spawns one.
+    readonly release: () => void;
 }
 
 const backendOf = (spec: McpServerConfig): BrowserBackendSpec | { readonly refusal: string } =>
@@ -273,7 +257,22 @@ const backendOf = (spec: McpServerConfig): BrowserBackendSpec | { readonly refus
         ? { command: spec.command, args: spec.args ?? [], env: spec.env ?? {} }
         : { refusal: "the browser server came back with a transport nothing here can spawn" };
 
-const NO_BROWSER_TOOLS: BrowserTurnTools = { servers: {}, accounts: {}, ports: {}, passkeys: {} };
+const NO_BROWSER_TOOLS: BrowserTurnTools = { servers: {}, accounts: {}, ports: {}, passkeys: {}, release: () => undefined };
+
+const schemaCache = createSchemaCache();
+
+// The tool list every router serves: a property of the @playwright/mcp version and nothing else, so it is probed from
+// an isolated headless server once per version and read from disk by every later daemon.
+export const browserToolSchemas = async (): Promise<readonly McpToolSchema[]> => {
+    const runtime = await browserRuntime();
+    if (runtime === undefined) {
+        throw new Error("no browser is installed in this sandbox");
+    }
+    return schemaCache(join(configDir, `tools-${mcpVersion}.json`), {
+        command: process.execPath,
+        args: [runtime.cli, "--browser", "chromium", "--executable-path", runtime.executablePath, "--no-sandbox", "--isolated", "--headless"],
+    });
+};
 
 // Everything a browser costs to have — its X display, its exit, its fingerprint, its config file and the
 // @playwright/mcp process itself — is paid here, on the first call that names this owner, never at turn setup. A turn
@@ -341,18 +340,19 @@ export const prepareBrowserOwner = async (
     );
 };
 
-// One router process per mount, and one backend per profile owner behind it: identities share one with born accounts;
-// two standalone get two. `anonymous` controls the separate credential-free browser: a different question from whose
-// name this turn may use.
-// Nothing here spawns a browser, starts a display or resolves an exit: this only declares what the turn *may* reach,
-// at the cost of a reserved port per owner. The router answers the handshake and the tool list from a schema cache, so
-// a turn that never calls a browser tool never pays for one.
+// One router per mount, and one backend per profile owner behind it: identities share one with born accounts; two
+// standalone get two. `anonymous` controls the separate credential-free browser: a different question from whose name
+// this turn may use.
+// Nothing here spawns a process, starts a display or resolves an exit: the routers live in this daemon and are reached
+// over HTTP, and this only declares what the turn *may* reach, at the cost of a reserved port per owner. The router
+// answers the handshake and the tool list from a schema cache, so a turn that never calls a browser tool never pays
+// for one.
 export const browserServersOf = async (
     capabilities: readonly Capability[],
     root: string,
-    bridge: PrepareBridge,
+    routers: Pick<BrowserRouterHub, "open" | "close">,
     anonymous = true,
-    // Router's workload stamp for the reaper to claim a hard-killed harness's leftovers; absent on the bench.
+    // Stamped onto the backends a router spawns, so the process scan attributes a browser to its conversation.
     conversationId?: string,
 ): Promise<BrowserTurnTools> => {
     const runtime = await browserRuntime();
@@ -363,37 +363,32 @@ export const browserServersOf = async (
     const ports: Record<string, number> = {};
     const passkeys: Record<string, string> = {};
     const servers: Record<string, McpServerConfig> = {};
-    // Schema probe: isolated headless server, initialize+tools/list only; depends on the package, not the display.
-    // Shared by both mounts, since the tool list is a property of the @playwright/mcp version and nothing else.
-    const shared = {
-        schemaCachePath: join(configDir, `tools-${mcpVersion}.json`),
-        probe: {
-            command: process.execPath,
-            args: [runtime.cli, "--browser", "chromium", "--executable-path", runtime.executablePath, "--no-sandbox", "--isolated", "--headless"],
-        },
-        prepare: { url: bridge.url, token: bridge.token },
-        // Applied over the prepared environment when a backend spawns, so the reaper can claim a hard-killed
-        // harness's leftovers; the daemon that prepares it doesn't carry this turn's stamp.
-        backendEnv: conversationId === undefined ? {} : workloadStamp(conversationId),
+    const opened: string[] = [];
+    const mount = (manifest: Omit<RouterManifest, "backendEnv">): McpServerConfig => {
+        const router = routers.open({ ...manifest, backendEnv: conversationId === undefined ? {} : workloadStamp(conversationId) });
+        opened.push(router.id);
+        // Not alwaysLoad: the router's schemas defer behind ToolSearch like every other MCP tool; system append names it.
+        return { type: "http", url: router.url, headers: { Authorization: `Bearer ${router.token}` }, timeout: BROWSER_CALL_TIMEOUT_MS };
+    };
+    const release = (): void => {
+        for (const id of opened.splice(0)) {
+            routers.close(id);
+        }
     };
     if (anonymous) {
         ports[ANONYMOUS_BROWSER_SERVER] = await freePort();
         // Its own router, not a second account on the shared one: `mcp__web__*` takes no `account` argument, and a
         // sole-owner manifest is what keeps that parameter off its schemas.
-        servers[ANONYMOUS_BROWSER_SERVER] = await routerServer(
-            {
-                ...shared,
-                soleOwner: ANONYMOUS_BROWSER_SERVER,
-                accounts: {},
-                owners: { [ANONYMOUS_BROWSER_SERVER]: { port: ports[ANONYMOUS_BROWSER_SERVER] } },
-            },
-            conversationId,
-        );
+        servers[ANONYMOUS_BROWSER_SERVER] = mount({
+            soleOwner: ANONYMOUS_BROWSER_SERVER,
+            accounts: {},
+            owners: { [ANONYMOUS_BROWSER_SERVER]: { port: ports[ANONYMOUS_BROWSER_SERVER] } },
+        });
     }
     const granted = capabilities.filter((capability) => capability.kind === "browser" || capability.kind === "identity");
     const owners = new Set(granted.map((capability) => profileOwner(capability)).filter((owner) => !isProfileOpen(owner)));
     if (owners.size === 0) {
-        return { ...NO_BROWSER_TOOLS, servers, ports };
+        return { ...NO_BROWSER_TOOLS, servers, ports, release };
     }
     // Router's manifest: every granted id resolves to its profile owner; one held by the login window is left out.
     const accounts: Record<string, string> = {};
@@ -412,24 +407,6 @@ export const browserServersOf = async (
         passkeys[owner] = passkeyPath(root, owner);
         backends[owner] = { port: ports[owner] };
     }
-    servers[ROUTED_BROWSER_SERVER] = await routerServer({ ...shared, accounts, owners: backends }, conversationId);
-    return { servers, accounts, ports, passkeys };
-};
-
-// The manifest is written 0600 under a per-daemon 0700 directory: it carries the bridge token, so anything that can
-// read it can ask the daemon to bring a browser up.
-const routerServer = async (manifest: object, conversationId: string | undefined): Promise<McpServerConfig> => {
-    const manifestPath = join(configDir, `router-${randomBytes(4).toString("hex")}.json`);
-    await writeFile(manifestPath, JSON.stringify(manifest), { flag: "wx", mode: 0o600 });
-    // Not alwaysLoad: the router's schemas defer behind ToolSearch like every other MCP tool; system append names it.
-    return {
-        type: "stdio",
-        command: process.execPath,
-        args: [ROUTER_SCRIPT, manifestPath],
-        env: {
-            ...(Object.fromEntries(Object.entries(process.env).filter(([, value]) => value !== undefined)) as Record<string, string>),
-            ...(conversationId === undefined ? {} : workloadStamp(conversationId)),
-        },
-        timeout: BROWSER_CALL_TIMEOUT_MS,
-    };
+    servers[ROUTED_BROWSER_SERVER] = mount({ accounts, owners: backends });
+    return { servers, accounts, ports, passkeys, release };
 };

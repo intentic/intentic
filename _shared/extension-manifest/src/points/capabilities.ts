@@ -180,6 +180,16 @@ export const CapabilityContributionSchema = z
             probe: ProbeSchema.optional().describe(
                 "One authenticated request that tests this card's settings before they are saved, so a wrong token or an unreachable host is answered on the form rather than by a card that says 'not connected' afterwards.",
             ),
+            // A stdio server in the extension's agent plugin is spawned once per session; this is served by the one
+            // backend host the sandbox already runs, so N sessions cost N requests rather than N processes.
+            mcp: z
+                .string()
+                .regex(/^[a-z0-9][a-z0-9/-]*$/)
+                .refine((value) => !value.endsWith("/"), { message: "mcp must not end in a slash" })
+                .optional()
+                .describe(
+                    "A path in this extension's backend (`server`) answering MCP over Streamable HTTP. Every turn granted a card of this kind gets it as a server named by the card's id; each request arrives at `<path>/<card id>`, so the backend reads that card's config through the daemon rather than the turn's environment.",
+                ),
         }),
         // A site the agent acts on as the owner through the shared browser; `loginUrl`/`homeUrl` are both optional so a
         // card can be the generic one that asks for them on its form instead.

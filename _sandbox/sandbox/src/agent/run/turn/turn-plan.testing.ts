@@ -97,8 +97,11 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
         hostReach: async () => undefined,
         // Same for the owner's own browsers: none connected, which every planned turn asks about too.
         webextReach: async () => undefined,
-        // Read on every planned turn that mounts a browser stack, to point that turn's routers back at this daemon.
-        browserBridgeToken: "test-browser-bridge-token",
+        // Read on every planned turn that mounts a browser stack, to open that turn's routers in this daemon.
+        browserRouters: unstubbed<Services["browserRouters"]>("browserRouters", {
+            open: () => ({ id: "router", url: "http://127.0.0.1:1/mcp/browser/router", token: "test-router-token" }),
+            close: () => undefined,
+        }),
         // No translator and no api key: the state both Codex gates refuse from, where most cases here start.
         config: testConfig,
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", { accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }) }),
