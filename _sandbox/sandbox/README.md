@@ -42,7 +42,8 @@ flowchart LR
   the conversions its shape has had; `jsonFile` runs them on every read and keeps what it does not know on writes.
   Before any store opens, `store/evolution/state-convergence.ts` writes converted files back under a journal a rolled-back build
   undoes, committed once boot converges. `src/state-plan.ts` is the same plan, read-only, for `ic`'s pre-flight. Both
-  take every document and structural step from `store/evolution/state-registry.ts`, never from what a process loaded:
+  take every document and structural step from `src/state-registry.ts` (`main.ts` hands it to the boot step), never
+  from what a process loaded, and it sits above every subsystem because it imports them all:
   `store/shapes/write-state-shapes.ts` writes it from every `export const name = defineDocument(…)` (or `defineStep`)
   in the source, and fails on a definition in any other form; it also freezes every shape each document has had so the
   typecheck catches a change that would strand an old file.
@@ -51,6 +52,8 @@ flowchart LR
   conversions (every conversion's description, earlier address and step id) identifies its journal episode: only a
   build with the same digest resumes one, and any other open episode is put back. The conversion count earlier builds
   compared is still written for them, and decides nothing.
+- A `rename` conversion moves a key and nothing more: there is no grace window writing both names. A build rolled back
+  past a committed rename keeps the new name as a key it does not know, and reads its own default for the old one.
 
 More: [subsystems](docs/subsystems.md) (how the parts connect), [environment](docs/env-contract.md) (what the daemon
 reads at start), [debugging](docs/debugging.md) (logs, diagnostics, state on disk).

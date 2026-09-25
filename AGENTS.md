@@ -116,7 +116,7 @@ its shape ships with its conversion, in the `history` of the document's `defineD
 typecheck of `src/store/generated/state-shapes.ts` fails at the document and property an old file would break on. Define
 a document or a boot step as `export const name = defineDocument(…)` (or `defineStep`) at the top of its module, and
 list it by running the shape generator (`node --import tsx src/store/shapes/write-state-shapes.ts` in
-`_sandbox/sandbox`): the boot step and the update pre-flight read only `store/evolution/state-registry.ts`, and its
+`_sandbox/sandbox`): the boot step and the update pre-flight read only `src/state-registry.ts`, and its
 test fails on a definition missing from it. Never
 read an existing key a new way (rename it), and never reuse a retired name. [COMPATIBILITY.md](COMPATIBILITY.md#stored-data)
 has the rest and the reasons.

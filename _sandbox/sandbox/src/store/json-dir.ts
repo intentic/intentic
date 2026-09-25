@@ -2,10 +2,10 @@ import { readdir, readFile, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { errnoCode, errorMessage, isMissing, undefinedIfMissing } from "@intentic/base/errors";
 import { convertDocument } from "./evolution/conversions.js";
-import { type DocumentSpec, documentKey } from "./evolution/documents.js";
+import type { DocumentSpec } from "./evolution/documents.js";
 import { asideOf, ManifestUnreadableError, writeJsonFile } from "./json-file.js";
+import { newerBuildRan } from "./newest-run.js";
 import { carryUnknown } from "./evolution/passthrough.js";
-import { reconcileRenames, renameWindowsOf, withOldNames } from "./evolution/rename-compat.js";
 import { queueOnFile } from "./text-file.js";
 
 // Directory of one JSON file per entry, for a store with a second writer besides the daemon; jsonFile is the
@@ -14,6 +14,8 @@ import { queueOnFile } from "./text-file.js";
 // - an unparsable filename is reported by list(), never silently dropped
 // - the document's conversions run over each file before `parse`, and a write keeps what the file it replaces held
 //   that this build does not know (passthrough.ts), so a rollback's older build edits around a newer one's keys
+// - a write over an entry this build cannot read follows jsonFile's policy: the bytes move aside first
+//   (`<id>.json.corrupt`), and after a newer build has run here the write is refused instead
 
 // Charset must mirror `entryId` in sandbox-contract's schemas/internal.ts.
 const ENTRY_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,59}$/;
@@ -35,22 +37,34 @@ export interface JsonDir<T> {
 export const jsonDir = <T>(dir: string, parse: (raw: unknown) => T | undefined, document?: DocumentSpec): JsonDir<T> => {
     const entryPath = (id: string): string => join(dir, `${id}.json`);
     // Raw JSON as today's shape: the document's conversions, when it has any, before any schema sees it.
-    const perFile = { granularity: "object" } as const;
-    const windows = () => (document === undefined ? [] : renameWindowsOf(documentKey(document)));
-    const converted = (raw: unknown): unknown =>
-        document === undefined ? raw : convertDocument(document.history, "object", reconcileRenames(raw, perFile, windows())).value;
+    const converted = (raw: unknown): unknown => (document === undefined ? raw : convertDocument(document.history, "object", raw).value);
 
-    // The raw entry as it stands and what parse made of it, for a write to carry forward; undefined for an absent or
-    // unreadable file, which has nothing this build could carry.
-    const current = async (id: string): Promise<{ raw: unknown; parsed: T } | undefined> => {
+    // One entry as it stands: absent, read (the raw JSON as today's shape and what parse made of it, for a write to
+    // carry forward), or there and unreadable, with what was wrong.
+    type Loaded = { readonly kind: "absent" } | { readonly kind: "read"; readonly raw: unknown; readonly parsed: T } | { readonly kind: "unreadable"; readonly detail: string };
+    const load = async (path: string): Promise<Loaded> => {
+        let text: string | undefined;
         try {
-            const raw = converted(JSON.parse(await readFile(entryPath(id), "utf8")));
-            const parsed = parse(raw);
-            return parsed === undefined ? undefined : { raw, parsed };
-        } catch {
-            // silent-catch: absent, not JSON, or a failed conversion all mean nothing to carry; the write replaces it whole
-            return undefined;
+            text = await readFile(path, "utf8").catch(undefinedIfMissing);
+        } catch (error) {
+            return { kind: "unreadable", detail: `the file could not be read (${errnoCode(error) ?? errorMessage(error)})` };
         }
+        if (text === undefined) {
+            return { kind: "absent" };
+        }
+        let raw: unknown;
+        try {
+            raw = JSON.parse(text);
+        } catch {
+            return { kind: "unreadable", detail: "the file is not valid JSON" };
+        }
+        try {
+            raw = converted(raw);
+        } catch (error) {
+            return { kind: "unreadable", detail: `a conversion to this build's shape failed (${errorMessage(error)})` };
+        }
+        const parsed = parse(raw);
+        return parsed === undefined ? { kind: "unreadable", detail: "the file does not match what this build expects" } : { kind: "read", raw, parsed };
     };
 
     const read = async (id: string): Promise<(T & { id: string }) | undefined> => {
@@ -58,31 +72,11 @@ export const jsonDir = <T>(dir: string, parse: (raw: unknown) => T | undefined, 
             return undefined;
         }
         const path = entryPath(id);
-        let text: string | undefined;
-        try {
-            text = await readFile(path, "utf8").catch(undefinedIfMissing);
-        } catch (error) {
-            throw new ManifestUnreadableError(path, `the file could not be read (${errnoCode(error) ?? errorMessage(error)})`);
+        const loaded = await load(path);
+        if (loaded.kind === "unreadable") {
+            throw new ManifestUnreadableError(path, loaded.detail);
         }
-        if (text === undefined) {
-            return undefined;
-        }
-        let raw: unknown;
-        try {
-            raw = JSON.parse(text);
-        } catch {
-            throw new ManifestUnreadableError(path, "the file is not valid JSON");
-        }
-        try {
-            raw = converted(raw);
-        } catch (error) {
-            throw new ManifestUnreadableError(path, `a conversion to this build's shape failed (${errorMessage(error)})`);
-        }
-        const body = parse(raw);
-        if (body === undefined) {
-            throw new ManifestUnreadableError(path, "the file does not match what this build expects");
-        }
-        return { ...body, id };
+        return loaded.kind === "absent" ? undefined : { ...loaded.parsed, id };
     };
 
     return {
@@ -118,9 +112,17 @@ export const jsonDir = <T>(dir: string, parse: (raw: unknown) => T | undefined, 
         // Serialized per entry, since carrying forward reads the file this write replaces.
         write: (id, body) =>
             queueOnFile(entryPath(id), async () => {
-                const before = await current(id);
-                const carried = before === undefined ? body : carryUnknown(before.raw, before.parsed, body);
-                await writeJsonFile(entryPath(id), withOldNames(carried, perFile, windows()));
+                const path = entryPath(id);
+                const before = await load(path);
+                if (before.kind === "unreadable") {
+                    // Never written over: a newer build's entry is refused (setting it aside would hand the owner a reset
+                    // the moment they roll forward), anything else is moved aside where a hand can recover it.
+                    if (newerBuildRan()) {
+                        throw new ManifestUnreadableError(path, `${before.detail}; a newer intentic wrote it`);
+                    }
+                    await rename(path, await asideOf(path)).catch(undefinedIfMissing);
+                }
+                await writeJsonFile(path, before.kind === "read" ? carryUnknown(before.raw, before.parsed, body) : body);
             }),
         remove: (id) =>
             unlink(entryPath(id)).then(

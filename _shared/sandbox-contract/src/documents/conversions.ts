@@ -213,12 +213,12 @@ const applyToObject = (conversion: Conversion, target: JsonObject, where: string
                 report({ conversion: conversion.describe, at: where });
                 return renamedKey(target, conversion.from, conversion.to);
             }
-            // Both names holding the same value is a file written under both on purpose (a rename's grace window keeps
-            // the old name for a build that only knows it): nothing to report, nothing for the file to lose.
+            // Both names holding the same value (a file a daemon before 2026-09-25 wrote under both during a rename's
+            // grace window, or one edited by hand): nothing to report, nothing for the file to lose.
             if (JSON.stringify(target[conversion.from]) === JSON.stringify(target[conversion.to])) {
                 return withoutKey(target, conversion.from);
             }
-            // Both names present and different (an old key back through git, or an older build's edit after the window):
+            // Both names present and different (an old key back through git, or a rolled-back build's edit):
             // the current name wins, and what the older one held is recorded rather than lost without a word.
             report({ conversion: conversion.describe, at: where, detail: `kept ${conversion.to}; ${conversion.from} held ${glimpse(target[conversion.from])}` });
             return withoutKey(target, conversion.from);

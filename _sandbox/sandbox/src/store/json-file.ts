@@ -2,12 +2,11 @@ import { lstat, readFile, rename } from "node:fs/promises";
 import { basename } from "node:path";
 import { errnoCode, errorMessage, isMissing, undefinedIfMissing } from "@intentic/base/errors";
 import { convertDocument } from "./evolution/conversions.js";
-import { type DocumentSpec, documentKey } from "./evolution/documents.js";
+import type { DocumentSpec } from "./evolution/documents.js";
 import { type ManifestProblem, recordManifestProblems } from "./manifest-problems.js";
 import { type ManifestEdit, registerManifestEditor } from "./manifest-repair.js";
 import { newerBuildRan } from "./newest-run.js";
-import { reconcileRenames, renameWindowsOf, withOldNames } from "./evolution/rename-compat.js";
-import { carryUnknown, type IdKeys, readEntries, reemitQuarantined } from "./evolution/passthrough.js";
+import { carryUnknown, type EntryRead, type IdKeys, reemitQuarantined } from "./evolution/passthrough.js";
 import { queueOnFile, writeTextFile } from "./text-file.js";
 
 // One JSON file, read through a schema and written whole; every `*-store.ts` in the daemon sits on this.
@@ -97,10 +96,12 @@ interface Store<T> {
     readonly mode: number | undefined;
     readonly onUnreadable: "setAside" | "refuse";
     readonly document: DocumentSpec | undefined;
+    // True when `decode` runs the document's conversions itself, one entry at a time, instead of over the whole file.
+    readonly convertsEntries?: boolean;
 }
 
 const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
-    const { decode, fallback, mode, onUnreadable, document } = store;
+    const { decode, fallback, mode, onUnreadable, document, convertsEntries = false } = store;
     // Value plus whether it stands in for content that exists but couldn't be read; a plain read answers the same
     // either way.
     const readState = async (): Promise<Read<T>> => {
@@ -130,9 +131,9 @@ const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
         } catch {
             return unreadable("the file is not valid JSON");
         }
-        if (document !== undefined) {
+        if (document !== undefined && !convertsEntries) {
             try {
-                raw = convertDocument(document.history, document.granularity, reconcileRenames(raw, document, renameWindowsOf(documentKey(document)))).value;
+                raw = convertDocument(document.history, document.granularity, raw).value;
             } catch (error) {
                 return unreadable(`a conversion to this build's shape failed (${errorMessage(error)})`);
             }
@@ -183,8 +184,7 @@ const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
                     return updated;
                 }
                 if (carry !== undefined) {
-                    const bytes = document === undefined ? carry(updated) : withOldNames(carry(updated), document, renameWindowsOf(documentKey(document)));
-                    await writeJsonFile(path, bytes, mode);
+                    await writeJsonFile(path, carry(updated), mode);
                     return updated;
                 }
                 // Content this build could not read is never overwritten: refused, or set aside where a later
@@ -214,18 +214,53 @@ export const jsonFile = <T>(path: string, { parse, fallback, mode, onUnreadable 
         document,
     });
 
-// A top-level array read one entry at a time: an entry this build cannot read is reported and skipped instead of
-// sinking the whole file to its fallback, and kept in the file on the next write where a later build can read it.
+// Each entry of a top-level array through the document's conversions and then `entry`, on its own: one whose
+// conversion throws or that this build cannot read is reported and quarantined (kept as written, where a later build
+// can read it), never the file. An entry a conversion retires is gone.
+const readEach = <E>(raw: readonly unknown[], document: DocumentSpec | undefined, entry: (raw: unknown) => E | undefined, report: Report): EntryRead<E> => {
+    const entries: E[] = [];
+    const aligned: unknown[] = [];
+    const quarantined: { index: number; entry: unknown }[] = [];
+    const converted = (written: unknown): readonly unknown[] => {
+        if (document?.granularity !== "entries") {
+            return [written];
+        }
+        const value = convertDocument(document.history, "entries", [written]).value;
+        return Array.isArray(value) ? value : [value];
+    };
+    raw.forEach((written, index) => {
+        let candidates: readonly unknown[];
+        try {
+            candidates = converted(written);
+        } catch (error) {
+            quarantined.push({ index, entry: written });
+            report({ kind: "invalidEntry", detail: `entry ${index} could not be converted to this build's shape (${errorMessage(error)}); it is kept as written` });
+            return;
+        }
+        for (const candidate of candidates) {
+            const parsed = entry(candidate);
+            if (parsed === undefined) {
+                quarantined.push({ index, entry: candidate });
+                report({ kind: "invalidEntry", detail: `entry ${index} is not one this build can read; it is kept as written` });
+                continue;
+            }
+            entries.push(parsed);
+            aligned.push(candidate);
+        }
+    });
+    return { entries, aligned, quarantined };
+};
+
+// A top-level array read one entry at a time: an entry this build cannot read, or whose conversion fails, is reported
+// and skipped instead of sinking the whole file to its fallback, and kept in the file on the next write where a later
+// build can read it.
 export const jsonEntries = <E>(path: string, { entry, mode, onUnreadable = "setAside", document, idKeys = ["id"] }: JsonEntriesOptions<E>): JsonFile<E[]> =>
     openJsonFile<E[]>(path, {
         decode: (raw, report) => {
             if (!Array.isArray(raw)) {
                 return undefined;
             }
-            const read = readEntries(raw, (candidate) => entry(candidate, report));
-            for (const { index } of read.quarantined) {
-                report({ kind: "invalidEntry", detail: `entry ${index} is not one this build can read; it is kept as written` });
-            }
+            const read = readEach(raw, document, (candidate) => entry(candidate, report), report);
             return {
                 value: read.entries,
                 carry: (updated) =>
@@ -236,4 +271,6 @@ export const jsonEntries = <E>(path: string, { entry, mode, onUnreadable = "setA
         mode,
         onUnreadable,
         document,
+        // An entries document converts per entry; a whole-file conversion of another granularity runs before decode.
+        convertsEntries: document?.granularity === "entries",
     });

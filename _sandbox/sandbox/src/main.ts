@@ -18,6 +18,7 @@ import { commitStateAtBoot, convergeStateAtBoot } from "./bootstrap/state-boot.j
 import { startVersionWatches } from "./bootstrap/version-watches.js";
 import { startWorkspaceApps } from "./bootstrap/workspace-apps.js";
 import { createServices } from "./composition.js";
+import { stateDocuments, stateSteps } from "./state-registry.js";
 import { logsRoot } from "./logs/log-files.js";
 import { loadConfig } from "./env.config.js";
 import { claimContainer } from "./platform/boot/container-owner.js";
@@ -65,7 +66,7 @@ const main = async (): Promise<void> => {
         : { container: false, roots: true };
     // Brings every stored file to this build's shapes before a single store opens (store/evolution/state-convergence.ts), under a
     // journal a rolled-back build undoes; committed once the boot chain converges, below.
-    await convergeStateAtBoot({ config, logger, traits, role });
+    await convergeStateAtBoot({ config, logger, traits, role, documents: stateDocuments(), steps: stateSteps() });
     const services = createServices(config, logger);
     shutdown.push(() => services.perf.stop());
     shutdown.push(() => services.ciHooks.stop());

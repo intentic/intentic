@@ -4,7 +4,7 @@ import { undefinedIfMissing } from "@intentic/base/errors";
 import { z } from "zod";
 import { stateRelPath } from "../../state-paths.js";
 import type { DocumentRoot } from "./documents.js";
-import { writeJsonFile } from "../json-file.js";
+import { asideOf, writeJsonFile } from "../json-file.js";
 
 // The write-ahead journal of one conversion episode: before the boot step changes a file it copies the file aside
 // (its pre-image), and the episode stays open until the new version has booted all the way. A build that finds an
@@ -12,11 +12,15 @@ import { writeJsonFile } from "../json-file.js";
 // which is how a rollback lands on the files the previous version left rather than the ones the new version had
 // started converting.
 // Committed episodes keep their pre-images for a grace window, a hand-restorable record of what each update changed.
+// Every build reads the journal every other build wrote, a rolled-back one included, so it is read one episode at a
+// time: an episode this build cannot read (a newer build's shape) is logged and kept as written, never dropped by a
+// rewrite, and the rest still restore.
 
 // How long committed pre-images, and earlier document addresses left beside their current one, are kept.
 export const GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 
-const EntrySchema = z.object({
+// Loose, like every object below: a key a newer build adds survives this build's rewrite of the journal.
+const EntrySchema = z.looseObject({
     path: z.string(),
     // Where the file's bytes were copied before the episode changed it; null when it did not exist yet.
     preImage: z.string().nullable(),
@@ -24,7 +28,7 @@ const EntrySchema = z.object({
     movedFrom: z.string().optional(),
 });
 
-const EpisodeSchema = z.object({
+const EpisodeSchema = z.looseObject({
     id: z.string(),
     // The conversion count builds before the digest identify an episode by; still written for them.
     engine: z.number(),
@@ -39,32 +43,96 @@ const EpisodeSchema = z.object({
 });
 export type Episode = z.infer<typeof EpisodeSchema>;
 
-const JournalSchema = z.object({
-    episodes: z.array(EpisodeSchema).default([]),
+export interface Journal {
+    readonly episodes: readonly Episode[];
     // An earlier document address still present beside its current one, and when it was first seen so.
-    moved: z.record(z.string(), z.number()).default({}),
-    // Each document's renames in their grace window (rename-compat.ts), and when each window closes.
-    renames: z.record(z.string(), z.array(z.object({ from: z.string(), to: z.string(), until: z.number() }))).default({}),
-});
-export type Journal = z.infer<typeof JournalSchema>;
+    readonly moved: Readonly<Record<string, number>>;
+    // What this build read but could not use, written back as it stands: episodes it cannot read, and the keys it
+    // does not know (a daemon before 2026-09-25 kept its rename windows under `renames`).
+    readonly kept: { readonly episodes: readonly unknown[]; readonly keys: Readonly<Record<string, unknown>> };
+    // The file was there and not a journal at all (not JSON, or not an object): the next write sets it aside first.
+    readonly damaged?: true;
+}
+
+export const emptyJournal = (): Journal => ({ episodes: [], moved: {}, kept: { episodes: [], keys: {} } });
 
 export const journalPath = (historyRoot: string): string => join(historyRoot, "state-journal.json");
 
-// An unreadable journal reads as empty, the only safe reading: its pre-images stay on disk where a hand can reach them.
-export const readJournal = async (historyRoot: string): Promise<Journal> => {
-    const text = await readFile(journalPath(historyRoot), "utf8").catch(undefinedIfMissing);
+// What reading the journal needs of a logger; a pino logger is one.
+export interface JournalLogger {
+    readonly warn: (fields: object, message: string) => void;
+}
+
+const MovedSchema = z.record(z.string(), z.number());
+
+// One episode at a time: a reject costs that episode (kept, logged), never the rest. An unreadable `moved` reads as
+// nothing seen yet, which only delays removing an earlier address by one grace window.
+export const readJournal = async (historyRoot: string, logger?: JournalLogger): Promise<Journal> => {
+    const path = journalPath(historyRoot);
+    const text = await readFile(path, "utf8").catch(undefinedIfMissing);
     if (text === undefined) {
-        return JournalSchema.parse({});
+        return emptyJournal();
+    }
+    let raw: unknown;
+    try {
+        raw = JSON.parse(text);
+    } catch {
+        // silent-catch: not JSON is reported just below, with a file that is JSON but not a journal
+        raw = undefined;
+    }
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+        logger?.warn({ path }, "state: the conversion journal is not one this build can read; it is set aside on the next write, its pre-images left where they are");
+        return { ...emptyJournal(), damaged: true };
+    }
+    const { episodes: rawEpisodes, moved: rawMoved, ...keys } = raw as Record<string, unknown>;
+    const episodes: Episode[] = [];
+    const unread: unknown[] = [];
+    for (const [index, candidate] of (Array.isArray(rawEpisodes) ? rawEpisodes : []).entries()) {
+        const parsed = EpisodeSchema.safeParse(candidate);
+        if (parsed.success) {
+            episodes.push(parsed.data);
+            continue;
+        }
+        unread.push(candidate);
+        logger?.warn(
+            { path, index, id: (candidate as { id?: unknown } | null)?.id, issue: parsed.error.issues[0]?.message },
+            "state: a conversion episode is not one this build can read (a newer build's, or damaged); it is kept as written and not restored",
+        );
+    }
+    if (rawEpisodes !== undefined && !Array.isArray(rawEpisodes)) {
+        logger?.warn({ path }, "state: the conversion journal's episodes are not a list; kept as written");
+        keys["episodes"] = rawEpisodes;
+    }
+    const moved = MovedSchema.safeParse(rawMoved ?? {});
+    if (!moved.success) {
+        logger?.warn({ path }, "state: the conversion journal's earlier addresses are not readable; treated as first seen now");
+    }
+    return { episodes, moved: moved.data ?? {}, kept: { episodes: unread, keys } };
+};
+
+const isJournalObject = async (path: string): Promise<boolean> => {
+    const text = await readFile(path, "utf8").catch(undefinedIfMissing);
+    if (text === undefined) {
+        return true;
     }
     try {
-        return JournalSchema.safeParse(JSON.parse(text)).data ?? JournalSchema.parse({});
+        const raw: unknown = JSON.parse(text);
+        return typeof raw === "object" && raw !== null && !Array.isArray(raw);
     } catch {
-        // silent-catch: not JSON reads as empty, like a schema reject; the pre-image directories are left alone
-        return JournalSchema.parse({});
+        // silent-catch: not JSON is exactly the damaged file this asks about; the answer is the report
+        return false;
     }
 };
 
-export const writeJournal = (historyRoot: string, journal: Journal): Promise<void> => writeJsonFile(journalPath(historyRoot), journal);
+export const writeJournal = async (historyRoot: string, journal: Journal): Promise<void> => {
+    const path = journalPath(historyRoot);
+    // Only while the file is still what could not be read: a journal already written over it is this build's own.
+    if (journal.damaged === true && !(await isJournalObject(path))) {
+        await rename(path, await asideOf(path)).catch(undefinedIfMissing);
+    }
+    const { episodes, moved, kept } = journal;
+    await writeJsonFile(path, { ...kept.keys, episodes: [...episodes, ...kept.episodes], moved });
+};
 
 // Where each volume keeps pre-images: in its own secret class, so a copy of a vault never lands anywhere backed up.
 const preImageRoot = (roots: Readonly<Record<DocumentRoot, string>>, root: DocumentRoot, episode: string): string => {

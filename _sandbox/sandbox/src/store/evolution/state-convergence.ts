@@ -5,11 +5,10 @@ import type { Logger } from "pino";
 import { z } from "zod";
 import { stateRelPath } from "../../state-paths.js";
 import { convertDocument } from "./conversions.js";
-import { conversionDigest, defineDocument, type DocumentRoot, type DocumentSpec, documentKey, engineEpoch } from "./documents.js";
+import { conversionDigest, defineDocument, type DocumentRoot, type DocumentSpec, engineEpoch } from "./documents.js";
 import { jsonEntries } from "../json-file.js";
 import { isDowngrade, newestRunVersion, recordNewestRun } from "../newest-run.js";
 import { commitEpisodes, type Episode, GRACE_MS, type Journal, openEpisode, pruneEpisodes, readJournal, restoreEpisode, writeJournal } from "./state-journal.js";
-import { reconcileRenames, type RenameWindow, setRenameWindows } from "./rename-compat.js";
 import type { StructuralStep } from "./state-steps.js";
 import { writeTextFile } from "../text-file.js";
 import { version as buildVersion } from "../../version.js";
@@ -195,13 +194,9 @@ const copyDocument = async (overlay: Overlay, spec: DocumentSpec, from: string, 
     }
 };
 
-// The windows standing for one document at `now`, from the journal.
-const openWindows = (journal: Journal, key: string, now: number): RenameWindow[] =>
-    (journal.renames[key] ?? []).filter(({ until }) => until > now).map(({ from, to }) => ({ from, to }));
-
 // Writes back one file whose conversions change it; a file that is not JSON, or too large to rewrite at boot, is left to
 // the store, which converts on read and reports what it cannot.
-const planConversion = async (spec: DocumentSpec, path: string, draft: PlanDraft, windows: readonly RenameWindow[]): Promise<void> => {
+const planConversion = async (spec: DocumentSpec, path: string, draft: PlanDraft): Promise<void> => {
     const text = await draft.overlay.read(path);
     if (text === undefined || text.length > EAGER_LIMIT) {
         return;
@@ -214,7 +209,7 @@ const planConversion = async (spec: DocumentSpec, path: string, draft: PlanDraft
         return;
     }
     try {
-        const converted = convertDocument(spec.history, spec.directory ? "object" : spec.granularity, reconcileRenames(raw, spec, windows));
+        const converted = convertDocument(spec.history, spec.directory ? "object" : spec.granularity, raw);
         if (converted.changes.length === 0) {
             return;
         }
@@ -286,9 +281,8 @@ export const planState = async ({ roots, documents, steps, version = buildVersio
     }
     for (const spec of onDisk.filter((candidate) => candidate.history.length > 0)) {
         const path = documentPath(roots, spec);
-        const windows = openWindows(standing, documentKey(spec), now);
         for (const file of spec.directory ? await entryFiles(draft.overlay, path) : [path]) {
-            await planConversion(spec, file, draft, windows);
+            await planConversion(spec, file, draft);
         }
     }
     return {
@@ -370,37 +364,6 @@ export interface ConvergeOutcome {
 const withSeen = (journal: Journal, seen: readonly string[], now: number): Journal =>
     seen.length === 0 ? journal : { ...journal, moved: { ...journal.moved, ...Object.fromEntries(seen.map((path) => [path, now])) } };
 
-// Opens a grace window for every rename this plan applied (a document whose own history renames a key, and a step of
-// the plan naming that rename for it), and closes the ones that ran out.
-const withRenameWindows = (journal: Journal, documents: readonly DocumentSpec[], plan: StatePlan, now: number): Journal => {
-    const renames: Journal["renames"] = {};
-    for (const [key, standing] of Object.entries(journal.renames)) {
-        const open = standing.filter(({ until }) => until > now);
-        if (open.length > 0) {
-            renames[key] = open;
-        }
-    }
-    for (const spec of documents) {
-        // Only a value that moved to its new name opens a window; an old name overruled beside the new one (back through
-        // git, or an older build writing after its window) is recorded, and opens nothing.
-        const shown = new Set(plan.steps.filter((step) => step.document === displayOf(spec) && step.detail === undefined).map((step) => step.change));
-        for (const conversion of spec.history) {
-            if (conversion.kind !== "rename" || !shown.has(conversion.describe)) {
-                continue;
-            }
-            const key = documentKey(spec);
-            const others = (renames[key] ?? []).filter(({ from, to }) => from !== conversion.from || to !== conversion.to);
-            renames[key] = [...others, { from: conversion.from, to: conversion.to, until: now + GRACE_MS }];
-        }
-    }
-    return { ...journal, renames };
-};
-
-// What the stores dual-write from now on, for every document with a window standing.
-const publishRenameWindows = (journal: Journal, now: number): void => {
-    setRenameWindows(new Map(Object.keys(journal.renames).map((key) => [key, openWindows(journal, key, now)])));
-};
-
 // A newer build's open episode is undone before anything else: those files are the previous version's to read. An
 // older one's is undone too, since this build plans from the files as they were before it began. Only an interrupted
 // episode of this same conversion set is resumed, its pre-images being the true originals; one opened before the digest
@@ -427,11 +390,9 @@ export const convergeState = async (options: ConvergeOptions): Promise<ConvergeO
     runningEngine = engineEpoch(documents, steps);
     await recordNewestRun(roots.workspace, version, { engine: runningEngine, digest, write: mayWrite });
     if (!mayWrite) {
-        // A guest writes through the same stores, so it keeps the same windows; it only reads the journal.
-        publishRenameWindows(await readJournal(roots.history), now());
         return { plan: undefined, restored: 0 };
     }
-    const recovered = await recoverEpisodes(roots, await readJournal(roots.history), digest, logger);
+    const recovered = await recoverEpisodes(roots, await readJournal(roots.history, logger), digest, logger);
     let journal = await pruneEpisodes(roots, recovered.journal, now());
     journalOpen = journal.episodes.some((episode) => episode.state === "open");
     const plan = await planState({ roots, documents, steps, version, journal, now: now() });
@@ -467,8 +428,7 @@ export const convergeState = async (options: ConvergeOptions): Promise<ConvergeO
         await appendLedger(roots.workspace, { at: now(), version, engine: plan.engine, digest, steps: [...plan.steps] });
         logger.info({ files: plan.writes.size, steps: plan.steps.length }, "state: converted this workspace's files; the journal stays open until boot finishes");
     }
-    const settled = withRenameWindows(withSeen(journal, plan.seen, now()), documents, plan, now());
-    publishRenameWindows(settled, now());
+    const settled = withSeen(journal, plan.seen, now());
     if (JSON.stringify(settled) !== JSON.stringify(recovered.journal)) {
         await writeJournal(roots.history, settled);
     }
@@ -492,5 +452,4 @@ export const commitState = async (roots: StateRoots, now: number = Date.now()): 
 export const resetStateStatus = (): void => {
     journalOpen = false;
     runningEngine = 0;
-    setRenameWindows(new Map());
 };

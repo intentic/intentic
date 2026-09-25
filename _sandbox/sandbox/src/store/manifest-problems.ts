@@ -63,5 +63,8 @@ export const manifestProblems = (root: string): ManifestProblemReport[] =>
         .map(({ rel, problems }) => ({ path: rel, problems: withSkewHint(problems, version, newestRunVersion()) }))
         .toSorted((a, b) => a.path.localeCompare(b.path));
 
+// What the last read of one file recorded, whether or not the file is one the browser is shown.
+export const recordedProblems = (path: string): readonly ManifestProblem[] => byPath.get(path) ?? [];
+
 // Test seam: resets the module-level registry between suites.
 export const clearManifestProblems = (): void => byPath.clear();

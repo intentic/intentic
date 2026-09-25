@@ -42,6 +42,13 @@ pub enum SessionEnd {
     SignOut,
 }
 
+impl SessionEnd {
+    /// What a parked setup that predates `how` ended with: a restart, the only kind there was.
+    fn before_how() -> SessionEnd {
+        SessionEnd::Restart
+    }
+}
+
 /// A setup parked across a Windows restart. See [`AppState::park_setup`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -50,7 +57,9 @@ pub struct ParkedSetup {
     /// Unix seconds. The point of writing it down: after a restart there is nothing else left that knows how
     /// long ago this was, and the setup code inside expires.
     pub saved_at: u64,
-    /// Which way the session ended on this setup's behalf.
+    /// Which way the session ended on this setup's behalf. A file written before 2026-09-15 has none: every
+    /// setup parked then was parked across a restart, the only way a session ended on its behalf.
+    #[serde(default = "SessionEnd::before_how")]
     pub how: SessionEnd,
 }
 
@@ -369,6 +378,17 @@ mod tests {
         let parked = state_in(&dir).parked_setup().expect("parked");
         assert_eq!(parked.how, SessionEnd::SignOut);
         assert_eq!(parked.args.code, "abc");
+
+        // A file written before `how` existed still resumes, as the restart every setup was parked across then.
+        std::fs::write(
+            dir.join("resume-setup.json"),
+            r#"{"args":{"code":"old","name":null,"cfToken":null,"syncDir":null,"platformUrl":null},"savedAt":1}"#,
+        )
+        .expect("write");
+        let older = state_in(&dir).parked_setup().expect("older file parses");
+        assert_eq!(older.how, SessionEnd::Restart);
+        assert_eq!(older.args.code, "old");
+        assert!(!dir.join("resume-setup.json.unreadable").exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

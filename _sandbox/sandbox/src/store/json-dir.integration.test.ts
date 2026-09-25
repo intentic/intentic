@@ -7,6 +7,7 @@ import { rename } from "./evolution/conversions.js";
 import { defineDocument } from "./evolution/documents.js";
 import { jsonDir } from "./json-dir.js";
 import { ManifestUnreadableError } from "./json-file.js";
+import { clearNewestRun, recordNewestRun } from "./newest-run.js";
 
 const dirs: string[] = [];
 const tempDir = async (): Promise<string> => {
@@ -17,6 +18,7 @@ const tempDir = async (): Promise<string> => {
     return join(dir, `${STATE_DIR}`, "entries");
 };
 afterEach(async () => {
+    clearNewestRun();
     for (const dir of dirs.splice(0)) {
         await rm(dir, { recursive: true, force: true });
     }
@@ -116,4 +118,27 @@ test("a document's conversions run on each file, and a write keeps the keys a ne
     expect(await store.read("old")).toEqual({ text: "from an older build", id: "old" });
     await store.write("new", { text: "edited" });
     expect(JSON.parse(await readFile(join(dir, "new.json"), "utf8"))).toEqual({ text: "edited", pinned: true });
+});
+
+test("a write over an entry this build cannot read moves the bytes aside first, never over them", async () => {
+    const dir = await tempDir();
+    const store = notes(dir);
+    await store.write("seed", { text: "placeholder" });
+    await writeFile(join(dir, "mangled.json"), `{"text": `);
+    await store.write("mangled", { text: "fresh" });
+    expect(JSON.parse(await readFile(join(dir, "mangled.json"), "utf8"))).toEqual({ text: "fresh" });
+    expect(await readFile(join(dir, "mangled.json.corrupt"), "utf8")).toBe(`{"text": `);
+});
+
+test("after a newer build ran here, a write over an entry this build cannot read is refused and moves nothing", async () => {
+    const dir = await tempDir();
+    const store = notes(dir);
+    await store.write("seed", { text: "placeholder" });
+    await recordNewestRun(join(dir, "..", ".."), "9.0.0");
+    await writeFile(join(dir, "future.json"), JSON.stringify({ text: { rich: true } }));
+    await expect(store.write("future", { text: "older" })).rejects.toThrow(
+        "future.json could not be read by this build (the file does not match what this build expects; a newer intentic wrote it)",
+    );
+    expect(JSON.parse(await readFile(join(dir, "future.json"), "utf8"))).toEqual({ text: { rich: true } });
+    expect((await readdir(dir)).toSorted()).toEqual(["future.json", "seed.json"]);
 });

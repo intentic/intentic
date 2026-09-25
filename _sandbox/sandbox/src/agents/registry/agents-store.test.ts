@@ -1,4 +1,5 @@
 import { openConversationsDb } from "../../store/conversations-db.js";
+import { recordedProblems } from "../../store/manifest-problems.js";
 import { IN_MEMORY } from "../../store/sqlite.js";
 import { conversationEntry, isolatedAgent } from "../../testing.js";
 import { type PersistedAgent, sqliteAgentsStore } from "./agents-store.js";
@@ -113,6 +114,34 @@ describe("sqliteAgentsStore", () => {
         // Still a registered conversation: its directory is not an orphan's.
         expect(store.has("unreadable")).toBe(true);
         expect(store.has("never")).toBe(false);
+    });
+
+    it("a record this build cannot read is reported against the database, and a clean load clears the report", () => {
+        const { db, store } = fresh();
+        store.save([conversationEntry({ id: "readable" })]);
+        db.db.prepare("INSERT INTO conversation(id, record) VALUES (?, ?)").run("unreadable", JSON.stringify({ placement: { kind: "main" } }));
+        store.load();
+        expect(recordedProblems(IN_MEMORY)).toEqual([
+            { kind: "invalidEntry", detail: "conversation unreadable: its record does not match what this build expects (identity); it is kept as written" },
+        ]);
+        store.remove(["unreadable"]);
+        store.load();
+        expect(recordedProblems(IN_MEMORY)).toEqual([]);
+    });
+
+    it("a save by this build keeps the keys a newer build wrote into the record, at any depth", () => {
+        const { db, store } = fresh();
+        const entry = isolatedAgent([{ repo: "root", base: "a" }], { id: "w" });
+        store.save([entry]);
+        const stored = JSON.parse((db.db.prepare("SELECT record FROM conversation WHERE id = ?").get("w") as { record: string }).record) as Record<string, unknown>;
+        const newer = { ...stored, pinnedBy: "ania", placement: { ...(stored["placement"] as object), sparse: true } };
+        db.db.prepare("UPDATE conversation SET record = ? WHERE id = ?").run(JSON.stringify(newer), "w");
+
+        const [loaded] = store.load();
+        store.save([{ ...(loaded ?? entry), archivedAt: 20 }]);
+
+        const saved = JSON.parse((db.db.prepare("SELECT record FROM conversation WHERE id = ?").get("w") as { record: string }).record) as Record<string, unknown>;
+        expect(saved).toEqual({ ...newer, archivedAt: 20 });
     });
 
     it("removing a conversation takes every row keyed by it in every table, and nobody else's", () => {

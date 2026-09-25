@@ -5,7 +5,6 @@ import pino from "pino";
 import { z } from "zod";
 import { rename, retype } from "./conversions.js";
 import { conversionDigest, defineDocument } from "./documents.js";
-import { jsonFile } from "../json-file.js";
 import { clearNewestRun } from "../newest-run.js";
 import { commitState, convergeState, planState, resetStateStatus, type StateRoots, stateStatus } from "./state-convergence.js";
 import { GRACE_MS, readJournal, writeJournal } from "./state-journal.js";
@@ -301,28 +300,4 @@ test("a layout step's rename and a conversion inside the renamed tree both come 
     expect(await json(join(roots.workspace, "flat/settings.json"))).toEqual({ colour: "dark" });
     expect([...(await readFile(join(roots.workspace, "flat/asset.bin")))]).toEqual([0, 255, 1]);
     await expect(readdir(join(roots.workspace, "grouped"))).rejects.toThrow("ENOENT");
-});
-
-test("a rename's grace window writes both names, lets an older build's edit win, and closes after the grace period", async () => {
-    const roots = await volumes();
-    const path = join(roots.workspace, "evolution/settings.json");
-    const renamed = defineDocument({ path: "evolution/settings.json", schema: Settings, history: [colour] });
-    const start = 5_000_000;
-    await put(path, { colour: "dark" });
-    await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents: [renamed], steps: [], now: () => start });
-    await commitState(roots, start);
-    const file = jsonFile<z.infer<typeof Settings>>(path, { parse: (raw) => Settings.safeParse(raw).data, fallback: () => ({ theme: "light" }), document: renamed });
-
-    // Inside the window every write carries the old name too, for a build that reads only it.
-    await file.update((current) => ({ ...current, density: 2 }));
-    expect(await json(path)).toEqual({ theme: "dark", colour: "dark", density: 2 });
-
-    // A rolled-back build edited the old name: inside the window that is the newer value.
-    await put(path, { theme: "dark", colour: "blue", density: 2 });
-    expect(await file.read()).toEqual({ theme: "blue", density: 2 });
-
-    // Past the window, the next boot closes it and writes carry only the current name.
-    await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents: [renamed], steps: [], now: () => start + GRACE_MS + 1 });
-    await file.update((current) => ({ ...current, density: 3 }));
-    expect(await json(path)).toEqual({ theme: "dark", density: 3 });
 });

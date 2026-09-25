@@ -16,7 +16,7 @@ describe("rename", () => {
         expect(changes).toEqual([{ conversion: "renames old to new", at: "", detail: 'kept new; old held "stale"' }]);
     });
 
-    test("both names holding the same value (a grace window's double write) settle with nothing to report", () => {
+    test("both names holding the same value (a file written under both) settle with nothing to report", () => {
         expect(convertDocument([rename("old", "new")], "object", { old: [1], new: [1] })).toEqual({ value: { new: [1] }, changes: [] });
     });
 

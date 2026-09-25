@@ -1,5 +1,8 @@
 import { basename } from "node:path";
 import type { BrowserContext, CDPSession, Page } from "playwright";
+import { z } from "zod";
+import { stateRelPath } from "../../state-paths.js";
+import { defineDocument } from "../../store/evolution/documents.js";
 import { type JsonFile, jsonFile } from "../../store/json-file.js";
 
 // Sandbox-held WebAuthn passkeys over the daemon's CDP window: an owner's hardware key can't reach this container.
@@ -33,8 +36,32 @@ interface PasskeyFile {
     readonly credentials: readonly PasskeyCredential[];
 }
 
+// One file per account (`<owner>.passkeys.json`, session-store.ts): declared for its shape and its conversions. Loose,
+// since its reader keeps every credential verbatim, whatever fields Chromium hands back.
+const PasskeyFileSchema = z.object({
+    credentials: z.array(
+        z.looseObject({
+            credentialId: z.string(),
+            isResidentCredential: z.boolean(),
+            rpId: z.string().optional(),
+            privateKey: z.string(),
+            userHandle: z.string().optional(),
+            signCount: z.number(),
+            userName: z.string().optional(),
+            userDisplayName: z.string().optional(),
+        }),
+    ),
+});
+export const browserPasskeysDocument = defineDocument({
+    path: stateRelPath(".intentic/local/browser/", "<owner>.passkeys.json"),
+    boot: false,
+    schema: PasskeyFileSchema,
+});
+
 // Private keys a site will ask for again, which nothing can regrow: writes are atomic and queued per path (two pages of
 // one account race enrollment against assertion), and content this build can't read is set aside, never written over.
+// Set aside rather than refused: the key being saved is one the site already holds the public half of, so refusing it
+// would lose it, while the set-aside copy keeps every older one where a hand can put it back.
 const passkeyFile = (storePath: string): JsonFile<PasskeyFile> =>
     jsonFile<PasskeyFile>(storePath, {
         // Entries are kept verbatim, never filtered: one dropped on read would be dropped from disk by the next write.
@@ -44,6 +71,7 @@ const passkeyFile = (storePath: string): JsonFile<PasskeyFile> =>
         },
         fallback: () => ({ credentials: [] }),
         mode: 0o600,
+        document: browserPasskeysDocument,
     });
 
 export const listPasskeys = async (storePath: string): Promise<readonly PasskeyCredential[]> => (await passkeyFile(storePath).read()).credentials;

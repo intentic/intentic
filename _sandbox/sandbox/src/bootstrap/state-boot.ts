@@ -3,8 +3,9 @@ import type { Config } from "../env.config.js";
 import { AGENT_SESSION_ENV, type ContainerRole } from "../platform/boot/container-owner.js";
 import type { ProfileTraits } from "../platform/boot/profile.js";
 import { statePath } from "../state-paths.js";
+import type { DocumentSpec } from "../store/evolution/documents.js";
 import { commitState, convergeState, type StateRoots } from "../store/evolution/state-convergence.js";
-import { stateDocuments, stateSteps } from "../store/evolution/state-registry.js";
+import type { StructuralStep } from "../store/evolution/state-steps.js";
 import { version } from "../version.js";
 import type { BootPhase } from "./boot-phase.js";
 
@@ -28,16 +29,20 @@ interface StateBoot {
     readonly logger: Logger;
     readonly traits: ProfileTraits;
     readonly role: ContainerRole;
+    // Every document and step this build knows: main.ts hands in src/state-registry.ts, which sits above every
+    // subsystem so that nothing under one (this module included) imports it.
+    readonly documents: readonly DocumentSpec[];
+    readonly steps: readonly StructuralStep[];
 }
 
 // Never fatal: a failure here leaves every file as it was or journaled, and the stores still convert on read, which is
 // strictly better than a daemon that cannot start (a hosted sandbox has no previous image to roll back to).
-export const convergeStateAtBoot = async ({ config, logger, traits, role }: StateBoot): Promise<void> => {
+export const convergeStateAtBoot = async ({ config, logger, traits, role, documents, steps }: StateBoot): Promise<void> => {
     try {
         await convergeState({
             roots: stateRootsOf(config),
-            documents: stateDocuments(),
-            steps: stateSteps(),
+            documents,
+            steps,
             version,
             logger,
             mayWrite: mayConverge(traits, role),

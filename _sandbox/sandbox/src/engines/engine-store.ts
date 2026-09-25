@@ -4,6 +4,7 @@ import { HISTORY_ROOT } from "@intentic/constants";
 import { type EngineId, type EngineQuarantine, EngineQuarantineSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { opt } from "../opt.js";
+import { defineDocument } from "../store/evolution/documents.js";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
 
 // Versions of the upstream engines, held on the daemon's volume (/history) outside the image so they survive container
@@ -25,6 +26,10 @@ const EngineStateSchema = z.object({
     previous: z.string().optional(),
     quarantined: z.array(EngineQuarantineSchema).default([]),
 });
+
+// One per engine (`engines/<id>/state.json` on the daemon volume, or under INTENTIC_ENGINES_DIR): declared for its shape
+// and its conversions, which its reader runs; the boot step does not look for it, since the directory can move.
+export const engineStateDocument = defineDocument({ root: "history", path: "engines/<engine>/state.json", boot: false, schema: EngineStateSchema });
 
 // Refusals remembered per engine; enough to show a pattern on the card, bounded against a runaway upstream.
 const QUARANTINE_KEPT = 6;
@@ -55,6 +60,7 @@ const stateFile = (id: EngineId): JsonFile<EngineState> => {
                 : { ...opt("active", parsed.active), ...opt("previous", parsed.previous), quarantined: parsed.quarantined };
         },
         fallback: () => ({ quarantined: [] }),
+        document: engineStateDocument,
     });
     states.set(path, file);
     return file;

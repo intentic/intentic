@@ -2,6 +2,7 @@
 // had, and the checks that each still converts to what today's schema accepts. Do not edit; run the generator. A
 // failure below names the document and property that would strand an old file: add a conversion to its history.
 import type { Accepted, Converted, Fits, ReusedKeys } from "../evolution/conversion-types.js";
+import type { conversationRecordDocument } from "../../agents/registry/agents-store.js";
 import type { approvalsDocument } from "../../approvals/approvals-store.js";
 import type { areasDocument } from "../../areas/areas-store.js";
 import type { membersDocument } from "../../auth/auth.js";
@@ -13,6 +14,7 @@ import type { automationRunsDocument } from "../../automations/automations-store
 import type { automationsDocument } from "../../automations/automations-store.js";
 import type { heldWakesDocument } from "../../automations/held-wakes-store.js";
 import type { sendersDocument } from "../../automations/senders-store.js";
+import type { browserPasskeysDocument } from "../../browser/tools/passkeys.js";
 import type { capabilitiesDocument } from "../../capabilities/capabilities-store.js";
 import type { capabilitySecretsDocument } from "../../capabilities/credentials/secret-vault.js";
 import type { extensionSecretsDocument } from "../../capabilities/credentials/secret-vault.js";
@@ -21,6 +23,7 @@ import type { choreLedgerDocument } from "../../chores/chores-store.js";
 import type { choreProbesDocument } from "../../chores/chores-store.js";
 import type { ciDocument } from "../../ci/ci-store.js";
 import type { enginePolicyDocument } from "../../engines/engine-policy.js";
+import type { engineStateDocument } from "../../engines/engine-store.js";
 import type { runtimeInstallsDocument } from "../../environment/runtime-installs.js";
 import type { extensionApprovalsDocument } from "../../extensions/extension-approvals.js";
 import type { extensionEnablementDocument } from "../../extensions/extension-enablement.js";
@@ -61,6 +64,7 @@ import type { conversionsDocument } from "../../store/evolution/state-convergenc
 import type { issueInstallsDocument } from "../../store/installs.js";
 import type { webchatInstallsDocument } from "../../store/installs.js";
 import type { newestRunDocument } from "../../store/newest-run.js";
+import type { workspaceIdentityDocument } from "../../system/workspace-identity.js";
 import type { accountUsageDocument } from "../../usage/account-usage.js";
 import type { modelCooldownsDocument } from "../../usage/model-cooldowns.js";
 import type { modelRefusalsDocument } from "../../usage/model-refusals.js";
@@ -95,9 +99,17 @@ type AccountUsageDocument1 = { measuredAt: number; windows: ({ gates: "all" | "n
 // since 2026-09-25
 type AccountUsageDocument2 = { measuredAt: number; unread?: { reason: string; since: number }; windows: ({ gates: "all" | "none" | { models: string[] }; kind: string; label?: string; resetsAt?: number; utilization: number })[] };
 
+// history:conversations.db#conversation.record
+// since 2026-09-25
+type ConversationRecordDocument0 = { archivedAt?: number; compactedTurn?: number; createdAt: number; ending: { kind: "idle" } | { kind: "interrupted" } | { kind: "stopped" } | { code?: string; failure?: string; kind: "failed" } | { failure?: string; held: boolean; kind: "limited"; moving?: string; resetsAt?: number; scheduled: boolean }; id: string; identity: { actsAs?: string; areas?: string[]; forkedFrom?: { conversationId: string; files: "then" | "now"; index: number }; origin?: { author?: string; automationId: string; channelId?: string; provider: string }; startIn?: string; startedBy?: string }; landing: { conflicts?: ({ clean: number; mainBranch?: string; paths: ({ path: string; reason: "workspace" | "diverged" | "binary" })[]; repo: string })[]; diff?: { deletions: number; files: number; insertions: number }; message?: { breaking?: string; note?: string; subject: string; testNote?: string } }; placement: { kind: "main" } | { branch: string; composition?: { persona?: string; repos: string[] }; kind: "worktree"; repos: { absorbed?: number; base: string; landedAt?: number; landedHead?: string; landedTip?: string; repo: string }[]; runner?: string }; postures: { autoLand?: boolean; limit?: "wait" | "resend" | "move"; outage?: "wait" | "retry"; stopped?: "wait" | "retry" }; profile: { account?: string; effort?: string; fast?: boolean; harness: "native" | "claude-code"; model?: string; provider: string; thinking?: boolean }; proof?: { at: number; check?: string; unviewed?: number; verification: "verified" | "unproven" | "failing" | "no-code" }; queue?: { items: ({ actor?: string; areas?: string[]; id: string; outside?: string; owner?: { email: string; name?: string }; queuedAt: number; revision: number; turn: { account?: string; actsAs?: string; agent?: string; allowedTools?: string[]; attachments?: string[]; autoLand?: boolean; autoPicked?: boolean; conversationId: string & string; editorContext?: { endLine?: number; file: string; selection?: string; startLine?: number }; effort?: string; fast?: boolean; forkOf?: { conversationId: string; files: "then" | "now"; keep: number }; harness?: "native" | "claude-code"; isolated?: boolean; mentions?: string[]; messageId?: string; model?: string; origin?: { author?: string; automationId: string; channelId?: string; provider: string }; outsideWake?: string; permissionMode?: "default" | "plan" | "bypassPermissions"; placement?: { kind: "local" } | { id: string; kind: "runner" }; prompt: string; runRole?: "commit-message" | "session-title" | "safety-judge" | "loop-verdict" | "model-router" | "pipeline-fix" | "deployment-fix" | "maintenance-chore" | "documentation-run" | "acceptance-run" | "pre-push-fix" | "approval-queue" | "extension-review" | "loop-iteration"; sessionId?: string; startIn?: string; thinking?: boolean; title?: string; unattended?: boolean; worktreeBase?: { base: string; repo: string }[] }; voice: "person" | "sandbox" | "agent" })[]; paused?: "stopped" | "refused"; revision: number }; sessionId?: string; social: { landRequested?: { at: number; email: string; name?: string }; owner?: { email: string; name?: string; since: number }; reactions: { at: number; email: string; emoji: string; name?: string }[]; seenAt?: number; title?: { action?: string; source: "derived" | "model" | "plan" | "user"; text: string } }; totals: { costUsd: number; inputTokens: number; outputTokens: number; subagents: number; toolUses: number; turns: number }; unfinished?: { at: number; check?: string; steps?: { next?: string; open: number; total: number } }; updatedAt: number };
+
 // history:dependency-requests.json
 // since 2026-09-24
 type DependencyRequestsDocument0 = { projects: Record<string, { conversationId?: string; kind: "request"; title?: string }> };
+
+// history:engines/<engine>/state.json
+// since 2026-09-25
+type EngineStateDocument0 = { active?: string; previous?: string; quarantined?: { at: string; reason: string; version: string }[] };
 
 // history:extension-approvals.json
 // since 2026-09-24
@@ -367,6 +379,14 @@ type OwnerDocument0 = { email: string };
 // since 2026-09-24
 type PasskeysDocument0 = { credentials: ({ aaguid: string; backedUp: boolean; counter: number; createdAt: number; email: string; id: string; label: string; lastUsedAt?: number; name?: string; picture?: string; publicKey: { alg: -7 | -257 | -8; jwk: Record<string, string> }; rpId: string; transports: string[] })[]; recovery: { hash: string; usedAt?: number }[]; required: boolean };
 
+// workspace:.intentic/identity/workspace.json
+// since 2026-09-25
+type WorkspaceIdentityDocument0 = { id: string };
+
+// workspace:.intentic/local/browser/<owner>.passkeys.json
+// since 2026-09-25
+type BrowserPasskeysDocument0 = { credentials: { credentialId: string; isResidentCredential: boolean; privateKey: string; rpId?: string; signCount: number; userDisplayName?: string; userHandle?: string; userName?: string }[] };
+
 // workspace:.intentic/local/newest-run.json
 // since 2026-09-25
 type NewestRunDocument0 = { digest?: string; engine?: number; version?: string };
@@ -593,8 +613,12 @@ export type StateShapeChecks = [
     Fits<Accepted<typeof accountUsageDocument>, Converted<AccountUsageDocument1, typeof accountUsageDocument>>,
     Fits<Accepted<typeof accountUsageDocument>, Converted<AccountUsageDocument2, typeof accountUsageDocument>>,
     Fits<never, ReusedKeys<typeof accountUsageDocument>>,
+    Fits<Accepted<typeof conversationRecordDocument>, Converted<ConversationRecordDocument0, typeof conversationRecordDocument>>,
+    Fits<never, ReusedKeys<typeof conversationRecordDocument>>,
     Fits<Accepted<typeof dependencyRequestsDocument>, Converted<DependencyRequestsDocument0, typeof dependencyRequestsDocument>>,
     Fits<never, ReusedKeys<typeof dependencyRequestsDocument>>,
+    Fits<Accepted<typeof engineStateDocument>, Converted<EngineStateDocument0, typeof engineStateDocument>>,
+    Fits<never, ReusedKeys<typeof engineStateDocument>>,
     Fits<Accepted<typeof extensionApprovalsDocument>, Converted<ExtensionApprovalsDocument0, typeof extensionApprovalsDocument>>,
     Fits<never, ReusedKeys<typeof extensionApprovalsDocument>>,
     Fits<Accepted<typeof hookApprovalsDocument>, Converted<HookApprovalsDocument0, typeof hookApprovalsDocument>>,
@@ -729,6 +753,10 @@ export type StateShapeChecks = [
     Fits<never, ReusedKeys<typeof ownerDocument>>,
     Fits<Accepted<typeof passkeysDocument>, Converted<PasskeysDocument0, typeof passkeysDocument>>,
     Fits<never, ReusedKeys<typeof passkeysDocument>>,
+    Fits<Accepted<typeof workspaceIdentityDocument>, Converted<WorkspaceIdentityDocument0, typeof workspaceIdentityDocument>>,
+    Fits<never, ReusedKeys<typeof workspaceIdentityDocument>>,
+    Fits<Accepted<typeof browserPasskeysDocument>, Converted<BrowserPasskeysDocument0, typeof browserPasskeysDocument>>,
+    Fits<never, ReusedKeys<typeof browserPasskeysDocument>>,
     Fits<Accepted<typeof newestRunDocument>, Converted<NewestRunDocument0, typeof newestRunDocument>>,
     Fits<never, ReusedKeys<typeof newestRunDocument>>,
     Fits<Accepted<typeof ruleFiringsDocument>, Converted<RuleFiringsDocument0, typeof ruleFiringsDocument>>,

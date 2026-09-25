@@ -14,7 +14,12 @@ import {
     UnfinishedWorkSchema,
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
+import { errorMessage } from "@intentic/base/errors";
 import type { ConversationsDb } from "../../store/conversations-db.js";
+import { convertDocument } from "../../store/evolution/conversions.js";
+import { defineDocument } from "../../store/evolution/documents.js";
+import { carryUnknown } from "../../store/evolution/passthrough.js";
+import { type ManifestProblem, recordManifestProblems } from "../../store/manifest-problems.js";
 import { TurnQueueSchema } from "../actor/conversation-queue.js";
 
 // The persisted half of the fleet registry: one record per conversation, what must survive a restart, as nested records
@@ -180,6 +185,16 @@ export const PersistedAgentSchema = z.object({
 });
 export type PersistedAgent = z.infer<typeof PersistedAgentSchema>;
 
+// The `record` column of a `conversation` row, read back with its id and its checkout's repo rows grafted on: a stored
+// document like any file, so its shape is frozen and a change to it ships with its conversion here. Not a file the boot
+// step can find (a column of conversations.db), so it converts on every read.
+export const conversationRecordDocument = defineDocument({
+    root: "history",
+    path: "conversations.db#conversation.record",
+    boot: false,
+    schema: PersistedAgentSchema,
+});
+
 // A conversation that owns a worktree, as a type rather than a runtime re-check.
 export type IsolatedAgent = PersistedAgent & { readonly placement: WorktreePlacement };
 export const isIsolated = (entry: PersistedAgent): entry is IsolatedAgent => entry.placement.kind === "worktree";
@@ -246,15 +261,35 @@ const fromRow = (row: RepoRow): RepoRecord => ({
 });
 
 // The record column: the entry less its key and its repos, which are rows of their own.
-const recordOf = ({ id: _key, placement, ...rest }: PersistedAgent): string => {
+const recordOf = ({ id: _key, placement, ...rest }: PersistedAgent): Record<string, unknown> => {
     if (placement.kind === "main") {
-        return JSON.stringify({ ...rest, placement });
+        return { ...rest, placement };
     }
     const { repos: _rows, ...checkout } = placement;
-    return JSON.stringify({ ...rest, placement: checkout });
+    return { ...rest, placement: checkout };
 };
 
-export const sqliteAgentsStore = ({ db, transaction }: ConversationsDb): AgentsStore => {
+// One row as this build reads it: the stored record through the document's conversions, and what the schema made of it,
+// or why it could not be read.
+type RowRead = { readonly ok: true; readonly raw: Record<string, unknown>; readonly entry: PersistedAgent } | { readonly ok: false; readonly detail: string };
+
+const readRow = (id: string, record: string, repos: readonly RepoRecord[]): RowRead => {
+    let raw: Record<string, unknown>;
+    try {
+        const stored = convertDocument(conversationRecordDocument.history, "object", JSON.parse(record)).value;
+        if (typeof stored !== "object" || stored === null || Array.isArray(stored)) {
+            return { ok: false, detail: "its record is not an object" };
+        }
+        raw = stored as Record<string, unknown>;
+    } catch (error) {
+        return { ok: false, detail: `its record could not be converted to this build's shape (${errorMessage(error)})` };
+    }
+    const placement = raw["placement"] as { readonly kind?: unknown } | undefined;
+    const parsed = PersistedAgentSchema.safeParse({ ...raw, id, placement: placement?.kind === "worktree" ? { ...placement, repos } : placement });
+    return parsed.success ? { ok: true, raw, entry: parsed.data } : { ok: false, detail: `its record does not match what this build expects (${parsed.error.issues[0]?.path.join(".") ?? ""})` };
+};
+
+export const sqliteAgentsStore = ({ db, path, transaction }: ConversationsDb): AgentsStore => {
     const upsert = db.prepare("INSERT INTO conversation(id, record) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET record = excluded.record");
     const dropRepos = db.prepare("DELETE FROM conversation_repo WHERE conversation_id = ?");
     const insertRepo = db.prepare(
@@ -264,6 +299,15 @@ export const sqliteAgentsStore = ({ db, transaction }: ConversationsDb): AgentsS
     const selectConversations = db.prepare("SELECT id, record FROM conversation");
     const selectRepos = db.prepare("SELECT * FROM conversation_repo ORDER BY conversation_id, position");
     const selectOne = db.prepare("SELECT 1 FROM conversation WHERE id = ?");
+    const selectRecord = db.prepare("SELECT record FROM conversation WHERE id = ?");
+    // The row a save replaces, as its record: what this build's parse dropped from it (a newer build's keys) is carried
+    // into the new one. A row this build cannot read at all has nothing it could carry, and is replaced as before.
+    const recordFor = (entry: PersistedAgent): string => {
+        const updated = recordOf(entry);
+        const stored = selectRecord.get(entry.id) as { record: string } | undefined;
+        const before = stored === undefined ? undefined : readRow(entry.id, stored.record, reposOf(entry));
+        return JSON.stringify(before?.ok === true ? carryUnknown(before.raw, recordOf(before.entry), updated) : updated);
+    };
     return {
         load: () => {
             const repos = new Map<string, RepoRecord[]>();
@@ -275,17 +319,24 @@ export const sqliteAgentsStore = ({ db, transaction }: ConversationsDb): AgentsS
                     held.push(fromRow(row));
                 }
             }
-            return (selectConversations.all() as unknown as { id: string; record: string }[]).flatMap(({ id, record }) => {
-                const stored = JSON.parse(record) as { readonly placement?: { readonly kind?: unknown } };
-                const placement = stored.placement?.kind === "worktree" ? { ...stored.placement, repos: repos.get(id) ?? [] } : stored.placement;
-                const parsed = PersistedAgentSchema.safeParse({ ...stored, id, placement });
-                return parsed.success ? [parsed.data] : [];
+            // A row this build cannot read costs that conversation, never the roster, and is reported, not dropped in
+            // silence: it stays in the database as written, where the build that wrote it reads it again.
+            const problems: ManifestProblem[] = [];
+            const loaded = (selectConversations.all() as unknown as { id: string; record: string }[]).flatMap(({ id, record }) => {
+                const read = readRow(id, record, repos.get(id) ?? []);
+                if (!read.ok) {
+                    problems.push({ kind: "invalidEntry", detail: `conversation ${id}: ${read.detail}; it is kept as written` });
+                    return [];
+                }
+                return [read.entry];
             });
+            recordManifestProblems(path, problems);
+            return loaded;
         },
         save: (entries) =>
             transaction(() => {
                 for (const entry of entries) {
-                    upsert.run(entry.id, recordOf(entry));
+                    upsert.run(entry.id, recordFor(entry));
                     dropRepos.run(entry.id);
                     reposOf(entry).forEach((repo, position) =>
                         insertRepo.run(

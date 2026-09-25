@@ -3,9 +3,10 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { z } from "zod";
-import { rename, retype } from "./evolution/conversions.js";
+import { rename, retireEntries, retype } from "./evolution/conversions.js";
 import { defineDocument, type DocumentSpec } from "./evolution/documents.js";
 import { type JsonFile, jsonEntries, jsonFile, ManifestUnreadableError, writeJsonFile } from "./json-file.js";
+import { recordedProblems } from "./manifest-problems.js";
 import { clearNewestRun, recordNewestRun } from "./newest-run.js";
 
 const dirs: string[] = [];
@@ -291,6 +292,61 @@ describe("jsonEntries", () => {
         await seed(path, [{ id: "b", kind: "from-the-future" }]);
         await entries(path).update((current) => [...current, { id: "b", kind: "cron" }]);
         expect(JSON.parse(await readFile(path, "utf8"))).toEqual([{ id: "b", kind: "cron" }]);
+    });
+
+    test("an entry whose conversion throws is quarantined and reported; the others read, and a save keeps it as written", async () => {
+        const path = await tempFile();
+        const failing = retype(
+            "kind",
+            (value): value is number => typeof value === "number",
+            (value) => {
+                if (value > 1) {
+                    throw new Error("no such kind");
+                }
+                return "cron";
+            },
+            "converts numbered kinds",
+        );
+        const document = defineDocument({ path: "evolution/entries.json", schema: Entry, granularity: "entries", history: [failing] });
+        await seed(path, [
+            { id: "a", kind: 1 },
+            { id: "b", kind: 7 },
+            { id: "c", kind: "webhook" },
+        ]);
+        const file = jsonEntries<Entry>(path, { entry: (raw) => Entry.safeParse(raw).data, document });
+        expect(await file.state()).toEqual({
+            value: [
+                { id: "a", kind: "cron" },
+                { id: "c", kind: "webhook" },
+            ],
+            unreadable: false,
+        });
+        expect(recordedProblems(path)).toEqual([
+            { kind: "invalidEntry", detail: 'entry 1 could not be converted to this build\'s shape (conversion "converts numbered kinds" failed: no such kind); it is kept as written' },
+        ]);
+        await file.update((current) => current.filter((entry) => entry.id !== "c"));
+        expect(JSON.parse(await readFile(path, "utf8"))).toEqual([
+            { id: "a", kind: "cron" },
+            { id: "b", kind: 7 },
+        ]);
+        expect((await readdir(join(path, ".."))).toSorted()).toEqual(["state.json"]);
+    });
+
+    test("an entry a conversion retires is gone from the read and from the next save", async () => {
+        const path = await tempFile();
+        const retired = retireEntries("drops retired kinds", (value): value is { kind: "manual" } => (value as { kind?: unknown }).kind === "manual");
+        const document = defineDocument({ path: "evolution/retiring.json", schema: Entry, granularity: "entries", history: [retired] });
+        await seed(path, [
+            { id: "a", kind: "manual" },
+            { id: "b", kind: "cron" },
+        ]);
+        const file = jsonEntries<Entry>(path, { entry: (raw) => Entry.safeParse(raw).data, document });
+        expect(await file.read()).toEqual([{ id: "b", kind: "cron" }]);
+        await file.update((current) => [...current, { id: "c", kind: "webhook" }]);
+        expect(JSON.parse(await readFile(path, "utf8"))).toEqual([
+            { id: "b", kind: "cron" },
+            { id: "c", kind: "webhook" },
+        ]);
     });
 
     test("a file that is not an array at all is still unreadable", async () => {

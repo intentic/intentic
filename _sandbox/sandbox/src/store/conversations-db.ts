@@ -109,6 +109,8 @@ export const conversationsSchemaStep = defineStep({
 });
 
 export interface ConversationsDb {
+    // The file it was opened from (`:memory:` for a test's), which names it where its rows are reported.
+    readonly path: string;
     readonly db: DatabaseSync;
     // All of `work` or none of it, over this database (sqlite.ts).
     readonly transaction: <T>(work: () => T) => T;
@@ -151,6 +153,7 @@ export const openConversationsDb = (path: string): ConversationsDb => {
     const keyOf = (table: string): string | undefined =>
         table === "conversation" ? "id" : (columns.all(table) as { name: string }[]).some(({ name }) => name === "conversation_id") ? "conversation_id" : undefined;
     return {
+        path,
         db,
         transaction: tx,
         snapshot: (target) => {
