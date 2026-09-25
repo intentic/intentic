@@ -4,6 +4,7 @@ import { parentDir } from "@intentic/ui/path";
 import { computed, type Ref, ref, watch } from "vue";
 import { clickIntent, rangeSelect } from "../../../lib/multiSelect";
 import { useNotifications } from "../../../shell/notifications/notifications";
+import { useDeleteUndo } from "../explorer/useDeleteUndo";
 import type { RowAction } from "../explorer/rowActions";
 import { useTerminalPanel } from "../../terminal/useTerminalPanel";
 import { useTreeDelete } from "../explorer/tree/useTreeDelete";
@@ -123,7 +124,7 @@ export function useHomeActions(ctx: HomeActionsContext) {
         store,
         openCreated: ctx.openCreated,
     });
-    const { confirmPaths, deleteTitle, requestDelete, confirmDelete, keepFolder } = useTreeDelete({
+    const { requestDelete, keepFolder } = useTreeDelete({
         byPath,
         targetDir: here,
         rules,
@@ -131,6 +132,7 @@ export function useHomeActions(ctx: HomeActionsContext) {
         selecting,
         store,
         say,
+        sayDeleted: useDeleteUndo().sayDeleted,
     });
     const transfer = useTreeTransfer({
         tree: () => store.tree.value,
@@ -206,9 +208,6 @@ export function useHomeActions(ctx: HomeActionsContext) {
         rules,
         inline,
         endEdit,
-        confirmPaths,
-        deleteTitle,
-        confirmDelete,
         transfer,
         menu,
         menuItems,

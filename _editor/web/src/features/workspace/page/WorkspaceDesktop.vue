@@ -5,6 +5,9 @@ import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
 import { WORKSPACE } from "../../../shell/commands/categories";
 import { commandShortcut, type CommandRegistration, registerCommand } from "../../../shell/commands/useCommands";
+import { publishContextKey } from "../../../shell/commands/contextKeys";
+import { deleteUndoable } from "../explorer/deleteUndo";
+import { UNDO_DELETE, useDeleteUndo } from "../explorer/useDeleteUndo";
 import { useAudience } from "../../../app/useAudience";
 import { useVocabulary } from "../../../core-views/vocabulary";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
@@ -64,6 +67,7 @@ import { useT } from "@intentic/ui/i18n";
 // (sandbox-global); this view owns no control for it.
 
 const t = useT();
+const { undoDelete } = useDeleteUndo();
 
 const layout = useLayout();
 const { maker } = useAudience();
@@ -711,6 +715,16 @@ const WORKSPACE_COMMANDS = computed((): readonly Omit<CommandRegistration, `owne
         handler: reopenClosedTab,
     },
     { command: `workspace.refresh`, title: t(`workspace.workspaceDesktop.refreshFiles`), icon: `refresh`, handler: () => refetch() },
+    // Mod+Z brings back the last delete wherever the caret isn't in a field or the code editor, which keep their own
+    // undo; with nothing deleted the chord passes through untouched.
+    {
+        command: UNDO_DELETE,
+        title: t(`workspace.workspaceDesktop.undoDelete`),
+        icon: `undo`,
+        keybinding: `Mod+Z`,
+        when: `workspaceDeleteUndoable && !editableTarget`,
+        handler: () => undoDelete(),
+    },
 ]);
 let workspaceCommandDisposables: readonly Disposable[] = [];
 
@@ -762,7 +776,10 @@ onMounted(() => {
     // Loads Monaco (+ Shiki bridge) while browsing the tree, so the first file open isn't cold.
     void useMonaco().ensureMonaco();
     // One family for the whole list, stated here rather than on every entry.
-    workspaceCommandDisposables = WORKSPACE_COMMANDS.value.map((spec) => registerCommand({ owner: `builtin`, category: WORKSPACE, ...spec }));
+    workspaceCommandDisposables = [
+        publishContextKey(`workspaceDeleteUndoable`, deleteUndoable),
+        ...WORKSPACE_COMMANDS.value.map((spec) => registerCommand({ owner: `builtin`, category: WORKSPACE, ...spec })),
+    ];
 });
 onBeforeUnmount(() => {
     unwatchDragSource?.();

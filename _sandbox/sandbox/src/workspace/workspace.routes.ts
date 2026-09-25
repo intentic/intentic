@@ -21,6 +21,7 @@ import { syncWorkspaceRepos } from "./layout/sync-repos.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "./layout/templates-config.js";
 import { isControlPlanePath, resolveWithin } from "./files/workspace-files-paths.js";
 import { UnknownArchiveError } from "./files/workspace-extract.js";
+import { TrashMissError } from "./files/workspace-trash.js";
 import { mainlineStatus } from "./deps/mainline-status.js";
 import { childrenForRead, containedForRead, containedIn, insideArchive, scopedTarget, workspaceRootFor } from "./layout/workspace-scope.js";
 import {
@@ -300,10 +301,25 @@ export const createWorkspaceRoutes = (services: Services) => {
             services.history.notifyUserWrite();
             return { ok: true } as const;
         }),
+        // A delete is a move into the trash, answered with the id that takes it back.
         delete: i.delete.handler(async ({ input, context }) => {
-            await services.files.remove(await contained(context, input.path));
+            const trashed = await services.files.trash.put(await contained(context, input.path), input.path);
             services.history.notifyUserWrite();
-            return { ok: true } as const;
+            return trashed === undefined ? ({ ok: true } as const) : ({ ok: true, trashed } as const);
+        }),
+        // The recorded path is resolved again under the caller's own fence, so a trash id buys nothing a caller could
+        // not write at that path today.
+        restore: i.restore.handler(async ({ input, context }) => {
+            try {
+                const landed = await services.files.trash.restore(input.trashed, (relPath) => contained(context, relPath));
+                services.history.notifyUserWrite();
+                return { path: relative(services.workspace.root, landed) };
+            } catch (failure) {
+                if (failure instanceof TrashMissError) {
+                    throw new ORPCError("NOT_FOUND", { message: "that is no longer in the trash" });
+                }
+                throw failure;
+            }
         }),
         move: i.move.handler(async ({ input, context }) => {
             await services.files.move(await contained(context, input.from), await contained(context, input.to));

@@ -3721,7 +3721,6 @@
         "builtIntoSandboxImage": "built into the sandbox image",
         "cancel": "Cancel",
         "cantHelpNow": "Can't help now",
-        "cantUndone": "This can't be undone.",
         "capabilities": "Capabilities",
         "category": "Category",
         "changes": "Changes",
@@ -4818,6 +4817,7 @@
             "refreshChanges": "Refresh changes",
             "refreshFiles": "Refresh Files",
             "reopenClosedTab": "Reopen Closed Tab",
+            "undoDelete": "Undo Delete",
             "search": "Search…",
             "searchIgnoredFiles": "Search ignored files",
             "searchInFiles2": "Search in Files…",
@@ -4852,12 +4852,9 @@
             "workspaceAgentsReadEdit": "This is the workspace your agents read and edit. Bring something in and they have something to work on."
         },
         "workspaceMobile": {
-            "cantUndone": "? This can't be undone.",
             "copyPath": "Copy path",
             "couldntLoadFiles": "Couldn't load your files.",
-            "delete": "Delete?",
             "directoryEmpty": "This directory is empty.",
-            "everythingInside": " and everything inside it",
             "hideTechnicalFiles": "Hide technical files",
             "hideTests": "Hide tests",
             "ignored": "Ignored",

@@ -24,6 +24,7 @@ const DAEMON_STATE_PATHS = [
     stateRelPath(".intentic/records/sessions/claude/"),
     stateRelPath(".intentic/local/runtime/"),
     stateRelPath(".intentic/local/tmp/"),
+    stateRelPath(".intentic/local/trash/"),
     stateRelPath(".intentic/local/.pnpm-store/"),
 ];
 const isDaemonStatePath = (relPath: string): boolean => {

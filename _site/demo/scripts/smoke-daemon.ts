@@ -208,6 +208,7 @@ const samplesOf = ({ fleet, automations, ci, workflows, loops, devices }: Awaite
             children: { path: `web` },
             file: { path: `web/src/lib/checkout.ts` },
             delete: { path: `web/smoke.txt` },
+            restore: { trashed: `smoke` },
             repos: undefined,
             search: { query: `checkout` },
             mainline: undefined,

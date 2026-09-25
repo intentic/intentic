@@ -3512,7 +3512,6 @@
         "builtIntoSandboxImage": "integrada en la imagen del sandbox",
         "cancel": "Cancelar",
         "cantHelpNow": "Ahora no puedo ayudar",
-        "cantUndone": "Esto no se puede deshacer.",
         "capabilities": "Capacidades",
         "category": "Categoría",
         "changes": "Cambios",
@@ -4580,6 +4579,7 @@
             "refreshChanges": "Actualizar los cambios",
             "refreshFiles": "Actualizar los archivos",
             "reopenClosedTab": "Reabrir la pestaña cerrada",
+            "undoDelete": "Deshacer eliminación",
             "search": "Buscar…",
             "searchIgnoredFiles": "Buscar en los archivos ignorados",
             "searchInFiles2": "Buscar en los archivos…",
@@ -4614,12 +4614,9 @@
             "workspaceAgentsReadEdit": "Este es el espacio de trabajo que tus agentes leen y editan. Trae algo y tendrán con qué trabajar."
         },
         "workspaceMobile": {
-            "cantUndone": "? Esto no se puede deshacer.",
             "copyPath": "Copiar la ruta",
             "couldntLoadFiles": "No se pudieron cargar tus archivos.",
-            "delete": "¿Eliminar?",
             "directoryEmpty": "Este directorio está vacío.",
-            "everythingInside": " y todo lo que hay dentro",
             "hideTechnicalFiles": "Ocultar los archivos técnicos",
             "hideTests": "Ocultar las pruebas",
             "ignored": "Ignorados",

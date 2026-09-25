@@ -116,6 +116,13 @@ export const fakeFiles = (overrides: Partial<Services["files"]> = {}): Services[
         size: async () => undefined,
         mkdir: async () => {},
         remove: async () => {},
+        trash: {
+            put: async () => undefined,
+            restore: async () => {
+                throw new Error("fakeFiles: nothing in the trash");
+            },
+            sweep: async () => {},
+        },
         move: async () => {},
         copy: async () => {},
         ...overrides,

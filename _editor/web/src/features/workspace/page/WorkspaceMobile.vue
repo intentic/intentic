@@ -4,7 +4,6 @@ import {
     BottomSheet,
     Button,
     clipboardOf,
-    ConfirmDialog,
     Modal,
     type NoticeModel,
     NoticeStack,
@@ -30,6 +29,7 @@ import { useWorkspaceRoute } from "../health/useWorkspaceRoute";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
 import { useNotifications } from "../../../shell/notifications/notifications";
+import { useDeleteUndo } from "../explorer/useDeleteUndo";
 import DiffToolbar from "../viewers/DiffToolbar.vue";
 import DiffSkeleton from "../viewers/DiffSkeleton.vue";
 import FileDiffPane from "../viewers/FileDiffPane.vue";
@@ -99,6 +99,7 @@ const treeNotice = computed<NoticeModel | undefined>(() =>
 );
 const { enqueue } = useUploadQueue();
 const { say } = useNotifications();
+const { sayDeleted } = useDeleteUndo();
 // Open file lives in the URL, synced by useWorkspaceRoute; this view keeps only its own state (dir, diff).
 const { tabs, activeId, activeTab, openLine, openFile, openAtLine, openDiff } = useWorkspaceTabs();
 useWorkspaceRoute();
@@ -246,7 +247,6 @@ const rootEl = ref<HTMLElement>();
 const sheetEntry = ref<WorkspaceTreeEntry | undefined>(undefined);
 // The tree's own naming field, in a box: what a commit writes, and that an empty or unchanged name writes nothing.
 const { edit: renaming, draft: renameValue, apply: renameStep } = useInlineEdit(() => false);
-const deleteTarget = ref<WorkspaceTreeEntry | undefined>(undefined);
 
 const renameField = ref<HTMLInputElement>();
 let selectWholeName = false;
@@ -275,15 +275,13 @@ const confirmRename = (): void => {
         say(`Renamed to ${basename(write.to)}`);
     }, `Couldn't rename that.`);
 };
-const confirmDelete = (): void => {
-    const target = deleteTarget.value;
-    deleteTarget.value = undefined;
-    if (target !== undefined) {
-        void run(async () => {
-            await removeEntries([target.path]);
-            say(`${target.name} deleted`);
-        }, `Couldn't delete that.`);
-    }
+// No confirm: it goes to the trash, and the receipt's Undo brings it back, which a thumb reaches as easily as a dialog.
+const removeEntry = (target: WorkspaceTreeEntry): void => {
+    sheetEntry.value = undefined;
+    void run(async () => {
+        const batch = await removeEntries([target.path]);
+        sayDeleted(`${target.name} deleted`, batch);
+    }, `Couldn't delete that.`);
 };
 const copyPath = (target: WorkspaceTreeEntry): void => {
     sheetEntry.value = undefined;
@@ -742,7 +740,7 @@ const onPick = (event: Event): void => {
                         <button
                             type="button"
                             class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm text-danger active:bg-danger/10"
-                            @click="((deleteTarget = sheetEntry), (sheetEntry = undefined))"
+                            @click="removeEntry(sheetEntry)"
                         >
                             <Icon name="trash" class="text-base" /> {{ t(`ui.action.delete`) }}
                         </button>
@@ -772,20 +770,5 @@ const onPick = (event: Event): void => {
                 <Button :label="t(`ui.action.rename`)" @click="confirmRename" />
             </template>
         </Modal>
-
-        <ConfirmDialog
-            :open="deleteTarget !== undefined"
-            :header="t(`workspace.workspaceMobile.delete`)"
-            :confirm-label="t(`ui.action.delete`)"
-            confirm-icon="trash"
-            @cancel="deleteTarget = undefined"
-            @confirm="confirmDelete"
-        >
-            <p class="text-sm text-content">
-                {{ t(`ui.action.delete`) }} <span class="font-medium">{{ deleteTarget?.path }}</span
-                >{{ deleteTarget?.type === "dir" ? t(`workspace.workspaceMobile.everythingInside`) : ""
-                }}{{ t(`workspace.workspaceMobile.cantUndone`) }}
-            </p>
-        </ConfirmDialog>
     </div>
 </template>

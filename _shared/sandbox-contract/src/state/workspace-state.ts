@@ -356,6 +356,14 @@ const STATE_FILES = [
         why: "Scratch that agents and tools leave behind (build logs, demo checkouts); nothing reads it after the turn that wrote it. The state janitor empties it at boot.",
         portability: "derived",
     },
+    // What the file view deleted, one folder per delete, kept so Undo can put it back. A day is longer than any undo
+    // stack lives in a browser tab; the hourly janitor sweep drops what's older.
+    {
+        path: ".intentic/local/trash/",
+        invalidates: [],
+        why: "Entries deleted from the file view, held for a day so Undo can restore them; nothing renders it, and the janitor expires it.",
+        portability: "derived",
+    },
     // Account for the pnpm store even though pnpm creates it, not the daemon.
     {
         path: ".intentic/local/.pnpm-store/",

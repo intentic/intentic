@@ -290,6 +290,7 @@ import { workspaceArrivedEmpty } from "./scaffold/starter-site.js";
 import { type WorkspacePaths, workspacePaths } from "./workspace/workspace.js";
 import { writeWorkspaceFileStream } from "./workspace/files/workspace-files-upload.js";
 import { extractArchive } from "./workspace/files/workspace-extract.js";
+import { createWorkspaceTrash, type WorkspaceTrash } from "./workspace/files/workspace-trash.js";
 import {
     copyWorkspacePath,
     makeWorkspaceDir,
@@ -701,6 +702,8 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
         readonly size: (absPath: string) => Promise<number | undefined>;
         readonly mkdir: (absPath: string) => Promise<void>;
         readonly remove: (absPath: string) => Promise<void>;
+        // Where the file view's deletes go, so Undo can bring them back.
+        readonly trash: WorkspaceTrash;
         readonly move: (fromAbs: string, toAbs: string) => Promise<void>;
         readonly copy: (fromAbs: string, toAbs: string) => Promise<void>;
         // Unpacks an archive beside itself, answering with the absolute path of what landed.
@@ -1514,6 +1517,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             size: statWorkspaceFileSize,
             mkdir: makeWorkspaceDir,
             remove: removeWorkspacePath,
+            trash: createWorkspaceTrash(statePath(workspace.root, ".intentic/local/trash/")),
             move: moveWorkspacePath,
             copy: copyWorkspacePath,
             extract: extractArchive,

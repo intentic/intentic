@@ -2,14 +2,16 @@ import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { computed, type Ref, ref, watch } from "vue";
 import type { useNotifications } from "../../../../shell/notifications/notifications";
 import type { BarrenChain } from "../emptyDirs";
-import { deletedReceipt, deleteHeader, joinPath } from "../entryNames";
+import type { DeleteBatch } from "../deleteUndo";
+import { deletedReceipt, joinPath } from "../entryNames";
 import type { useEmptyDirs } from "../useEmptyDirs";
 import type { useWorkspaceTree } from "../useWorkspaceTree";
 import type { useTreeRules } from "./useTreeRules";
 import type { useTreeSelection } from "./useTreeSelection";
 
-// Deleting from the tree: a confirm that names what goes, and a receipt once it has; and the empty-folder sweep line,
-// which deletes without asking, since nothing is lost and Undo rebuilds exactly what went.
+// Deleting from the tree, and the empty-folder sweep line. Neither asks first: a delete goes to the daemon's trash, and
+// the receipt's Undo (or Mod+Z, anywhere in the workspace) puts back exactly what went. A confirm in front of an undo
+// only makes the common case slower, and a drop that was the wrong file should leave as fast as it came.
 
 // `where` is the ancestor path that is staying; `label` is the barren chain itself, about to be deleted. Kept apart,
 // since a joined path could read as one folder being deleted when only the tail is.
@@ -25,21 +27,15 @@ export const branchOf = (path: string, chainOf: (path: string) => BarrenChain): 
     label: chainOf(path).names.join(` / `),
 });
 
-// What sweeping these branches says, and what its Undo recreates: each chain's deepest folder, which brings back every
-// folder above it. Planned before the delete, since the tree won't know the shape after.
-export const sweepPlan = (
-    roots: readonly string[],
-    emptyDirs: Pick<ReturnType<typeof useEmptyDirs>, "chainOf" | "branchDirs">,
-): { readonly leaves: readonly string[]; readonly receipt: string } => {
-    const dirs = roots.flatMap((root) => emptyDirs.branchDirs(root));
-    const leaves = dirs.filter((dir) => !dirs.some((other) => other !== dir && other.startsWith(`${dir}/`)));
+// What sweeping these branches says. Named before the delete, since the tree won't know the chain after.
+export const sweepReceipt = (roots: readonly string[], chainOf: (path: string) => BarrenChain): string => {
     const [only] = roots;
     if (roots.length !== 1 || only === undefined) {
-        return { leaves, receipt: `${roots.length} empty folders removed` };
+        return `${roots.length} empty folders removed`;
     }
     // The whole path in one string: a receipt has no room to shade the two parts differently.
-    const branch = branchOf(only, emptyDirs.chainOf);
-    return { leaves, receipt: `${branch.where === `` ? branch.label : `${branch.where} / ${branch.label}`} removed` };
+    const branch = branchOf(only, chainOf);
+    return `${branch.where === `` ? branch.label : `${branch.where} / ${branch.label}`} removed`;
 };
 
 export interface TreeDeleteHost {
@@ -48,34 +44,30 @@ export interface TreeDeleteHost {
     readonly rules: Pick<ReturnType<typeof useTreeRules>, "refuseIn" | "unlockedOnly">;
     readonly emptyDirs: ReturnType<typeof useEmptyDirs>;
     readonly selecting: Pick<ReturnType<typeof useTreeSelection>, "selection" | "lead" | "clear">;
-    readonly store: Pick<ReturnType<typeof useWorkspaceTree>, "run" | "removeEntries" | "createDir" | "createFile" | "refuseWrite">;
+    readonly store: Pick<ReturnType<typeof useWorkspaceTree>, "run" | "removeEntries" | "createFile" | "refuseWrite">;
     readonly say: ReturnType<typeof useNotifications>["say"];
+    // The receipt for a delete that landed, offering to take back exactly that batch.
+    readonly sayDeleted: (receipt: string, batch: DeleteBatch) => void;
 }
 
 export const useTreeDelete = (host: TreeDeleteHost) => {
     const { store, emptyDirs, selecting } = host;
-    // Paths pending delete confirmation: also drives the confirm dialog's visibility.
-    const confirmPaths = ref<readonly string[] | undefined>(undefined);
-    const deleteTitle = computed<string>(() =>
-        confirmPaths.value === undefined ? `` : deleteHeader(confirmPaths.value, (path) => host.byPath.value.get(path)?.type),
-    );
 
+    // The receipt is named while the tree still knows what went, and said only once the delete lands.
+    const remove = (paths: readonly string[], receipt: string): void => {
+        void store.run(async () => {
+            const batch = await store.removeEntries(paths);
+            host.sayDeleted(receipt, batch);
+        }, `Couldn't delete that.`);
+        selecting.clear();
+    };
     const sweep = (roots: readonly string[]): void => {
         if (roots.length === 0 || store.refuseWrite()) {
             return;
         }
-        const { leaves, receipt } = sweepPlan(roots, emptyDirs);
-        void store.run(async () => {
-            await store.removeEntries(roots);
-            host.say(receipt, async () => {
-                for (const dir of leaves) {
-                    await store.createDir(dir);
-                }
-            });
-        }, `Couldn't delete that.`);
-        selecting.clear();
+        remove(roots, sweepReceipt(roots, emptyDirs.chainOf));
     };
-    // Barren-only selections skip the confirm dialog: nothing is lost, and Undo recreates the folder exactly.
+    // A barren-only selection reads as the sweep line does, since that is what it is.
     const requestDelete = (): void => {
         if (host.rules.refuseIn(host.targetDir(selecting.lead.value))) {
             return;
@@ -88,22 +80,7 @@ export const useTreeDelete = (host: TreeDeleteHost) => {
             sweep(paths);
             return;
         }
-        confirmPaths.value = paths;
-    };
-    // The receipt is named while the tree still knows what went, and said only once the delete lands. No Undo, unlike the
-    // sweep's: there is no trash to restore from, and a button that only sometimes brings a file back is worse than none.
-    const confirmDelete = (): void => {
-        const paths = confirmPaths.value;
-        confirmPaths.value = undefined;
-        if (paths === undefined) {
-            return;
-        }
-        const named = deletedReceipt(paths);
-        void store.run(async () => {
-            await store.removeEntries(paths);
-            host.say(named);
-        }, `Couldn't delete that.`);
-        selecting.clear();
+        remove(paths, deletedReceipt(paths));
     };
     // Drops a placeholder into the chain's deepest folder, making it non-empty for git and off the barren list for good.
     const keepFolder = async (path: string): Promise<void> => {
@@ -137,10 +114,7 @@ export const useTreeDelete = (host: TreeDeleteHost) => {
     const sweepAll = (): void => sweep(emptyDirs.roots.value);
 
     return {
-        confirmPaths,
-        deleteTitle,
         requestDelete,
-        confirmDelete,
         keepFolder,
         sweepOpen,
         pointedBarren,

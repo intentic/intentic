@@ -76,7 +76,9 @@ jest.mock("../../sandbox/client/sandboxRpc", () => {
         sandboxRpc: fakeSandboxRpc({
             workspace: {
                 move: (input) => exchange({ procedure: `workspace.move`, input }, OK),
-                delete: (input) => exchange({ procedure: `workspace.delete`, input }, OK),
+                // A delete answers a trash id naming the path, so a restore can answer where it came back.
+                delete: (input) => exchange({ procedure: `workspace.delete`, input }, { ...OK, trashed: `t:${input.path}` }),
+                restore: (input) => exchange({ procedure: `workspace.restore`, input }, { path: input.trashed.slice(2) }),
                 mkdir: (input) => exchange({ procedure: `workspace.mkdir`, input }, OK),
                 file: (input) => exchange({ procedure: `workspace.file`, input }, { present: false as const, path: input.path }),
             },
@@ -539,9 +541,9 @@ describe(`empty folders (barren branches)`, () => {
         expect(receipt.value?.title).toContain(`web / demo / assets`);
         expect(receipt.value?.title).toMatch(/removed/i);
 
-        // Undo recreates the deepest folder via a recursive create.
+        // Undo brings the whole chain back out of the trash in one piece.
         await receipt.value?.actions?.[0]?.run();
-        expect(inputsTo(`workspace.mkdir`)).toEqual([{ path: `web/demo/assets` }]);
+        expect([inputsTo(`workspace.restore`), inputsTo(`workspace.mkdir`)]).toEqual([[{ trashed: `t:web` }], []]);
     });
 
     it(`says where a buried folder is, on the line and on the receipt`, async () => {
@@ -1044,7 +1046,7 @@ describe(`a tree rooted at one project`, () => {
 });
 
 // The template's bindings to the tree's headless parts, each through the gesture that reaches it: the keys, an inline
-// field ending without a write, the confirm's Cancel, an OS drag's lit folder, an arriving row's tooltip, focus and copy.
+// field ending without a write, a delete and its Undo, an OS drag's lit folder, an arriving row's tooltip, focus and copy.
 describe(`the gestures the template hands on`, () => {
     const rowNamed = (el: HTMLElement, name: string): HTMLElement =>
         [...el.querySelectorAll(`[role="treeitem"]`)].find((row) => row.textContent?.trim() === name) as HTMLElement;
@@ -1083,18 +1085,25 @@ describe(`the gestures the template hands on`, () => {
         ]);
     });
 
-    it(`names the file in the delete confirm, and deletes nothing when it is cancelled`, async () => {
+    it(`deletes on the Delete key without a dialog, and the receipt's Undo brings the file back once`, async () => {
         restoreFrom([`src`]);
         const el = await mount({ tree: TREE });
         const row = rowNamed(el, `main.ts`);
         row.click();
         await nextTick();
         await press(row, `Delete`);
-        expect(document.body.textContent).toContain(`Delete file?`);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const { receipt } = useNotifications();
+        expect([document.querySelector(`[role="dialog"]`), inputsTo(`workspace.delete`), receipt.value?.title]).toEqual([
+            null,
+            [{ path: `src/main.ts` }],
+            `main.ts deleted`,
+        ]);
 
-        [...document.body.querySelectorAll(`button`)].find((candidate) => candidate.textContent?.trim() === `Cancel`)?.click();
-        await nextTick();
-        expect([rows(el), inputsTo(`workspace.delete`)]).toEqual([[`src`, `api`, `main.ts`, `README.md`], []]);
+        const undo = receipt.value?.actions?.[0];
+        await undo?.run();
+        await undo?.run();
+        expect([inputsTo(`workspace.restore`), useNotifications().receipt.value?.title]).toEqual([[{ trashed: `t:src/main.ts` }], `main.ts restored`]);
     });
 
     it(`lights the folder an OS file drag would land in when it is over any row inside it`, async () => {

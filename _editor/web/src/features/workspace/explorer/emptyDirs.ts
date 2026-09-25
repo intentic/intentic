@@ -65,11 +65,6 @@ export const barrenChainOf = (path: string, children: ReadonlyMap<string, readon
     }
 };
 
-// Every dir path inside a branch (root included), recorded so Undo recreates the exact shape. Asked
-// against the full barren list, not just settled, since delete takes everything under the root either way.
-export const branchDirPaths = (root: string, barren: readonly string[]): readonly string[] =>
-    barren.filter((path) => path === root || path.startsWith(`${root}/`));
-
 // Settled once continuously barren for `settleMs` (new path stamps now, departure drops the stamp,
 // exempt paths never settle). Caller passes `now`: no clock reads here.
 export const settleBarren = (

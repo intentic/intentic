@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
-import { ConfirmDialog, ContextMenu, iconForEntry, useLoadingReveal } from "@intentic/ui";
+import { ContextMenu, useLoadingReveal } from "@intentic/ui";
 import { basename, parentDir } from "@intentic/ui/path";
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { variableRows } from "../../../lib/rowWindow";
@@ -179,7 +179,7 @@ const crumbs = computed<readonly { readonly label: string; readonly path: string
 const here = computed(() => crumbs.value.at(-1)?.label ?? rootLabel.value);
 
 // --- The verbs: the tree's file management over these tiles (useHomeActions) -----------------------------------------
-const { selection, select, clear, rules, inline, endEdit, confirmPaths, deleteTitle, confirmDelete, transfer, menu, menuItems, openMenu, handleKey } =
+const { selection, select, clear, rules, inline, endEdit, transfer, menu, menuItems, openMenu, handleKey } =
     useHomeActions({
         dir: homeDir,
         order,
@@ -673,21 +673,5 @@ const onBackgroundMenu = (event: MouseEvent): void => {
 
         <HomePeek :entry="peekEntry" :anchor="peekAnchor" />
         <ContextMenu ref="menu" :model="menuItems" :min-width="10" />
-        <ConfirmDialog
-            :open="confirmPaths !== undefined"
-            :header="deleteTitle"
-            :confirm-label="t(`ui.action.delete`)"
-            confirm-icon="trash"
-            :items="confirmPaths ?? []"
-            @cancel="confirmPaths = undefined"
-            @confirm="confirmDelete"
-        >
-            <template #item="{ item }">
-                <Icon :name="iconForEntry(basename(item), entriesByPath.get(item)?.type ?? 'file')" class="shrink-0 text-xs text-muted" />
-                <span class="truncate text-content">{{ basename(item) }}</span>
-                <span v-if="parentDir(item) !== ''" class="min-w-0 truncate text-xs text-subtle">{{ parentDir(item) }}</span>
-            </template>
-            <p class="mt-3 text-xs text-muted">{{ t(`shared.cantUndone`) }}</p>
-        </ConfirmDialog>
     </div>
 </template>

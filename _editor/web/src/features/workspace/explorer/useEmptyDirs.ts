@@ -1,6 +1,6 @@
 import { sandboxRef, sandboxValue } from "@intentic/extension-api";
 import { computed, watch } from "vue";
-import { type BarrenChain, barrenChainOf, barrenChildren, barrenRoots, branchDirPaths, settleBarren, sweepableDirs } from "./emptyDirs";
+import { type BarrenChain, barrenChainOf, barrenChildren, barrenRoots, settleBarren, sweepableDirs } from "./emptyDirs";
 
 // Reactive shell around emptyDirs.ts: decides when a folder counts as barren (time, authorship), not which qualify.
 // - Settles only after continuously barren for SETTLE_MS, so an agent mid-scaffold doesn't flicker.
@@ -66,8 +66,5 @@ export function useEmptyDirs(barren: () => readonly string[]) {
     const roots = computed<readonly string[]>(() => barrenRoots(raw.value, settled.value));
     const settledChildren = computed(() => barrenChildren(settled.value));
     const chainOf = (path: string): BarrenChain => barrenChainOf(path, settledChildren.value);
-    // Every dir of a branch, recorded before a sweep so Undo can rebuild the exact shape.
-    const branchDirs = (root: string): readonly string[] => branchDirPaths(root, raw.value);
-
-    return { isBarren, roots, chainOf, branchDirs };
+    return { isBarren, roots, chainOf };
 }

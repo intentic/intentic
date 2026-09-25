@@ -589,14 +589,45 @@ export const writeFile = (path: string, content: string): void => {
     FILES.set(path, content);
 };
 
-/** DELETE /workspace/entry: a file, or a directory and everything under it. */
-export const deleteEntry = (path: string): void => {
-    FILES.delete(path);
-    for (const candidate of FILES.keys()) {
-        if (candidate.startsWith(`${path}/`)) {
-            FILES.delete(candidate);
-        }
+// What deletes took, by trash id, so Undo can put it back, as the daemon's trash does.
+const TRASH = new Map<string, { readonly path: string; readonly files: ReadonlyMap<string, string | number> }>();
+let trashed = 0;
+
+/** DELETE /workspace/entry: a file, or a directory and everything under it, into the trash. */
+export const deleteEntry = (path: string): { ok: true; trashed?: string } => {
+    const files = new Map([...FILES].filter(([candidate]) => candidate === path || candidate.startsWith(`${path}/`)));
+    for (const candidate of files.keys()) {
+        FILES.delete(candidate);
     }
+    if (files.size === 0) {
+        return { ok: true };
+    }
+    trashed += 1;
+    const id = `demo-${trashed.toString(16).padStart(8, `0`)}`;
+    TRASH.set(id, { path, files });
+    return { ok: true, trashed: id };
+};
+
+/** POST /workspace/restore: back where it was, or beside a newcomer under a `(restored)` name; undefined for an id
+ * the trash no longer holds. */
+export const restoreEntry = (id: string): { path: string } | undefined => {
+    const held = TRASH.get(id);
+    if (held === undefined) {
+        return undefined;
+    }
+    TRASH.delete(id);
+    const taken = (path: string): boolean => [...FILES.keys()].some((candidate) => candidate === path || candidate.startsWith(`${path}/`));
+    const dot = held.path.lastIndexOf(`.`);
+    const slash = held.path.lastIndexOf(`/`);
+    const [stem, ext] = dot > slash + 1 ? [held.path.slice(0, dot), held.path.slice(dot)] : [held.path, ``];
+    let target = held.path;
+    for (let n = 1; taken(target); n += 1) {
+        target = `${stem} (restored${n === 1 ? `` : ` ${n}`})${ext}`;
+    }
+    for (const [path, entry] of held.files) {
+        FILES.set(target + path.slice(held.path.length), entry);
+    }
+    return { path: target };
 };
 
 // Sessions window: the sandbox's whole history, more than the fleet board's today-only view.

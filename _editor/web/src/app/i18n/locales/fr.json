@@ -3490,7 +3490,6 @@
         "builtIntoSandboxImage": "intégrée à l'image du sandbox",
         "cancel": "Annuler",
         "cantHelpNow": "Impossible d'aider maintenant",
-        "cantUndone": "C'est irréversible.",
         "capabilities": "Capacités",
         "category": "Catégorie",
         "changes": "Changements",
@@ -4539,6 +4538,7 @@
             "refreshChanges": "Rafraîchir les changements",
             "refreshFiles": "Rafraîchir les fichiers",
             "reopenClosedTab": "Rouvrir l'onglet fermé",
+            "undoDelete": "Annuler la suppression",
             "search": "Rechercher…",
             "searchIgnoredFiles": "Chercher dans les fichiers ignorés",
             "searchInFiles2": "Chercher dans les fichiers…",
@@ -4573,12 +4573,9 @@
             "workspaceAgentsReadEdit": "C'est l'espace de travail que vos agents lisent et modifient. Faites-y entrer quelque chose et ils auront de quoi travailler."
         },
         "workspaceMobile": {
-            "cantUndone": " ? C'est irréversible.",
             "copyPath": "Copier le chemin",
             "couldntLoadFiles": "Impossible de charger vos fichiers.",
-            "delete": "Supprimer ?",
             "directoryEmpty": "Ce répertoire est vide.",
-            "everythingInside": " et tout ce qu'il contient",
             "hideTechnicalFiles": "Masquer les fichiers techniques",
             "hideTests": "Masquer les tests",
             "ignored": "Ignorés",

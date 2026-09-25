@@ -2,7 +2,8 @@ import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { noticeOf, type NoticeModel } from "@intentic/ui/async";
 import { mock } from "bun:test";
 import { computed, effectScope, ref, shallowRef } from "vue";
-import { barrenChainOf, barrenChildren, barrenRoots, branchDirPaths } from "../features/workspace/explorer/emptyDirs";
+import type { DeleteBatch } from "../features/workspace/explorer/deleteUndo";
+import { barrenChainOf, barrenChildren, barrenRoots } from "../features/workspace/explorer/emptyDirs";
 import type { RowAction } from "../features/workspace/explorer/rowActions";
 import type { DroppedFile } from "../features/workspace/explorer/transfer/dropEntries";
 import { indexEntries } from "../features/workspace/explorer/tree/treeRows";
@@ -50,7 +51,6 @@ export const emptyDirsOver = (barren: readonly string[]) => {
             isBarren: (path: string) => settled.value.includes(path),
             roots: computed(() => barrenRoots(settled.value, new Set(settled.value))),
             chainOf: (path: string) => barrenChainOf(path, barrenChildren(settled.value)),
-            branchDirs: (root: string) => branchDirPaths(root, settled.value),
         },
     };
 };
@@ -109,9 +109,11 @@ export const fakeTreeStore = (listing: readonly WorkspaceTreeEntry[], { canWrite
         moveEntry: mock((from: string, to: string): Promise<void> => land(`move ${from} → ${to}`, to, file(to), from)),
         createFile: mock((path: string): Promise<void> => land(`write ${path}`, path, file(path))),
         createDir: mock((path: string): Promise<void> => land(`mkdir ${path}`, path, dir(path, []))),
-        removeEntries: mock(async (paths: readonly string[]): Promise<void> => {
+        // Each path goes to the trash under an id named after it, so a test can tell which batch a receipt's Undo holds.
+        removeEntries: mock(async (paths: readonly string[]): Promise<DeleteBatch> => {
             await answered;
             calls.push(`delete ${paths.join(`, `)}`);
+            return { entries: paths.map((path) => ({ path, type: `file`, trashed: `trash:${path}` })) };
         }),
         copyEntries: mock(async (pairs: readonly { from: string; to: string }[]): Promise<void> => {
             await answered;
@@ -162,6 +164,8 @@ export const treeSurface = (
         enqueueFromDataTransfer: mock((at: string, transfer: DataTransfer): void => undefined),
     };
     const say = mock((message: string, undo?: () => void | Promise<void>) => [message, undo]);
+    // A delete's receipt, recorded with the batch its Undo would take back.
+    const sayDeleted = mock((receipt: string, batch: DeleteBatch) => [receipt, batch]);
     const surface = effectScope().run(() => {
         const rows = useTreeRows({
             tree: () => store.tree.value,
@@ -190,7 +194,7 @@ export const treeSurface = (
             store,
             openCreated: (path) => calls.push(`opened ${path}`),
         });
-        const deleting = useTreeDelete({ byPath, targetDir, rules, emptyDirs, selecting, store, say });
+        const deleting = useTreeDelete({ byPath, targetDir, rules, emptyDirs, selecting, store, say, sayDeleted });
         const transfer = useTreeTransfer({
             tree: () => store.tree.value,
             rootDir: () => rootDir,
@@ -231,5 +235,5 @@ export const treeSurface = (
         surface.selecting.selection.value = new Set(paths);
         surface.selecting.lead.value = paths.at(-1) ?? null;
     };
-    return { ...surface, store, calls, release, settled, uploads, say, el, select };
+    return { ...surface, store, calls, release, settled, uploads, say, sayDeleted, el, select };
 };

@@ -3494,7 +3494,6 @@
         "builtIntoSandboxImage": "ins Sandbox-Image eingebaut",
         "cancel": "Abbrechen",
         "cantHelpNow": "Kann gerade nicht helfen",
-        "cantUndone": "Das lässt sich nicht rückgängig machen.",
         "capabilities": "Fähigkeiten",
         "category": "Kategorie",
         "changes": "Änderungen",
@@ -4549,6 +4548,7 @@
             "refreshChanges": "Änderungen aktualisieren",
             "refreshFiles": "Dateien aktualisieren",
             "reopenClosedTab": "Geschlossenen Tab wieder öffnen",
+            "undoDelete": "Löschen rückgängig machen",
             "search": "Suchen…",
             "searchIgnoredFiles": "Ignorierte Dateien durchsuchen",
             "searchInFiles2": "In Dateien suchen…",
@@ -4583,12 +4583,9 @@
             "workspaceAgentsReadEdit": "Das ist der Workspace, den Ihre Agenten lesen und bearbeiten. Bringen Sie etwas herein, und sie haben etwas zu tun."
         },
         "workspaceMobile": {
-            "cantUndone": "? Das lässt sich nicht rückgängig machen.",
             "copyPath": "Pfad kopieren",
             "couldntLoadFiles": "Ihre Dateien ließen sich nicht laden.",
-            "delete": "Löschen?",
             "directoryEmpty": "Dieses Verzeichnis ist leer.",
-            "everythingInside": " und alles darin",
             "hideTechnicalFiles": "Technische Dateien ausblenden",
             "hideTests": "Tests ausblenden",
             "ignored": "Ignoriert",

@@ -116,23 +116,24 @@ describe(`the verbs`, () => {
         ]);
     });
 
-    it(`rename the lead alone on F2, ask about the whole selection on Delete, and leave every key to a name being typed`, async () => {
-        const { home, marked } = homeOver();
+    it(`rename the lead alone on F2, delete the whole selection on Delete, and leave every key to a name being typed`, async () => {
+        const { home, marked, store } = homeOver();
         home.select(A.path);
         home.handleKey(key(`F2`));
         const renaming = home.inline.edit.value;
-        const typing = [home.handleKey(key(`Delete`)), home.confirmPaths.value];
+        const typing = [home.handleKey(key(`Delete`)), [...store.removeEntries.mock.calls]];
         await home.endEdit(`cancel`);
         home.select(B.path, CTRL);
         home.handleKey(key(`F2`));
+        const editing = home.inline.edit.value;
         home.handleKey(key(`Delete`));
 
-        expect([renaming, typing, home.inline.edit.value, home.confirmPaths.value, marked()]).toEqual([
+        expect([renaming, typing, editing, store.removeEntries.mock.calls, marked()]).toEqual([
             { kind: `renaming`, path: `docs/a.md` },
-            [true, undefined],
+            [true, []],
             { kind: `idle` },
-            [`docs/a.md`, `docs/b.md`],
-            [`docs/a.md`, `docs/b.md`],
+            [[[`docs/a.md`, `docs/b.md`]]],
+            [],
         ]);
     });
 });

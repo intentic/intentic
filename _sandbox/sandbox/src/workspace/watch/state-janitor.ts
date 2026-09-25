@@ -3,12 +3,14 @@ import { readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { Logger } from "pino";
 import { statePath } from "../../state-paths.js";
+import { createWorkspaceTrash } from "../files/workspace-trash.js";
 
 // Garbage collection for everything under `.intentic` classified as disposable; the state table says what a tree is,
 // this decides what happens to it. Every rule is derived from a class, not a judgment about content:
 // - tmp/ (derived scratch) is emptied at boot, when nothing can be mid-write
 // - the pnpm store is pruned via pnpm's own unreferenced-blob definition of garbage
 // - browser screenshots age out after 30 days, since a transcript that outlives its images degrades to a path string
+// - the file view's trash ages out after a day, its Undo window
 
 // Screenshots older than this are deleted; attachments and reports in artifacts/ stay untouched.
 const SCREENSHOT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -73,4 +75,5 @@ export const sweepStateAtBoot = async (workspaceRoot: string, log: Logger): Prom
 // The recurring half; cheap enough to ride the hourly timer agent sweeps already use.
 export const sweepAgedState = async (workspaceRoot: string, now: number, log: Logger): Promise<void> => {
     await sweepAgedCaptures(statePath(workspaceRoot, ".intentic/records/artifacts/", "browser"), now, log);
+    await createWorkspaceTrash(statePath(workspaceRoot, ".intentic/local/trash/")).sweep(now);
 };

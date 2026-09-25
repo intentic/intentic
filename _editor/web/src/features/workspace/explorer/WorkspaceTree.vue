@@ -2,20 +2,18 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import {
-    ConfirmDialog,
     ContextMenu,
     type ExplorerTreatment,
     explorerTreatment,
-    iconForEntry,
     type IconName,
     useExplorerStyle,
     vAction,
 } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { basename, parentDir } from "@intentic/ui/path";
 import { nextTick } from "vue";
 import { useVocabulary } from "../../../core-views/vocabulary";
 import { useNotifications } from "../../../shell/notifications/notifications";
+import { useDeleteUndo } from "./useDeleteUndo";
 import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
 import { viewersOfPath } from "../../../shell/presence/usePresence";
 import { useLayout } from "../../../shell/window/useLayout";
@@ -131,16 +129,17 @@ const { beginRename, beginCreate, endEdit } = useTreeEdits({
         layout.setEditMode(true);
     },
 });
-const { confirmPaths, deleteTitle, requestDelete, confirmDelete, keepFolder, sweepOpen, pointedBarren, barrenBranches, soleBarren, sweepAll } =
-    useTreeDelete({
-        byPath,
-        targetDir,
-        rules,
-        emptyDirs,
-        selecting,
-        store,
-        say,
-    });
+const { sayDeleted } = useDeleteUndo();
+const { requestDelete, keepFolder, sweepOpen, pointedBarren, barrenBranches, soleBarren, sweepAll } = useTreeDelete({
+    byPath,
+    targetDir,
+    rules,
+    emptyDirs,
+    selecting,
+    store,
+    say,
+    sayDeleted,
+});
 // Opens the way down to an empty folder, selects it and brings its row on screen; the keyboard stays with the sweep line.
 const revealBarren = async (path: string): Promise<void> => {
     openAll(ancestorDirs(path));
@@ -564,28 +563,6 @@ const restingClass = (action: RowAction, path: string): string =>
             </div>
         </div>
         <ContextMenu ref="menu" :model="menuItems" :min-width="10" />
-        <ConfirmDialog
-            :open="confirmPaths !== undefined"
-            :header="deleteTitle"
-            :confirm-label="t(`ui.action.delete`)"
-            confirm-icon="trash"
-            :items="confirmPaths ?? []"
-            @cancel="confirmPaths = undefined"
-            @confirm="confirmDelete"
-            @hide="focusLead"
-        >
-            <!-- Delete-confirm list stays calm/monochrome, but tracks the setup's icon size. -->
-            <template #item="{ item }">
-                <Icon
-                    :name="iconForEntry(basename(item), byPath.get(item)?.type ?? 'file', false)"
-                    class="shrink-0 text-muted"
-                    :class="explorerTreatment(explorerStyle, basename(item), byPath.get(item)?.type ?? 'file', false, false).sizeClass"
-                />
-                <span class="truncate text-content">{{ basename(item) }}</span>
-                <span v-if="parentDir(item) !== ''" class="min-w-0 truncate text-xs text-subtle">{{ parentDir(item) }}</span>
-            </template>
-            <p class="mt-3 text-xs text-muted">{{ t(`shared.cantUndone`) }}</p>
-        </ConfirmDialog>
     </div>
 </template>
 

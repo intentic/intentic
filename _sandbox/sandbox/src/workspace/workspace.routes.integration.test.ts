@@ -26,6 +26,7 @@ import { MAX_RAW_BYTES } from "./files/workspace-files-download.js";
 import { UnknownArchiveError } from "./files/workspace-extract.js";
 import { UploadTooLargeError } from "./files/workspace-files-upload.js";
 import { sha256Text, statWorkspaceFileSize } from "./files/workspace-files.js";
+import { createWorkspaceTrash } from "./files/workspace-trash.js";
 
 import { clientFor, errorCode, proven } from "../harness/route-client.testing.js";
 import { fakeFiles, fakeHistory, tempWorkspace } from "../harness/route-fakes.testing.js";
@@ -697,8 +698,13 @@ test("workspace.mkdir/delete/move/copy resolve within /work and reject escapes",
                     mkdir: async (p) => {
                         calls.push(["mkdir", p]);
                     },
-                    remove: async (p) => {
-                        calls.push(["remove", p]);
+                    trash: {
+                        put: async (p) => {
+                            calls.push(["trash", p]);
+                            return undefined;
+                        },
+                        restore: async () => "",
+                        sweep: async () => {},
                     },
                     move: async (a, b) => {
                         calls.push(["move", a, b]);
@@ -717,19 +723,42 @@ test("workspace.mkdir/delete/move/copy resolve within /work and reject escapes",
     expect(await client.workspace.copy({ from: "app/a.ts", to: "app/nested/c.ts" })).toEqual({ ok: true });
     expect(calls).toEqual([
         ["mkdir", "/work/app/new-dir"],
-        ["remove", "/work/app/old.ts"],
+        ["trash", "/work/app/old.ts"],
         ["move", "/work/app/a.ts", "/work/app/b.ts"],
         ["copy", "/work/app/a.ts", "/work/app/nested/c.ts"],
     ]);
 
     // No security floor: former-secret paths resolve and act like any other contained path.
     expect(await client.workspace.delete({ path: "desired-state/.env" })).toEqual({ ok: true });
-    expect(calls.at(-1)).toEqual(["remove", "/work/desired-state/.env"]);
+    expect(calls.at(-1)).toEqual(["trash", "/work/desired-state/.env"]);
 
     // Only a climb-out of /work is refused, on either endpoint, before the filesystem is touched.
     expect(await errorCode(client.workspace.mkdir({ path: "../evil" }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.workspace.move({ from: "app/a.ts", to: "../escape" }))).toBe("BAD_REQUEST");
     expect(calls).toHaveLength(5);
+});
+
+test("workspace.delete sends an entry to the trash, and restore brings it back, beside a newcomer that took its name", async () => {
+    const workspace = tempWorkspace([]);
+    const trash = createWorkspaceTrash(join(workspace.root, STATE_DIR, "local", "trash"));
+    const client = clientFor(createApp(services({ workspace, files: fakeFiles({ trash }) })));
+    await mkdir(join(workspace.root, "drops", "photos"), { recursive: true });
+    await writeFile(join(workspace.root, "drops", "photos", "a.jpg"), "one");
+
+    const deleted = await client.workspace.delete({ path: "drops/photos" });
+    expect(deleted.trashed).toMatch(/^[a-z0-9]+-[a-f0-9]{8}$/);
+    await expect(readFile(join(workspace.root, "drops", "photos", "a.jpg"))).rejects.toThrow();
+    // Nothing there: nothing to take back.
+    expect(await client.workspace.delete({ path: "drops/never" })).toEqual({ ok: true });
+
+    // Something new took the name meanwhile: the restore lands beside it, and says where.
+    await mkdir(join(workspace.root, "drops", "photos"));
+    expect(await client.workspace.restore({ trashed: deleted.trashed ?? "" })).toEqual({ path: "drops/photos (restored)" });
+    expect(await readFile(join(workspace.root, "drops", "photos (restored)", "a.jpg"), "utf8")).toBe("one");
+
+    // Once restored, the id is spent; a forged one names nothing either.
+    expect(await errorCode(client.workspace.restore({ trashed: deleted.trashed ?? "" }))).toBe("NOT_FOUND");
+    expect(await errorCode(client.workspace.restore({ trashed: "../../etc" }))).toBe("NOT_FOUND");
 });
 
 test("workspace.extract answers with the path it landed at, and refuses what nothing here unpacks", async () => {

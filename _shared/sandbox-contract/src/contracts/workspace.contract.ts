@@ -26,8 +26,11 @@ import {
     SidecarStatusSchema,
     WorkspaceDerivedQuerySchema,
     WorkspaceDerivedSchema,
+    WorkspaceDeletedSchema,
     WorkspaceDirSchema,
     WorkspaceExtractSchema,
+    WorkspaceRestoredSchema,
+    WorkspaceRestoreSchema,
     WorkspaceFileQuerySchema,
     WorkspaceFileReadQuerySchema,
     WorkspaceFileSchema,
@@ -192,11 +195,22 @@ export const workspaceContract = {
             path: "/workspace/entry",
             summary: "Delete a file or folder",
             description:
-                "Removes one entry and everything under it. The path travels in the body rather than the address, the same as every other write in this group.",
+                "Removes one entry and everything under it. It goes to the trash rather than being erased, and the answer carries the id that brings it back through the restore call for a day. The path travels in the body rather than the address, the same as every other write in this group.",
         })
         .meta({ floor: "writer" })
         .input(WorkspaceFileQuerySchema)
-        .output(OkSchema),
+        .output(WorkspaceDeletedSchema),
+    restore: procedure
+        .route({
+            method: "POST",
+            path: "/workspace/restore",
+            summary: "Bring back something deleted",
+            description:
+                "Puts an entry a delete sent to the trash back where it was, recreating the folders above it. Nothing is written over: when something new holds the name, it comes back beside it and the answer says where. Trash older than a day is gone.",
+        })
+        .meta({ floor: "writer" })
+        .input(WorkspaceRestoreSchema)
+        .output(WorkspaceRestoredSchema),
     move: procedure
         .route({
             method: "POST",

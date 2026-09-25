@@ -63,6 +63,7 @@ import { transcriptFor } from "./fixture/transcripts";
 import {
     agentChanges,
     deleteEntry,
+    restoreEntry,
     fileBody,
     fileDiff,
     gitChanges,
@@ -533,7 +534,8 @@ export const procedures = {
         // A missing path answers "nothing there" in a 200 body, not a 404; several surfaces read a file just to
         // check existence.
         file: ({ path }) => readFile(path),
-        delete: ({ path }) => okAfter(() => deleteEntry(path)),
+        delete: ({ path }) => deleteEntry(path),
+        restore: ({ trashed }) => restoreEntry(trashed) ?? refuse(`That is no longer in the trash.`, 404),
         repos: () => ({ repos: [...REPOS] }),
         search: ({ query, mode, literal, word, caseSensitive, include = ``, dir = `` }) =>
             searchWorkspace(query, { smart: mode === `q`, literal: literal === true, word: word === true, caseSensitive: caseSensitive === true, include, dir }),

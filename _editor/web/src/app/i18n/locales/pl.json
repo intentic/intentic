@@ -3515,7 +3515,6 @@
         "builtIntoSandboxImage": "wbudowane w obraz sandboxa",
         "cancel": "Anuluj",
         "cantHelpNow": "Teraz nie pomogę",
-        "cantUndone": "Tego nie można cofnąć.",
         "capabilities": "Możliwości",
         "category": "Kategoria",
         "changes": "Zmiany",
@@ -4585,6 +4584,7 @@
             "refreshChanges": "Odśwież zmiany",
             "refreshFiles": "Odśwież pliki",
             "reopenClosedTab": "Otwórz ponownie zamkniętą kartę",
+            "undoDelete": "Cofnij usunięcie",
             "search": "Szukaj…",
             "searchIgnoredFiles": "Przeszukuj ignorowane pliki",
             "searchInFiles2": "Szukaj w plikach…",
@@ -4619,12 +4619,9 @@
             "workspaceAgentsReadEdit": "To jest przestrzeń robocza, którą Twoje agenty czytają i edytują. Wnieś do niej coś, a będą miały nad czym pracować."
         },
         "workspaceMobile": {
-            "cantUndone": "? Tego nie można cofnąć.",
             "copyPath": "Kopiuj ścieżkę",
             "couldntLoadFiles": "Nie udało się wczytać Twoich plików.",
-            "delete": "Usunąć?",
             "directoryEmpty": "Ten katalog jest pusty.",
-            "everythingInside": " i wszystkiego w środku",
             "hideTechnicalFiles": "Ukryj pliki techniczne",
             "hideTests": "Ukryj testy",
             "ignored": "Ignorowane",

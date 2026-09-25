@@ -2,9 +2,9 @@ import { STATE_DIR } from "@intentic/constants";
 import "@intentic/testing/dom";
 import { nextTick } from "vue";
 import { dir, emptyDirsOver, file, treeSurface } from "../../../../testing/treeSurface";
-import { branchOf, sweepPlan } from "./useTreeDelete";
+import { branchOf, sweepReceipt } from "./useTreeDelete";
 
-// Pins deleting: the confirm and its receipt, and the empty-folder line, which sweeps without asking and undoes exactly.
+// Pins deleting: straight to the trash with a receipt whose Undo holds exactly that delete, and the empty-folder line.
 
 // `web/demo/assets` is one chain at the root; `src/old` sits under a folder with real content.
 const BARREN = [`web`, `web/demo`, `web/demo/assets`, `src/old`];
@@ -15,17 +15,13 @@ const drain = async (): Promise<void> => {
     }
 };
 
-describe(`the sweep's plan`, () => {
+describe(`the sweep's receipt`, () => {
     const { emptyDirs } = emptyDirsOver(BARREN);
 
     it(`names a lone branch in full, root-level or buried, and counts several`, () => {
-        expect(sweepPlan([`web`], emptyDirs).receipt).toBe(`web / demo / assets removed`);
-        expect(sweepPlan([`src/old`], emptyDirs).receipt).toBe(`src / old removed`);
-        expect(sweepPlan([`web`, `src/old`], emptyDirs).receipt).toBe(`2 empty folders removed`);
-    });
-
-    it(`recreates each chain's deepest folder on Undo, which brings back every one above it`, () => {
-        expect(sweepPlan([`web`, `src/old`], emptyDirs).leaves).toEqual([`web/demo/assets`, `src/old`]);
+        expect(sweepReceipt([`web`], emptyDirs.chainOf)).toBe(`web / demo / assets removed`);
+        expect(sweepReceipt([`src/old`], emptyDirs.chainOf)).toBe(`src / old removed`);
+        expect(sweepReceipt([`web`, `src/old`], emptyDirs.chainOf)).toBe(`2 empty folders removed`);
     });
 
     it(`keeps a branch's staying ancestors apart from the chain that goes`, () => {
@@ -37,26 +33,28 @@ describe(`the sweep's plan`, () => {
 });
 
 describe(`deleting the selection`, () => {
-    it(`asks first about what may be deleted, and deletes it only on the confirm, the receipt after`, async () => {
-        const { deleting, selecting, store, say, select } = treeSurface(TREE, { barren: BARREN });
+    it(`deletes what may be deleted without asking, the receipt holding that delete for its Undo`, async () => {
+        const { deleting, selecting, store, sayDeleted, select } = treeSurface(TREE, { barren: BARREN });
         select(`src/main.ts`, `${STATE_DIR}/config/capabilities.json`, `README.md`);
 
         deleting.requestDelete();
-        expect([deleting.confirmPaths.value, deleting.deleteTitle.value, store.removeEntries.mock.calls]).toEqual([
-            [`src/main.ts`, `README.md`],
-            `Delete 2 items?`,
-            [],
-        ]);
-
-        deleting.confirmDelete();
-        expect([deleting.confirmPaths.value, [...selecting.selection.value], store.removeEntries.mock.calls, store.run.mock.calls[0]?.[1]]).toEqual([
-            undefined,
+        expect([[...selecting.selection.value], store.removeEntries.mock.calls, store.run.mock.calls[0]?.[1]]).toEqual([
             [],
             [[[`src/main.ts`, `README.md`]]],
             `Couldn't delete that.`,
         ]);
         await drain();
-        expect(say.mock.calls).toEqual([[`2 items deleted`]]);
+        expect(sayDeleted.mock.calls).toEqual([
+            [
+                `2 items deleted`,
+                {
+                    entries: [
+                        { path: `src/main.ts`, type: `file`, trashed: `trash:src/main.ts` },
+                        { path: `README.md`, type: `file`, trashed: `trash:README.md` },
+                    ],
+                },
+            ],
+        ]);
     });
 
     it(`asks nothing and deletes nothing for a refused folder or an empty selection`, () => {
@@ -68,35 +66,20 @@ describe(`deleting the selection`, () => {
         nothing.select(`${STATE_DIR}/config/capabilities.json`);
         nothing.deleting.requestDelete();
 
-        expect([readOnly.deleting.confirmPaths.value, nothing.deleting.confirmPaths.value, readOnly.store.removeEntries.mock.calls]).toEqual([
-            undefined,
-            undefined,
-            [],
-        ]);
+        expect([readOnly.store.removeEntries.mock.calls, nothing.store.removeEntries.mock.calls]).toEqual([[], []]);
     });
 
-    it(`titles the confirm by what it names: one folder, one file, or a count`, () => {
-        const { deleting, select } = treeSurface(TREE);
-        select(`src`);
-        deleting.requestDelete();
-        const folder = deleting.deleteTitle.value;
-        select(`README.md`);
-        deleting.requestDelete();
-
-        expect([folder, deleting.deleteTitle.value]).toEqual([`Delete folder?`, `Delete file?`]);
-    });
-
-    it(`sweeps a selection of empty folders without asking, and its Undo rebuilds them`, async () => {
-        const { deleting, selecting, store, say, select } = treeSurface(TREE, { barren: BARREN });
+    it(`reads a selection of empty folders as the sweep line does`, async () => {
+        const { deleting, selecting, store, sayDeleted, select } = treeSurface(TREE, { barren: BARREN });
         select(`web`);
 
         deleting.requestDelete();
         await drain();
-        expect([deleting.confirmPaths.value, store.removeEntries.mock.calls, [...selecting.selection.value]]).toEqual([undefined, [[[`web`]]], []]);
-
-        const [receipt, undo] = say.mock.calls[0] ?? [];
-        await undo?.();
-        expect([receipt, store.createDir.mock.calls]).toEqual([`web / demo / assets removed`, [[`web/demo/assets`]]]);
+        expect([store.removeEntries.mock.calls, [...selecting.selection.value], sayDeleted.mock.calls[0]?.[0]]).toEqual([
+            [[[`web`]]],
+            [],
+            `web / demo / assets removed`,
+        ]);
     });
 });
 
@@ -134,7 +117,7 @@ describe(`the empty-folder line`, () => {
         const reader = treeSurface(TREE, { barren: BARREN, canWrite: false });
         reader.deleting.sweepAll();
 
-        expect([writer.store.removeEntries.mock.calls, writer.say.mock.calls[0]?.[0], reader.store.removeEntries.mock.calls]).toEqual([
+        expect([writer.store.removeEntries.mock.calls, writer.sayDeleted.mock.calls[0]?.[0], reader.store.removeEntries.mock.calls]).toEqual([
             [[[`web`, `src/old`]]],
             `2 empty folders removed`,
             [],

@@ -459,6 +459,7 @@ const RECORDED: Readonly<Record<string, string>> = {
     "GET /workspace/resolve": "bearer waits timed viewer guest panel read drive land",
     "GET /workspace/search": "bearer waits timed viewer guest panel editor read drive land",
     "GET /workspace/setup": "bearer waits timed viewer panel read drive land",
+    "POST /workspace/restore": "bearer waits timed writer panel",
     "POST /workspace/setup/install": "bearer waits timed maintainer panel",
     "POST /workspace/sync": "bearer waits timed maintainer panel",
     "GET /workspace/templates": "bearer waits timed viewer panel read drive land",

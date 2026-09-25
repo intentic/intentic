@@ -1,5 +1,5 @@
 import { STATE_DIR } from "@intentic/constants";
-import { barrenChainOf, barrenChildren, barrenRoots, branchDirPaths, settleBarren, sweepableDirs } from "./emptyDirs";
+import { barrenChainOf, barrenChildren, barrenRoots, settleBarren, sweepableDirs } from "./emptyDirs";
 
 // Daemon sends every folder holding only empty folders, root-relative, tree order; this file
 // decides which the explorer offers.
@@ -82,21 +82,6 @@ describe(`barrenChainOf`, () => {
     it(`stops at a child the given set does not hold (not yet settled)`, () => {
         const settled = [`public2`, `public2/demo`];
         expect(barrenChainOf(`public2`, chain(settled)).names).toEqual([`public2`, `demo`]);
-    });
-});
-
-describe(`branchDirPaths`, () => {
-    it(`lists every dir of the branch, root first`, () => {
-        const barren = [`a`, `a/b`, `a/b/c`, `a/b/d`, `z`];
-        expect(branchDirPaths(`a`, barren)).toEqual([`a`, `a/b`, `a/b/c`, `a/b/d`]);
-    });
-
-    it(`takes a sibling that merely shares a name prefix for what it is: not part of the branch`, () => {
-        expect(branchDirPaths(`a`, [`a`, `a-old`])).toEqual([`a`]);
-    });
-
-    it(`records what the delete will take, settled or not: the way back has to rebuild all of it`, () => {
-        expect(branchDirPaths(`a`, [`a`, `a/fresh`])).toEqual([`a`, `a/fresh`]);
     });
 });
 

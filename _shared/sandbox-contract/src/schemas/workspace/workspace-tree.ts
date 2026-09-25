@@ -278,6 +278,28 @@ export const WorkspaceExtractSchema = z.object({
         ),
 });
 export type WorkspaceExtract = z.infer<typeof WorkspaceExtractSchema>;
+// A delete moves the entry into the daemon's trash rather than erasing it, so the gesture can be taken back.
+export const WorkspaceDeletedSchema = z.object({
+    ok: z.literal(true).describe("Always true: the entry is gone from where it was, or was never there."),
+    trashed: z
+        .string()
+        .optional()
+        .describe(
+            "The trash id that brings it back through the restore call, for a day. Absent when there was nothing at that path to delete.",
+        ),
+});
+export type WorkspaceDeleted = z.infer<typeof WorkspaceDeletedSchema>;
+export const WorkspaceRestoreSchema = z.object({
+    trashed: z.string().min(1).describe("The trash id a delete answered with."),
+});
+export const WorkspaceRestoredSchema = z.object({
+    path: z
+        .string()
+        .describe(
+            "Where it came back, as a workspace path: where it was deleted from, or beside that under a `(restored)` name when something new has taken the name since.",
+        ),
+});
+export type WorkspaceRestored = z.infer<typeof WorkspaceRestoredSchema>;
 // Deterministic, no-LLM classification into coarse buckets, read-only, applied via /workspace/move. reason is the
 // winning signal: magic:<mime>, ext:<ext>, repository:<marker>, text-content, or unknown.
 export const WorkspaceBucketSchema = z.enum(["repositories", "documents", "media", "archives", "other"]);

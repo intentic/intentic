@@ -14,6 +14,7 @@ import { useRole } from "../../sandbox/secrets/useRole";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 import { dropProvisional, markSettled, noteArriving, noteLeaving, reconcileProvisional } from "../files/provisionalEntries";
 import { renameOpenPaths } from "../tabs/useWorkspaceTabs";
+import { type DeleteBatch, rememberDelete, type TrashedEntry } from "./deleteUndo";
 import { changedDirs } from "../changes/live/useWorkspaceLive";
 import { useHome } from "../home/useHome";
 import { readExpandedDirs, writeExpandedDirs } from "../tabs/workspaceSnapshot";
@@ -265,15 +266,63 @@ export function useWorkspaceTree() {
             (move) => renameOpenPaths(move.to, move.from),
         );
     };
-    const removeEntries = async (paths: readonly string[]): Promise<void> => {
+    // Each entry goes to the daemon's trash; the ones that went are remembered as one batch for Mod+Z, even when some
+    // of the gesture was refused, and answered so a receipt's Undo can name exactly this delete.
+    const removeEntries = async (paths: readonly string[]): Promise<DeleteBatch> => {
+        const types = new Map(paths.map((path) => [path, typeOf(path)]));
         for (const path of paths) {
             noteLeaving(path);
         }
+        const entries: TrashedEntry[] = [];
+        const batch: DeleteBatch = { entries };
+        try {
+            await settleEach(
+                paths,
+                (path) => [path],
+                async (path) => {
+                    const { trashed } = await sandboxRpc.workspace.delete({ path });
+                    if (trashed !== undefined) {
+                        entries.push({ path, type: types.get(path) ?? `file`, trashed });
+                    }
+                },
+            );
+        } finally {
+            rememberDelete(batch);
+        }
+        return batch;
+    };
+    // Puts a delete back, answering where each entry landed (beside its old name when something new took it) and how
+    // many the trash no longer held. A row appears at once where the old one stood, unless that name is taken again.
+    // What a failed request left in the trash goes back on the stack, so the next Mod+Z can try it again.
+    const restoreDeleted = async (batch: DeleteBatch): Promise<{ readonly landed: readonly string[]; readonly gone: number }> => {
+        const landed: string[] = [];
+        const settled = new Set<string>();
+        let gone = 0;
+        const free = batch.entries.filter((entry) => !entriesByPath.value.has(entry.path));
+        for (const entry of free) {
+            noteArriving(entry.path, { kind: `write`, type: entry.type });
+        }
         await settleEach(
-            paths,
-            (path) => [path],
-            (path) => sandboxRpc.workspace.delete({ path }),
-        );
+            batch.entries,
+            (entry) => (free.includes(entry) ? [entry.path] : []),
+            async (entry) => {
+                try {
+                    const { path } = await sandboxRpc.workspace.restore({ trashed: entry.trashed });
+                    landed.push(path);
+                    settled.add(entry.trashed);
+                } catch (failure) {
+                    // Aged out of the trash, or already put back elsewhere: counted, not a failure of the rest.
+                    if (failure instanceof SandboxHttpError && failure.status === 404) {
+                        gone += 1;
+                        settled.add(entry.trashed);
+                        dropProvisional(entry.path);
+                        return;
+                    }
+                    throw failure;
+                }
+            },
+        ).finally(() => rememberDelete({ entries: batch.entries.filter((entry) => !settled.has(entry.trashed)) }));
+        return { landed, gone };
     };
     const copyEntries = async (pairs: readonly { from: string; to: string }[]): Promise<void> => {
         for (const { from, to } of pairs) {
@@ -477,6 +526,7 @@ export function useWorkspaceTree() {
         createDir,
         moveEntry,
         removeEntries,
+        restoreDeleted,
         copyEntries,
         moveIntoMany,
         extractEntry,

@@ -1,4 +1,4 @@
-import { deletedReceipt, deleteHeader, joinPath, newNameError } from "./entryNames";
+import { deletedReceipt, joinPath, newNameError, restoredReceipt } from "./entryNames";
 
 describe(`a new name being typed`, () => {
     const taken = new Set([`src/index.ts`, `notes`]);
@@ -31,17 +31,24 @@ describe(`a new name being typed`, () => {
 });
 
 describe(`what a delete says`, () => {
-    const typeOf = (path: string): "file" | "dir" | undefined => (path === `src` ? `dir` : path === `gone` ? undefined : `file`);
-
-    it(`names the one kind, or counts several`, () => {
-        expect(deleteHeader([`src`], typeOf)).toBe(`Delete folder?`);
-        expect(deleteHeader([`a.ts`], typeOf)).toBe(`Delete file?`);
-        expect(deleteHeader([`gone`], typeOf)).toBe(`Delete file?`);
-        expect(deleteHeader([`a.ts`, `src`], typeOf)).toBe(`Delete 2 items?`);
-    });
-
     it(`receipts by name, or by count`, () => {
         expect(deletedReceipt([`src/a.ts`])).toBe(`a.ts deleted`);
         expect(deletedReceipt([`a`, `b`, `c`])).toBe(`3 items deleted`);
+    });
+});
+
+describe(`what an undo says`, () => {
+    it(`names the one thing back where it was, or counts several`, () => {
+        expect(restoredReceipt([`src/a.ts`], [`src/a.ts`], 0)).toBe(`a.ts restored`);
+        expect(restoredReceipt([`a`, `b`], [`b`, `a`], 0)).toBe(`2 items restored`);
+    });
+
+    it(`names the new name when something took the old one meanwhile`, () => {
+        expect(restoredReceipt([`docs/plan.pdf`], [`docs/plan (restored).pdf`], 0)).toBe(`Restored as plan (restored).pdf`);
+    });
+
+    it(`adds what had aged out of the trash, and leaves an all-gone undo to a warning`, () => {
+        expect(restoredReceipt([`a`, `b`], [`a`], 1)).toBe(`a restored; 1 no longer in the trash`);
+        expect(restoredReceipt([`a`], [], 1)).toBeUndefined();
     });
 });
