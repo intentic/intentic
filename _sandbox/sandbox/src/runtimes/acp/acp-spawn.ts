@@ -1,7 +1,7 @@
 import type { ChildProcessByStdio } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { ndJsonStream, type Stream } from "@agentclientprotocol/sdk";
-import { spawnAs } from "../../platform/resources/workload-class.js";
+import { spawnAs } from "../../workload/workload-class.js";
 import { DAEMON_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
 import { webStream } from "../../web-stream.js";
 

@@ -53,15 +53,38 @@ export const PressureMetricsSchema = z.object({
 });
 export type PressureMetrics = z.infer<typeof PressureMetricsSchema>;
 
+// The memory figures the daemon admits work by (its resource budget), so a gauge built on them warns exactly when a turn
+// would be held.
+export const MemoryRoomSchema = z.object({
+    freeBytes: z
+        .number()
+        .optional()
+        .describe("The limit less what is used and what work admitted in the last minute and a half still holds. Absent where nothing measures it."),
+    reservedBytes: z.number().describe("What work admitted in the last minute and a half holds before it shows in `memoryBytes`."),
+    personNeedBytes: z.number().describe("What a person's turn needs free to start without a warning: below it, the sandbox is short."),
+    stallPercent: z.number().describe("Percent of the last ten seconds in which everything in the sandbox waited on memory (pressure `full`)."),
+    stallLimitPercent: z.number().describe("The stall at or past which the sandbox counts as short of memory, whatever `freeBytes` says."),
+});
+export type MemoryRoom = z.infer<typeof MemoryRoomSchema>;
+
 export const SandboxUsageSchema = z.object({
     cpuPercent: z
         .number()
         .optional()
         .describe("CPU the whole sandbox used over the window, as a percentage of all it may use (`cores`). Absent on a first reading."),
     cores: z.number().describe("How many cores the sandbox may use: its CPU quota, or every core it is allowed to run on when it has none."),
-    memoryBytes: z.number().describe("Memory in use, less the file cache the kernel takes back on demand: the figure that runs into the limit."),
-    memoryLimitBytes: z.number().describe("The memory limit: the container's own, or the machine's memory when the container has none."),
-    swapBytes: z.number().optional().describe("Memory pushed out to swap. Absent where the sandbox cannot see its own swap."),
+    memoryBytes: z
+        .number()
+        .describe(
+            "Memory in use as the daemon admits work by it: resident memory less the file cache the kernel takes back on demand, plus what was pushed to swap.",
+        ),
+    memoryLimitBytes: z
+        .number()
+        .describe(
+            "The memory limit work is admitted against: where the kernel starts throttling the container (memory.high), else its hard limit, else the machine's memory.",
+        ),
+    swapBytes: z.number().optional().describe("Of `memoryBytes`, what was pushed out to swap. Absent where the sandbox cannot see its own memory."),
+    memoryRoom: MemoryRoomSchema.optional().describe("What admission reads off the same reading. Absent from a daemon that predates it."),
     diskBytes: z.number().optional().describe("Space used on the volume the workspace lives on. Absent when the volume would not say."),
     diskTotalBytes: z.number().optional().describe("That volume's size. Absent when the volume would not say."),
     loadAverage: z

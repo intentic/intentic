@@ -17,9 +17,8 @@ import { createAnnouncer } from "../platform/boot/announce.js";
 import { createBootTracker } from "../platform/boot/boot.js";
 import { createPerfTracker } from "../platform/resources/perf.js";
 import { providerReadiness } from "../agent/providers/provider-registry.js";
-import { ROOMY_MEMORY } from "../agent/run/turn/turn-plan.testing.js";
+import { budgetOn } from "../agent/run/turn/turn-plan.testing.js";
 import { PROVIDER_MODULES, RUNTIME_ADAPTERS } from "../runtimes/runtime-table.js";
-import { createMemoryWarnings } from "../platform/resources/memory-admission.js";
 import { createReachReporter } from "../platform/listeners/reach-report.js";
 import { enrolledFleet, syncPairBurnPath, type SyncMode } from "../platform/sync.js";
 import { outboxStreamFor } from "../webchat/webchat-outbox.js";
@@ -137,10 +136,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         config: testConfig,
         logger: createLogger(testConfig),
         // A box with room, stated rather than measured, for the admission gate every turn route passes through. The
-        // real reading is of live cgroup files, and once it counts swap (platform/resources/memory-admission.ts) a
+        // real reading is of live cgroup files, and since it counts swap (platform/resources/resource-budget.ts) a
         // suite running on a machine that is genuinely full refuses turns these tests are asserting the shape of.
-        memoryHeadroom: ROOMY_MEMORY,
-        memoryWarnings: createMemoryWarnings(),
+        resources: budgetOn(),
         // No chain declared, so converged from birth; the gate itself is covered below with a declared chain.
         boot: createBootTracker(createLogger(testConfig)),
         // Real tracker: in-memory, unref'd summary timer, and request middleware records through it on every route.

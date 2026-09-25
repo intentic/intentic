@@ -6,8 +6,8 @@ import type { ConversationActors } from "../agents/actor/conversation-actors.js"
 import { parkedCards } from "../agents/actor/parked-cards.js";
 import { createDomainEvents } from "../seams/domain-events.js";
 import { memoryFleet } from "../testing.js";
-import { ROOMY_MEMORY } from "../agent/run/turn/turn-plan.testing.js";
-import { createMemoryWarnings, type MemoryHeadroom, type MemoryWarnings } from "../platform/resources/memory-admission.js";
+import type { MemoryReading } from "@intentic/constants/memory-room";
+import { budgetOn, ROOMY_READING } from "../agent/run/turn/turn-plan.testing.js";
 
 // The daemon as a child spawn sees it (agent/subagents/children.ts): the settings it budgets by, the transcript a child
 // turn appends to, the fleet it may be placed onto, and the actors its records, cards and runs are held by. Anything
@@ -21,23 +21,19 @@ export interface FakeRunner {
     readonly inFlight?: number;
 }
 
-// The daemon's own warnings, polled every few milliseconds so a child's wait for room costs a suite no real seconds.
-const quickRoom = (warnings: MemoryWarnings): MemoryWarnings => ({
-    ...warnings,
-    waitForRoom: (conversationId, options) => warnings.waitForRoom(conversationId, { ...options, intervalMs: 5 }),
-});
-
 // `conversations` are the actors the spawn's records, cards and runs are held by; a fresh fleet's unless the suite reads
-// them itself. `memory` is the box a child waits on for room, roomy unless the suite makes it short.
+// them itself. `memory` is the box a child waits on for room, roomy unless the suite makes it short; read afresh on every
+// look, so a suite frees memory by changing what it returns.
 export const spawnServices = (
     over: Partial<SandboxSettings> = {},
     fleet: readonly FakeRunner[] = [],
     conversations: ConversationActors = memoryFleet().conversations,
-    memory: () => Promise<MemoryHeadroom> = ROOMY_MEMORY,
+    memory: () => MemoryReading = () => ROOMY_READING,
 ): Services =>
     unstubbed<Services>("services", {
-        memoryHeadroom: memory,
-        memoryWarnings: quickRoom(createMemoryWarnings()),
+        resources: budgetOn(memory, { waitDeadlineMs: 10_000 }),
+        // No conversation here was placed on a runner before, so a follow-up runs where a first turn would.
+        agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
             get: async () => ({ ...SandboxSettingsSchema.parse({}), ...over }),
         }),

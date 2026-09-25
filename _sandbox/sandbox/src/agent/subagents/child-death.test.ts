@@ -1,16 +1,7 @@
-import type { MemoryHeadroom } from "../../platform/resources/memory-admission.js";
-import { killCauseOf, runtimeKilled } from "./child-death.js";
+import { type DeathWitness, killCauseOf, runtimeKilled } from "./child-death.js";
 
-const GIB = 1024 ** 3;
-
-const reading = (freeGib: number, oomKills: number | undefined): MemoryHeadroom => ({
-    limitBytes: 16 * GIB,
-    usedBytes: (16 - freeGib) * GIB,
-    swapBytes: 0,
-    freeBytes: freeGib * GIB,
-    stalledPercent: 0,
-    oomKills,
-});
+// What the budget saw: the OOM count now, and whether a reading in the last few minutes was short.
+const witness = (shortRecently: boolean, oomKills: number | undefined): DeathWitness => ({ oomKills, shortRecently });
 
 test("the SDK's sentences for a runtime killed by signal read as a kill, with its stderr tail after them", () => {
     expect(runtimeKilled("Claude Code process exited with code 137")).toBe(true);
@@ -27,17 +18,18 @@ test("a runtime that exited on its own, or a provider's refusal, is the child's 
 });
 
 test("the OOM killer moving during the turn names memory, even once the box has room again", () => {
-    expect(killCauseOf(reading(8, 4), 3)).toBe("memory");
+    expect(killCauseOf(witness(false, 4), 3)).toBe("memory");
 });
 
-// earlyoom and the host's own killer act from userspace, so the counter never moves: the box being short is the evidence.
-test("a box short now names memory with the counter still", () => {
-    expect(killCauseOf(reading(1, 3), 3)).toBe("memory");
-    expect(killCauseOf(reading(1, undefined), undefined)).toBe("memory");
+// earlyoom and the host's own killer act from userspace, so the counter never moves: the box having been short is the
+// evidence, read off the budget's own recent readings rather than a verdict taken after the death.
+test("a box the sampler saw short names memory with the counter still", () => {
+    expect(killCauseOf(witness(true, 3), 3)).toBe("memory");
+    expect(killCauseOf(witness(true, undefined), undefined)).toBe("memory");
 });
 
 test("a steady counter on a box with room names something outside the turn", () => {
-    expect(killCauseOf(reading(8, 3), 3)).toBe("outside");
+    expect(killCauseOf(witness(false, 3), 3)).toBe("outside");
     // No count at the start (no cgroup then) cannot prove the killer moved.
-    expect(killCauseOf(reading(8, 9), undefined)).toBe("outside");
+    expect(killCauseOf(witness(false, 9), undefined)).toBe("outside");
 });

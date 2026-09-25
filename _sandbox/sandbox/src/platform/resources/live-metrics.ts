@@ -4,7 +4,8 @@ import { performance } from "node:perf_hooks";
 import type { DaemonUsage, ProcessGroupMetrics, ProcessRole, SandboxMetrics, SandboxUsage, SessionMetrics } from "@intentic/sandbox-contract";
 import { DAEMON_OWNER, ONE_SHOT_OWNER } from "../../seams/workload-stamp.js";
 import { type CgroupReading, readCgroup, readText } from "./cgroup.js";
-import { createProcessScanner, listPids, type ProcSource, type ProcUnits, procUnits } from "./process-scan.js";
+import { createProcessScanner, listPids, type ProcSource, type ProcUnits, procUnits, scanProcesses } from "./process-scan.js";
+import type { BudgetSnapshot, ResourceBudget } from "../../workload/resource-budget.js";
 
 // GET /system/metrics: CPU and memory per conversation, per kind of process, and for the sandbox. Runs only inside a
 // request and holds no timer; between requests it keeps the counters the next CPU figure is measured from, and what
@@ -149,6 +150,8 @@ export const sessionsOf = (
 
 export interface SandboxUsageInput {
     readonly cgroup: CgroupReading;
+    // The budget's snapshot: memory is shown exactly as the gate counts it.
+    readonly room: BudgetSnapshot;
     readonly machine: MachineReading;
     readonly disk: DiskReading | undefined;
     readonly processes: number;
@@ -156,16 +159,26 @@ export interface SandboxUsageInput {
     readonly coresUsed: number | undefined;
 }
 
-// Capacity is the quota where there is one, and never more than the cores the sandbox can be given.
-export const sandboxUsageOf = ({ cgroup, machine, disk, processes, coresUsed }: SandboxUsageInput): SandboxUsage => {
+// Capacity is the quota where there is one, and never more than the cores the sandbox can be given. Memory is the
+// budget's own figures (resource-budget.ts), so the gauge and the gate that holds a turn never disagree; the machine's
+// stand in only where the budget can measure nothing.
+export const sandboxUsageOf = ({ cgroup, room, machine, disk, processes, coresUsed }: SandboxUsageInput): SandboxUsage => {
     const cores = Math.min(cgroup.cpuQuotaCores ?? Number.POSITIVE_INFINITY, machine.cores);
     const { cpu, memory, io } = cgroup.pressure;
+    const { reading } = room;
     return {
         ...(coresUsed === undefined ? {} : { cpuPercent: roundTenth((coresUsed / cores) * 100) }),
         cores,
-        memoryBytes: cgroup.workingSetBytes ?? Math.max(0, machine.totalMemoryBytes - machine.freeMemoryBytes),
-        memoryLimitBytes: Math.min(cgroup.memoryLimitBytes ?? Number.POSITIVE_INFINITY, machine.totalMemoryBytes),
-        ...(cgroup.swapBytes === undefined ? {} : { swapBytes: cgroup.swapBytes }),
+        memoryBytes: reading.usedBytes ?? Math.max(0, machine.totalMemoryBytes - machine.freeMemoryBytes),
+        memoryLimitBytes: reading.limitBytes ?? machine.totalMemoryBytes,
+        ...(reading.usedBytes === undefined ? {} : { swapBytes: reading.swapBytes }),
+        memoryRoom: {
+            ...(room.freeBytes === undefined ? {} : { freeBytes: room.freeBytes }),
+            reservedBytes: room.reservedBytes,
+            personNeedBytes: room.personNeedBytes,
+            stallPercent: reading.stallPercent,
+            stallLimitPercent: room.stallLimitPercent,
+        },
         ...(disk === undefined ? {} : { diskBytes: disk.usedBytes, diskTotalBytes: disk.totalBytes }),
         loadAverage: [...machine.loadAverage],
         processes,
@@ -212,21 +225,30 @@ export interface LiveMetrics {
 
 export const createLiveMetrics = ({
     workspaceRoot,
-    source = procSource(),
+    budget,
+    source,
 }: {
     readonly workspaceRoot: string;
+    readonly budget: Pick<ResourceBudget, "snapshot">;
+    // A fake procfs for a test; production shares the daemon's one scanner (process-scan.ts).
     readonly source?: LiveMetricsSource;
 }): LiveMetrics => {
-    const scan = createProcessScanner(source);
+    const scan = source === undefined ? scanProcesses : createProcessScanner(source);
+    const sourceOf = source ?? procSource();
     let baseline: Baseline | undefined;
     let last: SandboxMetrics | undefined;
     let inFlight: Promise<SandboxMetrics> | undefined;
 
     const sample = async (): Promise<SandboxMetrics> => {
-        const units = await source.units();
-        const at = source.now();
-        const daemon = source.daemon();
-        const [scanned, cgroup, disk] = await Promise.all([scan(daemon.pid), readCgroup(source.readText), source.disk(workspaceRoot)]);
+        const units = await sourceOf.units();
+        const at = sourceOf.now();
+        const daemon = sourceOf.daemon();
+        const [scanned, cgroup, room, disk] = await Promise.all([
+            scan(daemon.pid),
+            readCgroup(sourceOf.readText),
+            budget.snapshot(),
+            sourceOf.disk(workspaceRoot),
+        ]);
         const samples = scanned.map((entry) => ({
             owner: entry.owner,
             role: entry.role,
@@ -249,7 +271,8 @@ export const createLiveMetrics = ({
             ...(windowMs === undefined ? {} : { windowMs }),
             sandbox: sandboxUsageOf({
                 cgroup,
-                machine: source.machine(),
+                room,
+                machine: sourceOf.machine(),
                 disk,
                 // The daemon is running too, and is the one process the scan leaves out.
                 processes: samples.length + 1,
@@ -266,7 +289,7 @@ export const createLiveMetrics = ({
             if (inFlight !== undefined) {
                 return inFlight;
             }
-            if (last !== undefined && source.now() - last.at < REUSE_MS) {
+            if (last !== undefined && sourceOf.now() - last.at < REUSE_MS) {
                 return Promise.resolve(last);
             }
             inFlight = sample()

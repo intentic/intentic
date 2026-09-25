@@ -162,7 +162,7 @@ fi
 
 # memory.high, the kernel's own brake, set below the hard cap so reclaim starts BEFORE the cliff rather than at it.
 # `memory.max` is a wall: cross it and something is killed. `memory.high` is throttle-and-reclaim, which spends time
-# instead of a process, and it raises PSI early enough that the memory gate (src/platform/resources/memory-gate.ts)
+# instead of a process, and it raises PSI early enough that the resource budget (src/workload/resource-budget.ts)
 # can see a tight box while it is still only tight. Docker has no flag for this — `--memory-reservation` is
 # memory.low, protection rather than a brake — so it is set here, from inside, where cgroup2 is delegated rw.
 #

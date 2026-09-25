@@ -1,5 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { DAEMON_OWNER, ONE_SHOT_OWNER, WORKLOAD_ENV } from "../../seams/workload-stamp.js";
+import { createResourceBudget, readMemoryReading, type ResourceBudget } from "../../workload/resource-budget.js";
 import { readCgroup } from "./cgroup.js";
 import {
     createLiveMetrics,
@@ -47,6 +48,11 @@ interface FakeHost {
 }
 
 const machine: MachineReading = { cores: 8, totalMemoryBytes: 32 * 2 ** 30, freeMemoryBytes: 20 * 2 ** 30, loadAverage: [1.5, 1.25, 1] };
+
+// The daemon's budget over the host's files, on its clock; read past the source, so a test counting what the scan read
+// counts the scan alone.
+const budgetOf = (host: FakeHost): ResourceBudget =>
+    createResourceBudget({ read: () => readMemoryReading(async (path) => host.files.get(path)), now: () => host.clock, sampleMs: 0 });
 
 const fakeHost = (processes: Record<number, FakeProcess>, files: Record<string, string> = {}): FakeHost => {
     const host: FakeHost = {
@@ -177,15 +183,27 @@ describe("the sandbox and the daemon", () => {
         "/sys/fs/cgroup/io.pressure": "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n",
     };
     const cgroupOf = (texts: Record<string, string>) => readCgroup(async (path) => texts[path]);
+    // The daemon's budget over the same files, as the gate reads them.
+    const budgetOver = (texts: Record<string, string>): ResourceBudget =>
+        createResourceBudget({ read: () => readMemoryReading(async (path) => texts[path]), sampleMs: 0 });
+    const usageOf = async (texts: Record<string, string>, rest: { readonly disk?: { usedBytes: number; totalBytes: number }; readonly processes: number; readonly coresUsed?: number }) =>
+        sandboxUsageOf({
+            cgroup: await cgroupOf(texts),
+            room: await budgetOver(texts).snapshot(),
+            machine,
+            disk: rest.disk,
+            processes: rest.processes,
+            coresUsed: rest.coresUsed,
+        });
 
-    test("memory is the working set against the container's limit, and CPU is against its quota", async () => {
-        const cgroup = await cgroupOf(files);
-        expect(sandboxUsageOf({ cgroup, machine, disk: { usedBytes: 5, totalBytes: 9 }, processes: 42, coresUsed: 0.5 })).toEqual({
+    test("memory is the budget's working set and swap against its limit, and CPU is against the quota", async () => {
+        expect(await usageOf(files, { disk: { usedBytes: 5, totalBytes: 9 }, processes: 42, coresUsed: 0.5 })).toEqual({
             cpuPercent: 25,
             cores: 2,
-            memoryBytes: 7 * 2 ** 30,
+            memoryBytes: 8 * 2 ** 30,
             memoryLimitBytes: 16 * 2 ** 30,
             swapBytes: 2 ** 30,
+            memoryRoom: { freeBytes: 8 * 2 ** 30, reservedBytes: 0, personNeedBytes: 2 ** 30, stallPercent: 3, stallLimitPercent: 20 },
             diskBytes: 5,
             diskTotalBytes: 9,
             loadAverage: [1.5, 1.25, 1],
@@ -195,19 +213,34 @@ describe("the sandbox and the daemon", () => {
     });
 
     test("without a cgroup it reads the machine, and says nothing it cannot see", async () => {
-        const none = await cgroupOf({ "/sys/fs/cgroup/memory.max": "max\n" });
-        expect(sandboxUsageOf({ cgroup: none, machine, disk: undefined, processes: 3, coresUsed: undefined })).toEqual({
+        expect(await usageOf({ "/sys/fs/cgroup/memory.max": "max\n" }, { processes: 3 })).toEqual({
             cores: 8,
             memoryBytes: 12 * 2 ** 30,
             memoryLimitBytes: 32 * 2 ** 30,
+            memoryRoom: { reservedBytes: 0, personNeedBytes: 2 ** 30, stallPercent: 0, stallLimitPercent: 20 },
             loadAverage: [1.5, 1.25, 1],
             processes: 3,
         });
     });
 
-    test("a limit above the machine's memory is the machine's memory", async () => {
-        const loose = await cgroupOf({ ...files, "/sys/fs/cgroup/memory.max": `${64 * 2 ** 30}\n` });
-        expect(sandboxUsageOf({ cgroup: loose, machine, disk: undefined, processes: 1, coresUsed: undefined }).memoryLimitBytes).toBe(32 * 2 ** 30);
+    test("memory.high, where the kernel starts throttling, is the limit the gauge shows", async () => {
+        const throttled = { ...files, "/sys/fs/cgroup/memory.high": `${14 * 2 ** 30}\n` };
+        expect((await usageOf(throttled, { processes: 1 })).memoryLimitBytes).toBe(14 * 2 ** 30);
+    });
+
+    // The promise the gauge makes: when it turns amber, a person's turn is held, and when it does not, it is not.
+    test("the gauge and the gate read one snapshot: the same limit, used, free and stall, and the same verdict", async () => {
+        for (const current of [10, 17.5]) {
+            const texts = { ...files, "/sys/fs/cgroup/memory.current": `${current * 2 ** 30}\n` };
+            const budget = budgetOver(texts);
+            const shown = sandboxUsageOf({ cgroup: await cgroupOf(texts), room: await budget.snapshot(), machine, disk: undefined, processes: 1, coresUsed: undefined });
+            const { reading } = await budget.snapshot();
+            expect([shown.memoryBytes, shown.memoryLimitBytes, shown.memoryRoom?.stallPercent]).toEqual([reading.usedBytes, reading.limitBytes, reading.stallPercent]);
+            const room = shown.memoryRoom;
+            const warns = room !== undefined && ((room.freeBytes ?? Number.POSITIVE_INFINITY) < room.personNeedBytes || room.stallPercent >= room.stallLimitPercent);
+            const verdict = (await budget.admit({ workload: "agentRuntime", attended: true, actor: "ada" })).verdict;
+            expect({ current, warns, verdict }).toEqual({ current, warns: current === 17.5, verdict: current === 17.5 ? "refuse" : "run" });
+        }
     });
 
     test("the daemon's CPU is of one core and its loop figure is the busy share of loop time", () => {
@@ -232,7 +265,7 @@ describe("a reading", () => {
 
     test("the first one has memory and no CPU: there is nothing earlier to measure from", async () => {
         const host = stamped();
-        const metrics = await createLiveMetrics({ workspaceRoot: WORKSPACE_ROOT, source: host.source }).read();
+        const metrics = await createLiveMetrics({ workspaceRoot: WORKSPACE_ROOT, budget: budgetOf(host), source: host.source }).read();
         expect(metrics.windowMs).toBeUndefined();
         expect(metrics.sandbox.cpuPercent).toBeUndefined();
         expect(metrics.daemon).toEqual({ rssBytes: 300 * 2 ** 20, heapUsedBytes: 120 * 2 ** 20 });
@@ -249,7 +282,7 @@ describe("a reading", () => {
 
     test("the next one measures CPU since the first, a command that finished and was reaped included", async () => {
         const host = stamped();
-        const live = createLiveMetrics({ workspaceRoot: WORKSPACE_ROOT, source: host.source });
+        const live = createLiveMetrics({ workspaceRoot: WORKSPACE_ROOT, budget: budgetOf(host), source: host.source });
         await live.read();
 
         host.clock += 2_000;
@@ -269,7 +302,7 @@ describe("a reading", () => {
 
     test("a process is identified once in its life, and again only when its pid now names someone else", async () => {
         const host = stamped();
-        const live = createLiveMetrics({ workspaceRoot: WORKSPACE_ROOT, source: host.source });
+        const live = createLiveMetrics({ workspaceRoot: WORKSPACE_ROOT, budget: budgetOf(host), source: host.source });
         await live.read();
         host.clock += 2_000;
         await live.read();
@@ -285,7 +318,7 @@ describe("a reading", () => {
 
     test("boards asking together cost one scan, and one asking again within a second is answered from it", async () => {
         const host = stamped();
-        const live = createLiveMetrics({ workspaceRoot: WORKSPACE_ROOT, source: host.source });
+        const live = createLiveMetrics({ workspaceRoot: WORKSPACE_ROOT, budget: budgetOf(host), source: host.source });
         const [first, second] = await Promise.all([live.read(), live.read()]);
         expect(second).toBe(first);
         host.clock += 500;
@@ -299,7 +332,7 @@ describe("a reading", () => {
 
     test("after a quiet spell the reading carries no CPU rather than an average over it", async () => {
         const host = stamped();
-        const live = createLiveMetrics({ workspaceRoot: WORKSPACE_ROOT, source: host.source });
+        const live = createLiveMetrics({ workspaceRoot: WORKSPACE_ROOT, budget: budgetOf(host), source: host.source });
         await live.read();
         host.clock += 60_000;
         const late = await live.read();
@@ -316,6 +349,7 @@ describe("a reading", () => {
         const listed = host.source.listPids;
         const live = createLiveMetrics({
             workspaceRoot: WORKSPACE_ROOT,
+            budget: budgetOf(host),
             source: { ...host.source, listPids: async () => [...(await listed()), 4_242] },
         });
         expect((await live.read()).sandbox.processes).toBe(5);

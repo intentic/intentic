@@ -1,4 +1,6 @@
 import { errorMessage } from "@intentic/base/errors";
+import type { WorkPlace } from "../../workload/resource-budget.js";
+import { worktreeOf } from "../../agents/registry/agents-store.js";
 import type { AgentEvent, AgentHarness, AgentProvider, AskQuestion, TurnProfile } from "@intentic/sandbox-contract";
 import { capabilitiesOf, newConversationId, PROVIDERS } from "@intentic/sandbox-contract";
 import type { Holding } from "../../agents/actor/conversation-holdings.js";
@@ -164,12 +166,9 @@ export const pendingQuestionOf = (actors: Actors, childId: string): PendingChild
     return pending?.kind === "question" ? pending : undefined;
 };
 
-// How long a child waits for memory before starting anyway, to meet the door's own answer.
-const ROOM_DEADLINE_MS = 10 * 60_000;
-
 /** Why a child's runtime was killed under it, as the ending its parent reads; undefined for a failure of its own. */
 export const childKillNote = async (
-    services: Pick<Services, "conversations" | "memoryHeadroom">,
+    services: Pick<Services, "conversations" | "resources">,
     childId: string,
     failure: string,
 ): Promise<string | undefined> => {
@@ -177,12 +176,21 @@ export const childKillNote = async (
         return undefined;
     }
     const before = services.conversations.holdings(CHILDREN).get(childId)?.oomKillsAtStart;
-    return killNote(killCauseOf(await services.memoryHeadroom(), before), failure);
+    // Read now, not reused: the count has to be the one after the death.
+    const shortRecently = await services.resources.shortRecently();
+    const snapshot = await services.resources.snapshot();
+    return killNote(killCauseOf({ oomKills: snapshot.reading.oomKills, shortRecently }, before), failure);
 };
 
 // Pumps one child turn onto the roster once the box has room for it; shared by spawn and follow-up send. Detached: the
 // caller returns with the child queued, and every ending, a refusal included, settles the record and frees its seat.
-const runChildTurn = (services: Services, childId: string, parent: string, turn: TurnInput & { conversationId: string }): void => {
+const runChildTurn = (
+    services: Services,
+    childId: string,
+    parent: string,
+    turn: TurnInput & { conversationId: string },
+    where: WorkPlace,
+): void => {
     void (async () => {
         const kid = services.conversations.holdings(CHILDREN).get(childId);
         let bubble = "";
@@ -194,18 +202,29 @@ const runChildTurn = (services: Services, childId: string, parent: string, turn:
             if (kid !== undefined) {
                 kid.queued = true;
             }
-            const room = await services.memoryWarnings.waitForRoom(childId, {
-                read: services.memoryHeadroom,
-                deadlineMs: ROOM_DEADLINE_MS,
-                onShort: (diagnosis) =>
-                    noteSpawnedChild(services.conversations, childId, { status: "pending", summary: `Waiting for memory: ${diagnosis}.` }),
+            // Admitted here, where the wait can be shown on the child's row, and kept for the door, which takes this
+            // admission instead of judging the same turn a second time. A child placed on a runner holds nothing here.
+            const room = await services.resources.admit({
+                workload: "agentRuntime",
+                attended: false,
+                owner: childId,
+                where,
+                forTurn: true,
+                wait: {
+                    onShort: (diagnosis) =>
+                        noteSpawnedChild(services.conversations, childId, { status: "pending", summary: `Waiting for memory: ${diagnosis}.` }),
+                },
             });
+            if (room.verdict !== "run") {
+                failure = room.message;
+                return;
+            }
             if (room.waitedMs > 0) {
                 noteSpawnedChild(services.conversations, childId, { status: "running", summary: "" });
             }
             if (kid !== undefined) {
                 kid.queued = false;
-                kid.oomKillsAtStart = (await services.memoryHeadroom()).oomKills;
+                kid.oomKillsAtStart = (await services.resources.snapshot(0)).reading.oomKills;
             }
             // The parent's agent asked for it, never a person.
             const run = services.turns.run({ ...turn, byPerson: false });
@@ -536,7 +555,7 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
             spawnDepth: depth,
             ...(spec.model !== undefined ? { model: spec.model } : {}),
         });
-        runChildTurn(services, id, parent.conversationId, turn);
+        runChildTurn(services, id, parent.conversationId, turn, placement === undefined ? "local" : { runner: placement });
         handedOff = true;
         return { ok: true, id };
     } finally {
@@ -605,7 +624,9 @@ export const sendToChild = async (services: Services, parent: ChildParent, child
         });
         kid.running = true;
         kid.startedAt = Date.now();
-        runChildTurn(services, childId, parent.conversationId, turn);
+        // A follow-up runs where the conversation already runs: the registry's runner, else here.
+        const runner = worktreeOf(services.agents.entry(childId))?.runner;
+        runChildTurn(services, childId, parent.conversationId, turn, runner === undefined ? "local" : { runner });
         handedOff = true;
         return { ok: true, note: "Sent: the child runs a follow-up turn, once there is memory for it. Supervise it with wait." };
     } finally {

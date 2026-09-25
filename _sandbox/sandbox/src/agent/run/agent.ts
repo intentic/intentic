@@ -11,7 +11,7 @@ import type {
     SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
 import { refreshClaudeSdk, sdk } from "../../engines/claude-sdk.js";
-import { spawnAs } from "../../platform/resources/workload-class.js";
+import { spawnAs } from "../../workload/workload-class.js";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import {

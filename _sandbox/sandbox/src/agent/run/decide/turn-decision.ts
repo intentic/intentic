@@ -161,8 +161,7 @@ const personaWarnings = (persona: TurnPersona, input: AgentTurn): TurnWarning[] 
 export const decideTurn = (facts: TurnFacts, input: AgentTurn, context: TurnContext): TurnDecision | DecidedRefusal => {
     if ("held" in facts) {
         // Spread whole: the reading rides through to the composer's notice, which can only size a raise it was told.
-        const { admit: _held, ...refusal } = facts.held;
-        return { ok: false, code: "sandbox-memory-low", ...refusal, warnings: [], spawn: false };
+        return { ok: false, code: "sandbox-memory-low", ...facts.held, warnings: [], spawn: false };
     }
     const runtime = turnRuntime(input, facts.entry);
     const { capabilities } = runtime;

@@ -1,5 +1,5 @@
 import type { ChildProcess } from "node:child_process";
-import { spawnAs } from "../platform/resources/workload-class.js";
+import { spawnAs } from "../workload/workload-class.js";
 import { closeSync, mkdirSync, openSync, renameSync, statSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";

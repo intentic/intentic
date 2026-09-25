@@ -3,11 +3,10 @@ import { repoRoot } from "@intentic/constants/node";
 import { type CredentialGate, type Persona, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
-import { createMemoryWarnings, type MemoryHeadroom } from "../../../platform/resources/memory-admission.js";
 import { createCredentialGrants } from "../../../secrets/credential-grants.js";
 import { conversationAfter, testConfig } from "../../../testing.js";
 import type { TurnContext } from "../../providers/adapter.js";
-import { base, context, servicesWith, turn } from "../turn/turn-plan.testing.js";
+import { base, budgetOn, context, memoryReading, servicesWith, turn } from "../turn/turn-plan.testing.js";
 import { LANDING_CHECKS_NOTE_TITLE } from "../../../workspace/deps/mainline-note.js";
 import { type AdmittedTurnFacts, gatherTurnFacts, type TurnFacts } from "./turn-facts.js";
 
@@ -30,13 +29,12 @@ const GIB = 1024 ** 3;
 
 // Every seam but the memory gate's is left to name itself, so a read past the hold fails by that seam's name.
 test("a held turn reads nothing past the memory gate", async () => {
-    const short: MemoryHeadroom = { limitBytes: 16 * GIB, usedBytes: 15 * GIB, swapBytes: 0, freeBytes: GIB, stalledPercent: 0, oomKills: undefined };
-    const services = unstubbed<Services>("services", { memoryHeadroom: async () => short, memoryWarnings: createMemoryWarnings() });
+    const services = unstubbed<Services>("services", { resources: budgetOn(memoryReading(16, 15), { waitDeadlineMs: 20 }) });
 
     expect(await gatherTurnFacts(services, turn({ unattended: true }), context)).toEqual({
         held: {
-            admit: false,
-            message: "Sandbox memory is low: 15.0 GiB of 16.0 GiB used. This background turn did not start: turns people send get the room first.",
+            message:
+                "Sandbox memory is low: 15.0 GiB of 16.0 GiB used. This background work waited 1 minute for room and did not start: work people send gets the room first.",
             memory: { limitBytes: 16 * GIB, residentBytes: 15 * GIB, swapBytes: 0 },
         },
     });

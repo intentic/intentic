@@ -8,7 +8,7 @@ import { gitRunCounts, gitSpawnStats } from "@intentic/scaffold";
 import type { Logger } from "pino";
 import { logsRoot } from "../../logs/log-files.js";
 import { flatKeyed, readCgroup, readText } from "./cgroup.js";
-import { createProcessScanner, type ScannedProcess } from "./process-scan.js";
+import { scanProcesses, type ScannedProcess } from "./process-scan.js";
 import { queueSnapshot } from "./queue-slots.js";
 
 // Durable, one-line-per-minute account of the sandbox's resources: what was growing before an event-loop stall,
@@ -199,7 +199,10 @@ export interface ResourceSampler {
     readonly stop: () => void;
 }
 
-const createResourceSampler = (owners: () => Readonly<Record<string, unknown>> = () => ({})): ResourceSampler => {
+const createResourceSampler = (
+    owners: () => Readonly<Record<string, unknown>> = () => ({}),
+    room: () => Promise<unknown> = async () => undefined,
+): ResourceSampler => {
     const loopDelay = monitorEventLoopDelay({ resolution: 20 });
     loopDelay.enable();
     let gcCount = 0;
@@ -219,7 +222,6 @@ const createResourceSampler = (owners: () => Readonly<Record<string, unknown>> =
     let lastElu = performance.eventLoopUtilization();
     let lastAt = performance.now();
     let previousProcessCpu: ReadonlyMap<number, number> = new Map();
-    const scanProcesses = createProcessScanner();
 
     const sample = async (): Promise<ResourceSnapshot> => {
         const now = performance.now();
@@ -261,12 +263,13 @@ const createResourceSampler = (owners: () => Readonly<Record<string, unknown>> =
             .then((entries) => entries.length)
             .catch(() => undefined);
         const processesPromise = scanProcesses(process.pid).then((scanned) => processSnapshot(scanned, previousProcessCpu));
-        const [selfStatus, openFds, processes, system, queue] = await Promise.all([
+        const [selfStatus, openFds, processes, system, queue, roomNow] = await Promise.all([
             selfStatusPromise,
             openFdsPromise,
             processesPromise,
             systemSnapshot(),
             queueSnapshot(),
+            room(),
         ]);
         previousProcessCpu = processes.cpuByPid;
         const heap = getHeapStatistics();
@@ -327,7 +330,9 @@ const createResourceSampler = (owners: () => Readonly<Record<string, unknown>> =
                 // Cumulative since boot, by subcommand; a rate is the difference between two samples.
                 gitRuns: gitRunCounts(),
             },
-            system,
+            // The resource budget's own snapshot beside the raw figures: the limit, used, free and stall every admission
+            // was judged by, so the log reads what the gate saw.
+            system: { ...(system as Record<string, unknown>), room: roomNow },
             processes: { total: processes.total, descendants: processes.descendants, byRole: processes.byRole, top: processes.top },
             queue,
             owners: owners(),
@@ -353,6 +358,8 @@ export interface ResourceMetricsOptions {
     readonly historyRoot: string;
     readonly logger: Pick<Logger, "warn" | "error">;
     readonly owners?: () => Readonly<Record<string, unknown>>;
+    // The resource budget's snapshot (workload/resource-budget.ts), logged as `system.room`.
+    readonly room?: () => Promise<unknown>;
     readonly intervalMs?: number;
     readonly sampler?: ResourceSampler;
 }
@@ -428,13 +435,14 @@ export const startResourceMetrics = ({
     historyRoot,
     logger,
     owners = () => ({}),
+    room,
     intervalMs = SAMPLE_INTERVAL_MS,
     sampler: suppliedSampler,
 }: ResourceMetricsOptions): ResourceMetrics => {
     if (historyRoot === "") {
         return { sample: async () => {}, stop: () => suppliedSampler?.stop() };
     }
-    const sampler = suppliedSampler ?? createResourceSampler(owners);
+    const sampler = suppliedSampler ?? createResourceSampler(owners, room);
     let inFlight: Promise<void> | undefined;
     let persistenceFailed = false;
     // Previous sample for the OOM diff, held in memory: a restart has nothing to compare against, on purpose.

@@ -349,6 +349,7 @@ export const createLandCheck = (deps: LandCheckDeps): LandCheck => {
                 command: `mkdir -p ${paths.dir} && rm -f ${paths.status} ${paths.report} ${paths.verdict} ${paths.started} && { ${exported.join("; ")}; ${wrapped}; } 2>&1 | tee ${paths.log}; echo $pipestatus[1] > ${paths.status}${runner === undefined ? "" : verdictMerge(paths.verdict)}`,
                 cwd: join(deps.workspace.root, dir),
                 oneShot: true,
+                workload: "toolchain",
             });
             return await watchRun(deps, paths.key, paths.started, ceilingMs);
         } finally {

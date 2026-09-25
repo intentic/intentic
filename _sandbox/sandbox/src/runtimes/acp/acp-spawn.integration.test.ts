@@ -2,7 +2,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { classifyProcess } from "../../platform/resources/process-scan.js";
-import { OOM_SCORE } from "../../platform/resources/workload-class.js";
+import { OOM_SCORE } from "../../workload/workload-class.js";
 import { type AcpProcess, spawnAcpProcess } from "./acp-spawn.js";
 
 /* An ACP agent is configured as a free-form command, and `npx some-acp-agent` is the usual one. The display's regex reads

@@ -14,8 +14,7 @@ import type { AgentRequest } from "../../providers/agent-request.js";
 import { composeWirePrompt } from "../../prompt/turn-preamble.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import { planTurn } from "./turn-plan.js";
-import { base, codexServices, context, harnessServices, ROOMY_MEMORY, servicesWith, turn, wire } from "./turn-plan.testing.js";
-import { createMemoryWarnings } from "../../../platform/resources/memory-admission.js";
+import { base, budgetOn, codexServices, context, harnessServices, servicesWith, turn, wire } from "./turn-plan.testing.js";
 import { RUNTIME_ADAPTERS } from "../../../runtimes/runtime-table.js";
 import { parkedCards } from "../../../agents/actor/parked-cards.js";
 
@@ -65,8 +64,7 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
         tools: [],
         // The real table: which arm a (provider, harness) pair reaches is part of what a plan is.
         adapters: RUNTIME_ADAPTERS,
-        memoryHeadroom: ROOMY_MEMORY,
-        memoryWarnings: createMemoryWarnings(),
+        resources: budgetOn(),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         processes: unstubbed<Services["processes"]>("processes", { running: () => false }),
         dependencies: unstubbed<Services["dependencies"]>("dependencies", {

@@ -12,8 +12,7 @@ import { LANDING_CHECKS_NOTE_TITLE, landingChecksNote } from "../../workspace/de
 import type { AgentRequest } from "../providers/agent-request.js";
 import type { TurnContext } from "../providers/adapter.js";
 import { planTurn } from "../run/turn/turn-plan.js";
-import { ROOMY_MEMORY } from "../run/turn/turn-plan.testing.js";
-import { createMemoryWarnings } from "../../platform/resources/memory-admission.js";
+import { budgetOn } from "../run/turn/turn-plan.testing.js";
 import { composeWirePrompt, preambleNotes, stripTurnPreamble } from "./turn-preamble.js";
 import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";
 import { RUNTIME_ADAPTERS } from "../../runtimes/runtime-table.js";
@@ -66,8 +65,7 @@ const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, ov
         tools: [],
         // The real table: which arm a (provider, harness) pair reaches is part of what a plan is.
         adapters: RUNTIME_ADAPTERS,
-        memoryHeadroom: ROOMY_MEMORY,
-        memoryWarnings: createMemoryWarnings(),
+        resources: budgetOn(),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         processes: unstubbed<Services["processes"]>("processes", { running: () => false }),
         dependencies: unstubbed<Services["dependencies"]>("dependencies", {

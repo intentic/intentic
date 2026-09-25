@@ -1,8 +1,8 @@
-import type { ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { getPriority } from "node:os";
-import { OOM_SCORE, spawnAs } from "./workload-class.js";
+import { type ChildProcess, spawn } from "node:child_process";
+import { applyToStampedChild, OOM_SCORE, SPAWN_STAMP_ENV, spawnAs } from "./workload-class.js";
 
 /* The half the unit tests cannot reach: real children of this process, classed through procfs. A score that parses and
    never lands on a process looks exactly like one that did, so only the kernel's own file proves it. */
@@ -75,5 +75,15 @@ describeLinux("spawnAs puts a child in its class as it starts", () => {
         // choom execs sleep in place, so the pid is the sleeper's; a lower score written over it would read the class's.
         const ranked = kept(spawnAs({ class: "agentRuntime", spawnDepth: 0 }, "choom", ["-n", String(high), "--", "sleep", "33"], { stdio: "ignore" }));
         expect(await settledScore(ranked.pid ?? 0, high)).toBe(high);
+    });
+
+    // A library that spawns with no hook (the OpenCode SDK) hands back no pid; the stamp set across its spawn finds it.
+    test("a child a library spawned is found by the stamp set across the spawn, and classed", async () => {
+        const plain = kept(spawn("sleep", ["34"], { stdio: "ignore" }));
+        const stamped = kept(spawn("sleep", ["34"], { stdio: "ignore", env: { ...process.env, [SPAWN_STAMP_ENV]: "stamp-1" } }));
+        expect(applyToStampedChild("stamp-1", { class: "toolchain" })).toBe(stamped.pid);
+        expect(await scoreOf(stamped.pid ?? 0)).toBe(OOM_SCORE.heavy);
+        expect(await scoreOf(plain.pid ?? 0)).toBe(INHERITED);
+        expect(applyToStampedChild("no-such-stamp", { class: "toolchain" })).toBeUndefined();
     });
 });

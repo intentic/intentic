@@ -1,3 +1,4 @@
+import { createResourceBudget } from "../../workload/resource-budget.js";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { tmpdir } from "node:os";
@@ -15,7 +16,7 @@ test.skipIf(process.platform !== "linux")("a process stamped with a conversation
     });
     try {
         await once(child, "spawn");
-        const live = createLiveMetrics({ workspaceRoot: tmpdir() });
+        const live = createLiveMetrics({ workspaceRoot: tmpdir(), budget: createResourceBudget({ sampleMs: 0 }) });
         const first = await live.read();
         expect(first.sessions[owner]?.processes).toBe(1);
         expect(first.sessions[owner]?.cpuPercent).toBeUndefined();

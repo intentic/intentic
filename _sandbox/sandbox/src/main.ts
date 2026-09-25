@@ -1,4 +1,5 @@
 import { DisposableStore } from "@intentic/base/lifecycle";
+import { startRoomSocket } from "./workload/room-socket.js";
 import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
 import { startProviderBoot } from "./agent/providers/provider-registry.js";
 import { declareBootSteps, runBootSteps } from "./bootstrap/boot-chain.js";
@@ -68,6 +69,13 @@ const main = async (): Promise<void> => {
     // journal a rolled-back build undoes; committed once the boot chain converges, below.
     await convergeStateAtBoot({ config, logger, traits, role, documents: stateDocuments(), steps: stateSteps() });
     const services = createServices(config, logger);
+    shutdown.push(() => services.resources.stop());
+    // The budget's verdict for heavy commands and test fan-outs, on a socket of its own; one per container, so the
+    // daemon that claimed the container serves it.
+    if (role.container) {
+        const room = await startRoomSocket(services.resources, logger);
+        shutdown.push(() => void room.close());
+    }
     shutdown.push(() => services.perf.stop());
     shutdown.push(() => services.ciHooks.stop());
     shutdown.push(() => services.announcer.stop());

@@ -129,7 +129,7 @@ const undelivered = (unattended: boolean): string =>
 const memoryPress = (event: Extract<AgentEvent, { kind: "error" }>): "sendAnyway" | "sandboxMemory" =>
     event.memory === undefined ? "sendAnyway" : "sandboxMemory";
 
-// A memory hold is asked once and never again that spell (memory-admission.ts), so the next send always runs. A turn the
+// A memory hold is asked once and never again that spell (resource-budget.ts), so the next send always runs. A turn the
 // sandbox started itself (a fix press, a peer's message, a re-run) was never in a composer: its message stays above, and
 // the press asks the sandbox to run the turn it kept rather than sending a queue that holds nothing.
 const heldRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow => {

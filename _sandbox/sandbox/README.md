@@ -35,9 +35,12 @@ flowchart LR
   A turn reaches an extension card's MCP endpoint on a bearer minted per turn for the cards that turn was granted
   (`extensions/backend/extension-mcp.ts`). The panel token that repo operator panels hold reaches no route that
   returns a stored secret.
-- A process the daemon starts is put in a workload class by whoever starts it (`platform/resources/workload-class.ts`,
+- A process the daemon starts is put in a workload class by whoever starts it (`workload/workload-class.ts`,
   `spawnAs`): its niceness, IO class and rank for the kernel's OOM killer, inherited by everything it forks. Builds
   go first, agent runtimes last, children before their parents. Nothing ranks a process by its command line.
+- One `ResourceBudget` (`workload/resource-budget.ts`) decides whether there is room for more work: the turn door, a
+  child waiting for room, heavy commands (over the local `room.sock`) and the editor's memory gauge all read its one
+  snapshot, taken by the formula in `@intentic/constants/memory-room`.
 - Stored files evolve under one engine (`store/`). Each is declared with `defineDocument` beside its store, carrying
   the conversions its shape has had; `jsonFile` runs them on every read and keeps what it does not know on writes.
   Before any store opens, `store/evolution/state-convergence.ts` writes converted files back under a journal a rolled-back build
@@ -81,7 +84,7 @@ Main groups under `src/`:
 | Owner controls | `auth/` `secrets/` `areas/` `approvals/` `safety/` `usage/` `wallet/` `settings/` |
 | Outside world | `capabilities/` `extensions/` `browser/` `hosts/` `peers/` `webext/` `runners/` `fleet/` `ci/` `automations/` |
 | Network | `front/` `platform/` `tunnel/` `vpn/` `exit/` `netdisk/` `public/` `share/` `webchat/` |
-| Plumbing | `bootstrap/` `store/` `seams/` `system/` `http/` `workers/` `logs/` `invariants/` |
+| Plumbing | `bootstrap/` `store/` `seams/` `system/` `http/` `workers/` `logs/` `invariants/` `workload/` |
 | Test support | `harness/` `fences/` `e2e/` |
 
 ## Commands

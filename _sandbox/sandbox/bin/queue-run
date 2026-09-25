@@ -125,16 +125,18 @@ poll_seconds=$(number "$poll_seconds" 2)
 case "$on_deadline" in run | skip) ;; *) on_deadline="run" ;; esac
 
 # The memory half of the gate, before the slot rather than after: a box with no room should not burn a slot
-# sitting in it. Skipped silently when the binary is absent (a dev daemon, a partial image) — see memory-gate.ts
-# for why every outcome of it is "run the command".
-# Exec'd when it is executable, run through `node` when it is not: the symlink points at a file in dist/, and a
-# dist re-synced into a running sandbox arrives without its executable bit (measured: every heavy command printed
-# "memory-gate: Permission denied" and the memory half of this gate silently never ran).
-if [ "$memory_gate" -gt 0 ] && gate="$(command -v memory-gate 2>/dev/null)" && [ -n "$gate" ]; then
+# sitting in it. `memory-room` asks the daemon's resource budget (the same verdict that holds a turn, and the same
+# ledger: two heavy commands admitted at one instant do not both pass on one reading), and applies the same formula
+# itself where no daemon answers (@intentic/constants/memory-room). Every outcome of it is "run the command";
+# skipped silently when the binary is absent (a dev daemon, a partial image).
+# Run through `node` when it is not executable: the symlink points into node_modules, and a tree re-synced into a
+# running sandbox can arrive without its executable bit (measured with the gate before it: every heavy command printed
+# "Permission denied" and the memory half of this gate silently never ran).
+if [ "$memory_gate" -gt 0 ] && gate="$(command -v memory-room 2>/dev/null)" && [ -n "$gate" ]; then
     if [ -x "$gate" ]; then
-        "$gate" --deadline-seconds "$memory_gate" --label "$label" || true
+        "$gate" --class toolchain --wait "$memory_gate" --label "$label" || true
     else
-        node "$gate" --deadline-seconds "$memory_gate" --label "$label" || true
+        node "$gate" --class toolchain --wait "$memory_gate" --label "$label" || true
     fi
 fi
 
@@ -182,7 +184,7 @@ done
 
 # Deadline reached. `skip` exits 75 (EX_TEMPFAIL) having run nothing, so the caller records a check that was not
 # made rather than one that failed; it is for a command whose overlap with the holder is the incident and whose
-# absence costs only a check. Everything else runs anyway, for the reason memory-admission.ts gives for the same
+# absence costs only a check. Everything else runs anyway, for the reason memory-room gives for the same
 # decision: this gate exists to dodge a peak, not to hand whatever is holding the box a veto over the owner's
 # work. A queue that can block forever turns one stuck suite into a dead sandbox — a worse failure, and a much
 # quieter one.

@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { spawnAs } from "../../platform/resources/workload-class.js";
+import { spawnAs } from "../../workload/workload-class.js";
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";

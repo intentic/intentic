@@ -1,7 +1,7 @@
 import type { Area, Capability, CredentialGate, Persona, Rule, SandboxSettings, TurnNote } from "@intentic/sandbox-contract";
 import type { Services } from "../../../composition.js";
 import { readPersonaPrompt } from "../../../personas/persona-kit.js";
-import type { TurnAdmission } from "../../../platform/resources/memory-admission.js";
+import type { ShortMemory } from "@intentic/constants/memory-room";
 import { repoCheckRules } from "../../../rules/repo-checks.js";
 import { createCredentialGrants, type CredentialGrants } from "../../../secrets/credential-grants.js";
 import { loadedSkillCatalogNote } from "../../../store/loaded-skills.js";
@@ -23,9 +23,10 @@ import { type ConversationEntry, type TurnPremise, type TurnRuntime, premiseOf, 
 // Every read a turn is planned on, each timed under the `turn.plan.*` span diagnostics read and run beside the others
 // wherever nothing orders them, so the decision after it is pure. A read that hinges on a decision waits for the premise.
 
-// The memory gate held the turn (a person once per spell, background work on every short reading): nothing else is read.
+// The resource budget held the turn (a person once per spell, background work once it waited out its deadline):
+// nothing else is read.
 export interface HeldTurnFacts {
-    readonly held: Extract<TurnAdmission, { readonly admit: false }>;
+    readonly held: { readonly message: string; readonly memory?: ShortMemory };
 }
 
 export interface AdmittedTurnFacts {
@@ -167,8 +168,7 @@ export type TurnFactsDeps = Pick<
     | "endpointModels"
     | "iq"
     | "logger"
-    | "memoryHeadroom"
-    | "memoryWarnings"
+    | "resources"
     | "perf"
     | "personas"
     | "sandboxSettings"
@@ -178,13 +178,16 @@ export type TurnFactsDeps = Pick<
 
 export const gatherTurnFacts = async (services: TurnFactsDeps, input: TurnInput, context: TurnContext): Promise<TurnFacts> => {
     // First, so a held turn costs no settings read, capability list, dependency probe or persona load.
-    const admission = services.memoryWarnings.admit(await services.memoryHeadroom(), {
-        unattended: input.unattended === true,
+    // Work nobody is waiting on is held here until there is room; a child the budget already admitted is not judged again.
+    const admission = await services.resources.admit({
+        workload: "agentRuntime",
+        attended: input.unattended !== true,
+        owner: input.conversationId,
         actor: input.actor,
-        conversationId: input.conversationId,
+        ...(input.unattended === true ? { wait: { signal: context.base.signal } } : {}),
     });
-    if (!admission.admit) {
-        return { held: admission };
+    if (admission.verdict !== "run") {
+        return { held: { message: admission.message, ...(admission.verdict === "refuse" && admission.memory !== undefined ? { memory: admission.memory } : {}) } };
     }
     const entry = input.conversationId === undefined ? undefined : services.agents.entry(input.conversationId);
     const runtime = turnRuntime(input, entry);

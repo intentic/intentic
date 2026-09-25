@@ -1,6 +1,7 @@
 import { type Capability, type CredentialGate, type Persona, PersonaPowersSchema, type Rule, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { createMemoryWarnings, type MemoryHeadroom, type TurnAdmission } from "../../../platform/resources/memory-admission.js";
+import type { MemoryReading } from "@intentic/constants/memory-room";
+import type { Admission } from "../../../workload/resource-budget.js";
 import { createCredentialGrants } from "../../../secrets/credential-grants.js";
 import { GATED_CREDENTIALS_TITLE } from "../../../secrets/credential-gating.js";
 import type { FieldNotes } from "../../prompt/field-notes.js";
@@ -13,7 +14,7 @@ import type { TurnContext } from "../../providers/adapter.js";
 import { conversationExperimentArm } from "./experiments.js";
 import { conversationAfter } from "../../../testing.js";
 import { LANDING_CHECKS_NOTE_TITLE, landingChecksNote } from "../../../workspace/deps/mainline-note.js";
-import { base, context, ROOT, turn } from "../turn/turn-plan.testing.js";
+import { base, budgetOn, context, memoryReading, ROOT, turn } from "../turn/turn-plan.testing.js";
 import { decideTurn, type TurnDecision } from "./turn-decision.js";
 import type { AdmittedTurnFacts, TurnFacts } from "./turn-facts.js";
 
@@ -69,28 +70,39 @@ const conversationIn = (salt: string, arm: boolean): string => {
 
 const GIB = 1024 ** 3;
 // 12 GiB resident and 7 swapped against a 16 GiB cap: short for a person and for background work alike.
-const SHORT: MemoryHeadroom = { limitBytes: 16 * GIB, usedBytes: 19 * GIB, swapBytes: 7 * GIB, freeBytes: 0, stalledPercent: 0, oomKills: undefined };
-const ROOMY: MemoryHeadroom = { limitBytes: 16 * GIB, usedBytes: 4 * GIB, swapBytes: 0, freeBytes: 12 * GIB, stalledPercent: 0, oomKills: undefined };
+const SHORT: MemoryReading = memoryReading(16, 12, 7);
+const ROOMY: MemoryReading = memoryReading(16, 4);
 
-const factsAfter = (admission: TurnAdmission): TurnFacts => (admission.admit ? FACTS : { held: admission });
+const factsAfter = (admission: Admission): TurnFacts =>
+    admission.verdict === "run"
+        ? FACTS
+        : { held: { message: admission.message, ...(admission.verdict === "refuse" && admission.memory !== undefined ? { memory: admission.memory } : {}) } };
+
+// The door's own request, as gatherTurnFacts makes it: work nobody waits on is held for room, then turned away.
+const press = (budget: ReturnType<typeof budgetOn>, unattended: boolean): Promise<Admission> =>
+    budget.admit({ workload: "agentRuntime", attended: !unattended, actor: "ada@example.com", ...(unattended ? { wait: {} } : {}) });
 
 test.each([
     ["a person is held on the first press of a spell and let through on the next", SHORT, false, [false, true]],
     ["background work is held on every short reading, since nobody is there to be told", SHORT, true, [false, false]],
     ["a box with room holds nobody", ROOMY, false, [true, true]],
-] as const)("the memory gate: %s", (_case, reading, unattended, expected) => {
-    const spell = createMemoryWarnings();
-    const presses = expected.map(() => decideTurn(factsAfter(spell.admit(reading, { unattended, actor: "ada@example.com", conversationId: undefined })), turn(), context).ok);
+] as const)("the memory gate: %s", async (_case, reading, unattended, expected) => {
+    const budget = budgetOn(reading, { waitDeadlineMs: 20 });
+    const presses: boolean[] = [];
+    for (const _ of expected) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- the presses are in order: the second reads the first's warning.
+        presses.push(decideTurn(factsAfter(await press(budget, unattended)), turn(), context).ok);
+    }
     expect(presses).toEqual([...expected]);
 });
 
-test("a held turn is refused with the reading behind it, and owes the log nothing", () => {
-    const held = createMemoryWarnings().admit(SHORT, { unattended: false, actor: "ada@example.com", conversationId: undefined });
-    if (held.admit) {
+test("a held turn is refused with the reading behind it, and owes the log nothing", async () => {
+    const held = await press(budgetOn(SHORT), false);
+    if (held.verdict !== "refuse") {
         throw new Error("the fixture's box is meant to be short");
     }
 
-    expect(decideTurn({ held }, turn(), context)).toEqual({
+    expect(decideTurn(factsAfter(held), turn(), context)).toEqual({
         ok: false,
         code: "sandbox-memory-low",
         message: held.message,

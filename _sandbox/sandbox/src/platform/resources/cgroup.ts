@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 
-// The sandbox's own cgroup v2 figures; /proc/pressure describes the host and stands in only where the cgroup keeps none.
+// The sandbox's own cgroup v2 figures, raw, for CPU, pressure and the minute log; /proc/pressure describes the host and
+// stands in only where the cgroup keeps none. Whether there is room is not read here: that is the resource budget's one
+// formula (@intentic/constants/memory-room).
 
 const CGROUP = "/sys/fs/cgroup";
 const PRESSURE_KINDS = ["cpu", "memory", "io"] as const;
@@ -71,9 +73,6 @@ export interface CgroupReading {
     readonly workingSetBytes: number | undefined;
     // memory.max; undefined when uncapped.
     readonly memoryLimitBytes: number | undefined;
-    // memory.high: where the kernel starts throttling and reclaiming the cgroup, short of the cap (the entrypoint sets
-    // 90% of it); undefined when unset.
-    readonly memoryHighBytes: number | undefined;
     // memory.swap.current: anon pushed to swap, charged here and not to memory.current.
     readonly swapBytes: number | undefined;
     readonly swapLimitBytes: number | undefined;
@@ -83,12 +82,11 @@ export interface CgroupReading {
 }
 
 export const readCgroup = async (read: ReadText = readText): Promise<CgroupReading> => {
-    const [cpuStat, cpuMax, current, max, high, memoryStat, swap, swapMax, events, pressure] = await Promise.all([
+    const [cpuStat, cpuMax, current, max, memoryStat, swap, swapMax, events, pressure] = await Promise.all([
         read(`${CGROUP}/cpu.stat`),
         read(`${CGROUP}/cpu.max`),
         read(`${CGROUP}/memory.current`),
         read(`${CGROUP}/memory.max`),
-        read(`${CGROUP}/memory.high`),
         read(`${CGROUP}/memory.stat`),
         read(`${CGROUP}/memory.swap.current`),
         read(`${CGROUP}/memory.swap.max`),
@@ -112,7 +110,6 @@ export const readCgroup = async (read: ReadText = readText): Promise<CgroupReadi
         memoryBytes,
         workingSetBytes: memoryBytes === undefined ? undefined : Math.max(0, memoryBytes - (flatKeyed(memoryStat)["inactive_file"] ?? 0)),
         memoryLimitBytes: numeric(max),
-        memoryHighBytes: numeric(high),
         swapBytes: numeric(swap),
         swapLimitBytes: numeric(swapMax),
         memoryEvents: flatKeyed(events),

@@ -10,12 +10,11 @@ import { UNATTENDED_ACCOUNTS_TITLE } from "../../../personas/personas.js";
 import { LANDING_CHECKS_NOTE_HEADER, landingChecksNote } from "../../../workspace/deps/mainline-note.js";
 import type { AgentRequest, TurnPolicy, TurnSpec } from "../../providers/agent-request.js";
 import { composeWirePrompt } from "../../prompt/turn-preamble.js";
-import type { MemoryHeadroom } from "../../../platform/resources/memory-admission.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import { conversationExperimentArm } from "../decide/experiments.js";
 import { ruleCommandIn } from "../harness/harness-hooks.js";
 import { planTurn } from "./turn-plan.js";
-import { base, codexServices, context, harnessServices, ROOT, servicesWith, turn, wire } from "./turn-plan.testing.js";
+import { base, budgetOn, codexServices, context, harnessServices, memoryReading, ROOT, servicesWith, turn, wire } from "./turn-plan.testing.js";
 import * as harnessCredentialsOriginal from "../../providers/harness-credentials.js";
 
 // What a turn is allowed to run on, and what it's handed once it may; session-resume rules live with the route instead
@@ -50,19 +49,11 @@ beforeEach(() => {
 // the gates: each refuses for an ordinary state of a sandbox, and says which one
 
 const GIB = 1024 ** 3;
-const reading = (limitGib: number, residentGib: number, swapGib: number) => async (): Promise<MemoryHeadroom> => ({
-    limitBytes: limitGib * GIB,
-    usedBytes: (residentGib + swapGib) * GIB,
-    swapBytes: swapGib * GIB,
-    freeBytes: Math.max(0, limitGib - residentGib - swapGib) * GIB,
-    stalledPercent: 0,
-    oomKills: undefined,
-});
 
 // A warning the next press cannot get past is a wall: the send after the hold has to run.
 test("a short box holds a person's first turn with its reading, and runs the one after", async () => {
     const services = harnessServices({
-        memoryHeadroom: reading(16, 12, 7),
+        resources: budgetOn(memoryReading(16, 12, 7)),
         agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
     });
     const asAda = { ...turn(), actor: "ada@example.com" };
@@ -78,17 +69,32 @@ test("a short box holds a person's first turn with its reading, and runs the one
 });
 
 // Read off the turn itself: the request the plan is built from does not carry `unattended` yet at this point.
-test("a background turn is held to the stricter reserve on a box that still has room for a person", async () => {
+test("a background turn is held to the stricter reserve, and turned away once it waited out its deadline", async () => {
     const services = harnessServices({
-        memoryHeadroom: reading(10, 8.5, 0),
+        resources: budgetOn(memoryReading(10, 8.5), { waitDeadlineMs: 30 }),
         agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
     });
 
     const background = await planTurn(services, turn({ unattended: true, conversationId: "ci-fix-intentic-1" }), context);
     expect(background).toMatchObject({ ok: false, code: "sandbox-memory-low" });
-    expect((background as { message: string }).message).toContain("This background turn did not start");
+    expect((background as { message: string }).message).toBe(
+        "Sandbox memory is low: 8.5 GiB of 10.0 GiB used. This background work waited 1 minute for room and did not start: work people send gets the room first.",
+    );
 
     expect((await planTurn(services, turn(), context)).ok).toBe(true);
+});
+
+// The door parks work nobody waits on instead of refusing it on the first short reading, and runs it once room comes.
+test("a background turn on a short box waits at the door and runs when memory frees up", async () => {
+    let used = 8.5;
+    const services = harnessServices({
+        resources: budgetOn(() => memoryReading(10, used), { waitDeadlineMs: 5_000 }),
+        agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
+    });
+    const planned = planTurn(services, turn({ unattended: true, conversationId: "ci-fix-intentic-2" }), context);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    used = 6;
+    expect((await planned).ok).toBe(true);
 });
 
 test("Codex with neither a translator subscription nor an api key names which of the two is missing", async () => {

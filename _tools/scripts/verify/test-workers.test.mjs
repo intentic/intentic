@@ -1,11 +1,10 @@
 // Pins the sizing rule: what the free memory affords at four concurrent turbo tasks, capped by the cpus, never fewer
 // than one, and a caller's own value kept.
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
 import { test } from "node:test";
-import { availableMemory, cgroupMemoryLimit, hostJobs, memAvailable, standaloneWorkers, testWorkers, typecheckConcurrency, workersFor } from "./test-workers.mjs";
+import { freeBytesOf, readReadingSync, ROOM_SOCKET } from "../../constants/src/memory-room.mjs";
+import { availableMemory, hostJobs, standaloneWorkers, testWorkers, typecheckConcurrency, workersFor } from "./test-workers.mjs";
 
 const GIB = 1024 ** 3;
 const CORES = 16;
@@ -53,37 +52,15 @@ test("the jobs sharing a host are read from the environment, and absent means al
     assert.equal(hostJobs({ CI_HOST_JOBS: "0" }), 1);
 });
 
-test("the cgroup ceiling is read as bytes; `max`, a missing file or a bad number are no ceiling", () => {
-    const dir = mkdtempSync(join(tmpdir(), "memory-max-"));
-    let files = 0;
-    const file = (text) => {
-        const path = join(dir, `memory.max.${(files += 1)}`);
-        writeFileSync(path, text);
-        return path;
-    };
-    assert.equal(cgroupMemoryLimit(file("17179869184\n")), 16 * GIB);
-    assert.equal(cgroupMemoryLimit(file("max\n")), undefined);
-    assert.equal(cgroupMemoryLimit(file("not a number")), undefined);
-    assert.equal(cgroupMemoryLimit(join(dir, "absent")), undefined);
-});
-
-test("free memory is the kernel's available memory, held under what a cgroup ceiling leaves", () => {
-    const dir = mkdtempSync(join(tmpdir(), "available-"));
-    const meminfo = join(dir, "meminfo");
-    writeFileSync(meminfo, `MemTotal:       25165824 kB\nMemFree:          175816 kB\nMemAvailable:   ${10 * 1024 * 1024} kB\n`);
-    assert.equal(memAvailable(meminfo), 10 * GIB);
-    assert.equal(memAvailable(join(dir, "absent")), undefined);
-    const cgroup = join(dir, "cgroup");
-    mkdirSync(cgroup);
-    assert.equal(availableMemory({ meminfo, cgroup }), 10 * GIB, "no cgroup files: the machine's figure");
-    writeFileSync(join(cgroup, "memory.max"), `${20 * GIB}\n`);
-    writeFileSync(join(cgroup, "memory.current"), `${16 * GIB}\n`);
-    writeFileSync(join(cgroup, "memory.stat"), `anon 1\ninactive_file ${1 * GIB}\nactive_file 5\n`);
-    assert.equal(availableMemory({ meminfo, cgroup }), 5 * GIB, "the ceiling leaves less than the machine has");
-    writeFileSync(join(cgroup, "memory.current"), `${2 * GIB}\n`);
-    assert.equal(availableMemory({ meminfo, cgroup }), 10 * GIB, "the machine has less than the ceiling leaves");
-    writeFileSync(join(cgroup, "memory.max"), "max\n");
-    assert.equal(availableMemory({ meminfo, cgroup }), 10 * GIB);
+// The figure is the one room formula's (memory-room.test.ts pins the formula): asked of the daemon's socket where one
+// answers, else read off the same files, so the fan-out and the gate that holds a turn never disagree about room.
+test("free memory is the room formula's free memory, asked once per process", () => {
+    const first = availableMemory();
+    assert.equal(availableMemory(), first);
+    const formula = freeBytesOf(readReadingSync());
+    if (formula !== undefined && !existsSync(ROOM_SOCKET)) {
+        assert.ok(Math.abs(first - formula) < 512 * 1024 ** 2, `${first} is the formula's ${formula}, give or take what moved since`);
+    }
 });
 
 test("a caller's own TEST_WORKERS wins, and an empty one is unset", () => {

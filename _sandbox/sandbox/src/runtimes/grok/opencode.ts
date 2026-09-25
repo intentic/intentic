@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
@@ -11,6 +12,7 @@ import {
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
 import { idCatalog } from "../../agent/models/model-discovery.js";
 import { engineBinary } from "../../engines/engine-resolve.js";
+import { applyToStampedChild, SPAWN_STAMP_ENV } from "../../workload/workload-class.js";
 import type { InputModality } from "../gemini/gemini-models.js";
 import { type CommandGuard, consultWith, vendorSubject } from "../../guard/command-guard.js";
 import { jsonFile } from "../../store/json-file.js";
@@ -287,9 +289,13 @@ export const createOpenCodeService = (
         if (stored !== undefined) {
             process.env["PATH"] = `${dirname(stored)}:${previousPath ?? ""}`;
         }
+        // The SDK spawns `opencode serve` with no hook and no pid, inside its first synchronous step: stamped across that
+        // step, the child is found by the stamp and put in the runtime class before it has started anything.
+        const stamp = randomUUID();
+        process.env[SPAWN_STAMP_ENV] = stamp;
         let server: { url: string; close(): void };
         try {
-            server = await createOpencodeServer({
+            const starting = createOpencodeServer({
                 timeout: BOOT_TIMEOUT_MS,
                 ...(options.port === undefined ? {} : { port: options.port }),
                 // No provider key: xAI auth is OAuth, stored by OpenCode. Runs autonomously since the container is the
@@ -302,7 +308,11 @@ export const createOpenCodeService = (
                     },
                 },
             });
+            delete process.env[SPAWN_STAMP_ENV];
+            applyToStampedChild(stamp, { class: "agentRuntime", spawnDepth: 0 });
+            server = await starting;
         } finally {
+            delete process.env[SPAWN_STAMP_ENV];
             if (previous === undefined) {
                 delete process.env["XDG_DATA_HOME"];
             } else {

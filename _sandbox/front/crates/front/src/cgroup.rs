@@ -86,6 +86,10 @@ fn move_strays(leaves: &Leaves, keep: &[u32], refused: &mut HashSet<u32>) {
     }
 }
 
+// The daemon puts what it starts for a purpose in a workload class as it spawns it (src/workload/workload-class.ts),
+// niceness included, and every class runs at this nice or lower. This loop is the floor for the rest: the git fork
+// broker and every plain spawn (rules, runner commands, the JS tool, Xvfb, VPN clients) would otherwise run at the
+// daemon's own priority. It sets 10 once per child and never raises one a class already lowered further.
 fn renice_children(node: u32, reniced: &mut HashSet<u32>) {
     let Ok(children) = std::fs::read_to_string(format!("/proc/{node}/task/{node}/children")) else {
         return;
@@ -97,12 +101,35 @@ fn renice_children(node: u32, reniced: &mut HashSet<u32>) {
     reniced.retain(|pid| current.contains(pid));
     for pid in current {
         // SAFETY: setpriority on a pid read from procfs; a pid gone since is an error, retried never.
-        if !reniced.contains(&pid)
-            && unsafe { libc::setpriority(libc::PRIO_PROCESS, pid, WORKLOAD_NICE) } == 0
-        {
+        if !reniced.contains(&pid) && lower_to_workload(pid) {
             reniced.insert(pid);
         }
     }
+}
+
+// Down to WORKLOAD_NICE, never back up: a child spawned at 19 (an agent's build) stays at 19. True once the child sits
+// at or below it, so it is not looked at again.
+fn lower_to_workload(pid: u32) -> bool {
+    let Some(current) = std::fs::read_to_string(format!("/proc/{pid}/stat"))
+        .ok()
+        .and_then(|stat| nice_of(&stat))
+    else {
+        return false;
+    };
+    // SAFETY: setpriority on a pid read from procfs; a pid gone since is an error, retried never.
+    current >= WORKLOAD_NICE
+        || unsafe { libc::setpriority(libc::PRIO_PROCESS, pid, WORKLOAD_NICE) } == 0
+}
+
+/// The niceness in a `/proc/<pid>/stat` line: field 19, counted after the `)` that closes the command name, which may
+/// itself hold spaces and parentheses.
+pub fn nice_of(stat: &str) -> Option<i32> {
+    stat.rsplit_once(')')?
+        .1
+        .split_whitespace()
+        .nth(16)?
+        .parse()
+        .ok()
 }
 
 #[cfg(test)]
@@ -119,6 +146,17 @@ mod tests {
         assert_eq!(daemon_cgroup_of("0::/workload"), None);
         assert_eq!(daemon_cgroup_of("0::/daemons"), None);
         assert_eq!(daemon_cgroup_of("12:cpu:/daemon"), None);
+    }
+
+    #[test]
+    fn the_niceness_is_read_after_the_command_name_whatever_it_holds() {
+        let stat = "4242 (a (b) c) S 1 4242 4242 0 -1 4194560 100 0 0 0 5 3 0 0 20 10 1 0 123 4096 25 18446744073709551615";
+        assert_eq!(nice_of(stat), Some(10));
+        assert_eq!(
+            nice_of("4242 (sleep) S 1 2 3 0 -1 0 0 0 0 0 0 0 0 0 39 19 1 0 5"),
+            Some(19)
+        );
+        assert_eq!(nice_of("garbage"), None);
     }
 
     #[test]

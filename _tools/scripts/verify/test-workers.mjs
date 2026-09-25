@@ -9,9 +9,8 @@
 //
 // THE BOX IS NOT ALWAYS THIS JOB'S ALONE, and at the moment six jobs start nothing any of them reads says so: each sees
 // the same free memory. `CI_HOST_JOBS` is how the caller supplies the part that cannot be measured.
-import { readFileSync } from "node:fs";
 import { availableParallelism, freemem } from "node:os";
-import { join } from "node:path";
+import { askFreeSync } from "../../constants/src/memory-room.mjs";
 import { pathToFileURL } from "node:url";
 
 // turbo.json `concurrency`: tasks running at once, each forking its own workers.
@@ -51,44 +50,12 @@ export const testConcurrency = (freeBytes = availableMemory(), jobs = hostJobs()
 export const typecheckConcurrency = (freeBytes = availableMemory(), jobs = hostJobs()) =>
     Math.min(TURBO_CONCURRENCY, Math.max(1, Math.floor(freeBytes / (jobs * TYPECHECK_BYTES))));
 
-const readText = (path) => {
-    try {
-        return readFileSync(path, "utf8");
-    } catch {
-        // silent-catch: a file the platform does not have (no /proc on macOS, no cgroup v2) is the absent reading every caller handles
-        return undefined;
-    }
-};
-
-// The kernel's own estimate of what can be handed out without swapping (`MemAvailable`, bytes), or undefined off Linux.
-export const memAvailable = (path = "/proc/meminfo") => {
-    const kib = /^MemAvailable:\s+(\d+) kB$/m.exec(readText(path) ?? "")?.[1];
-    return kib === undefined ? undefined : Number(kib) * 1024;
-};
-
-// What this process may still use: the machine's available memory, and under a cgroup ceiling what is left below it,
-// counting the page cache the cgroup would drop first as free. The smaller of the two, since either one refuses first.
-export const availableMemory = ({ meminfo = "/proc/meminfo", cgroup = "/sys/fs/cgroup" } = {}) => {
-    const host = memAvailable(meminfo) ?? freemem();
-    const limit = cgroupMemoryLimit(join(cgroup, "memory.max"));
-    const current = Number(readText(join(cgroup, "memory.current"))?.trim());
-    if (limit === undefined || !Number.isFinite(current)) {
-        return limit === undefined ? host : Math.min(host, limit);
-    }
-    const reclaimable = Number(/^inactive_file (\d+)$/m.exec(readText(join(cgroup, "memory.stat")) ?? "")?.[1] ?? 0);
-    return Math.max(0, Math.min(host, limit - current + reclaimable));
-};
-
-// cgroup v2's ceiling in bytes, or undefined where there is none to read: `max`, no such file (macOS, Windows, cgroup
-// v1), or a value that is not a positive number.
-export const cgroupMemoryLimit = (path = "/sys/fs/cgroup/memory.max") => {
-    const text = readText(path)?.trim();
-    if (text === undefined || text === "max") {
-        return undefined;
-    }
-    const bytes = Number(text);
-    return Number.isFinite(bytes) && bytes > 0 ? bytes : undefined;
-};
+// What this run may still use: the sandbox's free memory by the one room formula (@intentic/constants/memory-room: the
+// limit less the working set and swap, never more than the machine has available, less what the daemon just admitted),
+// asked of the daemon where one runs and read off the same files where none does. The machine's free memory only where
+// neither can say (macOS, Windows). Asked once per process: every default argument below reads the same figure.
+let asked;
+export const availableMemory = () => (asked ??= askFreeSync() ?? freemem());
 
 // Workers for one package run with no turbo fan-out above it: half of what is free at the web worker's size, split with
 // whatever else shares the machine, never past the cores. `jobs` matters here too — this is what `suites` falls back

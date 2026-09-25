@@ -1,5 +1,5 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
-import { spawnAs } from "../../platform/resources/workload-class.js";
+import { spawnAs } from "../../workload/workload-class.js";
 import { createInterface } from "node:readline";
 import { whenAborted } from "../../abort.js";
 import { nsenterArgv } from "../../agents/worktrees/isolation.js";

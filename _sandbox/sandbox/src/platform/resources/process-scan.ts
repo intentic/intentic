@@ -234,3 +234,7 @@ export const createProcessScanner = (source: ProcSource = { listPids, readText }
         return scanned;
     };
 };
+
+// The daemon's one scanner: the gauge (live-metrics.ts), the minute log (resource-metrics.ts) and the reaper read the
+// same processes, so they share what each process was found to be instead of reading every environ three times.
+export const scanProcesses: (except?: number) => Promise<ScannedProcess[]> = createProcessScanner();

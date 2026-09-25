@@ -1,5 +1,5 @@
 import type { AgentEvent, AgentTurn, SubagentSession } from "@intentic/sandbox-contract";
-import type { MemoryHeadroom } from "../../platform/resources/memory-admission.js";
+import type { MemoryReading } from "@intentic/constants/memory-room";
 import { listSubagentSessions, resetSubagents, waitForSubagent } from "./subagents.js";
 import type { Services } from "../../composition.js";
 import { spawnServices } from "../../harness/spawn-services.testing.js";
@@ -783,12 +783,11 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
 describe("on a box short of memory", () => {
     const GIB = 1024 ** 3;
     // 15 of 16 GiB used: short of the two a background turn needs; `oomKills` is the kernel's running count.
-    const box = (freeGib: number, oomKills = 0) => async (): Promise<MemoryHeadroom> => ({
+    const box = (freeGib: number, oomKills = 0) => (): MemoryReading => ({
         limitBytes: 16 * GIB,
         usedBytes: (16 - freeGib) * GIB,
         swapBytes: 0,
-        freeBytes: freeGib * GIB,
-        stalledPercent: 0,
+        stallPercent: 0,
         oomKills,
     });
 
@@ -808,7 +807,7 @@ describe("on a box short of memory", () => {
         let free = 1;
         const turns: AgentTurn[] = [];
         const services = drivenBy(
-            spawnServices({}, [], actors, async () => box(free)()),
+            spawnServices({}, [], actors, () => box(free)()),
             fakeTurn(turns),
         );
         const result = await spawnChild(services, parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
@@ -831,6 +830,20 @@ describe("on a box short of memory", () => {
         expect(listSubagentSessions(actors).find((session) => session.id === result.id)?.status).toBe("completed");
     });
 
+    // A child sent to a runner uses that machine's memory, not this one's: it neither waits on this box nor holds any of it.
+    it("a child placed on a runner starts at once on a short box, and holds nothing here", async () => {
+        const turns: AgentTurn[] = [];
+        const services = drivenBy(spawnServices({}, [{ id: "rig", online: true }], actors, box(1)), fakeTurn(turns));
+        const result = await spawnChild(services, parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await settled(result.id);
+        expect(turns.map((turn) => turn.placement)).toEqual([{ kind: "runner", id: "rig" }]);
+        expect(listSubagentSessions(actors).find((session) => session.id === result.id)?.status).toBe("completed");
+        expect((await services.resources.snapshot()).reservedBytes).toBe(0);
+    });
+
     // The runtime's death as the SDK reports it; the fake bumps the kernel's count mid-turn, as an OOM kill does.
     const killedBy = (kills: { count: number }, message: string): TurnStarter["stream"] =>
         async function* killed() {
@@ -842,7 +855,7 @@ describe("on a box short of memory", () => {
     it("a runtime killed while the OOM killer moved settles killed, with the way back", async () => {
         const kills = { count: 3 };
         const services = drivenBy(
-            spawnServices({}, [], actors, async () => box(8, kills.count)()),
+            spawnServices({}, [], actors, () => box(8, kills.count)()),
             killedBy(kills, "Claude Code process terminated by signal SIGKILL"),
         );
         const result = await spawnChild(services, parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });

@@ -10,7 +10,7 @@ import {
     runningBrowserOwners,
 } from "../../browser/sessions/browser-sessions.js";
 import { forkedExec } from "@intentic/scaffold";
-import { createProcessScanner } from "../resources/process-scan.js";
+import { scanProcesses } from "../resources/process-scan.js";
 import { type Leftover, leftoverProcesses, ownProcessGroup, signalFor } from "./leftovers.js";
 
 // Reclaims everything a conversation holds (processes, tmux terminals, browser records, scratch /tmp state) once the
@@ -163,7 +163,6 @@ export const createResourceReaper = (deps: ReaperDeps): ResourceReaper => {
     const browserIdleMs = deps.browserIdleMs ?? BROWSER_IDLE_MS;
     const intervalMs = deps.intervalMs ?? SWEEP_INTERVAL_MS;
     const group = ownProcessGroup();
-    const scanProcesses = createProcessScanner();
 
     // Owner → when first known stopped; cleared when the owner runs again, resetting its grace window.
     const stoppedAt = new Map<string, number>();

@@ -3,7 +3,8 @@ import { unstubbed } from "@intentic/testing";
 import { createCredentialGrants } from "../../../secrets/credential-grants.js";
 import { claudeStoreOf } from "../../../sessions/session-store.js";
 import type { Services } from "../../../composition.js";
-import { createMemoryWarnings, type MemoryHeadroom } from "../../../platform/resources/memory-admission.js";
+import type { MemoryReading } from "@intentic/constants/memory-room";
+import { createResourceBudget, type ResourceBudget } from "../../../workload/resource-budget.js";
 import { RUNTIME_ADAPTERS } from "../../../runtimes/runtime-table.js";
 import { testConfig, memoryFleet } from "../../../testing.js";
 import type { AgentRequest, TurnBase } from "../../providers/agent-request.js";
@@ -18,19 +19,32 @@ import { parkedCards } from "../../../agents/actor/parked-cards.js";
 // Doesn't exist on disk, so the dependency probe finds nothing and no assertion depends on the host's checkout.
 export const ROOT = "/nowhere/turn-plan";
 
-// A box with room, stated rather than measured, for the admission gate `planTurn` runs above everything else.
-// The real reading is of live cgroup files at absolute paths, and once it counts swap (memory-admission.ts) a suite
-// running on a machine that is genuinely full refuses every fixture in these suites — a failure about the host rather
-// than about the plan. Shared so the roomy box is one fact, not one per suite; a test that wants the refusal passes
-// the reading that produces it instead.
-export const ROOMY_MEMORY = async (): Promise<MemoryHeadroom> => ({
-    limitBytes: 16 * 1024 ** 3,
-    usedBytes: 4 * 1024 ** 3,
-    swapBytes: 0,
-    freeBytes: 12 * 1024 ** 3,
-    stalledPercent: 0,
+// A box stated rather than measured, for the resource budget planTurn asks above everything else. The real reading is
+// of live cgroup files at absolute paths, and since it counts swap a suite running on a machine that is genuinely full
+// would refuse every fixture in these suites: a failure about the host rather than about the plan. Used memory is
+// resident plus swapped, as the formula counts it.
+export const memoryReading = (limitGib: number, residentGib: number, swapGib = 0, stallPercent = 0): MemoryReading => ({
+    limitBytes: limitGib * 1024 ** 3,
+    usedBytes: (residentGib + swapGib) * 1024 ** 3,
+    swapBytes: swapGib * 1024 ** 3,
+    stallPercent,
     oomKills: undefined,
 });
+
+export const ROOMY_READING: MemoryReading = memoryReading(16, 4);
+
+// The daemon's own budget on a stated reading (or one the suite changes as it goes), with no timer, and held work
+// looking again every few milliseconds so a wait for room costs a suite no real seconds.
+export const budgetOn = (
+    reading: MemoryReading | (() => MemoryReading) = ROOMY_READING,
+    options: { readonly waitDeadlineMs?: number } = {},
+): ResourceBudget =>
+    createResourceBudget({
+        read: async () => (typeof reading === "function" ? reading() : reading),
+        sampleMs: 0,
+        waitIntervalMs: 5,
+        waitDeadlineMs: options.waitDeadlineMs ?? 200,
+    });
 
 export const base: TurnBase = {
     spec: { prompt: "do the thing", cwd: ROOT },
@@ -56,8 +70,7 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
         tools: [],
         // The real table: which arm a (provider, harness) pair reaches is what these suites are about.
         adapters: RUNTIME_ADAPTERS,
-        memoryHeadroom: ROOMY_MEMORY,
-        memoryWarnings: createMemoryWarnings(),
+        resources: budgetOn(),
         workspace: unstubbed<Services["workspace"]>("workspace", { root: ROOT }),
         processes: unstubbed<Services["processes"]>("processes", { running: () => false }),
         dependencies: unstubbed<Services["dependencies"]>("dependencies", { status: async () => [], issueAt: async () => undefined }),

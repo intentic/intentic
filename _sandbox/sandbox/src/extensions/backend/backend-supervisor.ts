@@ -1,5 +1,5 @@
 import type { ChildProcess } from "node:child_process";
-import { spawnAs } from "../../platform/resources/workload-class.js";
+import { spawnAs } from "../../workload/workload-class.js";
 import { randomBytes } from "node:crypto";
 import { createInterface } from "node:readline";
 import { createRequire } from "node:module";

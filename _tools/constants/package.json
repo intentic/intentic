@@ -23,7 +23,9 @@
         "src/mirror-roots.mjs",
         "src/mirror-roots.d.mts",
         "src/ci-infra-steps.mjs",
-        "src/ci-infra-steps.d.mts"
+        "src/ci-infra-steps.d.mts",
+        "src/memory-room.mjs",
+        "src/memory-room.d.mts"
     ],
     "exports": {
         ".": {
@@ -64,6 +66,10 @@
         "./test-suites": {
             "types": "./src/test-suites.d.mts",
             "default": "./src/test-suites.mjs"
+        },
+        "./memory-room": {
+            "types": "./src/memory-room.d.mts",
+            "default": "./src/memory-room.mjs"
         }
     },
     "scripts": {

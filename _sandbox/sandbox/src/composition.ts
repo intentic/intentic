@@ -51,7 +51,7 @@ import {
 } from "@intentic/scaffold";
 import type { ResidentEngine } from "@intentic/iq-engine";
 import { createEngineClient } from "@intentic/iq-engine/host";
-import { applyWorkload } from "./platform/resources/workload-class.js";
+import { applyWorkload } from "./workload/workload-class.js";
 import { capabilityCtx } from "./capabilities/capability.js";
 import { type OpenAccountInput, openBrowserAccount } from "./capabilities/open-account.js";
 import { composeEnvironment } from "./environment/environment.js";
@@ -103,7 +103,7 @@ import { type DismissalsStore, fileDismissalsStore } from "./capabilities/dismis
 import { filePersonasStore, type PersonasStore } from "./personas/personas-store.js";
 import { fileAreasStore, type AreasStore } from "./areas/areas-store.js";
 import { fileHeavyCommandsStore, type HeavyCommandsStore } from "./platform/resources/heavy-commands.js";
-import { createMemoryWarnings, type MemoryHeadroom, type MemoryWarnings, readMemoryHeadroom } from "./platform/resources/memory-admission.js";
+import { createResourceBudget, type ResourceBudget } from "./workload/resource-budget.js";
 import { type BlobSource, deriveBytes } from "./derived/derived-blob.js";
 import { deriveText, readDerivedText } from "./derived/derived-text.js";
 import { sidecarStatus } from "./derived/sidecar-service.js";
@@ -459,12 +459,10 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly queueHeavy: (line: string) => Promise<string>;
     // Just the prefix queueHeavy would put in front of a line, "" when none: what offload-run keeps for running it here.
     readonly heavyPrefix: (line: string) => Promise<string>;
-    // What the cgroup says about memory right now, for the admission gate above every turn. A service rather than a
-    // direct call so a test can say what the box has: the reading is of live cgroup files at absolute paths, and once
-    // it counts swap (memory-admission.ts) a suite running on a genuinely full machine refuses its own fixtures.
-    readonly memoryHeadroom: () => Promise<MemoryHeadroom>;
-    // Who has already been told this spell that the box is short, so the gate holds each person's turn once, not forever.
-    readonly memoryWarnings: MemoryWarnings;
+    // The one judge of room (platform/resources/resource-budget.ts): the turn door, a child waiting for room, the
+    // heavy-command queue's socket and the editor's gauge all read its snapshot. A service so a test can say what the box
+    // has: the reading is of live cgroup files, and a suite on a genuinely full machine would refuse its own fixtures.
+    readonly resources: ResourceBudget;
     // Scheduled agent wake-ups; run history is a separate ledger joined on read, so callers see one store.
     readonly automations: AutomationsStore;
     // Ralph loops: the pump drives them, /loops starts/stops them; `running` at boot is what the daemon died under.
@@ -1092,6 +1090,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // Seeded on boot if absent so the rule list isn't invisible; not awaited, since nothing reads it before then.
     void heavyCommands.seed().catch((error: unknown) => logger.warn({ err: error }, "heavy-commands: could not write the default rules"));
     const ciStore = fileCiStore(statePath(workspace.root, ".intentic/secrets/ci.json"));
+    // Samples on a timer of its own, so a death certificate can look back at what the sandbox had.
+    const resources = createResourceBudget();
     const verifyStore = fileVerifyStore(statePath(workspace.root, ".intentic/records/verify.json"));
     // Hoisted: the drift sweep and the install-steering hook write the same ledger the /environment route reads.
     const runtimeInstalls = fileRuntimeInstallsStore(statePath(workspace.root, ".intentic/records/runtime-installs.json"));
@@ -1259,7 +1259,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
                 perf: { operations: operations.length, spans: operations.reduce((total, operation) => total + operation.count, 0) },
             };
         },
-        liveMetrics: createLiveMetrics({ workspaceRoot: workspace.root }),
+        liveMetrics: createLiveMetrics({ workspaceRoot: workspace.root, budget: resources }),
         // Born converged: main() closes the gate, so a test or host-internal preview build has nothing to wait for.
         boot: createBootTracker(logger),
         announcer: createAnnouncer(config, logger),
@@ -1347,8 +1347,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         heavyCommands,
         queueHeavy: queueWhole(heavyCommands.read),
         heavyPrefix: queuePrefixFor(heavyCommands.read),
-        memoryHeadroom: readMemoryHeadroom,
-        memoryWarnings: createMemoryWarnings(),
+        resources,
         ciStore,
         verifyStore,
         landCheck: landCheckOf(() => services),

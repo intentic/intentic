@@ -54,6 +54,16 @@ export const usedOf = (used: number, total: number): string => {
 
 const clamp = (value: number): number => Math.min(1, Math.max(0, value));
 
+// Warned exactly when the daemon would hold a person's turn: the same figures and the same thresholds, read off one
+// reading. A daemon that predates `memoryRoom` sends neither, and its gauge falls back to how full it is.
+export const memoryShort = (sandbox: SandboxMetrics[`sandbox`]): boolean => {
+    const room = sandbox.memoryRoom;
+    if (room === undefined) {
+        return sandbox.memoryBytes >= NEAR_LIMIT * sandbox.memoryLimitBytes;
+    }
+    return (room.freeBytes !== undefined && room.freeBytes < room.personNeedBytes) || room.stallPercent >= room.stallLimitPercent;
+};
+
 export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<SandboxReadout> {
     const t = useT();
 
@@ -79,7 +89,7 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
             detail: `${formatBytes(sandbox.memoryBytes)} / ${formatBytes(sandbox.memoryLimitBytes)}`,
             fraction: sandbox.memoryLimitBytes > 0 ? clamp(sandbox.memoryBytes / sandbox.memoryLimitBytes) : undefined,
             hint: t(`agents.liveMetrics.memoryHint`),
-            warn: sandbox.memoryBytes >= NEAR_LIMIT * sandbox.memoryLimitBytes,
+            warn: memoryShort(sandbox),
         };
         if (sandbox.diskBytes === undefined || sandbox.diskTotalBytes === undefined) {
             return [cpu, memory];

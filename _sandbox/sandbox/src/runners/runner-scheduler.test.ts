@@ -17,8 +17,9 @@ const load = (counts: Record<string, number> = {}) => ({ inFlight: new Map(Objec
 test("slots are the lower of what the cores and the memory can hold", () => {
     // Cores minus 2: the reserve covers the daemon and whoever else uses that machine.
     expect(runnerSlots({ cpus: 8, memoryMb: 64_000, freeDiskMb: 0, load: 0 })).toBe(6);
-    // Memory wins when it's the tighter constraint: 4GB is 2 agents, regardless of core count.
-    expect(runnerSlots({ cpus: 16, memoryMb: 4_096, freeDiskMb: 0, load: 0 })).toBe(2);
+    // Memory wins when it's the tighter constraint: 4 GiB is 4 agents at the gibibyte each one holds here.
+    expect(runnerSlots({ cpus: 16, memoryMb: 4_096, freeDiskMb: 0, load: 0 })).toBe(4);
+    expect(runnerSlots({ cpus: 16, memoryMb: 4_095, freeDiskMb: 0, load: 0 })).toBe(3);
     // Floors at 1 and caps at 16: more parallelism past that stops paying off.
     expect(runnerSlots({ cpus: 1, memoryMb: 1_024, freeDiskMb: 0, load: 0 })).toBe(1);
     expect(runnerSlots({ cpus: 64, memoryMb: 256_000, freeDiskMb: 0, load: 0 })).toBe(16);

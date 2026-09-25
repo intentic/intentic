@@ -1,11 +1,13 @@
+import { WORKLOAD_COST_BYTES } from "../workload/resource-budget.js";
 import { type AgentHarness, type AgentProvider, capabilitiesOf, type RunnerFacts, type RunnerSummary } from "@intentic/sandbox-contract";
 
 // Where a spawned fan-out child runs, since nobody manually places one thirty times per workflow. Free slots decide
 // first, load only breaks ties: a load average lags a minute behind what this daemon already knows it dispatched.
 // Falling back here is not a failure; queueing is somebody else's job, and the caller's own ceilings still bound it.
 
-// Two ceilings, whichever is lower: cores minus 2 (capped at 16, the local fan-out rule) and memory / 2GB.
-const MEMORY_PER_AGENT_MB = 2_048;
+// Two ceilings, whichever is lower: cores minus 2 (capped at 16, the local fan-out rule) and memory over what one agent
+// costs, the same figure an admission here holds (workload/resource-budget.ts).
+const MEMORY_PER_AGENT_MB = WORKLOAD_COST_BYTES.agentRuntime / 1024 ** 2;
 export const runnerSlots = (facts: RunnerFacts): number =>
     Math.max(1, Math.min(16, facts.cpus - 2, Math.floor(facts.memoryMb / MEMORY_PER_AGENT_MB)));
 

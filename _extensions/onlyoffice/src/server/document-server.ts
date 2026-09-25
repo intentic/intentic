@@ -147,7 +147,7 @@ export class DocumentServer {
     // WHY THIS EXISTS: the container carries `restart: unless-stopped`, so once started it outlives every document
     // anyone opened. Measured on a sandbox four hours after its last use: 27 processes, 122 MB resident and 2.6 GB of
     // swap — the single largest swapped-out thing on the box, and since the admission gate counts swap against the
-    // cap (platform/resources/memory-admission.ts), 2.6 GB of headroom no turn could spend.
+    // cap (_sandbox/sandbox/src/workload/resource-budget.ts), 2.6 GB of headroom no turn could spend.
     //
     // Stopped, not removed: `ensureRunning` finds the stopped container and `bringUp` starts it again on the same
     // published port, so the cost of being wrong is one entrypoint wait, not a lost address.

@@ -9,7 +9,7 @@ import { SHELL } from "../terminal/pane-state.js";
 import { watchPromptSignals } from "../terminal/prompt-signal.js";
 import { PANEL_SESSION_PREFIX } from "../terminal/terminal-session.js";
 import { isNoTmuxServer } from "../terminal/tmux-server.js";
-import { applyWorkload, type WorkloadClass } from "../platform/resources/workload-class.js";
+import { applyWorkload, type WorkloadClass } from "../workload/workload-class.js";
 import { freePort } from "./free-port.js";
 
 export interface ProcessSpec {
@@ -23,7 +23,7 @@ export interface ProcessSpec {
     readonly oneShot?: true;
     // What the pane's shell and everything it runs are to the sandbox (platform/resources/workload-class.ts); absent is
     // a panel.
-    readonly workload?: Extract<WorkloadClass, "panel" | "install">;
+    readonly workload?: Extract<WorkloadClass, "panel" | "install" | "toolchain">;
 }
 
 // launching: session exists, shell hasn't run the command yet

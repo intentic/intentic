@@ -7,7 +7,7 @@ import {
     type StdioNull,
     type StdioPipe,
 } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { getPriority, setPriority } from "node:os";
 import type { Readable, Writable } from "node:stream";
 import { forkedExec } from "@intentic/scaffold";
@@ -159,4 +159,41 @@ export function spawnAs(workload: Workload, command: string, args: readonly stri
 export const shellPrefix = (workload: Workload): string => {
     const priority = priorityOf(workload);
     return `nice -n ${String(priority.nice)} ${priority.lowIo ? "ionice -c 2 -n 7 " : ""}choom -n ${String(priority.oomScoreAdj)} -- `;
+};
+
+// Set in this process's environment for the one synchronous call that spawns a child through a library with no spawn
+// hook (the OpenCode SDK's `createOpencodeServer`), so the child it started can be told apart from every other.
+export const SPAWN_STAMP_ENV = "INTENTIC_SPAWN_STAMP";
+
+const ownChildren = (): number[] => {
+    try {
+        return readdirSync("/proc/self/task").flatMap((task) =>
+            readFileSync(`/proc/self/task/${task}/children`, "utf8").trim().split(/\s+/u).filter(Boolean).map(Number),
+        );
+    } catch {
+        // silent-catch: no procfs (a laptop's dev daemon), so no child to find and nothing to class
+        return [];
+    }
+};
+
+/**
+ * Puts the child this process just spawned with `SPAWN_STAMP_ENV=stamp` in its environment in its class, found among
+ * this process's own children by that stamp. Called right after the spawning call returns, like spawnAs, so what the
+ * child forks later inherits the class. Returns the pid it classed, or undefined when none carried the stamp.
+ */
+export const applyToStampedChild = (stamp: string, workload: Workload): number | undefined => {
+    if (process.platform !== "linux") {
+        return undefined;
+    }
+    for (const pid of ownChildren()) {
+        try {
+            if (readFileSync(`/proc/${String(pid)}/environ`, "utf8").split("\0").includes(`${SPAWN_STAMP_ENV}=${stamp}`)) {
+                void applyWorkload(pid, workload);
+                return pid;
+            }
+        } catch {
+            // silent-catch: a child that exited between the listing and the read is not the one just spawned
+        }
+    }
+    return undefined;
 };

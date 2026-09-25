@@ -10,7 +10,7 @@ import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { QUEUE_RUN_BIN, queueRunEnabled, TMUX_RUN_BIN } from "../../terminal/terminal-run.js";
 import { offloadPrefix } from "../../offload/offload-prefix.js";
 import { type HeavyCommands, type HeavyMatch, matchHeavyCommand } from "../../platform/resources/heavy-commands.js";
-import { shellPrefix } from "../../platform/resources/workload-class.js";
+import { shellPrefix } from "../../workload/workload-class.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { type BackgroundJob, backgroundJobOf, type BackgroundJobSeed, jobCommandLine, openBackgroundJob, stopBackgroundJob } from "./background-jobs.js";
 import { turnRunOf } from "../../agents/actor/conversation-holdings.js";

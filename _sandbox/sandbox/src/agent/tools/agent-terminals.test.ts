@@ -6,7 +6,7 @@ import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { syncHookOutput, memoryFleet } from "../../testing.js";
 import { DEFAULT_HEAVY_COMMANDS, type HeavyCommands, HeavyCommandsSchema } from "../../platform/resources/heavy-commands.js";
-import { OOM_SCORE } from "../../platform/resources/workload-class.js";
+import { OOM_SCORE } from "../../workload/workload-class.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";
 import { bashTmuxHooks, PIPESTATUS_TRAP } from "./agent-terminals.js";
 import { backgroundJobOf, type BackgroundJob, noteJobShell, settledBackgroundJobs } from "./background-jobs.js";

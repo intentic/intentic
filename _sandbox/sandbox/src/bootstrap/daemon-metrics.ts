@@ -9,6 +9,7 @@ export const startDaemonMetrics = ({ config, logger, services, shutdown }: BootP
     const resourceMetrics = startResourceMetrics({
         historyRoot: config.historyRoot,
         logger,
+        room: () => services.resources.snapshot(),
         owners: () => ({
             ...services.resourceOwners(),
             turnRuns: turnRunMetrics(services.conversations),

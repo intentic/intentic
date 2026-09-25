@@ -253,11 +253,11 @@ test("the slot survives exec, so the lock covers the command and not the wrapper
     expect(await peakConcurrency(log)).toBe(1);
 });
 
-// Tests the wiring to bin/memory-gate (order, args, failure tolerance), not the policy itself
-// (memory-admission.test.ts). A stub avoids asserting on this container's real cgroup state.
+// Tests the wiring to memory-room (order, args, failure tolerance), not the policy itself (resource-budget.test.ts,
+// memory-room.test.ts). A stub avoids asserting on this container's real cgroup state and on a live daemon's answer.
 const stubGate = async (script: string): Promise<string> => {
     const bin = await mkdtemp(join(tmpdir(), "queue-bin-"));
-    await writeFile(join(bin, "memory-gate"), `#!/usr/bin/env bash\n${script}\n`, { mode: 0o755 });
+    await writeFile(join(bin, "memory-room"), `#!/usr/bin/env bash\n${script}\n`, { mode: 0o755 });
     return bin;
 };
 
@@ -272,7 +272,7 @@ test("the memory gate runs before the command, and is told the deadline and the 
         bin,
     );
     expect(run.code).toBe(0);
-    expect(await readFile(seen, "utf8")).toContain("--deadline-seconds 7 --label vitest");
+    expect(await readFile(seen, "utf8")).toBe("--class toolchain --wait 7 --label vitest\n");
     // Before, not after: a box with no room should not first burn a slot sitting in it.
     expect((await readFile(join(queue, "order"), "utf8")).split("\n").filter(Boolean)).toEqual(["gate", "cmd"]);
 });
