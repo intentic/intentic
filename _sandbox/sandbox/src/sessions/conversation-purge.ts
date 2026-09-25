@@ -34,12 +34,14 @@ const purgeClaudeSession = async (store: string, sessionId: string): Promise<voi
     const projects = join(store, "projects");
     const entries = await readdir(projects, { withFileTypes: true }).catch(() => []);
     await Promise.all(
-        entries
-            .filter((entry) => entry.isDirectory())
-            .flatMap((entry) => [
-                rm(join(projects, entry.name, `${sessionId}.jsonl`), { force: true }),
-                rm(join(projects, entry.name, sessionId), { recursive: true, force: true }),
-            ]),
+        entries.flatMap((entry) =>
+            entry.isDirectory()
+                ? [
+                      rm(join(projects, entry.name, `${sessionId}.jsonl`), { force: true }),
+                      rm(join(projects, entry.name, sessionId), { recursive: true, force: true }),
+                  ]
+                : [],
+        ),
     );
 };
 
@@ -78,7 +80,9 @@ export const purgeConversationState = async (
             : [],
     );
     await Promise.all([
-        ...[...orphaned].map((id) => rm(statePath(workspaceRoot, ".intentic/records/artifacts/", "attachments", id), { recursive: true, force: true })),
+        ...[...orphaned].map((id) =>
+            rm(statePath(workspaceRoot, ".intentic/records/artifacts/", "attachments", id), { recursive: true, force: true }),
+        ),
         ...[...new Set(claudeSessions)].map((sessionId) => purgeClaudeSession(claudeStoreOf(workspaceRoot, historyRoot, undefined), sessionId)),
     ]);
 };

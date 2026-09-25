@@ -33,6 +33,6 @@
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,target=/root/.npm \
-    npx --yes playwright@1.62.1 install --with-deps chromium \
+    npx --yes playwright@1.63.0 install --with-deps chromium \
     && apt-get update && apt-get install -y --no-install-recommends xvfb ffmpeg xdotool fonts-noto-color-emoji fonts-liberation \
     && rm -rf /root/.cache/ms-playwright/chromium_headless_shell-*

@@ -5,4 +5,4 @@
 # npm declines the package's postinstall, so the --version run is what downloads the platform binary into the image
 # rather than into the agent's first command.
 RUN --mount=type=cache,target=/root/.npm \
-    npm install -g @posthog/cli@0.18.3 && posthog-cli --version
+    npm install -g @posthog/cli@0.18.7 && posthog-cli --version

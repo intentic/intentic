@@ -44,7 +44,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --release --locked --bin intentic-ingress \
     && cp target/release/intentic-ingress /intentic-ingress
 
-FROM debian:trixie-20260803-slim@sha256:3a39a0592364683e6bab97937b72cad5a8fa6dcbbee90edb3bb48c7f8e94f258
+FROM debian:trixie-20260918-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 COPY --from=build /intentic-ingress /usr/local/bin/intentic-ingress
 # Declared after the FROM it applies to, and defaulted so a hand build needs no argument. docker-release.sh passes the

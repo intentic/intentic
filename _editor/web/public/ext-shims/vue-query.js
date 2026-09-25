@@ -19,6 +19,7 @@ export const defaultScheduler = m["defaultScheduler"];
 export const defaultShouldDehydrateMutation = m["defaultShouldDehydrateMutation"];
 export const defaultShouldDehydrateQuery = m["defaultShouldDehydrateQuery"];
 export const dehydrate = m["dehydrate"];
+export const dehydrateQuery = m["dehydrateQuery"];
 export const environmentManager = m["environmentManager"];
 export const experimental_streamedQuery = m["experimental_streamedQuery"];
 export const focusManager = m["focusManager"];

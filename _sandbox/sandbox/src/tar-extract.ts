@@ -2,7 +2,7 @@
 // its own onEntry. Settles exactly once, destroying both streams on the first failure so a second error can't crash the
 // process. A decode-error relabeler is a parameter, since only some callers promise a specific format.
 import type { Readable } from "node:stream";
-import type { Extract, Headers } from "tar-stream";
+import type { Extract, Header } from "tar-stream";
 
 /** Consumes and discards an entry's body so tar-stream emits the next one; used for directory markers and skipped entries. */
 export const drain = (source: Readable): Promise<void> =>
@@ -16,7 +16,7 @@ export const drain = (source: Readable): Promise<void> =>
 export const extractAll = async (
     source: Readable,
     ex: Extract,
-    onEntry: (header: Headers, stream: Readable) => Promise<void>,
+    onEntry: (header: Header, stream: Readable) => Promise<void>,
     asDecodeError: (error: unknown) => unknown = (error) => error,
 ): Promise<void> =>
     new Promise<void>((resolve, reject) => {
@@ -32,7 +32,10 @@ export const extractAll = async (
         };
         const failDecode = (error: unknown): void => fail(asDecodeError(error));
         ex.on("entry", (header, stream, next) => {
-            onEntry(header, stream).then(() => next(), fail);
+            // tar-stream's own typings (3.2.1+) describe the entry as a streamx Readable, whose declarations are a thin
+            // subset of Node's. The readers only use the surface streamx implements for real (on, resume, pipe, async
+            // iteration), which is what @types/tar-stream promised by typing it as a Node Readable.
+            onEntry(header, stream as unknown as Readable).then(() => next(), fail);
         });
         ex.on("finish", () => {
             if (!settled) {

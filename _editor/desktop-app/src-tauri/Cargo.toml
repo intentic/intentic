@@ -37,8 +37,8 @@ url = "2"
 # The sign-in handoff's nonce (auth.rs). Tauri already pulls uuid in transitively; naming it here is what makes
 # "the state a handoff must echo" something this crate generates rather than something it improvises.
 uuid = { version = "1", features = ["v4"] }
-base64 = "0.22"
-sha2 = "0.10"
+base64 = "0.23"
+sha2 = "0.11"
 # The update schedule's only need: a sleep that yields rather than one that holds a thread. Tauri's async
 # runtime IS tokio, so this names what is already in the graph instead of adding to it — and the alternative,
 # `spawn_blocking` around `thread::sleep`, would park a pooled worker for six hours at a time.

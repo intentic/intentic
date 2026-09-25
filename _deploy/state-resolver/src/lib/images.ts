@@ -3,18 +3,18 @@
 // (last release with a reference compose); bumping it means re-porting signoz.ts's configs, not a routine pin bump.
 export const IMAGES = Object.freeze({
     // renovate: datasource=docker depName=codeberg.org/forgejo/forgejo
-    forgejo: "codeberg.org/forgejo/forgejo:15.0.3@sha256:55bb42bec9abef5223744804f164e37d37b20df7e8b8b4807ba213ad4f071d6d",
+    forgejo: "codeberg.org/forgejo/forgejo:15.0.9@sha256:91a5310c86934339e16bd06b6078aada836e3d8935b2d70f6598108cbfaed5d1",
     // renovate: datasource=docker depName=data.forgejo.org/forgejo/runner
-    forgejoRunner: "data.forgejo.org/forgejo/runner:12.12.0@sha256:268ad0d1d24bd7ecf2386b7c44e8211398dc014ca81d4fd5fbad96fe79af18f5",
+    forgejoRunner: "data.forgejo.org/forgejo/runner:13.2.0@sha256:ca3d5eea46004789a175d1369eec6829d3ea9bfbe2011a06625b4bdaa55f7552",
     // Image act_runner runs `runs-on: docker` jobs in; docker CLI + buildx are bind-mounted from the host.
     // renovate: datasource=docker depName=data.forgejo.org/oci/node
-    forgejoRunnerJob: "data.forgejo.org/oci/node:24-bookworm@sha256:fdddfb3e688158251943d52eba361de991548f6814007acba4917ae6b512d6be",
+    forgejoRunnerJob: "data.forgejo.org/oci/node:24-bookworm@sha256:64af3819f9275802414d7cdc38c27e9d82bd564dec4d4da87d008255d36c63b4",
     // renovate: datasource=docker depName=cloudflare/cloudflared
-    cloudflared: "cloudflare/cloudflared:2026.9.1@sha256:b269e8abd07a5bf6f3f4be65d5050b2174eca89c56a0241a8ff32a16aec454e4",
+    cloudflared: "cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c",
     // renovate: datasource=docker depName=ghcr.io/moghtech/komodo-core
-    komodoCore: "ghcr.io/moghtech/komodo-core:2.1.0@sha256:4915d91b5c6e9de4e8fd59391eed5cad090ec84dcf6a1a9233d97edfdbbb88e7",
+    komodoCore: "ghcr.io/moghtech/komodo-core:2.3.3@sha256:bca73d0eee143066228fb9b80c38a5a2726e573ad2758f7aa92b5c91a8aef1c7",
     // renovate: datasource=docker depName=ghcr.io/moghtech/komodo-periphery
-    komodoPeriphery: "ghcr.io/moghtech/komodo-periphery:2.1.0@sha256:f5b272e3d9acd60d4eac69ea4fa0292dcaddfdecfc2be64ba5575e5ae18e72ae",
+    komodoPeriphery: "ghcr.io/moghtech/komodo-periphery:2.3.3@sha256:fa3f1a641a265216066676950d5eecdf506955a7bafe2f01996135ae93115cd5",
     // renovate: datasource=docker depName=ghcr.io/ferretdb/ferretdb
     ferretdb: "ghcr.io/ferretdb/ferretdb:2.7.0@sha256:5706414241eb84f0515512c37b46db0f1b1eac9e5ceb7e4c2523211c184b1985",
     // documentdb-extended postgres FerretDB runs on; tag paired with the FerretDB version above.
@@ -37,37 +37,37 @@ export const IMAGES = Object.freeze({
     paperless: "ghcr.io/paperless-ngx/paperless-ngx:2.20.15@sha256:6c86cad803970ea782683a8e80e7403444c5bf3cf70de63b4d3c8e87500db92f",
     // OpenProject: all-in-one tag (not -slim) bundles postgres+memcached+web+worker via supervisord.
     // renovate: datasource=docker depName=openproject/openproject
-    openproject: "openproject/openproject:17.5.1@sha256:0232048b00657f6b00369376c4f3f36766b288f0d6e16b953e3f04d5c7ee410a",
+    openproject: "openproject/openproject:17.8.0@sha256:8e49371d8d2aa5b92a40231687076fa3eaa2c98ff1f4f1789e1fe9da5fd838f9",
     // Outline (kind "outline"): team wiki; runs on the postgres+valkey images above, Dex below for login.
     // renovate: datasource=docker depName=outlinewiki/outline
-    outline: "outlinewiki/outline:1.8.2-0@sha256:b1bc8d1a30949fcbe96e6c802fd6a13f8538fce221e54b0d472e0329e740d160",
+    outline: "outlinewiki/outline:1.10.1@sha256:832051f039b446c87aa23929cf92c00980c66aaa2d744d118c48c016ec816ad8",
     // OIDC provider bundled into the Outline stack (no local password auth); one static intentic user.
     // renovate: datasource=docker depName=ghcr.io/dexidp/dex
-    dex: "ghcr.io/dexidp/dex:v2.41.1@sha256:bc7cfce7c17f52864e2bb2a4dc1d2f86a41e3019f6d42e81d92a301fad0c8a1d",
+    dex: "ghcr.io/dexidp/dex:v2.45.1@sha256:8499afd690c437f52301efd2b05b2455da5bd2dfc20332cd697dc9937f808462",
     // Invoice Ninja: one Octane/FrankenPHP image runs app/worker/scheduler roles; MySQL/MariaDB only.
     // renovate: datasource=docker depName=invoiceninja/invoiceninja-octane
-    invoiceninja: "invoiceninja/invoiceninja-octane:5.13.26@sha256:5cb4d04646e2e554de82f6f07d1e4bcd4c343ba6361207958097ba2eae77879a",
+    invoiceninja: "invoiceninja/invoiceninja-octane:5.13.43@sha256:e9e5fba61c897102db6ad0be20b688f74dad4ab135fc9717677d466b8ec7bd28",
     // MariaDB backing Invoice Ninja; upstream's sanctioned mysql alternative, LTS line.
     // renovate: datasource=docker depName=mariadb
-    mariadb: "mariadb:11.8.8@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4",
+    mariadb: "mariadb:11.8.9@sha256:79d59758afc91b89b120b0a8904d637f5a3b3e1c4900f29b740d6d46c72fef68",
     // Infisical (kind "infisical"): secrets management; standalone image (frontend+backend, migrates on boot).
     // renovate: datasource=docker depName=infisical/infisical
-    infisical: "infisical/infisical:v0.161.11@sha256:efe2d4fe5f37fb250ce5956ecc4734cc9ab1b50629d97cf7793d54200a18642b",
+    infisical: "infisical/infisical:v0.165.16@sha256:6b911e3938ac2ff385a782df59ce9272799be7976d26dc5667266a2aecac4116",
     // Scheduled-backup container (alpine, restic+crond); no docker CLI, host's docker binary is bind-mounted.
     // renovate: datasource=docker depName=restic/restic
-    backup: "restic/restic:0.19.0@sha256:7f44e0057b82348597568ea209360762d0b38f8e1dbc8ad859661ac1055e45f2",
+    backup: "restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510",
     // Postgres backing instance; binding provider creates per-app db+role via `docker exec … psql`.
     // renovate: datasource=docker depName=postgres
-    postgres: "postgres:18.4-alpine@sha256:1b1689b20d16a014a3d195653381cf2caa75a41a92d93b255a9d6ea29fd353aa",
+    postgres: "postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873",
     // Valkey backing instance; binding provider mints a per-app ACL user via `docker exec … valkey-cli`.
     // renovate: datasource=docker depName=valkey/valkey
-    valkey: "valkey/valkey:9.1.0-alpine@sha256:a35428eba9043cc0b79dbe54100f0c92784f2de00ad09b01182bfb1c5c83d1bd",
+    valkey: "valkey/valkey:9.1.2-alpine@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11",
     // Authentik server (i.want.auth); compose of server+worker+bundled postgres/valkey; OIDC clients via its API.
     // renovate: datasource=docker depName=ghcr.io/goauthentik/server
-    authentik: "ghcr.io/goauthentik/server:2026.2.4@sha256:0ed7e84cef9d0051659dba5cf63a860a485f85b3fff698c8d2fff17fa3cbe596",
+    authentik: "ghcr.io/goauthentik/server:2026.2.7@sha256:da7024c4a7136b2f0fbbae3740c5ed54633edb393b10dc4fae2cdc056b8f70a8",
     // Garage object store (i.want.objectStorage); binding provider mints per-app bucket+key via `docker exec`.
     // renovate: datasource=docker depName=dxflrs/garage
-    garage: "dxflrs/garage:v2.3.0@sha256:866bd13ed2038ba7e7190e840482bc27234c4afaf77be8cfa439ae088c1e4690",
+    garage: "dxflrs/garage:v2.4.1@sha256:9c96caa2612d3411acc5b0e6701fb238dbfba33e533a6d7d3d811a4b12d0d020",
     // First-party image tracking the moving `stable` tag (moved only by a release), deliberately not digest-pinned.
     // Never `:latest`: that's the unpublished continuous build (0.0.0), which breaks `pnpm install`/`intentic deploy
     // init`.

@@ -4,7 +4,7 @@
 # says how to point turbo at it.
 services:
   turbo-cache:
-    image: ducktors/turborepo-remote-cache:2
+    image: ducktors/turborepo-remote-cache:2.14.1@sha256:8aa1c158d885757149fa953e92c0c8da544cf4a1e9a19b7feb684e59cf7b4bb0
     restart: unless-stopped
     environment:
       # The one token every reader and writer presents; the same value goes into the repository secret TURBO_TOKEN.

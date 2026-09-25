@@ -13,7 +13,7 @@ import { IMAGES } from "./images.js";
 
 // Pinned to match the self-hosted platform's own compose file.
 // SPA fronted by TLS here, not its own image, since the api is https and same-site includes scheme.
-const NGINX_IMAGE = `nginx:1.30.4-alpine3.24@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46`;
+const NGINX_IMAGE = `nginx:1.30.5-alpine3.24@sha256:bf3201ab56f23e5954646379c775d511fc466e9f11376d9725361064ad07ed35`;
 
 const TLS_FRONT_CONF = `server {
     listen 443 ssl;
@@ -27,7 +27,7 @@ const TLS_FRONT_CONF = `server {
 }
 `;
 
-const POSTGRES_IMAGE = `postgres:18.4-alpine3.24@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15`;
+const POSTGRES_IMAGE = `postgres:18.6-alpine3.24@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873`;
 
 // Not secrets: this database exists for the length of one run, on a network of its own.
 const DB = { user: `app`, password: `app`, name: `app` } as const;

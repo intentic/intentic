@@ -27,7 +27,7 @@
 # tier is for — an incomplete Depends, a library the AppImage forgot — is unchanged; a host older than the
 # build base does not test an older user's machine, it tests a machine the artifact was never built for.
 # BUMP THIS WITH _tools/ci-base/Dockerfile, to the same Debian release.
-FROM debian:trixie-20260803-slim@sha256:3a39a0592364683e6bab97937b72cad5a8fa6dcbbee90edb3bb48c7f8e94f258
+FROM debian:trixie-20260918-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
 
 # Xvfb + dbus: a Tauri app is a GTK app, and GTK needs both a display and a session bus. xdg-utils carries
 # xdg-open and xdg-mime — the real OS path a deep link takes, and the thing the .desktop MIME entry feeds.

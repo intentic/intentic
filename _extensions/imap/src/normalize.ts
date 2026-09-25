@@ -4,25 +4,25 @@ import type { ListenerMessage } from "@intentic/connector-runtime";
 // channelId is the watched mailbox. Structural input slices, not imapflow's types, keep this module pure and testable.
 
 export interface MailAddress {
-    readonly name?: string;
-    readonly address?: string;
+    readonly name?: string | undefined;
+    readonly address?: string | undefined;
 }
 
 export interface MailEnvelope {
-    readonly subject?: string;
-    readonly messageId?: string;
-    readonly from?: readonly MailAddress[];
-    readonly to?: readonly MailAddress[];
-    readonly cc?: readonly MailAddress[];
+    readonly subject?: string | undefined;
+    readonly messageId?: string | undefined;
+    readonly from?: readonly MailAddress[] | undefined;
+    readonly to?: readonly MailAddress[] | undefined;
+    readonly cc?: readonly MailAddress[] | undefined;
 }
 
 export interface MailPart {
     readonly type: string;
-    readonly size?: number;
-    readonly disposition?: string;
-    readonly dispositionParameters?: Record<string, string>;
-    readonly parameters?: Record<string, string>;
-    readonly childNodes?: readonly MailPart[];
+    readonly size?: number | undefined;
+    readonly disposition?: string | undefined;
+    readonly dispositionParameters?: Record<string, string> | undefined;
+    readonly parameters?: Record<string, string> | undefined;
+    readonly childNodes?: readonly MailPart[] | undefined;
 }
 
 // Bounded excerpt; the agent fetches the full message over the imap skill (by extra.uid) for more.

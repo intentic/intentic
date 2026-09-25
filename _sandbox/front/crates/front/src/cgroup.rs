@@ -77,10 +77,11 @@ fn move_strays(leaves: &Leaves, keep: &[u32], refused: &mut HashSet<u32>) {
     let found = strays(&procs, keep);
     refused.retain(|pid| found.contains(pid));
     for pid in found {
-        if let Err(error) = std::fs::write(&leaves.workload, pid.to_string()) {
-            if error.raw_os_error() != Some(libc::ESRCH) && refused.insert(pid) {
-                tracing::warn!(%error, pid, "a stray process stays in the daemon's cgroup: moving it was refused");
-            }
+        if let Err(error) = std::fs::write(&leaves.workload, pid.to_string())
+            && error.raw_os_error() != Some(libc::ESRCH)
+            && refused.insert(pid)
+        {
+            tracing::warn!(%error, pid, "a stray process stays in the daemon's cgroup: moving it was refused");
         }
     }
 }

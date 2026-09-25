@@ -96,8 +96,8 @@ jobs:
 
       # No pnpm-setup composite here: that action is written for the Linux container jobs (it points the store
       # and turbo cache at /ci-cache, which does not exist on this box). A plain install is what this needs.
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: package.json
           cache: pnpm
@@ -142,7 +142,7 @@ jobs:
       # about the build. Downloading first made that timeout skip every step below it — including the reconcile
       # whose whole job is to hand the next run a clean machine — so a flaky minute of network left the box dirty
       # and the next run demanding a person. Nothing above this step reads the artifact.
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ inputs.artifact-name }}
           path: windows-artifacts

@@ -31,8 +31,8 @@
 # fails on a bump that changes the shape, and the parser reports "could not check" rather than "clean" if one
 # ever does.
 ENV UV_LINK_MODE=copy
-RUN version=0.12.10 \
-    && ruff_version=0.16.6 \
+RUN version=0.12.19 \
+    && ruff_version=0.16.9 \
     && case "$(dpkg --print-architecture)" in \
         amd64) triple=x86_64-unknown-linux-gnu ;; \
         arm64) triple=aarch64-unknown-linux-gnu ;; \
@@ -44,4 +44,4 @@ RUN version=0.12.10 \
         | tar -xz -C /usr/local/bin --strip-components=1 "ruff-${triple}/ruff" \
     && uv --version && uvx --version && ruff --version
 RUN --mount=type=cache,target=/root/.npm \
-    npm install -g pyright@1.1.413 && pyright --version
+    npm install -g pyright@1.1.414 && pyright --version

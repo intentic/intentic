@@ -21,7 +21,8 @@ export const compareDocx = async (before: Blob | Uint8Array, after: Blob | Uint8
     const [old, current] = (await Promise.all([parseAsync(before), parseAsync(after)])) as [ParsedDocx, ParsedDocx];
     const result = redline(old.documentPart.body.children, current.documentPart.body.children, options);
     current.documentPart.body.children = [...result.children];
-    await renderDocument(current, host, undefined, { renderChanges: true });
+    // docx-preview 0.4 returns the rendered nodes (styles included) instead of drawing into a container.
+    host.replaceChildren(...(await renderDocument(current, { renderChanges: true })));
     return { events: result.events, whole: result.whole };
 };
 

@@ -3,7 +3,7 @@
 # the Komodo compose stack, the cloudflared connector) run exactly as they would on a real owned box,
 # without polluting the developer's Docker daemon. sshd is added so the engine reaches it over SSH like
 # real infra. The harness injects the authorized public key via testcontainers before start.
-FROM docker:29.7.1-dind@sha256:e8faad5a8dc5279dff929afc5449f2791736912fff9f99351d742db2fad01b4c
+FROM docker:29.8.1-dind@sha256:3f3c01aaaebf7cce837356b688b7c059a4749f10bd7660dec7c58fc454a283f0
 
 # Links the GHCR package to this repository — without it a private package is unpullable by the repository's
 # own GITHUB_TOKEN, and every job that runs this image fails before its first step.

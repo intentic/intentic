@@ -44,7 +44,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         > /etc/apt/sources.list.d/nvidia-cuda.list \
     && apt-get update && apt-get install -y --no-install-recommends cmake ccache g++ make libgomp1 cuda-nvcc-12-6 cuda-cudart-dev-12-6 libcublas-dev-12-6 \
     && mkdir -p /tmp/llama.cpp \
-    && curl -fsSL https://github.com/ggml-org/llama.cpp/archive/refs/tags/b10581.tar.gz \
+    && curl -fsSL https://github.com/ggml-org/llama.cpp/archive/refs/tags/b11146.tar.gz \
         | tar -xz -C /tmp/llama.cpp --strip-components=1 \
     && cmake -S /tmp/llama.cpp -B /tmp/llama.cpp/build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
         -DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF \

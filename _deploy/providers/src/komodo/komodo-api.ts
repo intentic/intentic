@@ -164,10 +164,13 @@ export const komodoApi: KomodoApi = {
         }
         return result.data.jwt;
     },
+    // `limit: 0` on every List* call: Komodo 2.3 paginates the resource list APIs (50 per page by default) and still
+    // answers with a bare array, so without it a truncated list is indistinguishable from a complete one — a server,
+    // deployment or alerter past the first page would read as absent. Pre-2.3 cores ignore the field.
     listServers: async ({ baseUrl, jwt }) =>
-        project(await read({ baseUrl, module: "read", type: "ListServers", params: {}, jwt }, z.array(listItemSchema))),
+        project(await read({ baseUrl, module: "read", type: "ListServers", params: { limit: 0 }, jwt }, z.array(listItemSchema))),
     listDeployments: async ({ baseUrl, jwt }) =>
-        project(await read({ baseUrl, module: "read", type: "ListDeployments", params: {}, jwt }, z.array(listItemSchema))),
+        project(await read({ baseUrl, module: "read", type: "ListDeployments", params: { limit: 0 }, jwt }, z.array(listItemSchema))),
     getDeployment: async ({ baseUrl, jwt, deployment }) =>
         (await read({ baseUrl, module: "read", type: "GetDeployment", params: { deployment }, jwt }, getDeploymentSchema)).config,
     createDeployment: async ({ baseUrl, jwt, name, config }) => {
@@ -206,7 +209,7 @@ export const komodoApi: KomodoApi = {
         });
     },
     listAlerters: async ({ baseUrl, jwt }) =>
-        project(await read({ baseUrl, module: "read", type: "ListAlerters", params: {}, jwt }, z.array(listItemSchema))),
+        project(await read({ baseUrl, module: "read", type: "ListAlerters", params: { limit: 0 }, jwt }, z.array(listItemSchema))),
     getAlerter: async ({ baseUrl, jwt, id }) =>
         (await read({ baseUrl, module: "read", type: "GetAlerter", params: { alerter: id }, jwt }, getAlerterSchema)).config,
     createAlerter: async ({ baseUrl, jwt, name, config }) => {

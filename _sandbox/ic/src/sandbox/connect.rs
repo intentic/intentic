@@ -325,7 +325,7 @@ fn connect(
         }
         self_host_via = "cloudflared".to_string();
         let root = crate::selfhost::Root::acquire("SELF_HOST setup")?;
-        let cloudflared_version = env_or("CLOUDFLARED_VERSION", "2026.9.1");
+        let cloudflared_version = env_or("CLOUDFLARED_VERSION", "2026.9.3");
         crate::selfhost::install_cloudflared(&root, &cloudflared_version)?;
         crate::selfhost::run_ssh_connector(&root, &host_tunnel_token, "the connect one-liner")?;
         ui::note(&format!(

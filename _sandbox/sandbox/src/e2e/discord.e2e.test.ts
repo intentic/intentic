@@ -33,9 +33,9 @@ const CLAUDE_CREDS = {
         : {}),
 };
 
-// Whisper model (~75MB) and sample audio, cached across runs from the same v1.9.1 tag the overlay builds.
+// Whisper model (~75MB) and sample audio, cached across runs from the same v1.9.4 tag the overlay builds.
 const CACHE_DIR = join(homedir(), ".cache", "intentic-e2e", "whisper");
-const SAMPLE_URL = "https://raw.githubusercontent.com/ggml-org/whisper.cpp/v1.9.1/samples/jfk.wav";
+const SAMPLE_URL = "https://raw.githubusercontent.com/ggml-org/whisper.cpp/v1.9.4/samples/jfk.wav";
 
 const ensureCached = async (file: string, fetchBlob: () => Promise<Blob>): Promise<string> => {
     const path = join(CACHE_DIR, file);

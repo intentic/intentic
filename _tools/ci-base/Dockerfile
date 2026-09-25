@@ -18,7 +18,7 @@
 # test an older user's machine; it tests a machine the artifact was never built for.
 # ponytail: bump this digest together with _sandbox/sandbox/Dockerfile's FROM — they must stay identical — and
 # move _tools/desktop-smoke/Dockerfile's FROM to the same Debian release.
-FROM node:24.21.0-trixie-slim@sha256:db3ae80f5d8df06e04dabdf7b44cbf008d32de168205fa0294444aabbc08c590
+FROM node:24.21.0-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe
 
 # What LINKS the GHCR package to this repository, and the reason is not cosmetic: an unlinked private package
 # is one the repository's own GITHUB_TOKEN cannot pull, so every job that runs in this image dies at
@@ -69,9 +69,10 @@ RUN git config --system --add safe.directory '*'
 # `bun build --compile`. Copied out of the official image instead of piping the install script from bun.sh: the
 # version is digest-pinned and this layer needs no network. -slim is Debian, and an older one than this image's
 # trixie, so the binary is linked against a glibc this one already satisfies.
-# ponytail: keep in lockstep with _platform/api/Dockerfile and _platform/ingress/Dockerfile — all three
-# ship bun 1.4.1 via the same digest-pinned canary-slim until 1.4.1-slim exists on Docker Hub.
-COPY --from=oven/bun:canary-slim@sha256:6285dc2ad21f26e6b57f6887905cccccc62f151a6e4b4334faa009a500594b71 /usr/local/bin/bun /usr/local/bin/bun
+# ponytail: keep in lockstep with _platform/api/Dockerfile and the `bun` catalog entry in pnpm-workspace.yaml —
+# both images ship bun 1.4.2 from the same digest-pinned stable 1.4.2-slim (canary-slim only stood in while no
+# stable -slim tag of the catalog's bun existed).
+COPY --from=oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52d95a519631e2fc61 /usr/local/bin/bun /usr/local/bin/bun
 
 # pnpm INSTALLED NATIVELY, not through corepack, because pnpm 12 already does corepack's job: it is a Rust
 # binary that needs no Node, and `pmOnFail` defaults to `download`, so it fetches whatever version the
@@ -85,7 +86,7 @@ COPY --from=oven/bun:canary-slim@sha256:6285dc2ad21f26e6b57f6887905cccccc62f151a
 # ponytail: bump together with package.json's packageManager field.
 ENV PNPM_HOME=/usr/local/share/pnpm
 ENV PATH=$PNPM_HOME/bin:$PATH
-RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.4.1 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
+RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.6.0 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
     && rm -f /tmp/pnpm-env.sh \
     && pnpm --version
 

@@ -64,7 +64,7 @@ export const expectedGraph: DesiredStateGraph = {
                         key: "FORGEJO_ADMIN_PASSWORD",
                     },
                 },
-                image: "codeberg.org/forgejo/forgejo:15.0.3@sha256:55bb42bec9abef5223744804f164e37d37b20df7e8b8b4807ba213ad4f071d6d",
+                image: "codeberg.org/forgejo/forgejo:15.0.9@sha256:91a5310c86934339e16bd06b6078aada836e3d8935b2d70f6598108cbfaed5d1",
             },
             dependsOn: ["host"],
             readyWhen: {
@@ -96,8 +96,8 @@ export const expectedGraph: DesiredStateGraph = {
                 token: {
                     $ref: "host-git.runnerToken",
                 },
-                image: "data.forgejo.org/forgejo/runner:12.12.0@sha256:268ad0d1d24bd7ecf2386b7c44e8211398dc014ca81d4fd5fbad96fe79af18f5",
-                jobImage: "data.forgejo.org/oci/node:24-bookworm@sha256:fdddfb3e688158251943d52eba361de991548f6814007acba4917ae6b512d6be",
+                image: "data.forgejo.org/forgejo/runner:13.2.0@sha256:ca3d5eea46004789a175d1369eec6829d3ea9bfbe2011a06625b4bdaa55f7552",
+                jobImage: "data.forgejo.org/oci/node:24-bookworm@sha256:64af3819f9275802414d7cdc38c27e9d82bd564dec4d4da87d008255d36c63b4",
             },
             dependsOn: ["host", "host-git"],
         },
@@ -139,8 +139,8 @@ export const expectedGraph: DesiredStateGraph = {
                 registryToken: {
                     $ref: "host-git.packagesToken",
                 },
-                coreImage: "ghcr.io/moghtech/komodo-core:2.1.0@sha256:4915d91b5c6e9de4e8fd59391eed5cad090ec84dcf6a1a9233d97edfdbbb88e7",
-                peripheryImage: "ghcr.io/moghtech/komodo-periphery:2.1.0@sha256:f5b272e3d9acd60d4eac69ea4fa0292dcaddfdecfc2be64ba5575e5ae18e72ae",
+                coreImage: "ghcr.io/moghtech/komodo-core:2.3.3@sha256:bca73d0eee143066228fb9b80c38a5a2726e573ad2758f7aa92b5c91a8aef1c7",
+                peripheryImage: "ghcr.io/moghtech/komodo-periphery:2.3.3@sha256:fa3f1a641a265216066676950d5eecdf506955a7bafe2f01996135ae93115cd5",
                 ferretdbImage: "ghcr.io/ferretdb/ferretdb:2.7.0@sha256:5706414241eb84f0515512c37b46db0f1b1eac9e5ceb7e4c2523211c184b1985",
                 postgresImage:
                     "ghcr.io/ferretdb/postgres-documentdb:17-0.107.0-ferretdb-2.7.0@sha256:2386795ec2aa7ae559304361979f1dc5708d383ee9020ae63dadc2940dfe58f7",
@@ -564,7 +564,7 @@ export const expectedGraph: DesiredStateGraph = {
                     },
                 },
                 signoz: false,
-                image: "restic/restic:0.19.0@sha256:7f44e0057b82348597568ea209360762d0b38f8e1dbc8ad859661ac1055e45f2",
+                image: "restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510",
             },
             dependsOn: ["host-git", "host-deploy"],
         },
@@ -608,7 +608,7 @@ export const expectedGraph: DesiredStateGraph = {
                         port: 23104,
                     },
                 ],
-                image: "cloudflare/cloudflared:2026.9.1@sha256:b269e8abd07a5bf6f3f4be65d5050b2174eca89c56a0241a8ff32a16aec454e4",
+                image: "cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c",
             },
             dependsOn: ["cf", "host"],
         },

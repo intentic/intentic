@@ -9,9 +9,10 @@
 #
 # Runtime config (see src/config.ts) is injected by the deployment, never baked: DATABASE_URL,
 # BETTER_AUTH_SECRET, SECRETS_KEY, WEB_ORIGIN, API_URL, GOOGLE_CLIENT_*, INTENTIC_CLOUDFLARE_*, STRIPE_*, …
-# ponytail: keep in lockstep with _tools/ci-base/Dockerfile and _platform/ingress/Dockerfile — all three
-# ship bun 1.4.1 via the same digest-pinned canary-slim until 1.4.1-slim exists on Docker Hub.
-FROM oven/bun:canary-slim@sha256:6285dc2ad21f26e6b57f6887905cccccc62f151a6e4b4334faa009a500594b71
+# ponytail: keep in lockstep with _tools/ci-base/Dockerfile and the `bun` catalog entry in pnpm-workspace.yaml —
+# both images ship bun 1.4.2 from the same digest-pinned stable 1.4.2-slim (canary-slim only stood in while no
+# stable -slim tag of the catalog's bun existed).
+FROM oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52d95a519631e2fc61
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 WORKDIR /app
 COPY . /app

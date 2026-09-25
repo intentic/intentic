@@ -433,8 +433,8 @@ export const demoEnvironmentContents = (): EnvironmentContents => ({
             state: `after-rebuild`,
             tools: [],
             purpose: `Turns voice-channel audio into text on this machine, without sending it anywhere.`,
-            detail: `Built from source and pinned to v1.9.1, so a transcript made today can be reproduced next year.`,
-            commands: `RUN git clone --depth 1 --branch v1.9.1 https://github.com/ggml-org/whisper.cpp /tmp/whisper.cpp \\\n    && cmake --build /tmp/whisper.cpp/build -j --target whisper-cli`,
+            detail: `Built from source and pinned to v1.9.4, so a transcript made today can be reproduced next year.`,
+            commands: `RUN git clone --depth 1 --branch v1.9.4 https://github.com/ggml-org/whisper.cpp /tmp/whisper.cpp \\\n    && cmake --build /tmp/whisper.cpp/build -j --target whisper-cli`,
         },
         {
             id: `capability:docker`,
@@ -461,7 +461,7 @@ export const demoEnvironmentContents = (): EnvironmentContents => ({
             name: `pnpm`,
             origin: `base`,
             state: `active`,
-            tools: [{ name: `pnpm`, version: `12.4.1` }],
+            tools: [{ name: `pnpm`, version: `12.6.0` }],
             purpose: `Installs and runs workspace packages.`,
         },
         {
@@ -509,7 +509,7 @@ export const demoEnvironmentContents = (): EnvironmentContents => ({
             name: `cloudflared`,
             origin: `base`,
             state: `active`,
-            tools: [{ name: `cloudflared`, version: `2026.9.1` }],
+            tools: [{ name: `cloudflared`, version: `2026.9.3` }],
             purpose: `Puts a local port on a public URL.`,
         },
     ],

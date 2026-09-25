@@ -1,6 +1,6 @@
 import { Readable } from "node:stream";
 import { createGunzip } from "node:zlib";
-import { extract, type Headers } from "tar-stream";
+import { extract, type Header } from "tar-stream";
 import { ArrivalFormatError } from "../arrival-error.js";
 import { drain, extractAll } from "../tar-extract.js";
 import { skipReason } from "./scan-policy.js";
@@ -48,7 +48,7 @@ export const readForeignArchive = async (body: ReadableStream<Uint8Array>, limit
     const skipped = new Set<string>();
     let remaining = limit;
 
-    const handleEntry = async (header: Headers, stream: Readable): Promise<void> => {
+    const handleEntry = async (header: Header, stream: Readable): Promise<void> => {
         if (header.type !== "file") {
             await drain(stream);
             return;

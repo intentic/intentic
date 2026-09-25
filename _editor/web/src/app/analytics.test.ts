@@ -7,7 +7,7 @@ import { nextTick, ref } from "vue";
 const user = ref<User | null>(null);
 jest.mock("../features/auth/useAuth", () => ({ useAuth: () => ({ user }) }));
 jest.mock("posthog-js", () => ({
-    default: { init: jest.fn(), identify: jest.fn(), reset: jest.fn(), capture: jest.fn(), register: jest.fn() },
+    posthog: { init: jest.fn(), identify: jest.fn(), reset: jest.fn(), capture: jest.fn(), register: jest.fn() },
 }));
 
 // environment.ts reads `window.env` once, at import; this is the same object under the same name, mutated per case,
@@ -29,7 +29,7 @@ const bootAnalytics = async (posthogKey: string, desktop?: { version: string; in
         env: environment,
         ...(desktop !== undefined ? { __INTENTIC_DESKTOP__: desktop } : {}),
     });
-    const posthog = (await import(`posthog-js`)).default;
+    const { posthog } = await import(`posthog-js`);
     const analytics = await freshImport<typeof import("./analytics")>("./analytics", import.meta.url);
     analytics.initAnalytics();
     return { posthog, analytics };

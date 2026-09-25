@@ -5,8 +5,8 @@ import { createKomodoProvider } from "./komodo.js";
 
 const res = (stdout: string, code = 0): SshResult => ({ stdout, stderr: "", code });
 
-const CORE_IMAGE = "ghcr.io/moghtech/komodo-core:2.1.0@sha256:aaaa";
-const PERIPHERY_IMAGE = "ghcr.io/moghtech/komodo-periphery:2.1.0@sha256:bbbb";
+const CORE_IMAGE = "ghcr.io/moghtech/komodo-core:2.3.3@sha256:aaaa";
+const PERIPHERY_IMAGE = "ghcr.io/moghtech/komodo-periphery:2.3.3@sha256:bbbb";
 const FERRETDB_IMAGE = "ghcr.io/ferretdb/ferretdb:2.7.0@sha256:cccc";
 const POSTGRES_IMAGE = "ghcr.io/ferretdb/postgres-documentdb:17-0.107.0-ferretdb-2.7.0@sha256:dddd";
 // The service=image lines `docker inspect` reports for the running compose project, mirroring runningImages.
@@ -147,7 +147,7 @@ test("a guarded update snapshots the postgres/keys/ferretdb volumes before recre
     const ssh = fakeSsh({ healthy: true });
     const observed = { outputs: {}, detail: { images: { ...DEFAULT_IMAGES, core: "ghcr.io/moghtech/komodo-core:2.0.0@sha256:old" } } };
     await createKomodoProvider(ssh.executor).apply(
-        { ...inputs, guardRepo: "s3:s3.example.com/bucket", resticImage: "restic/restic:0.19.0@sha256:r" },
+        { ...inputs, guardRepo: "s3:s3.example.com/bucket", resticImage: "restic/restic:0.19.1@sha256:r" },
         observed,
         ctx(),
     );

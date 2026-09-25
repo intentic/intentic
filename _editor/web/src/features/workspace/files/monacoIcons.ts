@@ -5,6 +5,7 @@ import { glyphBody } from "@intentic/ui/glyph";
 export const EDITOR_ICONS = {
     account: `user`,
     add: `plus`,
+    "add-small": `plus`,
     "arrow-down": `arrow-down`,
     "arrow-right": `arrow-right`,
     "arrow-swap": `repeat`,
@@ -12,6 +13,7 @@ export const EDITOR_ICONS = {
     "bell-slash": `volume-off`,
     "case-sensitive": `case-sensitive`,
     check: `check`,
+    circle: `circle`,
     "chevron-down": `chevron-down`,
     "chevron-left": `chevron-left`,
     "chevron-right": `chevron-right`,
@@ -48,6 +50,7 @@ export const EDITOR_ICONS = {
     "quick-input-back": `arrow-left`,
     regex: `regex`,
     remove: `minus`,
+    "remove-small": `minus`,
     replace: `replace`,
     "replace-all": `replace-all`,
     "scrollbar-button-down": `chevron-down`,

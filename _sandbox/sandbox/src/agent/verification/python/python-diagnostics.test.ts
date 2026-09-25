@@ -36,7 +36,7 @@ test("a relative path is resolved against the run's own directory before it is r
 
 // One payload covering every case: error shown, warning not, position moved zero-based to one-based.
 const PYRIGHT_JSON = JSON.stringify({
-    version: "1.1.413",
+    version: "1.1.414",
     generalDiagnostics: [
         {
             file: `${WORKSPACE_ROOT}/app/main.py`,
@@ -130,7 +130,7 @@ test("a payload this cannot read is not a clean file", () => {
     // Every unreadable payload answers "could not read": unchecked, not a clean bill of health.
     expect(pyrightErrors("", asIs, WHOLE)).toBeUndefined();
     expect(pyrightErrors("Traceback (most recent call last):", asIs, WHOLE)).toBeUndefined();
-    expect(pyrightErrors(JSON.stringify({ version: "1.1.413", summary: {} }), asIs, WHOLE)).toBeUndefined();
+    expect(pyrightErrors(JSON.stringify({ version: "1.1.414", summary: {} }), asIs, WHOLE)).toBeUndefined();
     expect(pyrightErrors('{"generalDiagnostics": {"file": "x"}}', asIs, WHOLE)).toBeUndefined();
     // A run that really found nothing is a different answer, and it is the empty list.
     expect(pyrightErrors(JSON.stringify({ generalDiagnostics: [] }), asIs, WHOLE)).toEqual([]);

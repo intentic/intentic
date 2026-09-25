@@ -34,7 +34,7 @@ const inputs = {
     sshKey: "key",
     coreAddress: "https://deploy.example.com",
     serverName: "worker",
-    image: "ghcr.io/moghtech/komodo-periphery:2.1.0@sha256:bbbb",
+    image: "ghcr.io/moghtech/komodo-periphery:2.3.3@sha256:bbbb",
 };
 
 test("delete removes the periphery container on the worker host", async () => {

@@ -41,6 +41,13 @@ const REVIEWED = new Map([
         },
     ],
     [
+        "elkjs",
+        {
+            licence: "EPL-2.0",
+            why: "Needs an owner decision: the ELK graph-layout engine mermaid 12 took on as a hard dependency (11 left it to the separate @mermaid-js/layout-elk package), shipped unmodified in the desktop app through @intentic/ui > mermaid; EPL-2.0 is file-level copyleft like MPL-2.0 and asks for the source of those files, which npm already publishes.",
+        },
+    ],
+    [
         "web-push",
         {
             licence: "MPL-2.0",
@@ -64,8 +71,8 @@ const REVIEWED = new Map([
     [
         "@dicebear/styles",
         {
-            licence: undefined,
-            why: 'Needs an owner decision: no licence field; its LICENSE licenses each avatar style separately, several CC BY 4.0 (attribution) and some "free for personal and commercial use"; the desktop app ships @intentic/ui, which depends on it.',
+            licence: "SEE LICENSE IN LICENSE.md",
+            why: 'Needs an owner decision: its LICENSE.md licenses each avatar style separately, several CC BY 4.0 (attribution) and some "free for personal and commercial use", and the code around them MIT (the licence field pointing there arrived in 10.6.0; the terms are the ones 10.4.0 carried); the desktop app ships @intentic/ui, which depends on it.',
         },
     ],
 ]);

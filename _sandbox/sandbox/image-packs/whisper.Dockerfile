@@ -25,7 +25,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/root/.cache/ccache \
     apt-get update && apt-get install -y --no-install-recommends cmake ccache g++ make libgomp1 \
     && mkdir -p /tmp/whisper.cpp \
-    && curl -fsSL https://github.com/ggml-org/whisper.cpp/archive/refs/tags/v1.9.1.tar.gz \
+    && curl -fsSL https://github.com/ggml-org/whisper.cpp/archive/refs/tags/v1.9.4.tar.gz \
         | tar -xz -C /tmp/whisper.cpp --strip-components=1 \
     && cmake -S /tmp/whisper.cpp -B /tmp/whisper.cpp/build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
         -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \

@@ -104,7 +104,7 @@ const graph: DesiredStateGraph = {
                 user: "deploy",
                 sshKey: { $secret: { source: "env", key: "HOST_SSH_KEY" } },
                 ingress: [{ hostname: "app.example.com", port: 3000 }],
-                image: "cloudflare/cloudflared:2026.9.1@sha256:aaaa",
+                image: "cloudflare/cloudflared:2026.9.3@sha256:aaaa",
             },
             dependsOn: ["cf", "host"],
         },

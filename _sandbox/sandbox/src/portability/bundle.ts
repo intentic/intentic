@@ -94,7 +94,7 @@ const packTree = async (
         }
         // An empty directory that survived every filter is content in its own right, and needs an explicit entry.
         if (!wrote && relDir !== "") {
-            packer.entry({ name: `${prefix}${relDir}/`, type: "directory" }).end();
+            packer.entry({ name: `${prefix}${relDir}/`, type: "directory" }).end(null);
         }
         return wrote;
     };

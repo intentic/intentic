@@ -144,7 +144,10 @@ export const openImapConnection = async (
     let point: { lastUid: number; baselined: boolean };
     try {
         const stored = await readWatermark(path, (detail) =>
-            ctx.log.warn({ capabilityId, path, detail }, "imap watermark unreadable; resuming from the mailbox's current end, so mail from the downtime is not dispatched"),
+            ctx.log.warn(
+                { capabilityId, path, detail },
+                "imap watermark unreadable; resuming from the mailbox's current end, so mail from the downtime is not dispatched",
+            ),
         );
         point = resumePoint(stored, { mailbox, uidValidity, uidNext: box.uidNext });
         if (point.baselined) {
@@ -161,13 +164,15 @@ export const openImapConnection = async (
     const dispatchNew = (): Promise<void> =>
         syncNewMail(
             {
-                search: (range) => client.search({ uid: range }, { uid: true }),
-                fetch: (uid) =>
-                    client.fetchOne(
+                // imapflow 2 answers `undefined` where 1.x answered `false` (no mailbox open, message gone); both mean
+                // "nothing to deliver" here.
+                search: async (range) => (await client.search({ uid: range }, { uid: true })) ?? false,
+                fetch: async (uid) =>
+                    (await client.fetchOne(
                         uid,
                         { uid: true, envelope: true, internalDate: true, bodyStructure: true, source: { maxLength: SOURCE_MAX } },
                         { uid: true },
-                    ),
+                    )) ?? false,
             },
             mark,
             {

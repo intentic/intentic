@@ -28,7 +28,7 @@ const tier = e2eTier(`the hosted plan, end to end: the real api on Postgres, Str
 const exec = promisify(execFile);
 
 // The pin the platform's own compose file and migrations job run, so the guard matches production's database.
-const POSTGRES_IMAGE = `postgres:18.4-alpine3.24`;
+const POSTGRES_IMAGE = `postgres:18.6-alpine3.24`;
 
 const API_ORIGIN = `http://api.test`;
 const WEB_ORIGIN = `http://web.test`;

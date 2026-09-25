@@ -7,7 +7,7 @@ import { pipeline } from "node:stream/promises";
 import { createGunzip } from "node:zlib";
 import { type ArrivalItem, type ArrivalReport, BundleManifestSchema, type BundleManifest, type NeedsAction } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
-import { extract, type Headers } from "tar-stream";
+import { extract, type Header } from "tar-stream";
 import { pathExists } from "../path-exists.js";
 import { convertDocument, fold, isJsonObject, nested, retype } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
@@ -154,7 +154,7 @@ const countLabel = (tally: Tally | undefined): string =>
 const walkBundle = async (
     source: Readable,
     onManifest: (manifest: BundleManifest) => void,
-    visit: (placed: Placed, header: Headers, stream: Readable, refuse: (name: string) => void) => Promise<void>,
+    visit: (placed: Placed, header: Header, stream: Readable, refuse: (name: string) => void) => Promise<void>,
 ): Promise<void> => {
     const ex = extract();
     let manifest: BundleManifest | undefined;
@@ -171,7 +171,7 @@ const walkBundle = async (
     const refused: string[] = [];
     const refuse = (name: string): void => void refused.push(name);
 
-    const handleEntry = async (header: Headers, stream: Readable): Promise<void> => {
+    const handleEntry = async (header: Header, stream: Readable): Promise<void> => {
         if (header.name === BUNDLE_MANIFEST_ENTRY) {
             const raw: unknown = JSON.parse((await readEntry(stream)).toString("utf8"));
             const parsed = BundleManifestSchema.safeParse(convertDocument(bundleManifestDocument.history, "object", raw).value);
@@ -360,7 +360,7 @@ const healGitPointers = async (
 // from. Undefined refuses it: outside its root, or a live database's sidecar, which nothing here would ever write.
 const destinationOf = (
     placed: Placed,
-    header: Headers,
+    header: Header,
     roots: { readonly workspaceRoot: string; readonly historyRoot: string },
     arrivedDatabase: string,
 ): string | undefined => {
@@ -406,7 +406,7 @@ export const applyBundle = async (
 
     // One entry to one path, split out of the visitor so its three decisions (ticked? consented? inside the root?)
     // aren't buried beside the four write shapes.
-    const writeEntry = async (target: string, header: Headers, stream: Readable): Promise<void> => {
+    const writeEntry = async (target: string, header: Header, stream: Readable): Promise<void> => {
         if (header.type === "directory") {
             await mkdir(target, { recursive: true });
             return;

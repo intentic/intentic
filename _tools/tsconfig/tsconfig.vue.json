@@ -14,5 +14,7 @@
         "target": "ES2023",
         "useDefineForClassFields": true
     },
-    "extends": "./tsconfig.base.json"
+    "extends": "./tsconfig.base.json",
+    /* Inherited by every Vue project (a child's own `include` does not replace it); see css.d.ts. */
+    "files": ["./css.d.ts"]
 }

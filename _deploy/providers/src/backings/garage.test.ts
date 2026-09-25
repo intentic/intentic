@@ -4,7 +4,7 @@ import { createGarageBucketProvider } from "./garage-bucket.js";
 
 const res = (stdout: string, code = 0): SshResult => ({ stdout, stderr: "", code });
 
-const IMAGE = "dxflrs/garage:v2.3.0@sha256:aaaa";
+const IMAGE = "dxflrs/garage:v2.4.1@sha256:aaaa";
 
 // Drives the garage instance provider: `garage status` reports readiness, docker inspect reports the image,
 // the layout commands drive the one-time bootstrap, and docker compose up can be made to fail.

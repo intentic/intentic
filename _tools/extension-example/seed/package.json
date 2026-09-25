@@ -5,22 +5,22 @@
     "license": "MIT",
     "private": true,
     "type": "module",
-    "packageManager": "pnpm@12.4.1",
+    "packageManager": "pnpm@12.6.0",
     "scripts": {
         "build": "vite build",
         "typecheck": "vue-tsc --noEmit -p tsconfig.json",
         "test": "node --test test/activate.test.mjs"
     },
     "dependencies": {
-        "@intentic/extension-api": "^1.176.3"
+        "@intentic/extension-api": "^1.311.0"
     },
     "devDependencies": {
-        "@tanstack/vue-query": "^5.90.2",
-        "@types/node": "^24.0.0",
-        "@vitejs/plugin-vue": "^6.0.1",
-        "typescript": "^5.9.3",
-        "vite": "^7.1.7",
-        "vue": "^3.5.22",
-        "vue-tsc": "^3.1.1"
+        "@tanstack/vue-query": "^5.103.2",
+        "@types/node": "^24.13.6",
+        "@vitejs/plugin-vue": "^6.0.9",
+        "typescript": "^6.0.3",
+        "vite": "^8.3.1",
+        "vue": "^3.5.43",
+        "vue-tsc": "^3.3.11"
     }
 }

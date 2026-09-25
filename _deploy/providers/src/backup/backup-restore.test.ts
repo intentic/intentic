@@ -17,7 +17,7 @@ const fakeSsh = (): { executor: SshExecutor; commands: string[] } => {
 
 const args = (scope: "forgejo" | "komodo" | "all", executor: SshExecutor) => ({
     target,
-    image: "restic/restic:0.19.0@sha256:aaaa",
+    image: "restic/restic:0.19.1@sha256:aaaa",
     repo: "s3:s3.example.com/bucket",
     password: "restic-pw",
     credentials: { AWS_ACCESS_KEY_ID: "AKIA" },

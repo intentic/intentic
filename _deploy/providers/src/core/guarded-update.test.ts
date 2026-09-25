@@ -17,7 +17,7 @@ const fakeSession = (fail: (command: string) => boolean = () => false): { sessio
 const base = (session: SshSession) => ({
     session,
     repo: "s3:s3.example.com/bucket",
-    resticImage: "restic/restic:0.19.0@sha256:aaaa",
+    resticImage: "restic/restic:0.19.1@sha256:aaaa",
     volumes: ["intentic-forgejo-data"],
     tag: "intentic-preupdate-host-git",
     log: () => {},

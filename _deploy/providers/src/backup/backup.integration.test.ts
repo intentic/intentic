@@ -5,7 +5,7 @@ import { createBackupProvider } from "./backup.js";
 
 const res = (stdout: string, code = 0): SshResult => ({ stdout, stderr: "", code });
 
-const IMAGE = "restic/restic:0.19.0@sha256:aaaa";
+const IMAGE = "restic/restic:0.19.1@sha256:aaaa";
 const SEP = "|";
 
 // Drives the backup provider over SSH: docker ps reports the container, docker inspect reports the create-time

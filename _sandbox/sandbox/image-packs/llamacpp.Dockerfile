@@ -57,9 +57,9 @@
 # it look like a turn that was merely thinking. Upstream now treats a typeless schema as the free-form value it
 # is, which is the floor this pack has to clear: a local model is only useful to an agent that can call tools.
 # ponytail: bump the pin deliberately; a llama.cpp server-API change surfaces as a local-model-only failure.
-ARG LLAMACPP_VERSION=b10581
-ARG LLAMACPP_SHA256_X64=b93bf39a66ce02170417ca03ff2ce4721970594b9b959941a862f45f96cb8c91
-ARG LLAMACPP_SHA256_ARM64=2606bc598c670977e235ed9dd17d27d2cdc3fea07a3e7de5de640b0d7a1356e9
+ARG LLAMACPP_VERSION=b11146
+ARG LLAMACPP_SHA256_X64=c150306eb16b5ab696f76a8bdf810c35fd98a24e82158742e6fa28f420ff8410
+ARG LLAMACPP_SHA256_ARM64=4aeda6fe68831547e49b7fa87607383ca5352b3d72ca5f70d52ed265f58c131f
 # libgomp1 is ggml's OpenMP runtime and libssl3 is the server's TLS: both are pulled in today by g++ and curl
 # in the core image, and both are named here anyway so this pack does not depend on another layer's dependency
 # graph. The `--version` at the end is the gate both architectures answer to: an unrunnable binary is the exact

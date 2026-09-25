@@ -22,7 +22,7 @@ x-logging: &logging
 
 services:
     postgres:
-        image: postgres:18.4-alpine3.24@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
+        image: postgres:18.6-alpine3.24@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
         restart: unless-stopped
         logging: *logging
         environment:
@@ -275,7 +275,7 @@ services:
         networks: [intentic-platform]
 
     cloudflared:
-        image: cloudflare/cloudflared:2026.9.1@sha256:b269e8abd07a5bf6f3f4be65d5050b2174eca89c56a0241a8ff32a16aec454e4
+        image: cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c
         restart: unless-stopped
         logging: *logging
         command: tunnel --no-autoupdate run --token ${PLATFORM_TUNNEL_TOKEN:?set PLATFORM_TUNNEL_TOKEN in .env}

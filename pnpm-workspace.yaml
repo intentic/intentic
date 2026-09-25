@@ -59,7 +59,7 @@ overrides:
   # The versioned UI patches route control icons to Icon and render diagram SVGs natively.
   "primevue>@primevue/icons": "-"
   "mermaid>@iconify/utils": "-"
-  zod: 4.5.4
+  zod: 4.6.5
   # THE ONE PACKAGE THE ZOD OVERRIDE ABOVE MUST NOT REACH. @cursor/sdk asks for `^3.25.0` and the blanket
   # override hands it 4.5.4 anyway, which is a MAJOR it was not written against, and the damage is silent
   # rather than loud: the SDK's published .d.ts is a ~52k-line wall of zod-3 type shapes, every public type in
@@ -73,23 +73,11 @@ overrides:
   # the point rather than a cost: two packages genuinely want different majors, and this workspace's own code
   # is unaffected because nothing here imports through @cursor/sdk's zod.
   "@cursor/sdk>zod": 3.25.76
-  # @posthog/core 1.40.1's tarball shipped dist .d.ts that import "../src/*.ts" (raw source), dragging posthog's
-  # src into vue-tsc under our strict flags (58 errors); 1.40.2 fixes the declaration emit (types-only bump).
-  "@posthog/core": 1.40.2
-  # astro 6.4's `sharp` is still an optional `^0.34.0`, so the catalog bump below reaches the site's own copy but
-  # not astro's — and 0.34.x carries four libvips CVEs (GHSA-f88m-g3jw-g9cj). Overriding globally is also what
-  # keeps the single-copy property the catalog entry asks for: astro, the site and @huggingface/transformers
-  # (which already wanted 0.35.x) all land on one sharp.
-  sharp: 0.35.4
-  # astro-opengraph-images > tw-to-css pins postcss to an exact 8.4.31, which has two sourceMappingURL
-  # arbitrary-file-read advisories (GHSA-6g55-p6wh-862q, GHSA-r28c-9q8g-f849). Same major, and it dedupes onto
-  # the 8.5.x copy the rest of the tree already resolves.
-  "tw-to-css>postcss": 8.5.25
   # prisma and better-auth both carry mysql2 as an optional driver dependency, and both resolved 3.15.3, which
   # leaks plaintext credentials on an auth-plugin downgrade to mysql_clear_password (GHSA-3f6p-5ww8-9rcr,
   # fixed in 3.22.0). Nothing here connects to MySQL — the datasource in _platform/prisma/schema.prisma is
   # postgresql — so this is a tree hygiene bump, not a live exposure; same major, no code of ours touches it.
-  mysql2: 3.24.3
+  mysql2: 3.24.4
   # react-dom@19.3.0 peers react@^19.3.0; better-auth pulls react-dom into @intentic/web, and react@19.2.8 is one
   # patch behind — peer-deps flags it for @intentic/share-view.
   react: 19.3.0
@@ -99,24 +87,18 @@ overrides:
   # symlink-following advisory covers `>=0.5.9 <=0.6.0`, so the pin that was meant to be the fix became a
   # vulnerable version pinned on purpose. 0.6.1 is the first release outside the range.
   "onnxruntime-node>adm-zip": 0.6.1
-  # monaco-editor-core bundles its own dompurify 3.2.7 — eighteen sanitiser-bypass advisories, and unlike the
-  # entries above this one is reachable: it is the sanitiser the editor runs over rendered markdown. Same major
-  # as the catalog entry, so this dedupes the tree onto one copy rather than adding a second.
-  "monaco-editor-core>dompurify": 3.4.13
-  # mermaid pins dompurify to an exact 3.4.12, one patch below the fix for GHSA-55q2-fjhq-7xh7, and it is the
-  # sanitiser mermaid runs over diagram labels. Same reasoning and same target as the entry above.
-  "mermaid>dompurify": 3.4.13
-  # miniflare (wrangler's local Workers runtime, a devDependency of the site) pins undici 7.28.0, which has five
-  # request/response-smuggling advisories. Patch bump inside the same major.
-  "miniflare>undici": 7.29.0
+  # monaco-editor-core pins its own dompurify exactly (3.4.15 in 0.57), and unlike the entries above this one is
+  # reachable: it is the sanitiser the editor runs over rendered markdown. An exact pin never follows a sanitiser
+  # fix, so this holds it on the catalog's copy; same major, so the tree dedupes onto one copy rather than two.
+  "monaco-editor-core>dompurify": 3.4.16
   # @connectrpc/connect-node (reached through @cursor/sdk) asks for undici ^5.28.4, and the 5.x line is EOL:
   # all twelve of its open advisories — three of them high — are fixed only in 6.x, so no in-range bump exists.
   # What connect-node imports is one thing, `Headers`, and it installs it as a global only when the Node major
   # is below 18 (node-headers-polyfill.js); on this workspace's Node 24 that branch is dead and none of the
   # vulnerable fetch, WebSocket or Set-Cookie code is ever entered. Bumped anyway so the tree does not carry a
-  # known-bad copy: 6.28.0 is the newest 6.x and the copy discord.js already resolves, so this drops the 5.x
+  # known-bad copy: 6.29.0 is the newest 6.x and the line discord.js already resolves, so this drops the 5.x
   # copy rather than adding a second one.
-  "@connectrpc/connect-node>undici": 6.28.0
+  "@connectrpc/connect-node>undici": 6.29.0
   # Two packages pin deepmerge-ts to the 7.x line — @prisma/config to an exact 7.1.5 and html-to-text (via
   # mailparser) to ^7.1.5 — and every 7.x release blows the stack on a recursive object graph
   # (GHSA-ggr8-5vv4-36mx, fixed only in 8.0.0; the 7.1.6 that landed just before it is still vulnerable).
@@ -124,13 +106,13 @@ overrides:
   # attacker-supplied mail. Same package shape across the major (dual CJS/ESM, same exports map) and v8's
   # breaks are deep-Map merging plus two type renames, neither of which either consumer touches — both merge
   # plain option objects.
-  deepmerge-ts: 8.0.1
+  deepmerge-ts: 8.0.2
   # Oxlint's JS plugin ABI is explicitly NOT semver-stable — the docs say so — so every copy of
   # @oxlint/plugins in the tree has to be the one `oxlint` itself was built against, or the config fails to
   # load before a single file is linted. oxlint-plugin-complexity asks for ^1.73.0, which floats to 1.80 on its
   # own; this holds it at the catalog pin instead.
   # ponytail: bump together with oxlint.
-  "@oxlint/plugins": 1.76.0
+  "@oxlint/plugins": 1.85.0
 
 # 1440 IS ALSO PNPM'S OWN DEFAULT, and stating it is not redundant: `minimumReleaseAgeStrict` defaults to true
 # only when the age is set explicitly, false when it is inherited. So the pair below is today's behaviour
@@ -146,10 +128,7 @@ minimumReleaseAgeStrict: false
 minimumReleaseAgeExcludePrune: true
 
 minimumReleaseAgeExclude:
-  - '@posthog/core@1.40.2'
-  - imapflow@1.6.5
-  - jose@6.2.5
-  - astro-opengraph-images@1.17.4
+  - imapflow@2.0.7
   - '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.282'
   - '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.282'
   - '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.282'
@@ -159,24 +138,7 @@ minimumReleaseAgeExclude:
   - '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.282'
   - '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.282'
   - '@anthropic-ai/claude-agent-sdk@0.3.282'
-  - mammoth@1.12.2
-  - '@oxlint/plugins@1.76.0'
-  - oxlint-plugin-complexity@2.1.8
-  - '@oven/bun-darwin-aarch64@1.4.0-canary.20260903.1'
-  - '@oven/bun-darwin-x64@1.4.0-canary.20260903.1'
-  - '@oven/bun-freebsd-aarch64@1.4.0-canary.20260903.1'
-  - '@oven/bun-freebsd-x64@1.4.0-canary.20260903.1'
-  - '@oven/bun-linux-aarch64-android@1.4.0-canary.20260903.1'
-  - '@oven/bun-linux-aarch64-musl@1.4.0-canary.20260903.1'
-  - '@oven/bun-linux-aarch64@1.4.0-canary.20260903.1'
-  - '@oven/bun-linux-x64-android@1.4.0-canary.20260903.1'
-  - '@oven/bun-linux-x64-musl@1.4.0-canary.20260903.1'
-  - '@oven/bun-linux-x64@1.4.0-canary.20260903.1'
-  - '@oven/bun-windows-aarch64@1.4.0-canary.20260903.1'
-  - '@oven/bun-windows-x64@1.4.0-canary.20260903.1'
-  - bun@1.4.0-canary.20260903.1
   - image-size@2.0.4
-  - astro@7.3.2
   - '@intlify/core-base@11.4.12'
   - '@intlify/devtools-types@11.4.12'
   - '@intlify/message-compiler@11.4.12'
@@ -191,6 +153,21 @@ minimumReleaseAgeExclude:
   - '@cursor/sdk@1.0.32'
   - '@openai/codex-sdk@0.157.0'
   - '@openai/codex@0.157.0-darwin-arm64 || 0.157.0-darwin-x64 || 0.157.0-linux-arm64 || 0.157.0-linux-x64 || 0.157.0-win32-arm64 || 0.157.0-win32-x64 || 0.157.0'
+  - '@turbo/darwin-64@2.11.4'
+  - '@turbo/darwin-arm64@2.11.4'
+  - '@turbo/linux-64@2.11.4'
+  - '@turbo/linux-arm64@2.11.4'
+  - '@turbo/windows-64@2.11.4'
+  - '@turbo/windows-arm64@2.11.4'
+  - '@vitest/mocker@5.0.2'
+  - '@vitest/spy@5.0.2'
+  - miniflare@5.20260923.0-alpha
+  - posthog-js@1.434.14
+  - turbo@2.11.4
+  - undici@6.29.0
+  - vitest@5.0.2
+  - wrangler@4.140.0
+  - monaco-editor-core@0.57.0
 
 allowBuilds:
   "@ast-grep/lang-go": true
@@ -235,13 +212,13 @@ catalogPrune: true
 # Version conflicts are resolved to the newest compatible release. Held to a single copy per package, which is
 # what lets the overrides above dedupe rather than add.
 catalog:
-  "@agentclientprotocol/sdk": 1.3.0
+  "@agentclientprotocol/sdk": 1.5.0
   "@anthropic-ai/claude-agent-sdk": 0.3.282
   "@astrojs/check": 0.9.10
   "@astrojs/sitemap": 3.7.4
-  "@commitlint/cli": 21.2.1
-  "@commitlint/config-conventional": 21.2.0
-  "@commitlint/types": 21.2.0
+  "@commitlint/cli": 21.2.3
+  "@commitlint/config-conventional": 21.2.3
+  "@commitlint/types": 21.2.3
   # Cursor's own agent runtime (cursor/ in the daemon), and the ONE entry in this catalog that is not
   # open-source: its licence is "all rights reserved, use subject to Cursor's Terms of Service", which grants
   # no redistribution. So it is a repo dependency for TYPES and for a dev run, and never rides a published
@@ -250,119 +227,127 @@ catalog:
   # account. packs.integration.test.ts holds the two in step, the @openai/codex precedent.
   # ponytail: bump together with image-packs/cursor.Dockerfile.
   "@cursor/sdk": 1.0.32
-  "@dagrejs/dagre": 3.0.0
+  "@dagrejs/dagre": 3.1.1
   # DiceBear v10 discontinued the per-style npm packages (@dicebear/adventurer and its ~50 siblings) in favour of
   # one package of JSON style definitions, so the pair below is what used to be `core` + a per-style package. They
   # version independently — core carries the renderer, styles carries the artwork — which is why both are here
   # rather than one entry standing in for the other.
-  "@dicebear/core": 10.5.0
-  "@dicebear/styles": 10.4.0
+  "@dicebear/core": 10.7.0
+  "@dicebear/styles": 10.6.0
   "@discordjs/voice": 0.19.2
-  "@hono/node-server": 2.0.12
+  "@hono/node-server": 2.1.1
   "@hono/otel": 1.1.2
-  "@huggingface/hub": 2.14.4
-  "@huggingface/transformers": 4.2.0
+  "@huggingface/hub": 2.17.5
+  "@huggingface/transformers": 4.3.0
   "@openai/codex-sdk": 0.157.0
   "@opencode-ai/sdk": 1.18.32
   "@opentelemetry/api": 1.9.1
-  "@opentelemetry/context-async-hooks": 2.10.0
-  "@opentelemetry/core": 2.10.0
-  "@opentelemetry/exporter-trace-otlp-proto": 0.221.0
-  "@opentelemetry/resources": 2.10.0
-  "@opentelemetry/sdk-trace-node": 2.10.0
+  "@opentelemetry/context-async-hooks": 2.11.0
+  "@opentelemetry/core": 2.11.0
+  "@opentelemetry/exporter-trace-otlp-proto": 0.222.0
+  "@opentelemetry/resources": 2.11.0
+  "@opentelemetry/sdk-trace-node": 2.11.0
   "@opentelemetry/semantic-conventions": 1.43.0
   "@parcel/watcher": 2.6.0
-  "@orpc/client": 1.14.13
-  "@orpc/contract": 1.14.13
-  "@orpc/openapi": 1.14.13
-  "@orpc/openapi-client": 1.14.13
-  "@orpc/server": 1.14.13
+  "@orpc/client": 1.15.4
+  "@orpc/contract": 1.15.4
+  "@orpc/openapi": 1.15.4
+  "@orpc/openapi-client": 1.15.4
+  "@orpc/server": 1.15.4
   # The plugin API the vendored anti-slop rules compile against, pinned to `oxlint` — see the override above.
-  "@oxlint/plugins": 1.76.0
-  "@playwright/mcp": 0.0.79
-  "@playwright/test": 1.62.1
+  "@oxlint/plugins": 1.85.0
+  "@playwright/mcp": 0.0.82
+  "@playwright/test": 1.63.0
+  # Held on the PrimeVue 4 line on purpose: PrimeVue 5 (and @primeuix/themes 3, which it pairs with) left MIT for
+  # the commercial "PrimeUI License": a licence key checked by @primeui/license-manager, a revenue/headcount cap on
+  # the free tier, and no redistribution "as a component library or development tool", which is what
+  # @intentic/extension-ui hands every extension author. 4.5.5 and 2.0.3 are the last MIT releases. Moving past
+  # them is a licensing decision for the owner, not a version bump.
+  # ponytail: primevue and @primeuix/themes move together.
   "@primeuix/themes": 2.0.3
-  "@prisma/adapter-pg": 7.9.1
-  "@prisma/client": 7.9.1
+  "@prisma/adapter-pg": 7.10.0
+  "@prisma/client": 7.10.0
   "@puristic/env": 1.6.1
   "@semantic-release/exec": 7.1.0
-  "@shikijs/langs": 4.4.1
-  "@shikijs/monaco": 4.4.1
-  "@shikijs/themes": 4.4.1
-  "@slack/socket-mode": 3.0.0
-  "@slack/web-api": 8.0.0
+  "@shikijs/langs": 4.4.3
+  "@shikijs/monaco": 4.4.3
+  "@shikijs/themes": 4.4.3
+  "@slack/socket-mode": 3.0.1
+  "@slack/web-api": 8.1.1
   "@stricli/core": 1.3.0
   # Mutation testing, behind the `test-strength` chore and opted into by stryker.conf.mjs at the repo root. A real
   # dependency rather than `pnpm dlx`: under dlx Stryker resolves its plugins from the working directory and finds none.
   "@stryker-mutator/core": 10.0.0
   "@tailwindcss/vite": 4.3.3
-  "@tanstack/query-persist-client-core": 5.101.4
-  "@tanstack/vue-query": 5.101.4
+  "@tanstack/query-persist-client-core": 5.103.2
+  "@tanstack/vue-query": 5.103.2
   "@tauri-apps/api": 2.11.1
-  "@tauri-apps/cli": 2.11.4
-  "@tauri-apps/plugin-dialog": 2.7.2
-  "@types/bun": 1.4.0
+  "@tauri-apps/cli": 2.11.5
+  "@tauri-apps/plugin-dialog": 2.7.3
+  "@types/bun": 1.4.2
   "@types/mailparser": 3.4.6
-  "@types/node": 24.13.2
-  "@types/pg": 8.20.0
-  "@types/ssh2": 1.15.5
-  "@types/tar-stream": 3.1.4
+  "@types/node": 24.13.6
+  "@types/pg": 8.23.1
+  "@types/ssh2": 1.15.6
   "@types/web-push": 3.6.4
   "@types/ws": 8.18.1
   "@typescript/native-preview": 7.0.0-dev.20260707.2
-  "@vitejs/plugin-vue": 6.0.8
+  "@vitejs/plugin-vue": 6.0.9
   "@vue-flow/core": 1.48.2
   "@xterm/addon-search": 0.16.0
   "@xterm/addon-web-links": 0.12.0
   "@xterm/addon-webgl": 0.19.0
   "@xterm/headless": 6.0.0
   "@xterm/xterm": 6.0.0
-  "@ast-grep/napi": 0.44.1
+  "@ast-grep/napi": 0.45.3
   "@ast-grep/lang-python": 0.0.6
   "@ast-grep/lang-go": 0.0.6
   "@ast-grep/lang-rust": 0.0.7
   "@ast-grep/lang-java": 0.0.7
-  astro: 7.3.2
-  astro-opengraph-images: 1.17.4
+  astro: 7.3.5
+  astro-opengraph-images: 1.20.3
   # The WhatsApp gateway's protocol library. Its `latest` tag is a release candidate — 7.0.0 has been in rc for
   # the whole of the 7.x line — so the pin looks provisional but is in fact the newest published build.
   baileys: 7.0.0-rc14
   bcryptjs: 3.0.3
-  better-auth: 1.6.25
-  bun: 1.4.0-canary.20260903.1
+  better-auth: 1.7.6
+  bun: 1.4.2
   chokidar: 5.0.0
   croner: 10.0.1
   discord.js: 14.27.0
-  docx-preview: 0.3.7
-  dompurify: 3.4.13
-  esbuild: 0.28.1
+  docx-preview: 0.4.1
+  dompurify: 3.4.16
+  esbuild: 0.28.2
   # fileq's spreadsheet deriver (xlsx → capped markdown tables); also writes the suite's fixtures.
   exceljs: 4.4.0
   # fileq's image deriver: EXIF facts off a photo without decoding pixels.
   exifr: 7.1.3
   eta: 4.6.0
-  fast-check: 4.9.0
+  fast-check: 4.10.2
   # fileq's zip surgeon: pptx slide parts out, binary test fixtures built in code.
   fflate: 0.8.3
-  file-type: 22.0.1
-  hono: 4.12.34
+  file-type: 22.1.1
+  hono: 4.13.9
   idb-keyval: 6.3.0
   # fileq's image dimensions, header-only (no pixel decode, no native code).
   image-size: 2.0.4
-  ignore: 7.0.6
-  imapflow: 1.6.5
-  jose: 6.2.5
+  ignore: 7.0.10
+  imapflow: 2.0.7
+  jose: 6.2.12
+  # Held on 29: jsdom 30's window fails its own EventTarget brand check under bun's `vm` ("'addEventListener' called
+  # on an object that is not a valid instance of EventTarget" from _tools/testing/src/dom.ts), while the same code
+  # passes under Node. Every DOM suite here runs on bun, so 30 waits for either side to fix that.
   jsdom: 29.1.1
   # Types only, and pinned to what @orpc/openapi itself resolves: it is the JSON Schema dialect oRPC's
   # generator declares in its own signatures, so a converter feeding that generator has to speak the same one.
   json-schema-typed: 8.0.2
-  knip: 6.31.0
-  mailparser: 3.9.20
+  knip: 6.38.0
+  mailparser: 3.9.28
   # fileq's docx deriver: docx → semantic HTML, which webq's markdown writer then renders.
-  mammoth: 1.12.2
-  marked: 18.0.7
+  mammoth: 1.12.3
+  marked: 18.0.14
   # fileq's audio/video deriver: duration, codec facts and tags without decoding a frame.
-  music-metadata: 11.15.0
+  music-metadata: 11.16.1
   # The Opus decoder for received Discord voice (the gateway decodes packets to PCM for whisper; it never sends
   # audio, so nothing here encodes). napi-rs: the platform binding ships as a prebuilt optional dependency, one
   # per target and sixteen of them — including musl, which the binding it replaced had no prebuild for — and
@@ -370,64 +355,63 @@ catalog:
   # here rather than @discordjs/opus, whose node-pre-gyp installer fetched a tarball over the network at install
   # time and dragged in a `tar` override to stay clear of a live path-traversal advisory.
   mediaplex: 1.0.0
-  mermaid: 11.16.1
-  monaco-editor-core: 0.55.1
-  oxlint: 1.76.0
+  mermaid: 12.0.0
+  monaco-editor-core: 0.57.0
+  oxlint: 1.85.0
   # Cyclomatic AND cognitive complexity as one rule. Cognitive is the metric worth having: it charges nothing
   # for flat dispatch, compounds for nesting, and names the lines that cost the most, which is what makes the
   # diagnostic actionable rather than a number to argue with. Its own peers (oxc-parser, estree-walker, diff)
   # are auto-installed.
-  oxlint-plugin-complexity: 2.1.8
+  oxlint-plugin-complexity: 3.0.0
   # webq's HTML parser. parse5 rather than jsdom for the sandbox-image path: webq is baked into the daemon's
   # deployed tree, and parse5 is the spec-compliant parser alone (one dependency, no DOM emulation layer) —
   # the traversal webq needs is fifty lines of its own helpers.
   parse5: 8.0.1
-  pg: 8.22.0
+  pg: 8.23.0
   pino: 10.3.1
   pino-pretty: 13.1.3
-  playwright: 1.62.1
-  posthog-js: 1.409.5
-  prettier: 3.9.6
+  playwright: 1.63.0
+  posthog-js: 1.434.14
+  prettier: 3.9.9
   primevue: 4.5.5
-  prisma: 7.9.1
+  prisma: 7.10.0
   read-excel-file: 9.3.10
-  semantic-release: 25.0.8
+  semantic-release: 25.0.9
   # astro:assets' default image service loads `sharp` from the PROJECT, not from astro's own tree — so the
-  # site has to declare it even though astro carries the same optional dependency. The two still share one
-  # copy, but it now takes the `sharp` override above to hold that: astro 6.4 asks for ^0.34.0 and 0.34.x is
-  # the vulnerable line.
+  # site has to declare it even though astro carries the same optional dependency. astro 7.3 asks for ^0.35.4,
+  # so the two share one copy without an override.
   sharp: 0.35.4
-  shiki: 4.4.1
+  shiki: 4.4.3
   # TOML for the sandbox-definition surface (sandbox.toml): a strict 1.0 parser with no coercion surprises.
-  smol-toml: 1.7.1
+  smol-toml: 1.9.0
   # The vector index behind iq's semantic tier. Ships as prebuilt loadable extensions, one optional dependency
   # per platform (linux/darwin x64+arm64, windows x64) and no build script, so nothing is compiled on install.
   sqlite-vec: 0.1.9
   ssh2: 1.17.0
-  tailwind-merge: 3.6.0
+  tailwind-merge: 3.7.0
   tailwindcss: 4.3.3
-  tar-stream: 3.2.0
-  testcontainers: 12.0.4
+  tar-stream: 3.2.1
+  testcontainers: 12.1.0
   tslib: 2.8.1
-  tsx: 4.23.1
-  turbo: 2.10.8
-  typescript: 5.9.3
+  tsx: 4.23.15
+  turbo: 2.11.4
+  typescript: 6.0.3
   # fileq's pdf deriver: a serverless pdf.js build that extracts text layers in plain Node — no worker, no
   # canvas, no DOM shims — at a fraction of pdfjs-dist's install.
   unpdf: 1.8.1
-  vite: 8.2.0
-  vitest: 4.1.10
-  vue: 3.5.40
+  vite: 8.3.1
+  vitest: 5.0.2
+  vue: 3.5.43
   vue-i18n: 11.4.12
-  vue-router: 5.2.0
-  vue-tsc: 3.3.9
+  vue-router: 5.3.1
+  vue-tsc: 3.3.11
   web-push: 3.6.7
-  wrangler: 4.118.0
-  ws: 8.21.1
-  yaml: 2.9.0
-  zod: 4.5.4
+  wrangler: 4.140.0
+  ws: 8.21.3
+  yaml: 2.9.1
+  zod: 4.6.5
 
 patchedDependencies:
   primevue@4.5.5: _editor/ui/patches/primevue@4.5.5.patch
-  mermaid@11.16.1: _editor/ui/patches/mermaid@11.16.1.patch
-  monaco-editor-core@0.55.1: _editor/ui/patches/monaco-editor-core@0.55.1.patch
+  mermaid@12.0.0: _editor/ui/patches/mermaid@12.0.0.patch
+  monaco-editor-core@0.57.0: _editor/ui/patches/monaco-editor-core@0.57.0.patch

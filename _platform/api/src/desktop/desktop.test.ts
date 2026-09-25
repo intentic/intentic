@@ -12,7 +12,7 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof j
 
 const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
     ({
-        prisma: fakePrisma({}),
+        prisma: fakePrisma({ account: { findFirst: jest.fn().mockResolvedValue({ id: `acct-google` }) } }),
         config: { secrets: { key: `` } },
         user,
         logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
@@ -86,7 +86,7 @@ describe(`desktop handoff`, () => {
         const ctx = context({ auth: { api: { getAccessToken } } as unknown as OrpcContext[`auth`], headers });
 
         await expect(call(desktopRoutes.googleIdToken, {}, { context: ctx })).resolves.toEqual({ idToken: `google-jwt` });
-        expect(getAccessToken).toHaveBeenCalledWith({ body: { providerId: `google` }, headers });
+        expect(getAccessToken).toHaveBeenCalledWith({ body: { accountId: `acct-google` }, headers });
     });
 
     it(`says it holds nothing rather than failing when Google returns no id token`, async () => {
@@ -95,6 +95,17 @@ describe(`desktop handoff`, () => {
         });
 
         await expect(call(desktopRoutes.googleIdToken, {}, { context: ctx })).resolves.toEqual({ idToken: undefined });
+    });
+
+    it(`says it holds nothing when the user never linked Google`, async () => {
+        const getAccessToken = jest.fn();
+        const ctx = context({
+            prisma: fakePrisma({ account: { findFirst: jest.fn().mockResolvedValue(null) } }),
+            auth: { api: { getAccessToken } } as unknown as OrpcContext[`auth`],
+        });
+
+        await expect(call(desktopRoutes.googleIdToken, {}, { context: ctx })).resolves.toEqual({});
+        expect(getAccessToken).not.toHaveBeenCalled();
     });
 
     it(`says it holds nothing rather than failing when the refresh is refused`, async () => {

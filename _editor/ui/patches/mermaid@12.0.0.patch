@@ -1,18 +1,18 @@
-diff --git a/dist/chunks/mermaid.core/chunk-4I5QYGJK.mjs b/dist/chunks/mermaid.core/chunk-4I5QYGJK.mjs
---- a/dist/chunks/mermaid.core/chunk-4I5QYGJK.mjs
-+++ b/dist/chunks/mermaid.core/chunk-4I5QYGJK.mjs
+diff --git a/dist/chunks/mermaid.core/chunk-742MDFTN.mjs b/dist/chunks/mermaid.core/chunk-742MDFTN.mjs
+--- a/dist/chunks/mermaid.core/chunk-742MDFTN.mjs
++++ b/dist/chunks/mermaid.core/chunk-742MDFTN.mjs
 @@ -1,98 +1,5 @@
 -import {
 -  getConfig,
 -  sanitizeText
--} from "./chunk-I66GZJ75.mjs";
+-} from "./chunk-O7XYJQB3.mjs";
 -import {
 -  log
 -} from "./chunk-X3CZISLH.mjs";
 -import {
 -  __name
 -} from "./chunk-Y2CYZVJY.mjs";
-+import { getConfig, sanitizeText } from './chunk-I66GZJ75.mjs';
++import { getConfig, sanitizeText } from './chunk-O7XYJQB3.mjs';
 +import { createIconRegistry } from '../../rendering-util/svgIcons.mjs';
  
 -// src/rendering-util/icons.ts
@@ -104,21 +104,21 @@ diff --git a/dist/chunks/mermaid.core/chunk-4I5QYGJK.mjs b/dist/chunks/mermaid.c
 -};
 +const { unknownIcon, registerIconPacks, isIconAvailable, getIconSVG } = createIconRegistry(svg => sanitizeText(svg, getConfig()));
 +export { unknownIcon, registerIconPacks, isIconAvailable, getIconSVG };
-diff --git a/dist/chunks/mermaid.esm/chunk-AQ2D6KKF.mjs b/dist/chunks/mermaid.esm/chunk-AQ2D6KKF.mjs
---- a/dist/chunks/mermaid.esm/chunk-AQ2D6KKF.mjs
-+++ b/dist/chunks/mermaid.esm/chunk-AQ2D6KKF.mjs
+diff --git a/dist/chunks/mermaid.esm/chunk-E62FA7JU.mjs b/dist/chunks/mermaid.esm/chunk-E62FA7JU.mjs
+--- a/dist/chunks/mermaid.esm/chunk-E62FA7JU.mjs
++++ b/dist/chunks/mermaid.esm/chunk-E62FA7JU.mjs
 @@ -1,417 +1,5 @@
 -import {
 -  getConfig,
 -  sanitizeText
--} from "./chunk-NEZ6ONQZ.mjs";
+-} from "./chunk-KMA2NSDO.mjs";
 -import {
 -  log
--} from "./chunk-FO5PYUIK.mjs";
+-} from "./chunk-OHNBJXQ2.mjs";
 -import {
 -  __name
--} from "./chunk-PTVI3W5X.mjs";
-+import { getConfig, sanitizeText } from './chunk-NEZ6ONQZ.mjs';
+-} from "./chunk-35ZOQMXA.mjs";
++import { getConfig, sanitizeText } from './chunk-KMA2NSDO.mjs';
 +import { createIconRegistry } from '../../rendering-util/svgIcons.mjs';
  
 -// ../../node_modules/.pnpm/@iconify+utils@3.0.2/node_modules/@iconify/utils/lib/icon/defaults.js
@@ -546,7 +546,7 @@ diff --git a/dist/diagrams/treeView/icons.d.ts b/dist/diagrams/treeView/icons.d.
  import type { NodeType } from './types.js';
  /**
   * Built-in icon pack for treeView nodes.
-@@ -11,7 +11,7 @@
+@@ -11,7 +11,7 @@ import type { NodeType } from './types.js';
   *
   * Icons use `currentColor` so they can be themed via CSS `color`.
   */

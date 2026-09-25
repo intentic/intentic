@@ -1,7 +1,7 @@
 import { mkdir, stat } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Readable } from "node:stream";
-import { extract, type Headers } from "tar-stream";
+import { extract, type Header } from "tar-stream";
 import { drain, extractAll } from "../../tar-extract.js";
 import { isControlPlanePath, resolveWithin } from "./workspace-files-paths.js";
 import { MAX_UPLOAD_BYTES, writeStreamCounted } from "./workspace-files-upload.js";
@@ -30,7 +30,7 @@ export const extractTarToWorkspace = async (root: string, body: ReadableStream<U
     const ex = extract();
     let remaining = limit;
 
-    const handleEntry = async (header: Headers, stream: Readable): Promise<void> => {
+    const handleEntry = async (header: Header, stream: Readable): Promise<void> => {
         const target = resolveWithin(root, header.name);
         if (target === undefined) {
             throw new PathEscapeError();

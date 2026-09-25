@@ -3,7 +3,7 @@ import { createForgejoProvider } from "./forgejo.js";
 
 const res = (stdout: string, code = 0): SshResult => ({ stdout, stderr: "", code });
 
-const IMAGE = "codeberg.org/forgejo/forgejo:15.0.3@sha256:aaaa";
+const IMAGE = "codeberg.org/forgejo/forgejo:15.0.9@sha256:aaaa";
 
 interface FakeOpts {
     readonly running?: boolean;
@@ -184,7 +184,7 @@ test("a guarded update snapshots the data volume before recreating; the happy pa
     const ssh = fakeSsh({ healthy: true, token: "tok-123", gitToken: "gtok-456", packagesToken: "ptok-789" });
     const observed = { outputs: {}, detail: { image: "codeberg.org/forgejo/forgejo:14.0.0@sha256:old" } };
     await createForgejoProvider(ssh.executor).apply(
-        { ...inputs, guardRepo: "s3:s3.example.com/bucket", resticImage: "restic/restic:0.19.0@sha256:r" },
+        { ...inputs, guardRepo: "s3:s3.example.com/bucket", resticImage: "restic/restic:0.19.1@sha256:r" },
         observed,
         ctx(),
     );

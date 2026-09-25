@@ -87,7 +87,6 @@
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "@types/ssh2": "catalog:",
-        "@types/tar-stream": "catalog:",
         "@types/web-push": "catalog:",
         "@types/ws": "catalog:",
         "@typescript/native-preview": "catalog:",

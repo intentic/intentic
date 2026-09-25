@@ -19,7 +19,7 @@
 # inject agent credentials (ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN) and mount the workspace volume at
 # /work — neither is baked into the image.
 
-FROM node:24.21.0-trixie-slim@sha256:db3ae80f5d8df06e04dabdf7b44cbf008d32de168205fa0294444aabbc08c590 AS runtime
+FROM node:24.21.0-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe AS runtime
 # Links the GHCR package to the repo (inherits its visibility/permissions, shows under its Packages).
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 
@@ -223,7 +223,7 @@ RUN printf '%s\n' \
 # ponytail: bump together with package.json's packageManager field.
 ENV PNPM_HOME=/usr/local/share/pnpm
 ENV PATH=$PNPM_HOME/bin:$PATH
-RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.4.1 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
+RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.6.0 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
     && rm -f /tmp/pnpm-env.sh \
     && pnpm --version
 # node-gyp on PATH, for an agent compiling a native dep by hand. Pinned like every other tool in this image so a
@@ -252,7 +252,7 @@ RUN --mount=type=cache,target=/root/.npm \
 # fabric; that fabric is the platform's own edge now, which the daemon dials over an outbound WebSocket with
 # no binary to install (sandbox-contract/ingress-contract.ts). Placed HERE, before the tree COPYs below, so
 # the layer stays cache-stable across source changes.
-ARG CLOUDFLARED_VERSION=2026.9.1
+ARG CLOUDFLARED_VERSION=2026.9.3
 RUN arch="$(dpkg --print-architecture)" \
     && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${arch}" -o /usr/local/bin/cloudflared \
     && chmod +x /usr/local/bin/cloudflared \

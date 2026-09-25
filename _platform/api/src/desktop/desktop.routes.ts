@@ -56,10 +56,15 @@ export const desktopRoutes = {
 
     // Best-effort refresh of the on-file Google ID token, tried before Google's own button; never a 500.
     googleIdToken: os.desktop.googleIdToken.handler(async ({ context }) => {
-        requireUser(context);
+        const user = requireUser(context);
         try {
+            // better-auth 1.7 selects the account by its row id rather than by provider, so find the Google row first.
+            const google = await context.prisma.account.findFirst({ where: { userId: user.id, providerId: `google` }, select: { id: true } });
+            if (!google) {
+                return {};
+            }
             const granted = await context.auth.api.getAccessToken({
-                body: { providerId: `google` },
+                body: { accountId: google.id },
                 headers: context.headers,
             });
             return { idToken: granted?.idToken };

@@ -8,7 +8,7 @@
 # _tools/scripts/platform/docker-release.sh). The context is this app dir; .dockerignore keeps only dist, nginx.conf
 # and entrypoint.sh:
 #   pnpm --filter=@intentic/web build && docker build -t …/web _editor/web
-FROM nginx:1.30.4-alpine3.24@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46
+FROM nginx:1.30.5-alpine3.24@sha256:bf3201ab56f23e5954646379c775d511fc466e9f11376d9725361064ad07ed35
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 # The build this image is, served back as X-Web-Build (nginx.conf) so a deploy can tell WHICH image answered
 # and not merely that something did. docker-release.sh bakes the content-addressed tag in on seeing this ARG.
