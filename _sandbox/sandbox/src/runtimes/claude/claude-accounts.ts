@@ -1,7 +1,7 @@
 import type { AccountUsage, OauthAccount } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import type { AccountDoor } from "../../agent/providers/provider-module.js";
-import { buildAuthorizeUrl, exchangeCode, newAccount, renameAccount, toAccount } from "./claude-credentials.js";
+import { buildAuthorizeUrl, exchangeCode, newAccount, reconnectAccount, renameAccount, sameIdentity, toAccount } from "./claude-credentials.js";
 import type { SeatRefusal } from "./claude-seats.js";
 
 // Claude's account door (agent/provider-module.ts): subscription OAuth the sandbox owns, never the platform.
@@ -49,8 +49,14 @@ export const claudeAccountDoor = (services: ClaudeAccountDeps): AccountDoor => {
             if (code === undefined || code.trim() === "") {
                 throw new Error("Paste the code the sign-in page showed.");
             }
-            const account = newAccount(await exchangeCode(code, attempt.verifier, handshake), label ?? "");
+            const tokens = await exchangeCode(code, attempt.verifier, handshake);
             pending.delete(handshake);
+            // Reconnect and "add another" are the same sign-in; which one it was is decided by whose account came back.
+            // A revoked match is preferred, since that is the row the person pressed Reconnect on.
+            const matches = (await services.claudeStore.list()).filter((entry) => sameIdentity(entry, tokens));
+            const match = matches.find((entry) => entry.needsReauth === true) ?? matches[0];
+            const stored = match === undefined ? undefined : await services.claudeStore.read(match.id);
+            const account = stored === undefined ? newAccount(tokens, label ?? "") : reconnectAccount(stored, tokens, label ?? "");
             await services.claudeStore.write(account);
             return toAccount(account);
         },
@@ -81,7 +87,7 @@ export const claudeAccountDoor = (services: ClaudeAccountDeps): AccountDoor => {
             // Rename must carry the seat note too; it replaces the whole row on the card.
             return withSeat(toAccount(renamed), (await services.claudeSeats.read())[id]);
         },
-        // Clears the credential, usage, and seat state; a reconnect mints a new id, so anything left behind orphans.
+        // Clears the credential, usage, and seat state; the next sign-in as this identity mints a new id, so anything left behind orphans.
         disconnect: async (id) => {
             await Promise.all([services.claudeStore.clear(id), services.headroom.clear("claude", id), services.claudeSeats.clear(id)]);
         },

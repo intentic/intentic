@@ -118,7 +118,7 @@ test("Claude: an account its organization turned away says so without asking for
     ]);
     // Rename replaces the whole row; the seat refusal must survive it too.
     expect(await claude.rename("a", "Job")).toEqual({ id: "a", label: "Job", connectedAt: 1, seatRefusal: refusal });
-    // Disconnect clears the seat entry; a reconnect mints a new account id, so a leftover entry is orphaned.
+    // Disconnect clears the seat entry; a later sign-in as this identity mints a new account id, so a leftover entry is orphaned.
     await claude.disconnect("a");
     expect(seats.has("a")).toBe(false);
 });
@@ -145,4 +145,48 @@ test("Claude: a forced list re-measures, and waits longer for it", async () => {
     // Only the forced list is watched: that flag, not the zero, is what lets a sweep spend a target's read budget early.
     expect(sweeps.map((sweep) => sweep.watched)).toEqual([undefined, true]);
     expect(sweeps[1]!.withinMs).toBeGreaterThan(sweeps[0]!.withinMs!);
+});
+
+// Reconnect and "add another" are one sign-in, so whose account came back decides it: the same person and organization
+// land on the row already on file, keeping its id (and every chat pinned to it), while anyone else gets a row of their own.
+test("Claude: signing in as an account already on file reconnects it in place instead of adding a second row", async () => {
+    const accounts = new Map<string, StoredAccount>([
+        [
+            "old",
+            {
+                id: "old",
+                label: "Mine",
+                connectedAt: 1,
+                accessToken: "dead",
+                refreshToken: "dead-refresh",
+                email: "me@example.com",
+                organization: "Me's Organization",
+                revokedAt: 5,
+                revokedReason: "Claude sign-in was revoked, reconnect to keep using this account.",
+            },
+        ],
+    ]);
+    const claude = door(memoryStore(accounts));
+    const signIn = async (email: string, organization: string) => {
+        const realFetch = globalThis.fetch;
+        globalThis.fetch = (async () =>
+            Response.json({ access_token: `tok-${email}-${organization}`, refresh_token: "fresh", expires_in: 3600, account: { email_address: email }, organization: { name: organization } })) as unknown as typeof fetch;
+        try {
+            const started = await claude.start(undefined);
+            return await claude.complete!({ handshake: started.handshake, code: "abc#def" });
+        } finally {
+            globalThis.fetch = realFetch;
+        }
+    };
+
+    const reconnected = await signIn("me@example.com", "Me's Organization");
+    expect(reconnected).toEqual({ id: "old", label: "Mine", connectedAt: 1, email: "me@example.com", organization: "Me's Organization" });
+    expect(accounts.size).toBe(1);
+    expect(accounts.get("old")).toMatchObject({ accessToken: "tok-me@example.com-Me's Organization", refreshToken: "fresh" });
+    expect(accounts.get("old")?.revokedAt).toBeUndefined();
+
+    // Same email in another organization is another seat; another email is another person.
+    expect((await signIn("me@example.com", "Work"))?.id).not.toBe("old");
+    expect((await signIn("you@example.com", "Me's Organization"))?.id).not.toBe("old");
+    expect(accounts.size).toBe(3);
 });
