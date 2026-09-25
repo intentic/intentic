@@ -14,7 +14,7 @@ export const root = repoRoot(import.meta.url);
 export const WORKSPACES = readdirSync(root, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && entry.name.startsWith("_"))
     .map((entry) => entry.name);
-export const SKIP_DIRS = new Set(["node_modules", "dist", ".cache", ".turbo", "out-tsc", "generated", ".git"]);
+export const SKIP_DIRS = new Set(["node_modules", "dist", ".cache", ".turbo", "out-tsc", "generated", ".git", "target"]);
 export const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
 export const VUE_FILE = /\.vue$/;
 
