@@ -23,9 +23,10 @@ flowchart LR
   `/events` pushes file, git and fleet changes to the browser.
 - One turn: `agent/run/turn/turn-admission.ts` admits it, `turn-plan.ts` picks a runtime, it runs in the
   conversation's worktree (or the main tree, or a remote runner), and `agents/land/land.ts` lands the result as
-  uncommitted changes. Nothing checks the turn when it ends. `verify-landed.ts` queues the repository's land check
-  on the main tree (`workspace/deps/verify-deps.ts`), which runs in the background, and `agents/land/land-breakage.ts`
-  decides who is sent a red one.
+  uncommitted changes. Nothing checks the turn when it ends. `verify-landed.ts` asks the one land check
+  (`services.landCheck`, `workspace/deps/verify-deps.ts`) to run the repository's check on the main tree in the
+  background, and `agents/land/land-breakage.ts` decides who is sent a red one. The lands waiting for a verdict and what
+  the router holds or waits on live in the verify store, so a restart picks both up again.
 - Archive is sticky: only a person's message un-archives a conversation. A turn the daemon starts itself (a retry,
   a nudge, an automation's thread) is refused on an archived one (`agents/actor/conversation-decide.ts`), and a
   thread whose conversation was archived opens a fresh one instead.

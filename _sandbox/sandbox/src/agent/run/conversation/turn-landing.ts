@@ -1,4 +1,4 @@
-import type { AgentEvent, MainlineRouting, Rule, WorkspaceEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent, Rule, WorkspaceEvent } from "@intentic/sandbox-contract";
 import { landAgent, type LandOutcome, reportLockfileFailures } from "../../../agents/land/land.js";
 import { landingPaths } from "../../../agents/land/landing-paths.js";
 import { type LandVerifier, verifyLandedTree } from "../../../agents/land/verify-landed.js";
@@ -8,7 +8,6 @@ import type { Services } from "../../../composition.js";
 import { landingVerdict, type RuleFacts, standing } from "../../../rules/rules.js";
 import type { DependencyLandOrigin } from "../../../workspace/deps/dependency-origin.js";
 import type { ReconcileOutcome } from "../../../workspace/deps/reconcile-deps.js";
-import type { LandBreakage } from "../../../workspace/deps/verify-deps.js";
 import { opt } from "../../../opt.js";
 
 // A finished isolated turn's land. Whether its work reaches the main tree or waits on its branch is decided purely, from
@@ -69,7 +68,7 @@ export interface LandBooks {
 
 export type LandingDeps = Pick<
     Services,
-    "agents" | "conversations" | "sandboxSettings" | "agentWorktrees" | "logger" | "perf" | "activity" | "ruleFirings"
+    "agents" | "conversations" | "sandboxSettings" | "agentWorktrees" | "logger" | "perf" | "activity" | "ruleFirings" | "events"
 > &
     LandVerifier;
 
@@ -77,9 +76,6 @@ export type LandingDeps = Pick<
 export interface LandingHooks {
     // Drafts what a land did and commits it where the version rule stands, off the turn's clock.
     readonly settleLanding: (conversationId: string) => void;
-    // Hands the failures a land's whole-repository check found new back to the conversation that landed them; false
-    // when none is named for them.
-    readonly routeBreakage: (breakage: LandBreakage) => Promise<MainlineRouting | undefined>;
 }
 
 export interface LandingTurn {
@@ -152,7 +148,7 @@ async function* recordLand(
     }
     // The moment a dependency change starts costing every later turn's node_modules.
     const origin: DependencyLandOrigin = { kind: "land", agentId: id, ...opt("title", finished.social.title?.text), branch: books.branch, repos: books.span };
-    const reconciled = landed.landed ? await verifyLandedTree(deps, origin, hooks.routeBreakage) : undefined;
+    const reconciled = landed.landed ? await verifyLandedTree(deps, origin) : undefined;
     yield landedFrame(landed, reconciled);
     if (!landed.landed) {
         return;

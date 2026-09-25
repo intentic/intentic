@@ -1,40 +1,34 @@
 import type { MainlineRun } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
-import type { DependencyLandOrigin } from "./dependency-origin.js";
-import * as verifyDeps from "./verify-deps.js";
-import type { VerifyQueueSnapshot } from "./verify-deps.js";
+import { knownReds, mainlineStatus } from "./mainline-status.js";
 import type { StoredPush } from "./push-checks-store.js";
-import type { VerifyOutcome } from "./verify-store.js";
+import type { CurrentRun } from "./verify-deps.js";
+import type { QueuedLand, VerifyOutcome } from "./verify-store.js";
 
-// The main-line check as the editor reads it: what the verify store remembers, and what the queue holds right now. The
-// queue is the check's own module state, so it is stood in for here; how it fills is verify-deps.integration.test.ts's.
-
-let snapshot: VerifyQueueSnapshot = { current: undefined, pending: [] };
-jest.mock("./verify-deps.js", () => ({ ...verifyDeps, verifyQueueSnapshot: () => snapshot }));
-const { knownReds, mainlineStatus } = await import("./mainline-status.js");
-
-afterEach(() => {
-    snapshot = { current: undefined, pending: [] };
-});
+// The main-line check as the editor reads it: what the verify store remembers and holds waiting, and what the land check
+// runs right now. How the queue fills is verify-deps.integration.test.ts's.
 
 const storeOf = (
     projects: Record<string, VerifyOutcome>,
     runs: readonly MainlineRun[],
     pushes: readonly StoredPush[] = [],
-): Pick<Services, "verifyStore" | "pushChecks"> => ({
-    verifyStore: unstubbed<Services["verifyStore"]>("verifyStore", { read: async () => ({ projects, runs }) }),
+    waiting: { readonly current?: CurrentRun; readonly lands?: Record<string, readonly QueuedLand[]> } = {},
+): Pick<Services, "verifyStore" | "pushChecks" | "landCheck"> => ({
+    verifyStore: unstubbed<Services["verifyStore"]>("verifyStore", { read: async () => ({ projects, runs }), lands: async () => waiting.lands ?? {} }),
     pushChecks: unstubbed<Services["pushChecks"]>("pushChecks", {
         store: unstubbed<Services["pushChecks"]["store"]>("pushChecks.store", { read: async () => ({ pushes: [...pushes], seen: [] }) }),
     }),
+    landCheck: unstubbed<Services["landCheck"]>("landCheck", { current: () => waiting.current }),
 });
 
-const land = (agentId: string, title?: string): DependencyLandOrigin => ({
+const land = (agentId: string, at: number, title?: string): QueuedLand => ({
     kind: "land",
     agentId,
     ...(title === undefined ? {} : { title }),
     branch: `agent/${agentId}`,
     repos: [{ repo: "root", from: "abc", dir: "" }],
+    at,
 });
 
 const run = (over: Partial<MainlineRun> & Pick<MainlineRun, "project" | "at">): MainlineRun => ({
@@ -57,26 +51,24 @@ describe("the main line's status", () => {
         const appRed = run({ project: "app", at: 9, failures: ["x"], failureCount: 1, attempt: 2 });
         const libGreen = run({ project: "lib", at: 8, status: "green", attempt: 0 });
         const appEarlier = run({ project: "app", at: 3, attempt: 1 });
-        snapshot = {
-            current: { dir: "web", command: "pnpm test", startedAt: 100, lands: [land("a", "Ship the page")] },
-            pending: [
-                { dirs: ["app"], lands: [land("b")] },
-                // A causeless install waits too, but answers for no land.
-                { dirs: ["web", "lib"], lands: [] },
-            ],
+        const running = land("a", 50, "Ship the page");
+        const waiting = {
+            current: { dir: "web", command: "pnpm test", startedAt: 100, lands: [running], session: "web--verify" },
+            // The land the running check covers waits in the store until its verdict answers it; only the rest are queued.
+            lands: { app: [land("b", 60)], web: [running] },
         };
         const projects: Record<string, VerifyOutcome> = {
             lib: { status: "green", attempt: 0, at: 8 },
             app: { status: "red", attempt: 2, at: 9, failures: ["x"], since: 3 },
         };
 
-        expect(await mainlineStatus(storeOf(projects, [appRed, libGreen, appEarlier]))).toEqual({
+        expect(await mainlineStatus(storeOf(projects, [appRed, libGreen, appEarlier], [], waiting))).toEqual({
             projects: [
-                { project: "app", queued: [{ conversationId: "b", at: 0 }], last: appRed, redSince: 3 },
+                { project: "app", queued: [{ conversationId: "b", at: 60 }], last: appRed, redSince: 3 },
                 { project: "lib", queued: [], last: libGreen },
                 {
                     project: "web",
-                    running: { command: "pnpm test", startedAt: 100, lands: [{ conversationId: "a", title: "Ship the page", at: 0 }] },
+                    running: { command: "pnpm test", startedAt: 100, lands: [{ conversationId: "a", title: "Ship the page", at: 50 }] },
                     queued: [],
                 },
             ],

@@ -42,7 +42,6 @@ import { provenanceOf, refuseUnlessVisible, visibleTo } from "../auth/fleet-scop
 import { syncBeforeLand } from "./land/sync.js";
 import { verifyLandedTree } from "./land/verify-landed.js";
 import { settleLandingInBackground } from "./land/version-landed.js";
-import { routeLandBreakage } from "./land/land-breakage.js";
 import { AttemptRefused } from "./fix/fix-attempts.js";
 import { startPushFix } from "./fix/push-fix.js";
 import { actorOf, areasOf, ownerOf } from "../auth/principal.js";
@@ -764,7 +763,6 @@ export const createAgentsRoutes = (services: Services) => {
                             branch: entry.placement.branch,
                             repos: [...span],
                         },
-                        (breakage) => routeLandBreakage(services, breakage),
                     ).catch((error: unknown) => services.logger.warn({ err: error, id: entry.id }, "agents: land verify could not be queued"));
                 }
                 return {

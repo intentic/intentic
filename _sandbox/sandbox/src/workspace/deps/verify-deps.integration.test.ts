@@ -4,12 +4,12 @@ import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import type { MainlineRouting, WorkspaceEvent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import { freshImport, SETTLES, waitFor } from "@intentic/testing/bun";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { ManagedProcesses, ProcessSpec } from "../../processes/managed-processes.js";
-import type { DependencyLandOrigin } from "./dependency-origin.js";
+import type { DependencyLandOrigin, DependencyOrigin } from "./dependency-origin.js";
 import { checkRunningIn } from "./checks-in-flight.js";
-import { checkCommandFor, type LandBreakage, type VerifyDeps } from "./verify-deps.js";
-import { fileVerifyStore } from "./verify-store.js";
+import { checkCommandFor, createLandCheck, type LandBreakage, type LandCheck, type LandCheckDeps } from "./verify-deps.js";
+import { fileVerifyStore, type QueuedLand } from "./verify-store.js";
 
 const workspace = async (): Promise<string> => mkdtemp(join(tmpdir(), "verify-"));
 
@@ -78,18 +78,13 @@ const hangingProcesses = (): ManagedProcesses => {
     } as unknown as ManagedProcesses;
 };
 
-// Fresh module per case, since the module's queue is process-wide and mustn't leak between tests. Only this module is
-// re-evaluated, so the check window it opens is the one the statically imported registry reports.
-const freshQueue = async (): Promise<typeof import("./verify-deps.js")> =>
-    freshImport<typeof import("./verify-deps.js")>("./verify-deps.js", import.meta.url);
-
 const deps = (
     root: string,
     processes: ManagedProcesses,
     events: WorkspaceEvent[],
     feed: string[],
     announced: { count: number } = { count: 0 },
-): VerifyDeps => ({
+): LandCheckDeps => ({
     workspace: { root },
     processes,
     logger: silent,
@@ -101,9 +96,26 @@ const deps = (
     },
     emit: (event) => void events.push(event),
     announce: () => (announced.count += 1),
+    heavyPrefix: async () => "",
+    offload: async () => undefined,
+    route: async () => undefined,
+    settled: async () => undefined,
+    recheckPushes: async () => undefined,
+    declaredCheck: async () => undefined,
     pollMs: 5,
     watchMaxMs: 200,
+    startWaitMs: 100,
 });
+
+// A land check on its own queue, asked once for `dirs`; the same check is asked again by calling `enqueue` on it.
+const checked = (landCheckDeps: LandCheckDeps, origin: DependencyOrigin, dirs: readonly string[]): LandCheck => {
+    const check = createLandCheck(landCheckDeps);
+    check.enqueue(origin, dirs);
+    return check;
+};
+
+// A land as the check files it while it waits: the origin, and when it asked.
+const queued = (land: DependencyLandOrigin): QueuedLand => ({ ...land, at: expect.any(Number) as number });
 
 const settle = async (done: () => boolean): Promise<void> => {
     for (let waited = 0; waited < 2_000 && !done(); waited += 10) {
@@ -112,13 +124,12 @@ const settle = async (done: () => boolean): Promise<void> => {
 };
 
 test("a red check announces deps.broken with the project, command, exit code and log tail", async () => {
-    const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const events: WorkspaceEvent[] = [];
     const feed: string[] = [];
     const started: string[] = [];
-    queueVerify(deps(root, fakeProcesses(root, 1, started), events, feed), context, ["app"]);
+    checked(deps(root, fakeProcesses(root, 1, started), events, feed), context, ["app"]);
     await settle(() => events.length > 0);
     expect(started).toEqual(["app--verify"]);
     expect(events).toEqual([
@@ -135,47 +146,43 @@ test("a red check announces deps.broken with the project, command, exit code and
 });
 
 test("a green check after a red one announces deps.fixed; green after green announces nothing", async () => {
-    const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { verify: "pnpm typecheck && pnpm test" });
     const events: WorkspaceEvent[] = [];
     const feed: string[] = [];
     const store = fileVerifyStore(join(root, `${STATE_DIR}/records/verify.json`));
     await store.record("app", "red", 1);
-    queueVerify(deps(root, fakeProcesses(root, 0, []), events, feed), context, ["app"]);
+    checked(deps(root, fakeProcesses(root, 0, []), events, feed), context, ["app"]);
     await settle(() => events.length > 0);
     expect(events.map((event) => event.event)).toEqual(["deps.fixed"]);
     expect(events[0]?.deps?.attempt).toBe(0);
-    const { queueVerify: again } = await freshQueue();
     const laterEvents: WorkspaceEvent[] = [];
     const laterFeed: string[] = [];
-    again(deps(root, fakeProcesses(root, 0, []), laterEvents, laterFeed), context, ["app"]);
+    checked(deps(root, fakeProcesses(root, 0, []), laterEvents, laterFeed), context, ["app"]);
     await settle(() => laterFeed.length > 0);
     expect(laterEvents).toEqual([]);
     expect(laterFeed).toEqual(["deps.verify_green"]);
 });
 
 test("a still-red check advances the attempt the guard caps on", async () => {
-    const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const store = fileVerifyStore(join(root, `${STATE_DIR}/records/verify.json`));
     await store.record("app", "red", 1);
     const events: WorkspaceEvent[] = [];
-    queueVerify(deps(root, fakeProcesses(root, 1, []), events, []), context, ["app"]);
+    checked(deps(root, fakeProcesses(root, 1, []), events, []), context, ["app"]);
     await settle(() => events.length > 0);
     expect(events[0]?.event).toBe("deps.broken");
     expect(events[0]?.deps?.attempt).toBe(2);
 });
 
 test("a project with no verify or test script is reported, not guessed at", async () => {
-    const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, {});
     const events: WorkspaceEvent[] = [];
     const feed: string[] = [];
     const started: string[] = [];
-    queueVerify(deps(root, fakeProcesses(root, 0, started), events, feed), context, ["app"]);
+    checked(deps(root, fakeProcesses(root, 0, started), events, feed), context, ["app"]);
     await settle(() => feed.length > 0);
     expect(started).toEqual([]);
     expect(events).toEqual([]);
@@ -183,7 +190,6 @@ test("a project with no verify or test script is reported, not guessed at", asyn
 });
 
 test("an install that left the project unready stops at telling the owner: no check, no wake", async () => {
-    const { queueVerify } = await freshQueue();
     const root = await workspace();
     // Installed marker present, but the declared dependency is still missing: the install failed.
     await write(root, "app/package.json", JSON.stringify({ name: "app", dependencies: { "left-pad": "^1.3.0" }, scripts: { test: "vitest run" } }));
@@ -192,7 +198,7 @@ test("an install that left the project unready stops at telling the owner: no ch
     const events: WorkspaceEvent[] = [];
     const feed: string[] = [];
     const started: string[] = [];
-    queueVerify(deps(root, fakeProcesses(root, 0, started), events, feed), context, ["app"]);
+    checked(deps(root, fakeProcesses(root, 0, started), events, feed), context, ["app"]);
     await settle(() => feed.length > 0);
     expect(started).toEqual([]);
     expect(events).toEqual([]);
@@ -200,25 +206,23 @@ test("an install that left the project unready stops at telling the owner: no ch
 });
 
 test("a pane that dies before reporting reads as red, never green", async () => {
-    const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const events: WorkspaceEvent[] = [];
     // No status file: the pane died before writing one.
-    queueVerify(deps(root, fakeProcesses(root, undefined, []), events, []), context, ["app"]);
+    checked(deps(root, fakeProcesses(root, undefined, []), events, []), context, ["app"]);
     await settle(() => events.length > 0);
     expect(events[0]?.event).toBe("deps.broken");
     expect(events[0]?.deps?.exitCode).toBe(-1);
 });
 
 test("an install nobody caused records its verdict and wakes nobody", async () => {
-    const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const events: WorkspaceEvent[] = [];
     const feed: string[] = [];
     const started: string[] = [];
-    queueVerify(deps(root, fakeProcesses(root, 1, started), events, feed), { kind: "external" }, ["app"]);
+    checked(deps(root, fakeProcesses(root, 1, started), events, feed), { kind: "external" }, ["app"]);
     await settle(() => feed.length > 0);
     expect(started).toEqual(["app--verify"]);
     expect(feed).toEqual(["deps.verify_red"]);
@@ -228,24 +232,22 @@ test("an install nobody caused records its verdict and wakes nobody", async () =
 // A build empties and rewrites its output dir, which the watcher prunes: nothing else can tell a browser that files a
 // repo tracks under `dist/` came back, so a review read mid-build would keep reporting them deleted.
 test("a finished check says it wrote the tree where nothing was watching", async () => {
-    const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { verify: "pnpm run build" });
     const feed: string[] = [];
     const announced = { count: 0 };
-    queueVerify(deps(root, fakeProcesses(root, 0, []), [], feed, announced), context, ["app"]);
+    checked(deps(root, fakeProcesses(root, 0, []), [], feed, announced), context, ["app"]);
     await settle(() => feed.length > 0);
     expect(feed).toEqual(["deps.verify_green"]);
     expect(announced.count).toBe(1);
 });
 
 test("a check that outran the watch window says so too: it wrote before it was stopped", async () => {
-    const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const feed: string[] = [];
     const announced = { count: 0 };
-    queueVerify(deps(root, hangingProcesses(), [], feed, announced), context, ["app"]);
+    checked(deps(root, hangingProcesses(), [], feed, announced), context, ["app"]);
     await settle(() => feed.length > 0);
     expect(feed).toEqual(["deps.verify_lost"]);
     expect(announced.count).toBe(1);
@@ -256,7 +258,6 @@ test("a check that outran the watch window says so too: it wrote before it was s
 // The main-line strip and the breakage router both read what runs now: a check whose panel never started must not read
 // as running until the next one, or a red held on a conversation would be left waiting on a check that is not coming.
 test("a check whose panel could not start leaves nothing reading as running", async () => {
-    const { queueVerify, verifyQueueSnapshot, landCheckAhead } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const warned: string[] = [];
@@ -267,18 +268,17 @@ test("a check whose panel could not start leaves nothing reading as running", as
         },
         running: () => false,
     } as unknown as ManagedProcesses;
-    queueVerify({ ...deps(root, processes, [], []), logger }, context, ["app"]);
+    const check = checked({ ...deps(root, processes, [], []), logger }, context, ["app"]);
     await settle(() => warned.length > 0);
     expect(warned).toEqual(["dependency verify: chain failed"]);
-    expect(verifyQueueSnapshot()).toEqual({ current: undefined, pending: [] });
-    expect(landCheckAhead("app")).toBe(false);
+    expect(check.current()).toBeUndefined();
+    expect(await check.ahead("app")).toBe(false);
     expect(checkRunningIn("app")).toBe(false);
 });
 
 // The window the review reads (git.routes.ts ownWork): open while the build is rewriting the project's output dirs,
 // and already closed when the announcement lands, so the rescan it triggers reports the tree the build settled on.
 test("the check window is open while the build runs and closed before the announcement that rescans", async () => {
-    const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { verify: "pnpm run build" });
     const feed: string[] = [];
@@ -292,23 +292,12 @@ test("the check window is open while the build runs and closed before the announ
             await panels.start(key, spec);
         },
     } as unknown as ManagedProcesses;
-    queueVerify({ ...deps(root, processes, [], feed), announce: () => void whenAnnounced.push(checkRunningIn("app")) }, context, ["app"]);
+    checked({ ...deps(root, processes, [], feed), announce: () => void whenAnnounced.push(checkRunningIn("app")) }, context, ["app"]);
     await settle(() => feed.length > 0);
     expect(feed).toEqual(["deps.verify_green"]);
     expect(whileStarting).toEqual([true]);
     expect(whenAnnounced).toEqual([false]);
     expect(checkRunningIn("app")).toBe(false);
-});
-
-test("a chain with no event sink at all still checks and still records", async () => {
-    const { queueVerify } = await freshQueue();
-    const root = await workspace();
-    await ready(root, { test: "vitest run" });
-    const feed: string[] = [];
-    const { emit: _emit, ...sinkless } = deps(root, fakeProcesses(root, 0, []), [], feed);
-    queueVerify(sinkless, { kind: "external" }, ["app"]);
-    await settle(() => feed.length > 0);
-    expect(feed).toEqual(["deps.verify_green"]);
 });
 
 test("the check command is the project's own word for it: verify first, then test, then nothing", async () => {
@@ -337,13 +326,12 @@ test("the verify store remembers red across restarts: its list is the closure re
 
 // queue-run's own exit for a command it never started: the repo-verify rule skips rather than overlap a slot holder.
 test("a check the queue skipped is reported as not run, and changes no verdict", async () => {
-    const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { verify: "pnpm run verify" });
     await fileVerifyStore(join(root, `${STATE_DIR}/records/verify.json`)).record("app", "red", 1);
     const events: WorkspaceEvent[] = [];
     const feed: string[] = [];
-    queueVerify(deps(root, fakeProcesses(root, 75, []), events, feed), context, ["app"]);
+    checked(deps(root, fakeProcesses(root, 75, []), events, feed), context, ["app"]);
     await settle(() => feed.length > 0);
     expect(feed).toEqual(["deps.verify_deferred"]);
     expect(events).toEqual([]);
@@ -356,29 +344,27 @@ test("a check the queue skipped is reported as not run, and changes no verdict",
 });
 
 test("the check is told where to leave its failures and which commit the land departed from", async () => {
-    const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const feed: string[] = [];
     const commands: string[] = [];
-    queueVerify(deps(root, fakeProcesses(root, 0, [], undefined, commands), [], feed), context, ["app"]);
+    checked(deps(root, fakeProcesses(root, 0, [], undefined, commands), [], feed), context, ["app"]);
     await settle(() => feed.length > 0);
     expect(commands[0]).toContain(`export INTENTIC_VERIFY_REPORT=${join(root, `${STATE_DIR}/local/verify/app--verify.report.json`)}`);
     expect(commands[0]).toContain("export INTENTIC_LAND_FROM=abc");
 });
 
 test("a check the owner sends to a runner is handed to offload-run, keeping the queued form for running it here", async () => {
-    const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const feed: string[] = [];
     const commands: string[] = [];
-    const verifier: VerifyDeps = {
+    const verifier: LandCheckDeps = {
         ...deps(root, fakeProcesses(root, 0, [], undefined, commands), [], feed),
         offload: async () => "runner-omen",
         heavyPrefix: async () => "queue-run --pool heavy -- ",
     };
-    queueVerify(verifier, context, ["app"]);
+    checked(verifier, context, ["app"]);
     await settle(() => feed.length > 0);
     // The land's base travels, and the report and the tree verdict come back beside where a local run leaves them.
     expect(commands[0]).toContain(
@@ -390,12 +376,11 @@ test("a check the owner sends to a runner is handed to offload-run, keeping the 
 });
 
 test("a check nobody sends anywhere runs here, with no verdict to bring back", async () => {
-    const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const feed: string[] = [];
     const commands: string[] = [];
-    queueVerify({ ...deps(root, fakeProcesses(root, 0, [], undefined, commands), [], feed), offload: async () => undefined }, context, ["app"]);
+    checked({ ...deps(root, fakeProcesses(root, 0, [], undefined, commands), [], feed), offload: async () => undefined }, context, ["app"]);
     await settle(() => feed.length > 0);
     expect(commands[0]).not.toContain("offload-run");
     expect(commands[0]).not.toContain("INTENTIC_VERDICT_OUT");
@@ -412,7 +397,6 @@ const taking =
 const SENT_BACK: MainlineRouting = { kind: "original", conversationId: "agent-1", at: 5, detail: "Sent back to the conversation that landed it." };
 
 test("failures a red names for the first time go to the router, its answer is filed on the run, and no chore wakes as well", async () => {
-    const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const events: WorkspaceEvent[] = [];
@@ -420,13 +404,13 @@ test("failures a red names for the first time go to the router, its answer is fi
     const routed: LandBreakage[] = [];
     // The `rerun` an older check still writes is read past: nothing re-runs failures to tell suspect lands apart.
     const verifier = deps(root, fakeProcesses(root, 1, [], { failures: ["app#test a.test.ts › x"], rerun: "pnpm rerun" }), events, feed);
-    queueVerify({ ...verifier, route: taking(SENT_BACK, routed) }, context, ["app"]);
+    checked({ ...verifier, route: taking(SENT_BACK, routed) }, context, ["app"]);
     await settle(() => feed.length > 0 && routed.length > 0);
     expect(routed).toEqual([
         {
             project: "app",
             command: "pnpm run test",
-            lands: [context],
+            lands: [queued(context)],
             fresh: ["app#test a.test.ts › x"],
             failures: ["app#test a.test.ts › x"],
             logTail: "1 test failed\n",
@@ -449,14 +433,13 @@ test("failures a red names for the first time go to the router, its answer is fi
 // Every red is the router's to answer, since what an earlier red carried forward may be owed at this one; a router with
 // nothing to decide answers nothing, and then the chore hears of it as before.
 test("a red that names nothing new since the last one is still handed to the router, and the chore wakes when it takes nothing", async () => {
-    const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const store = fileVerifyStore(join(root, `${STATE_DIR}/records/verify.json`));
     await store.record("app", "red", 1, ["app#test a.test.ts › x"]);
     const events: WorkspaceEvent[] = [];
     const routed: LandBreakage[] = [];
-    queueVerify(
+    checked(
         { ...deps(root, fakeProcesses(root, 1, [], { failures: ["app#test a.test.ts › x"] }), events, []), route: taking(undefined, routed) },
         context,
         ["app"],
@@ -472,14 +455,13 @@ test("a red that names nothing new since the last one is still handed to the rou
 // Most repositories' checks write no report: a red is then one failure, the check itself, where it turns the project
 // red, and nothing new where it only stays red, since nobody can tell from outside what a second red added.
 test("a red whose check names no failures is one failure where it turns the project red, and none while it stays red", async () => {
-    const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const routed: LandBreakage[] = [];
     const verifier = deps(root, fakeProcesses(root, 1, []), [], []);
-    queueVerify({ ...verifier, route: taking(undefined, routed) }, context, ["app"]);
+    checked({ ...verifier, route: taking(undefined, routed) }, context, ["app"]);
     await settle(() => routed.length > 0);
-    queueVerify({ ...verifier, route: taking(undefined, routed) }, context, ["app"]);
+    checked({ ...verifier, route: taking(undefined, routed) }, context, ["app"]);
     await settle(() => routed.length > 1);
 
     expect(routed.map(({ fresh, failures, measured }) => ({ fresh, failures, measured }))).toEqual([
@@ -489,41 +471,38 @@ test("a red whose check names no failures is one failure where it turns the proj
 });
 
 test("a red the router only reports still wakes the chore, and the report is filed on the run", async () => {
-    const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const events: WorkspaceEvent[] = [];
     const routed: LandBreakage[] = [];
     const reported: MainlineRouting = { kind: "reported", at: 6, detail: "Repairs after landing are switched off." };
     const verifier = deps(root, fakeProcesses(root, 1, [], { failures: ["app#test a.test.ts › x"] }), events, []);
-    queueVerify({ ...verifier, route: taking(reported, routed) }, context, ["app"]);
+    checked({ ...verifier, route: taking(reported, routed) }, context, ["app"]);
     await settle(() => events.length > 0);
     expect(events.map(({ event }) => event)).toEqual(["deps.broken"]);
     expect((await verifier.verifyStore.read()).runs[0]?.routing).toEqual(reported);
 });
 
 test("a router that throws is logged and treated as taking nothing, so the chore still wakes", async () => {
-    const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const events: WorkspaceEvent[] = [];
     const route = async (): Promise<MainlineRouting | undefined> => {
         throw new Error("the fleet is gone");
     };
-    queueVerify({ ...deps(root, fakeProcesses(root, 1, [], { failures: ["app#test a.test.ts › x"] }), events, []), route }, context, ["app"]);
+    checked({ ...deps(root, fakeProcesses(root, 1, [], { failures: ["app#test a.test.ts › x"] }), events, []), route }, context, ["app"]);
     await settle(() => events.length > 0);
     expect(events.map(({ event }) => event)).toEqual(["deps.broken"]);
 });
 
 // The history the editor's strip and every card read (mainline-status.ts): one entry per settled run, newest first.
 test("every settled run is filed in the history with the lands it answered for, red or green", async () => {
-    const { queueVerify, mainlineLandOf } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const feed: string[] = [];
     const titled: DependencyLandOrigin = { ...context, title: "Fix the parser" };
     const verifier = deps(root, fakeProcesses(root, 1, [], { failures: ["app#test a.test.ts › x", "app#test b.test.ts › y"] }), [], feed);
-    queueVerify(verifier, titled, ["app"]);
+    checked(verifier, titled, ["app"]);
     await settle(() => feed.length > 0);
     const [red] = (await verifier.verifyStore.read()).runs;
     if (red === undefined) {
@@ -540,12 +519,12 @@ test("every settled run is filed in the history with the lands it answered for, 
         failureCount: 2,
         attempt: 1,
     });
-    expect(red.lands).toEqual([mainlineLandOf(titled)]);
+    // Answered: nothing waits in the project any more.
+    expect(await verifier.verifyStore.lands()).toEqual({});
     expect(red.startedAt).toBeLessThanOrEqual(red.at);
 
-    const { queueVerify: again } = await freshQueue();
     const greenFeed: string[] = [];
-    again(deps(root, fakeProcesses(root, 0, []), [], greenFeed), { kind: "external" }, ["app"]);
+    checked(deps(root, fakeProcesses(root, 0, []), [], greenFeed), { kind: "external" }, ["app"]);
     await settle(() => greenFeed.length > 0);
     const runs = (await fileVerifyStore(join(root, `${STATE_DIR}/records/verify.json`)).read()).runs;
     expect(runs.map(({ status, lands, failureCount, attempt }) => ({ status, lands, failureCount, attempt }))).toEqual([
@@ -555,14 +534,13 @@ test("every settled run is filed in the history with the lands it answered for, 
 });
 
 test("a green run tells the router the project is settled, and is not routed", async () => {
-    const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const feed: string[] = [];
     const settled: string[] = [];
     const routed: LandBreakage[] = [];
-    queueVerify(
-        { ...deps(root, fakeProcesses(root, 0, []), [], feed), route: taking(SENT_BACK, routed), settled: (project) => void settled.push(project) },
+    checked(
+        { ...deps(root, fakeProcesses(root, 0, []), [], feed), route: taking(SENT_BACK, routed), settled: async (project) => void settled.push(project) },
         context,
         ["app"],
     );
@@ -575,7 +553,6 @@ test("a green run tells the router the project is settled, and is not routed", a
 // A landed fix for what a push let through clears it minutes later: every settled run measures the project's push
 // findings again (push-checks.ts decides whether any are open), and never waits on it or fails for it.
 test("every settled run, red or green, has the project's push findings measured again without waiting on them", async () => {
-    const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const feed: string[] = [];
@@ -584,9 +561,9 @@ test("every settled run, red or green, has the project's push findings measured 
         rechecked.push(project);
         throw new Error("no report");
     };
-    queueVerify({ ...deps(root, fakeProcesses(root, 1, []), [], feed), recheckPushes }, { kind: "startup" }, ["app"]);
+    checked({ ...deps(root, fakeProcesses(root, 1, []), [], feed), recheckPushes }, { kind: "startup" }, ["app"]);
     await settle(() => feed.length > 0);
-    queueVerify({ ...deps(root, fakeProcesses(root, 0, []), [], feed), recheckPushes }, { kind: "startup" }, ["app"]);
+    checked({ ...deps(root, fakeProcesses(root, 0, []), [], feed), recheckPushes }, { kind: "startup" }, ["app"]);
     await settle(() => feed.length > 1);
 
     expect(feed).toEqual(["deps.verify_red", "deps.verify_green"]);
@@ -596,7 +573,6 @@ test("every settled run, red or green, has the project's push findings measured 
 // A land that arrives while the check runs waits, and is measured by the next run with every land queued beside it; the
 // red found meanwhile is told that more is coming, so the router can wait for that check before sending anybody.
 test("lands queued behind a running check wait for the next run, which the running one's red is told about", async () => {
-    const { queueVerify, verifyQueueSnapshot, landCheckAhead } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const routed: LandBreakage[] = [];
@@ -624,23 +600,104 @@ test("lands queued behind a running check wait for the next run, which the runni
         repos: [{ repo: "app", from: "def", dir: "app" }],
     };
     const verifier = { ...deps(root, processes, [], []), route: taking(undefined, routed) };
-    queueVerify(verifier, context, ["app"]);
-    await settle(() => verifyQueueSnapshot().current !== undefined);
-    queueVerify(verifier, later, ["app"]);
+    const check = checked(verifier, context, ["app"]);
+    await settle(() => check.current() !== undefined);
+    check.enqueue(later, ["app"]);
 
-    const snapshot = verifyQueueSnapshot();
-    expect(snapshot.current).toMatchObject({ dir: "app", command: "pnpm run test", lands: [context] });
-    expect(snapshot.pending).toEqual([{ dirs: ["app"], lands: [later] }]);
-    expect(landCheckAhead("app")).toBe(true);
-    expect(landCheckAhead("lib")).toBe(false);
+    // Both wait in the store until a verdict answers them: the running check answers for the first.
+    await waitFor(async () => expect(await verifier.verifyStore.lands()).toEqual({ app: [queued(context), queued(later)] }), SETTLES);
+    // Read field by field: the lands are the store's own objects, which a matcher must not be handed to rewrite.
+    const running = check.current();
+    expect([running?.dir, running?.command, running?.session, running?.lands.map(({ agentId }) => agentId)]).toEqual(["app", "pnpm run test", "app--verify", ["agent-1"]]);
+    expect(await check.ahead("app")).toBe(true);
+    expect(await check.ahead("lib")).toBe(false);
 
     release();
     await settle(() => routed.length === 2);
     expect(routed.map(({ lands, queuedBehind }) => ({ lands, queuedBehind }))).toEqual([
-        { lands: [context], queuedBehind: true },
-        { lands: [later], queuedBehind: false },
+        { lands: [queued(context)], queuedBehind: true },
+        { lands: [queued(later)], queuedBehind: false },
     ]);
-    await settle(() => verifyQueueSnapshot().current === undefined);
-    expect(verifyQueueSnapshot()).toEqual({ current: undefined, pending: [] });
-    expect(landCheckAhead("app")).toBe(false);
+    await settle(() => check.current() === undefined);
+    expect(check.current()).toBeUndefined();
+    expect(await verifier.verifyStore.lands()).toEqual({});
+    expect(await check.ahead("app")).toBe(false);
+});
+
+// A run that ends without a verdict answers for nobody: its lands wait on, and the next run measures them with its own,
+// so the router lays the failures at every land they may have come with, not the newest alone.
+test("the lands a run left without a verdict are carried into the next run", async () => {
+    const root = await workspace();
+    await ready(root, { test: "vitest run" });
+    const routed: LandBreakage[] = [];
+    const feed: string[] = [];
+    let exitCode = 75;
+    const panels = (): ManagedProcesses => fakeProcesses(root, exitCode, [], { failures: ["app#test a.test.ts › x"] });
+    const processes = { start: async (key: string, spec: ProcessSpec) => panels().start(key, spec), running: () => false } as unknown as ManagedProcesses;
+    const later: DependencyLandOrigin = { kind: "land", agentId: "agent-2", branch: "agent/agent-2", repos: [{ repo: "app", from: "def", dir: "app" }] };
+    const verifier = { ...deps(root, processes, [], feed), route: taking(undefined, routed) };
+    const check = checked(verifier, context, ["app"]);
+    await settle(() => feed.length > 0);
+    expect(feed).toEqual(["deps.verify_deferred"]);
+    expect(await verifier.verifyStore.lands()).toEqual({ app: [queued(context)] });
+
+    exitCode = 1;
+    check.enqueue(later, ["app"]);
+    await settle(() => routed.length > 0);
+
+    expect(routed.map(({ lands }) => lands)).toEqual([[queued(context), queued(later)]]);
+    const [run] = (await verifier.verifyStore.read()).runs;
+    expect(run?.lands.map(({ conversationId }) => conversationId)).toEqual(["agent-1", "agent-2"]);
+    expect(await verifier.verifyStore.lands()).toEqual({});
+});
+
+// The lands waiting live in the verify store, so a daemon that stopped before their check still answers for them.
+test("a restarted daemon checks the lands no run answered before it stopped", async () => {
+    const root = await workspace();
+    await ready(root, { test: "vitest run" });
+    const routed: LandBreakage[] = [];
+    const verifier = { ...deps(root, fakeProcesses(root, 1, [], { failures: ["app#test a.test.ts › x"] }), [], []), route: taking(undefined, routed) };
+    await verifier.verifyStore.owe(["app"], { ...context, at: 42 });
+
+    await createLandCheck(verifier).resume();
+    await settle(() => routed.length > 0);
+
+    expect(routed.map(({ lands }) => lands)).toEqual([[{ ...context, at: 42 }]]);
+    expect(await verifier.verifyStore.lands()).toEqual({});
+});
+
+// The heavy-command queue may hold a check for up to its wait before it starts; that wait is never charged to the
+// check's own ceiling, which starts when the check marks its start inside the queue.
+test("the watch window starts when the check starts, not while it waits in the queue", async () => {
+    const root = await workspace();
+    await ready(root, { test: "vitest run" });
+    const feed: string[] = [];
+    const commands: string[] = [];
+    const live = new Set<string>();
+    const artifacts = join(root, `${STATE_DIR}/local/verify`);
+    const processes = {
+        start: async (key: string, spec: ProcessSpec) => {
+            commands.push(spec.command);
+            live.add(key);
+            await mkdir(artifacts, { recursive: true });
+            // Queued for 300ms, then the check runs for 150ms: past a 200ms ceiling counted from launch, inside one
+            // counted from its start.
+            setTimeout(() => void writeFile(join(artifacts, `${key}.started`), ""), 300);
+            setTimeout(() => {
+                void (async () => {
+                    await writeFile(join(artifacts, `${key}.log`), "ok\n");
+                    await writeFile(join(artifacts, `${key}.status`), "0\n");
+                    live.delete(key);
+                })();
+            }, 450);
+        },
+        running: (key: string) => live.has(key),
+        stop: async (key: string) => void live.delete(key),
+    } as unknown as ManagedProcesses;
+    checked({ ...deps(root, processes, [], feed), heavyPrefix: async () => "queue-run -- ", startWaitMs: 1_000 }, context, ["app"]);
+    await settle(() => feed.length > 0);
+
+    expect(feed).toEqual(["deps.verify_green"]);
+    // The start mark is written inside the queued command, where only a started check reaches it.
+    expect(commands[0]).toContain(`queue-run -- bash -c ': > ${join(artifacts, "app--verify.started")}; pnpm run test'`);
 });

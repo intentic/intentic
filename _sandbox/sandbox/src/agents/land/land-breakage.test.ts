@@ -1,6 +1,7 @@
 import {
     type ActivityEvent,
     type AgentSummary,
+    fixAttemptId,
     LAND_FIX_OPENING,
     landBreakagePrompt,
     landFixConversationId,
@@ -13,9 +14,10 @@ import { advanceTimersByTimeAsync, realSleep, waitFor } from "@intentic/testing/
 import type { Services } from "../../composition.js";
 import { recordingLogger } from "../../harness/route-fakes.testing.js";
 import type { Said, SentTurn } from "../../seams/turn-starter.js";
-import { isolatedAgent } from "../../testing.js";
+import { isolatedAgent, memoryVerifyStore } from "../../testing.js";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
-import type { LandBreakage } from "../../workspace/deps/verify-deps.js";
+import { type LandBreakage, mainlineLandOf } from "../../workspace/deps/verify-deps.js";
+import type { QueuedLand } from "../../workspace/deps/verify-store.js";
 import { narrowCheckOf } from "./land-fix.js";
 
 // What a red main-line check is owed, decided from the fleet as it stands: wait for the check behind it, hold while a
@@ -36,6 +38,7 @@ const {
     packageOf,
     pathOfUnit,
     resetBreakageRouter,
+    resumeBreakageRouter,
     routeLandBreakage,
     stillInMind,
     suspectsOf,
@@ -142,13 +145,14 @@ const SANDBOX_TEST = "@intentic/sandbox#test _sandbox/sandbox/src/parser.test.ts
 const SANDBOX_LEXER = "@intentic/sandbox#test _sandbox/sandbox/src/lexer.test.ts › tokenizes";
 const SANDBOX_TYPES = "@intentic/sandbox#typecheck _sandbox/sandbox/src/turn.ts: TS2322 Type 'x'";
 
-// A land into the workspace root, the way a conversation's isolated turn lands it.
-const origin = (agentId: string): DependencyLandOrigin => ({
+// A land into the workspace root, the way a conversation's isolated turn lands it and the check files it.
+const origin = (agentId: string): QueuedLand => ({
     kind: "land",
     agentId,
     title: `Work ${agentId}`,
     branch: `agent/${agentId}`,
     repos: [{ repo: "root", from: `from-${agentId}`, dir: "" }],
+    at: 500,
 });
 
 const red = (over: Partial<LandBreakage> = {}): LandBreakage => ({
@@ -226,6 +230,17 @@ const fleet = (conversations: readonly Conversation[], options: { readonly autoR
     }[] = [];
     const activity: Omit<ActivityEvent, "id" | "at">[] = [];
     const { lines, logger } = recordingLogger();
+    // The verify store as the daemon keeps it, with every routing the router files recorded on the way in.
+    const store = memoryVerifyStore();
+    const verifyStore: Services["verifyStore"] = {
+        ...store,
+        routed: async (project, at, routing, suspects) => {
+            filed.push({ project, at, routing, suspects });
+            await store.routed(project, at, routing, suspects);
+        },
+    };
+    // Whether a check that answers for some land is ahead of the red being decided.
+    const ahead = { value: false };
     const services = unstubbed<Services>("services", {
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
             get: async () => SandboxSettingsSchema.parse({ autoRepair: options.autoRepair ?? true }),
@@ -258,16 +273,31 @@ const fleet = (conversations: readonly Conversation[], options: { readonly autoR
             },
         }),
         logger,
-        verifyStore: unstubbed<Services["verifyStore"]>("verifyStore", {
-            routed: async (project, at, routing, suspects) => {
-                filed.push({ project, at, routing, suspects });
-            },
-        }),
+        verifyStore,
+        landCheck: unstubbed<Services["landCheck"]>("landCheck", { ahead: async () => ahead.value }),
     });
     // Who each thing the router said was said to, and what, in order.
     const told = (): { readonly to: string; readonly prompt: string }[] => said.map(({ turn }) => ({ to: turn.conversationId, prompt: turn.prompt }));
     const types = (): string[] => activity.map(({ type }) => type);
-    return { services, running, told, started, filed, types, activity, lines };
+    return { services, running, told, started, filed, types, activity, lines, ahead };
+};
+
+type World = ReturnType<typeof fleet>;
+
+// A red run as the land check hands it over: filed in the history first, then routed.
+const route = async (world: World, breakage: LandBreakage, git?: GitRunner): Promise<MainlineRouting | undefined> => {
+    await world.services.verifyStore.noteRun({
+        project: breakage.project,
+        command: breakage.command,
+        status: "red",
+        startedAt: breakage.runAt - 10,
+        at: breakage.runAt,
+        lands: breakage.lands.map(mainlineLandOf),
+        failures: [...breakage.failures],
+        failureCount: breakage.failures.length,
+        attempt: 1,
+    });
+    return routeLandBreakage(world.services, breakage, git);
 };
 
 // The router's git answers `diff --name-only` for a land by the tip it names; any other question is a failure here.
@@ -296,8 +326,8 @@ describe("a red with nothing owed", () => {
     test("owes nothing when nothing new failed and nothing was carried in, or no land is there to answer for it", async () => {
         const world = fleet([{ id: "one" }]);
 
-        expect(await routeLandBreakage(world.services, red({ fresh: [] }))).toBeUndefined();
-        expect(await routeLandBreakage(world.services, red({ lands: [], runAt: 2_000 }))).toBeUndefined();
+        expect(await route(world, red({ fresh: [] }))).toBeUndefined();
+        expect(await route(world, red({ lands: [], runAt: 2_000 }))).toBeUndefined();
         expect(world.told()).toEqual([]);
         expect(world.started).toEqual([]);
         expect(world.filed).toEqual([]);
@@ -306,7 +336,7 @@ describe("a red with nothing owed", () => {
     test("is only reported while repairs after landing are switched off", async () => {
         const world = fleet([{ id: "one" }], { autoRepair: false });
 
-        expect(await routeLandBreakage(world.services, red())).toEqual(routed("reported", { detail: "Repairs after landing are switched off." }));
+        expect(await route(world, red())).toEqual(routed("reported", { detail: "Repairs after landing are switched off." }));
         expect(world.told()).toEqual([]);
         expect(world.started).toEqual([]);
         // The run just settled is filed by the check that asked; nothing was carried in to file with it.
@@ -318,7 +348,7 @@ describe("the conversation that landed it", () => {
     test("is sent the failures back while it still has the work in mind, and the decision is filed on the run", async () => {
         const world = fleet([{ id: "one" }]);
 
-        const routing = await decided(routeLandBreakage(world.services, red()));
+        const routing = await decided(route(world, red()));
 
         expect(routing).toEqual(routed("original", { conversationId: "one", detail: "Sent back to the conversation that landed it (1 of 2)." }));
         expect(world.told()).toEqual([{ to: "one", prompt: followUp([SANDBOX_TEST]) }]);
@@ -341,10 +371,10 @@ describe("the conversation that landed it", () => {
         const world = fleet([{ id: "one" }]);
 
         const kinds = [
-            (await routeLandBreakage(world.services, red()))?.kind,
-            (await routeLandBreakage(world.services, red({ runAt: 2_000, fresh: [SANDBOX_LEXER], failures: [SANDBOX_TEST, SANDBOX_LEXER] })))?.kind,
+            (await route(world, red()))?.kind,
+            (await route(world, red({ runAt: 2_000, fresh: [SANDBOX_LEXER], failures: [SANDBOX_TEST, SANDBOX_LEXER] })))?.kind,
         ];
-        const third = await routeLandBreakage(world.services, red({ runAt: 3_000, fresh: [SANDBOX_TYPES], failures: [SANDBOX_TYPES] }));
+        const third = await route(world, red({ runAt: 3_000, fresh: [SANDBOX_TYPES], failures: [SANDBOX_TYPES] }));
 
         expect(kinds).toEqual(["original", "original"]);
         expect(world.told().map(({ to }) => to)).toEqual(["one", "one"]);
@@ -360,7 +390,7 @@ describe("the conversation that landed it", () => {
     test("is sent nothing once it has gone cold, and a fresh conversation is handed the failures instead", async () => {
         const world = fleet([{ id: "one", warm: false }]);
 
-        const routing = await decided(routeLandBreakage(world.services, red()));
+        const routing = await decided(route(world, red()));
 
         const passedOver =
             'The conversation that landed it ("Work one") has gone cold or is nearly full, so reading all of it again would cost more than starting fresh.';
@@ -384,7 +414,7 @@ describe("the conversation that landed it", () => {
     test("is sent nothing once archived", async () => {
         const world = fleet([{ id: "one", archived: true }]);
 
-        expect(await routeLandBreakage(world.services, red())).toEqual(
+        expect(await route(world, red())).toEqual(
             routed("fix-up", {
                 conversationId: landFixConversationId("", 1_000),
                 detail: 'The conversation that landed it ("Work one") is archived.',
@@ -404,7 +434,7 @@ describe("blame across several lands", () => {
         const world = fleet(both);
         const git = changedBy({ "tip-one": ["_editor/web/src/App.vue"], "tip-two": ["_sandbox/sandbox/src/parser.ts"] });
 
-        const routing = await decided(routeLandBreakage(world.services, red({ lands: [origin("one"), origin("two")] }), git));
+        const routing = await decided(route(world, red({ lands: [origin("one"), origin("two")] }), git));
 
         expect(routing).toEqual(routed("original", { conversationId: "two", detail: "Sent back to the conversation that landed it (1 of 2)." }));
         expect(world.told().map(({ to }) => to)).toEqual(["two"]);
@@ -415,7 +445,7 @@ describe("blame across several lands", () => {
         const world = fleet(both);
         const git = changedBy({ "tip-one": ["_sandbox/sandbox/src/lexer.ts"], "tip-two": ["_sandbox/sandbox/src/parser.ts"] });
 
-        const routing = await decided(routeLandBreakage(world.services, red({ lands: [origin("one"), origin("two")] }), git));
+        const routing = await decided(route(world, red({ lands: [origin("one"), origin("two")] }), git));
 
         expect(routing).toEqual(
             routed("fix-up", {
@@ -431,34 +461,38 @@ describe("blame across several lands", () => {
 });
 
 describe("a red streak's allowance of fresh conversations", () => {
+    const base = landFixConversationId("", 1_000);
+
+    // Counted as the fleet numbers the streak's attempts, archived ones included, so a restart cannot reset it.
     test("is two; past them it waits for a person", async () => {
-        const world = fleet([{ id: "one", warm: false }]);
+        const world = fleet([{ id: "one", warm: false }, { id: base }, { id: fixAttemptId(base, 2) }]);
 
-        const first = await routeLandBreakage(world.services, red());
-        const second = await routeLandBreakage(
-            world.services,
-            red({ runAt: 2_000, fresh: [SANDBOX_LEXER], failures: [SANDBOX_TEST, SANDBOX_LEXER] }),
-        );
-        const third = await routeLandBreakage(world.services, red({ runAt: 3_000, fresh: [SANDBOX_TYPES], failures: [SANDBOX_TYPES] }));
+        const routing = await route(world, red());
 
-        expect([first?.kind, second?.kind]).toEqual(["fix-up", "fix-up"]);
-        expect(third).toEqual(routed("spent", { detail: "Still red after 2 fresh attempt(s); it waits for you." }));
-        expect(world.started).toHaveLength(2);
-        expect(world.types()).toEqual(["deps.breakage_fixup", "deps.breakage_fixup", "deps.breakage_spent"]);
-        expect(world.filed.map(({ at, routing }) => ({ at, kind: routing.kind }))).toEqual([
-            { at: 1_000, kind: "fix-up" },
-            { at: 2_000, kind: "fix-up" },
-            { at: 3_000, kind: "spent" },
-        ]);
+        expect(routing).toEqual(routed("spent", { detail: "Still red after 2 fresh attempt(s); it waits for you." }));
+        expect(world.started).toEqual([]);
+        expect(world.types()).toEqual(["deps.breakage_spent"]);
+        expect(world.filed.map(({ at, routing: filed }) => ({ at, kind: filed.kind }))).toEqual([{ at: 1_000, kind: "spent" }]);
+    });
+
+    // An attempt that ended without the fix carries on with the new failures: it is the same attempt, not a fresh one.
+    test("continues the attempt already made instead of counting another", async () => {
+        const world = fleet([{ id: "one", warm: false }, { id: base }]);
+
+        const routing = await route(world, red());
+
+        expect(routing).toEqual(routed("fix-up", { conversationId: base, detail: expect.stringContaining("has gone cold") }));
+        expect(world.started.map(({ conversationId }) => conversationId)).toEqual([base]);
+        expect(world.started[0]?.prompt.startsWith(LAND_FIX_OPENING)).toBe(false);
     });
 
     test("starts over once the project is green again, and the streak's end is logged with what it took", async () => {
         const world = fleet([{ id: "one" }]);
-        await routeLandBreakage(world.services, red());
-        await routeLandBreakage(world.services, red({ runAt: 2_000, fresh: [SANDBOX_LEXER], failures: [SANDBOX_TEST, SANDBOX_LEXER] }));
+        await route(world, red());
+        await route(world, red({ runAt: 2_000, fresh: [SANDBOX_LEXER], failures: [SANDBOX_TEST, SANDBOX_LEXER] }));
 
-        breakageSettled(world.services, "");
-        const again = await routeLandBreakage(world.services, red({ runAt: 5_000, redSince: 5_000 }));
+        await breakageSettled(world.services, "", undefined);
+        const again = await route(world, red({ runAt: 5_000, redSince: 5_000 }));
 
         expect(again).toEqual(routed("original", { conversationId: "one", detail: "Sent back to the conversation that landed it (1 of 2)." }));
         expect(world.lines.filter(({ message }) => message === "mainline: red streak ended")).toEqual([
@@ -471,7 +505,7 @@ describe("a red with more work queued behind it", () => {
     test("waits for the check that measures that work too, and sends nobody", async () => {
         const world = fleet([{ id: "one" }]);
 
-        expect(await routeLandBreakage(world.services, red({ queuedBehind: true }))).toEqual(
+        expect(await route(world, red({ queuedBehind: true }))).toEqual(
             routed("waiting", { detail: "More work landed while this ran; its check decides before anybody is sent." }),
         );
         expect(world.told()).toEqual([]);
@@ -486,10 +520,10 @@ describe("a red with more work queued behind it", () => {
             { id: "two", tip: "tip-two" },
         ]);
         const git = changedBy({ "tip-one": ["_sandbox/sandbox/src/parser.ts"], "tip-two": ["_editor/web/src/App.vue"] });
-        await routeLandBreakage(world.services, red({ queuedBehind: true }), git);
+        await route(world, red({ queuedBehind: true }), git);
 
         const routing = await decided(
-            routeLandBreakage(world.services, red({ runAt: 2_000, lands: [origin("two")], fresh: [], failures: [SANDBOX_TEST] }), git),
+            route(world, red({ runAt: 2_000, lands: [origin("two")], fresh: [], failures: [SANDBOX_TEST] }), git),
         );
 
         expect(routing).toEqual(routed("original", { conversationId: "one", detail: "Sent back to the conversation that landed it (1 of 2)." }));
@@ -503,10 +537,10 @@ describe("a red with more work queued behind it", () => {
 
     test("is resolved without anybody sent when the next red no longer has its failures", async () => {
         const world = fleet([{ id: "one" }, { id: "two" }]);
-        await routeLandBreakage(world.services, red({ queuedBehind: true }));
+        await route(world, red({ queuedBehind: true }));
 
         expect(
-            await routeLandBreakage(world.services, red({ runAt: 2_000, lands: [origin("two")], fresh: [], failures: [SANDBOX_LEXER] })),
+            await route(world, red({ runAt: 2_000, lands: [origin("two")], fresh: [], failures: [SANDBOX_LEXER] })),
         ).toBeUndefined();
         expect(world.told()).toEqual([]);
         expect(world.filed).toEqual([
@@ -517,10 +551,10 @@ describe("a red with more work queued behind it", () => {
     // A check that crashed or timed out wrote no list: it cannot say the carried failure is gone, so it is still owed.
     test("is still owed, not resolved, when the next red names no failures at all", async () => {
         const world = fleet([{ id: "one" }, { id: "two" }]);
-        await routeLandBreakage(world.services, red({ queuedBehind: true }));
+        await route(world, red({ queuedBehind: true }));
 
         const routing = await decided(
-            routeLandBreakage(world.services, red({ runAt: 2_000, lands: [origin("two")], fresh: [], failures: [], measured: false })),
+            route(world, red({ runAt: 2_000, lands: [origin("two")], fresh: [], failures: [], measured: false })),
         );
 
         expect(routing?.kind).not.toBe("resolved");
@@ -533,9 +567,9 @@ describe("a red with more work queued behind it", () => {
 
     test("is resolved without anybody sent when the next check is green, and what follows is a new streak", async () => {
         const world = fleet([{ id: "one" }]);
-        await routeLandBreakage(world.services, red({ queuedBehind: true }));
+        await route(world, red({ queuedBehind: true }));
 
-        breakageSettled(world.services, "");
+        await breakageSettled(world.services, "", undefined);
 
         await waitFor(() =>
             expect(world.filed).toEqual([
@@ -564,7 +598,7 @@ describe("a red with more work queued behind it", () => {
         const kinds: (string | undefined)[] = [];
         for (const runAt of [1_000, 2_000, 3_000, 4_000]) {
             const fresh = runAt === 1_000 ? [SANDBOX_TEST] : [];
-            kinds.push((await routeLandBreakage(world.services, red({ runAt, fresh, queuedBehind: true })))?.kind);
+            kinds.push((await route(world, red({ runAt, fresh, queuedBehind: true })))?.kind);
         }
 
         expect(kinds).toEqual(["waiting", "waiting", "waiting", "original"]);
@@ -583,7 +617,7 @@ describe("a red a conversation still working touches", () => {
         const world = fleet([{ id: "one" }, { id: "busy", running: true }]);
         unlanded.set("busy", ["_sandbox/sandbox/src/parser.ts"]);
 
-        const held = await decided(routeLandBreakage(world.services, red()));
+        const held = await decided(route(world, red()));
 
         expect(held).toEqual(
             routed("held", {
@@ -596,11 +630,11 @@ describe("a red a conversation still working touches", () => {
         expect(world.types()).toEqual(["deps.breakage_held"]);
 
         // Another red while it still works holds again, and it is not told twice.
-        await routeLandBreakage(world.services, red({ runAt: 2_000, fresh: [SANDBOX_LEXER], failures: [SANDBOX_TEST, SANDBOX_LEXER] }));
+        await route(world, red({ runAt: 2_000, fresh: [SANDBOX_LEXER], failures: [SANDBOX_TEST, SANDBOX_LEXER] }));
         expect(world.told().map(({ to }) => to)).toEqual(["busy"]);
 
         world.running.delete("busy");
-        breakageRunSettled(world.services, "busy");
+        await breakageRunSettled(world.services, "busy");
 
         await waitFor(() => expect(world.told().map(({ to }) => to)).toEqual(["busy", "one"]));
         expect(world.told()[1]?.prompt).toBe(followUp([SANDBOX_TEST, SANDBOX_LEXER]));
@@ -617,7 +651,7 @@ describe("a red a conversation still working touches", () => {
         const world = fleet([{ id: "one" }, { id: "busy", running: true }]);
         unlanded.set("busy", ["_editor/web/src/App.vue"]);
 
-        expect((await routeLandBreakage(world.services, red()))?.kind).toBe("original");
+        expect((await route(world, red()))?.kind).toBe("original");
         expect(world.told().map(({ to }) => to)).toEqual(["one"]);
     });
 
@@ -625,7 +659,7 @@ describe("a red a conversation still working touches", () => {
         const world = fleet([{ id: "one" }, { id: "busy", running: true }, { id: "also", running: true }]);
         unlanded.set("busy", ["_sandbox/sandbox/src/parser.ts"]);
         unlanded.set("also", ["_sandbox/sandbox/src/lexer.ts"]);
-        await routeLandBreakage(world.services, red());
+        await route(world, red());
         expect(
             world
                 .told()
@@ -634,16 +668,16 @@ describe("a red a conversation still working touches", () => {
         ).toEqual(["also", "busy"]);
 
         world.running.delete("busy");
-        breakageRunSettled(world.services, "busy");
+        await breakageRunSettled(world.services, "busy");
         // A conversation it was never held on stopping changes nothing either.
-        breakageRunSettled(world.services, "one");
+        await breakageRunSettled(world.services, "one");
         // Room for anything the first stop set moving to have moved.
         await realSleep(50);
         expect(world.told()).toHaveLength(2);
         expect(world.filed).toHaveLength(1);
 
         world.running.delete("also");
-        breakageRunSettled(world.services, "also");
+        await breakageRunSettled(world.services, "also");
         await waitFor(() =>
             expect(
                 world
@@ -658,7 +692,7 @@ describe("a red a conversation still working touches", () => {
     test("is held without a word on the suspect itself while it works, and sent to it once it stops", async () => {
         const world = fleet([{ id: "one", running: true }]);
 
-        expect(await routeLandBreakage(world.services, red())).toEqual(
+        expect(await route(world, red())).toEqual(
             routed("held", {
                 conversationId: "one",
                 detail: "A conversation still working touches what failed; nothing else starts until it stops.",
@@ -667,7 +701,7 @@ describe("a red a conversation still working touches", () => {
         expect(world.told()).toEqual([]);
 
         world.running.delete("one");
-        breakageRunSettled(world.services, "one");
+        await breakageRunSettled(world.services, "one");
 
         await waitFor(() => expect(world.told()).toEqual([{ to: "one", prompt: followUp([SANDBOX_TEST]) }]));
     });
@@ -677,7 +711,7 @@ describe("a red a conversation still working touches", () => {
         jest.useFakeTimers();
         const world = fleet([{ id: "one" }, { id: "busy", running: true }]);
         unlanded.set("busy", ["_sandbox/sandbox/src/parser.ts"]);
-        expect((await routeLandBreakage(world.services, red()))?.kind).toBe("held");
+        expect((await route(world, red()))?.kind).toBe("held");
 
         await advanceTimersByTimeAsync(45 * 60_000);
 
@@ -689,15 +723,85 @@ describe("a red a conversation still working touches", () => {
     test("is resolved without anybody sent when the next check is green", async () => {
         const world = fleet([{ id: "one" }, { id: "busy", running: true }]);
         unlanded.set("busy", ["_sandbox/sandbox/src/parser.ts"]);
-        await routeLandBreakage(world.services, red());
+        await route(world, red());
 
-        breakageSettled(world.services, "");
+        await breakageSettled(world.services, "", undefined);
         world.running.delete("busy");
-        breakageRunSettled(world.services, "busy");
+        await breakageRunSettled(world.services, "busy");
 
         await waitFor(() =>
             expect(world.filed.at(-1)?.routing).toEqual(routed("resolved", { detail: "Green at the next check, before anybody was sent." })),
         );
         expect(world.told().map(({ to }) => to)).toEqual(["busy"]);
+    });
+});
+
+/* A RESTART. What the router carries lives in the verify store, so a daemon that stopped mid-streak picks it up again. */
+
+describe("a daemon restarted mid-streak", () => {
+    test("releases a hold whose conversation stopped while it was down, and routes the red", async () => {
+        const world = fleet([{ id: "one" }, { id: "busy", running: true }]);
+        unlanded.set("busy", ["_sandbox/sandbox/src/parser.ts"]);
+        await world.services.verifyStore.record("", "red", 1_000, [SANDBOX_TEST]);
+        expect((await route(world, red()))?.kind).toBe("held");
+
+        // The daemon stops: its timers go, and the conversation's end is never heard.
+        resetBreakageRouter();
+        world.running.delete("busy");
+        await resumeBreakageRouter(world.services);
+
+        expect(world.told().map(({ to }) => to)).toEqual(["busy", "one"]);
+        expect(world.filed.at(-1)?.routing).toEqual(
+            routed("original", { conversationId: "one", detail: "Sent back to the conversation that landed it (1 of 2)." }),
+        );
+    });
+
+    test("keeps a hold on a conversation still working, and tells it nothing twice", async () => {
+        const world = fleet([{ id: "one" }, { id: "busy", running: true }]);
+        unlanded.set("busy", ["_sandbox/sandbox/src/parser.ts"]);
+        await world.services.verifyStore.record("", "red", 1_000, [SANDBOX_TEST]);
+        await route(world, red());
+
+        resetBreakageRouter();
+        await resumeBreakageRouter(world.services);
+
+        expect(world.told().map(({ to }) => to)).toEqual(["busy"]);
+        expect(world.filed.map(({ routing }) => routing.kind)).toEqual(["held"]);
+        expect((await world.services.verifyStore.streaks())[""]?.carried?.on).toEqual(["busy"]);
+    });
+
+    test("decides a red that waited on a check the restart left nothing ahead of", async () => {
+        const world = fleet([{ id: "one" }]);
+        await world.services.verifyStore.record("", "red", 1_000, [SANDBOX_TEST]);
+        await route(world, red({ queuedBehind: true }));
+
+        resetBreakageRouter();
+        await resumeBreakageRouter(world.services);
+
+        expect(world.told().map(({ to }) => to)).toEqual(["one"]);
+        expect((await world.services.verifyStore.streaks())[""]?.carried).toBeUndefined();
+    });
+
+    test("leaves a waiting red to the check still ahead of it", async () => {
+        const world = fleet([{ id: "one" }]);
+        await world.services.verifyStore.record("", "red", 1_000, [SANDBOX_TEST]);
+        await route(world, red({ queuedBehind: true }));
+        world.ahead.value = true;
+
+        await resumeBreakageRouter(world.services);
+
+        expect(world.told()).toEqual([]);
+        expect((await world.services.verifyStore.streaks())[""]?.carried?.runs).toEqual([1_000]);
+    });
+
+    // The follow-ups a conversation was sent are read off the runs they were filed on.
+    test("counts the follow-ups already sent this streak from the runs, not from memory", async () => {
+        const world = fleet([{ id: "one" }]);
+        await route(world, red());
+
+        resetBreakageRouter();
+        const second = await route(world, red({ runAt: 2_000, fresh: [SANDBOX_LEXER], failures: [SANDBOX_TEST, SANDBOX_LEXER] }));
+
+        expect(second).toEqual(routed("original", { conversationId: "one", detail: "Sent back to the conversation that landed it (2 of 2)." }));
     });
 });

@@ -3,7 +3,7 @@ import type { WorkspaceEvent } from "@intentic/sandbox-contract";
 export interface DependencyLandOrigin {
     readonly kind: "land";
     readonly agentId: string;
-    readonly title?: string;
+    readonly title?: string | undefined;
     readonly branch: string;
     readonly repos: WorkspaceEvent["repos"];
 }

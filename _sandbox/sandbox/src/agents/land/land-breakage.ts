@@ -1,10 +1,11 @@
-import { type AgentSummary, landBreakagePrompt, type MainlineRouting } from "@intentic/sandbox-contract";
+import { type AgentSummary, fixAttemptOf, landBreakagePrompt, landFixConversationId, type MainlineRouting, type MainlineRun } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Services } from "../../composition.js";
 import { deliverWake } from "../../agent/run/turn/wake-delivery.js";
 import { conversationProfile, isIsolated, type PersistedAgent, reposOf } from "../registry/agents-store.js";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
-import { landCheckAhead, type LandBreakage } from "../../workspace/deps/verify-deps.js";
+import type { LandBreakage } from "../../workspace/deps/verify-deps.js";
+import type { Carried } from "../../workspace/deps/verify-store.js";
 import { landingPaths } from "./landing-paths.js";
 import { landChange, type LandSuspect, narrowCheckOf, startLandFix } from "./land-fix.js";
 
@@ -38,35 +39,102 @@ const LISTED = 30;
 
 export type BreakageRouter = Pick<
     Services,
-    "sandboxSettings" | "agents" | "agentWorktrees" | "activity" | "logger" | "turns" | "conversations" | "verifyStore"
+    "sandboxSettings" | "agents" | "agentWorktrees" | "activity" | "logger" | "turns" | "conversations" | "verifyStore" | "landCheck"
 >;
 
-// What a red carried forward, per project, while it waited: the failures still owed, the lands they may have come with,
-// and the runs whose routing is decided with it.
+// What a red carried forward, per project, while it waited or held: the failures still owed, the lands they may have
+// come with, and the runs whose routing is decided with it. Kept in the verify store (`streaks`), so a restart neither
+// forgets a hold nor leaves it reading "On hold" for good.
 interface Owed {
     readonly breakage: LandBreakage;
     readonly runs: readonly number[];
     readonly waits: number;
-    // When it first waited on a conversation still working, carried across re-holds so HOLD_MAX_MS is one bound.
+    // When it first held on a conversation still working, carried across re-holds so HOLD_MAX_MS is one bound.
     readonly heldSince?: number | undefined;
+    // The conversations it holds on; empty while it only waits for the next check.
+    readonly on: readonly string[];
 }
 
-// A red waiting on conversations still working, per project.
-interface Held extends Owed {
-    readonly on: ReadonlySet<string>;
-    readonly timer: ReturnType<typeof setTimeout>;
-}
+// The hold's bound, as a timer per project; only a wake-up, since what it wakes is read back from the store (and armed
+// again at boot from `heldSince`).
+const holdTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-const waiting = new Map<string, Owed>();
-const holding = new Map<string, Held>();
-// Sends per project and conversation, fresh attempts per project, and live conversations told, since it was last green.
-const sent = new Map<string, number>();
-const fixUps = new Map<string, number>();
-const told = new Set<string>();
-// When each project's red streak began and how it was answered, for the line the streak's end logs.
-const streaks = new Map<string, { readonly since: number; routed: number }>();
+const clearHoldTimer = (project: string): void => {
+    const timer = holdTimers.get(project);
+    if (timer !== undefined) {
+        clearTimeout(timer);
+        holdTimers.delete(project);
+    }
+};
 
-const pairKey = (project: string, conversationId: string): string => `${project}\n${conversationId}`;
+const carriedOf = (owed: Owed): Carried => ({
+    command: owed.breakage.command,
+    fresh: [...owed.breakage.fresh],
+    failures: [...owed.breakage.failures],
+    logTail: owed.breakage.logTail,
+    measured: owed.breakage.measured,
+    lands: [...owed.breakage.lands],
+    runs: [...owed.runs],
+    waits: owed.waits,
+    ...(owed.heldSince === undefined ? {} : { heldSince: owed.heldSince }),
+    on: [...owed.on],
+});
+
+const owedOf = (project: string, since: number, carried: Carried): Owed => ({
+    breakage: {
+        project,
+        command: carried.command,
+        lands: carried.lands,
+        fresh: carried.fresh,
+        failures: carried.failures,
+        logTail: carried.logTail,
+        runAt: carried.runs.at(-1) ?? since,
+        redSince: since,
+        queuedBehind: false,
+        measured: carried.measured,
+    },
+    runs: carried.runs,
+    waits: carried.waits,
+    heldSince: carried.heldSince,
+    on: carried.on,
+});
+
+// Writes (or, with undefined, drops) what the project's streak carries; the conversations told stay with the streak.
+const carry = (services: BreakageRouter, project: string, since: number, owed: Owed | undefined): Promise<void> =>
+    services.verifyStore.streak(project, (current) => {
+        const told = current?.since === since ? current.told : [];
+        return { since, told, ...(owed === undefined ? {} : { carried: carriedOf(owed) }) };
+    });
+
+// What the project's current streak carries, if anything; one left from an earlier streak is nobody's any more.
+const carriedFor = async (services: BreakageRouter, project: string, since: number): Promise<{ readonly carried?: Carried; readonly told: readonly string[] }> => {
+    const streak = (await services.verifyStore.streaks())[project];
+    return streak?.since === since ? { ...(streak.carried === undefined ? {} : { carried: streak.carried }), told: streak.told } : { told: [] };
+};
+
+// Every decision filed on the project's runs since its streak began, once each: one decision is filed on every run it
+// answers, so the same routing on two runs is one decision.
+const decisionsSince = (runs: readonly MainlineRun[], project: string, since: number): MainlineRouting[] => {
+    const seen = new Map<string, MainlineRouting>();
+    for (const run of runs) {
+        if (run.project === project && run.at >= since && run.routing !== undefined) {
+            seen.set(JSON.stringify(run.routing), run.routing);
+        }
+    }
+    return [...seen.values()];
+};
+
+// Follow-ups sent to one conversation this streak, as the runs they were filed on say.
+const sendsTo = async (services: BreakageRouter, project: string, since: number, conversationId: string): Promise<number> =>
+    decisionsSince((await services.verifyStore.read()).runs, project, since).filter((routing) => routing.kind === "original" && routing.conversationId === conversationId)
+        .length;
+
+// Fresh fix-up conversations this streak has had, live or archived, as the fleet's own roster numbers them.
+const fixUpsOf = (services: Pick<Services, "agents">, project: string, since: number): number => {
+    const base = landFixConversationId(project, since);
+    const ids = new Set([...services.agents.list(), ...services.agents.listArchived()].map(({ id }) => id));
+    return [...ids].filter((id) => fixAttemptOf(base, id) !== undefined).length;
+};
 
 // The first repository path a unit names; a task id (`@scope/name#task`) is a package name, never a path.
 export const pathOfUnit = (unit: string): string | undefined =>
@@ -92,8 +160,8 @@ export const suspectsOf = (fresh: readonly string[], lands: readonly { readonly 
 };
 
 // Every land once, oldest first, by the conversation that landed it: a conversation landing twice is one suspect.
-const distinctLands = (lands: readonly DependencyLandOrigin[]): DependencyLandOrigin[] => {
-    const seen = new Map<string, DependencyLandOrigin>();
+const distinctLands = <T extends DependencyLandOrigin>(lands: readonly T[]): T[] => {
+    const seen = new Map<string, T>();
     for (const land of lands) {
         seen.set(land.agentId, { ...land, repos: [...(seen.get(land.agentId)?.repos ?? []), ...land.repos] });
     }
@@ -202,7 +270,6 @@ const blame = async (services: BreakageRouter, breakage: LandBreakage, git: GitR
 
 // Sends the failures back to the conversation that landed them; `entry` is its record, which passedOverWhy found live.
 const sendBack = (services: BreakageRouter, breakage: LandBreakage, land: DependencyLandOrigin, entry: PersistedAgent, sends: number): MainlineRouting => {
-    sent.set(pairKey(breakage.project, land.agentId), sends + 1);
     append(services, "deps.breakage_routed", `${breakage.fresh.length} failure(s) appeared with this land; sent back to it to fix (${sends + 1} of ${SENDS_PER_STREAK}).`, land);
     // A live conversation takes the words as a steer, an idle one is started, and a busy one queues them for its next turn.
     void deliverWake(
@@ -216,9 +283,10 @@ const sendBack = (services: BreakageRouter, breakage: LandBreakage, land: Depend
     return { kind: "original", conversationId: land.agentId, at: Date.now(), detail: `Sent back to the conversation that landed it (${sends + 1} of ${SENDS_PER_STREAK}).` };
 };
 
-// Starts, or finds, the fresh conversation working on this streak.
+// Starts, or finds, the fresh conversation working on this streak; past the streak's allowance of attempts, as the fleet
+// numbers them, it waits for a person.
 const freshFixUp = async (services: Services, breakage: LandBreakage, suspects: readonly LandSuspect[], named: boolean, passedOver: string | undefined): Promise<MainlineRouting> => {
-    const started = fixUps.get(breakage.project) ?? 0;
+    const started = fixUpsOf(services, breakage.project, breakage.redSince);
     if (started >= FIX_UPS_PER_STREAK) {
         append(services, "deps.breakage_spent", `The main tree's check in ${where(breakage.project)} is still red after ${started} fresh attempt(s); it waits for a person.`);
         return { kind: "spent", at: Date.now(), detail: `Still red after ${started} fresh attempt(s); it waits for you.` };
@@ -228,7 +296,6 @@ const freshFixUp = async (services: Services, breakage: LandBreakage, suspects: 
         if (outcome.kind === "busy") {
             return { kind: "fix-up", conversationId: outcome.conversationId, at: Date.now(), detail: "A conversation is already working on this red." };
         }
-        fixUps.set(breakage.project, started + 1);
         append(
             services,
             "deps.breakage_fixup",
@@ -247,12 +314,12 @@ const freshFixUp = async (services: Services, breakage: LandBreakage, suspects: 
 };
 
 // Why the one conversation named is not the one asked, in the sandbox's words; undefined when it should be.
-const passedOverWhy = (services: BreakageRouter, land: DependencyLandOrigin, project: string, now: number): string | undefined => {
+const passedOverWhy = (services: BreakageRouter, land: DependencyLandOrigin, sends: number, now: number): string | undefined => {
     const entry = services.agents.entry(land.agentId);
     if (entry === undefined || entry.archivedAt !== undefined) {
         return `The conversation that landed it ("${land.title ?? land.agentId}") is archived.`;
     }
-    if ((sent.get(pairKey(project, land.agentId)) ?? 0) >= SENDS_PER_STREAK) {
+    if (sends >= SENDS_PER_STREAK) {
         return `The conversation that landed it ("${land.title ?? land.agentId}") was already sent it ${SENDS_PER_STREAK} times.`;
     }
     if (!stillInMind(services.agents.get(land.agentId), now)) {
@@ -261,25 +328,33 @@ const passedOverWhy = (services: BreakageRouter, land: DependencyLandOrigin, pro
     return undefined;
 };
 
-// Holds a red on the conversations still working on what failed, telling each one once; routed when the last stops, or
-// after HOLD_MAX_MS regardless.
-const hold = (services: Services, owed: Owed, on: readonly string[], packages: readonly string[]): MainlineRouting => {
-    const { breakage } = owed;
-    const previous = holding.get(breakage.project);
-    if (previous !== undefined) {
-        clearTimeout(previous.timer);
-    }
-    const timer = setTimeout(() => void release(services, breakage.project), HOLD_MAX_MS);
+// Wakes the router when a hold runs out of time, `at` from now; the hold itself is read back from the store then.
+const armHold = (services: Services, project: string, at: number): void => {
+    clearHoldTimer(project);
+    const timer = setTimeout(() => void release(services, project), Math.max(0, at - Date.now()));
     timer.unref();
-    holding.set(breakage.project, { ...owed, heldSince: owed.heldSince ?? previous?.heldSince ?? Date.now(), on: new Set(on), timer });
-    for (const id of on) {
-        const key = pairKey(breakage.project, id);
+    holdTimers.set(project, timer);
+};
+
+// Holds a red on the conversations still working on what failed, telling each one once a streak; routed when the last
+// stops, or after HOLD_MAX_MS regardless.
+const hold = async (services: Services, owed: Owed, on: readonly string[], packages: readonly string[]): Promise<MainlineRouting> => {
+    const { breakage } = owed;
+    const heldSince = owed.heldSince ?? Date.now();
+    const { told } = await carriedFor(services, breakage.project, breakage.redSince);
+    // A suspect is asked about its own land once it stops, never told about it mid-turn.
+    const telling = on.filter((id) => !told.includes(id) && services.agents.entry(id) !== undefined && !breakage.lands.some((land) => land.agentId === id));
+    await services.verifyStore.streak(breakage.project, () => ({
+        since: breakage.redSince,
+        told: [...told, ...telling],
+        carried: carriedOf({ ...owed, heldSince, on }),
+    }));
+    armHold(services, breakage.project, heldSince + HOLD_MAX_MS);
+    for (const id of telling) {
         const entry = services.agents.entry(id);
-        // A suspect is asked about its own land once it stops, never told about it mid-turn.
-        if (told.has(key) || entry === undefined || breakage.lands.some((land) => land.agentId === id)) {
+        if (entry === undefined) {
             continue;
         }
-        told.add(key);
         void deliverWake(
             { turns: services.turns, sessionIdOf: (conversationId) => services.conversations.sessionIdOf(conversationId) },
             { conversationId: id, prompt: heldNoteOf(breakage, packages), voice: "sandbox", profile: conversationProfile(entry) },
@@ -299,21 +374,20 @@ const decide = async (services: Services, owed: Owed, git: GitRunner, now: numbe
     const holdOverdue = owed.heldSince !== undefined && owed.heldSince + HOLD_MAX_MS <= now;
     const busy = holdOverdue ? [] : await workingOn(services, breakage, packages, ids);
     if (busy.length > 0) {
-        const routing = hold(services, owed, busy, [...packages]);
+        const routing = await hold(services, owed, busy, [...packages]);
         await fileRouting(services, breakage.project, owed.runs, routing, ids);
         return routing;
     }
+    clearHoldTimer(breakage.project);
+    await carry(services, breakage.project, breakage.redSince, undefined);
     const single = named && suspects.length === 1 ? suspects[0] : undefined;
-    const passedOver = single === undefined ? undefined : passedOverWhy(services, single.land, breakage.project, now);
+    const sends = single === undefined ? 0 : await sendsTo(services, breakage.project, breakage.redSince, single.land.agentId);
+    const passedOver = single === undefined ? undefined : passedOverWhy(services, single.land, sends, now);
     const entry = single === undefined ? undefined : services.agents.entry(single.land.agentId);
     const routing =
         single !== undefined && entry !== undefined && passedOver === undefined
-            ? sendBack(services, breakage, single.land, entry, sent.get(pairKey(breakage.project, single.land.agentId)) ?? 0)
+            ? sendBack(services, breakage, single.land, entry, sends)
             : await freshFixUp(services, breakage, suspects, named, passedOver);
-    const streak = streaks.get(breakage.project);
-    if (streak !== undefined) {
-        streak.routed += 1;
-    }
     await fileRouting(services, breakage.project, owed.runs, routing, ids);
     return routing;
 };
@@ -321,15 +395,14 @@ const decide = async (services: Services, owed: Owed, git: GitRunner, now: numbe
 // A hold ends: its conversations stopped, or it ran out of time. Routed now unless a land it waited for is being checked,
 // whose own red (or green) decides instead.
 const release = async (services: Services, project: string, git: GitRunner = defaultGit): Promise<void> => {
-    const held = holding.get(project);
-    if (held === undefined) {
+    clearHoldTimer(project);
+    const streak = (await services.verifyStore.streaks())[project];
+    if (streak?.carried === undefined || streak.carried.on.length === 0) {
         return;
     }
-    holding.delete(project);
-    clearTimeout(held.timer);
-    const owed: Owed = { breakage: held.breakage, runs: held.runs, waits: held.waits, heldSince: held.heldSince };
-    if (landCheckAhead(project)) {
-        waiting.set(project, owed);
+    const owed: Owed = { ...owedOf(project, streak.since, streak.carried), on: [] };
+    if (await services.landCheck.ahead(project)) {
+        await carry(services, project, streak.since, owed);
         return;
     }
     await decide(services, owed, git, Date.now()).catch((error: unknown) =>
@@ -338,28 +411,22 @@ const release = async (services: Services, project: string, git: GitRunner = def
 };
 
 // Folds what an earlier red left owed into this one: its failures that still fail, and every land they may have come with.
-const owedWith = (breakage: LandBreakage): Owed => {
-    const prior = waiting.get(breakage.project) ?? holding.get(breakage.project);
-    waiting.delete(breakage.project);
-    const held = holding.get(breakage.project);
-    if (held !== undefined) {
-        clearTimeout(held.timer);
-        holding.delete(breakage.project);
-    }
+const owedWith = (breakage: LandBreakage, prior: Carried | undefined): Owed => {
     if (prior === undefined) {
-        return { breakage: { ...breakage, lands: distinctLands(breakage.lands) }, runs: [breakage.runAt], waits: 0 };
+        return { breakage: { ...breakage, lands: distinctLands(breakage.lands) }, runs: [breakage.runAt], waits: 0, on: [] };
     }
     // A run that named no failures cannot say which carried ones still stand, so they all do.
-    const still = breakage.measured ? prior.breakage.fresh.filter((unit) => breakage.failures.includes(unit)) : prior.breakage.fresh;
+    const still = breakage.measured ? prior.fresh.filter((unit) => breakage.failures.includes(unit)) : prior.fresh;
     return {
         breakage: {
             ...breakage,
             fresh: [...new Set([...still, ...breakage.fresh])],
-            lands: distinctLands([...prior.breakage.lands, ...breakage.lands]),
+            lands: distinctLands([...prior.lands, ...breakage.lands]),
         },
         runs: [...prior.runs, breakage.runAt],
         waits: prior.waits,
         heldSince: prior.heldSince,
+        on: [],
     };
 };
 
@@ -367,26 +434,27 @@ const owedWith = (breakage: LandBreakage): Owed => {
 // answer for them (a causeless install), which leaves them to any chore.
 export const routeLandBreakage = async (services: Services, breakage: LandBreakage, git: GitRunner = defaultGit): Promise<MainlineRouting | undefined> => {
     const now = Date.now();
-    if (!streaks.has(breakage.project)) {
-        streaks.set(breakage.project, { since: breakage.redSince, routed: 0 });
-    }
-    const owed = owedWith(breakage);
+    const project = breakage.project;
+    clearHoldTimer(project);
+    const owed = owedWith(breakage, (await carriedFor(services, project, breakage.redSince)).carried);
     if (owed.breakage.fresh.length === 0 || owed.breakage.lands.length === 0) {
+        await carry(services, project, breakage.redSince, undefined);
         // What an earlier red carried in is gone at this one, though the tree is red on something older: those runs
         // were resolved without anybody sent.
         if (owed.runs.length > 1 && owed.breakage.fresh.length === 0) {
-            await fileRouting(services, breakage.project, owed.runs.slice(0, -1), { kind: "resolved", at: now, detail: "Gone at the next check, before anybody was sent." }, []);
+            await fileRouting(services, project, owed.runs.slice(0, -1), { kind: "resolved", at: now, detail: "Gone at the next check, before anybody was sent." }, []);
         }
         return undefined;
     }
     if (!(await services.sandboxSettings.get()).autoRepair) {
+        await carry(services, project, breakage.redSince, undefined);
         const routing: MainlineRouting = { kind: "reported", at: now, detail: "Repairs after landing are switched off." };
-        await fileRouting(services, breakage.project, owed.runs.slice(0, -1), routing, []);
+        await fileRouting(services, project, owed.runs.slice(0, -1), routing, []);
         return routing;
     }
     if (breakage.queuedBehind && owed.waits < WAITS_PER_STREAK) {
-        waiting.set(breakage.project, { ...owed, waits: owed.waits + 1 });
-        append(services, "deps.breakage_waiting", `${owed.breakage.fresh.length} failure(s) in ${where(breakage.project)} wait for the check of the work that landed meanwhile.`);
+        await carry(services, project, breakage.redSince, { ...owed, waits: owed.waits + 1 });
+        append(services, "deps.breakage_waiting", `${owed.breakage.fresh.length} failure(s) in ${where(project)} wait for the check of the work that landed meanwhile.`);
         return { kind: "waiting", at: now, detail: "More work landed while this ran; its check decides before anybody is sent." };
     }
     // Filed on every run it answers for, the one just settled included, so a red held now and routed later reads its
@@ -395,69 +463,83 @@ export const routeLandBreakage = async (services: Services, breakage: LandBreaka
 };
 
 // A conversation's run ended: a red held on it is routed once nothing else it waits on is still working.
-export const breakageRunSettled = (services: Services, conversationId: string): void => {
-    for (const [project, held] of holding) {
-        if (!held.on.has(conversationId)) {
+export const breakageRunSettled = async (services: Services, conversationId: string): Promise<void> => {
+    for (const [project, streak] of Object.entries(await services.verifyStore.streaks())) {
+        const carried = streak.carried;
+        if (carried === undefined || !carried.on.includes(conversationId)) {
             continue;
         }
-        const on = new Set([...held.on].filter((id) => id !== conversationId && services.conversations.running(id)));
-        if (on.size > 0) {
-            holding.set(project, { ...held, on });
+        const on = carried.on.filter((id) => id !== conversationId && services.conversations.running(id));
+        if (on.length > 0) {
+            await services.verifyStore.streak(project, (current) => (current?.carried === undefined ? current : { ...current, carried: { ...current.carried, on } }));
             continue;
         }
-        void release(services, project);
+        await release(services, project);
     }
 };
 
 // A green project starts everything over, and what it had waiting is resolved without anybody sent.
-export const breakageSettled = (services: Pick<Services, "verifyStore" | "logger" | "activity">, project: string): void => {
-    const owed = waiting.get(project) ?? holding.get(project);
-    waiting.delete(project);
-    const held = holding.get(project);
-    if (held !== undefined) {
-        clearTimeout(held.timer);
-        holding.delete(project);
-    }
-    if (owed !== undefined) {
+export const breakageSettled = async (
+    services: Pick<Services, "verifyStore" | "logger" | "activity" | "agents">,
+    project: string,
+    redSince: number | undefined,
+): Promise<void> => {
+    clearHoldTimer(project);
+    const streak = (await services.verifyStore.streaks())[project];
+    await services.verifyStore.streak(project, () => undefined);
+    if (streak?.carried !== undefined) {
         const routing: MainlineRouting = { kind: "resolved", at: Date.now(), detail: "Green at the next check, before anybody was sent." };
-        void (async () => {
-            for (const at of owed.runs) {
-                await services.verifyStore.routed(project, at, routing).catch((error: unknown) => services.logger.warn({ err: error, project }, "land breakage: routing not filed"));
-            }
-        })();
+        for (const at of streak.carried.runs) {
+            await services.verifyStore.routed(project, at, routing).catch((error: unknown) => services.logger.warn({ err: error, project }, "land breakage: routing not filed"));
+        }
         append(services as BreakageRouter, "deps.breakage_resolved", `The failures in ${where(project)} were gone at the next check; nobody was sent.`);
     }
-    const streak = streaks.get(project);
-    if (streak !== undefined) {
+    const since = redSince ?? streak?.since;
+    if (since !== undefined) {
+        const routed = decisionsSince((await services.verifyStore.read()).runs, project, since).filter(
+            ({ kind }) => kind === "original" || kind === "fix-up" || kind === "spent",
+        ).length;
         // The measure of this design: how long main stays red, and how many repairs it took.
-        services.logger.info(
-            { project, redMs: Date.now() - streak.since, routed: streak.routed, fixUps: fixUps.get(project) ?? 0 },
-            "mainline: red streak ended",
-        );
-        streaks.delete(project);
+        services.logger.info({ project, redMs: Date.now() - since, routed, fixUps: fixUpsOf(services, project, since) }, "mainline: red streak ended");
     }
-    fixUps.delete(project);
-    for (const key of sent.keys()) {
-        if (key.startsWith(`${project}\n`)) {
-            sent.delete(key);
+};
+
+// At boot, what the daemon was holding or waiting on when it stopped is decided again: a hold on conversations no longer
+// running is released, one still standing gets its timer back, and a wait with no check left ahead of it is decided now.
+export const resumeBreakageRouter = async (services: Services, git: GitRunner = defaultGit): Promise<void> => {
+    const { projects } = await services.verifyStore.read();
+    for (const [project, streak] of Object.entries(await services.verifyStore.streaks())) {
+        const outcome = projects[project];
+        // A streak the project is no longer in (green since, or a newer streak) has nothing left to decide.
+        if (outcome?.status !== "red" || (outcome.since ?? outcome.at) !== streak.since) {
+            await services.verifyStore.streak(project, () => undefined);
+            continue;
         }
-    }
-    for (const key of told) {
-        if (key.startsWith(`${project}\n`)) {
-            told.delete(key);
+        const carried = streak.carried;
+        if (carried === undefined) {
+            continue;
+        }
+        if (carried.on.length > 0) {
+            const on = carried.on.filter((id) => services.conversations.running(id));
+            if (on.length === 0) {
+                await release(services, project, git);
+                continue;
+            }
+            await services.verifyStore.streak(project, (current) => (current?.carried === undefined ? current : { ...current, carried: { ...current.carried, on } }));
+            armHold(services, project, (carried.heldSince ?? Date.now()) + HOLD_MAX_MS);
+            continue;
+        }
+        if (!(await services.landCheck.ahead(project))) {
+            await decide(services, owedOf(project, streak.since, carried), git, Date.now()).catch((error: unknown) =>
+                services.logger.warn({ err: error, project }, "land breakage: a waiting red could not be routed"),
+            );
         }
     }
 };
 
-// Test seam: forgets every project's streak.
+// Test seam: stops every hold's timer.
 export const resetBreakageRouter = (): void => {
-    for (const held of holding.values()) {
-        clearTimeout(held.timer);
+    for (const project of holdTimers.keys()) {
+        clearHoldTimer(project);
     }
-    waiting.clear();
-    holding.clear();
-    sent.clear();
-    fixUps.clear();
-    told.clear();
-    streaks.clear();
 };

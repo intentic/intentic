@@ -29,7 +29,6 @@ import { type PersistedAgent, worktreeOf } from "../../agents/registry/agents-st
 import { holdAccount } from "../../runtimes/claude/claude-credentials.js";
 import { ensureComposedWorktree } from "../context/conversation-context.js";
 import { settleLandingInBackground, versionMainTree } from "../../agents/land/version-landed.js";
-import { routeLandBreakage } from "../../agents/land/land-breakage.js";
 import { handoffHistory, turnStartIndex } from "../../sessions/turn-transcript.js";
 import { type ChildSupervisor, childSupervisor, isSpawnedChild, spawnDepthOf } from "../subagents/children.js";
 import type { AgentRequest, TurnBase, TurnHooks, TurnSpec } from "../providers/agent-request.js";
@@ -165,7 +164,6 @@ const placementOf = (
             versionMain: (repos) => versionMainTree(services, repos),
             run: (worktree) => runTurn(services, input, signal, worktree, steering, snapshot),
             settleLanding: (conversationId) => settleLandingInBackground(services, conversationId),
-            routeBreakage: (breakage) => routeLandBreakage(services, breakage),
         },
     );
 };

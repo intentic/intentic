@@ -278,7 +278,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         activity: { append: async () => {}, list: async () => [] },
         // The main line's verdicts: nothing checked yet. Every planned turn that owes the checks-after-landing note reads
         // them, and GET /workspace/mainline serves them.
-        verifyStore: unstubbed<Services["verifyStore"]>("verifyStore", { read: async () => ({ projects: {}, runs: [] }) }),
+        verifyStore: unstubbed<Services["verifyStore"]>("verifyStore", { read: async () => ({ projects: {}, runs: [] }), lands: async () => ({}) }),
+        // Nothing is checked after a land here: the land check's own suite stands it up (verify-deps.integration.test.ts).
+        landCheck: unstubbed<Services["landCheck"]>("landCheck", { enqueue: () => {}, current: () => undefined, ahead: async () => false }),
         // Nothing pushed yet: GET /workspace/mainline serves the pushes beside the verdicts.
         pushChecks: unstubbed<Services["pushChecks"]>("pushChecks", {
             store: unstubbed<Services["pushChecks"]["store"]>("pushChecks.store", { read: async () => ({ pushes: [], seen: [] }) }),

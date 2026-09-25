@@ -31,7 +31,7 @@ const suspect = (agentId: string, paths: readonly string[], title?: string): Lan
 const breakage = (over: Partial<LandBreakage> = {}): LandBreakage => ({
     project: "",
     command: "pnpm verify",
-    lands: [land("one", "Fix the parser")],
+    lands: [{ ...land("one", "Fix the parser"), at: 1_500 }],
     fresh: [FAILING],
     failures: [FAILING],
     logTail: "\n  1 failed\n",

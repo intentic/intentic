@@ -22,6 +22,7 @@ import type { Config } from "./env.config.js";
 import type { Services } from "./composition.js";
 import type { Said, Steer, TurnInput, TurnStarter } from "./seams/turn-starter.js";
 import { opt } from "./opt.js";
+import { type VerifyState, type VerifyStore, verifyStoreOver } from "./workspace/deps/verify-store.js";
 
 // Test-support seams specific to this daemon; the generic stand-in for a wide interface is `unstubbed` in
 // @intentic/testing. Excluded from the build but type-checked via tsconfig.test.json, alongside every *.test.ts.
@@ -264,4 +265,16 @@ export const fakeTurns = (over: { readonly live?: boolean; readonly busy?: numbe
         },
     };
     return fake;
+};
+
+// The main-line check's store held in memory, read and written the way the daemon's file is (verify-store.ts).
+export const memoryVerifyStore = (): VerifyStore => {
+    let state: VerifyState = { projects: {}, runs: [], lands: {}, streaks: {} };
+    return verifyStoreOver({
+        read: async () => state,
+        update: async (change) => {
+            state = change(state);
+            return state;
+        },
+    });
 };

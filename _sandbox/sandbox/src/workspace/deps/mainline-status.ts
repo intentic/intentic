@@ -1,17 +1,24 @@
 import type { MainlineProject, MainlineStatus } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { publicPushes } from "./push-checks-store.js";
-import { mainlineLandOf, verifyQueueSnapshot } from "./verify-deps.js";
+import type { QueuedLand } from "./verify-store.js";
+import { mainlineLandOf } from "./verify-deps.js";
 
-// The main-line check as the editor reads it (GET /workspace/mainline): what runs now and what waits, from the queue in
-// memory; the last run and the red streak per project, and the latest runs with what became of each red one, from the
-// verify store. The only verification the sandbox runs on work, so it is shown rather than hidden in a terminal. Beside
-// it, what each push check let through and what became of it, from the push-checks store.
+// The main-line check as the editor reads it (GET /workspace/mainline): what runs now, from the land check; what waits,
+// the last run and the red streak per project, and the latest runs with what became of each red one, from the verify
+// store. The only verification the sandbox runs on work, so it is shown rather than hidden in a terminal. Beside it, what
+// each push check let through and what became of it, from the push-checks store.
 
-export const mainlineStatus = async (deps: Pick<Services, "verifyStore" | "pushChecks">): Promise<MainlineStatus> => {
-    const [{ projects, runs }, { pushes }] = await Promise.all([deps.verifyStore.read(), deps.pushChecks.store.read()]);
-    const { current, pending } = verifyQueueSnapshot();
-    const dirs = new Set([...Object.keys(projects), ...(current === undefined ? [] : [current.dir]), ...pending.flatMap(({ dirs: each }) => each)]);
+export const mainlineStatus = async (deps: Pick<Services, "verifyStore" | "pushChecks" | "landCheck">): Promise<MainlineStatus> => {
+    const [{ projects, runs }, lands, { pushes }] = await Promise.all([deps.verifyStore.read(), deps.verifyStore.lands(), deps.pushChecks.store.read()]);
+    const current = deps.landCheck.current();
+    const waiting = (dir: string): readonly QueuedLand[] =>
+        (lands[dir] ?? []).filter((land) => !(current?.dir === dir && current.lands.some((covered) => covered.agentId === land.agentId && covered.at === land.at)));
+    const dirs = new Set([
+        ...Object.keys(projects),
+        ...(current === undefined ? [] : [current.dir]),
+        ...Object.keys(lands).filter((dir) => waiting(dir).length > 0),
+    ]);
     const projectOf = (dir: string): MainlineProject => {
         const outcome = projects[dir];
         const last = runs.find((run) => run.project === dir);
@@ -27,7 +34,7 @@ export const mainlineStatus = async (deps: Pick<Services, "verifyStore" | "pushC
                       },
                   }
                 : {}),
-            queued: pending.filter((entry) => entry.dirs.includes(dir)).flatMap((entry) => entry.lands.map(mainlineLandOf)),
+            queued: waiting(dir).map(mainlineLandOf),
             ...(last === undefined ? {} : { last }),
             ...(outcome?.status === "red" ? { redSince: outcome.since ?? outcome.at } : {}),
         };

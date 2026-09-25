@@ -1,11 +1,7 @@
-import { queueWhole } from "../agent/tools/agent-terminals.js";
-import { offloadRunEnabled } from "../offload/offload-prefix.js";
 import type { Services } from "../composition.js";
 import type { DependencyOrigin } from "../workspace/deps/dependency-origin.js";
-import { queueVerify, type VerifyDeps } from "../workspace/deps/verify-deps.js";
-import { adoptedLandCheck } from "../rules/repo-checks.js";
-import { breakageRunSettled, breakageSettled, routeLandBreakage } from "../agents/land/land-breakage.js";
-import { announceUnwatchedWrite, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
+import { breakageRunSettled, resumeBreakageRouter } from "../agents/land/land-breakage.js";
+import { subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 
 // Wired before the data gate opens, so a turn arriving as boot finishes queues behind an already reserved repair.
 
@@ -34,23 +30,6 @@ const attribution = (origin: DependencyOrigin): { conversationId?: string; title
 };
 
 export const wireDependencyCoordinator = (services: Services): void => {
-    const dependencyChecks: VerifyDeps = {
-        workspace: services.workspace,
-        processes: services.processes,
-        logger: services.logger,
-        verifyStore: services.verifyStore,
-        activity: services.activity,
-        emit: (event) => services.events.publish("workspace", event),
-        announce: announceUnwatchedWrite,
-        queue: queueWhole(services.heavyCommands.read),
-        // Where the owner sends the check after landing (settings `offload.landCheck`); read per run, so a change binds
-        // on the next land.
-        ...(offloadRunEnabled() ? { offload: async () => (await services.sandboxSettings.get()).offload.landCheck, heavyPrefix: services.heavyPrefix } : {}),
-        route: (breakage) => routeLandBreakage(services, breakage),
-        settled: (project) => breakageSettled(services, project),
-        recheckPushes: (project) => services.pushChecks.recheckIfOpen(project),
-        landCheck: async (dir) => adoptedLandCheck(services.workspace.root, dir, (await services.sandboxSettings.get()).adoptedChecks),
-    };
     services.dependencies.subscribe(({ dir, origin }) => {
         const named = dir === "" ? `the workspace root` : dir;
         void services.activity
@@ -62,7 +41,7 @@ export const wireDependencyCoordinator = (services: Services): void => {
                 ...attribution(origin),
             })
             .catch((error: unknown) => services.logger.warn({ err: error }, "dependency coordinator: activity append failed"));
-        queueVerify(dependencyChecks, origin, [dir]);
+        services.landCheck.enqueue(origin, [dir]);
     });
     services.dependencies.subscribeFailures(({ dir, origin }) => {
         const named = dir === "" ? `the workspace root` : dir;
@@ -78,5 +57,15 @@ export const wireDependencyCoordinator = (services: Services): void => {
     });
     services.dependencies.watch(subscribeWorkspaceChanges);
     // A red main-line check held on a conversation still working is routed when that conversation's run ends.
-    services.events.subscribe("run.settled", ({ conversationId }) => breakageRunSettled(services, conversationId));
+    services.events.subscribe("run.settled", ({ conversationId }) => {
+        void breakageRunSettled(services, conversationId).catch((error: unknown) =>
+            services.logger.warn({ err: error, conversationId }, "dependency coordinator: a held red could not be released"),
+        );
+    });
+    // What the daemon was doing when it stopped, from the verify store: lands no run answered are queued for a check
+    // first, so a red that waited on them keeps waiting, and reds it held or waited on are decided again.
+    void (async () => {
+        await services.landCheck.resume();
+        await resumeBreakageRouter(services);
+    })().catch((error: unknown) => services.logger.warn({ err: error }, "dependency coordinator: the main line could not be resumed"));
 };

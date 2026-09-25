@@ -109,6 +109,8 @@ import { deriveText, readDerivedText } from "./derived/derived-text.js";
 import { sidecarStatus } from "./derived/sidecar-service.js";
 import { type CiStore, fileCiStore } from "./ci/ci-store.js";
 import { fileVerifyStore, type VerifyStore } from "./workspace/deps/verify-store.js";
+import type { LandCheck } from "./workspace/deps/verify-deps.js";
+import { landCheckOf } from "./agents/land/verify-landed.js";
 import { filePushChecksStore } from "./workspace/deps/push-checks-store.js";
 import { createPushChecks, type PushChecks } from "./workspace/deps/push-checks.js";
 import { type CiHookReconciler, createCiHookReconciler } from "./ci/hooks.js";
@@ -483,6 +485,8 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly doorTokens: DoorTokens;
     // Dependency verifier's memory: last verdict per project plus red streak, what makes deps.fixed an edge.
     readonly verifyStore: VerifyStore;
+    // The check after landing, one queue for every door into it (workspace/deps/verify-deps.ts).
+    readonly landCheck: LandCheck;
     // What each push check let through and what became of it: filed from the hook's report once the push reached its
     // remote, measured again on a press or after a land check, dismissed by the owner. Never sent to anyone by itself.
     readonly pushChecks: PushChecks;
@@ -1347,6 +1351,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         memoryWarnings: createMemoryWarnings(),
         ciStore,
         verifyStore,
+        landCheck: landCheckOf(() => services),
         pushChecks: createPushChecks({
             root: workspace.root,
             store: filePushChecksStore(statePath(workspace.root, ".intentic/records/push-checks.json")),
