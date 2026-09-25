@@ -53,6 +53,7 @@ jest.mock("../../sandbox/client/sandboxRpc", () => ({
             reply: procedureOf(`agent.reply`),
             stop: procedureOf(`agent.stop`),
             resume: procedureOf(`agent.resume`),
+            queueResume: procedureOf(`agent.queueResume`),
         },
         providers: { list: procedureOf(`providers.list`), models: procedureOf(`providers.models`) },
         endpoints: { models: procedureOf(`endpoints.models`), trial: procedureOf(`endpoints.trial`) },
@@ -147,7 +148,7 @@ const { setDaemonRoutes } = await import("../../sandbox/overview/useDaemonRoutes
 const { useChat } = await import("./useChat");
 const { agentTabOf, draftConversation, openAgentConversation, reveal } = await import("../panel/useChat-reveal");
 const { hydrateOnce } = await import("./useChat-sessions");
-const { loadAccountStatus, refreshConnections } = await import("../accounts/useChat-accounts");
+const { addAccount, loadAccountStatus, refreshConnections } = await import("../accounts/useChat-accounts");
 // The store half of "New agent", as the summons applies it (agentActions.startAgent): the fixture these
 // suites open extra tabs with.
 const newChat = () => {
@@ -622,6 +623,41 @@ describe(`the remembered account`, () => {
         await loadAccountStatus();
 
         expect(chat.account.value).toBe(`first`);
+    });
+
+    // A conversation that has run is on an account its person chose; which one it goes on once that account is gone is
+    // theirs to say, and its next turn is refused saying so. Moving it to the list's first account was a switch unasked.
+    it(`keeps a chat that has run on its account when that account goes while the window was away`, async () => {
+        const chat = useChat();
+        chat.active.value.selection.apply({ kind: `selectAccount`, account: `second` });
+        chat.active.value.registered.value = true;
+
+        await nextTick();
+        mockConnections({ accounts: (provider) => (provider === `claude` ? [{ id: `first`, label: `Claude`, connectedAt: 1 }] : []) });
+        await loadAccountStatus();
+
+        expect(chat.account.value).toBe(`second`);
+    });
+
+    // A reconnect mints a new id for the same person, and a chat stranded on the old one follows it. A different person's
+    // sign-in, connected while one account waits for reauth, is not a decision to run every stranded chat on it.
+    it(`moves a chat that has run onto a reconnect only when the same person signed in again`, async () => {
+        mockConnections({
+            accounts: (provider) =>
+                provider === `claude` ? [{ id: `first`, label: `Work`, email: `me@work.test`, connectedAt: 1, needsReauth: true }] : [],
+        });
+        await loadAccountStatus();
+        // A connect lets every held queue on the provider go; nothing is held here.
+        daemonAnswers((procedure) => (procedure === `agent.queueResume` ? Promise.resolve({}) : undefined));
+        const chat = useChat();
+        chat.active.value.selection.apply({ kind: `selectAccount`, account: `first` });
+        chat.active.value.registered.value = true;
+
+        addAccount(`claude`, { id: `someone-else`, label: `Home`, email: `me@home.test`, connectedAt: 2 });
+        expect(chat.account.value).toBe(`first`);
+
+        addAccount(`claude`, { id: `first-again`, label: `Work`, email: `me@work.test`, connectedAt: 3 });
+        expect(chat.account.value).toBe(`first-again`);
     });
 
     it(`keeps each sandbox's pick to itself: an account id names a credential in one sandbox's store`, async () => {
@@ -1659,6 +1695,8 @@ describe(`opening a fleet agent`, () => {
         expect(conversation.selection.account.value).toBe(`acct-work`);
     });
 
+    // The tab's account is this window's memory of where the conversation ran, and the daemon's session says where it
+    // runs now. Left on the tab's, the next message went out on it, retiring the session for an account nobody picked.
     it(`binds a reopened session to the account the daemon recorded, not to the tab's pick`, async () => {
         const conversation = openAgentConversation({
             id: `a6`,
@@ -1671,9 +1709,9 @@ describe(`opening a fleet agent`, () => {
 
         await waitFor(() => expect(conversation.session.value?.id).toBe(`current-sdk-session`));
         expect(conversation.session.value?.account).toBe(`acct-work`);
-        expect(conversation.selection.account.value).toBe(`acct-personal`);
+        expect(conversation.selection.account.value).toBe(`acct-work`);
 
-        // Back onto the account that holds the session: nothing is retired, so there is nothing to announce.
+        // Onto the account that holds the session: nothing is retired, so there is nothing to announce.
         conversation.selection.apply({ kind: `selectAccount`, account: `acct-work` });
         expect(conversation.transcript.messages.value.some((message) => message.role === `notice`)).toBe(false);
 

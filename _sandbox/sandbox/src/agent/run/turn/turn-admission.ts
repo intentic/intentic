@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { keyedLock } from "@intentic/base/async";
-import { MENTION_LIMIT, type MessageReceipt } from "@intentic/sandbox-contract";
+import { MENTION_LIMIT, type MessageReceipt, profileOf } from "@intentic/sandbox-contract";
 import type { BeginRefusal } from "../../../agents/actor/conversation-decide.js";
 import { type LiveRun, liveRunOf, turnRunOf } from "../../../agents/actor/conversation-holdings.js";
 import type { QueuedItem } from "../../../agents/actor/conversation-queue.js";
 import { cardsParkedOn } from "../../../agents/actor/parked-cards.js";
-import { worktreeOf } from "../../../agents/registry/agents-store.js";
+import { conversationProfile, worktreeOf } from "../../../agents/registry/agents-store.js";
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
 import type { Said, Steer, TurnInput, TurnStarter, Unsaid, Unsteered } from "../../../seams/turn-starter.js";
@@ -107,6 +107,20 @@ const requestOf = (item: Omit<QueuedItem, "revision">): Turn => ({
     ...opt("outsideWake", item.outside),
 });
 
+// A wake (a watch's report, a finished background job, a child's report, a land follow-up) continues the conversation as
+// it runs when the wake goes out, never as it ran when the wake was armed or queued: the routing it captured then goes
+// stale the moment the conversation moves, and replaying it would put the current session on an account, runtime or
+// model nobody chose. Only who serves the turn is replaced; its persona, placement, audience and job stay the wake's.
+const onCurrentRouting = (services: Services, turn: Turn): Turn => {
+    const entry = services.agents.entry(turn.conversationId);
+    if (entry === undefined) {
+        return turn;
+    }
+    const { agent: _agent, harness: _harness, account: _account, model: _model, effort: _effort, thinking: _thinking, fast: _fast, ...own } = turn;
+    const { agent, harness, account, model, effort, thinking, fast } = conversationProfile(entry);
+    return { ...own, ...profileOf({ agent, harness, account, model, effort, thinking, fast }) };
+};
+
 // What goes before anything waiting: a recovery the daemon runs by itself, or a rewind restoring files.
 const goesFirst = (services: Services, conversationId: string): boolean => {
     const state = services.conversations.state(conversationId);
@@ -164,7 +178,7 @@ const turnOf = (services: Services, batch: readonly QueuedItem[]): Turn => {
     }
     const { conversationId } = last.turn;
     if (last.voice !== "person") {
-        const { sessionId: _asked, ...wake } = requestOf(last);
+        const { sessionId: _asked, ...wake } = onCurrentRouting(services, requestOf(last));
         return { ...wake, ...opt("sessionId", services.conversations.sessionIdOf(conversationId)) };
     }
     const { prompt: _p, attachments: _a, mentions: _m, editorContext: _e, messageId: _i, sessionId: _s, ...routing } = requestOf(last);
@@ -310,8 +324,9 @@ export const createAdmission = (
         if (live !== undefined || daemon.conversations.state(conversationId)?.phase.kind === "running") {
             return intoLive(item, live);
         }
-        // Its own turn, as its sender asked for it, session and all.
-        const run = await startWith([item], requestOf(item));
+        // Its own turn, as its sender asked for it, session and all; a wake on the routing the conversation has now.
+        const request = requestOf(item);
+        const run = await startWith([item], item.voice === "person" ? request : onCurrentRouting(daemon, request));
         if (run === "archived") {
             return ARCHIVED;
         }

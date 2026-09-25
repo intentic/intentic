@@ -11,6 +11,7 @@ import {
 import type { Services } from "../../composition.js";
 import type { SeatRefusal } from "../../runtimes/claude/claude-seats.js";
 import { services, withTranslator } from "../../harness/route-services.testing.js";
+import { testConfig } from "../../testing.js";
 import { memoryCapabilitiesStore } from "../../harness/route-stores.testing.js";
 import type { HarnessCredential } from "./agent-request.js";
 import { harnessCredentialOf, harnessEnv, resolveHarnessCredentials } from "./harness-credentials.js";
@@ -203,6 +204,31 @@ test("a named account is still the account that runs, refused or not", async () 
     expect(result.ok && result.credentials.account).toBe("refused");
 });
 
+// The account a conversation runs on is the one it names. A container that authenticates by itself holds some other
+// identity, so falling to it when the named account is gone would move the conversation onto an account nobody chose.
+describe("a turn naming a Claude account that can no longer serve it", () => {
+    const withContainerToken = (): Services =>
+        services({
+            config: { ...testConfig, claudeCodeOauthToken: "container-token" },
+            claudeStore: {
+                read: async (id: string) => (id === "other" ? { id, label: id, connectedAt: 0, accessToken: "token-other" } : undefined),
+                list: async () => [{ id: "other", label: "other", connectedAt: 0 }],
+            },
+        });
+
+    test("refuses, even where the container has a credential of its own", async () => {
+        expect(await resolveHarnessCredentials(withContainerToken(), { agent: "claude", account: "gone" })).toEqual({
+            ok: false,
+            message: "The Claude account this conversation runs on is no longer connected. Pick another account for it, or connect this one again, then send again.",
+        });
+    });
+
+    test("an unnamed turn still lands on a connected account", async () => {
+        const result = await resolveHarnessCredentials(withContainerToken(), { agent: "claude" });
+        expect(result.ok && result.credentials.account).toBe("other");
+    });
+});
+
 // The assertion the spec-table conformance tests can't make: a wrong entitlement or a doubled version segment in a base
 // URL is type-correct and passes every table walk without ever reaching a model.
 describe.each(MINTED_PROVIDERS.map((provider) => ({ provider })))("a $provider turn", ({ provider }) => {
@@ -226,6 +252,14 @@ describe.each(MINTED_PROVIDERS.map((provider) => ({ provider })))("a $provider t
         // surface a stored key can read.
         expect(result.ok && result.credentials.allowance?.vendor).toBe(PROVIDER_VENDOR[provider]);
         expect(result.ok && result.credentials.allowance?.limit).toBeUndefined();
+    });
+
+    // Another connected account would take the conversation somewhere nobody chose; which one is the person's call.
+    test("refuses a named account that is no longer connected, rather than running on the first one", async () => {
+        expect(await resolveHarnessCredentials(await withKey(), { agent: provider, account: "disconnected" })).toEqual({
+            ok: false,
+            message: expect.stringContaining("account this conversation runs on is no longer connected"),
+        });
     });
 
     test("carries no Claude subscription token into the vendor's environment", async () => {

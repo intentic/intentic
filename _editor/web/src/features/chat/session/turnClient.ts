@@ -54,15 +54,21 @@ const repeatsNudge = (message: { readonly text: string; readonly attachments: re
     return isNudgeText(message.text) && isNudgeText(waiting.text);
 };
 
-// Routing for re-running a held turn, read at the press; an empty pick means the daemon keeps the held model.
-// `carry` keeps the provider session across an account change, only when asked.
-const heldRouting = (settings: TurnSettings, options: { readonly carry?: boolean }): ResumeRouting => ({
-    agent: settings.agent,
-    harness: settings.harness,
-    account: settings.account,
-    model: settings.model || undefined,
-    ...(options.carry === true ? { carry: true } : {}),
-});
+// Routing for re-running a held turn, read at the press; an empty pick means the daemon keeps the held model, and an
+// unnamed account the held turn's (turn-resume.ts pressedAccount). The account is named for a pick made in this chat,
+// or for a switch of runtime away from the session, whose account belongs to the runtime being left; this window's
+// guess otherwise would move a conversation the press only meant to continue. `carry` keeps the provider session
+// across an account change, only when asked.
+const heldRouting = (settings: TurnSettings, session: SessionRef | undefined, options: { readonly carry?: boolean }): ResumeRouting => {
+    const runtimeSwitch = session !== undefined && (session.provider !== settings.agent || session.harness !== settings.harness);
+    return {
+        agent: settings.agent,
+        harness: settings.harness,
+        account: settings.accountPicked === true || runtimeSwitch ? settings.account : undefined,
+        model: settings.model || undefined,
+        ...(options.carry === true ? { carry: true } : {}),
+    };
+};
 
 // A file that went out with a message the daemon never answered for, staged again in the composer as a finished chip.
 const chipOf = (file: ChatAttachment): PendingAttachment => ({ id: uuid(), name: file.name, path: file.path, status: `done`, progress: 100 });
@@ -363,6 +369,7 @@ export class TurnClient {
                     box: host.box.value,
                     mode: host.selection.mode.value,
                     settings,
+                    registered: host.registered.value,
                     resume,
                     forkOf,
                     attachmentPaths,
@@ -448,6 +455,7 @@ export class TurnClient {
                     box: host.box.value,
                     mode: host.selection.mode.value,
                     settings,
+                    registered: host.registered.value,
                     resume: resumes(session, settings) ? session : undefined,
                     forkOf: undefined,
                     attachmentPaths,
@@ -544,7 +552,7 @@ export class TurnClient {
         host.error.value = null;
         const released = await orRefusal(
             sandboxRpc.agent.queueResume(
-                { conversationId: host.conversationId, routing: heldRouting(host.selection.turnSettings(), {}) },
+                { conversationId: host.conversationId, routing: heldRouting(host.selection.turnSettings(), host.session.value, {}) },
                 { context: { at: host.box.value } },
             ),
         );
@@ -610,12 +618,15 @@ export class TurnClient {
             await this.stopping;
         }
         const settings = this.host.selection.turnSettings();
-        // This switch is also a segment cut: the fresh session belongs to the new credential, unless carried across.
-        if (!resumes(this.host.session.value, settings) && options.carry !== true) {
+        const session = this.host.session.value;
+        const routing = heldRouting(settings, session, options);
+        // A press that moves the conversation is also a segment cut: the fresh session belongs to the new credential,
+        // unless carried across. One naming no account continues on the daemon's own, so there's nothing to cut.
+        if (routing.account !== undefined && !resumes(session, settings) && options.carry !== true) {
             this.cutSegment();
         }
         this.host.selection.apply({ kind: `rerun` });
-        if (!(await this.askResume(heldRouting(settings, options)))) {
+        if (!(await this.askResume(routing))) {
             return false;
         }
         await this.reattach();

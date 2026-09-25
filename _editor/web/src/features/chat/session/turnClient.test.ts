@@ -71,7 +71,7 @@ const WAITING: ConversationQueue = {
 
 // A TurnClient over a conversation that is only its refs: the transcript is a real one, since a run's rows are drawn
 // there; the selection and the failure policy answer only what a run asks of them.
-const clientOf = () => {
+const clientOf = (settings: TurnSettings = SETTINGS) => {
     const error = ref<string | null>(null);
     const session = ref<SessionRef | undefined>();
     const box = ref<string | undefined>();
@@ -84,7 +84,7 @@ const clientOf = () => {
             return transcript;
         },
         selection: unstubbed<ComposerSelection>(`selection`, {
-            turnSettings: () => SETTINGS,
+            turnSettings: () => settings,
             apply: jest.fn(),
             mode: computed(() => `default` as const),
             provider: computed(() => `claude` as const),
@@ -312,6 +312,33 @@ describe(`a run's lifecycle`, () => {
         expect(client.firstSight(`t1`)).toBe(true);
         expect(client.firstSight(`t1`)).toBe(false);
         expect(client.firstSight(`t2`)).toBe(true);
+    });
+
+    // The composer's account is this window's guess unless the person picked it here: another window may have moved the
+    // conversation since. A plain Continue naming the guess moved the conversation back to it and cut its session.
+    it(`presses Continue naming only an account the person picked, keeping the session otherwise`, async () => {
+        const session: SessionRef = { id: `s-1`, provider: `claude`, account: `acct-now`, harness: `native` };
+        resume.mockImplementation(async () => ({ run: `r-press` }));
+        attach.mockImplementation(async () => attached(`r-press`, 4_000, `clean the sandbox`));
+
+        const guessed = clientOf({ ...SETTINGS, account: `acct-before` });
+        guessed.host.session.value = session;
+        guessed.host.pickUp.value = { reason: `limit`, held: { ran: true } };
+        expect(await guessed.client.resumeHeldTurn()).toBe(true);
+        expect(resume.mock.calls.at(-1)?.[0]).toEqual({
+            conversationId: `c1`,
+            routing: { agent: `claude`, harness: `native`, account: undefined, model: `opus` },
+        });
+        expect(guessed.host.session.value).toEqual(session);
+
+        const picked = clientOf({ ...SETTINGS, account: `acct-other`, accountPicked: true });
+        picked.host.session.value = session;
+        picked.host.pickUp.value = { reason: `limit`, held: { ran: true } };
+        expect(await picked.client.resumeHeldTurn({ carry: true })).toBe(true);
+        expect(resume.mock.calls.at(-1)?.[0]).toEqual({
+            conversationId: `c1`,
+            routing: { agent: `claude`, harness: `native`, account: `acct-other`, model: `opus`, carry: true },
+        });
     });
 
     it(`re-runs nothing the daemon is not holding, and nothing while a turn is live`, async () => {

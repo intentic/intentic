@@ -278,6 +278,28 @@ describe("agents registry", () => {
         expect(store.saved().find((entry) => entry.id === "c1")).toMatchObject({ sessionId: "sess-2", profile: { account: "acct-personal" } });
     });
 
+    // An account belongs to the provider that minted it. Carried onto another provider's profile it would be latched into
+    // that provider's next turn naming none, which then fell to whichever of its own accounts came first.
+    it("carries no account across a provider change the turn named none for, and keeps it on the same provider", async () => {
+        const store = memoryStore();
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
+        await registry.init();
+        await beginTurn(conversations, turn({ profile: { agent: "claude", harness: "native", account: "acct-work" } }), 1_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+
+        await beginTurn(conversations, turn({ profile: { agent: "claude", harness: "native" } }), 3_000);
+        await conversations.send("c1", { kind: "settle" }, 4_000).settled;
+        await registry.setTitle("c1", "Port the parser", "user");
+        expect(store.saved().find((entry) => entry.id === "c1")?.profile).toMatchObject({ provider: "claude", account: "acct-work" });
+
+        await beginTurn(conversations, turn({ profile: { agent: "codex", harness: "native" } }), 5_000);
+        await conversations.send("c1", { kind: "settle" }, 6_000).settled;
+        await registry.setTitle("c1", "Port the parser, on Codex", "user");
+        const moved = store.saved().find((entry) => entry.id === "c1")?.profile;
+        expect(moved?.provider).toBe("codex");
+        expect(moved?.account).toBeUndefined();
+    });
+
     it("clearSession drops the pointer so the next turn opens a fresh provider thread", async () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();

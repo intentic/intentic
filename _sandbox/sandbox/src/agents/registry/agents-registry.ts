@@ -319,17 +319,23 @@ const freshEntry = (turn: BeginTurn, now: number): PersistedAgent => ({
 });
 
 // Each setting falls back to the last turn's, so a turn naming none keeps describing the agent by what it actually ran;
-// provider and harness are the turn's own, never carried.
-const settingsOf = (existing: StoredProfile, profile: TurnProfile): StoredProfile => ({
-    ...existing,
-    provider: profile.agent ?? "claude",
-    harness: profile.harness ?? "native",
-    ...opt("model", profile.model),
-    ...opt("effort", profile.effort),
-    ...opt("thinking", profile.thinking),
-    ...opt("fast", profile.fast),
-    ...opt("account", profile.account),
-});
+// provider and harness are the turn's own, never carried. So is the account across a provider change: an account belongs
+// to the provider that minted it, and carried onto another it would be latched into that provider's next turn.
+const settingsOf = (existing: StoredProfile, profile: TurnProfile): StoredProfile => {
+    const provider = profile.agent ?? "claude";
+    const { account: held, ...kept } = existing;
+    const account = profile.account ?? (existing.provider === provider ? held : undefined);
+    return {
+        ...kept,
+        provider,
+        harness: profile.harness ?? "native",
+        ...opt("model", profile.model),
+        ...opt("effort", profile.effort),
+        ...opt("thinking", profile.thinking),
+        ...opt("fast", profile.fast),
+        ...opt("account", account),
+    };
+};
 
 // The entry a turn opens: every record carried whole, since each outlives the turn that wrote it, except what a turn
 // restates (identity it may still fill in, settings, title and owner). Its ending is the resting state for a turn that

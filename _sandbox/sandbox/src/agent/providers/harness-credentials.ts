@@ -242,6 +242,10 @@ const resolveEndpointCredentials = async (
     };
 };
 
+// The refusal for a conversation whose own account is no longer connected: which way on is the person's to choose.
+const goneAccountMessage = (provider: string): string =>
+    `The ${provider} account this conversation runs on is no longer connected. Pick another account for it, or connect this one again, then send again.`;
+
 // A minted provider publishes an Anthropic Messages endpoint directly, so the harness is pointed at it with the
 // sign-in's key; no translation needed.
 const resolveMintedCredentials = async (
@@ -250,8 +254,12 @@ const resolveMintedCredentials = async (
     input: { readonly account?: string; readonly model?: string },
 ): Promise<HarnessCredentialsResult> => {
     const accounts = await services.minted[provider].store.credentials();
-    // The user's explicit pick when still connected, else the first account.
-    const picked = accounts.find((account) => account.id === input.account) ?? accounts[0];
+    // The account the conversation runs on; only a turn naming none takes the first. A named one that is gone refuses:
+    // running on another account instead is a switch nobody chose.
+    const picked = input.account === undefined ? accounts[0] : accounts.find((account) => account.id === input.account);
+    if (picked === undefined && input.account !== undefined) {
+        return { ok: false, message: goneAccountMessage(providerLabel(provider)) };
+    }
     if (picked === undefined) {
         return {
             ok: false,
@@ -380,12 +388,16 @@ export const resolveHarnessCredentials = async (
             return { ok: false, message: error instanceof Error ? error.message : "claude credentials unavailable" };
         }
     }
-    if (oauthToken === undefined && services.config.claudeCodeOauthToken === "" && services.config.anthropicApiKey === "") {
+    // A named account that yields no token refuses whatever else could authenticate: the container's own credential is
+    // a different identity, and running on it is an account switch nobody chose. An unnamed turn may still fall to it.
+    const named = input.account !== undefined;
+    if (oauthToken === undefined && (named || (services.config.claudeCodeOauthToken === "" && services.config.anthropicApiKey === ""))) {
         // A connected-but-revoked account gets a reconnect refusal, not a generic no-account message.
         const revoked = accountId !== undefined && (await services.claudeStore.list()).some((a) => a.id === accountId && a.needsReauth === true);
-        return revoked
-            ? { ok: false, code: "claude-reauth", message: "Claude sign-in was revoked, reconnect the account to pick this conversation back up." }
-            : { ok: false, message: "No Claude account connected, connect it in Setup before chatting." };
+        if (revoked) {
+            return { ok: false, code: "claude-reauth", message: "Claude sign-in was revoked, reconnect the account to pick this conversation back up." };
+        }
+        return { ok: false, message: named ? goneAccountMessage("Claude") : "No Claude account connected, connect it in Setup before chatting." };
     }
     // Attribution follows the token: an account whose refresh yielded nothing served none of this turn.
     if (oauthToken === undefined) {

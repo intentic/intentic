@@ -24,6 +24,7 @@ describe(`turnRequestBody`, () => {
         isolated: false,
         mode: `plan`,
         settings,
+        registered: false,
         resume: undefined,
         forkOf: undefined,
         attachmentPaths: [] as string[],
@@ -78,6 +79,27 @@ describe(`turnRequestBody`, () => {
     it(`carries the persona only once one is picked`, () => {
         expect(wire(turnRequestBody(base))).not.toHaveProperty(`actsAs`);
         expect(wire(turnRequestBody({ ...base, settings: { ...settings, actsAs: `work` } }))).toMatchObject({ actsAs: `work` });
+    });
+
+    // A window's account can be older than the conversation's (another window moved it, a limit move did), and naming it
+    // on a turn that only continues the conversation took it back there: an account switch nobody chose.
+    describe(`the account`, () => {
+        const session = { id: `s-1`, provider: `claude`, account: `acct-a`, harness: `native` } as const;
+        const onA = { ...settings, account: `acct-a` };
+
+        it(`is left to the daemon on a turn that continues the conversation's session`, () => {
+            expect(wire(turnRequestBody({ ...base, registered: true, settings: onA, resume: session }))).not.toHaveProperty(`account`);
+        });
+
+        it(`is named for a pick made in this chat`, () => {
+            const picked = { ...settings, account: `acct-b`, accountPicked: true };
+            expect(wire(turnRequestBody({ ...base, registered: true, settings: picked, resume: session }))).toMatchObject({ account: `acct-b` });
+        });
+
+        it(`is named where there is no conversation to follow: its first turn, or a turn that leaves the session behind`, () => {
+            expect(wire(turnRequestBody({ ...base, registered: false, settings: onA, resume: session }))).toMatchObject({ account: `acct-a` });
+            expect(wire(turnRequestBody({ ...base, registered: true, settings: onA, resume: undefined }))).toMatchObject({ account: `acct-a` });
+        });
     });
 
     it(`sends no account of this box's when the turn runs in another sandbox`, () => {

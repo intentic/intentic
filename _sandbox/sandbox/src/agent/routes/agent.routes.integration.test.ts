@@ -425,6 +425,39 @@ describe("the conversation's queue", () => {
     });
 });
 
+// A wake carries the routing of the turn that armed it (a watch, a background job), and the conversation may have moved
+// since. Replaying the armed account resumed the new session on the old credential and wrote that account back onto the
+// conversation, so the person's next message no longer matched it and opened a fresh session: an account switch nobody
+// chose, on both sides of the wake.
+test("a wake runs on the account its conversation is on now, not the one the watch was armed under", async () => {
+    const tokens: string[] = [];
+    const daemon = services({
+        claudeStore: {
+            read: async (id) => ({ id, label: id, connectedAt: 0, accessToken: `tok-${id}` }),
+            list: async () => [
+                { id: "acct-a", label: "A", connectedAt: 0 },
+                { id: "acct-b", label: "B", connectedAt: 0 },
+            ],
+        },
+        async *agent(request) {
+            tokens.push(request.credential?.kind === "claude-oauth" ? request.credential.token : request.credential?.kind ?? "none");
+            yield { kind: "done" };
+        },
+    });
+    const client = clientFor(createApp(daemon));
+    await runAgentTurn(client, { prompt: "start the server and watch it", conversationId: "conv-wake", account: "acct-a" });
+    await runAgentTurn(client, { prompt: "now the docs", conversationId: "conv-wake", account: "acct-b" });
+
+    // The watch's report, carrying the profile it was armed under on the first turn.
+    expect(await daemon.turns.say({ voice: "sandbox", turn: { prompt: "The watch fired.", conversationId: "conv-wake", account: "acct-a" } })).toMatchObject({
+        delivered: "started",
+    });
+    await waitFor(() => expect(daemon.conversations.running("conv-wake")).toBe(false), SETTLES);
+
+    expect(tokens).toEqual(["tok-acct-a", "tok-acct-b", "tok-acct-b"]);
+    expect(daemon.agents.entry("conv-wake")?.profile.account).toBe("acct-b");
+});
+
 // Only a person reopens an archived conversation: the sandbox's own words go nowhere, and a person's message brings it back.
 describe("an archived conversation", () => {
     it("takes the sandbox's words nowhere, not even into its queue, and stays archived", async () => {

@@ -14,6 +14,7 @@ const TERM_GRACE_MS = 3_000;
 const POLL_MS = 100;
 
 const pidsOf = async (procRoot: string): Promise<number[]> =>
+    // silent-catch: a proc root that can't be listed holds no processes to find, which is what an empty list says.
     (await readdir(procRoot).catch(() => [] as string[])).filter((entry) => NUMERIC.test(entry)).map(Number);
 
 // One process's /proc file, empty once the process is gone: before the open that is a missing file, mid-read it is ESRCH.

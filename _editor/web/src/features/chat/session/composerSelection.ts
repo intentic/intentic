@@ -138,6 +138,7 @@ export class ComposerSelection {
             agent: state.value.provider,
             harness: state.value.harness,
             account: state.value.account,
+            ...(state.value.accountPicked ? { accountPicked: true } : {}),
             actsAs: state.value.actsAs,
             startIn: state.value.startIn,
             model: state.value.model,

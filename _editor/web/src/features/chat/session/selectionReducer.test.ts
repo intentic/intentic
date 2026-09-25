@@ -180,7 +180,7 @@ describe(`the settings`, () => {
 
     it(`takes an account while a card waits, owing the divider to the settle`, () => {
         expect(reduceSelection(SEEDED, { kind: `selectAccount`, account: `second` }, PARKED)).toEqual({
-            selection: { ...SEEDED, account: `second`, switchedMidTurn: true },
+            selection: { ...SEEDED, account: `second`, accountPicked: true, switchedMidTurn: true },
             effects: { kept: true, accountPick: { provider: `claude`, account: `second` }, divider: `refresh` },
         });
     });
@@ -213,22 +213,52 @@ describe(`a live turn`, () => {
 describe(`the session`, () => {
     it(`moves the held session onto a reconnected credential, retracting the divider rather than drawing one`, () => {
         expect(reduceSelection(SEEDED, { kind: `rebindAccount`, account: `renewed` }, { ...WORLD, session: CLAUDE_SESSION })).toEqual({
-            selection: { ...SEEDED, account: `renewed` },
+            selection: { ...SEEDED, account: `renewed`, accountPicked: true },
             effects: { session: { ...CLAUDE_SESSION, account: `renewed` }, divider: `drop` },
         });
     });
 
-    it(`binds the daemon's session, pinning its account only on an unpinned local chat of the same provider`, () => {
+    it(`binds the daemon's session, taking its account on a local chat of the same provider`, () => {
         const unpinned = { ...SEEDED, account: undefined };
         const bound = { ...CLAUDE_SESSION, account: `served` };
 
         expect(reduceSelection(unpinned, { kind: `bindSession`, session: bound }, WORLD)).toEqual({
             selection: { ...unpinned, account: `served` },
-            effects: { session: bound },
+            effects: { session: bound, divider: `refresh` },
         });
         expect(reduceSelection(unpinned, { kind: `bindSession`, session: bound }, { ...WORLD, local: false }).selection).toBe(unpinned);
-        expect(reduceSelection(SEEDED, { kind: `bindSession`, session: bound }, WORLD).selection).toBe(SEEDED);
         expect(reduceSelection(unpinned, { kind: `bindSession`, session: { ...bound, provider: `codex` } }, WORLD).selection).toBe(unpinned);
+        expect(reduceSelection(SEEDED, { kind: `bindSession`, session: { ...bound, account: undefined } }, WORLD).selection).toBe(SEEDED);
+    });
+
+    // The seeded default, a restored tab's account, the account before a move another window made: each is this window's
+    // guess, and left standing the next message took the conversation back to it, retiring its session on the way.
+    it(`replaces an account this window only guessed with the one the conversation runs on`, () => {
+        const bound = { ...CLAUDE_SESSION, account: `served` };
+
+        expect(reduceSelection(SEEDED, { kind: `bindSession`, session: bound }, WORLD)).toEqual({
+            selection: { ...SEEDED, account: `served` },
+            effects: { session: bound, divider: `refresh` },
+        });
+    });
+
+    it(`holds a pick the conversation isn't running on yet, and settles it once the session shows it`, () => {
+        const picked = reduceSelection(SEEDED, { kind: `selectAccount`, account: `second` }, WORLD).selection;
+
+        expect(reduceSelection(picked, { kind: `bindSession`, session: CLAUDE_SESSION }, WORLD)).toEqual({ selection: picked, effects: { session: CLAUDE_SESSION } });
+        expect(reduceSelection(picked, { kind: `bindSession`, session: { ...CLAUDE_SESSION, account: `second` } }, WORLD).selection).toEqual({
+            ...picked,
+            accountPicked: false,
+        });
+    });
+
+    it(`drops a pick made on the provider it leaves`, () => {
+        const picked = reduceSelection(SEEDED, { kind: `selectAccount`, account: `second` }, WORLD).selection;
+
+        expect(reduceSelection(picked, { kind: `selectProvider`, provider: `codex` }, WORLD).selection).toMatchObject({
+            account: `codex-account`,
+            accountPicked: false,
+        });
     });
 
     it(`resumes a history session on Claude's remembered account and native loop, planning first`, () => {

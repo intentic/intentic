@@ -1271,6 +1271,49 @@ test("a press on a switched account still says nothing ran, when nothing ran", a
     clearPendingResume(services, "lim-door");
 });
 
+// A composer that hasn't read the conversation's account sends a press naming none. That chose nothing: it used to drop
+// the held account, retire the session, and tell the model it had been moved to a different account it was never on.
+test("a press naming the runtime but no account keeps the held account and its session", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    const turns: AgentTurn[] = [];
+    recordHeldTurn(services, {
+        reason: "limit",
+        input: { prompt: "ship the parser", conversationId: "lim-unnamed", isolated: true, account: "spent-one" },
+        sessionId: "s-real",
+        ran: true,
+    });
+
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-unnamed", true, { agent: "claude", harness: "native" });
+    await settle(services, "lim-unnamed");
+
+    expect(turns[0]).toMatchObject({ account: "spent-one", sessionId: "s-real" });
+    expect(turns[0]!.prompt).toMatch(/continue from that point/i);
+    expect(turns[0]!.prompt).not.toMatch(/different account/i);
+
+    clearPendingResume(services, "lim-unnamed");
+});
+
+// Onto another runtime the held account belongs to the one being left, so it never rides across unnamed.
+test("a press onto another runtime naming no account carries none of the old runtime's", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    const turns: AgentTurn[] = [];
+    recordHeldTurn(services, {
+        reason: "limit",
+        input: { prompt: "ship the parser", conversationId: "lim-runtime", isolated: true, account: "spent-one" },
+        sessionId: "s-real",
+        ran: true,
+    });
+
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-runtime", true, { agent: "codex", harness: "native" });
+    await settle(services, "lim-runtime");
+
+    expect(turns[0]!.agent).toBe("codex");
+    expect(turns[0]!.account).toBeUndefined();
+    expect(turns[0]!.sessionId).toBeUndefined();
+
+    clearPendingResume(services, "lim-runtime");
+});
+
 test("a press that names no routing runs the turn exactly as it was", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
@@ -1706,8 +1749,14 @@ test("a press that carries keeps the session across the account change, and says
 
 // A refused carry is tried once, then falls back fresh via `carryRefused` and a move to the account the turn's already
 // on.
+// Only the owner's `move` answer books a move (bookLimitMove), and the pass asks it again before firing one.
+const answerLimitsWithMove = async (services: ReturnType<typeof fakeServices>): Promise<void> => {
+    await services.sandboxSettings.set({ ...(await services.sandboxSettings.get()), limitPolicy: "move" });
+};
+
 test("a carry the other account refused re-runs fresh on that account, once", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
+    await answerLimitsWithMove(services);
     const turns: AgentTurn[] = [];
     const scheduler = createTurnResumeScheduler(drivenBy(services, heldWake(turns)));
     recordHeldTurn(
@@ -1739,6 +1788,7 @@ test("a carry the other account refused re-runs fresh on that account, once", as
 // `fired` stamp like the appointment does.
 test("a booked move fires on the next pass, with the session the policy said to carry, and only once", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
+    await answerLimitsWithMove(services);
     const turns: AgentTurn[] = [];
     const scheduler = createTurnResumeScheduler(drivenBy(services, heldWake(turns)));
     recordHeldTurn(
@@ -1767,6 +1817,33 @@ test("a booked move fires on the next pass, with the session the policy said to 
     await settle(services, "lim-move");
     expect(turns).toHaveLength(1);
     clearPendingResume(services, "lim-move");
+});
+
+// The move was booked at the failure, but the owner answered the card with `wait` before the pass came round: moving the
+// conversation to another account anyway would be a switch they had just said no to.
+test("a booked move the owner took back before the pass stays held on its own account", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
+    const turns: AgentTurn[] = [];
+    const scheduler = createTurnResumeScheduler(drivenBy(services, heldWake(turns)));
+    recordHeldTurn(
+        services,
+        {
+            reason: "limit",
+            input: { prompt: "ship the parser", conversationId: "lim-withdrawn", isolated: true, account: "spent-one" },
+            sessionId: "s-real",
+            ran: true,
+            reopensAt: REOPENS,
+            move: { account: "with-room", carry: true },
+        },
+        RECORDED,
+    );
+
+    await scheduler.tick(RECORDED + 5_000);
+    await scheduler.tick(REOPENS * 1000 + 1);
+    await settle(services, "lim-withdrawn");
+
+    expect(turns).toEqual([]);
+    clearPendingResume(services, "lim-withdrawn");
 });
 
 test("a held turn with no booked move and no arming stays held", async () => {

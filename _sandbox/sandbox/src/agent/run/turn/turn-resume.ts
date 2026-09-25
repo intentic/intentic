@@ -68,8 +68,19 @@ export interface HeldTurn {
     readonly remint?: { readonly account: string; readonly refusedToken: string } | undefined;
 }
 
+// Whether the press keeps the held turn's runtime. Absent fields default to the wire's claude/native, so spelling them
+// out isn't a switch.
+const sameRuntime = (input: AgentTurn, routing: ResumeRouting): boolean =>
+    routing.agent === (input.agent ?? "claude") && routing.harness === (input.harness ?? "native");
+
+// The account a press runs on. Naming none on the same runtime keeps the held turn's: only a person's explicit pick
+// moves a conversation to another account, and a press that names nothing chose nothing. On another runtime the held
+// account belongs to the one being left, so nothing carries over.
+const pressedAccount = (input: AgentTurn, routing: ResumeRouting): string | undefined =>
+    routing.account ?? (sameRuntime(input, routing) ? input.account : undefined);
+
 // The turn's own fields come from the held copy; routing (agent/harness/account/model) comes from the press when named.
-// Destructure-then-add so a press can unset a field instead of leaving the old value standing.
+// Destructure-then-add so a press onto another runtime leaves none of the old runtime's fields standing.
 const reroutedInput = (input: TurnInput & { conversationId: string }, routing: ResumeRouting | undefined): TurnInput & { conversationId: string } => {
     if (routing === undefined) {
         return input;
@@ -77,29 +88,23 @@ const reroutedInput = (input: TurnInput & { conversationId: string }, routing: R
     const { agent: _agent, harness: _harness, account: _account, model: _model, ...rest } = input;
     // No model in the press keeps the refused turn's; an unloaded catalog has no pick to send.
     const model = routing.model ?? input.model;
+    const account = pressedAccount(input, routing);
     return {
         ...rest,
         agent: routing.agent,
         harness: routing.harness,
-        ...(routing.account !== undefined ? { account: routing.account } : {}),
+        ...(account !== undefined ? { account } : {}),
         ...(model !== undefined ? { model } : {}),
     };
 };
 
-// Retires the session on an agent/harness change (not a model swap) unless `carry` covers an account change too. Absent
-// fields default to the wire's claude/native, so spelling them out isn't a switch.
+// Retires the session on an agent/harness change (not a model swap) unless `carry` covers an account change too.
 const retiresSession = (input: AgentTurn, routing: ResumeRouting | undefined): boolean =>
-    routing !== undefined &&
-    (routing.agent !== (input.agent ?? "claude") ||
-        routing.harness !== (input.harness ?? "native") ||
-        (routing.account !== input.account && routing.carry !== true));
+    routing !== undefined && (!sameRuntime(input, routing) || (pressedAccount(input, routing) !== input.account && routing.carry !== true));
 
 // Same runtime, different account: the case the `carried` note describes.
 const movesAccount = (input: AgentTurn, routing: ResumeRouting | undefined): boolean =>
-    routing !== undefined &&
-    routing.agent === (input.agent ?? "claude") &&
-    routing.harness === (input.harness ?? "native") &&
-    routing.account !== input.account;
+    routing !== undefined && sameRuntime(input, routing) && pressedAccount(input, routing) !== input.account;
 
 // A re-run's note, whether it opens fresh, and whether it replaces an earlier attempt's note rather than keeping it.
 interface RerunNote {
@@ -418,7 +423,11 @@ const RUNGS: { readonly [R in HeldReason]?: Rung } = {
 // A given-up hold tells the card first; what it leaves waits until that lands, for a turn still unwinding.
 const runRung = async (services: Services, conversationId: string, held: HeldRecord, now: number): Promise<void> => {
     const rung = RUNGS[held.reason];
-    const verdict = held.fired || rung === undefined ? undefined : rung.verdict(held, now);
+    const booked = held.fired || rung === undefined ? undefined : rung.verdict(held, now);
+    // A move is booked at the failure, but it moves the conversation to another account, so it goes only while the owner
+    // still answers the limit with a move: one taken back before this pass waits on its reset like any other hold.
+    const withdrawn = booked?.routing !== undefined && (await breakPolicyFor(services, conversationId, "limit")) !== "move";
+    const verdict = withdrawn ? rung?.verdict({ ...held, move: undefined }, now) : booked;
     if (verdict === undefined || rung === undefined) {
         return;
     }

@@ -402,9 +402,11 @@ describe(`Conversation`, () => {
         expect(conversation.selection.account.value).toBe(`with-room`);
     });
 
+    // Made at the picker, which is what makes it the user's: an account the app wrote in (a restored tab, a route) is only
+    // this window's guess, and the daemon's session replaces it (the test above).
     it(`leaves a pin the user made alone when the daemon reports the session on another account`, async () => {
         const conversation = new Conversation(`c-pinned`);
-        conversation.selection.apply({ kind: `set`, picks: { account: `acct-1` } });
+        conversation.selection.apply({ kind: `selectAccount`, account: `acct-1` });
         daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1`, account: `acct-2` }, { kind: `done` }]));
 
         await conversation.turn.send(`hi`, { ...settings, account: `acct-1` });
