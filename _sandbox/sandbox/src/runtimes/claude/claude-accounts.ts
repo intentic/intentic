@@ -28,6 +28,9 @@ const LOGIN_WINDOW_MS = 15 * 60_000;
 
 export const claudeAccountDoor = (services: ClaudeAccountDeps): AccountDoor => {
     const pending = new Map<string, { readonly verifier: string; readonly expiresAt: number }>();
+    const forget = async (id: string): Promise<void> => {
+        await Promise.all([services.claudeStore.clear(id), services.headroom.clear("claude", id), services.claudeSeats.clear(id)]);
+    };
     return {
         start: async () => {
             const now = Date.now();
@@ -74,7 +77,12 @@ export const claudeAccountDoor = (services: ClaudeAccountDeps): AccountDoor => {
                 ...(force ? { maxAgeMs: 0, watched: true } : {}),
                 withinMs: force ? FORCED_USAGE_WAIT_MS : USAGE_WAIT_MS,
             });
-            const [accounts, usage, seats] = await Promise.all([services.claudeStore.list(), services.accountUsage.read(), services.claudeSeats.read()]);
+            const [stored, usage, seats] = await Promise.all([services.claudeStore.list(), services.accountUsage.read(), services.claudeSeats.read()]);
+            // A revoked row whose person is also connected on a working row is a leftover from before reconnects landed
+            // in place (it only ever showed up as a duplicate), so it goes the way a disconnect would.
+            const superseded = stored.filter((account) => account.needsReauth === true && stored.some((live) => live.needsReauth !== true && sameIdentity(account, live)));
+            await Promise.all(superseded.map((account) => forget(account.id)));
+            const accounts = stored.filter((account) => !superseded.includes(account));
             return accounts.map((account) => withUsage(withSeat(account, seats[account.id]), usage[account.id]));
         },
         rename: async (id, label) => {
@@ -88,8 +96,6 @@ export const claudeAccountDoor = (services: ClaudeAccountDeps): AccountDoor => {
             return withSeat(toAccount(renamed), (await services.claudeSeats.read())[id]);
         },
         // Clears the credential, usage, and seat state; the next sign-in as this identity mints a new id, so anything left behind orphans.
-        disconnect: async (id) => {
-            await Promise.all([services.claudeStore.clear(id), services.headroom.clear("claude", id), services.claudeSeats.clear(id)]);
-        },
+        disconnect: forget,
     };
 };

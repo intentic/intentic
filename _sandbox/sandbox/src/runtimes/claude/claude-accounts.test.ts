@@ -53,7 +53,12 @@ const memoryStore = (accounts: Map<string, StoredAccount>): ClaudeAccountDeps["c
         clear: async (id) => {
             accounts.delete(id);
         },
-        list: async () => [...accounts.values()].map(({ accessToken: _token, ...account }) => ({ ...account, label: displayLabel(account) })),
+        list: async () =>
+            [...accounts.values()].map(({ accessToken: _token, revokedAt, revokedReason: _reason, ...account }) => ({
+                ...account,
+                label: displayLabel(account),
+                ...(revokedAt === undefined ? {} : { needsReauth: true }),
+            })),
     });
 
 test("Claude: the list reflects the store, a start keeps its proof here, disconnect clears the named account", async () => {
@@ -189,4 +194,17 @@ test("Claude: signing in as an account already on file reconnects it in place in
     expect((await signIn("me@example.com", "Work"))?.id).not.toBe("old");
     expect((await signIn("you@example.com", "Me's Organization"))?.id).not.toBe("old");
     expect(accounts.size).toBe(3);
+});
+
+// Before reconnects landed in place, a reconnect left the revoked row behind next to the new one. The list retires such
+// a leftover; a revoked row nobody replaced still asks for its reconnect.
+test("Claude: a revoked account the same person has since reconnected under a new row is retired", async () => {
+    const accounts = new Map<string, StoredAccount>([
+        ["old", { id: "old", connectedAt: 1, accessToken: "dead", email: "me@example.com", organization: "Org", revokedAt: 5 }],
+        ["new", { id: "new", connectedAt: 2, accessToken: "tok", email: "me@example.com", organization: "Org" }],
+        ["lone", { id: "lone", connectedAt: 3, accessToken: "dead", email: "you@example.com", organization: "Org", revokedAt: 5 }],
+    ]);
+    const claude = door(memoryStore(accounts));
+    expect((await claude.list(false)).map((account) => account.id)).toEqual(["new", "lone"]);
+    expect([...accounts.keys()]).toEqual(["new", "lone"]);
 });
