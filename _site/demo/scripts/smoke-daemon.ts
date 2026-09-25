@@ -161,6 +161,9 @@ const samplesOf = ({ fleet, automations, ci, workflows, loops, devices }: Awaite
             browsers: undefined,
             devices: undefined,
             runDeviceAgentFlow: { id: host, op: `restart` },
+            // A log tail and a pause: the two that leave the fixture's containers and pairings as they were.
+            manageDeviceSandbox: { id: host, slug: `docs-site`, op: `logs` },
+            runDeviceCommand: { id: host, command: `sync-pause`, sandboxId: `billing-api` },
             closeBrowser: { name: `smoke` },
             subagents: undefined,
             storage: undefined,

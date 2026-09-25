@@ -5,8 +5,19 @@ import { sandboxVerbPrompt, VERB_LABEL } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, type ComputedRef, type Ref, ref, watch } from "vue";
 import { agentFallback, sandboxFallback, syncFallback } from "./deviceFallback";
+import { agentRefusal, type AgentRun, type LinksAsked } from "./agentRun";
 import { canSetShape, type ShapeIntent, shapeFlow, shapeSevers, TOO_OLD_TO_SAVE } from "../shapeFlow";
-import { type DeviceRow, folderOwner, isSelfMachine, type MachineRow, managerOf, rowRemoval } from "../deviceRows";
+import {
+    type BatchAction,
+    type BatchVerb,
+    type DeviceRow,
+    folderOwner,
+    isSelfMachine,
+    type MachineRow,
+    managerOf,
+    removableHere,
+    rowRemoval,
+} from "../deviceRows";
 import { manageDeviceSandbox, revokeSyncDevice, runDeviceAgentFlow, runDeviceCommand } from "../useDevices";
 import { useSandbox } from "../../client/useSandbox";
 import { type HubWork, useHubWork } from "../../../../shell/hub/hubWork";
@@ -125,6 +136,15 @@ const AGENT_WORKING: Record<DeviceAgentOp, string> = {
 
 const counted = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
 
+// A batch's one answer, in the verb's own tense: "3 sandboxes stopped", "1 sandbox didn't stop".
+const BATCH_DONE: Record<Exclude<BatchVerb, `remove`>, string> = { start: `started`, stop: `stopped`, restart: `restarted`, update: `updated` };
+const BATCH_REFUSED: Record<Exclude<BatchVerb, `remove`>, string> = {
+    start: `didn't start`,
+    stop: `didn't stop`,
+    restart: `didn't restart`,
+    update: `didn't update`,
+};
+
 /** The device's own sentence, whatever shape it arrived in. */
 const refusalText = (error: unknown): string => (error instanceof Error ? error.message : `that device didn't say why`);
 
@@ -165,6 +185,21 @@ export interface RemovalPrompt {
     readonly names: readonly string[];
     /** Whether one of them is the sandbox serving this page, which goes with it. Only ever a single-row removal. */
     readonly severing: boolean;
+}
+
+/** The one batch verb that asks first: an update takes each sandbox offline while it restarts onto a new image. */
+export interface BatchPrompt {
+    readonly header: string;
+    readonly body: string;
+    readonly names: readonly string[];
+    readonly label: string;
+}
+
+/** How far a batch has got, for the bar that started it. */
+export interface BatchProgress {
+    readonly verb: BatchVerb;
+    readonly done: number;
+    readonly total: number;
 }
 
 export interface ActPrompt {
@@ -218,7 +253,17 @@ export interface DeviceOps {
     readonly removalPrompt: ComputedRef<RemovalPrompt | undefined>;
     readonly confirmRemoval: () => void;
     readonly removing: Ref<boolean>;
-    readonly removalKey: string;
+
+    // One verb over every ticked row that can take it (deviceRows.ts `batchActions`), one row at a time, with one
+    // answer for the whole list under `listKey` — the rows it was about may be the ones that just left.
+    readonly runBatch: (action: BatchAction) => void;
+    readonly confirmingBatch: Ref<BatchAction | undefined>;
+    readonly batchPrompt: ComputedRef<BatchPrompt | undefined>;
+    readonly confirmBatch: () => void;
+    readonly batchProgress: Ref<BatchProgress | undefined>;
+    readonly listKey: string;
+    /** The sandbox a run is working on right now, so its row can say so while it happens. */
+    readonly workingIds: ComputedRef<readonly string[]>;
 
     // Everything one machine's file sync can be told to do: the switches over a pairing, and the one that starts
     // one. `mode`/`localDir` ride enrolling alone, and are what pick the environment that ends up running mutagen;
@@ -239,12 +284,11 @@ export interface DeviceOps {
     readonly runAgent: (environment: DeviceRow, op: DeviceAgentOp) => Promise<void>;
     /** Which of this environment's ops is in flight; a row has one thing to say. */
     readonly agentOp: (environment: DeviceRow) => DeviceAgentOp | undefined;
-    readonly agentBusy: (environment: DeviceRow) => boolean;
-    readonly agentLines: (environment: DeviceRow) => readonly string[];
-    readonly agentWaiting: (environment: DeviceRow) => string | undefined;
-    // Per environment, not the page's one slot, so a Restart on one side and an Update through another keep theirs.
-    readonly agentFailure: (environment: DeviceRow) => OpFailure | undefined;
-    readonly agentOutcome: (environment: DeviceRow) => string | undefined;
+    // The last press on this environment's agent as one thing with a state (agentRun.ts), per environment rather than
+    // the page's one slot, so a Restart on one side and an Update through another keep theirs.
+    readonly agentRun: (environment: DeviceRow) => AgentRun | undefined;
+    /** Puts a finished run away; a run still going stays, since it is the only thing saying so. */
+    readonly dismissAgent: (environment: DeviceRow) => void;
 
     // Cutting one environment's enrollment off entirely.
     readonly confirmingRevoke: Ref<DeviceRow | undefined>;
@@ -281,8 +325,18 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     const agentOp = ref<{ key: string; op: DeviceAgentOp } | undefined>();
     const revoking = ref(false);
     const removing = ref(false);
+    // A batch between its first row and its last; `busy` alone goes quiet between two rows.
+    const batchProgress = ref<BatchProgress | undefined>();
+    // The row a removal is on, which `busy` does not carry: a removal is two halves, only one of them a container verb.
+    const removingRow = ref<string | undefined>();
     const working = computed(
-        () => busy.value !== undefined || syncBusy.value !== undefined || agentOp.value !== undefined || revoking.value || removing.value,
+        () =>
+            busy.value !== undefined ||
+            syncBusy.value !== undefined ||
+            agentOp.value !== undefined ||
+            revoking.value ||
+            removing.value ||
+            batchProgress.value !== undefined,
     );
 
     const failure = ref<OpFailure | undefined>();
@@ -307,7 +361,8 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     // The rows one press asked to let go of, and the one key their answer lands under: a run over four rows has one
     // reason it went wrong, said once, rather than four notices under four rows nobody pressed.
     const confirmingRemoval = ref<readonly DeviceSandboxGroup[] | undefined>();
-    const removalKey = `${machine().key}:removal`;
+    const listKey = `${machine().key}:list`;
+    const confirmingBatch = ref<BatchAction | undefined>();
     const reshaping = ref<{ group: DeviceSandboxGroup } | undefined>();
     const confirmingUnpair = ref<{ environment: DeviceRow; group: DeviceSandboxGroup } | undefined>();
     const confirmingRevoke = ref<DeviceRow | undefined>();
@@ -401,18 +456,23 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     };
 
     const act = (group: DeviceSandboxGroup, verb: SandboxVerb): void => {
-        if (door() === undefined || group.sandbox === undefined || working.value) {
-            return;
-        }
-        if (verb === `resources`) {
-            openResources(group);
+        if (working.value) {
             return;
         }
         // ONE REMOVAL IN THE PRODUCT. The menu's Remove is the list's own act, so a container can never be taken
         // while the enrollment that pointed at it stays behind — which is how a machine collects rows for sandboxes
-        // that no longer exist.
+        // that no longer exist. Asked before the container check: a row holding only files removes too.
         if (verb === `remove`) {
-            confirmingRemoval.value = [group];
+            if (removableHere(machine(), group)) {
+                confirmingRemoval.value = [group];
+            }
+            return;
+        }
+        if (door() === undefined || group.sandbox === undefined) {
+            return;
+        }
+        if (verb === `resources`) {
+            openResources(group);
             return;
         }
         // The log button toggles: reopening what you closed is the same click, not a second control.
@@ -521,11 +581,11 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             // Nothing done is still something to say: a poll landing between the dialog and the press can leave a
             // row with neither half still on this machine.
             const said = settled.length === 0 ? `already held none of them` : settled.join(`, `);
-            outcome.value = { key: removalKey, message: `${machine().label}: ${said}.` };
+            outcome.value = { key: listKey, message: `${machine().label}: ${said}.` };
             return;
         }
         failure.value = {
-            key: removalKey,
+            key: listKey,
             notice: {
                 tone: `warning`,
                 title: `${counted(refused.length, `sandbox`, `sandboxes`)} stayed on ${machine().label}.`,
@@ -545,17 +605,23 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         let containers = 0;
         let pairings = 0;
         const refused: string[] = [];
+        batchProgress.value = { verb: `remove`, done: 0, total: groups.length };
         try {
-            for (const group of groups) {
+            for (const [index, group] of groups.entries()) {
+                removingRow.value = group.sandboxId;
+                // oxlint-disable-next-line eslint/no-await-in-loop -- one row at a time: every row goes through the same door
                 const done = await removeRow(group);
                 containers += done.container ? 1 : 0;
                 pairings += done.pairing ? 1 : 0;
                 if (done.refusal !== undefined) {
                     refused.push(`${group.title}: ${done.refusal}`);
                 }
+                batchProgress.value = { verb: `remove`, done: index + 1, total: groups.length };
             }
         } finally {
             removing.value = false;
+            removingRow.value = undefined;
+            batchProgress.value = undefined;
             endMark();
             // Always, including after a refusal: a run that stopped halfway still changed the machine.
             refetch();
@@ -570,6 +636,110 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             void runRemoval(pending);
         }
     };
+
+    // A container verb over several rows: one at a time through the one door, a refusal on one row never stopping the
+    // rest, and one answer for the run. No row here is the sandbox serving the page (`batchable`), so nothing severs.
+    const runContainerBatch = async (verb: Exclude<BatchVerb, `remove`>, groups: readonly DeviceSandboxGroup[]): Promise<void> => {
+        const hostId = door();
+        if (hostId === undefined || working.value || groups.length === 0) {
+            return;
+        }
+        failure.value = undefined;
+        outcome.value = undefined;
+        const endMark = hubWork.begin(`${VERB_WORKING[verb] ?? verb} ${counted(groups.length, `sandbox`, `sandboxes`)} on ${machine().label}`);
+        let settled = 0;
+        const refused: string[] = [];
+        batchProgress.value = { verb, done: 0, total: groups.length };
+        try {
+            for (const [index, group] of groups.entries()) {
+                const slug = group.sandbox?.slug;
+                if (slug === undefined) {
+                    refused.push(`${group.title}: no container on this device`);
+                    continue;
+                }
+                busy.value = `${rowKey(group)}:${verb}`;
+                // oxlint-disable-next-line eslint/no-await-in-loop -- one row at a time: every row goes through the same door
+                const refusal = await manageDeviceSandbox(hostId, slug, OP[verb]).then(
+                    () => undefined,
+                    (error: unknown) => refusalText(error),
+                );
+                if (refusal === undefined) {
+                    settled += 1;
+                } else {
+                    refused.push(`${group.title}: ${refusal}`);
+                }
+                batchProgress.value = { verb, done: index + 1, total: groups.length };
+            }
+        } finally {
+            busy.value = undefined;
+            batchProgress.value = undefined;
+            endMark();
+            // Always, including after a refusal: a run that stopped halfway still changed the machine.
+            refetch();
+        }
+        if (refused.length === 0) {
+            outcome.value = { key: listKey, message: `${machine().label}: ${counted(settled, `sandbox`, `sandboxes`)} ${BATCH_DONE[verb]}.` };
+            return;
+        }
+        failure.value = {
+            key: listKey,
+            notice: {
+                tone: `warning`,
+                title: `${counted(refused.length, `sandbox`, `sandboxes`)} ${BATCH_REFUSED[verb]} on ${machine().label}.`,
+                detail: [...refused, ...(settled === 0 ? [] : [`${counted(settled, `sandbox`, `sandboxes`)} ${BATCH_DONE[verb]}.`])].join(` · `),
+            },
+        };
+    };
+
+    // Remove asks with its own dialog (both halves, named per effect), Update asks because each sandbox goes offline
+    // while it restarts onto a new image, and the three power verbs just run: each is undone by its opposite.
+    const runBatch = (action: BatchAction): void => {
+        if (working.value || action.groups.length === 0) {
+            return;
+        }
+        if (action.verb === `remove`) {
+            confirmingRemoval.value = action.groups;
+            return;
+        }
+        if (action.verb === `update`) {
+            confirmingBatch.value = action;
+            return;
+        }
+        void runContainerBatch(action.verb, action.groups);
+    };
+
+    const batchPrompt = computed<BatchPrompt | undefined>(() => {
+        const pending = confirmingBatch.value;
+        if (pending === undefined) {
+            return undefined;
+        }
+        return {
+            header: `Update ${counted(pending.groups.length, `sandbox`, `sandboxes`)} on ${machine().label}?`,
+            body:
+                `Each one restarts onto the newest image and is unavailable while that happens — seconds if the update is ` +
+                `already downloaded, a few minutes if not. Their files are kept.`,
+            names: pending.groups.map((group) => group.title),
+            label: VERB_LABEL.update,
+        };
+    });
+
+    const confirmBatch = (): void => {
+        const pending = confirmingBatch.value;
+        confirmingBatch.value = undefined;
+        if (pending !== undefined && pending.verb !== `remove`) {
+            void runContainerBatch(pending.verb, pending.groups);
+        }
+    };
+
+    // The row a run is on right now: a container verb's row by its busy key, a removal's by the row it reached.
+    const workingIds = computed<readonly string[]>(() => {
+        if (removingRow.value !== undefined) {
+            return [removingRow.value];
+        }
+        const held = busy.value;
+        const group = held === undefined ? undefined : machine().groups.find((candidate) => held.startsWith(`${rowKey(candidate)}:`));
+        return group === undefined || runningVerb(group) === `logs` ? [] : [group.sandboxId];
+    });
 
     // No confirmation for the reversible four; `sync-unpair` alone routes through the dialog. `sandboxId`
     // present targets one pairing, absent runs the bare machine-wide CLI form. The environment named here is the door
@@ -635,6 +805,11 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     // Keyed by the door's environment: a Restart on one side must not wipe what an Update through another said.
     const agentFailed = ref<Record<string, OpFailure>>({});
     const agentSaid = ref<Record<string, string>>({});
+    // Which verb each environment's last run was, and for a drop the reading it was pressed against: what lets the
+    // strip say "Forgot 5 unreachable links" rather than only that something ran.
+    // `door` is false on a side an update only moved: it has no log or answer of its own, and is worth a strip only while
+    // it waits for its own version — the door's strip already says how the run went.
+    const agentRan = ref<Record<string, { op: DeviceAgentOp; door: boolean; links?: LinksAsked }>>({});
 
     const without = <T>(held: Record<string, T>, keys: readonly string[]): Record<string, T> =>
         Object.fromEntries(Object.entries(held).filter(([heldKey]) => !keys.includes(heldKey)));
@@ -642,6 +817,13 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     // An update moves every side of the machine from whichever door it went through; the other ops, that door's alone.
     const movedBy = (environment: DeviceRow, op: DeviceAgentOp): readonly string[] =>
         (op === `upgrade` ? machine().environments.filter((side) => side.device.hostId !== undefined) : [environment]).map(agentKey);
+
+    // The count the concern offering the drop was showing, taken at the press: the machine applies the same rule to
+    // the same stamps (device/config.ts `unreachableIn`), so it is the number it goes on to drop.
+    const linksAsked = (environment: DeviceRow, op: DeviceAgentOp): LinksAsked | undefined => {
+        const links = environment.device.facts?.links;
+        return op === `forget-unreachable` && links !== undefined ? { total: links.total, unreachable: links.unreachable } : undefined;
+    };
 
     // Clears only this row's own last answer: the page's shared slots belong to its other controls.
     const runAgent = async (environment: DeviceRow, op: DeviceAgentOp): Promise<void> => {
@@ -652,10 +834,16 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         const key = agentKey(environment);
         const moved = movedBy(environment, op);
         const endMark = hubWork.begin(`${AGENT_WORKING[op]} on ${machine().label}`);
+        const links = linksAsked(environment, op);
         agentOp.value = { key, op };
-        agentLog.value = { ...agentLog.value, [key]: [] };
-        agentFailed.value = without(agentFailed.value, [key]);
-        agentSaid.value = without(agentSaid.value, [key]);
+        agentLog.value = { ...without(agentLog.value, moved), [key]: [] };
+        agentFailed.value = without(agentFailed.value, moved);
+        agentSaid.value = without(agentSaid.value, moved);
+        agentRan.value = {
+            ...agentRan.value,
+            ...Object.fromEntries(moved.map((side) => [side, { op, door: false }])),
+            [key]: { op, door: true, ...(links === undefined ? {} : { links }) },
+        };
         waiting.value = { ...waiting.value, ...Object.fromEntries(moved.map((side) => [side, AGENT_ASKED[op]])) };
         try {
             const { message } = await runDeviceAgentFlow(hostId, op, {
@@ -673,7 +861,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             // The waiting notes are dropped, since nothing is on its way back.
             agentFailed.value = {
                 ...agentFailed.value,
-                [key]: { key, notice: noticeFrom(error, `That device wouldn't update its agent.`), command: agentFallback(op) },
+                [key]: { key, notice: noticeFrom(error, agentRefusal(op)), command: agentFallback(op) },
             };
             waiting.value = without(waiting.value, moved);
         } finally {
@@ -682,6 +870,37 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             // The version is the answer, so ask for it; the tab's own poll picks it up as the loop comes back.
             refetch();
         }
+    };
+
+    const agentRun = (environment: DeviceRow): AgentRun | undefined => {
+        const key = agentKey(environment);
+        const ran = agentRan.value[key];
+        if (ran === undefined || (!ran.door && waiting.value[key] === undefined)) {
+            return undefined;
+        }
+        const failed = agentFailed.value[key];
+        const state = agentOp.value?.key === key ? `running` : failed !== undefined ? `failed` : waiting.value[key] !== undefined ? `waiting` : `done`;
+        return {
+            op: ran.op,
+            state,
+            lines: agentLog.value[key] ?? [],
+            said: agentSaid.value[key],
+            waiting: waiting.value[key],
+            links: ran.links,
+            failure: failed === undefined ? undefined : { notice: failed.notice, command: failed.command },
+        };
+    };
+
+    const dismissAgent = (environment: DeviceRow): void => {
+        const key = agentKey(environment);
+        if (agentOp.value?.key === key) {
+            return;
+        }
+        agentRan.value = without(agentRan.value, [key]);
+        agentLog.value = without(agentLog.value, [key]);
+        agentFailed.value = without(agentFailed.value, [key]);
+        agentSaid.value = without(agentSaid.value, [key]);
+        waiting.value = without(waiting.value, [key]);
     };
 
     // Whether this environment's agent has arrived where the press was taking it: a live, unstalled loop serving the
@@ -761,18 +980,21 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         removalPrompt,
         confirmRemoval,
         removing,
-        removalKey,
+        runBatch,
+        confirmingBatch,
+        batchPrompt,
+        confirmBatch,
+        batchProgress,
+        listKey,
+        workingIds,
         runSync,
         syncRunning,
         confirmingUnpair,
         confirmUnpair,
         runAgent,
         agentOp: (environment) => (agentOp.value?.key === agentKey(environment) ? agentOp.value.op : undefined),
-        agentBusy: (environment) => agentOp.value?.key === agentKey(environment),
-        agentLines: (environment) => agentLog.value[agentKey(environment)] ?? [],
-        agentWaiting: (environment) => waiting.value[agentKey(environment)],
-        agentFailure: (environment) => agentFailed.value[agentKey(environment)],
-        agentOutcome: (environment) => agentSaid.value[agentKey(environment)],
+        agentRun,
+        dismissAgent,
         confirmingRevoke,
         revoking,
         runRevoke,

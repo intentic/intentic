@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { agentLines, Button, DeviceAgentNotes, DeviceRunLog, Icon, Row, StatusBadge } from "@intentic/ui";
+import { agentLines, Button, DeviceAgentNotes, Icon, Row, StatusBadge } from "@intentic/ui";
 import { computed } from "vue";
+import AgentRunStrip from "./health/AgentRunStrip.vue";
 import DeviceConcern from "./health/DeviceConcern.vue";
-import DeviceOpFailure from "./runners/DeviceOpFailure.vue";
 import { cardRoute } from "./deviceLinks";
 import type { DeviceAgentPanel } from "./deviceAgent";
 import type { DeviceConcern as Concern } from "./health/deviceAttention";
@@ -10,7 +10,6 @@ import { type DeviceRow, deviceState, deviceTone } from "./deviceRows";
 import { lastSeenNote, syncNote, syncStopped } from "./deviceFacts";
 import { environmentAddressed, environmentDetail, environmentIdentity, environmentTitle } from "./machineEnvironments";
 import type { DeviceOps } from "./runners/deviceOps";
-import { useT } from "@intentic/ui/i18n";
 
 // ONE ENVIRONMENT, ONE SHAPE. A PC reached through one door and a PC reached through three are the same kind of
 // thing, so they are the same row: this is the device page's masthead on a machine of one environment, and each
@@ -21,8 +20,6 @@ import { useT } from "@intentic/ui/i18n";
 // The row states each fact once. The badge owns the state word, the name owns the identity, the meta cluster owns
 // the agent's build, and everything that is an ERRAND hangs below on the row's own spine, so a sentence about this
 // environment can never be read as a sentence about the machine.
-
-const t = useT();
 
 const { environment, panel, concerns, readAt, ops, masthead, hardware } = defineProps<{
     environment: DeviceRow;
@@ -58,17 +55,16 @@ const stoppedSync = computed(() => (syncStopped(device.value, readAt) ? syncNote
 
 const notes = computed(() => (panel === undefined ? [] : agentLines(panel)));
 
-// Whether the agent block has anything to show: an op in flight, its log, or its answer.
-const activity = computed(
-    () =>
-        ops.agentWaiting(environment) !== undefined ||
-        ops.agentBusy(environment) ||
-        ops.agentLines(environment).length > 0 ||
-        ops.agentFailure(environment) !== undefined ||
-        ops.agentOutcome(environment) !== undefined,
-);
+// The last press on this environment's agent, as one strip with a state (agentRun.ts). Drawn IN PLACE of the concern
+// that offered it when there is one, since that concern is now a question already answered: its count is the reading
+// from before the press, and leaving its button live beside the run is what made a finished drop look unfinished.
+const run = computed(() => ops.agentRun(environment));
+const answers = (concern: Concern): boolean => run.value !== undefined && concern.fix?.kind === `agent` && concern.fix.op === run.value.op;
+// A run whose concern is gone (the fresh reading no longer raises it) or that no concern offered (a standing button)
+// still has to be drawn somewhere: after the concerns, on the same spine.
+const standalone = computed(() => run.value !== undefined && !concerns.some(answers));
 
-const below = computed(() => stoppedSync.value !== undefined || concerns.length > 0 || notes.value.length > 0 || activity.value);
+const below = computed(() => stoppedSync.value !== undefined || concerns.length > 0 || notes.value.length > 0 || run.value !== undefined);
 </script>
 
 <template>
@@ -137,34 +133,20 @@ const below = computed(() => stoppedSync.value !== undefined || concerns.length 
         <template v-if="below" #below>
             <div class="flex min-w-0 flex-col gap-2">
                 <p v-if="stoppedSync" class="min-w-0 text-xs text-warning">{{ stoppedSync }}</p>
-                <DeviceConcern
-                    v-for="concern in concerns"
-                    :key="concern.key"
-                    :concern="concern"
-                    :route="concern.fix?.kind === `card` ? cardRoute(concern.fix) : undefined"
-                    :busy="ops.working.value"
-                    :running="concern.fix?.kind === `agent` && ops.agentOp(environment) === concern.fix.op"
-                    @connect="emit(`connect`)"
-                    @agent="(op) => void ops.runAgent(environment, op)"
-                />
-                <DeviceAgentNotes :notes="notes" />
-                <template v-if="activity">
-                    <p v-if="ops.agentWaiting(environment)" class="text-xs text-muted">{{ ops.agentWaiting(environment) }}</p>
-                    <DeviceRunLog
-                        v-if="ops.agentBusy(environment) || ops.agentLines(environment).length > 0"
-                        :lines="ops.agentLines(environment)"
-                        :running="ops.agentBusy(environment)"
-                        :empty="t(`sandbox.devicePage.startingOnDevice`)"
-                        :note="t(`sandbox.devicePage.runsOnDeviceKeeps`)"
+                <template v-for="concern in concerns" :key="concern.key">
+                    <AgentRunStrip v-if="run && answers(concern)" :run="run" :machine="device.label" @dismiss="ops.dismissAgent(environment)" />
+                    <DeviceConcern
+                        v-else
+                        :concern="concern"
+                        :route="concern.fix?.kind === `card` ? cardRoute(concern.fix) : undefined"
+                        :busy="ops.working.value"
+                        :running="concern.fix?.kind === `agent` && ops.agentOp(environment) === concern.fix.op"
+                        @connect="emit(`connect`)"
+                        @agent="(op) => void ops.runAgent(environment, op)"
                     />
-                    <DeviceOpFailure
-                        v-if="ops.agentFailure(environment)"
-                        :of="ops.agentFailure(environment)!.notice"
-                        :command="ops.agentFailure(environment)!.command"
-                        :machine="device.label"
-                    />
-                    <p v-else-if="ops.agentOutcome(environment)" class="text-xs text-muted">{{ ops.agentOutcome(environment) }}</p>
                 </template>
+                <DeviceAgentNotes :notes="notes" />
+                <AgentRunStrip v-if="run && standalone" :run="run" :machine="device.label" @dismiss="ops.dismissAgent(environment)" />
             </div>
         </template>
     </Row>

@@ -10,8 +10,9 @@ import {
     folderConflicts,
     folderState,
     folderTone,
+    groupChips,
     groupNeedsAttention,
-    groupSummary,
+    groupStatus,
     type DeviceFolderRow,
     type DevicePortRow,
     type DeviceSandboxGroup,
@@ -34,6 +35,8 @@ const {
     sandboxes = [],
     open = [],
     undivided = false,
+    busy = [],
+    selected = [],
 } = defineProps<{
     pairings?: readonly DeviceFolderRow[];
     ports?: readonly DevicePortRow[];
@@ -46,11 +49,16 @@ const {
     // Drops the hairlines between sandboxes, for a caller that already separates rows itself, so two tiers
     // of hairline aren't drawn at the same weight.
     undivided?: boolean;
+    // Sandbox ids something is being done to right now: their status glyph turns into a spinner, so a batch working
+    // down the list shows where it is without a log per row.
+    busy?: readonly string[];
+    /** Sandbox ids the caller has ticked, tinted so a selection reads as one block rather than a column of boxes. */
+    selected?: readonly string[];
 }>();
 
 defineSlots<{
     // A tick box for a caller that acts on several rows at once. Drawn outside the disclosure button, so choosing
-    // a row never unfolds it, and before the chevron, so a list mid-selection reads as a column of choices.
+    // a row never unfolds it, and first on the line, so a list mid-selection reads as a column of choices.
     select?: (props: { group: DeviceSandboxGroup }) => unknown;
     /** Anything else worth saying about one sandbox, beside its name. */
     badges?: (props: { group: DeviceSandboxGroup }) => unknown;
@@ -109,6 +117,18 @@ watch(
     () => (folded.value = new Set([...folded.value].filter((id) => !open.includes(id)))),
 );
 
+// The status glyph's words: its accessible name, and on hover the sentence behind it.
+const statusWord = (group: DeviceSandboxGroup): string =>
+    busy.includes(group.sandboxId)
+        ? t(`ui.deviceDetail.working`)
+        : groupStatus(group) === `running`
+          ? t(`ui.deviceDetail.running`)
+          : groupStatus(group) === `stopped`
+            ? t(`ui.deviceDetail.stopped`)
+            : t(`ui.deviceDetail.notRunningHere`);
+const statusHint = (group: DeviceSandboxGroup): string =>
+    groupStatus(group) === `elsewhere` && !busy.includes(group.sandboxId) ? t(`ui.deviceDetail.notRunningHereHint`) : statusWord(group);
+
 // A port shows no fill or colour: with a chip on every port plus a green running dot, colour had stopped
 // signalling anything. Only a port that reached localhost is shown as `localhost:<port>`.
 
@@ -151,56 +171,68 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                 :id="blockId(group)"
                 class="flex flex-col gap-2 transition-colors duration-500"
                 :class="[
-                    undivided ? `pb-3 last:pb-0` : `border-t border-line-subtle py-2 first:border-t-0 first:pt-0 last:pb-0`,
+                    undivided ? `pb-2 last:pb-0` : `border-t border-line-subtle py-1 first:border-t-0 first:pt-0 last:pb-0`,
                     flashing === blockId(group) ? `bg-warning/10` : ``,
                 ]"
             >
-                <!-- The chevron and name are one button; verbs and the tick box keep their own hit areas outside it. -->
-                <div class="flex min-w-0 items-center gap-x-2">
-                    <span v-if="$slots[`select`]" class="flex shrink-0 items-center"><slot name="select" :group="group" /></span>
+                <!-- ONE QUIET LINE: tick box, one status glyph, the name, and the facts as glyphs with a count. The name
+                     through the chevron is one button; the tick box and the verbs keep their own hit areas outside it. -->
+                <!-- The app's own row tints (`ui-row-select`): a hover wash, and the selected tint for a ticked row. -->
+                <div
+                    class="ui-row-select -mx-2 flex min-w-0 items-center gap-x-2 rounded-md px-2"
+                    :class="selected.includes(group.sandboxId) ? `ui-row-select-on` : undefined"
+                >
+                    <span v-if="$slots[`select`]" class="flex w-5 shrink-0 items-center justify-center"><slot name="select" :group="group" /></span>
                     <button
                         type="button"
-                        class="group/row flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-0.5 text-left"
+                        class="group/row flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-1 text-left"
                         :aria-expanded="isOpen(group)"
                         :aria-controls="`${blockId(group)}-detail`"
                         @click="toggle(group)"
                     >
-                        <Icon
-                            name="chevron-right"
-                            class="shrink-0 text-2xs text-subtle transition-transform group-hover/row:text-muted"
-                            :class="isOpen(group) ? `rotate-90` : undefined"
-                            aria-hidden="true"
-                        />
-                        <!-- Fixed-width column so dot and icon leads occupy the same space. -->
-                        <span class="flex w-3.5 shrink-0 items-center justify-center">
-                            <span
-                                v-if="group.sandbox"
-                                class="h-1.5 w-1.5 rounded-full"
-                                :class="group.sandbox.running ? `bg-success` : `bg-subtle`"
-                                role="img"
-                                :aria-label="group.sandbox.running ? `running` : `stopped`"
-                                :title="group.sandbox.running ? `running` : `stopped`"
-                            ></span>
-                            <Icon v-else name="box" class="text-2xs text-subtle" />
+                        <!-- Where it stands on this machine, in one glyph: a filled dot runs, a ring is stopped, a cloud
+                             lives somewhere else and only its files or ports are here. The words are its hover and its
+                             accessible name, never a second label on the line. -->
+                        <span class="flex w-4 shrink-0 items-center justify-center" v-tooltip.top="statusHint(group)">
+                            <Icon v-if="busy.includes(group.sandboxId)" name="spinner" spin class="text-2xs text-muted" aria-hidden="true" />
+                            <span v-else-if="groupStatus(group) === `running`" class="h-2 w-2 rounded-full bg-success" aria-hidden="true"></span>
+                            <span v-else-if="groupStatus(group) === `stopped`" class="h-2 w-2 rounded-full border border-subtle" aria-hidden="true"></span>
+                            <Icon v-else name="cloud" class="text-2xs text-subtle" aria-hidden="true" />
+                            <span class="sr-only">{{ statusWord(group) }}</span>
                         </span>
-                        <span class="min-w-0 truncate text-xs font-semibold text-content">{{ group.title }}</span>
-                        <!-- The exact id, kept and demoted: the title is the friendliest name available, and this is what gets typed into a terminal. -->
-                        <span v-if="group.subtitle" class="hidden shrink-0 truncate font-mono text-2xs text-subtle sm:inline">
-                            {{ group.subtitle }}
-                        </span>
-                        <!-- Running is said by the dot; stopped needs the word, since a grey dot alone reads as nothing to see. -->
-                        <span v-if="group.sandbox && !group.sandbox.running" class="shrink-0 text-2xs text-muted">{{
-                            t(`ui.deviceDetail.stopped`)
-                        }}</span>
-                        <!-- A pairing with no container: says so explicitly, rather than rendering a bare row with no state and no verbs. -->
-                        <span v-else-if="!group.sandbox" class="shrink-0 text-2xs text-muted">{{ t(`ui.deviceDetail.notRunningHere`) }}</span>
+                        <!-- The exact id is the hover, not a second name beside the first: it's what gets typed into a
+                             terminal, and the open row states it with a copy button. -->
+                        <span
+                            class="min-w-0 truncate text-xs font-medium"
+                            :class="groupStatus(group) === `elsewhere` ? `text-muted` : `text-content`"
+                            v-tooltip.top="group.subtitle"
+                            >{{ group.title }}</span
+                        >
                         <slot name="badges" :group="group" />
-                        <!-- What the closed line still answers: facts are counted and uncoloured, a warning is why the row unfolded itself. -->
-                        <span v-if="!isOpen(group)" class="ml-auto flex min-w-0 shrink items-center gap-x-2.5 pl-3">
-                            <span v-for="fact in groupSummary(group).facts" :key="fact" class="shrink-0 text-2xs text-subtle">{{ fact }}</span>
-                            <span v-for="warning in groupSummary(group).warnings" :key="warning" class="truncate text-2xs text-warning">
-                                {{ warning }}
-                            </span>
+                        <!-- What the closed line still answers, as glyphs: facts are uncoloured, a warning keeps its ink and
+                             its words, since it's the reason the row unfolded itself. -->
+                        <span class="ml-auto flex min-w-0 shrink items-center gap-x-2.5 pl-3">
+                            <template v-if="!isOpen(group)">
+                                <span
+                                    v-for="chip in groupChips(group)"
+                                    :key="chip.key"
+                                    class="flex min-w-0 items-center gap-1 text-2xs"
+                                    :class="chip.tone === `warning` ? `text-warning` : `shrink-0 text-subtle`"
+                                    v-tooltip.top="chip.hint ?? chip.label"
+                                >
+                                    <Icon :name="chip.icon" class="shrink-0" aria-hidden="true" />
+                                    <span v-if="chip.text !== ``" class="truncate" aria-hidden="true">{{ chip.text }}</span>
+                                    <span class="sr-only">{{ chip.label }}</span>
+                                </span>
+                            </template>
+                            <!-- The disclosure's own mark, at the end and only on demand: shown on hover or focus, and
+                                 held while the row is open, so a resting list is names rather than a column of arrows. -->
+                            <Icon
+                                name="chevron-right"
+                                class="shrink-0 text-2xs text-subtle transition group-hover/row:opacity-100 group-focus-visible/row:opacity-100"
+                                :class="isOpen(group) ? `rotate-90` : `opacity-0`"
+                                aria-hidden="true"
+                            />
                         </span>
                     </button>
                     <span v-if="$slots[`actions`]" class="flex shrink-0 items-center gap-0.5"><slot name="actions" :group="group" /></span>
@@ -210,7 +242,8 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                 <div
                     v-if="isOpen(group)"
                     :id="`${blockId(group)}-detail`"
-                    class="grid grid-cols-[3.25rem_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1.5 pl-5"
+                    class="grid grid-cols-[3.25rem_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1.5 pb-1"
+                    :class="$slots[`select`] ? `pl-[3.25rem]` : `pl-6`"
                 >
                     <template v-if="group.folder">
                         <span class="text-2xs text-subtle">{{ t(`ui.deviceDetail.folder`) }}</span>
@@ -330,6 +363,15 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                         </div>
                     </template>
 
+                    <!-- The exact id the line only carries on hover: what gets typed into a terminal, so it can be copied. -->
+                    <template v-if="group.subtitle">
+                        <span class="text-2xs text-subtle">{{ t(`ui.deviceDetail.id`) }}</span>
+                        <div class="flex min-w-0 items-center gap-x-2">
+                            <span class="truncate font-mono text-xs text-subtle">{{ group.subtitle }}</span>
+                            <CopyButton :text="group.subtitle" v-tooltip.top="t(`ui.deviceDetail.copyId`)" />
+                        </div>
+                    </template>
+
                     <!-- Last, and quietest: the least-often-read fact, at the block's one value size rather than its own. -->
                     <template v-if="group.sandbox">
                         <span class="text-2xs text-subtle">{{ t(`ui.deviceDetail.image`) }}</span>
@@ -344,7 +386,9 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                 </div>
 
                 <!-- Outside the disclosure: a verb pressed on a folded row must still show what it's doing. -->
-                <div v-if="$slots[`footer`]" class="empty:hidden pl-5"><slot name="footer" :group="group" /></div>
+                <div v-if="$slots[`footer`]" class="empty:hidden" :class="$slots[`select`] ? `pl-[3.25rem]` : `pl-6`">
+                    <slot name="footer" :group="group" />
+                </div>
             </div>
         </div>
 

@@ -99,6 +99,11 @@ export {
 // containers.
 export { default as DeviceRunLog } from "./components/sandbox/DeviceRunLog.vue";
 export {
+    type GroupChip,
+    // The folded row's facts as glyphs with a count, and its one status glyph: what <DeviceDetail> draws on a closed line.
+    groupChips,
+    type GroupStatus,
+    groupStatus,
     type GroupSummary,
     groupNeedsAttention,
     groupSummary,

@@ -1,4 +1,6 @@
-<!-- Row controls for one sandbox: the power verb plus an overflow menu for the rest, shared by the web and desktop apps. -->
+<!-- Row controls for one sandbox: the power verb plus an overflow menu for the rest, shared by the web and desktop apps.
+     `compact` folds the power verb into the menu too, for a list that acts on its rows by selecting them: the row keeps
+     one quiet ⋯ instead of a word per line. -->
 <script setup lang="ts">
 import type { MenuItem } from "primevue/menuitem";
 import Button from "../primitives/Button.vue";
@@ -16,9 +18,16 @@ const {
     busy,
     disabled = false,
     logsOpen = false,
+    compact = false,
+    container = true,
 } = defineProps<{
     /** The container's own state: it decides whether the row's button says Start or Stop. */
     running: boolean;
+    /** Every verb behind the ⋯, the power verb first: for a list whose bulk verbs live in a bar above it. */
+    compact?: boolean | undefined;
+    // False for a row this machine holds only the files of: there is no container to power or reshape, so the menu is
+    // the one act that applies to it.
+    container?: boolean | undefined;
     /** The verb running on this row right now, which is the one that spins. */
     busy?: SandboxVerb | undefined;
     /** Something is running somewhere: every verb on every row waits, since they all drive one machine. */
@@ -47,12 +56,12 @@ const labelOf = (verb: SandboxVerb): string => (verb === `logs` ? (logsOpen ? `H
 
 // What the ⋯ button shows while something runs: a menu verb has no button of its own to spin, so the
 // control that opened it takes the spinner.
-const menuBusy = computed(() => busy !== undefined && busy !== power.value);
+const menuBusy = computed(() => busy !== undefined && (compact || !container || busy !== power.value));
+const item = (verb: SandboxVerb): MenuItem => ({ label: labelOf(verb), icon: VERB_ICON[verb], command: () => emit(`act`, verb) });
 
 const menu = ref<{ show: (event: Event) => void } | undefined>();
 const items = computed<MenuItem[]>(() => [
-    ...menuVerbs(running).map((verb) => ({ label: labelOf(verb), icon: VERB_ICON[verb], command: () => emit(`act`, verb) })),
-    { separator: true },
+    ...(container ? [...(compact ? [item(power.value)] : []), ...menuVerbs(running).map(item), { separator: true }] : []),
     // The caller still asks its own confirmation; this only stops the row presenting removal as the seventh
     // item beside harmless ones.
     { label: VERB_LABEL[DESTRUCTIVE_VERB], icon: VERB_ICON[DESTRUCTIVE_VERB], danger: true, command: () => emit(`act`, DESTRUCTIVE_VERB) },
@@ -62,6 +71,7 @@ const items = computed<MenuItem[]>(() => [
 <template>
     <span class="flex shrink-0 items-center gap-0.5">
         <Button
+            v-if="!compact && container"
             size="small"
             severity="secondary"
             :text="true"

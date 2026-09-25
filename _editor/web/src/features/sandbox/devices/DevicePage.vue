@@ -25,6 +25,7 @@ import DeviceConcern from "./health/DeviceConcern.vue";
 import DeviceEnvironment from "./DeviceEnvironment.vue";
 import DeviceOpFailure from "./runners/DeviceOpFailure.vue";
 import DeviceRunners from "./runners/DeviceRunners.vue";
+import SandboxBatchBar from "./SandboxBatchBar.vue";
 import { boardRoute, cardRoute } from "./deviceLinks";
 import { canSetShape } from "./shapeFlow";
 import { deviceAgentPanel, machineAgent } from "./deviceAgent";
@@ -43,12 +44,12 @@ import {
     manageable,
     managerOf,
     manySided,
-    massRemovable,
     pausable,
     removableHere,
     selfGroup,
 } from "./deviceRows";
 import { useDeviceOps } from "./runners/deviceOps";
+import { useSandboxSelection } from "./sandboxSelection";
 import { environmentTitle, wslDistroRows } from "./machineEnvironments";
 import { type ConflictAsk, conflictAsk } from "./sync/conflictAsk";
 import SandboxSyncToggles from "./sync/SandboxSyncToggles.vue";
@@ -181,45 +182,8 @@ const openIds = computed(() => {
 const applyReshape = (shape: ResourcesForm): void => ops.applyReshape(shape);
 const saveReshape = (shape: ResourcesForm | undefined): void => ops.saveReshape(shape);
 
-// SELECTING IS OPT-IN. This list is read far more often than it is pruned, so the tick boxes appear only once
-// somebody asks for them; the resting state stays one column of names with one cluster of verbs per row.
-const selecting = ref(false);
-const picked = ref(new Set<string>());
-// Never the sandbox serving this page (massRemovable): removing it would take the connection down mid-run and
-// abandon every row queued behind it. Its own row's verb still removes it, and warns about exactly that.
-const pickable = computed(() => massRemovable(machine, ownSlug));
-const pickableIds = computed(() => new Set(pickable.value.map((group) => group.sandboxId)));
-const chosen = computed(() => pickable.value.filter((group) => picked.value.has(group.sandboxId)));
-
-// Why a row's box is dead, read from the rule rather than discovered by clicking it.
-const unpickable = (group: DeviceSandboxGroup): string | undefined => {
-    if (pickableIds.value.has(group.sandboxId)) {
-        return undefined;
-    }
-    return ops.selfGroup(group) ? t(`sandbox.devicePage.cantPickSelf`) : t(`sandbox.devicePage.nothingToPick`);
-};
-
-const pick = (group: DeviceSandboxGroup, on: boolean): void => {
-    const next = new Set(picked.value);
-    if (on) {
-        next.add(group.sandboxId);
-    } else {
-        next.delete(group.sandboxId);
-    }
-    picked.value = next;
-};
-
-const stopSelecting = (): void => {
-    selecting.value = false;
-    picked.value = new Set();
-};
-
-// The ticks go with the press: what is left of them once rows start disappearing is a selection of ids that no
-// longer name anything, and the run's own answer already names what stayed.
-const confirmRemoval = (): void => {
-    ops.confirmRemoval();
-    stopSelecting();
-};
+// The list is managed by ticking rows and choosing a verb for all of them (sandboxSelection.ts, <SandboxBatchBar>).
+const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
 </script>
 
 <template>
@@ -320,52 +284,6 @@ const confirmRemoval = (): void => {
         <!-- One row per sandbox, the page's only disclosure: a row is a summary and its folder, ports, image and share are the evidence. -->
         <!-- Either answer draws rows: a card granting sandbox management alone lists containers and describes no folders. -->
         <RowGroup v-if="described" :label="t(`sandbox.devicePage.sandboxes`)">
-            <!-- Pruning the list, for the machine that has collected sandboxes it no longer runs: one verb over as many
-                 rows as are ticked, since letting go of six one dialog at a time is what stopped anybody doing it.
-                 Never over a single row, which would be that row's own button twenty pixels away in a wider, scarier
-                 label — the same floor the machine-wide sync switches keep. -->
-            <template v-if="pickable.length > 1" #actions>
-                <template v-if="selecting">
-                    <span class="text-2xs text-subtle">{{ t(`sandbox.devicePage.selected`, { count: chosen.length }) }}</span>
-                    <Button
-                        size="small"
-                        severity="secondary"
-                        :text="true"
-                        :label="t(`shared.selectAll`)"
-                        :disabled="ops.working.value || chosen.length === pickable.length"
-                        @click="picked = new Set(pickable.map((group) => group.sandboxId))"
-                    />
-                    <Button
-                        size="small"
-                        severity="danger"
-                        :label="t(`sandbox.devicePage.removeFromDevice`)"
-                        :loading="ops.removing.value"
-                        :disabled="chosen.length === 0 || ops.working.value"
-                        v-tooltip.top="t(`sandbox.devicePage.removeFromDeviceHint`)"
-                        @click="ops.confirmingRemoval.value = chosen"
-                    >
-                        <template #icon><Icon name="trash" /></template>
-                    </Button>
-                    <Button
-                        size="small"
-                        severity="secondary"
-                        :text="true"
-                        :label="t(`ui.action.cancel`)"
-                        :disabled="ops.working.value"
-                        @click="stopSelecting()"
-                    />
-                </template>
-                <Button
-                    v-else
-                    size="small"
-                    severity="secondary"
-                    :text="true"
-                    :label="t(`sandbox.devicePage.select`)"
-                    :disabled="ops.working.value"
-                    @click="selecting = true"
-                />
-            </template>
-
             <!-- On a many-sided machine the door's block is about this list, so it is said here rather than under a row. -->
             <RowNote v-if="listBlock" variant="block">
                 <DeviceConcern
@@ -425,46 +343,71 @@ const confirmRemoval = (): void => {
             </template>
 
             <RowNote variant="block">
+                <SandboxBatchBar v-if="selection.selectable.value" :selection="selection" :ops="ops" />
+
+                <!-- A run's one answer belongs to the list, not to a row: the rows it was about may be the ones that just
+                     left. Drawn under the bar that started it, where the eye still is. -->
+                <div v-if="ops.failure.value?.key === ops.listKey" class="mb-2">
+                    <DeviceOpFailure :of="ops.failure.value.notice" :machine="machine.label" />
+                </div>
+                <p v-else-if="ops.outcome.value?.key === ops.listKey" class="mb-2 flex items-center gap-1.5 text-xs text-muted" role="status">
+                    <Icon name="check-circle" class="shrink-0 text-success" aria-hidden="true" />{{ ops.outcome.value.message }}
+                </p>
+
                 <!-- No `agent` prop, deliberately: that state is the strip above, not a second liveness statement riding this list. -->
-                <DeviceDetail :pairings="lists.pairings" :ports="lists.ports" :sandboxes="lists.sandboxes" :open="openIds">
+                <DeviceDetail
+                    :pairings="lists.pairings"
+                    :ports="lists.ports"
+                    :sandboxes="lists.sandboxes"
+                    :open="openIds"
+                    :busy="ops.workingIds.value"
+                    :selected="selection.chosenIds.value"
+                >
                     <!-- Dead rather than absent on a row that can't go in a batch: a gap in the column says nothing, and
                          the reason is the one thing somebody who ticked it wants. -->
-                    <template v-if="selecting" #select="{ group }">
+                    <template v-if="selection.selectable.value" #select="{ group }">
                         <Checkbox
-                            :model-value="picked.has(group.sandboxId)"
+                            :model-value="selection.picked.value.has(group.sandboxId)"
                             :binary="true"
-                            :disabled="unpickable(group) !== undefined || ops.working.value"
+                            size="small"
+                            :disabled="selection.unpickable(group) !== undefined || ops.working.value"
                             :aria-label="group.title"
-                            v-tooltip.top="unpickable(group)"
-                            @update:model-value="(on: boolean) => pick(group, on)"
+                            :class="selection.unpickable(group) !== undefined ? `opacity-40` : undefined"
+                            v-tooltip.top="selection.unpickable(group)"
+                            @update:model-value="(on: boolean) => selection.pick(group, on)"
                         />
                     </template>
                     <!-- The one row on this page that can close the page, said beside the name rather than only in the confirmation. -->
                     <template #badges="{ group }">
-                        <StatusBadge v-if="ops.selfGroup(group)" variant="info" size="xs" :label="t(`shared.oneYoureUsing`)" />
+                        <StatusBadge
+                            v-if="ops.selfGroup(group)"
+                            variant="info"
+                            size="xs"
+                            :label="t(`sandbox.devicePage.thisSandbox`)"
+                            v-tooltip.top="t(`shared.oneYoureUsing`)"
+                            class="-my-0.5 shrink-0"
+                        />
                     </template>
-                    <!-- The verbs are the kit's, so this page and the desktop app's manager window offer the same row. -->
+                    <!-- One quiet ⋯ per row, the kit's own menu, so this page and the desktop app's manager window offer the
+                         same verbs. A row whose container is elsewhere gets the same ⋯ holding the one act that applies. -->
                     <template #actions="{ group }">
+                        <!-- No `busy`: the row's own status glyph spins while it works (DeviceDetail `busy`), and a
+                             second spinner on the ⋯ beside it would say the same thing twice. -->
                         <SandboxVerbs
                             v-if="manager && manageable(manager.device, group)"
+                            :compact="true"
                             :running="group.sandbox?.running === true"
-                            :busy="ops.runningVerb(group)"
                             :disabled="ops.working.value"
                             :logs-open="ops.logShown(group)"
                             @act="(verb) => ops.act(group, verb)"
                         />
-                        <!-- A sandbox this machine holds the FILES of and not the container — one running elsewhere, or one
-                             that is gone — has no power state to change, so the only thing to ask of it is to let go. Its
-                             own verb, because until now that row's exit was a button two clicks inside it. -->
-                        <Button
+                        <SandboxVerbs
                             v-else-if="removableHere(machine, group)"
-                            size="small"
-                            severity="danger"
-                            :text="true"
-                            :label="t(`ui.action.remove`)"
+                            :compact="true"
+                            :container="false"
+                            :running="false"
                             :disabled="ops.working.value"
-                            v-tooltip.top="t(`sandbox.devicePage.letGoHint`)"
-                            @click="ops.confirmingRemoval.value = [group]"
+                            @act="(verb) => ops.act(group, verb)"
                         />
                     </template>
                     <!-- Controls for this pairing's files, under the folder rather than up with the container verbs: Pause stops no container, only the file movement. -->
@@ -598,8 +541,10 @@ const confirmRemoval = (): void => {
                     </template>
                     <!-- The machine's own output, visible while a row works and afterward for as long as its log is being read. -->
                     <template #footer="{ group }">
+                        <!-- Not while a batch works down the list: the bar says where it has got, and a pane opening under
+                             each row in turn would be five logs for one press. -->
                         <DeviceRunLog
-                            v-if="ops.verbRunning(group) || ops.logShown(group)"
+                            v-if="(ops.verbRunning(group) && ops.batchProgress.value === undefined) || ops.logShown(group)"
                             :lines="ops.lines(group)"
                             :running="ops.verbRunning(group)"
                             :empty="t(`sandbox.devicePage.startingOnDevice`)"
@@ -616,11 +561,6 @@ const confirmRemoval = (): void => {
                 </DeviceDetail>
             </RowNote>
 
-            <!-- A removal's answer belongs to the list, not to a row: the rows it was about are the ones that just left. -->
-            <RowNote v-if="ops.failure.value?.key === ops.removalKey" variant="block">
-                <DeviceOpFailure :of="ops.failure.value.notice" :machine="machine.label" />
-            </RowNote>
-            <RowNote v-else-if="ops.outcome.value?.key === ops.removalKey">{{ ops.outcome.value.message }}</RowNote>
         </RowGroup>
 
         <!-- What this sandbox keeps here, as opposed to what the person does: runners it can hand a conversation to.
@@ -718,7 +658,7 @@ const confirmRemoval = (): void => {
             :destructive="true"
             :loading="ops.removing.value"
             @cancel="ops.confirmingRemoval.value = undefined"
-            @confirm="confirmRemoval()"
+            @confirm="selection.confirmRemoval()"
         >
             <template #item="{ item }"
                 ><span class="min-w-0 truncate font-mono text-xs text-content">{{ item }}</span></template
@@ -727,6 +667,23 @@ const confirmRemoval = (): void => {
             <p v-if="ops.removalPrompt.value?.severing === true" class="mt-3 text-xs text-warning">
                 {{ t(`sandbox.devicePage.sandboxUsingRightNow`) }}
             </p>
+        </ConfirmDialog>
+
+        <!-- An update over several rows, named row by row: nobody should agree to a count, and each goes offline in turn. -->
+        <ConfirmDialog
+            :open="ops.batchPrompt.value !== undefined"
+            :header="ops.batchPrompt.value?.header ?? ``"
+            header-icon="download"
+            :confirm-label="ops.batchPrompt.value?.label ?? t(`ui.action.continue`)"
+            confirm-icon="download"
+            :items="ops.batchPrompt.value?.names ?? []"
+            @cancel="ops.confirmingBatch.value = undefined"
+            @confirm="selection.confirmBatch()"
+        >
+            <template #item="{ item }"
+                ><span class="min-w-0 truncate font-mono text-xs text-content">{{ item }}</span></template
+            >
+            <p>{{ ops.batchPrompt.value?.body }}</p>
         </ConfirmDialog>
 
         <!-- Names what survives as carefully as what ends: the local folder is untouched. -->

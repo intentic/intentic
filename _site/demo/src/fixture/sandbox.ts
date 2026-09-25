@@ -96,6 +96,15 @@ export const demoCapabilities = (): CapabilitySummary[] => [
     { id: `discord`, kind: `cli`, status: { state: `active` }, config: { provider: `discord`, guild: `acme` }, secrets: [`token`] },
     { id: `stripe`, kind: `cli`, status: { state: `active` }, config: { provider: `stripe` }, secrets: [`apiKey`] },
     { id: `docker`, kind: `docker`, status: { state: `active` }, config: {}, secrets: [] },
+    // The owner's PC (fixture/devices.ts), admitted to run commands and manage its sandboxes: the two switches every
+    // button on its Devices page is gated on, so the demo draws the page as the owner sees it rather than as a refusal.
+    {
+        id: `ada-pc`,
+        kind: `device`,
+        status: { state: `active` },
+        config: { platform: `windows`, shell: `on`, sandboxes: `on`, write: `off`, screen: `off`, control: `off`, destructive: `off` },
+        secrets: [],
+    },
     {
         id: `ops-box`,
         kind: `ssh`,

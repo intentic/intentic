@@ -76,21 +76,26 @@
     },
     "deviceDetail": {
         "backup": "backup: {folder}",
+        "copyId": "Copy ID",
         "copyPath": "Copy path",
         "deviceIsntSyncingFolder": "This device isn't syncing a folder or holding any ports for this sandbox.",
         "folder": "Folder",
+        "id": "ID",
         "image": "Image",
         "localhost": "localhost:",
         "more": "… and {more} more",
         "noFolderDeviceOnly": "no folder: this device only mirrors ports",
         "noFolderSynced": "no folder synced",
         "notRunningHere": "not running here",
+        "notRunningHereHint": "Not running on this device: only its files or ports are here.",
         "offDeviceIsntPutting": "Off: this device isn't putting this sandbox's ports on its own localhost. File syncing is unaffected.",
         "ports": "Ports",
+        "running": "running",
         "share": "Share",
         "show": "show it",
         "stopped": "stopped",
-        "sync": "Sync"
+        "sync": "Sync",
+        "working": "working…"
     },
     "deviceRunLog": {
         "working": "Working…"

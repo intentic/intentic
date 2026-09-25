@@ -409,29 +409,49 @@ const managed = (running: boolean): Device => ({
 // Every control by label, anchors included, since a control that goes somewhere is a link.
 const labels = (el: HTMLElement): string[] => [...el.querySelectorAll(`button, a`)].map((control) => control.textContent?.trim() ?? ``);
 
+// The open row menu's items, in order: a menu row is a link named by the verb's label, teleported past the page.
+const menuRows = (): string[] =>
+    [...document.body.querySelectorAll(`.p-contextmenu a`)].map((row) => (row.textContent ?? ``).trim()).filter((label) => label !== ``);
+
+// Opens the ⋯ on the row named `name`: the menu sits on the same line as the row's disclosure, outside it.
+const openRowMenu = async (el: HTMLElement, name: string): Promise<void> => {
+    const line = disclosures(el).find((button) => (button.textContent ?? ``).includes(name))?.parentElement;
+    line?.querySelector<HTMLButtonElement>(`button[aria-label="More actions"]`)?.click();
+    await nextTick();
+};
+
+// The list's own tick boxes: the one over the list first, then one per row.
+const boxes = (el: HTMLElement): HTMLInputElement[] => [...el.querySelectorAll<HTMLInputElement>(`input[type="checkbox"]`)];
+
 // Every switch granted: the state the verb tests below assume; without it the row states the missing grant
 // instead.
 const granted = (): void => {
     capabilities.value = [{ id: `host-1`, kind: `device`, config: { platform: `linux`, shell: `on`, sandboxes: `on` } }];
 };
 
-it(`puts one verb on the row and everything else behind a menu`, () => {
+// A row carries no verbs in words: the list is acted on by selecting it, and each row keeps one quiet ⋯ whose first
+// item is the power verb its state calls for.
+it(`keeps every verb behind the row's one menu, the power verb first`, async () => {
     granted();
     const el = mount([managed(true)]);
     const found = labels(el);
-    expect(found).toContain(`Stop`);
-    // The overflow menu is a glyph, named for assistive tech rather than in words on the row.
-    expect(el.querySelector(`button[aria-label="More actions"]`)).not.toBeNull();
-    for (const verb of [`Restart`, `Update`, `Roll back`, `Resources…`, `Logs`, `Remove`]) {
+    for (const verb of [`Stop`, `Start`, `Restart`, `Update`, `Roll back`, `Resources…`, `Logs`, `Remove`]) {
         expect(found).not.toContain(verb);
     }
+    // The overflow menu is a glyph, named for assistive tech rather than in words on the row.
+    el.querySelector<HTMLButtonElement>(`button[aria-label="More actions"]`)?.click();
+    await nextTick();
+    expect(menuRows().slice(0, 3)).toEqual([`Stop`, `Restart`, `Logs`]);
+    expect(menuRows().at(-1)).toBe(`Remove`);
 });
 
-it(`offers Start, and no Stop, on a sandbox that is not running`, () => {
+it(`offers Start, and no Stop, on a sandbox that is not running`, async () => {
     granted();
-    const found = labels(mount([managed(false)]));
-    expect(found).toContain(`Start`);
-    expect(found).not.toContain(`Stop`);
+    const el = mount([managed(false)]);
+    el.querySelector<HTMLButtonElement>(`button[aria-label="More actions"]`)?.click();
+    await nextTick();
+    expect(menuRows()).toContain(`Start`);
+    expect(menuRows()).not.toContain(`Stop`);
 });
 
 // Pinned as vocabulary rather than via the teleported overlay, since the model is what both apps read.
@@ -673,11 +693,27 @@ const busyMachine = (): Device => ({
     },
 });
 
-it(`titles a sandbox by its folder rather than by a blob of hex`, () => {
-    const text = mount([busyMachine()]).textContent ?? ``;
+// The exact id is kept, one hover away rather than a second name on the line, and stated with a copy button once open.
+it(`titles a sandbox by its folder rather than by a blob of hex`, async () => {
+    const el = mount([busyMachine()]);
+    const text = el.textContent ?? ``;
     expect(text).toContain(`radarsu-web-platform-bce57bb9fe3b`);
     expect(text).toContain(`radarsu-local-0738cd6b5027`);
-    expect(text).toContain(`sandbox-bce57bb9fe3b`);
+    expect(text).not.toContain(`sandbox-bce57bb9fe3bradarsu`);
+    expect(hovers(el)).toContain(`sandbox-bce57bb9fe3b`);
+    await openRow(el, `radarsu-web-platform-bce57bb9fe3b`);
+    expect(el.textContent ?? ``).toContain(`IDsandbox-bce57bb9fe3b`);
+});
+
+// Where a sandbox stands on the machine is one glyph, its word the glyph's accessible name and hover, never a label.
+it(`states each sandbox's state as a glyph with its word on hover`, () => {
+    const el = mount([busyMachine()]);
+    const found = hovers(el);
+    expect(found).toContain(`¶ running ¶`);
+    expect(found).toContain(`¶ stopped ¶`);
+    // The facts ride as glyphs with a count, their sentence on hover.
+    expect(found).toContain(`2 ports on localhost: 8788, 33177`);
+    expect(found).toContain(`files sync to /home/radarsu/intentic/radarsu-web-platform-bce57bb9fe3b`);
 });
 
 it(`folds a sandbox to a line that still says what is under it`, () => {
@@ -1410,13 +1446,15 @@ const settle = async (): Promise<void> => {
 
 // A row whose container is somewhere else has no power state to change, so every verb the page had was about
 // somebody else's row; its only exit was a button two clicks inside it.
-it(`gives a sandbox this machine only syncs a verb of its own`, () => {
+it(`gives a sandbox this machine only syncs a verb of its own`, async () => {
     granted();
     const el = mount([holdings()]);
-    // One row carries the container verbs, the other the one act that applies to it.
-    expect(labels(el)).toContain(`Stop`);
-    expect(labels(el)).toContain(`Remove`);
-    expect(hovers(el)).toContain(`Its files stop syncing and its ports come off localhost`);
+    // Both rows carry the same ⋯; the one whose container is elsewhere holds the one act that applies to it.
+    expect(el.querySelectorAll(`button[aria-label="More actions"]`)).toHaveLength(2);
+    await openRowMenu(el, `not running here`);
+    expect(menuRows()).toEqual([`Remove`]);
+    // Its glyph says why, on hover: the container is not on this machine.
+    expect(hovers(el)).toContain(`Not running on this device`);
 });
 
 // A container removed on its own leaves an enrollment pointing at nothing, which is exactly the row this page was
@@ -1444,7 +1482,8 @@ it(`takes the container and the pairing together, and names each before it does`
 it(`ends the pairing alone on a sandbox this machine does not run`, async () => {
     granted();
     const el = mount([holdings()]);
-    rowButton(el, `Remove`)?.click();
+    await openRowMenu(el, `not running here`);
+    menuRow(`Remove`)?.click();
     await nextTick();
     expect(everything()).toContain(`Remove b from radarsu-rog?`);
     expect(everything()).not.toContain(`deleted on radarsu-rog`);
@@ -1455,19 +1494,21 @@ it(`ends the pairing alone on a sandbox this machine does not run`, async () => 
     expect(mirrorCalls).toEqual([{ hostId: `host-1`, command: `sync-unpair`, sandboxId: `work-b` }]);
 });
 
-// Ticking rows is opt-in: the list is read far more often than it is pruned.
-it(`removes several sandboxes on one press, once selecting is asked for`, async () => {
+// Selecting is how the list is managed: a box on every row, one over the list that ticks them all, and a bar offering
+// only what the ticked rows can take.
+it(`removes several sandboxes on one press, from the bar over the ticked rows`, async () => {
     granted();
     const el = mount([holdings()]);
-    expect(el.querySelectorAll(`input[type="checkbox"]`)).toHaveLength(0);
+    expect(boxes(el)).toHaveLength(3);
+    expect(labels(el)).not.toContain(`Remove`);
 
-    rowButton(el, `Select`)?.click();
-    await nextTick();
-    rowButton(el, `All`)?.click();
+    boxes(el)[0]?.click();
     await nextTick();
     expect(el.textContent ?? ``).toContain(`2 selected`);
+    // One row runs, the other only syncs: Stop acts on the one it can, and says how many.
+    expect(labels(el)).toContain(`Stop 1`);
 
-    rowButton(el, `Remove from this device`)?.click();
+    rowButton(el, `Remove`)?.click();
     await nextTick();
     // Both halves are named, each counted over the rows it is about.
     expect(everything()).toContain(`1 sandbox is deleted on radarsu-rog`);
@@ -1497,11 +1538,13 @@ it(`keeps the sandbox you are using out of a batch, and says why its box is dead
     };
     daemon.value = `https://work-a.example.com`;
     const el = mount([three]);
-    rowButton(el, `Select`)?.click();
-    await nextTick();
-    const boxes = [...el.querySelectorAll<HTMLInputElement>(`input[type="checkbox"]`)];
-    expect(boxes.map((box) => box.disabled)).toEqual([true, false, false]);
+    // The box over the list first, then one per row: the row in use is dead, and says why.
+    expect(boxes(el).map((box) => box.disabled)).toEqual([false, true, false, false]);
     expect(hovers(el)).toContain(`can't go in a batch`);
+    // Ticking every row ticks every row that can go, and none that can't.
+    boxes(el)[0]?.click();
+    await nextTick();
+    expect(boxes(el).map((box) => box.checked)).toEqual([true, false, true, true]);
 });
 
 // Removing the sandbox serving this page takes down the daemon that would have carried the unpair, so this one row
@@ -1527,10 +1570,45 @@ it(`draws no batch bar over a single removable row`, () => {
     granted();
     const row = holdings();
     const one = { ...row, report: { ...row.report!, pairings: [row.report!.pairings[0]!] } };
-    const found = labels(mount([one]));
-    expect(found).not.toContain(`Select`);
+    const el = mount([one]);
+    expect(boxes(el)).toHaveLength(0);
+    expect(el.textContent ?? ``).not.toContain(`Select all`);
     // The row itself still has its menu, which is where a single removal belongs.
-    expect(found).toContain(`Stop`);
+    expect(el.querySelector(`button[aria-label="More actions"]`)).not.toBeNull();
+});
+
+// Three power verbs just run, one row at a time through the one door, and the list gets one answer for all of them.
+it(`stops every ticked running sandbox on one press, and says so once`, async () => {
+    granted();
+    const el = mount([busyMachine()]);
+    boxes(el)[0]?.click();
+    await nextTick();
+    // Two of the three run: Stop names its count, Start the one it would start, Update all three.
+    expect(labels(el)).toEqual(expect.arrayContaining([`Start 1`, `Stop 2`, `Restart 2`, `Update`, `Remove`]));
+
+    rowButton(el, `Stop 2`)?.click();
+    await settle();
+    expect(verbCalls.map((call) => `${call.op}:${call.slug}`)).toEqual([`stop:sandbox-bce57bb9fe3b`, `stop:sandbox-0738cd6b5027`]);
+    expect(el.textContent ?? ``).toContain(`radarsu-rog: 2 sandboxes stopped.`);
+    // The ticks went with the press.
+    expect(el.textContent ?? ``).toContain(`Select all`);
+});
+
+// An update takes each sandbox offline while it restarts, so it asks first, naming every row.
+it(`asks before updating several sandboxes, naming each`, async () => {
+    granted();
+    const el = mount([busyMachine()]);
+    boxes(el)[0]?.click();
+    await nextTick();
+    rowButton(el, `Update`)?.click();
+    await nextTick();
+    expect(verbCalls).toEqual([]);
+    expect(everything()).toContain(`Update 3 sandboxes on radarsu-rog?`);
+    expect(everything()).toContain(`sandbox-4c64429cade7`);
+
+    dialogButton(`Update`)?.click();
+    await settle();
+    expect(verbCalls.map((call) => call.op)).toEqual([`update`, `update`, `update`]);
 });
 
 // one PC, two doors
@@ -1650,7 +1728,8 @@ it(`sends a container verb through the Windows door and a folder verb through th
     bothDoors();
     const el = mount([distroSide(), windowsSide()]);
     await nextTick();
-    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Stop`)?.click();
+    await openRowMenu(el, `work`);
+    menuRow(`Stop`)?.click();
     await nextTick();
     // Stopping the sandbox this page is not using needs no confirmation; the op leaves at once.
     expect(verbCalls.map((call) => call.hostId)).toEqual([`rog`]);
@@ -1669,7 +1748,15 @@ it(`updates the whole computer from one press, through its Windows side`, async 
     await waitFor(() => expect(agentCalls).toHaveLength(1));
     expect(agentCalls).toEqual([{ hostId: `rog`, op: `upgrade` }]);
     await nextTick();
-    // One log, under the door it went through: that side narrates every other side's leg too.
+    // One answer, under the door it went through: that side narrates every other side's leg too, and the side it
+    // only moved says nothing once its wait is over.
+    await settle();
+    expect((el.textContent ?? ``).match(/Update finished/g)).toHaveLength(1);
+    expect((el.textContent ?? ``).match(/Upgraded the agent: 1\.183\.0 → 1\.186\.0\./g)).toHaveLength(1);
+    // The machine's own output is evidence one press away, never the answer.
+    expect(el.textContent ?? ``).not.toContain(`Downloading the current agent…`);
+    rowButton(el, `Show output`)?.click();
+    await nextTick();
     expect((el.textContent ?? ``).match(/Downloading the current agent…/g)).toHaveLength(1);
 });
 
@@ -1706,4 +1793,68 @@ it(`keeps the computer's one update while only one side can be asked`, async () 
     expect(el.textContent ?? ``).toContain(`Environments`);
     expect(labels(el).filter((label) => label === `Update agent`)).toHaveLength(1);
     expect(labels(el).filter((label) => label === `Restart agent`)).toHaveLength(1);
+});
+
+// one press of an agent verb, start to finish
+
+// A machine still dialling five sandboxes that no longer exist: the concern offering "Forget them".
+const dialling = (): Device => ({
+    ...managed(true),
+    facts: {
+        os: `Ubuntu 24.04`,
+        arch: `x64`,
+        shell: `bash`,
+        home: `/home/ada`,
+        roots: [`/home/ada`],
+        links: { total: 7, unreachable: 5, unreachableSince: Date.now() - 7 * 3_600_000 },
+    },
+});
+
+// THE PRESS HAS TO END SOMEWHERE A READER CAN SEE. The concern's strip becomes the run: working, then done in the page's
+// own words, with the question it answered gone — its count is the reading from before the press — and the machine's
+// log one press away rather than the whole answer.
+it(`turns "Forget them" into the run it started, and says plainly when it is done`, async () => {
+    granted();
+    agentAnswer = () =>
+        Promise.resolve({
+            message: `The drop ran on this device. What it removed is in the lines above; this device's link count catches up within a few seconds.`,
+            settled: true,
+        });
+    const el = mount([dialling()]);
+    expect(el.textContent ?? ``).toContain(`5 of its 7 sandbox links have stopped answering`);
+
+    rowButton(el, `Forget them`)?.click();
+    await settle();
+    expect(agentCalls).toEqual([{ hostId: `host-1`, op: `forget-unreachable` }]);
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`Forgot 5 unreachable links`);
+    expect(text).toContain(`Still connected to 2 sandboxes.`);
+    // The question it answered is not asked again beside its own answer.
+    expect(text).not.toContain(`stopped answering`);
+    expect(labels(el)).not.toContain(`Forget them`);
+    // The machine's sentence pointed at a log; the log is there on request, and the page's words stand without it.
+    expect(text).not.toContain(`What it removed is in the lines above`);
+    expect(text).not.toContain(`Downloading the current agent…`);
+    rowButton(el, `Show output`)?.click();
+    await nextTick();
+    expect(el.textContent ?? ``).toContain(`Downloading the current agent…`);
+
+    // Put away, the reading speaks again: the concern returns only because this fixture still reports the dead links.
+    el.querySelector<HTMLButtonElement>(`button[aria-label="Dismiss"]`)?.click();
+    await nextTick();
+    expect(el.textContent ?? ``).not.toContain(`Forgot 5 unreachable links`);
+    expect(el.textContent ?? ``).toContain(`5 of its 7 sandbox links have stopped answering`);
+});
+
+// A refusal is the one ending a reader must act on, so it says what did not happen and offers the line to type there.
+it(`says what a refused drop did not do, and offers the command that does it on the machine`, async () => {
+    granted();
+    agentAnswer = () => Promise.reject(new Error(`"Run commands" is off for this device.`));
+    const el = mount([dialling()]);
+    rowButton(el, `Forget them`)?.click();
+    await settle();
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`Couldn't forget the unreachable links`);
+    expect(text).toContain(`"Run commands" is off for this device.`);
+    expect(text).toContain(`intentic-machine device forget-unreachable`);
 });

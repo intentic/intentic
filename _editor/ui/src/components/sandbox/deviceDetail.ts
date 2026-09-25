@@ -419,6 +419,78 @@ const summaryWarnings = (group: DeviceSandboxGroup): string[] => {
 
 export const groupSummary = (group: DeviceSandboxGroup): GroupSummary => ({ facts: summaryFacts(group), warnings: summaryWarnings(group) });
 
+// THE CLOSED LINE, IN GLYPHS. A folded row used to spell out every fact in its own words beside the name — "stopped",
+// "not running here", "2 ports", "ports only" — until the line was more words than name. Each fact is now a glyph with
+// the count beside it and the sentence one hover away (and in the accessible name, so nothing is lost to a screen
+// reader); only a warning keeps its words, since the words are the reason to open the row.
+export interface GroupChip {
+    readonly key: string;
+    readonly icon: `ports` | `eye-slash` | `folder` | `pause` | `exclamation-triangle`;
+    /** What sits beside the glyph: a count, or a word as short as "off". Empty draws the glyph alone. */
+    readonly text: string;
+    /** The whole sentence, for assistive tech, and for the hover unless `hint` says more. */
+    readonly label: string;
+    // What only the hover says: a synced folder's path. Kept out of `label`, which is the accessible name and so part
+    // of the closed line's text — and a path on a folded line is exactly what folding is for hiding.
+    readonly hint?: string;
+    readonly tone: `quiet` | `warning`;
+}
+
+const portChips = (group: DeviceSandboxGroup): GroupChip[] => {
+    if (mirroringOff(group.folder)) {
+        return [{ key: `mirroring`, icon: `ports`, text: `off`, label: `mirroring off`, tone: `quiet` }];
+    }
+    const chips: GroupChip[] = [];
+    const reached = countOf(group, `mirrored`);
+    if (reached > 0) {
+        const numbers = group.ports.filter((port) => port.state === `mirrored`).map((port) => port.port);
+        chips.push({ key: `ports`, icon: `ports`, text: String(reached), label: `${plural(reached, `port`, `ports`)} on localhost: ${numbers.join(`, `)}`, tone: `quiet` });
+    }
+    const busy = countOf(group, `busy`);
+    if (busy > 0) {
+        chips.push({ key: `busy`, icon: `ports`, text: `${busy} busy`, label: `${plural(busy, `port`, `ports`)} busy here`, tone: `quiet` });
+    }
+    const alone = countOf(group, `ignored`);
+    if (alone > 0) {
+        chips.push({ key: `alone`, icon: `eye-slash`, text: String(alone), label: `${plural(alone, `port`, `ports`)} left alone`, tone: `quiet` });
+    }
+    return chips;
+};
+
+// The folder half, only where it says something the row doesn't: a sync is where this device's copy lives, and a paused
+// one is a choice somebody made. A mirror-only pairing has no folder, and draws nothing.
+const folderChips = (group: DeviceSandboxGroup): GroupChip[] => {
+    const folder = group.folder;
+    if (folder === undefined || folder.mode !== `sync`) {
+        return [];
+    }
+    if (folder.paused === true) {
+        return [{ key: `folder`, icon: `pause`, text: ``, label: `file syncing paused`, tone: `quiet` }];
+    }
+    return [
+        {
+            key: `folder`,
+            icon: `folder`,
+            text: ``,
+            label: `files sync here`,
+            ...(folder.localDir === undefined ? {} : { hint: `files sync to ${folder.localDir}` }),
+            tone: `quiet`,
+        },
+    ];
+};
+
+export const groupChips = (group: DeviceSandboxGroup): GroupChip[] => [
+    ...summaryWarnings(group).map((warning): GroupChip => ({ key: `warn:${warning}`, icon: `exclamation-triangle`, text: warning, label: warning, tone: `warning` })),
+    ...portChips(group),
+    ...folderChips(group),
+];
+
+// One glyph for where the sandbox stands on this machine, in the column the chevron and the dot used to share.
+export type GroupStatus = `running` | `stopped` | `elsewhere`;
+
+export const groupStatus = (group: DeviceSandboxGroup): GroupStatus =>
+    group.sandbox === undefined ? `elsewhere` : group.sandbox.running ? `running` : `stopped`;
+
 // A sandbox reached over the user's own proxy has no sidecar at all, which differs from one that's
 // down; only the second is worth a word.
 export const groupNeedsAttention = (group: DeviceSandboxGroup): boolean => groupSummary(group).warnings.length > 0;

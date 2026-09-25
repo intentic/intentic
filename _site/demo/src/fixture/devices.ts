@@ -49,6 +49,27 @@ const AGENT = { running: true, pid: 48211, build: `1.275.0`, installed: `1.275.0
 // have to look different from the self row.
 const ENGINE = { memoryBytes: 32 * 1024 ** 3, cpus: 16 };
 const GIB = 1024 ** 3;
+// A sandbox the PC keeps the files of and runs nowhere any more: the row that only Remove applies to, and the reason
+// a list is worth pruning in bulk.
+const LEFT_BEHIND: NonNullable<Device[`report`]>[`pairings`][number] = {
+    sandboxId: `experiment-7f3e21a9c04d`,
+    mode: `sync`,
+    localDir: `/home/ada/intentic/old-experiment`,
+    mirroring: `on`,
+};
+
+// What the page has done to this PC since it loaded: the demo's containers answer Start, Stop and Remove, and its agent
+// drops the links it was dialling into nothing, so a press is followed by the reading it caused.
+const demoState = { running: new Map<string, boolean>(), removed: new Set<string>(), linksForgotten: false };
+
+export const setDemoSandboxRunning = (slug: string, running: boolean): void => void demoState.running.set(slug, running);
+export const removeDemoSandbox = (slug: string): void => void demoState.removed.add(slug);
+export const forgetDemoLinks = (): void => void (demoState.linksForgotten = true);
+
+// Seven links, five of them to sandboxes deleted hours ago: the strip that offers "Forget them", until it is pressed.
+const demoLinks = (now: number): NonNullable<NonNullable<Device[`facts`]>[`links`]> =>
+    demoState.linksForgotten ? { total: 2, unreachable: 0 } : { total: 7, unreachable: 5, unreachableSince: now - 7 * HOUR };
+
 const SANDBOXES: NonNullable<Device[`sandboxes`]> = [
     {
         slug: `sandbox`,
@@ -67,7 +88,31 @@ const SANDBOXES: NonNullable<Device[`sandboxes`]> = [
         image: `ghcr.io/intentic/sandbox:latest`,
         resources: { memoryBytes: 8 * GIB, privileged: false, gpu: false, hostRuntime: [], overlayRuntime: [] },
     },
+    {
+        slug: `docs-site`,
+        name: `docs-site`,
+        container: `intentic-sandbox-docs-site`,
+        running: true,
+        image: `ghcr.io/intentic/sandbox:latest`,
+        tunnelRunning: true,
+        resources: { memoryBytes: 4 * GIB, cpus: 2, privileged: false, gpu: false, hostRuntime: [], overlayRuntime: [] },
+    },
+    {
+        slug: `load-test`,
+        name: `load-test`,
+        container: `intentic-sandbox-load-test`,
+        running: false,
+        image: `ghcr.io/intentic/sandbox:latest`,
+        resources: { memoryBytes: 8 * GIB, privileged: false, gpu: false, hostRuntime: [], overlayRuntime: [] },
+    },
 ];
+
+// The containers as the page last left them.
+const sandboxes = (): NonNullable<Device[`sandboxes`]> =>
+    SANDBOXES.filter((box) => !demoState.removed.has(box.slug)).map((box) => ({ ...box, running: demoState.running.get(box.slug) ?? box.running }));
+
+const pairings = (): NonNullable<Device[`report`]>[`pairings`] =>
+    [PAIRING, SYNCED_ELSEWHERE, LEFT_BEHIND].filter((pairing) => !demoState.removed.has(pairing.sandboxId));
 
 export const demoDevices = (now: number): Device[] => [
     {
@@ -89,8 +134,9 @@ export const demoDevices = (now: number): Device[] => [
             roots: [`C:\\Users\\ada`],
             wslDistros: [`archlinux`],
             engine: ENGINE,
+            links: demoLinks(now),
         },
-        sandboxes: SANDBOXES,
+        sandboxes: sandboxes(),
         report: {
             hostname: `ada-pc`,
             os: `win32`,
@@ -123,12 +169,12 @@ export const demoDevices = (now: number): Device[] => [
             wsl: { distro: `archlinux` },
             engine: ENGINE,
         },
-        sandboxes: SANDBOXES,
+        sandboxes: sandboxes(),
         report: {
             hostname: `ada-pc`,
             os: `linux`,
             wsl: { distro: `archlinux` },
-            pairings: [PAIRING, SYNCED_ELSEWHERE],
+            pairings: pairings(),
             ports: [
                 { port: 5173, host: `127.0.0.1`, sandboxId: `demo`, state: `mirrored`, command: `node vite` },
                 { port: 6379, host: `127.0.0.1`, sandboxId: `demo`, state: `busy`, command: `docker-proxy` },

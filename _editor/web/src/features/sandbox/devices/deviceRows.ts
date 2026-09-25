@@ -281,11 +281,43 @@ export const removableHere = (machine: MachineRow, group: DeviceSandboxGroup): b
     return removal.container || removal.pairing;
 };
 
-// The rows a several-at-once removal may take. The sandbox serving the page is excluded on purpose: removing it
-// takes down the connection running the loop, abandoning every row still queued behind it. Its own row keeps the
-// single-sandbox verb, which warns about exactly that.
-export const massRemovable = (machine: MachineRow, ownSlug: string | undefined): DeviceSandboxGroup[] =>
-    machine.groups.filter((group) => removableHere(machine, group) && !isSelfMachine(machine, group, ownSlug));
+// WHAT A SELECTION CAN HAVE DONE TO IT. The list is managed by ticking rows and choosing a verb for all of them, so
+// each verb states which rows it applies to and the bar offers only the verbs something ticked can take — a Stop over
+// three rows of which one is running stops that one, and says so, rather than refusing the other two one by one.
+// The same floors as each row's own menu: a container verb needs a reachable door onto a real container, and Remove
+// needs something this machine holds (rowRemoval).
+export const BATCH_VERBS = [`start`, `stop`, `restart`, `update`, `remove`] as const;
+export type BatchVerb = (typeof BATCH_VERBS)[number];
+
+export const batchEligible = (machine: MachineRow, group: DeviceSandboxGroup, verb: BatchVerb): boolean => {
+    if (verb === `remove`) {
+        return removableHere(machine, group);
+    }
+    const manager = managerOf(machine);
+    if (manager === undefined || !manageable(manager.device, group)) {
+        return false;
+    }
+    const running = group.sandbox?.running === true;
+    return verb === `start` ? !running : verb === `update` ? true : running;
+};
+
+// The rows a batch may take. The sandbox serving the page is excluded on purpose: stopping, restarting, updating or
+// removing it takes down the connection running the loop, abandoning every row still queued behind it. Its own row
+// keeps its menu, whose every severing verb warns about exactly that.
+export const batchable = (machine: MachineRow, ownSlug: string | undefined): DeviceSandboxGroup[] =>
+    machine.groups.filter((group) => !isSelfMachine(machine, group, ownSlug) && BATCH_VERBS.some((verb) => batchEligible(machine, group, verb)));
+
+/** One verb the bar offers, and exactly the ticked rows it would act on. */
+export interface BatchAction {
+    readonly verb: BatchVerb;
+    readonly groups: readonly DeviceSandboxGroup[];
+}
+
+// Only the verbs at least one ticked row can take, in the menu's own reading order with Remove last.
+export const batchActions = (machine: MachineRow, groups: readonly DeviceSandboxGroup[]): BatchAction[] =>
+    BATCH_VERBS.map((verb) => ({ verb, groups: groups.filter((group) => batchEligible(machine, group, verb)) })).filter(
+        (action) => action.groups.length > 0,
+    );
 
 // A conflict between two EDITED copies has no switch: choosing between them is judgement per file, so the
 // control is a turn an agent can run against both ends, not a one-click winner. Offered only where at least

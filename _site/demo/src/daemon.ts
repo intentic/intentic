@@ -26,7 +26,7 @@ import { KNOWLEDGE_BASE } from "../vendor/knowledge/wire-types";
 import { BROWSER_SESSIONS } from "./browser";
 import { type DemoGrant, grantAccess, grants, revokeAccess } from "./fixture/access";
 import { automationApprovals, automationCatalog, automationsList, deleteAutomation, resolveApproval, saveAutomation } from "./fixture/automations";
-import { demoDevices } from "./fixture/devices";
+import { demoDevices, forgetDemoLinks, removeDemoSandbox, setDemoSandboxRunning } from "./fixture/devices";
 import { demoMetrics } from "./fixture/metrics";
 import { demoStorageClean, demoStorageReport, demoStorageScan } from "./fixture/storage";
 import { demoLoops } from "./fixture/loops";
@@ -207,15 +207,34 @@ const attach = (conversationId: string): Frames<AttachFrame> => {
 // One device agent's update or restart, in the frames the real flow sends: `line` for progress, `result` for what the
 // machine says at the end. Paced so a press is watchable rather than over before the row has drawn its log.
 const AGENT_STEP_MS = 450;
-const agentFlow = (id: string, op: string): Frames<DeviceFlowLine> => {
-    const said =
-        op === `restart`
-            ? { lines: [`Stopping the agent loop on ${id}.`], result: `The agent loop was restarted on this device.` }
-            : {
-                  lines: [`Downloading the current agent (1.275.0)…`, `  100% of 87 MB`, `Swapping the binary and restarting the loop.`],
-                  result: `Already on the current agent (1.275.0). Nothing to do.`,
-              };
-    return new Frames((sink) => {
+
+// The machine's own words for each op, as the real agent prints them (_devices/machine/src/device/tools/agent.ts).
+const DEAD_LINKS = [`b055ea494d4d`, `d1143f54bc31`, `04d00cfa2fc0`, `52c0a0524bcb`, `db30f83623ad`].map((id) => `https://sandbox-${id}.sbx.intentic.dev`);
+const agentSaid = (id: string, op: string): { lines: string[]; result: string; after?: () => void } => {
+    if (op === `restart`) {
+        return { lines: [`Stopping the agent loop on ${id}.`], result: `The agent loop was restarted on this device.` };
+    }
+    if (op === `forget-unreachable`) {
+        return {
+            lines: [
+                `Dropping this device's links to sandboxes that have stopped answering. The agent closes them on its next pass; this connection stays up.`,
+                `Started device forget-unreachable (pid 33844), detached from this connection so it finishes either way. Log: C:\\Users\\ada\\.intentic\\machine\\machine-update.log`,
+                `Dropped 5 unreachable links: ${DEAD_LINKS.join(`, `)}.`,
+                `Still connected to 2 sandboxes.`,
+            ],
+            result: `The drop ran on this device. What it removed is in the lines above; this device's link count catches up within a few seconds.`,
+            after: forgetDemoLinks,
+        };
+    }
+    return {
+        lines: [`Downloading the current agent (1.275.0)…`, `  100% of 87 MB`, `Swapping the binary and restarting the loop.`],
+        result: `Already on the current agent (1.275.0). Nothing to do.`,
+    };
+};
+
+// Lines, then the one terminal frame, paced like a machine that is doing the work.
+const paced = (said: { lines: string[]; result: string; after?: () => void }): Frames<DeviceFlowLine> =>
+    new Frames((sink) => {
         let step = 0;
         const timer = setInterval(() => {
             const line = said.lines[step];
@@ -224,12 +243,40 @@ const agentFlow = (id: string, op: string): Frames<DeviceFlowLine> => {
                 step += 1;
                 return;
             }
+            said.after?.();
             sink.emit({ kind: `result`, message: said.result });
             sink.close();
         }, AGENT_STEP_MS);
         return () => clearInterval(timer);
     });
+
+const agentFlow = (id: string, op: string): Frames<DeviceFlowLine> => paced(agentSaid(id, op));
+
+// A container verb on the demo PC: the power verbs and removal change what the next reading says, the rest answer and
+// leave it as it was.
+const SANDBOX_DONE: Record<string, string> = {
+    start: `Started`,
+    stop: `Stopped`,
+    restart: `Restarted`,
+    update: `Updated`,
+    rollback: `Rolled back`,
+    remove: `Removed`,
+    reshape: `Reshaped`,
 };
+const sandboxFlow = (slug: string, op: string): Frames<DeviceFlowLine> =>
+    paced({
+        lines: op === `logs` ? [`[${slug}] listening on :8080`, `[${slug}] GET /health 200 2ms`] : [`docker ${op} intentic-sandbox-${slug}`],
+        result: `${SANDBOX_DONE[op] ?? `Ran ${op} on`} sandbox "${slug}".`,
+        after: () => {
+            if (op === `start` || op === `restart` || op === `update` || op === `rollback`) {
+                setDemoSandboxRunning(slug, true);
+            } else if (op === `stop`) {
+                setDemoSandboxRunning(slug, false);
+            } else if (op === `remove`) {
+                removeDemoSandbox(slug);
+            }
+        },
+    });
 
 // Prefixes for the rail's isolated extension runs (xt-/dg-/mt-), refused here; a prefixless run still works.
 const EXTENSION_RUN_PREFIXES = [`xt-`, `dg-`, `mt-`];
@@ -472,6 +519,15 @@ export const procedures = {
         // Each environment of a PC answers for itself, which is what a machine-wide update walks through — without this
         // the only state that page could show was the refusal of a route nobody serves.
         runDeviceAgentFlow: ({ id, op }) => agentFlow(id, op),
+        // The container verbs and the unpair a removal ends with, answered the way a machine does, so a batch over
+        // several rows can be pressed and watched rather than refused as a route nobody serves.
+        manageDeviceSandbox: ({ slug, op }) => sandboxFlow(slug, op),
+        runDeviceCommand: ({ command, sandboxId }) => {
+            if (command === `sync-unpair` && sandboxId !== undefined) {
+                removeDemoSandbox(sandboxId);
+            }
+            return { ok: true, refused: false, message: `Ran ${command}${sandboxId === undefined ? `` : ` for ${sandboxId}`}.` };
+        },
         closeBrowser: () => refuse(`This is the demo workspace: the browser you are watching is a recording, so there is nothing to close.`),
         subagents: () => ({ sessions: [] }),
     },

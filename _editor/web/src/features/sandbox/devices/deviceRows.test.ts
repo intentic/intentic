@@ -1,6 +1,9 @@
 import type { Device } from "@intentic/sandbox-contract";
 import { deviceAttention } from "./health/deviceAttention";
 import {
+    batchable,
+    batchActions,
+    batchEligible,
     boardBody,
     type DeviceRow,
     deviceRow,
@@ -15,7 +18,6 @@ import {
     machineRows,
     machineState,
     managerOf,
-    massRemovable,
     removableHere,
     rowMatches,
     rowRemoval,
@@ -413,11 +415,59 @@ test(`offers nothing on a machine that cannot be reached`, () => {
     expect(asleep.groups.map((group) => removableHere(asleep, group))).toEqual([false, false]);
 });
 
-// REMOVING THE SANDBOX SERVING THE PAGE TAKES THE PAGE DOWN, and with it the loop working through the rest of the
-// batch. It keeps its own row's verb, which warns about exactly that; it is the batch it cannot join.
+// STOPPING OR REMOVING THE SANDBOX SERVING THE PAGE TAKES THE PAGE DOWN, and with it the loop working through the rest
+// of the batch. It keeps its own row's menu, which warns about exactly that; it is the batch it cannot join.
 test(`keeps the sandbox you are using out of a batch, and everything else in`, () => {
-    expect(massRemovable(bothKinds(), `work-abc`).map((group) => group.sandboxId)).toEqual([`elsewhere`]);
-    expect(massRemovable(bothKinds(), undefined).map((group) => group.sandboxId)).toEqual([`work-abc`, `elsewhere`]);
+    expect(batchable(bothKinds(), `work-abc`).map((group) => group.sandboxId)).toEqual([`elsewhere`]);
+    expect(batchable(bothKinds(), undefined).map((group) => group.sandboxId)).toEqual([`work-abc`, `elsewhere`]);
+});
+
+// One running container, one stopped, one this machine only syncs: the selection the bar is read over most.
+const THREE: Held = {
+    pairings: [
+        { sandboxId: `up`, mode: `sync`, localDir: `/home/ada/up`, mutagenStatus: `watching` },
+        { sandboxId: `elsewhere`, mode: `sync`, localDir: `/home/ada/elsewhere`, mutagenStatus: `watching` },
+    ],
+    sandboxes: [
+        { slug: `up`, container: `sandbox-up`, running: true, image: `img:1` },
+        { slug: `down`, container: `sandbox-down`, running: false, image: `img:1` },
+    ],
+};
+const three = () => card(row({}, THREE));
+
+// A verb applies to a row where the row's own menu would offer it: power by state, update to any container, and
+// removal to anything this machine holds — including the row whose container lives somewhere else.
+test(`states which rows each batch verb can act on`, () => {
+    const machine = three();
+    const verbsOf = (id: string) =>
+        ([`start`, `stop`, `restart`, `update`, `remove`] as const).filter((verb) =>
+            batchEligible(machine, machine.groups.find((group) => group.sandboxId === id)!, verb),
+        );
+    expect(verbsOf(`up`)).toEqual([`stop`, `restart`, `update`, `remove`]);
+    expect(verbsOf(`down`)).toEqual([`start`, `update`, `remove`]);
+    expect(verbsOf(`elsewhere`)).toEqual([`remove`]);
+});
+
+// The bar offers what the ticked rows can take, each with exactly the rows it would act on, and nothing else.
+test(`offers only the verbs a selection can take, each over the rows it applies to`, () => {
+    const machine = three();
+    const offered = batchActions(machine, machine.groups).map((action) => [action.verb, action.groups.map((group) => group.sandboxId)]);
+    expect(offered).toEqual([
+        [`start`, [`down`]],
+        [`stop`, [`up`]],
+        [`restart`, [`up`]],
+        [`update`, [`up`, `down`]],
+        [`remove`, [`up`, `elsewhere`, `down`]],
+    ]);
+    const filesOnly = machine.groups.filter((group) => group.sandboxId === `elsewhere`);
+    expect(batchActions(machine, filesOnly).map((action) => action.verb)).toEqual([`remove`]);
+});
+
+// No door, no verb: an asleep machine's rows can be read and not acted on, so a selection over them offers nothing.
+test(`offers no batch verb on a machine that cannot be reached`, () => {
+    const asleep = card(deviceRow(device({ online: false, gap: `offline`, report: report(THREE), sandboxes: THREE.sandboxes }), undefined));
+    expect(batchActions(asleep, asleep.groups)).toEqual([]);
+    expect(batchable(asleep, undefined)).toEqual([]);
 });
 
 test(`offers no filter over a board small enough to read`, () => {
