@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { z } from "zod";
 import type { Services } from "../composition.js";
 import { stateRelPath } from "../state-paths.js";
-import { convertDocument } from "../store/evolution/conversions.js";
+import { readDocument } from "@intentic/sandbox-contract/documents";
+import { CHECK_SETTLES } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { recordManifestProblems } from "../store/manifest-problems.js";
 
@@ -35,18 +36,7 @@ export const workspaceIdentity = async (services: IdentitySeams): Promise<string
         recordManifestProblems(path, []);
         return id;
     }
-    let parsed: z.infer<typeof WorkspaceIdentitySchema> | undefined;
-    let detail = "the file does not match what this build expects";
-    try {
-        parsed = WorkspaceIdentitySchema.safeParse(convertDocument(workspaceIdentityDocument.history, "object", JSON.parse(text)).value).data;
-    } catch {
-        // allow(silent-catch): not JSON is reported below, like a schema reject, and the file is left as it stands
-        detail = "the file is not valid JSON";
-    }
-    if (parsed === undefined) {
-        recordManifestProblems(path, [{ kind: "unreadable", detail }]);
-        return unreadableId(text);
-    }
-    recordManifestProblems(path, []);
-    return parsed.id;
+    const read = readDocument(text, workspaceIdentityDocument, { kind: "whole", parse: (raw) => WorkspaceIdentitySchema.safeParse(raw).data }, CHECK_SETTLES);
+    recordManifestProblems(path, read.problems);
+    return read.value === undefined ? unreadableId(text) : read.value.id;
 };

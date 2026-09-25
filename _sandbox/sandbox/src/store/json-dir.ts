@@ -2,11 +2,11 @@ import { readdir, readFile, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { errnoCode, errorMessage, isMissing, undefinedIfMissing } from "@intentic/base/errors";
 import { queueOnFile } from "@intentic/base/fs";
-import { convertDocument } from "./evolution/conversions.js";
+import { readDocument } from "@intentic/sandbox-contract/documents";
+import { CHECK_SETTLES } from "./evolution/conversions.js";
 import type { DocumentSpec } from "./evolution/documents.js";
 import { asideOf, ManifestUnreadableError, writeJsonFile } from "./json-file.js";
 import { newerBuildRan } from "./newest-run.js";
-import { carryUnknown } from "./evolution/passthrough.js";
 
 // Directory of one JSON file per entry, for a store with a second writer besides the daemon; jsonFile is the
 // single-manifest shape for a daemon-only writer.
@@ -37,11 +37,15 @@ export interface JsonDir<T> {
 export const jsonDir = <T>(dir: string, parse: (raw: unknown) => T | undefined, document?: DocumentSpec): JsonDir<T> => {
     const entryPath = (id: string): string => join(dir, `${id}.json`);
     // Raw JSON as today's shape: the document's conversions, when it has any, before any schema sees it.
-    const converted = (raw: unknown): unknown => (document === undefined ? raw : convertDocument(document.history, "object", raw).value);
+    // Each file one document, so its conversions apply to the file as a whole.
+    const shape = { history: document?.history ?? [], granularity: "object" } as const;
 
     // One entry as it stands: absent, read (the raw JSON as today's shape and what parse made of it, for a write to
     // carry forward), or there and unreadable, with what was wrong.
-    type Loaded = { readonly kind: "absent" } | { readonly kind: "read"; readonly raw: unknown; readonly parsed: T } | { readonly kind: "unreadable"; readonly detail: string };
+    type Loaded =
+        | { readonly kind: "absent" }
+        | { readonly kind: "read"; readonly parsed: T; readonly carry: (updated: T) => unknown }
+        | { readonly kind: "unreadable"; readonly detail: string };
     const load = async (path: string): Promise<Loaded> => {
         let text: string | undefined;
         try {
@@ -52,19 +56,10 @@ export const jsonDir = <T>(dir: string, parse: (raw: unknown) => T | undefined, 
         if (text === undefined) {
             return { kind: "absent" };
         }
-        let raw: unknown;
-        try {
-            raw = JSON.parse(text);
-        } catch {
-            return { kind: "unreadable", detail: "the file is not valid JSON" };
-        }
-        try {
-            raw = converted(raw);
-        } catch (error) {
-            return { kind: "unreadable", detail: `a conversion to this build's shape failed (${errorMessage(error)})` };
-        }
-        const parsed = parse(raw);
-        return parsed === undefined ? { kind: "unreadable", detail: "the file does not match what this build expects" } : { kind: "read", raw, parsed };
+        const read = readDocument<T>(text, shape, { kind: "whole", parse: (raw) => parse(raw) }, CHECK_SETTLES);
+        return read.value === undefined
+            ? { kind: "unreadable", detail: read.problems[0]?.detail ?? "the file does not match what this build expects" }
+            : { kind: "read", parsed: read.value, carry: read.carry };
     };
 
     const read = async (id: string): Promise<(T & { id: string }) | undefined> => {
@@ -122,7 +117,7 @@ export const jsonDir = <T>(dir: string, parse: (raw: unknown) => T | undefined, 
                     }
                     await rename(path, await asideOf(path)).catch(undefinedIfMissing);
                 }
-                await writeJsonFile(path, before.kind === "read" ? carryUnknown(before.raw, before.parsed, body) : body);
+                await writeJsonFile(path, before.kind === "read" ? before.carry(body) : body);
             }),
         remove: (id) =>
             unlink(entryPath(id)).then(

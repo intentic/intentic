@@ -3,8 +3,8 @@ import { drop, rename } from "./conversions.js";
 import type { VanishedKeys } from "./conversion-types.js";
 import { defineDocument } from "./documents.js";
 
-// The vanished-key check the generated shape checks (untracked) apply to every frozen shape, pinned on shapes small enough to
-// read: what it names, and what it must not.
+// The vanished-key check the generated shape checks (`write-state-shapes.ts --checks`) apply to every frozen shape,
+// pinned on shapes small enough to read: what it names, and what it must not.
 
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 const holds = <T extends true>(): T | undefined => undefined;

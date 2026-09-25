@@ -37,7 +37,7 @@ export {
     type TransformConversion,
 } from "@intentic/sandbox-contract/documents";
 
-const CHECK_SETTLES = version === DEV_VERSION;
+export const CHECK_SETTLES = version === DEV_VERSION;
 
 export const convertDocument = (conversions: readonly Conversion[], granularity: Granularity, raw: unknown): Converted =>
     convertWith(conversions, granularity, raw, CHECK_SETTLES);

@@ -55,6 +55,7 @@ import { conversionsDocument } from "../store/evolution/state-convergence.js";
 import { stateRegroupStep } from "../store/evolution/steps/state-regroup.js";
 import { issueInstallsDocument, webchatInstallsDocument } from "../store/installs.js";
 import { newestRunDocument } from "../store/newest-run.js";
+import { stagedUpdateDocument } from "../system/boot/staged-update.js";
 import { heavyCommandsDocument } from "../system/resources/heavy-commands.js";
 import { workspaceIdentityDocument } from "../system/workspace-identity.js";
 import { accountUsageDocument } from "../usage/account-usage.js";
@@ -132,6 +133,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     issueInstallsDocument,
     webchatInstallsDocument,
     newestRunDocument,
+    stagedUpdateDocument,
     heavyCommandsDocument,
     workspaceIdentityDocument,
     accountUsageDocument,

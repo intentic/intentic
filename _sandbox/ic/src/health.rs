@@ -186,6 +186,18 @@ mod tests {
         assert_eq!(running_step(&converting).as_deref(), Some("convert state"));
     }
 
+    /// The contract's example of `/health`'s `state` (StateStatusSchema, spelled once in its test and written to
+    /// golden/), which this reader must keep reading.
+    const GOLDEN_HEALTH: &str =
+        include_str!("../../../_shared/sandbox-contract/golden/health-state.json");
+
+    #[test]
+    fn the_contracts_health_state_reads_as_an_open_journal() {
+        let health: serde_json::Value = serde_json::from_str(GOLDEN_HEALTH).expect("JSON");
+        assert_eq!(health["state"]["journal"], "open");
+        assert!(journal_open(&health));
+    }
+
     #[test]
     fn only_the_contracts_own_spelling_reads_as_an_open_journal() {
         assert!(journal_open(

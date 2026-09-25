@@ -20,6 +20,16 @@ const FORMAT: u64 = 1;
 /// would hold the update with it.
 const LIMIT: Duration = Duration::from_secs(120);
 
+/// Where a sandbox's stored data lives in its container, the planner's flag for each, and whether a container
+/// always has it: the run contract's `DATA_MOUNTS` (_shared/sandbox-run), which this binary cannot import, so a
+/// test holds this copy to the contract's golden/data-mounts.json. `/agent-auth` rides only where the container has
+/// it (a dev sandbox sharing AI logins); without it the planner looked for those vaults in the workspace.
+const DATA_MOUNTS: [(&str, &str, bool); 3] = [
+    ("/work", "--workspace", true),
+    ("/history", "--history", true),
+    ("/agent-auth", "--auth", false),
+];
+
 /// The probe container's name, `<prefix><slug>`. Named at all so a probe that outlives its deadline can be
 /// removed (killing the CLI leaves the container running), and never under CONTAINER_PREFIX: every listing of
 /// the sandboxes on this machine is keyed on that prefix, and a probe must not read as a sandbox called
@@ -78,7 +88,7 @@ pub fn check(
     log: &Log,
 ) -> Result<()> {
     println!("intentic: pre-flighting the state conversions of {image} on this sandbox's data (read-only)…");
-    let plan = probe(container, slug, image, extra, log);
+    let (plan, _) = probe(container, slug, image, extra, log);
     log.line(&format!("state pre-flight: {plan:?}"));
     report(plan, image, verb)
 }
@@ -93,42 +103,50 @@ pub fn staged_plan(
     extra: &[String],
     log: &Log,
 ) -> Option<String> {
-    let plan = probe(container, slug, image, extra, log);
+    let (plan, line) = probe(container, slug, image, extra, log);
     log.line(&format!("state pre-flight for the staged build: {plan:?}"));
-    marker_json(&plan)
+    marker_json(&plan, line)
 }
 
-/// A plan in the marker's shape: the planner's own field names, so the daemon reads it with the schema it already has.
-fn marker_json(plan: &Plan) -> Option<String> {
-    let entries = |list: &[Entry], field: &str| -> Vec<serde_json::Value> {
-        list.iter()
-            .map(|entry| serde_json::json!({ "document": entry.document, field: entry.text }))
-            .collect()
-    };
-    let value = match plan {
-        Plan::Clear { steps, downgrade } => {
-            serde_json::json!({ "ok": true, "downgrade": downgrade, "steps": entries(steps, "change") })
-        }
-        Plan::Refused(failures) => {
-            serde_json::json!({ "ok": false, "failures": entries(failures, "detail") })
-        }
-        Plan::Unknown(_) => return None,
-    };
-    Some(value.to_string())
+/// The plan for the marker: the planner's own line, verbatim (the contract's StatePlanSchema, which the daemon reads
+/// the marker with), so nothing it says is lost on the way, a step's `detail` included. None when there is no plan.
+fn marker_json(plan: &Plan, line: Option<String>) -> Option<String> {
+    match plan {
+        Plan::Unknown(_) => None,
+        Plan::Clear { .. } | Plan::Refused(_) => line,
+    }
 }
 
-/// Run the planner once, against read-only mounts of the running container's /work and /history.
-fn probe(container: &str, slug: &str, image: &str, extra: &[String], log: &Log) -> Plan {
-    let (Some(work), Some(history)) = (
-        docker::mount_source(container, "/work"),
-        docker::mount_source(container, "/history"),
-    ) else {
-        return Plan::Unknown(format!(
-            "{container} has no mounts at /work and /history to show the planner"
-        ));
-    };
+/// Run the planner once, against read-only mounts of the running container's data (DATA_MOUNTS). Answers the plan,
+/// and the planner's line itself when it gave one.
+fn probe(
+    container: &str,
+    slug: &str,
+    image: &str,
+    extra: &[String],
+    log: &Log,
+) -> (Plan, Option<String>) {
+    let mut mounts: Vec<Mount> = Vec::new();
+    for (destination, flag, required) in DATA_MOUNTS {
+        match docker::mount_source(container, destination) {
+            Some(source) => mounts.push(Mount {
+                source,
+                destination,
+                flag,
+            }),
+            None if required => {
+                return (
+                    Plan::Unknown(format!(
+                        "{container} has no mount at {destination} to show the planner"
+                    )),
+                    None,
+                )
+            }
+            None => {}
+        }
+    }
     let name = format!("{NAME_PREFIX}{slug}");
-    let args = probe_argv(&name, image, &work, &history, extra);
+    let args = probe_argv(&name, image, &mounts, extra);
     log.section("state pre-flight");
     log.line(&format!("docker {}", args.join(" ")));
     // A probe that an interrupted run left behind still holds the name, and would fail this one for a reason
@@ -137,20 +155,29 @@ fn probe(container: &str, slug: &str, image: &str, extra: &[String], log: &Log) 
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
     let ran = match docker::capture_bounded(&arg_refs, LIMIT) {
         Ok(ran) => ran,
-        Err(Fail(reason)) => return Plan::Unknown(reason),
+        Err(Fail(reason)) => return (Plan::Unknown(reason), None),
     };
     log.line(&ran.stdout);
     log.line(&ran.stderr);
     if ran.timed_out {
         docker::quiet(&["rm", "-f", &name]);
     }
-    verdict(&ran, image)
+    let plan = verdict(&ran, image);
+    (plan, last_line(&ran.stdout).map(str::to_string))
+}
+
+/// One data volume as the planner sees it: the running container's source, where it is mounted, and the planner's
+/// flag naming that place.
+struct Mount {
+    source: String,
+    destination: &'static str,
+    flag: &'static str,
 }
 
 /// The planner's `docker run`. Split out so it is asserted without a daemon, because each flag is a promise
-/// about the owner's data: `:ro` on both mounts is what makes asking harmless, `--network none` keeps a
+/// about the owner's data: `:ro` on every data mount is what makes asking harmless, `--network none` keeps a
 /// planner from reaching anything but those files, and `--rm` leaves nothing behind.
-fn probe_argv(name: &str, image: &str, work: &str, history: &str, extra: &[String]) -> Vec<String> {
+fn probe_argv(name: &str, image: &str, mounts: &[Mount], extra: &[String]) -> Vec<String> {
     let mut args: Vec<String> = [
         "run",
         "--rm",
@@ -161,30 +188,24 @@ fn probe_argv(name: &str, image: &str, work: &str, history: &str, extra: &[Strin
         // The image's own entrypoint is the daemon, which would boot and convert for real.
         "--entrypoint",
         "node",
-        "-v",
-        &format!("{work}:/work:ro"),
-        "-v",
-        &format!("{history}:/history:ro"),
     ]
     .iter()
     .map(|arg| arg.to_string())
     .collect();
+    for mount in mounts {
+        args.push("-v".to_string());
+        args.push(format!("{}:{}:ro", mount.source, mount.destination));
+    }
     for mount in extra {
         args.push("-v".to_string());
         args.push(mount.clone());
     }
-    args.extend(
-        [
-            image,
-            SCRIPT,
-            "--workspace",
-            "/work",
-            "--history",
-            "/history",
-        ]
-        .iter()
-        .map(|arg| arg.to_string()),
-    );
+    args.push(image.to_string());
+    args.push(SCRIPT.to_string());
+    for mount in mounts {
+        args.push(mount.flag.to_string());
+        args.push(mount.destination.to_string());
+    }
     args
 }
 
@@ -228,9 +249,13 @@ fn error_line(stderr: &str) -> Option<String> {
 /// The planner's one JSON line → a plan. Pure, and tolerant where tolerance is safe: anything unreadable is
 /// Unknown (the swap proceeds as it always did), and only a document that says `"ok": false` in so many words
 /// becomes a refusal.
+/// The last line: a runtime that prints a notice to stdout before the plan must not cost the answer.
+fn last_line(stdout: &str) -> Option<&str> {
+    stdout.lines().map(str::trim).rfind(|line| !line.is_empty())
+}
+
 fn read_plan(stdout: &str) -> Plan {
-    // The last line: a runtime that prints a notice to stdout before the plan must not cost the answer.
-    let Some(line) = stdout.lines().map(str::trim).rfind(|line| !line.is_empty()) else {
+    let Some(line) = last_line(stdout) else {
         return Plan::Unknown("the planner answered nothing".to_string());
     };
     let Ok(plan) = serde_json::from_str::<Value>(line) else {
@@ -368,32 +393,116 @@ mod tests {
         }
     }
 
+    /// The contract's examples (the daemon's StatePlanSchema, spelled once in its test and written to golden/), which
+    /// this reader must keep reading.
+    const GOLDEN_CLEAR: &str =
+        include_str!("../../../../_shared/sandbox-contract/golden/state-plan-clear.json");
+    const GOLDEN_REFUSED: &str =
+        include_str!("../../../../_shared/sandbox-contract/golden/state-plan-refused.json");
+    const GOLDEN_MOUNTS: &str =
+        include_str!("../../../../_shared/sandbox-run/golden/data-mounts.json");
+
+    /// The planner prints its plan as one line; the golden files are pretty-printed.
+    fn one_line(golden: &str) -> String {
+        serde_json::from_str::<Value>(golden)
+            .expect("a golden file is JSON")
+            .to_string()
+    }
+
     #[test]
-    fn the_staged_marker_gets_the_plan_in_the_planners_own_field_names() {
-        let clear = Plan::Clear {
-            steps: vec![entry("settings.json", "renames a to b")],
-            downgrade: true,
-        };
-        let json: serde_json::Value =
-            serde_json::from_str(&marker_json(&clear).expect("a clear plan is recorded"))
-                .expect("JSON");
+    fn the_contracts_plans_read_as_what_they_say() {
         assert_eq!(
-            json,
-            serde_json::json!({ "ok": true, "downgrade": true, "steps": [{ "document": "settings.json", "change": "renames a to b" }] })
+            read_plan(&one_line(GOLDEN_CLEAR)),
+            Plan::Clear {
+                steps: vec![
+                    entry(
+                        "conversations-db-schema",
+                        "upgrades the conversations database schema"
+                    ),
+                    entry(
+                        ".intentic/config/personas.json",
+                        "moves it from .intentic/identities.json"
+                    ),
+                ],
+                downgrade: false,
+            }
         );
-        let refused = Plan::Refused(vec![entry("automations.json", "no such theme")]);
-        let json: serde_json::Value =
-            serde_json::from_str(&marker_json(&refused).expect("a refusal is recorded"))
-                .expect("JSON");
         assert_eq!(
-            json,
-            serde_json::json!({ "ok": false, "failures": [{ "document": "automations.json", "detail": "no such theme" }] })
+            read_plan(&one_line(GOLDEN_REFUSED)),
+            Plan::Refused(vec![entry(
+                ".intentic/config/automations.json",
+                "conversion \"converts numbered kinds\" failed: no such kind"
+            )])
+        );
+    }
+
+    #[test]
+    fn the_staged_marker_gets_the_planners_line_verbatim() {
+        let line = one_line(GOLDEN_CLEAR);
+        let plan = read_plan(&line);
+        // Every field the planner said, a conversion's `detail` included, which the marker once dropped.
+        assert_eq!(marker_json(&plan, Some(line.clone())), Some(line));
+        let refused = one_line(GOLDEN_REFUSED);
+        assert_eq!(
+            marker_json(&read_plan(&refused), Some(refused.clone())),
+            Some(refused)
         );
         // No plan to be had leaves the marker as it always was.
         assert_eq!(
-            marker_json(&Plan::Unknown("predates the engine".to_string())),
+            marker_json(
+                &Plan::Unknown("predates the engine".to_string()),
+                Some("garbage".to_string())
+            ),
             None
         );
+    }
+
+    #[test]
+    fn the_probe_mounts_what_the_run_contract_says_data_lives_on() {
+        let golden: Vec<Value> = serde_json::from_str(GOLDEN_MOUNTS).expect("JSON");
+        let contract: Vec<(String, String, bool)> = golden
+            .iter()
+            .map(|mount| {
+                (
+                    mount["destination"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_string(),
+                    mount["planner"].as_str().unwrap_or_default().to_string(),
+                    mount["required"].as_bool().unwrap_or_default(),
+                )
+            })
+            .collect();
+        let ours: Vec<(String, String, bool)> = DATA_MOUNTS
+            .iter()
+            .map(|(destination, flag, required)| {
+                (destination.to_string(), flag.to_string(), *required)
+            })
+            .collect();
+        assert_eq!(ours, contract);
+    }
+
+    fn mounts(work: &str, history: &str, auth: Option<&str>) -> Vec<Mount> {
+        let mut list = vec![
+            Mount {
+                source: work.to_string(),
+                destination: "/work",
+                flag: "--workspace",
+            },
+            Mount {
+                source: history.to_string(),
+                destination: "/history",
+                flag: "--history",
+            },
+        ];
+        if let Some(auth) = auth {
+            list.push(Mount {
+                source: auth.to_string(),
+                destination: "/agent-auth",
+                flag: "--auth",
+            });
+        }
+        list
     }
 
     #[test]
@@ -401,8 +510,7 @@ mod tests {
         let argv = probe_argv(
             "intentic-preflight-abc123",
             "ghcr.io/intentic/sandbox:stable",
-            "intentic-workspace-abc123",
-            "intentic-history-abc123",
+            &mounts("intentic-workspace-abc123", "intentic-history-abc123", None),
             &[],
         );
         assert_eq!(
@@ -431,13 +539,30 @@ mod tests {
     }
 
     #[test]
+    fn a_dev_sandboxs_shared_logins_ride_read_only_and_the_planner_is_told_where() {
+        let argv = probe_argv(
+            "n",
+            "intentic-sandbox:dev",
+            &mounts("w", "h", Some("intentic-dev-agent-auth")),
+            &[],
+        );
+        assert!(argv.contains(&"intentic-dev-agent-auth:/agent-auth:ro".to_string()));
+        let auth = argv.iter().position(|arg| arg == "--auth").expect("--auth");
+        assert_eq!(argv[auth + 1], "/agent-auth");
+        let image = argv
+            .iter()
+            .position(|arg| arg == "intentic-sandbox:dev")
+            .unwrap();
+        assert!(auth > image);
+    }
+
+    #[test]
     fn a_bind_source_and_the_dev_loops_trees_ride_before_the_image() {
         let extra = vec!["/src/_sandbox/sandbox/dist:/opt/sandbox/dist".to_string()];
         let argv = probe_argv(
             "n",
             "intentic-sandbox:dev",
-            "/srv/work",
-            "/srv/history",
+            &mounts("/srv/work", "/srv/history", None),
             &extra,
         );
         assert!(argv.contains(&"/srv/work:/work:ro".to_string()));

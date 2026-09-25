@@ -26,9 +26,6 @@ export const recordManifestProblems = (path: string, problems: readonly Manifest
 
 // Manifests with a problem a person can act on, sorted by path for a stable poll; recording is indiscriminate, the
 // audience filter (isReportedManifest) happens here where the path is workspace-relative.
-// Must match the schema-rejection detail json-file.ts writes; a reword there has to move this constant too.
-const SCHEMA_REJECTED = "the file does not match what this build expects";
-
 // A schema rejection looks identical whether hand-mangled or written by a newer, rolled-back build. If the workspace's
 // stamp says newer, the report says so instead of implying damage; nothing reads the file differently.
 export const withSkewHint = (problems: readonly ManifestProblem[], running: string, newest: string | undefined): ManifestProblem[] =>
@@ -36,7 +33,8 @@ export const withSkewHint = (problems: readonly ManifestProblem[], running: stri
         if (newest === undefined || !isNewer(newest, running)) {
             return problem;
         }
-        if (problem.kind === "unreadable" && problem.detail === SCHEMA_REJECTED) {
+        // Matched by reason (readDocument names it), never by the wording of `detail`.
+        if (problem.kind === "unreadable" && problem.reason === "rejected") {
             return {
                 ...problem,
                 detail: `it was written by intentic ${newest}, newer than this sandbox (${running})`,

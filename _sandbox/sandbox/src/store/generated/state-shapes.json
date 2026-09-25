@@ -169,6 +169,12 @@
       "since": "v1.312.0"
     }
   ],
+  "history:update-staged.json": [
+    {
+      "type": "{ at: number; channel: string; plan?: { converts?: { change: string; detail?: string; document: string }[]; digest?: string; downgrade?: boolean; engine?: number; failures?: { detail: string; document: string }[]; files?: string[]; ok: boolean; plan?: 1; steps?: { change: string; detail?: string; document: string }[]; version?: string }; version?: string }",
+      "since": "unreleased"
+    }
+  ],
   "history:usage-parks.json": [
     {
       "type": "{ provider: string; until: number }",

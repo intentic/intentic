@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
+import { STATE_PLAN_FORMAT, type StatePlan } from "@intentic/sandbox-contract";
 import { statePath } from "./state-paths.js";
 import { recordNewestRun } from "./store/newest-run.js";
 import { planState } from "./store/evolution/state-convergence.js";
@@ -34,16 +35,18 @@ await recordNewestRun(workspace, version, { write: false });
 // with (bootstrap/state-boot.ts): the same list, not whatever this entry's imports happen to reach.
 const plan = await planState({ roots, documents: stateDocuments(), steps: stateSteps(), version });
 
-process.stdout.write(
-    `${JSON.stringify({
-        plan: 1,
-        version,
-        engine: plan.engine,
-        digest: plan.digest,
-        ok: plan.failures.length === 0,
-        downgrade: plan.downgrade,
-        failures: plan.failures,
-        steps: plan.steps,
-        files: [...plan.writes.keys()].map((path) => (path.startsWith(join(workspace, "/")) ? path.slice(workspace.length + 1) : path)),
-    })}\n`,
-);
+// Typed by the contract (StatePlanSchema) that ic's reader and the staged marker share; the key order is the one the
+// host has always read.
+const line: StatePlan = {
+    plan: STATE_PLAN_FORMAT,
+    version,
+    engine: plan.engine,
+    digest: plan.digest,
+    ok: plan.failures.length === 0,
+    downgrade: plan.downgrade,
+    failures: [...plan.failures],
+    steps: [...plan.steps],
+    converts: [...plan.converts],
+    files: [...plan.writes.keys()].map((path) => (path.startsWith(join(workspace, "/")) ? path.slice(workspace.length + 1) : path)),
+};
+process.stdout.write(`${JSON.stringify(line)}\n`);

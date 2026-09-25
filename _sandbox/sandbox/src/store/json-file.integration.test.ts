@@ -322,7 +322,7 @@ describe("jsonEntries", () => {
             unreadable: false,
         });
         expect(recordedProblems(path)).toEqual([
-            { kind: "invalidEntry", detail: 'entry 1 could not be converted to this build\'s shape (conversion "converts numbered kinds" failed: no such kind); it is kept as written' },
+            { kind: "invalidEntry", reason: "conversion-failed", detail: 'entry 1 could not be converted to this build\'s shape (conversion "converts numbered kinds" failed: no such kind); it is kept as written' },
         ]);
         await file.update((current) => current.filter((entry) => entry.id !== "c"));
         expect(JSON.parse(await readFile(path, "utf8"))).toEqual([

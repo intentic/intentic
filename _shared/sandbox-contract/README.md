@@ -29,8 +29,12 @@ flowchart LR
   picker and publishes it as `state` on each account row. The editor reads that field, and runs the same function only
   for a daemon too old to send it.
 - `./documents` is the vocabulary stored files evolve by, shared by the daemon's stores and an extension's own files
-  (`sandboxDocument`): guarded, pure conversions of raw JSON that settle on their own output, and the passthrough that
-  keeps what a build does not know on its writes.
+  (`sandboxDocument`): guarded, pure conversions of raw JSON that settle on their own output, the passthrough that
+  keeps what a build does not know on its writes, and `readDocument`, the one read every store makes of a file (JSON,
+  conversions, parse, whole or one entry at a time), whose problems carry a `reason` a reader matches on.
+- `StatePlanSchema` and `StateStatusSchema` are what `ic` reads by field name: the update pre-flight's line (embedded
+  verbatim in the staged-update marker) and `/health`'s `state`. `golden/` holds their examples, which the contract's
+  test keeps current and ic's Rust tests parse.
 - The wire no oRPC route carries is defined by the Rust crates that speak it (`_sandbox/front/crates`): `tunnel` (the
   `/tunnel/v1` door, its headers, envelope, close codes, ALPN and the transports an edge declares), `browser-wire`
   (what a browser sees: the terminal socket and its messages, the WebTransport path, the edge's verdict) and

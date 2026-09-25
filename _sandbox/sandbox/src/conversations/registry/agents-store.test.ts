@@ -122,7 +122,7 @@ describe("sqliteAgentsStore", () => {
         db.db.prepare("INSERT INTO conversation(id, record) VALUES (?, ?)").run("unreadable", JSON.stringify({ placement: { kind: "main" } }));
         store.load();
         expect(recordedProblems(IN_MEMORY)).toEqual([
-            { kind: "invalidEntry", detail: "conversation unreadable: its record does not match what this build expects (identity); it is kept as written" },
+            { kind: "invalidEntry", reason: "rejected", detail: "conversation unreadable: its record does not match what this build expects (identity); it is kept as written" },
         ]);
         store.remove(["unreadable"]);
         store.load();

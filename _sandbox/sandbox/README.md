@@ -53,9 +53,12 @@ flowchart LR
   child waiting for room, heavy commands (over the local `room.sock`) and the editor's memory gauge all read its one
   snapshot, taken by the formula in `@intentic/constants/memory-room`.
 - Stored files evolve under one engine (`store/`). Each is declared with `defineDocument` beside its store, carrying
-  the conversions its shape has had; `jsonFile` runs them on every read and keeps what it does not know on writes.
-  Before any store opens, `store/evolution/state-convergence.ts` writes converted files back under a journal a rolled-back build
-  undoes, committed once boot converges. `src/state-plan.ts` is the same plan, read-only, for `ic`'s pre-flight. Both
+  the conversions its shape has had; `jsonFile`, `jsonEntries` and `jsonDir` read through the contract's one
+  `readDocument`, which runs them on every read, and keep what they do not know on writes, so a store's next save is
+  what persists a converted shape. Before any store opens, `store/evolution/state-convergence.ts` does only what a read
+  cannot (documents that moved, structural steps: a regroup, a database schema, an import) under a journal a
+  rolled-back build undoes, committed once boot converges; it runs each document's conversions without writing, so one
+  that would fail is named first. `src/state-plan.ts` is the same plan, read-only, for `ic`'s pre-flight. Both
   take every document and structural step from `bootstrap/state-registry.ts` (`main.ts` hands it to the boot step),
   never from what a process loaded; it sits in the boot wiring, above every subsystem, because it imports them all.
   `store/shapes/write-state-shapes.ts --freeze` (the check after each land) writes it from every

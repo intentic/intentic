@@ -219,6 +219,7 @@ export * from "./schemas/share.js";
 export * from "./schemas/shared.js";
 export * from "./schemas/system-prompt.js";
 export * from "./schemas/system.js";
+export * from "./schemas/state-plan.js";
 export * from "./schemas/terminal.js";
 export * from "./schemas/turn-break.js";
 export * from "./schemas/keep-warm.js";

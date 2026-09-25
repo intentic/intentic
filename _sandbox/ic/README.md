@@ -25,9 +25,10 @@ flowchart LR
   sandbox's state, its share as docker enforces it, the shape it runs with, the shape saved for its next restart and
   the update staged for it, in the sandbox contract's `DeviceSandbox` shape.
 - Before a swap touches the running container, it pre-flights the target image's state conversions against
-  read-only mounts of `/work` and `/history` (`preflight.rs`) and refuses if one would fail; `--skip-preflight`
-  overrides. `prepare` records the staged image's plan in the marker it leaves the sandbox, so the update card says
-  what an update converts before anyone accepts it. A new version that never commits its state journal is rolled back
+  read-only mounts of the container's data (`/work`, `/history`, and `/agent-auth` where the container has it: the run
+  contract's `DATA_MOUNTS`, held to it by a golden test) (`preflight.rs`) and refuses if one would fail;
+  `--skip-preflight` overrides. `prepare` records the staged image's plan in the marker it leaves the sandbox, the
+  planner's line verbatim, so the update card says what an update converts before anyone accepts it. A new version that never commits its state journal is rolled back
   onto the parked container.
 - A sandbox's **shape** is the owner's own ask for memory, CPUs, privileged and GPU, always whole
   ([`shape.rs`](src/shape.rs)). `ic sandbox shape <slug> … --when now` restarts onto it; `--when next-restart` checks

@@ -63,7 +63,7 @@ test("a file that is not JSON is reported, workspace-relative, as wholly ignored
     // The read still succeeds; the daemon boots on a broken file, just not silently.
     expect(await file.read()).toEqual({ hashlineEdits: false, skills: [] });
     expect(manifestProblems(root)).toEqual([
-        { path: `${STATE_DIR}/config/settings.json`, problems: [{ kind: `unreadable`, detail: `the file is not valid JSON` }] },
+        { path: `${STATE_DIR}/config/settings.json`, problems: [{ kind: `unreadable`, reason: `not-json`, detail: `the file is not valid JSON` }] },
     ]);
 });
 
@@ -194,7 +194,7 @@ test("a conversation record this build cannot read is reported by the registry's
     expect(manifestProblems(root, history)).toEqual([
         {
             path: `${HISTORY_ROOT}/conversations.db`,
-            problems: [{ kind: "invalidEntry", detail: "conversation unreadable: its record does not match what this build expects (identity); it is kept as written" }],
+            problems: [{ kind: "invalidEntry", reason: "rejected", detail: "conversation unreadable: its record does not match what this build expects (identity); it is kept as written" }],
         },
     ]);
     db.db.close();

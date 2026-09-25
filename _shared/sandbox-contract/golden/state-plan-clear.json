@@ -1,0 +1,29 @@
+{
+  "plan": 1,
+  "version": "1.400.0",
+  "engine": 84,
+  "digest": "c8cff51cab20a2b5",
+  "ok": true,
+  "downgrade": false,
+  "failures": [],
+  "steps": [
+    {
+      "document": "conversations-db-schema",
+      "change": "upgrades the conversations database schema"
+    },
+    {
+      "document": ".intentic/config/personas.json",
+      "change": "moves it from .intentic/identities.json"
+    }
+  ],
+  "converts": [
+    {
+      "document": ".intentic/config/settings.json",
+      "change": "converts personaRouting from its old values",
+      "detail": "\"suggest\" became true"
+    }
+  ],
+  "files": [
+    ".intentic/config/personas.json"
+  ]
+}

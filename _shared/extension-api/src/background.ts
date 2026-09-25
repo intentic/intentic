@@ -1,8 +1,6 @@
 import {
     at,
-    carryUnknown,
     type Conversion,
-    convertDocument,
     drop,
     dropAll,
     fold,
@@ -10,6 +8,7 @@ import {
     mapValue,
     nested,
     pinDefault,
+    readDocument,
     rename,
     retireEntries,
     retype,
@@ -260,36 +259,35 @@ export interface SandboxDocumentOptions<T> {
     readonly granularity?: Granularity;
 }
 
+// Every handle on one path queues behind the others, not just behind itself: two handles opened on the same file (two
+// panels, a panel and a command) would otherwise each read, change and write, and the second write would drop the first.
+const queues = new Map<string, Promise<unknown>>();
+
 export const sandboxDocument = <T>(host: () => IntenticApi, path: string, options: SandboxDocumentOptions<T>): SandboxDocument<T> => {
-    const convert = (raw: unknown): unknown => convertDocument(options.history ?? [], options.granularity ?? `object`, raw).value;
-    // Absent is undefined; present but unreadable throws, so no caller mistakes it for absent.
-    const readRaw = async (): Promise<unknown> => {
+    const shape = { history: options.history ?? [], granularity: options.granularity ?? `object` } as const;
+    // The one reading every store shares (@intentic/sandbox-contract/documents): undefined when absent; a value, or
+    // `value: undefined` with why, when present.
+    const readAs = async () => {
         // Through the contract's own read, which throws for a refused or unreachable read where `readJson` answers absent.
         const answer = await host().sandbox.rpc.workspace.file({ path });
-        if (!answer.present) {
-            return undefined;
-        }
-        return convert(JSON.parse(answer.content));
+        return answer.present ? readDocument<T>(answer.content, shape, { kind: `whole`, parse: (raw) => options.parse(raw) }) : undefined;
     };
     const read = async (): Promise<T> => {
         try {
-            const raw = await readRaw();
-            return (raw === undefined ? undefined : options.parse(raw)) ?? options.fallback();
+            return (await readAs())?.value ?? options.fallback();
         } catch {
-            // allow(silent-catch): a file this version cannot read reads as the fallback, the contract `read` states.
+            // allow(silent-catch): a file this version cannot reach reads as the fallback, the contract `read` states.
             return options.fallback();
         }
     };
-    let queue: Promise<unknown> = Promise.resolve();
     const update = (change: (current: T) => T): Promise<boolean> => {
         const run = async (): Promise<boolean> => {
             const current = sandboxScopeGuard();
-            const raw = await readRaw();
-            const parsed = raw === undefined ? undefined : options.parse(raw);
-            if (raw !== undefined && parsed === undefined) {
-                throw new Error(`${path} holds what this version of the extension cannot read; it is left as it is`);
+            const stored = await readAs();
+            if (stored !== undefined && stored.value === undefined) {
+                throw new Error(`${path} holds what this version of the extension cannot read; it is left as it is`, { cause: stored.problems[0] });
             }
-            const before = parsed ?? options.fallback();
+            const before = stored?.value ?? options.fallback();
             const after = change(before);
             if (after === before) {
                 return true;
@@ -297,13 +295,13 @@ export const sandboxDocument = <T>(host: () => IntenticApi, path: string, option
             if (!current()) {
                 return false;
             }
-            const written = raw === undefined ? after : carryUnknown(raw, parsed, after);
+            const written = stored === undefined ? after : stored.carry(after);
             await host().workspace.write(path, `${JSON.stringify(written, undefined, 2)}\n`);
             return true;
         };
-        const next = queue.then(run, run);
+        const next = (queues.get(path) ?? Promise.resolve()).then(run, run);
         // allow(silent-catch): the queue only orders the next update behind this one; this one's caller still gets its rejection
-        queue = next.catch(() => undefined);
+        queues.set(path, next.catch(() => undefined));
         return next;
     };
     return { read, update };

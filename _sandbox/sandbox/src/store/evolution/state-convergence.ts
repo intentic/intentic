@@ -12,27 +12,22 @@ import { isDowngrade, newestRunVersion, recordNewestRun } from "../newest-run.js
 import { commitEpisodes, type Episode, GRACE_MS, type Journal, openEpisode, pruneEpisodes, readJournal, restoreEpisode, writeJournal } from "./state-journal.js";
 import type { StructuralStep } from "./state-steps.js";
 import { version as buildVersion } from "../../version.js";
+import type { PlanFailure, PlanStep, StateStatus } from "@intentic/sandbox-contract";
 
-// The boot step that brings this workspace's stored files to this build's shapes before any store opens: moves
-// documents that changed address, runs structural steps, and writes back every document whose conversions change it,
-// all under a journal (state-journal.ts) that keeps the pre-images until the build has booted all the way. Planning is
+// The boot step that does, before any store opens, what a store's read cannot: moves documents that changed address
+// and runs structural steps (a regroup, a database's schema, an import), under a journal (state-journal.ts) that keeps
+// the pre-images until the build has booted all the way. A document's conversions are not written back here: every
+// read runs them, and a store's next write persists the converted shape with what it does not know carried along. The
+// plan still runs each document's conversions over its file, without writing, so a conversion that would fail on this
+// sandbox's data is named (and refuses the update in the pre-flight) before anything is touched. Planning is
 // separate from applying and reads only, so the pre-flight (state-plan.ts) runs the very same plan inside the target
 // image over read-only mounts before an update touches anything. Both take every document and step from their caller,
 // which reads them from state-registry.ts: nothing here depends on which modules a process loaded.
 
 export type StateRoots = Readonly<Record<DocumentRoot, string>>;
 
-export interface PlanStep {
-    readonly document: string;
-    readonly change: string;
-    // What was particular about this one: a conflict's losing value, a retired entry, a mapped value.
-    readonly detail?: string;
-}
-
-export interface PlanFailure {
-    readonly document: string;
-    readonly detail: string;
-}
+// The wire shapes the host reads (@intentic/sandbox-contract, StatePlanSchema).
+export type { PlanFailure, PlanStep } from "@intentic/sandbox-contract";
 
 export interface StatePlan {
     // The conversion count builds before the digest compared (documents.ts, engineEpoch); reported, never decided by.
@@ -41,7 +36,10 @@ export interface StatePlan {
     readonly digest: string;
     // A newer release than this build ran here (a rollback): its files may hold what this build cannot read.
     readonly downgrade: boolean;
+    // What the boot changes: documents moved, structural steps.
     readonly steps: readonly PlanStep[];
+    // What this build's conversions change in these files as its stores read them; written by each store's next save.
+    readonly converts: readonly PlanStep[];
     readonly failures: readonly PlanFailure[];
     // Every file the plan writes, to its new text (undefined deletes it), in the order they apply.
     readonly writes: ReadonlyMap<string, string | undefined>;
@@ -56,15 +54,15 @@ export interface StatePlan {
     readonly sourceOf: (path: string) => string;
 }
 
-// Past this a document is converted on read only: rewriting a large ledger at boot would cost the boot, not the reader.
-const EAGER_LIMIT = 5 * 1024 * 1024;
+// Past this a document's conversions are not tried at plan time: reading a large ledger would cost the boot, not the
+// reader, whose own read converts and reports what it cannot.
+const PLAN_LIMIT = 5 * 1024 * 1024;
 
 export const documentPath = (roots: StateRoots, spec: Pick<DocumentSpec, "root" | "path">): string => join(roots[spec.root], spec.path);
 
 // How a plan names a document: the workspace-relative path people see in the tree, or the volume and its path.
 const displayOf = (spec: Pick<DocumentSpec, "root" | "path">): string => (spec.root === "workspace" ? spec.path : `${spec.root}:${spec.path}`);
 
-const canonical = (value: unknown): string => `${JSON.stringify(value, undefined, 2)}\n`;
 
 // The volumes as the plan will leave them: reads see the writes, copies and renames planned so far, and nothing
 // touches the disk.
@@ -143,6 +141,7 @@ const createOverlay = (): Overlay => {
 interface PlanDraft {
     readonly overlay: Overlay;
     readonly steps: PlanStep[];
+    readonly converts: PlanStep[];
     readonly failures: PlanFailure[];
     readonly touches: string[];
     readonly effects: (() => Promise<void>)[];
@@ -194,11 +193,11 @@ const copyDocument = async (overlay: Overlay, spec: DocumentSpec, from: string, 
     }
 };
 
-// Writes back one file whose conversions change it; a file that is not JSON, or too large to rewrite at boot, is left to
-// the store, which converts on read and reports what it cannot.
+// Runs one file's conversions without writing: what they change is reported, what would fail is a failure. A file that
+// is not JSON, or too large to read at boot, is left to the store, which converts on read and reports what it cannot.
 const planConversion = async (spec: DocumentSpec, path: string, draft: PlanDraft): Promise<void> => {
     const text = await draft.overlay.read(path);
-    if (text === undefined || text.length > EAGER_LIMIT) {
+    if (text === undefined || text.length > PLAN_LIMIT) {
         return;
     }
     let raw: unknown;
@@ -213,15 +212,14 @@ const planConversion = async (spec: DocumentSpec, path: string, draft: PlanDraft
         if (converted.changes.length === 0) {
             return;
         }
-        draft.overlay.writes.set(path, canonical(converted.value));
         const document = spec.directory ? `${displayOf(spec)}/${basename(path)}` : displayOf(spec);
-        // One step per conversion that plainly applied, and one per change with something particular to say.
+        // One line per conversion that plainly applied, and one per change with something particular to say.
         const plain = new Set(converted.changes.filter((one) => one.detail === undefined).map((one) => one.conversion));
         for (const change of plain) {
-            draft.steps.push({ document, change });
+            draft.converts.push({ document, change });
         }
         for (const one of converted.changes.filter((candidate) => candidate.detail !== undefined)) {
-            draft.steps.push({ document, change: one.conversion, ...(one.detail === undefined ? {} : { detail: one.detail }) });
+            draft.converts.push({ document, change: one.conversion, ...(one.detail === undefined ? {} : { detail: one.detail }) });
         }
     } catch (error) {
         draft.failures.push({ document: displayOf(spec), detail: errorMessage(error) });
@@ -269,7 +267,7 @@ export interface PlanOptions {
 export const planState = async ({ roots, documents, steps, version = buildVersion, journal, now = Date.now() }: PlanOptions): Promise<StatePlan> => {
     const standing = journal ?? (await readJournal(roots.history));
     const onDisk = documents.filter((spec) => spec.boot);
-    const draft: PlanDraft = { overlay: createOverlay(), steps: [], failures: [], touches: [], effects: [], seen: [] };
+    const draft: PlanDraft = { overlay: createOverlay(), steps: [], converts: [], failures: [], touches: [], effects: [], seen: [] };
     for (const step of steps.filter((candidate) => candidate.phase === "layout")) {
         await planStep(step, roots, draft);
     }
@@ -290,6 +288,7 @@ export const planState = async ({ roots, documents, steps, version = buildVersio
         digest: conversionDigest(documents, steps),
         downgrade: isDowngrade(version),
         steps: draft.steps,
+        converts: draft.converts,
         failures: draft.failures,
         writes: draft.overlay.writes,
         copies: draft.overlay.copies,
@@ -342,7 +341,7 @@ const appendLedger = async (workspaceRoot: string, entry: z.infer<typeof LedgerE
 let journalOpen = false;
 let runningEngine = 0;
 
-export const stateStatus = (): { readonly journal: "open" | "none"; readonly engine: number } => ({
+export const stateStatus = (): StateStatus => ({
     journal: journalOpen ? "open" : "none",
     engine: runningEngine,
 });

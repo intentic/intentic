@@ -1,4 +1,4 @@
-import { DAEMON_PORT, LOCAL_PORT } from "@intentic/constants";
+import { DAEMON_PORT, HISTORY_ROOT, LOCAL_PORT, WORKSPACE_ROOT } from "@intentic/constants";
 import { shellQuote } from "./quote.js";
 
 // The sandbox container's run contract: every way a sandbox starts, composed from one definition instead of four
@@ -36,6 +36,19 @@ export const sandboxNames = (slug: string): SandboxNames => ({
     dockerVolume: `intentic-docker-${slug}`,
     network: `intentic-workspace-${slug}`,
 });
+
+// Where a dev sandbox's shared AI-provider logins are mounted, a mount and AGENT_AUTH_DIR together (`mounts` carries it).
+export const AGENT_AUTH_ROOT = "/agent-auth";
+
+// Where a sandbox's stored data lives inside its container, and the state planner's flag for each (the daemon's
+// state-plan.ts): every file the daemon converts is on one of these. The update pre-flight (ic, preflight.rs) mounts
+// exactly these from the running container, read-only, and plans against them; its copy is held to this list by
+// golden/data-mounts.json. `required: false` rides only where the container has it.
+export const DATA_MOUNTS = [
+    { destination: WORKSPACE_ROOT, planner: "--workspace", required: true },
+    { destination: HISTORY_ROOT, planner: "--history", required: true },
+    { destination: AGENT_AUTH_ROOT, planner: "--auth", required: false },
+] as const;
 
 // Container-scoped capabilities every sandbox gets: SYS_ADMIN for mount namespaces, SYS_PTRACE for diagnosis.
 export const SANDBOX_CAPABILITIES = ["SYS_ADMIN", "SYS_PTRACE"] as const;

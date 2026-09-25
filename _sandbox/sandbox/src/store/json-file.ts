@@ -1,13 +1,14 @@
 import { lstat, readFile, rename } from "node:fs/promises";
 import { basename } from "node:path";
-import { errnoCode, errorMessage, isMissing, undefinedIfMissing } from "@intentic/base/errors";
+import { errnoCode, isMissing, undefinedIfMissing } from "@intentic/base/errors";
 import { queueOnFile, writeFileAtomic } from "@intentic/base/fs";
-import { convertDocument } from "./evolution/conversions.js";
+import { type DocumentParse, readDocument } from "@intentic/sandbox-contract/documents";
+import { CHECK_SETTLES } from "./evolution/conversions.js";
 import type { DocumentSpec } from "./evolution/documents.js";
 import { type ManifestProblem, recordManifestProblems } from "./manifest-problems.js";
 import { type ManifestEdit, registerManifestEditor } from "./manifest-repair.js";
 import { newerBuildRan } from "./newest-run.js";
-import { carryUnknown, type EntryRead, type IdKeys, reemitQuarantined } from "./evolution/passthrough.js";
+import type { IdKeys } from "./evolution/passthrough.js";
 
 // One JSON file, read through a schema and written whole; every `*-store.ts` in the daemon sits on this.
 // - atomicity: writes go to a sibling temp file and rename over the target, so a reader never sees a half-written file
@@ -76,14 +77,6 @@ export const asideOf = async (path: string): Promise<string> =>
 export const writeJsonFile = (path: string, value: unknown, mode?: number): Promise<void> =>
     writeFileAtomic(path, `${JSON.stringify(value, undefined, 2)}\n`, mode);
 
-// One decoded read: the value, and how a change to it becomes the bytes to write without losing what parse dropped.
-interface Decoded<T> {
-    readonly value: T;
-    readonly carry: (updated: T) => unknown;
-}
-
-type Decode<T> = (raw: unknown, report: Report) => Decoded<T> | undefined;
-
 interface Read<T> {
     readonly state: JsonFileState<T>;
     // Present only for a readable file: the bytes a change to its value writes.
@@ -91,17 +84,19 @@ interface Read<T> {
 }
 
 interface Store<T> {
-    readonly decode: Decode<T>;
+    // How the file reads (@intentic/sandbox-contract/documents, readDocument): whole, or one entry at a time.
+    readonly how: DocumentParse<T>;
     readonly fallback: () => T;
     readonly mode: number | undefined;
     readonly onUnreadable: "setAside" | "refuse";
     readonly document: DocumentSpec | undefined;
-    // True when `decode` runs the document's conversions itself, one entry at a time, instead of over the whole file.
-    readonly convertsEntries?: boolean;
 }
 
+// A file with no document has no conversions to run.
+const NO_HISTORY = { history: [], granularity: "object" } as const;
+
 const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
-    const { decode, fallback, mode, onUnreadable, document, convertsEntries = false } = store;
+    const { how, fallback, mode, onUnreadable, document } = store;
     // Value plus whether it stands in for content that exists but couldn't be read; a plain read answers the same
     // either way.
     const readState = async (): Promise<Read<T>> => {
@@ -112,7 +107,7 @@ const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
             return read;
         };
         const unreadable = (detail: string): Read<T> => {
-            problems.push({ kind: "unreadable", detail });
+            problems.push({ kind: "unreadable", reason: "io", detail });
             return done({ state: { value: fallback(), unreadable: true, detail } });
         };
         let text: string;
@@ -125,25 +120,13 @@ const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
             }
             return unreadable(`the file could not be read (${errnoCode(error) ?? String(error)})`);
         }
-        let raw: unknown;
-        try {
-            raw = JSON.parse(text);
-        } catch {
-            return unreadable("the file is not valid JSON");
+        const read = readDocument(text, document ?? NO_HISTORY, how, CHECK_SETTLES);
+        problems.push(...read.problems);
+        if (read.value === undefined) {
+            const detail = read.problems[0]?.detail ?? "the file does not match what this build expects";
+            return done({ state: { value: fallback(), unreadable: true, detail } });
         }
-        if (document !== undefined && !convertsEntries) {
-            try {
-                raw = convertDocument(document.history, document.granularity, raw).value;
-            } catch (error) {
-                return unreadable(`a conversion to this build's shape failed (${errorMessage(error)})`);
-            }
-        }
-        const decoded = decode(raw, (problem) => problems.push(problem));
-        if (decoded === undefined) {
-            // Schema-rejected: the file's content is ignored in favor of defaults, with no other way to notice.
-            return unreadable("the file does not match what this build expects");
-        }
-        return done({ state: { value: decoded.value, unreadable: false }, carry: decoded.carry });
+        return done({ state: { value: read.value, unreadable: false }, carry: read.carry });
     };
 
     // Edits the raw JSON on the same queue as update, for removing a key `parse` already drops before `update` ever
@@ -204,75 +187,23 @@ const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
 
 export const jsonFile = <T>(path: string, { parse, fallback, mode, onUnreadable = "setAside", document }: JsonFileOptions<T>): JsonFile<T> =>
     openJsonFile(path, {
-        decode: (raw, report) => {
-            const value = parse(raw, report);
-            return value === undefined ? undefined : { value, carry: (updated) => carryUnknown(raw, value, updated) };
-        },
+        how: { kind: "whole", parse },
         fallback,
         mode,
         onUnreadable,
         document,
     });
 
-// Each entry of a top-level array through the document's conversions and then `entry`, on its own: one whose
-// conversion throws or that this build cannot read is reported and quarantined (kept as written, where a later build
-// can read it), never the file. An entry a conversion retires is gone.
-const readEach = <E>(raw: readonly unknown[], document: DocumentSpec | undefined, entry: (raw: unknown) => E | undefined, report: Report): EntryRead<E> => {
-    const entries: E[] = [];
-    const aligned: unknown[] = [];
-    const quarantined: { index: number; entry: unknown }[] = [];
-    const converted = (written: unknown): readonly unknown[] => {
-        if (document?.granularity !== "entries") {
-            return [written];
-        }
-        const value = convertDocument(document.history, "entries", [written]).value;
-        return Array.isArray(value) ? value : [value];
-    };
-    raw.forEach((written, index) => {
-        let candidates: readonly unknown[];
-        try {
-            candidates = converted(written);
-        } catch (error) {
-            quarantined.push({ index, entry: written });
-            report({ kind: "invalidEntry", detail: `entry ${index} could not be converted to this build's shape (${errorMessage(error)}); it is kept as written` });
-            return;
-        }
-        for (const candidate of candidates) {
-            const parsed = entry(candidate);
-            if (parsed === undefined) {
-                quarantined.push({ index, entry: candidate });
-                report({ kind: "invalidEntry", detail: `entry ${index} is not one this build can read; it is kept as written` });
-                continue;
-            }
-            entries.push(parsed);
-            aligned.push(candidate);
-        }
-    });
-    return { entries, aligned, quarantined };
-};
-
 // A top-level array read one entry at a time: an entry this build cannot read, or whose conversion fails, is reported
 // and skipped instead of sinking the whole file to its fallback, and kept in the file on the next write where a later
 // build can read it.
 export const jsonEntries = <E>(path: string, { entry, mode, onUnreadable = "setAside", document, idKeys = ["id"] }: JsonEntriesOptions<E>): JsonFile<E[]> =>
     openJsonFile<E[]>(path, {
-        decode: (raw, report) => {
-            if (!Array.isArray(raw)) {
-                return undefined;
-            }
-            const read = readEach(raw, document, (candidate) => entry(candidate, report), report);
-            return {
-                value: read.entries,
-                carry: (updated) =>
-                    reemitQuarantined(carryUnknown(read.aligned, read.entries, updated, idKeys) as readonly unknown[], read.quarantined, idKeys),
-            };
-        },
+        how: { kind: "entries", entry, idKeys },
         fallback: () => [],
         mode,
         onUnreadable,
         document,
-        // An entries document converts per entry; a whole-file conversion of another granularity runs before decode.
-        convertsEntries: document?.granularity === "entries",
     });
 
 // A newest-last log kept to its `cap` newest entries, over its store's own file, whose shape, mode and refusal stay the store's.

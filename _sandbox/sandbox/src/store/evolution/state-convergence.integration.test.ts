@@ -40,31 +40,55 @@ const numbered = retype("density", (value): value is string => typeof value === 
 const settingsAt = (history: readonly (typeof colour | typeof numbered)[]) =>
     defineDocument({ path: "evolution/settings.json", schema: Settings, history: [...history] });
 
-test("a document whose conversions change it is written back under an open journal, committed after boot", async () => {
+// A structural step that rewrites one file while it still holds a key: what drives an episode, since a document's own
+// conversions are no longer written back at boot.
+const renameIn = (id: string, relative: string, from: string, to: string): StructuralStep => ({
+    id,
+    describe: `renames ${from} to ${to} in ${relative}`,
+    plan: async ({ roots, read }) => {
+        const path = join(roots.workspace, relative);
+        const text = await read(path);
+        const value = text === undefined ? undefined : (JSON.parse(text) as Record<string, unknown>);
+        if (value === undefined || !Object.hasOwn(value, from)) {
+            return undefined;
+        }
+        const { [from]: moved, ...rest } = value;
+        return { changes: [`renames ${from} to ${to}`], writes: new Map([[path, `${JSON.stringify({ ...rest, [to]: moved }, undefined, 2)}\n`]]) };
+    },
+});
+
+test("a document's conversions are reported and left to its store; a step's writes land under an open journal, committed after boot", async () => {
     const roots = await volumes();
     const path = join(roots.workspace, "evolution/settings.json");
+    const flat = join(roots.workspace, "evolution/flat.json");
     await put(path, { colour: "dark", density: "2", fromNewerBuild: true });
+    await put(flat, { colour: "light" });
 
     const documents = [settingsAt([colour, numbered])];
-    const digest = conversionDigest(documents, []);
-    const outcome = await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents, steps: [] });
+    const steps = [renameIn("flat-colour", "evolution/flat.json", "colour", "theme")];
+    const digest = conversionDigest(documents, steps);
+    const outcome = await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents, steps });
 
     expect(outcome.plan?.digest).toBe(digest);
-    expect(outcome.plan?.steps).toEqual([
+    expect(outcome.plan?.converts).toEqual([
         { document: "evolution/settings.json", change: "renames colour to theme" },
         { document: "evolution/settings.json", change: "turns density into a number" },
     ]);
-    expect(await json(path)).toEqual({ theme: "dark", density: 2, fromNewerBuild: true });
-    expect(stateStatus()).toEqual({ journal: "open", engine: 2 });
+    // Read as today's shape by its store; its bytes wait for the store's next write.
+    expect(await json(path)).toEqual({ colour: "dark", density: "2", fromNewerBuild: true });
+    expect(outcome.plan?.steps).toEqual([{ document: "flat-colour", change: "renames colour to theme" }]);
+    expect(await json(flat)).toEqual({ theme: "light" });
+    expect(stateStatus()).toEqual({ journal: "open", engine: 3 });
     const [episode] = (await readJournal(roots.history)).episodes;
-    expect(episode).toMatchObject({ state: "open", engine: 2, digest, version: "1.400.0" });
-    expect(await json(episode?.entries[0]?.preImage ?? "")).toEqual({ colour: "dark", density: "2", fromNewerBuild: true });
+    expect(episode).toMatchObject({ state: "open", engine: 3, digest, version: "1.400.0" });
+    expect(episode?.entries.map((entry) => entry.path)).toEqual([flat]);
+    expect(await json(episode?.entries[0]?.preImage ?? "")).toEqual({ colour: "light" });
     expect(await json(join(roots.workspace, ".intentic/records/conversions.json"))).toEqual([
-        { at: expect.any(Number), version: "1.400.0", engine: 2, digest, steps: outcome.plan?.steps },
+        { at: expect.any(Number), version: "1.400.0", engine: 3, digest, steps: outcome.plan?.steps },
     ]);
 
     await commitState(roots);
-    expect(stateStatus()).toEqual({ journal: "none", engine: 2 });
+    expect(stateStatus()).toEqual({ journal: "none", engine: 3 });
     expect((await readJournal(roots.history)).episodes.map(({ state }) => state)).toEqual(["committed"]);
 });
 
@@ -78,19 +102,19 @@ test("a second boot of the same build finds nothing to do and opens no episode",
     expect((await readJournal(roots.history)).episodes).toEqual([]);
 });
 
-test("a rolled-back build puts back what a newer one converted and never committed", async () => {
+test("a rolled-back build puts back what a newer one changed and never committed", async () => {
     const roots = await volumes();
     const path = join(roots.workspace, "evolution/settings.json");
-    await put(path, { theme: "dark", density: "2" });
-    // The newer build converts density and dies before its boot finishes, leaving the episode open.
-    await convergeState({ roots, version: "1.401.0", logger, mayWrite: true, documents: [settingsAt([colour, numbered])], steps: [] });
-    expect(await json(path)).toEqual({ theme: "dark", density: 2 });
+    await put(path, { colour: "dark" });
+    // The newer build runs a step and dies before its boot finishes, leaving the episode open.
+    await convergeState({ roots, version: "1.401.0", logger, mayWrite: true, documents: [], steps: [renameIn("colour", "evolution/settings.json", "colour", "theme")] });
+    expect(await json(path)).toEqual({ theme: "dark" });
     clearNewestRun();
 
-    // The older build knows one conversion fewer.
-    const outcome = await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents: [settingsAt([colour])], steps: [] });
+    // The older build knows no such step.
+    const outcome = await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents: [], steps: [] });
     expect(outcome.restored).toBe(1);
-    expect(await json(path)).toEqual({ theme: "dark", density: "2" });
+    expect(await json(path)).toEqual({ colour: "dark" });
     expect(outcome.plan?.downgrade).toBe(true);
     expect((await readJournal(roots.history)).episodes).toEqual([]);
     expect(await readdir(join(roots.workspace, ".intentic/secrets/converting"))).toEqual([]);
@@ -115,29 +139,30 @@ test("an open episode opened before the conversion digest existed is put back, w
     const roots = await volumes();
     const path = join(roots.workspace, "evolution/settings.json");
     await put(path, { colour: "dark" });
-    const documents = [settingsAt([colour])];
-    await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents, steps: [] });
+    const steps = [renameIn("colour", "evolution/settings.json", "colour", "theme")];
+    await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents: [], steps });
     // As a build before the digest wrote it: the same count as this one's, and no digest.
     const journal = await readJournal(roots.history);
     await writeJournal(roots.history, { ...journal, episodes: journal.episodes.map(({ digest: _digest, ...episode }) => episode) });
     clearNewestRun();
 
-    const outcome = await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents, steps: [] });
+    const outcome = await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents: [], steps });
     expect(outcome.restored).toBe(1);
-    // Put back, then converted again by this build under an episode of its own.
+    // Put back, then changed again by this build under an episode of its own.
     expect(await json(path)).toEqual({ theme: "dark" });
-    expect((await readJournal(roots.history)).episodes).toMatchObject([{ state: "open", digest: conversionDigest(documents, []) }]);
+    expect((await readJournal(roots.history)).episodes).toMatchObject([{ state: "open", digest: conversionDigest([], steps) }]);
 });
 
 test("another release with the same conversion set resumes the interrupted episode instead of undoing it", async () => {
     const roots = await volumes();
     const path = join(roots.workspace, "evolution/settings.json");
     await put(path, { colour: "dark" });
-    await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents: [settingsAt([colour])], steps: [] });
+    const steps = [renameIn("colour", "evolution/settings.json", "colour", "theme")];
+    await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents: [], steps });
     const [opened] = (await readJournal(roots.history)).episodes;
     clearNewestRun();
 
-    const outcome = await convergeState({ roots, version: "1.401.0", logger, mayWrite: true, documents: [settingsAt([colour])], steps: [] });
+    const outcome = await convergeState({ roots, version: "1.401.0", logger, mayWrite: true, documents: [], steps });
     expect(outcome.restored).toBe(0);
     expect((await readJournal(roots.history)).episodes.map(({ id, state }) => `${id} ${state}`)).toEqual([`${opened?.id ?? "no episode"} open`]);
     expect(await json(path)).toEqual({ theme: "dark" });
@@ -147,12 +172,12 @@ test("an interrupted episode of the same build resumes: it keeps the original pr
     const roots = await volumes();
     const path = join(roots.workspace, "evolution/settings.json");
     const other = join(roots.workspace, "evolution/other.json");
-    const documents = [settingsAt([colour]), defineDocument({ path: "evolution/other.json", schema: Settings, history: [colour] })];
+    const steps = [renameIn("settings-colour", "evolution/settings.json", "colour", "theme"), renameIn("other-colour", "evolution/other.json", "colour", "theme")];
     await put(path, { colour: "dark" });
-    // The build converts settings.json and dies before its boot finishes; then a second file needing conversion lands.
-    await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents, steps: [] });
+    // The build changes settings.json and dies before its boot finishes; then a second file needing it lands.
+    await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents: [], steps });
     await put(other, { colour: "light" });
-    await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents, steps: [] });
+    await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents: [], steps });
 
     const [episode] = (await readJournal(roots.history)).episodes;
     expect(episode?.entries.map((entry) => entry.path)).toEqual([path, other]);
@@ -190,7 +215,7 @@ test("a directory document moves every entry file", async () => {
     expect((await readdir(join(roots.workspace, "evolution/approvals"))).toSorted()).toEqual(["one.json", "two.json"]);
 });
 
-test("a failing conversion is reported and the rest of the plan still lands", async () => {
+test("a failing conversion is reported, and neither it nor any other document's conversions are written", async () => {
     const roots = await volumes();
     const failing = retype(
         "theme",
@@ -213,8 +238,11 @@ test("a failing conversion is reported and the rest of the plan still lands", as
     expect(outcome.plan?.failures).toEqual([
         { document: "evolution/bad.json", detail: 'conversion "converts numbered themes" failed: no such theme' },
     ]);
-    expect(await json(join(roots.workspace, "evolution/settings.json"))).toEqual({ theme: "dark" });
+    expect(outcome.plan?.converts).toEqual([{ document: "evolution/settings.json", change: "renames colour to theme" }]);
+    expect(outcome.plan?.writes.size).toBe(0);
+    expect(await json(join(roots.workspace, "evolution/settings.json"))).toEqual({ colour: "dark" });
     expect(await json(join(roots.workspace, "evolution/bad.json"))).toEqual({ theme: 3 });
+    expect((await readJournal(roots.history)).episodes).toEqual([]);
 });
 
 test("a structural step's writes and effect run under the same journal", async () => {
@@ -265,13 +293,13 @@ test("planning alone writes nothing, so the pre-flight can run it over read-only
     const roots = await volumes();
     const path = join(roots.workspace, "evolution/settings.json");
     await put(path, { colour: "dark" });
-    const plan = await planState({ roots, documents: [settingsAt([colour])], steps: [] });
+    const plan = await planState({ roots, documents: [settingsAt([colour])], steps: [renameIn("colour", "evolution/settings.json", "colour", "theme")] });
     expect([...plan.writes.keys()]).toEqual([path]);
     expect(await json(path)).toEqual({ colour: "dark" });
     expect(await readdir(roots.history)).toEqual([]);
 });
 
-test("a layout step's rename and a conversion inside the renamed tree both come back on a rollback", async () => {
+test("a layout step's rename and a content step's write inside the renamed tree both come back on a rollback", async () => {
     const roots = await volumes();
     const layout: StructuralStep = {
         id: "evolution-layout",
@@ -285,11 +313,11 @@ test("a layout step's rename and a conversion inside the renamed tree both come 
             return { changes: ["moves flat into grouped"], writes: new Map(), renames: new Map([[old, join(roots.workspace, "grouped")]]) };
         },
     };
-    const inside = defineDocument({ path: "grouped/settings.json", schema: Settings, history: [colour] });
+    const inside = renameIn("grouped-colour", "grouped/settings.json", "colour", "theme");
     await put(join(roots.workspace, "flat/settings.json"), { colour: "dark" });
     await writeFile(join(roots.workspace, "flat/asset.bin"), Buffer.from([0, 255, 1]));
 
-    await convergeState({ roots, version: "1.401.0", logger, mayWrite: true, documents: [inside], steps: [layout] });
+    await convergeState({ roots, version: "1.401.0", logger, mayWrite: true, documents: [], steps: [layout, inside] });
     expect(await json(join(roots.workspace, "grouped/settings.json"))).toEqual({ theme: "dark" });
     expect([...(await readFile(join(roots.workspace, "grouped/asset.bin")))]).toEqual([0, 255, 1]);
     await expect(readdir(join(roots.workspace, "flat"))).rejects.toThrow("ENOENT");

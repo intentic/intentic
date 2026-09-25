@@ -1,0 +1,17 @@
+{
+  "plan": 1,
+  "version": "1.400.0",
+  "engine": 84,
+  "digest": "c8cff51cab20a2b5",
+  "ok": false,
+  "downgrade": true,
+  "failures": [
+    {
+      "document": ".intentic/config/automations.json",
+      "detail": "conversion \"converts numbered kinds\" failed: no such kind"
+    }
+  ],
+  "steps": [],
+  "converts": [],
+  "files": []
+}

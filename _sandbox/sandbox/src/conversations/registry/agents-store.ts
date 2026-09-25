@@ -14,11 +14,10 @@ import {
     UnfinishedWorkSchema,
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { errorMessage } from "@intentic/base/errors";
 import type { ConversationsDb } from "../../store/conversations-db.js";
-import { convertDocument } from "../../store/evolution/conversions.js";
+import { readDocument } from "@intentic/sandbox-contract/documents";
+import { CHECK_SETTLES } from "../../store/evolution/conversions.js";
 import { defineDocument } from "../../store/evolution/documents.js";
-import { carryUnknown } from "../../store/evolution/passthrough.js";
 import { type ManifestProblem, recordManifestProblems } from "../../store/manifest-problems.js";
 import { TurnQueueSchema } from "../actor/conversation-queue.js";
 
@@ -269,24 +268,42 @@ const recordOf = ({ id: _key, placement, ...rest }: PersistedAgent): Record<stri
     return { ...rest, placement: checkout };
 };
 
-// One row as this build reads it: the stored record through the document's conversions, and what the schema made of it,
-// or why it could not be read.
-type RowRead = { readonly ok: true; readonly raw: Record<string, unknown>; readonly entry: PersistedAgent } | { readonly ok: false; readonly detail: string };
+// One row as this build reads it, through the one document read (readDocument): the stored record through the
+// document's conversions, its id and repo rows grafted on before the schema, or why it could not be read.
+type RowRead =
+    | { readonly ok: true; readonly entry: PersistedAgent; readonly carry: (updated: PersistedAgent) => unknown }
+    | { readonly ok: false; readonly reason: ManifestProblem["reason"]; readonly detail: string };
 
 const readRow = (id: string, record: string, repos: readonly RepoRecord[]): RowRead => {
-    let raw: Record<string, unknown>;
-    try {
-        const stored = convertDocument(conversationRecordDocument.history, "object", JSON.parse(record)).value;
-        if (typeof stored !== "object" || stored === null || Array.isArray(stored)) {
-            return { ok: false, detail: "its record is not an object" };
-        }
-        raw = stored as Record<string, unknown>;
-    } catch (error) {
-        return { ok: false, detail: `its record could not be converted to this build's shape (${errorMessage(error)})` };
+    // The first path the schema refused, which a reader of the report needs more than the sentence around it.
+    let refused = "";
+    const read = readDocument<PersistedAgent>(
+        record,
+        conversationRecordDocument,
+        {
+            kind: "whole",
+            parse: (raw) => {
+                const stored = raw as { readonly placement?: { readonly kind?: unknown } } | null;
+                const placement = stored?.placement?.kind === "worktree" ? { ...stored.placement, repos } : stored?.placement;
+                const parsed = PersistedAgentSchema.safeParse({ ...(raw as object), id, placement });
+                refused = parsed.success ? "" : (parsed.error.issues[0]?.path.join(".") ?? "");
+                return parsed.data;
+            },
+        },
+        CHECK_SETTLES,
+    );
+    if (read.value === undefined) {
+        const [problem] = read.problems;
+        // Said of the row, not of a file: the detail readDocument gives is about a file's bytes.
+        const said =
+            problem?.reason === "rejected"
+                ? "its record does not match what this build expects"
+                : problem?.reason === "not-json"
+                  ? "its record is not valid JSON"
+                  : (problem?.detail ?? "its record could not be read");
+        return { ok: false, reason: problem?.reason, detail: `${said}${refused === "" ? "" : ` (${refused})`}` };
     }
-    const placement = raw["placement"] as { readonly kind?: unknown } | undefined;
-    const parsed = PersistedAgentSchema.safeParse({ ...raw, id, placement: placement?.kind === "worktree" ? { ...placement, repos } : placement });
-    return parsed.success ? { ok: true, raw, entry: parsed.data } : { ok: false, detail: `its record does not match what this build expects (${parsed.error.issues[0]?.path.join(".") ?? ""})` };
+    return { ok: true, entry: read.value, carry: read.carry };
 };
 
 export const sqliteAgentsStore = ({ db, path, transaction }: ConversationsDb): AgentsStore => {
@@ -306,7 +323,7 @@ export const sqliteAgentsStore = ({ db, path, transaction }: ConversationsDb): A
         const updated = recordOf(entry);
         const stored = selectRecord.get(entry.id) as { record: string } | undefined;
         const before = stored === undefined ? undefined : readRow(entry.id, stored.record, reposOf(entry));
-        return JSON.stringify(before?.ok === true ? carryUnknown(before.raw, recordOf(before.entry), updated) : updated);
+        return JSON.stringify(before?.ok === true ? recordOf(before.carry(entry) as PersistedAgent) : updated);
     };
     return {
         load: () => {
@@ -325,7 +342,7 @@ export const sqliteAgentsStore = ({ db, path, transaction }: ConversationsDb): A
             const loaded = (selectConversations.all() as unknown as { id: string; record: string }[]).flatMap(({ id, record }) => {
                 const read = readRow(id, record, repos.get(id) ?? []);
                 if (!read.ok) {
-                    problems.push({ kind: "invalidEntry", detail: `conversation ${id}: ${read.detail}; it is kept as written` });
+                    problems.push({ kind: "invalidEntry", ...(read.reason === undefined ? {} : { reason: read.reason }), detail: `conversation ${id}: ${read.detail}; it is kept as written` });
                     return [];
                 }
                 return [read.entry];

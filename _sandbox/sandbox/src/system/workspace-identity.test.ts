@@ -38,7 +38,7 @@ test("a file this build cannot read is reported and left as it stands, with one 
     expect(first).toMatch(/^unreadable-[0-9a-f]{16}$/);
     expect(await workspaceIdentity(over(disk))).toBe(first);
     expect(disk.get(PATH)).toBe("{ half");
-    expect(recordedProblems(PATH)).toEqual([{ kind: "unreadable", detail: "the file is not valid JSON" }]);
+    expect(recordedProblems(PATH)).toEqual([{ kind: "unreadable", reason: "not-json", detail: "the file is not valid JSON" }]);
 
     disk.set(PATH, JSON.stringify({ id: "kept-id" }));
     expect(await workspaceIdentity(over(disk))).toBe("kept-id");

@@ -27,7 +27,8 @@ flowchart LR
 - Helpers every extension needs live here too: sandbox-scoped module state (`sandboxRef`, cleared on every sandbox
   switch), background polling for rail badges, `sandboxLedger` (whose writes reject rather than overwrite a file they
   could not read), `sandboxDocument` (a file of the extension's own read through the `conversions` its shape has had,
-  and written with what a newer version of the extension put in it kept), SSE and ndjson stream reading, and the
+  by the contract's `readDocument`, and written with what a newer version of the extension put in it kept; every handle
+  on one path shares one write queue), SSE and ndjson stream reading, and the
   payload for `api.workspace.openDiff`.
 - Contribution points: `agent`, `automationTemplates`, `bin`, `capabilities`, `commands`, `documents`,
   `environment`, `files`, `listener`, `processes`, `settings`, `tools`, `viewers` and `views`, plus the manifest's top-level

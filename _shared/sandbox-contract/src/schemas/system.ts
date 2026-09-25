@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { StatePlanSchema } from "./state-plan.js";
 // version is this build's baked-in version; latest/updateAvailable come from comparing it to the published stable
 // release.
 // Whether a runtime can serve a turn, probed off the turn path. "unknown" reads as available-but-unverified, never as
@@ -29,19 +30,10 @@ export const StagedUpdateSchema = z.object({
     at: z.number().describe("When the download finished, in milliseconds, which answers whether this is still the update being offered."),
     // The staged build's state pre-flight (the daemon's state-plan.ts, run by `ic sandbox prepare` over read-only mounts
     // of this sandbox's volumes): what its first boot converts, before anyone accepts the update.
-    plan: z
-        .object({
-            ok: z.boolean().describe("False when a conversion would fail on this sandbox's files, which refuses the update before anything is touched."),
-            downgrade: z.boolean().optional().describe("The staged build is older than the one that converted these files; it opens them read-only."),
-            steps: z
-                .array(z.object({ document: z.string(), change: z.string() }))
-                .optional()
-                .describe("Each stored file the first boot converts, and how."),
-            failures: z
-                .array(z.object({ document: z.string(), detail: z.string() }))
-                .optional()
-                .describe("Each conversion that would fail, and why."),
-        })
+    // Embedded verbatim by the ic that staged it (StatePlanSchema); a marker an older ic wrote held only `ok` with
+    // `downgrade` and `steps`, or `failures`, so everything but `ok` stays optional here.
+    plan: StatePlanSchema.partial()
+        .extend({ ok: StatePlanSchema.shape.ok })
         .optional()
         .describe("What the downloaded build's first boot would convert in this sandbox's stored files. Absent when no plan could be had, which says nothing either way."),
 });
@@ -103,6 +95,13 @@ export const ManifestProblemSchema = z.object({
         .enum(["unreadable", "unknownKey", "invalidEntry"])
         .describe(
             "What to do about it. Unreadable means the whole file is being ignored and everything in it is at its default. An unknown key means only that key is ignored. An invalid entry means one item of a list was skipped and the rest is fine.",
+        ),
+    // Why, as a word a reader matches on; `detail` is prose for a person and never parsed. Absent from an older daemon.
+    reason: z
+        .enum(["io", "not-json", "conversion-failed", "rejected"])
+        .optional()
+        .describe(
+            "Why it could not be read: the file could not be opened (io), it is not JSON, a conversion to this version's shape failed, or its contents are not what this version expects (rejected). A rejected file after a newer version ran is usually that version's, not a broken one.",
         ),
     detail: z.string().describe("What exactly was wrong, as one sentence and nothing else. Never the remedy: that is `fix`."),
     suggestion: z.string().optional().describe("The name it was probably meant to be, when one is close enough to guess honestly."),

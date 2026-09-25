@@ -503,6 +503,20 @@ describe(`sandboxDocument`, () => {
         expect(written).toEqual([]);
     });
 
+    test(`two handles on one file queue behind each other, so neither update is lost`, async () => {
+        const disk = { file: { items: [] as string[] } as unknown };
+        const { api } = fakeApi({
+            get file() {
+                return disk.file;
+            },
+            write: (_path, body) => {
+                disk.file = JSON.parse(body) as unknown;
+            },
+        });
+        await Promise.all([notes(api).update((current) => ({ items: [...current.items, `a`] })), notes(api).update((current) => ({ items: [...current.items, `b`] }))]);
+        expect(disk.file).toEqual({ items: [`a`, `b`] });
+    });
+
     test(`an update that changes nothing writes nothing`, async () => {
         const { api, written } = fakeApi({ file: { items: [`a`] } });
         expect(await notes(api).update((current) => current)).toBe(true);

@@ -1,0 +1,17 @@
+[
+  {
+    "destination": "/work",
+    "planner": "--workspace",
+    "required": true
+  },
+  {
+    "destination": "/history",
+    "planner": "--history",
+    "required": true
+  },
+  {
+    "destination": "/agent-auth",
+    "planner": "--auth",
+    "required": false
+  }
+]

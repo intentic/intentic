@@ -102,11 +102,16 @@ test("settings a withdrawn rule once made unreadable read again, the rule gone a
     expect(settings.settings.rules.map((rule) => rule.id)).toEqual(["land"]);
 
     const outcome = await converge(roots, [settingsDocument], []);
-    expect(outcome.plan?.steps).toEqual([
+    expect(outcome.plan?.steps).toEqual([]);
+    expect(outcome.plan?.converts).toEqual([
         { document: settingsDocument.path, change: "drops rules at a withdrawn moment or with a withdrawn action (push.starting, instruct, three built-in checks)" },
         { document: settingsDocument.path, change: "converts personaRouting from its old values", detail: '"suggest" became true' },
     ]);
-    expect(await json(path)).toMatchObject({ personaRouting: true, rules: [{ id: "land" }] });
+    // The boot leaves the bytes to the store, whose next save writes today's shape.
+    expect(await json(path)).toMatchObject({ personaRouting: "suggest" });
+    const store = fileSandboxSettingsStore(path);
+    await store.set({ ...(await store.get()), hashlineEdits: true });
+    expect(await json(path)).toMatchObject({ personaRouting: true, rules: [{ id: "land" }], hashlineEdits: true });
 });
 
 test("a capability of the kind device was once called becomes a device, and withdrawn connections are retired", async () => {
@@ -121,22 +126,19 @@ test("a capability of the kind device was once called becomes a device, and with
     ]);
     expect((await fileCapabilitiesStore(path).list()).map(({ id, kind }) => `${id}:${kind}`)).toEqual(["laptop:device", "gh:cli"]);
 
-    await converge(roots, [capabilitiesDocument], []);
-    expect(await json(path)).toEqual([
-        { id: "laptop", kind: "device", config: { platform: "linux" } },
-        { id: "gh", kind: "cli", config: { provider: "github" } },
-    ]);
-    expect(await json(join(roots.workspace, stateRelPath(".intentic/records/conversions.json")))).toMatchObject([
-        {
-            steps: expect.arrayContaining([
-                {
-                    document: capabilitiesDocument.path,
-                    change: "retires a service or integration connection, withdrawn in favour of CLI connectors",
-                    detail: '{"id":"db","kind":"service","config":{"service":"postgres"}}',
-                },
-            ]),
-        },
-    ]);
+    const outcome = await converge(roots, [capabilitiesDocument], []);
+    expect(outcome.plan?.converts).toEqual(
+        expect.arrayContaining([
+            {
+                document: capabilitiesDocument.path,
+                change: "retires a service or integration connection, withdrawn in favour of CLI connectors",
+                detail: '{"id":"db","kind":"service","config":{"service":"postgres"}}',
+            },
+        ]),
+    );
+    // Nothing is written at boot, so nothing is journaled or entered in the ledger for it.
+    expect(outcome.plan?.writes.size).toBe(0);
+    expect((await json(path)) as unknown[]).toHaveLength(3);
 });
 
 test("an automation that named a model gets a one-rung ladder; its runs and webhook token move where they live now", async () => {
@@ -150,16 +152,16 @@ test("an automation that named a model gets a one-rung ladder; its runs and webh
 
     await converge(roots, [automationsDocument], [automationsRelocationStep]);
 
+    // The step moved runs and the token out; the ladder is the store's to write, on its next save.
     const stored = (await json(manifest)) as { id: string; models?: unknown; trigger: unknown; runs?: unknown }[];
-    expect(stored[0]).toMatchObject({ id: "nightly", models: [{ provider: "codex", model: "gpt-5" }], trigger: { kind: "event" } });
+    expect(stored[0]).toMatchObject({ id: "nightly", agent: "codex", model: "gpt-5", trigger: { kind: "event" } });
     expect(stored[0]).not.toHaveProperty("runs");
-    expect(stored[0]).not.toHaveProperty("model");
-    // Named no model: nothing can choose one for it, so it stays for its owner, skipped by the store rather than
-    // sinking the others.
     expect(stored[1]).not.toHaveProperty("models");
     expect(await json(join(roots.workspace, stateRelPath(".intentic/secrets/doors.json")))).toEqual({ automation: { nightly: "tok-123" } });
     const listed = await fileAutomationsStore(manifest, join(roots.workspace, stateRelPath(".intentic/records/automation-runs.json"))).list();
-    expect(listed.map(({ id }) => id)).toEqual(["nightly"]);
+    // Named no model: nothing can choose one for it, so it stays for its owner, skipped by the store rather than
+    // sinking the others.
+    expect(listed.map(({ id, models }) => ({ id, models }))).toEqual([{ id: "nightly", models: [{ provider: "codex", model: "gpt-5" }] }]);
 });
 
 test("a release gate's token moves out of the tracked design into the door store", async () => {

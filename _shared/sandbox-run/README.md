@@ -22,6 +22,8 @@ flowchart LR
   private key.
 - `localDaemonPort` derives a sandbox's host loopback port from its id, so a recreate lands on the same port and the
   editor and machine agent compute it without being told.
+- `DATA_MOUNTS` names where a sandbox's stored data lives in its container and the state planner's flag for each; the
+  update pre-flight in `ic` mounts exactly these, read-only, and its copy is held to `golden/data-mounts.json`.
 - `./quote` holds the shell, SQL and env-file quoters the daemon, providers and CLI share.
 
 ## Key files

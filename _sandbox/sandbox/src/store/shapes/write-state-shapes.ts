@@ -13,7 +13,7 @@ import { type Definition, stateModules } from "./state-modules.js";
 // The shape generator, two modes. `--freeze` (the land check's fixer, after every land that touched daemon or contract
 // source) writes the state registry (src/bootstrap/state-registry.ts, every document and boot step the source defines,
 // which the boot step and the pre-flight read) and records each document's current shape in state-shapes.json, the
-// only one of its outputs that is committed. `--checks` (the package's `pretypecheck`) writes the untracked checks from that
+// only one of its outputs that is committed. `--checks` (the package's `pretypecheck`) writes the shape checks from that
 // record: the type-level checks that each frozen shape still converts to what today's schema accepts and loses no key
 // on the way (store/evolution/conversion-types.ts), so a change that would strand an old file fails `tsc` at the
 // document until a conversion covers it. `--seed` backfills, once, the shapes every release since the contract lock
@@ -256,6 +256,6 @@ if (freezing) {
 }
 await writeFile(CHECKS_FILE, checksSource(sorted, located));
 process.stdout.write(
-    `${Object.values(sorted).reduce((sum, list) => sum + list.length, 0)} shapes across ${Object.keys(sorted).length} documents` +
-        (freezing ? `; ${modules.documents.length} documents and ${modules.steps.length} steps in the registry\n` : "\n"),
+    `${Object.values(sorted).reduce((sum, list) => sum + list.length, 0)} shapes across ${Object.keys(sorted).length} documents${ 
+        freezing ? `; ${modules.documents.length} documents and ${modules.steps.length} steps in the registry\n` : "\n"}`,
 );
