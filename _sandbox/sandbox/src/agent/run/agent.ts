@@ -11,7 +11,7 @@ import type {
     SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
 import { refreshClaudeSdk, sdk } from "../../engines/claude-sdk.js";
-import { spawn } from "node:child_process";
+import { spawnAs } from "../../platform/resources/workload-class.js";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import {
@@ -257,18 +257,25 @@ export const mcpConfigOffArgv = (args: readonly string[]): { readonly args: stri
     return { args: rewritten, dispose: () => rmSync(scratch, { recursive: true, force: true }) };
 };
 
-// Execs the CLI into the turn's isolation anchor via nsenter instead of spawning plainly; the SDK still owns the
-// child's stdio, exit and SIGTERM. A failure here fails the turn rather than silently using the shared tree.
-const namespacedSpawn =
-    (anchor: IsolationAnchor) =>
+// The CLI's spawn for every turn, in the agentRuntime class at this turn's spawn depth (workload-class.ts); an anchored
+// turn's CLI is exec'd into its isolation anchor via nsenter instead of spawned plainly, and a failure there fails the
+// turn rather than silently using the shared tree. The SDK still owns the child's stdio, exit and SIGTERM, but a custom
+// spawn skips its stderr reader, so this one feeds `onStderr` itself: an unread pipe would stall a chatty CLI.
+const runtimeSpawn =
+    (anchor: IsolationAnchor | undefined, spawnDepth: number, onStderr: (data: string) => void) =>
     (options: SpawnOptions): SpawnedProcess => {
         const config = mcpConfigOffArgv(options.args);
-        const { command, args } = nsenterArgv(anchor.pid, anchor.cwd, options.command, config.args);
-        const child = spawn(command, args, {
+        const { command, args } =
+            anchor === undefined ? { command: options.command, args: config.args } : nsenterArgv(anchor.pid, anchor.cwd, options.command, config.args);
+        const child = spawnAs({ class: "agentRuntime", spawnDepth }, command, args, {
+            ...(anchor === undefined ? opt("cwd", options.cwd) : {}),
             env: options.env,
             ...opt("signal", options.signal),
             stdio: ["pipe", "pipe", "pipe"],
+            windowsHide: true,
         });
+        child.stderr.setEncoding("utf8");
+        child.stderr.on("data", onStderr);
         // The CLI reads the file at startup; outliving the process would leave the document on disk for the tmp sweep.
         child.once("exit", config.dispose);
         child.once("error", config.dispose);
@@ -431,8 +438,6 @@ const baseOptions = (
             // checkout.
             depsNoticeHooks(request.hooks.dependencyIssue ?? (async () => undefined), request.policy.dependencyInstallAllowed === true),
         ),
-        // Wraps the CLI's own spawn so the agent process and everything it forks is born inside the namespace.
-        ...(request.spec.isolation?.anchor !== undefined ? { spawnClaudeCodeProcess: namespacedSpawn(request.spec.isolation.anchor) } : {}),
         ...opt("model", request.spec.model),
         ...opt("resume", request.spec.sessionId),
         ...opt(
@@ -803,9 +808,10 @@ export async function* runAgent(
         systemPrompt,
         // Legalizes bypassPermissions without activating it; a plan approval can switch into bypass mid-turn.
         allowDangerouslySkipPermissions: true,
-        stderr: (data) => {
+        // Every turn's CLI is spawned here, so it starts in its class and, anchored, inside its namespace.
+        spawnClaudeCodeProcess: runtimeSpawn(request.spec.isolation?.anchor, request.spec.spawnDepth ?? 0, (data) => {
             stderr += data;
-        },
+        }),
         // Backs AskUserQuestion; withheld on an unattended turn, since nobody is there to answer.
         mcpServers: {
             // External MCP capabilities first, so every daemon-owned server below wins a name collision: a capability

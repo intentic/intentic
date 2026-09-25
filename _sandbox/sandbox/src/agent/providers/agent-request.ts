@@ -44,6 +44,9 @@ export interface TurnSpec {
     readonly attachments?: readonly string[];
     // Conversation this turn belongs to, for filing its subagents under the parent. Absent: unregistered.
     readonly conversationId?: string;
+    // How deep that conversation sits under the spawns above it (0 or absent for one nobody spawned): the runtime's
+    // OOM rank, so a child goes before the parent supervising it (platform/resources/workload-class.ts).
+    readonly spawnDepth?: number;
     // Working dir the agent edits, the workspace root; under `isolation` it's the root as seen inside the namespace.
     readonly cwd: string;
     // Whether that cwd is this conversation's own copy; absent reads as the owner's shared tree, the fail-safe side.

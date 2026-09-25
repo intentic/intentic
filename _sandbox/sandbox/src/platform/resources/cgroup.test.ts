@@ -48,6 +48,7 @@ describe("the cgroup reading", () => {
             files({
                 "/sys/fs/cgroup/memory.current": `${10 * 2 ** 30}\n`,
                 "/sys/fs/cgroup/memory.max": `${16 * 2 ** 30}\n`,
+                "/sys/fs/cgroup/memory.high": `${14 * 2 ** 30}\n`,
                 "/sys/fs/cgroup/memory.stat": `anon 1\nfile 2\ninactive_file ${3 * 2 ** 30}\n`,
                 "/sys/fs/cgroup/memory.swap.current": `${2 ** 30}\n`,
                 "/sys/fs/cgroup/memory.swap.max": "max\n",
@@ -58,6 +59,7 @@ describe("the cgroup reading", () => {
             memoryBytes: 10 * 2 ** 30,
             workingSetBytes: 7 * 2 ** 30,
             memoryLimitBytes: 16 * 2 ** 30,
+            memoryHighBytes: 14 * 2 ** 30,
             swapBytes: 2 ** 30,
             swapLimitBytes: undefined,
             memoryEvents: { low: 0, high: 0, max: 12, oom: 1, oom_kill: 1, oom_group_kill: 0 },
@@ -93,6 +95,7 @@ describe("the cgroup reading", () => {
             memoryBytes: undefined,
             workingSetBytes: undefined,
             memoryLimitBytes: undefined,
+            memoryHighBytes: undefined,
             swapBytes: undefined,
             swapLimitBytes: undefined,
             memoryEvents: {},

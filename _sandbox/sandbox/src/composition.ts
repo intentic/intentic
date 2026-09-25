@@ -51,6 +51,7 @@ import {
 } from "@intentic/scaffold";
 import type { ResidentEngine } from "@intentic/iq-engine";
 import { createEngineClient } from "@intentic/iq-engine/host";
+import { applyWorkload } from "./platform/resources/workload-class.js";
 import { capabilityCtx } from "./capabilities/capability.js";
 import { type OpenAccountInput, openBrowserAccount } from "./capabilities/open-account.js";
 import { composeEnvironment } from "./environment/environment.js";
@@ -1195,6 +1196,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const iq = createEngineClient({
         root: workspace.root,
         indexDir: statePath(workspace.root, ".intentic/local/cache/", "iq"),
+        // A service: a dead engine costs a re-sweep, and it holds more memory than anything else the daemon runs.
+        onSpawn: (pid) => void applyWorkload(pid, { class: "service" }),
         // An index pass failing after warm() has no caller to reject; without this it silently stops tracking disk.
         onIndexError: (error) => logger.warn({ err: error }, "iq index pass failed, search results may be stale"),
         onIndexProgress: (remaining) => {

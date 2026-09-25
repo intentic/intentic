@@ -29,11 +29,13 @@ const headroom = (
     residentGib: number | undefined,
     swapGib: number | undefined,
     machineGib = Number.POSITIVE_INFINITY,
+    highGib: number | undefined = undefined,
 ) =>
     headroomFrom(
         {
             workingSetBytes: residentGib === undefined ? undefined : residentGib * GIB,
             memoryLimitBytes: limitGib === undefined ? undefined : limitGib * GIB,
+            memoryHighBytes: highGib === undefined ? undefined : highGib * GIB,
             swapBytes: swapGib === undefined ? undefined : swapGib * GIB,
             memoryEvents: {},
             pressure: { cpu: undefined, memory: undefined, io: undefined },
@@ -129,13 +131,30 @@ test("an unaccounted swap file reads as none rather than blanking the ceiling", 
 });
 
 // An owner may cap the box past its engine, and memory the engine does not have is not headroom.
-test("a cap past the engine is measured against the engine, and an uncapped box stays without an opinion", () => {
+test("a cap past the engine is measured against the engine, and an uncapped box against the machine", () => {
     const beyond = headroom(32, 18.5, 0, 19.5);
     expect(beyond.limitBytes).toBe(19.5 * GIB);
     expect(beyond.freeBytes).toBe(GIB);
     expect(refusal(admitTurn(beyond, true))).toContain("18.5 GiB of 19.5 GiB used");
     expect(headroom(16, 12, 0, 19.5).limitBytes).toBe(16 * GIB);
-    expect(headroom(undefined, 12, 0, 19.5).limitBytes).toBeUndefined();
+    expect(headroom(undefined, 12, 0, 19.5).limitBytes).toBe(19.5 * GIB);
+    expect(headroom(undefined, 12, 0).limitBytes).toBeUndefined();
+});
+
+// The entrypoint sets memory.high to 90% of the cap. On a 20 GiB cap that is 18 GiB, and a person's turn measured against
+// the cap would start at 18.5 GiB used: already throttled into reclaim, with a gibibyte "free" the kernel will not give.
+test("memory.high is the ceiling when set, since past it the kernel throttles the whole sandbox", () => {
+    const throttled = headroom(20, 18.5, 0, 64, 18);
+    expect(throttled.limitBytes).toBe(18 * GIB);
+    expect(throttled.freeBytes).toBe(0);
+    expect(refusal(admitTurn(throttled))).toContain("18.5 GiB of 18.0 GiB used");
+    expect(admitTurn(headroom(20, 18.5, 0, 64)).admit).toBe(true);
+    const roomy = headroom(20, 16, 0, 64, 18);
+    expect(roomy.freeBytes).toBe(2 * GIB);
+    expect(admitTurn(roomy).admit).toBe(true);
+    expect(admitTurn(roomy, true).admit).toBe(true);
+    // A memory.high above the cap binds nowhere: the cap is reached first.
+    expect(headroom(16, 12, 0, 64, 20).limitBytes).toBe(16 * GIB);
 });
 
 // Unknown ceiling (no cgroup, cgroup v1, hosted) admits rather than refuses on ignorance.
@@ -268,6 +287,7 @@ test("the OOM killer's count rides the reading", () => {
         {
             workingSetBytes: 4 * GIB,
             memoryLimitBytes: 16 * GIB,
+            memoryHighBytes: undefined,
             swapBytes: 0,
             memoryEvents: { oom: 3, oom_kill: 2 },
             pressure: { cpu: undefined, memory: undefined, io: undefined },

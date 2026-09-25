@@ -136,6 +136,7 @@ export const startInstall = async (root: string, project: WorkspaceProject, proc
         command: project.recipe.command,
         cwd: join(root, project.dir),
         oneShot: true,
+        workload: "install",
     });
 };
 

@@ -1,4 +1,5 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
+import { spawnAs } from "../../platform/resources/workload-class.js";
 import { randomBytes } from "node:crypto";
 import { createInterface } from "node:readline";
 import { createRequire } from "node:module";
@@ -212,7 +213,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
             extensions: collected.runnable,
         };
         const command = hostCommand();
-        const child = spawn(command.file, command.args, {
+        const child = spawnAs({ class: "service" }, command.file, command.args, {
             env: { ...process.env, [BACKEND_CONFIG_ENV]: JSON.stringify(config) },
             stdio: ["ignore", "pipe", "pipe"],
         });

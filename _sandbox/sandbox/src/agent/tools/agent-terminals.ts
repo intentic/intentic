@@ -10,7 +10,7 @@ import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { QUEUE_RUN_BIN, queueRunEnabled, TMUX_RUN_BIN } from "../../terminal/terminal-run.js";
 import { offloadPrefix } from "../../offload/offload-prefix.js";
 import { type HeavyCommands, type HeavyMatch, matchHeavyCommand } from "../../platform/resources/heavy-commands.js";
-import { choomPrefix, OOM_SCORE } from "../../platform/resources/oom-priority.js";
+import { shellPrefix } from "../../platform/resources/workload-class.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { type BackgroundJob, backgroundJobOf, type BackgroundJobSeed, jobCommandLine, openBackgroundJob, stopBackgroundJob } from "./background-jobs.js";
 import { turnRunOf } from "../../agents/actor/conversation-holdings.js";
@@ -64,16 +64,17 @@ const envKeyFlags = (envKeys: readonly string[]): string =>
         .map((key) => `-e ${key} `)
         .join("");
 
-// Demotes every agent command (nice +10, ionice) and ranks it for the OOM killer above every runtime; `bash -c` wraps it
-// since `nice` execs a binary not a keyword. Panes hang off the tmux server, so no runtime's score reaches them by fork.
-const POLITE_PREFIX = `nice -n 10 ionice -c 2 -n 7 ${choomPrefix(OOM_SCORE.command)}`;
+// Puts every agent command in the `command` class (workload-class.ts): demoted, and ranked for the OOM killer above every
+// runtime; `bash -c` wraps it since `nice` execs a binary not a keyword. Panes hang off the tmux server, so no runtime's
+// class reaches them by fork.
+const POLITE_PREFIX = shellPrefix({ class: "command" });
 
 // Leaves the last pipeline's per-stage statuses where bin/tmux-run's pane exports INTENTIC_PIPESTATUS_FILE. An EXIT
 // trap on the command's first line: its text, line numbers and exit status stay the agent's own.
 export const PIPESTATUS_TRAP = `trap 'printf "%s " "\${PIPESTATUS[@]}" 2>/dev/null >"\${INTENTIC_PIPESTATUS_FILE:-/dev/null}"' EXIT; `;
 
-// Bounds concurrent heavy commands via bin/queue-run, since demotion rations CPU but not memory, and makes each the
-// first thing the OOM killer takes. Spliced inside the namespace hop and the demotion, so both cover the forked tree.
+// Bounds concurrent heavy commands via bin/queue-run, since demotion rations CPU but not memory, and puts each in the
+// `toolchain` class, the first thing the OOM killer takes. Spliced inside the namespace hop and the demotion, so both cover the forked tree.
 const queuePrefix = (command: string, config: HeavyCommands | undefined): string => {
     const match = config === undefined ? undefined : matchHeavyCommand(command, config);
     return match === undefined || config === undefined ? "" : queuePrefixOf(match, config);
@@ -89,7 +90,7 @@ const queuePrefixOf = (match: HeavyMatch, config: HeavyCommands): string => {
         `--on-deadline ${match.onDeadline}`,
         `--label ${shellQuote(match.id)}`,
     ].join(" ");
-    return `${QUEUE_RUN_BIN} ${flags} -- ${choomPrefix(OOM_SCORE.heavy)}`;
+    return `${QUEUE_RUN_BIN} ${flags} -- ${shellPrefix({ class: "toolchain" })}`;
 };
 
 // Where a heavy line runs instead of here (settings `offload`): its matched rule's runner, when the owner sends that kind

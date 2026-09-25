@@ -1,9 +1,10 @@
-import { type ChildProcessByStdio, spawn } from "node:child_process";
+import type { ChildProcessByStdio } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import type { Readable, Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import type { AcpAgentConfig } from "@intentic/sandbox-contract";
 import { parseEnvBlock, splitCommand } from "../acp/acp-spawn.js";
+import { spawnAs } from "../../platform/resources/workload-class.js";
 import { DAEMON_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
 
 // Pi RPC transport: spawns `<command> --mode rpc` and speaks its strict-LF JSONL protocol over stdio. Commands carry a
@@ -74,7 +75,9 @@ export const piSpawner = (sessionDir: string): PiSpawn => {
     mkdirSync(sessionDir, { recursive: true });
     return (config, cwd, handlers) => {
         const [head, ...rest] = splitCommand(config.command);
-        const proc: ChildProcessByStdio<Writable, Readable, Readable> = spawn(
+        // Pooled across turns like the ACP agents, so it ranks at the top of the spawn tree.
+        const proc: ChildProcessByStdio<Writable, Readable, Readable> = spawnAs(
+            { class: "agentRuntime", spawnDepth: 0 },
             head as string,
             [...rest, "--mode", "rpc", "--session-dir", sessionDir],
             {

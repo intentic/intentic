@@ -71,6 +71,9 @@ export interface CgroupReading {
     readonly workingSetBytes: number | undefined;
     // memory.max; undefined when uncapped.
     readonly memoryLimitBytes: number | undefined;
+    // memory.high: where the kernel starts throttling and reclaiming the cgroup, short of the cap (the entrypoint sets
+    // 90% of it); undefined when unset.
+    readonly memoryHighBytes: number | undefined;
     // memory.swap.current: anon pushed to swap, charged here and not to memory.current.
     readonly swapBytes: number | undefined;
     readonly swapLimitBytes: number | undefined;
@@ -80,11 +83,12 @@ export interface CgroupReading {
 }
 
 export const readCgroup = async (read: ReadText = readText): Promise<CgroupReading> => {
-    const [cpuStat, cpuMax, current, max, memoryStat, swap, swapMax, events, pressure] = await Promise.all([
+    const [cpuStat, cpuMax, current, max, high, memoryStat, swap, swapMax, events, pressure] = await Promise.all([
         read(`${CGROUP}/cpu.stat`),
         read(`${CGROUP}/cpu.max`),
         read(`${CGROUP}/memory.current`),
         read(`${CGROUP}/memory.max`),
+        read(`${CGROUP}/memory.high`),
         read(`${CGROUP}/memory.stat`),
         read(`${CGROUP}/memory.swap.current`),
         read(`${CGROUP}/memory.swap.max`),
@@ -108,6 +112,7 @@ export const readCgroup = async (read: ReadText = readText): Promise<CgroupReadi
         memoryBytes,
         workingSetBytes: memoryBytes === undefined ? undefined : Math.max(0, memoryBytes - (flatKeyed(memoryStat)["inactive_file"] ?? 0)),
         memoryLimitBytes: numeric(max),
+        memoryHighBytes: numeric(high),
         swapBytes: numeric(swap),
         swapLimitBytes: numeric(swapMax),
         memoryEvents: flatKeyed(events),

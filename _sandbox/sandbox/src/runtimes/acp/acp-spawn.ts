@@ -1,6 +1,7 @@
-import { type ChildProcessByStdio, spawn } from "node:child_process";
+import type { ChildProcessByStdio } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { ndJsonStream, type Stream } from "@agentclientprotocol/sdk";
+import { spawnAs } from "../../platform/resources/workload-class.js";
 import { DAEMON_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
 import { webStream } from "../../web-stream.js";
 
@@ -38,7 +39,9 @@ export const spawnAcpProcess = (command: string, env: Record<string, string>, cw
     if (bin === undefined || bin === "") {
         throw new Error("ACP agent command is empty");
     }
-    const child = spawn(bin, args, {
+    // A runtime because this adapter started it, whatever its command (`npx some-agent`, `bun run agent`): pooled
+    // across turns, so it ranks at the top of the spawn tree rather than any one turn's depth.
+    const child = spawnAs({ class: "agentRuntime", spawnDepth: 0 }, bin, args, {
         cwd,
         // Stamped as the DAEMON's rather than any one turn's, because that is what a pooled agent is: it
         // deliberately outlives the turn that warmed it (acp-connection.ts), so the in-life sweep must never

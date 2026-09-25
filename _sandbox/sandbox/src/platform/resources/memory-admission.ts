@@ -6,7 +6,8 @@ import { type CgroupReading, readCgroup } from "./cgroup.js";
 // snapshot, and returns a hold as a value rather than throwing. A person is warned, never stopped; background work waits.
 
 export interface MemoryHeadroom {
-    // Undefined when uncapped or cgroup v2 is unavailable; the gate treats both as no opinion.
+    // The ceiling a turn is measured against: memory.high, where the kernel starts throttling, else memory.max, else the
+    // machine's memory, never past the machine's. Undefined only when nothing bounds it; the gate then has no opinion.
     readonly limitBytes: number | undefined;
     // Working set plus swapped: a sandbox may swap past its cap, and a paged-out page leaves memory.current, so paging must not read as relief.
     readonly usedBytes: number | undefined;
@@ -19,21 +20,25 @@ export interface MemoryHeadroom {
     readonly oomKills: number | undefined;
 }
 
-// Pure, so the arithmetic swap broke is testable without a cgroup; a cap past the machine's memory never binds.
+// Pure, so the arithmetic swap broke is testable without a cgroup; a cap past the machine's memory never binds. Past
+// memory.high the kernel throttles the whole cgroup into reclaim, so room above it is room nobody can use at speed: on a
+// cap above 10 GiB, a gibibyte short of memory.max already sits past it.
 export const headroomFrom = (
     {
         workingSetBytes,
         memoryLimitBytes,
+        memoryHighBytes,
         swapBytes,
         memoryEvents,
         pressure,
-    }: Pick<CgroupReading, "workingSetBytes" | "memoryLimitBytes" | "swapBytes" | "memoryEvents" | "pressure">,
+    }: Pick<CgroupReading, "workingSetBytes" | "memoryLimitBytes" | "memoryHighBytes" | "swapBytes" | "memoryEvents" | "pressure">,
     machineBytes: number,
 ): MemoryHeadroom => {
     // Unaccounted swap (cgroup v1, swapaccount off) is none, never unknown: it must not blank a measurable ceiling.
     const swapped = swapBytes ?? 0;
     const usedBytes = workingSetBytes === undefined ? undefined : workingSetBytes + swapped;
-    const ceiling = memoryLimitBytes === undefined ? undefined : Math.min(memoryLimitBytes, machineBytes);
+    const bound = Math.min(memoryHighBytes ?? Number.POSITIVE_INFINITY, memoryLimitBytes ?? Number.POSITIVE_INFINITY, machineBytes);
+    const ceiling = Number.isFinite(bound) ? bound : undefined;
     return {
         limitBytes: ceiling,
         usedBytes,

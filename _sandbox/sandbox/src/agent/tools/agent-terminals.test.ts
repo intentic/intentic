@@ -6,7 +6,7 @@ import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { syncHookOutput, memoryFleet } from "../../testing.js";
 import { DEFAULT_HEAVY_COMMANDS, type HeavyCommands, HeavyCommandsSchema } from "../../platform/resources/heavy-commands.js";
-import { OOM_SCORE } from "../../platform/resources/oom-priority.js";
+import { OOM_SCORE } from "../../platform/resources/workload-class.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";
 import { bashTmuxHooks, PIPESTATUS_TRAP } from "./agent-terminals.js";
 import { backgroundJobOf, type BackgroundJob, noteJobShell, settledBackgroundJobs } from "./background-jobs.js";
@@ -19,7 +19,7 @@ const shell = (command: string): string => `bash -c ${shellQuote(`${PIPESTATUS_T
 
 // Demotes a command via nice/ionice, ranks it for the OOM killer, and runs it as one `bash -c` tree, before tmux-run sees
 // it.
-const demoted = (command: string): string => `nice -n 10 ionice -c 2 -n 7 choom -n ${String(OOM_SCORE.command)} -- ${shell(command)}`;
+const demoted = (command: string): string => `nice -n 19 ionice -c 2 -n 7 choom -n ${String(OOM_SCORE.command)} -- ${shell(command)}`;
 
 // Carries the conversation id; every forked process inherits it, marking the run as agent-started, not the sandbox's
 // own.
@@ -260,7 +260,7 @@ const heavy = (over: Partial<HeavyCommands> = {}) => {
 // The demoted form, with the queue between demotion and shell and the heavy rank inside the queue: position is the
 // assertion.
 const queued = (command: string, label: string, pool = "heavy", limit = 2, onDeadline = DEFAULT_HEAVY_COMMANDS.onDeadline): string =>
-    `nice -n 10 ionice -c 2 -n 7 choom -n ${String(OOM_SCORE.command)} -- /usr/local/bin/queue-run --pool ${shellQuote(pool)} --limit ${String(limit)} --wait 900 --memory-gate 120 --max-hold ${String(DEFAULT_HEAVY_COMMANDS.maxHoldSeconds)} --on-deadline ${onDeadline} --label ${shellQuote(label)} -- choom -n ${String(OOM_SCORE.heavy)} -- ${shell(command)}`;
+    `nice -n 19 ionice -c 2 -n 7 choom -n ${String(OOM_SCORE.command)} -- /usr/local/bin/queue-run --pool ${shellQuote(pool)} --limit ${String(limit)} --wait 900 --memory-gate 120 --max-hold ${String(DEFAULT_HEAVY_COMMANDS.maxHoldSeconds)} --on-deadline ${onDeadline} --label ${shellQuote(label)} -- nice -n 19 ionice -c 2 -n 7 choom -n ${String(OOM_SCORE.heavy)} -- ${shell(command)}`;
 
 test("a rule's deadline answer reaches the wrapper, so the one shipped rule that skips is the only one that does", async () => {
     const command = await rewritten({ command: "pnpm verify:turn" }, bashTmuxHooks([], undefined, undefined, undefined, heavy()));
@@ -308,8 +308,8 @@ const offloadTo = (map: Record<string, string>) => () => Promise.resolve(map);
 
 test("a heavy line whose kind goes to a runner is handed to offload-run, which keeps the queue for running it here", async () => {
     const command = await rewritten({ command: "pnpm test" }, bashTmuxHooks([], undefined, undefined, undefined, heavy(), offloadTo({ "package-script": "runner-omen" })));
-    const queue = `/usr/local/bin/queue-run --pool heavy --limit 2 --wait 900 --memory-gate 120 --max-hold ${String(DEFAULT_HEAVY_COMMANDS.maxHoldSeconds)} --on-deadline ${DEFAULT_HEAVY_COMMANDS.onDeadline} --label package-script -- choom -n ${String(OOM_SCORE.heavy)} -- `;
-    const offloaded = `nice -n 10 ionice -c 2 -n 7 choom -n ${String(OOM_SCORE.command)} -- /usr/local/bin/offload-run --to runner-omen --label package-script --here ${shellQuote(queue)} -- ${shell("pnpm test")}`;
+    const queue = `/usr/local/bin/queue-run --pool heavy --limit 2 --wait 900 --memory-gate 120 --max-hold ${String(DEFAULT_HEAVY_COMMANDS.maxHoldSeconds)} --on-deadline ${DEFAULT_HEAVY_COMMANDS.onDeadline} --label package-script -- nice -n 19 ionice -c 2 -n 7 choom -n ${String(OOM_SCORE.heavy)} -- `;
+    const offloaded = `nice -n 19 ionice -c 2 -n 7 choom -n ${String(OOM_SCORE.command)} -- /usr/local/bin/offload-run --to runner-omen --label package-script --here ${shellQuote(queue)} -- ${shell("pnpm test")}`;
     expect(command).toBe(wrap("pnpm test", born(offloaded), "run"));
 });
 

@@ -34,6 +34,9 @@ flowchart LR
   A turn reaches an extension card's MCP endpoint on a bearer minted per turn for the cards that turn was granted
   (`extensions/backend/extension-mcp.ts`). The panel token that repo operator panels hold reaches no route that
   returns a stored secret.
+- A process the daemon starts is put in a workload class by whoever starts it (`platform/resources/workload-class.ts`,
+  `spawnAs`): its niceness, IO class and rank for the kernel's OOM killer, inherited by everything it forks. Builds
+  go first, agent runtimes last, children before their parents. Nothing ranks a process by its command line.
 - Stored files evolve under one engine (`store/`). Each is declared with `defineDocument` beside its store, carrying
   the conversions its shape has had; `jsonFile` runs them on every read and keeps what it does not know on writes.
   Before any store opens, `store/evolution/state-convergence.ts` writes converted files back under a journal a rolled-back build

@@ -1,4 +1,5 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawnAs } from "../../platform/resources/workload-class.js";
 import { createInterface } from "node:readline";
 import { whenAborted } from "../../abort.js";
 import { nsenterArgv } from "../../agents/worktrees/isolation.js";
@@ -42,6 +43,8 @@ export interface CodexTurn {
     // app-servers in sequence.
     readonly steering?: AsyncIterable<string>;
     readonly namespace?: CodexNamespace;
+    // How deep the turn's conversation sits under the spawns above it: the app-server's OOM rank (workload-class.ts).
+    readonly spawnDepth?: number;
     readonly signal: AbortSignal;
 }
 
@@ -396,9 +399,10 @@ class AsyncQueue<T> implements AsyncIterable<T> {
     }
 }
 
-type CodexSpawn = (binary: string, args: readonly string[], env: Record<string, string>) => ChildProcessWithoutNullStreams;
+type CodexSpawn = (binary: string, args: readonly string[], env: Record<string, string>, spawnDepth: number) => ChildProcessWithoutNullStreams;
 
-const spawnCodex: CodexSpawn = (binary, args, env) => spawn(binary, args, { env, stdio: ["pipe", "pipe", "pipe"] });
+const spawnCodex: CodexSpawn = (binary, args, env, spawnDepth) =>
+    spawnAs({ class: "agentRuntime", spawnDepth }, binary, args, { env, stdio: ["pipe", "pipe", "pipe"] });
 
 const stdioConnector =
     (binaryPath: () => Promise<string | undefined> = codexBinary, spawnProcess: CodexSpawn = spawnCodex): CodexAppServerConnector =>
@@ -412,7 +416,7 @@ const stdioConnector =
             turn.namespace === undefined
                 ? { command: binary, args: ["app-server", "--stdio"] }
                 : nsenterArgv(turn.namespace.pid, turn.namespace.cwd, binary, ["app-server", "--stdio"]);
-        const child = spawnProcess(argv.command, argv.args, turn.env);
+        const child = spawnProcess(argv.command, argv.args, turn.env, turn.spawnDepth ?? 0);
         const messages = new AsyncQueue<AppServerMessage>();
         const pending = new Map<number, { readonly resolve: (value: unknown) => void; readonly reject: (error: unknown) => void }>();
         let requestId = 0;

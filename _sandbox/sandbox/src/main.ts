@@ -27,9 +27,6 @@ import { checks as containerChecks, owner as containerOwner } from "./platform/i
 import { readCgroup } from "./platform/resources/cgroup.js";
 import { startBootProfile } from "./platform/resources/loop/boot-profile.js";
 import { startLoopWatchdog } from "./platform/resources/loop/loop-watchdog.js";
-import { oomScoreResolver } from "./platform/resources/oom-priority.js";
-import { startOomScorer } from "./platform/resources/oom-scorer.js";
-import { spawnDepthOf } from "./agent/subagents/children.js";
 import { answers } from "./ports/port-probe.js";
 import { runnerModeRequested, startRunnerMode } from "./runners/runner-mode.js";
 import { appPanelKey } from "./workspace/layout/app-previews.js";
@@ -70,9 +67,6 @@ const main = async (): Promise<void> => {
     // journal a rolled-back build undoes; committed once the boot chain converges, below.
     await convergeStateAtBoot({ config, logger, traits, role });
     const services = createServices(config, logger);
-    // Ranks the daemon's children for the OOM killer by role and spawn depth; the front renices them.
-    const oomScorer = startOomScorer(oomScoreResolver((owner) => spawnDepthOf(services.conversations, owner)));
-    shutdown.push(() => oomScorer.stop());
     shutdown.push(() => services.perf.stop());
     shutdown.push(() => services.ciHooks.stop());
     shutdown.push(() => services.announcer.stop());

@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import { spawnAs } from "../../platform/resources/workload-class.js";
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
@@ -78,7 +79,7 @@ const parsed = (line: string): RpcMessage | undefined => {
         const message: unknown = JSON.parse(line);
         return typeof message === "object" && message !== null ? (message as RpcMessage) : undefined;
     } catch {
-        // A backend's stray non-JSON line (a warning printed to stdout) carries nothing to route.
+        // silent-catch: a backend's stray non-JSON line (a warning printed to stdout) carries nothing to route.
         return undefined;
     }
 };
@@ -146,7 +147,7 @@ export const createSchemaCache = (timeoutMs = 30_000) => {
             await mkdir(dirname(cachePath), { recursive: true })
                 .then(() => writeFile(temp, JSON.stringify(tools)))
                 .then(() => rename(temp, cachePath))
-                // A cache that could not be written costs the next boot one more probe; this answer is in hand.
+                // silent-catch: a cache that could not be written costs the next boot one more probe; this answer is in hand.
                 .catch(() => undefined);
             return tools;
         })();
@@ -221,7 +222,7 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
         try {
             backend.child.stdin?.write(`${JSON.stringify(message)}\n`);
         } catch {
-            // The backend went away mid-write; its exit handler answers everything it still owed.
+            // silent-catch: the backend went away mid-write; its exit handler answers everything it still owed.
         }
     };
 
@@ -239,7 +240,8 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
     // The environment arrives whole from the prepare step, not merged over the daemon's: a headless backend needs
     // DISPLAY absent, which a merge could not express.
     const spawnBackend = (owner: string, spec: BrowserBackendSpec): Backend => {
-        const child = spawn(spec.command, [...spec.args], { env: { ...spec.env, ...manifest.backendEnv }, stdio: ["pipe", "pipe", "ignore"] });
+        // A service: the browser it drives is restarted on the next call, and Chromium raises its own renderers above it.
+        const child = spawnAs({ class: "service" }, spec.command, [...spec.args], { env: { ...spec.env, ...manifest.backendEnv }, stdio: ["pipe", "pipe", "ignore"] });
         let markReady: () => void = () => undefined;
         const backend: Backend = { child, pending: new Map(), nextId: 1, ready: new Promise((resolve) => (markReady = resolve)) };
         backends.set(owner, backend);

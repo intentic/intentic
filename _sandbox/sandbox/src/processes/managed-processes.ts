@@ -9,6 +9,7 @@ import { SHELL } from "../terminal/pane-state.js";
 import { watchPromptSignals } from "../terminal/prompt-signal.js";
 import { PANEL_SESSION_PREFIX } from "../terminal/terminal-session.js";
 import { isNoTmuxServer } from "../terminal/tmux-server.js";
+import { applyWorkload, type WorkloadClass } from "../platform/resources/workload-class.js";
 import { freePort } from "./free-port.js";
 
 export interface ProcessSpec {
@@ -20,6 +21,9 @@ export interface ProcessSpec {
     readonly portEnv?: readonly string[];
     // A one-shot job reports done once its shell returns to prompt; default panels run until session end.
     readonly oneShot?: true;
+    // What the pane's shell and everything it runs are to the sandbox (platform/resources/workload-class.ts); absent is
+    // a panel.
+    readonly workload?: Extract<WorkloadClass, "panel" | "install">;
 }
 
 // launching: session exists, shell hasn't run the command yet
@@ -89,16 +93,15 @@ const defaultRunner: ProcessRunner = {
         // fresh. `=` forces an exact target match (a bare `-t panel-x` would prefix-match `panel-x--api`).
         await endPanes(session);
         await forkedExec("tmux", ["kill-session", "-t", `=${session}`]).catch(() => undefined);
+        const created = await forkedExec("tmux", ["new-session", "-d", "-P", "-F", "#{pane_pid}", "-s", session, "-c", spec.cwd, ...envFlags]);
+        // The pane's shell hangs off the tmux server, not the daemon, so it is put in its class here, at the prompt,
+        // before it is handed the command: everything the command forks inherits the class.
+        const shell = Number(created.stdout.trim());
+        if (Number.isInteger(shell) && shell > 0) {
+            await applyWorkload(shell, { class: spec.workload ?? "panel" });
+        }
         // Sent via send-keys so Ctrl+C/↑ still work; trailing `:` is required for tmux to resolve the pane.
         await forkedExec("tmux", [
-            "new-session",
-            "-d",
-            "-s",
-            session,
-            "-c",
-            spec.cwd,
-            ...envFlags,
-            ";",
             "send-keys",
             "-t",
             `=${session}:`,

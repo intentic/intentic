@@ -1,4 +1,5 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
+import { spawnAs } from "../platform/resources/workload-class.js";
 import { closeSync, mkdirSync, openSync, renameSync, statSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -122,7 +123,7 @@ export const createServiceProcesses = (logsDir: string, logger: Logger, timing: 
     const spawnChild = (key: string, entry: Entry): void => {
         const fd = openLog(key);
         const binDir = join(entry.spec.cwd, "node_modules", ".bin");
-        const child = spawn("sh", ["-c", entry.spec.command], {
+        const child = spawnAs({ class: "service" }, "sh", ["-c", entry.spec.command], {
             cwd: entry.spec.cwd,
             env: {
                 ...process.env,

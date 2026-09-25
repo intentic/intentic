@@ -61,6 +61,9 @@ export interface EngineClientOptions extends ResidentEngineOptions {
     readonly memoryCeilingBytes?: number;
     readonly memoryCheckIntervalMs?: number;
     readonly onRecycle?: (info: { readonly pid: number; readonly rssBytes: number }) => void;
+    // Told each child's pid as it is forked, before it has read a request: where the host puts it in its own class of
+    // process (priority, OOM rank), which this package has no view of.
+    readonly onSpawn?: (pid: number) => void;
 }
 
 // VmRSS for one pid. Linux only, and undefined everywhere else, which reads as "no reason to recycle".
@@ -71,7 +74,7 @@ const residentBytes = async (pid: number): Promise<number | undefined> => {
 };
 
 export const createEngineClient = (options: EngineClientOptions): EngineClient => {
-    const { onIndexError, onQueryError, onIndexProgress, memoryCeilingBytes, memoryCheckIntervalMs, onRecycle, ...init } = options;
+    const { onIndexError, onQueryError, onIndexProgress, memoryCeilingBytes, memoryCheckIntervalMs, onRecycle, onSpawn, ...init } = options;
     // Callbacks and policy are destructured out because `init` is structured-cloned to the child, which a function
     // cannot survive.
     const ceilingBytes = memoryCeilingBytes ?? 0;
@@ -127,6 +130,9 @@ export const createEngineClient = (options: EngineClientOptions): EngineClient =
         // advanced serialization, not JSON: QueryRequest.features is a Set, and optionals need absent-vs-undefined
         // kept.
         const started = fork(childModule, { serialization: "advanced", stdio: ["ignore", "inherit", "inherit", "ipc"] });
+        if (started.pid !== undefined) {
+            onSpawn?.(started.pid);
+        }
         started.on("message", (message) => receive(message as EngineEvent));
         // A dead child takes its in-flight calls with it, reported through onQueryError (the host's channel for a
         // degraded search). The handle is dropped so the next call starts a fresh child, index claim and all.

@@ -65,7 +65,7 @@ const withRuntimeConfig = (
 
 // What every turn of one run shares: environment, provider block, and namespace. Only the prompt, sandbox mode and
 // session id differ between turns.
-type CodexTurnBase = Pick<CodexTurn, "env" | "modelProvider" | "config" | "namespace">;
+type CodexTurnBase = Pick<CodexTurn, "env" | "modelProvider" | "config" | "namespace" | "spawnDepth">;
 
 // Projects the browser layer's MCP specs (built for the Claude SDK) into Codex's per-thread config instead of a second
 // browser stack: the daemon-hosted routers as Streamable HTTP servers, anything stdio as a process. SDK-instance servers
@@ -686,6 +686,7 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
             ...(request.spec.isolation?.anchor === undefined
                 ? {}
                 : { namespace: { pid: request.spec.isolation.anchor.pid, cwd: request.spec.isolation.anchor.cwd } }),
+            ...opt("spawnDepth", request.spec.spawnDepth),
         };
         // request.spec.cwd is this conversation's own checkout; the shared root would misplace an isolated turn's image.
         const imageArtifacts = { workspaceRoot: request.spec.cwd, codexHome: activeCodexHome };

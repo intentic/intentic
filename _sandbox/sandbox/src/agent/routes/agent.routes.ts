@@ -31,7 +31,7 @@ import { ensureComposedWorktree } from "../context/conversation-context.js";
 import { settleLandingInBackground, versionMainTree } from "../../agents/land/version-landed.js";
 import { routeLandBreakage } from "../../agents/land/land-breakage.js";
 import { handoffHistory, turnStartIndex } from "../../sessions/turn-transcript.js";
-import { type ChildSupervisor, childSupervisor, isSpawnedChild } from "../subagents/children.js";
+import { type ChildSupervisor, childSupervisor, isSpawnedChild, spawnDepthOf } from "../subagents/children.js";
 import type { AgentRequest, TurnBase, TurnHooks, TurnSpec } from "../providers/agent-request.js";
 import { composeWirePrompt } from "../prompt/turn-preamble.js";
 import { applyTrim, trimFrame, type TurnTrimState } from "../prompt/window/context-trim.js";
@@ -381,6 +381,7 @@ const baseRequestOf = (
             cwd: turn.cwd,
             // Which agent the children this turn spawns belong to; absent for a turn with no conversation.
             ...opt("conversationId", input.conversationId),
+            ...opt("spawnDepth", input.conversationId === undefined ? undefined : spawnDepthOf(services.conversations, input.conversationId)),
             ...opt("isolation", turn.isolation),
             ...opt("sessionId", turn.resumed),
             ...opt("model", input.model),

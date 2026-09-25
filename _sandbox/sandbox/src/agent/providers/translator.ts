@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import { spawnAs } from "../../platform/resources/workload-class.js";
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -194,7 +195,7 @@ export const startTranslator = (services: Services): void => {
         // Daemon-owned and stamped, so a later daemon can recognize this as its own leftover.
         // Falls back from a store copy, to the pack install, to the bare name, reported as missing.
         const binary = (await engineBinary("translator", "cli-proxy-api")) ?? "cli-proxy-api";
-        child = spawn(binary, ["--config", configPath], {
+        child = spawnAs({ class: "service" }, binary, ["--config", configPath], {
             stdio: ["ignore", "pipe", "pipe"],
             env: { ...process.env, ...workloadStamp(DAEMON_OWNER) },
         });
