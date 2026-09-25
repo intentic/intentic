@@ -83,10 +83,30 @@ export const UnfinishedWorkSchema = z.object({
         })
         .optional()
         .describe("The agent's own checklist where that turn left it. Absent for a conversation that kept no list."),
-    // Name of the `turn.ending` check still red when the turn ended, after its two repair rounds ran out.
-    check: z.string().optional().describe("The end-of-turn check that was still failing when the turn ended, by name."),
+    // Name of the `turn.ending` check still red when the turn ended. Retired with that check: nothing writes it now, and
+    // it stays so entries written before still read.
+    check: z
+        .string()
+        .optional()
+        .describe("The end-of-turn check that was still failing when the turn ended, by name. No longer written: checks run after work lands."),
 });
 export type UnfinishedWork = z.infer<typeof UnfinishedWorkSchema>;
+// What the last turn showed of its own work, read off its tool calls and never asked of the model: the record a card
+// badges instead of sending the turn back to prove anything. Checks run after the work lands (mainline.ts).
+export const TurnProofSchema = z.object({
+    at: z.number().describe("When the turn that left this ended, in milliseconds."),
+    verification: z
+        .enum(["verified", "unproven", "failing", "no-code"])
+        .describe(
+            "Verified: a check it ran passed after its last edit to code. Failing: the last one it ran failed. Unproven: it changed code and ran nothing that checked it. No-code: it changed nothing a check could speak to.",
+        ),
+    check: z.string().optional().describe("The command that spoke, when one did, so a targeted test is never read as the whole suite."),
+    unviewed: z
+        .number()
+        .optional()
+        .describe("How many rendered files it changed (pages, components, styles) without looking at the result afterwards. Absent when none."),
+});
+export type TurnProof = z.infer<typeof TurnProofSchema>;
 // A landing's commit message: subject plus the two trailer sentences a changelog repo gets. One schema, not three
 // duplicated fields, since both the live roster and the review carrier must read the same shape and can't disagree.
 export const LandedMessageSchema = z.object({
@@ -396,7 +416,11 @@ export const AgentSummarySchema = z.object({
     // Beside `attention` since a reader asks both at a glance, but opposite in shape: a turn gone, not one still parked
     // and waiting.
     unfinished: UnfinishedWorkSchema.optional().describe(
-        "What its last turn left open: steps it never completed, a check still failing. Absent for a turn that finished what it started.",
+        "What its last turn left open: steps it never completed. Absent for a turn that finished what it started.",
+    ),
+    // Written by the turn's own settle from its tool calls; nothing is asked of the model to earn or clear it.
+    proof: TurnProofSchema.optional().describe(
+        "What its last turn showed of its work: whether a check it ran passed after its last edit, and whether it looked at interface files it changed. Absent until a turn that edited or checked anything has ended.",
     ),
     // Completed turns and lifetime tool calls, the card's msgs/tools counters.
     turns: z.number().optional().describe("Turns it has finished."),

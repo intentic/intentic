@@ -6,7 +6,8 @@ import { opt } from "../opt.js";
 import { operatorHere } from "../auth/operator.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
-import { AttemptRefused, ciFailureEvidence, startCiFix } from "./ci-fix.js";
+import { AttemptRefused } from "../agents/fix/fix-attempts.js";
+import { ciFailureEvidence, startCiFix } from "./ci-fix.js";
 import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects, type CiProject } from "./projects.js";
 

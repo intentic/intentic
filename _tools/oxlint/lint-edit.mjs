@@ -10,7 +10,7 @@ import { repoRoot } from "../constants/src/node.mjs";
 // The extensions `pnpm lint` reads.
 const LINTABLE = new Set([`.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.mjs`, `.cjs`, `.jsx`, `.vue`, `.astro`]);
 
-// Rules a half-written file trips honestly; `pnpm lint` still holds them when the turn ends.
+// Rules a half-written file trips honestly; `pnpm lint` still reads them in the check after the land and at the push.
 const DEFERRED = new Set([`eslint(no-unused-vars)`]);
 
 const OXLINT_TIMEOUT_MS = 60_000;

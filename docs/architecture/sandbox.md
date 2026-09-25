@@ -11,6 +11,7 @@ flowchart LR
     runtime --> wt["worktree<br/>/history/worktrees/id"]
     wt -->|"land: patch as<br/>uncommitted changes"| main["main tree<br/>/work"]
     main --> verify["land check<br/>verify-deps.ts"]
+    verify -->|"red"| route["who fixes it<br/>land-breakage.ts"]
 ```
 
 ## The process
@@ -36,12 +37,27 @@ flowchart LR
 
 - Landing applies a conversation's changes to the main tree as **uncommitted changes**. `HEAD` never moves; the owner's commit is the review boundary ([`land.ts`](../../_sandbox/sandbox/src/agents/land/land.ts), `landAgent`).
 - It rebases the branch onto main ([`sync.ts`](../../_sandbox/sandbox/src/agents/land/sync.ts)), reconciles the lockfile, and checks every repository's patch before writing any: one conflict and nothing is written. The `merge` mode writes conflict markers instead, and `measure` is a dry run.
-- After a land, [`verify-deps.ts`](../../_sandbox/sandbox/src/workspace/deps/verify-deps.ts) runs the repository's `land` check, else its `verify` script, else `test`. New failures go back to the conversation whose land caused them ([`land-breakage.ts`](../../_sandbox/sandbox/src/agents/land/land-breakage.ts)).
+- After a land, [`verify-deps.ts`](../../_sandbox/sandbox/src/workspace/deps/verify-deps.ts) runs the repository's `land` check, else its `verify` script, else `test`, on the main tree in the background. It is the one check work gets, and nothing waits on it. One project is checked at a time, and lands that arrive during a run wait and are measured together in the next. `GET /workspace/mainline` ([`mainline-status.ts`](../../_sandbox/sandbox/src/workspace/deps/mainline-status.ts)) is what the editor shows of it: a main-line strip at the top of the chat rail (what is being checked, what waits, the last verdict, who is working on a red one) and a status on each session card.
+
+## After a red land check
+
+[`land-breakage.ts`](../../_sandbox/sandbox/src/agents/land/land-breakage.ts) routes a red run the same way every time, in this order:
+
+1. More work landed while it ran: wait for that check, which may already be green. At most three times per red streak.
+2. A conversation still working has unlanded changes in a failing package: hold, tell it once, and route when it stops or after 45 minutes.
+3. Lay the failures at a land: the one land the run covered, else the lands whose changed paths share a package with a failure, else, when the check's report names a `rerun` command, the lands whose own landed tree reproduces the failures. [`land-bisect.ts`](../../_sandbox/sandbox/src/agents/land/land-bisect.ts) checks each suspect's tip out in a scratch `git worktree` with the main tree's dependencies mirrored and re-runs only the failing tests there ([`rerun-units.mjs`](../../_tools/scripts/verify/rerun-units.mjs) in this repository).
+4. Exactly one land named, and its conversation still has the work in mind (prompt cache warm, under 60% of its context window, not archived, sent fewer than two times this streak): send the failures back to it.
+5. Otherwise start a fresh fix-up conversation ([`land-fix.ts`](../../_sandbox/sandbox/src/agents/land/land-fix.ts)) with the failures, each suspect's changed files, the exact `git diff <from> <tip>` and `agents show <id>` to read its conversation. Its id is `land-fix-<project>-<streak>`, so every attempt at one streak shares it, and a streak gets at most two attempts.
+6. Past those limits the red waits for a person.
+
+Every decision is filed on the run and shown in the editor. With the owner's "Repair what breaks after landing" switch (`autoRepair`) off, all of it is only reported. A red streak's end logs `mainline: red streak ended` with how long it lasted.
 
 ## Checks
 
-- A repository declares its checks in `.intentic/checks.json` for the moments `edit`, `turn` and `land` (`RepoChecksFileSchema` in [`settings.ts`](../../_shared/sandbox-contract/src/schemas/settings.ts)). The owner adopts the file, and a changed declaration waits for re-adoption.
-- [`repo-checks.ts`](../../_sandbox/sandbox/src/rules/repo-checks.ts) turns them into rules. Edit checks run on every file an agent writes, and their output returns with the edit ([`file-edited.ts`](../../_sandbox/sandbox/src/rules/file-edited.ts)). Turn checks run when the agent stops and can send it back to work ([`turn-ending.ts`](../../_sandbox/sandbox/src/rules/turn-ending.ts)). A turn whose checks failed is held from landing unless a rule allows it.
+- A repository declares its checks in `.intentic/checks.json` for the moments `edit` and `land` (`RepoChecksFileSchema` in [`settings.ts`](../../_shared/sandbox-contract/src/schemas/settings.ts)). The owner adopts the file, and a changed declaration waits for re-adoption. The `turn` moment is retired: a declaration naming it still parses and counts toward adoption, but runs nothing.
+- [`repo-checks.ts`](../../_sandbox/sandbox/src/rules/repo-checks.ts) turns edit checks into `file.edited` rules. They run on every file an agent writes, and their output returns in that edit's result without stopping the turn ([`file-edited.ts`](../../_sandbox/sandbox/src/rules/file-edited.ts)).
+- Nothing runs when a turn ends, nothing sends it back to work, and no check holds its land. The owner's `turn.ending` rules and the built-in `verify-ui-edits` are retired like `turn`. What a turn showed of its own work is recorded as its card's `proof` ([`turn-settlement.ts`](../../_sandbox/sandbox/src/agent/run/settle/turn-settlement.ts)): verified, unproven, failing or no-code from the checks it chose to run after its last edit, and how many rendered interface files it changed without looking. The editor badges it.
+- A "Checks after landing" note ([`mainline-note.ts`](../../_sandbox/sandbox/src/workspace/deps/mainline-note.ts)) tells each conversation that nothing checks its work when it finishes, what runs after it lands, and which failures main already has. It goes out with the opening message, after a compaction, and whenever the main tree's reds change.
 
 ## State
 

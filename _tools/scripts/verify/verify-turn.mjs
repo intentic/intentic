@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// `pnpm verify:turn`: what a turn can answer for at Stop, scoped to what it touched since its main-line base, committed
-// on the branch or not (the full repository runs after the land, in verify.mjs). Four independent readers, each judged
-// against that base: (1) the checks, line by line (turn-findings.mjs), a new line refused whatever its gate; (2) the
-// linter over the changed files; (3) the assertion ratchet over the changed test files; (4) typecheck+test over the
-// affected closure (lib/workspace-graph.mjs), re-run once before a failure is charged.
-// Every reader reports before the digest (lib/steps.mjs): the Stop sends a model back at most twice (MAX_FOLLOW_UPS,
-// sandbox/src/rules/turn-ending.ts), and quotes only the last ~4,000 bytes, which the digest is sized to fit.
+// `pnpm verify:turn`: an optional check a model or a person runs by hand on a branch's own closure. Nothing runs it
+// automatically and no turn waits on it. The check work gets is verify.mjs, on the main tree after the land. Scoped to
+// what the branch touched since its main-line base, committed or not. Four independent readers, each judged against
+// that base: (1) the checks, line by line (turn-findings.mjs), a new line counted whatever its gate; (2) the linter over
+// the changed files; (3) the assertion ratchet over the changed test files; (4) typecheck+test over the affected
+// closure (lib/workspace-graph.mjs), re-run once before a failure is charged.
+// Every reader reports before the digest (lib/steps.mjs), which lists every failure together at the end of the output.
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -53,9 +53,8 @@ if (fixedChecks.length > 0) {
 if (verdicts === undefined) {
     fail("checkout gates", "could not be measured · node _tools/checks/run.mjs --tidy=warn");
 } else {
-    // A check that could not measure judged nothing, so it has no problems to attribute and must never hold a turn: its
-    // tool moved, which is not something this turn's diff can answer for and not something a model should be sent back
-    // to fix at random.
+    // A check that could not measure judged nothing, so it has no problems to attribute and fails nothing here: its tool
+    // moved, which is not something this branch's diff can answer for.
     const unmeasured = verdicts.filter((verdict) => !verdict.measured);
     if (unmeasured.length > 0) {
         say(
@@ -67,15 +66,16 @@ if (verdicts === undefined) {
         say(`checkout gates: ${verdicts.filter(({ ok }) => ok).length} passed`);
     } else {
         // THE ONE QUESTION THIS SECTION ASKS: which of these lines were not here before. A `tidy` rule is a real cost
-        // with a measurement behind it, and what it must never do is refuse an actor for a tree it did not make — a
+        // with a measurement behind it, and what it must never do is charge an actor for a tree it did not make: a
         // directory somebody else filled, a baseline somebody else's deletion left stale. None of that is true of a line
-        // THIS turn wrote, which is why the refusal belongs here: it is the earliest gate that can tell the two apart,
-        // and the only one still holding the model that wrote the line.
+        // THIS branch wrote, which is why a new line counts here whatever its gate: this is the earliest run that can
+        // tell the two apart.
         //
-        // NOT THE LAST ONE, THOUGH, AND THE DIFFERENCE IS THE WHOLE OF WHY THE NIGHTLY WENT RED. A turn measures its own
-        // worktree against its own HEAD — a tree that never becomes main. Two turns that each add one file to a
-        // directory of thirty are each green here and over the limit once they land together. verify-push asks this same
-        // question of the push RANGE, which is the first tree that does become main.
+        // NOT THE LAST ONE, THOUGH, AND THE DIFFERENCE IS THE WHOLE OF WHY THE NIGHTLY WENT RED. A branch is measured
+        // here in its own worktree against its own base, a tree that never becomes main. Two branches that each add one
+        // file to a directory of thirty are each green here and over the limit once they land together. The check after
+        // each land (land-tiers.mjs) asks this same question of the main tree the land left, and verify-push asks it of
+        // the push RANGE.
         const before = reportsAt(
             root,
             base ?? "HEAD",
@@ -181,7 +181,7 @@ if (global !== undefined) {
     say(`${seeds.size} changed package${seeds.size === 1 ? "" : "s"}, ${affected.size} in the closure: ${[...affected].sort().join(", ")}`);
 }
 
-// Lines of a failure list shown before the rest is counted, so the digest after it survives the Stop's output tail.
+// Lines of a failure list shown before the rest is counted, so the digest after it stays in a truncated tail.
 const LISTED = 30;
 const list = (units) => [...units.slice(0, LISTED).map((unit) => `  ${unit}`), ...(units.length > LISTED ? [`  …and ${units.length - LISTED} more`] : [])].join("\n");
 

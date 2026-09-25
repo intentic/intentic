@@ -35,7 +35,9 @@ const everything: PersistedAgent = {
     sessionId: "sess-9",
     compactedTurn: 7,
     ending: { kind: "limited", failure: "spent", resetsAt: 1_900, held: true, scheduled: true, moving: "acct-3" },
+    // `check` is no longer written (no check runs when a turn ends), but entries from before still carry it and read.
     unfinished: { at: 9, steps: { open: 2, total: 5, next: "wire it" }, check: "pnpm verify" },
+    proof: { at: 10, verification: "failing", check: "pnpm test", unviewed: 2 },
     postures: { autoLand: false, limit: "move", outage: "retry", stopped: "wait" },
     landing: {
         message: { subject: "Fix the fan-out", note: "Cards update at once.", breaking: "Drops the old route." },

@@ -5,6 +5,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount } from "vue";
 import { cacheWarm } from "../../agents/fleet/promptCache";
 import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
+import { injectMainline } from "../../agents/mainline/useMainline";
 import { createCardViews, type OpenChat } from "./cardView";
 import ChatTabRow from "./ChatTabRow.vue";
 import { laneOfTab } from "./tabs";
@@ -30,6 +31,9 @@ const { edit } = actions;
 const cooling = computed(() => props.entries.some(({ agent }) => agent !== undefined && cacheWarm(agent)));
 const now = useNow(() => cooling.value);
 
+// The host's one read of main's check (ChatTabList), which each row's checks mark is projected from.
+const mainline = injectMainline();
+
 // One view-model cache per list, pruned to what it draws, so a pass over unchanged facts redraws no row.
 const views = createCardViews();
 const rows = computed(() => {
@@ -37,7 +41,7 @@ const rows = computed(() => {
     const built = props.entries.map((entry) => {
         alive.add(entry.conversation.conversationId);
         const snippet = entry.agent === undefined ? undefined : props.snippetOf?.(entry.agent);
-        return { ...entry, view: views.of(entry, snippet, now.value) };
+        return { ...entry, view: views.of(entry, snippet, now.value, mainline?.value) };
     });
     views.prune(alive);
     return built;

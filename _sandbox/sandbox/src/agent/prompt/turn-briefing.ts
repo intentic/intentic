@@ -2,11 +2,11 @@ import { type Persona, type TurnBriefingNoteId, type TurnNote, TURN_BRIEFING_FIX
 import { CONTEXT_NOTE_TITLE } from "../context/context-note.js";
 import { SPAWN_NOTE_TITLE } from "../subagents/spawn-note.js";
 import { PERSONA_NOTE_TITLE, UNATTENDED_ACCOUNTS_TITLE } from "../../personas/personas.js";
-import { TURN_ENDING_NOTE_TITLE } from "../../rules/turn-ending-note.js";
 import { GATED_CREDENTIALS_TITLE } from "../../secrets/credential-gating.js";
 import { SKILL_CATALOG_NOTE_TITLE } from "../../store/loaded-skills.js";
 import { REPO_SYNC_NOTE_TITLE } from "../../workspace/layout/sync-repos.js";
 import { SETUP_NOTICE_TITLE, STALE_NOTICE_TITLE } from "../../workspace/layout/workspace-setup.js";
+import { LANDING_CHECKS_NOTE_TITLE } from "../../workspace/deps/mainline-note.js";
 import { HANDOFF_STATE_NOTE_TITLE } from "./handoff-state.js";
 import { IQ_SEARCH_INSTRUCTION_TITLE } from "./iq-search-instruction.js";
 import { LITERAL_SLASH_NOTE, WORKTREE_NOTE_TITLE } from "./turn-preamble.js";
@@ -24,7 +24,7 @@ export const BRIEFING_NOTE_TITLES: Record<TurnBriefingNoteId, readonly string[]>
     skills: [SKILL_CATALOG_NOTE_TITLE],
     search: [IQ_SEARCH_INSTRUCTION_TITLE],
     delegation: [SPAWN_NOTE_TITLE],
-    checks: [TURN_ENDING_NOTE_TITLE],
+    checks: [LANDING_CHECKS_NOTE_TITLE],
     // One switch over two notices: missing and behind are the same question asked of a workspace in two states.
     dependencies: [SETUP_NOTICE_TITLE, STALE_NOTICE_TITLE],
     repoSync: [REPO_SYNC_NOTE_TITLE],

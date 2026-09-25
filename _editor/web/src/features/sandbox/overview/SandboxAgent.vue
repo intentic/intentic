@@ -119,10 +119,10 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <AgentSafetyLog />
         </template>
 
-        <!-- The two ways a turn ends: proof and delivery, then last the recovery path for a turn that broke instead. -->
+        <!-- What happens once a turn ends: nothing is checked inside it any more, so first who repairs a red the main tree's own check finds after work lands, then what each repository runs, then delivery, and last the recovery path for a turn that broke instead. -->
         <template v-else>
             <AgentChecks />
-            <!-- Directly under the daemon's own reviews, since the question both answer is the same one: what runs. -->
+            <!-- Directly under the repair switch, since the two answer one question: what runs after a land, and who is owed a red. -->
             <AgentRepoChecks />
             <AgentFinishedWork />
             <AgentChangelog />

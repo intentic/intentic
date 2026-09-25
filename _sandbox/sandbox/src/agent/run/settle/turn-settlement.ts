@@ -1,8 +1,7 @@
-import { type AgentProvider, capabilitiesOf, KeyedProviderSchema, profileOf } from "@intentic/sandbox-contract";
+import { type AgentProvider, KeyedProviderSchema, type TurnProof } from "@intentic/sandbox-contract";
 import type { Services } from "../../../composition.js";
 import type { TurnPlacement } from "../../../agents/worktrees/isolation.js";
 import type { RefreshOptions } from "../../../usage/headroom.js";
-import type { VerifyNudge } from "../../verification/verify-nudge.js";
 import type { AgentRequest } from "../../providers/agent-request.js";
 import { ERROR_MESSAGE_CHARS } from "../frames/classify-failure.js";
 import type { Attribution } from "../frames/frame-decorators.js";
@@ -15,8 +14,8 @@ import type { UsageFrame } from "../turn/turn-usage.js";
 import type { HeldTurn } from "../turn/turn-resume.js";
 
 // What a finished turn leaves behind, decided as data from its readings: the records a held turn is re-run from, the
-// row that closes it in the activity log, its ledger row, the re-read it owes, and what the daemon's own Stop runs on.
-// settle-turn.ts carries it out.
+// row that closes it in the activity log, its ledger row, the re-read it owes, and what its card records of the proof it
+// showed. Nothing here sends the turn back: checks run after the work lands. settle-turn.ts carries it out.
 
 // How much of the check that spoke the ledger keeps; a command is a line, not a script.
 const VERIFICATION_CHECK_CHARS = 200;
@@ -30,24 +29,12 @@ export type TurnOutcome = "ok" | "error" | "cancelled";
 export type TurnHold =
     { readonly kind: "held"; readonly held: HeldTurn } | { readonly kind: "got-somewhere"; readonly conversationId: string } | undefined;
 
-// What the daemon's own Stop runs on, for a runtime with no Stop hook of its own.
-export interface DaemonStop {
-    // Whose Stop the daemon runs: undefined for a hooked runtime, a turn that did not end well, or a spawned child,
-    // whose parent's Stop answers for it.
-    readonly conversationId: string | undefined;
-    // The turn-ending command rules' input; asked on every turn, since it answers empty for anything but a
-    // daemon-stopped isolated one.
-    readonly findings: DaemonStopTurn;
-    // The follow-up's input but for what those rules find; present exactly when `conversationId` is.
-    readonly nudge: Omit<VerifyNudge, "findings"> | undefined;
-}
-
-export interface DaemonStopTurn {
-    readonly conversationId: string | undefined;
-    readonly isolated: boolean;
-    readonly request: AgentRequest;
-    readonly edited: readonly string[];
-    readonly cwd: string;
+// What a conversation's card records of the turn that just ended: the proof it showed of its own work, read off its
+// tool calls. Absent for a turn that touched no code and looked at nothing, which leaves the card's last record standing,
+// since the work on the branch has not changed; and for a spawned child, whose parent's report carries its proof.
+export interface ProofNote {
+    readonly conversationId: string;
+    readonly proof: TurnProof;
 }
 
 // A ledger row as the store is handed it; the store stamps the instant and the day.
@@ -60,7 +47,7 @@ export interface SettlementPlan {
     readonly headroomRefresh: RefreshOptions | undefined;
     // The durable ledger row every turn lands on, unbilled failures included.
     readonly usage: UsageRow;
-    readonly daemonStop: DaemonStop;
+    readonly proof: ProofNote | undefined;
     // The label of the main tree's turn-end snapshot; undefined for an isolated turn, which never touches it.
     readonly snapshot: string | undefined;
 }
@@ -70,27 +57,17 @@ export interface TurnEnd {
     readonly input: TurnInput;
     readonly provider: AgentProvider;
     readonly attribution: Attribution;
-    // The request the runtime was handed: its resolved model, and the rules the daemon's Stop runs.
+    // The request the runtime was handed: its resolved model.
     readonly request: AgentRequest;
     readonly aborted: boolean;
     readonly isolated: boolean;
-    // A spawned child's Stop is its parent's to run, whose own Stop answers for it.
+    // A spawned child's proof is its parent's report to carry, not a card of its own.
     readonly spawnedChild: boolean;
-    // The tree as the agent saw it, and the namespace it ran in if it entered one.
-    readonly cwd: string;
+    // The namespace the turn ran in, if it entered one.
     readonly isolation: TurnPlacement | undefined;
     readonly experiments: Extract<TurnPlan, { readonly ok: true }>["experiments"];
     readonly frames: Pick<TurnFrames, "readings" | "verification" | "viewing" | "metrics">;
 }
-
-// The conversation whose Stop the daemon runs, or undefined (see DaemonStop).
-export const daemonStopConversation = (input: TurnInput, provider: AgentProvider, outcome: TurnOutcome, spawnedChild: boolean): string | undefined =>
-    outcome === "ok" &&
-    input.conversationId !== undefined &&
-    capabilitiesOf(provider, input.harness ?? "native").runtime !== "claude-code" &&
-    !spawnedChild
-        ? input.conversationId
-        : undefined;
 
 // Nothing held on a conversation is the run getting somewhere, the one thing that puts the stop ladder back at its start.
 const holdOf = (end: TurnEnd): TurnHold => {
@@ -198,23 +175,28 @@ const usageOf = (end: TurnEnd, outcome: TurnOutcome): UsageRow => {
     };
 };
 
-const daemonStopOf = (end: TurnEnd, outcome: TurnOutcome): DaemonStop => {
-    const { input, request, cwd } = end;
-    const conversationId = daemonStopConversation(input, end.provider, outcome, end.spawnedChild);
-    const findings = { conversationId, isolated: end.isolated, request, edited: end.frames.verification.edited(), cwd };
-    const nudge =
-        conversationId === undefined
-            ? undefined
-            : {
-                  conversationId,
-                  profile: profileOf(input),
-                  rules: request.policy.turnEndingRules ?? [],
-                  ledger: end.frames.verification,
-                  view: end.frames.viewing,
-                  cwd,
-                  ...(request.hooks.onRuleFired !== undefined ? { onFired: request.hooks.onRuleFired } : {}),
-              };
-    return { conversationId, findings, nudge };
+// The proof the turn showed, for its card: whether a check it ran passed after its last edit to code, and how many
+// rendered files it changed without looking at them since. A turn that touched no code and left no surface unlooked
+// says nothing new about the branch, so it records nothing and the last record stands.
+const proofOf = (end: TurnEnd, now: number): ProofNote | undefined => {
+    const conversationId = end.input.conversationId;
+    if (conversationId === undefined || end.spawnedChild || !end.frames.readings().silence.answered) {
+        return undefined;
+    }
+    const proven = end.frames.verification.standing();
+    const unviewed = end.frames.viewing.verdict()?.paths.length ?? 0;
+    if (proven.state === "no-code" && unviewed === 0) {
+        return undefined;
+    }
+    return {
+        conversationId,
+        proof: {
+            at: now,
+            verification: proven.state,
+            ...(proven.check !== undefined ? { check: proven.check.slice(0, VERIFICATION_CHECK_CHARS) } : {}),
+            ...(unviewed > 0 ? { unviewed } : {}),
+        },
+    };
 };
 
 const outcomeOf = (end: TurnEnd): TurnOutcome => {
@@ -233,7 +215,7 @@ export const settleTurn = (end: TurnEnd): SettlementPlan => {
         completion: { type: "turn.completed", ...(end.frames.readings().usage === undefined ? {} : { extra: billed }) },
         headroomRefresh: routed ? { scope: { providers: [end.provider] }, maxAgeMs: SETTLE_MAX_AGE_MS } : undefined,
         usage: usageOf(end, outcome),
-        daemonStop: daemonStopOf(end, outcome),
+        proof: proofOf(end, Date.now()),
         snapshot: end.isolated ? undefined : end.input.prompt,
     };
 };

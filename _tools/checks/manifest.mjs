@@ -1,21 +1,22 @@
-// The one list of checks that read the checkout; CI, the pre-push hook, the turn-ending check and `pnpm checks` all
-// read it, so a check exists once and runs everywhere. Each check is its own process (lib/report.mjs): problems to
-// stderr and exit 1, else what it vouched for to stdout and exit 0.
+// The one list of checks that read the checkout; CI, the pre-push hook, the check after each land (`pnpm verify`), the
+// per-edit run and `pnpm checks` all read it, so a check exists once and runs everywhere. Each check is its own process
+// (lib/report.mjs): problems to stderr and exit 1, else what it vouched for to stdout and exit 0.
 // `needs`:
 // checkout tracked files only, no install, no network
 // git checkout plus history (a merge-base, a range), still no install
 // node_modules optional: the check attempts what needs an install, vouches for less without it
 // `gate`:
-// code the tree is broken or unbuildable; refused wherever this list is read
-// tidy a cost to readers, not a break; a warning at the push, a refusal only for a turn's own new lines, a refusal in
-// CI's tidy job
+// code the tree is broken or unbuildable; a failure wherever this list is read (the pre-push hook only reports it)
+// tidy a cost to readers, not a break; a failure only for the lines a land or a pushed range adds, a warning otherwise,
+// and a failure in the nightly tidy job
 // A new check enters as tidy and is promoted to code once a run record shows only true failures.
 // `scoped`: the check takes `--paths a,b,c` and judges only those files, with the same verdict on them it would reach
 // reading the whole tree. That is what lets it run on ONE file the instant it is written (.intentic/checks.json's
 // `edit` moment), which is the only moment at which the model that wrote the line is still holding it. A check whose
 // finding is a property of the tree rather than of a file — a directory's size, a link's target, a cycle between
 // subsystems — is not scopable and omits the flag; those are read whole or not at all.
-// `fix`: arguments that make the check write the tree into shape itself; the Stop runs it before judging a failure.
+// `fix`: arguments that make the check write the tree into shape itself; the check after a land runs it on the main
+// tree before judging a failure (verify.mjs), and so does `pnpm verify:turn` on a branch.
 export const CHECKS = [
     { id: "control-chars", file: "control-chars.mjs", needs: "checkout", gate: "code", scoped: true, about: "no literal control bytes in tracked text" },
     { id: "skill-descriptions", file: "skill-descriptions.mjs", needs: "checkout", gate: "tidy", about: "every skill description fits the catalog budget the prompt pays for on every call" },

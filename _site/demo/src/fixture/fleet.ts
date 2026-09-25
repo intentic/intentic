@@ -12,6 +12,10 @@ export const AWAITING_AGENT_ID = `cnv_flaky_signup`;
 export const REVIEW_AGENT_ID = `cnv_soft_deletes`;
 // Agent whose land refuses: half the delta diverged, half is held by the owner's own edits.
 export const CONFLICT_AGENT_ID = `cnv_auth_middleware`;
+// The fresh conversation the sandbox started when the release notes' land turned `web`'s check red and the conversation
+// that landed it had gone cold (fixture/mainline.ts). Its id is the daemon's own shape (landFixConversationId): the
+// project, then the second its red streak began, in base 36.
+export const LAND_FIX_AGENT_ID = `land-fix-web-t2k9qx`;
 
 const minutes = (count: number): number => count * 60_000;
 
@@ -116,6 +120,8 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         turns: 3,
         toolUses: 28,
         diff: { files: 2, insertions: 22, deletions: 6 },
+        // The flake it is chasing failed again on its last run, which is what it is asking about.
+        proof: { at: now - minutes(2), verification: `failing`, check: `pnpm -C web e2e signup.spec.ts` },
     },
     {
         id: CONFLICT_AGENT_ID,
@@ -256,6 +262,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         // Somebody else's mark, waiting: work held on a branch is exactly what a teammate says 👀 about.
         reactions: [{ emoji: `👀`, by: [{ ...GRACE, at: now - minutes(16) }] }],
         jobs: SOFT_DELETES_JOBS(now).map(({ command: _command, ...job }) => job),
+        proof: { at: now - minutes(18), verification: `verified`, check: `pnpm -C api test src/db` },
     },
     {
         id: `cnv_release_notes`,
@@ -281,6 +288,8 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         turns: 2,
         toolUses: 11,
         diff: { files: 1, insertions: 22, deletions: 3 },
+        // It reworded the changelog page's headings and never ran or opened it: the land that turned `web` red.
+        proof: { at: now - minutes(34), verification: `unproven`, unviewed: 1 },
     },
     {
         id: `cnv_dep_audit`,
@@ -307,5 +316,34 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         turns: 4,
         toolUses: 46,
         diff: { files: 3, insertions: 14, deletions: 9 },
+        proof: { at: now - minutes(392), verification: `verified`, check: `pnpm -C api test` },
+    },
+    // Started by the sandbox, not by anyone on the team, on the failures the release notes' land left in `web`.
+    {
+        id: LAND_FIX_AGENT_ID,
+        startIn: `web`,
+        sessionId: `ses_01j9landfix`,
+        title: `Fix main after "Draft the release notes for 2.4"`,
+        status: `running`,
+        provider: `claude`,
+        harness: `claude-code`,
+        model: `claude-sonnet-5`,
+        effort: `high`,
+        account: `acc_claude_demo`,
+        branch: `agent/${LAND_FIX_AGENT_ID}`,
+        base: `4f1c8ab`,
+        costUsd: 0.07,
+        inputTokens: 12_400,
+        outputTokens: 1_060,
+        contextTokens: 9_800,
+        contextWindow: 200_000,
+        activity: { tool: `Bash`, target: `pnpm -C web vitest run src/pages/changelog.test.ts`, todo: `Re-run only the failing tests` },
+        startedAt: now - minutes(3),
+        updatedAt: now - 1_300,
+        seenAt: now - minutes(3),
+        attention: NO_ATTENTION,
+        turns: 1,
+        toolUses: 17,
+        diff: { files: 1, insertions: 6, deletions: 4 },
     },
 ];

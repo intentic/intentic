@@ -383,6 +383,71 @@
             "cappedNote": "Gekürzt, wo es über Mitternacht hinausginge, wenn sich das Datum im Prompt ändert, oder über den Punkt, ab dem Auffrischen mehr kostet als erneutes Lesen.",
             "stopsWhen": "Endet von selbst, wenn ein Zug beginnt, wenn das Konto {reserve} % eines Limits überschreitet oder wenn der Prompt des nächsten Zuges nicht mehr passen würde.",
             "stop": "Nicht mehr warm halten"
+        },
+        "mainline": {
+            "title": "Hauptlinie",
+            "explain": "Arbeit landet, ohne auf diese Prüfung zu warten: Sie läuft danach auf dem Hauptbaum, ein Projekt nach dem anderen, und nichts, was sie findet, hält ein Landen, einen Commit oder einen Push auf.",
+            "root": "Arbeitsbereich",
+            "checkingMain": "Prüfe main",
+            "lands": "{count} Landung | {count} Landungen",
+            "mainRed": "main ist rot",
+            "failures": "{count} Fehler | {count} Fehler",
+            "since": "seit {time}",
+            "landsWaiting": "{count} Landung wartet auf die Prüfung von main | {count} Landungen warten auf die Prüfung von main",
+            "mainGreen": "main ist grün",
+            "checkedAgo": "geprüft {ago}",
+            "alsoRed": "{project} rot",
+            "checkingNow": "Prüfe gerade {project}",
+            "waitingNext": "Wartet auf die nächste Prüfung",
+            "redSince": "{project} rot seit {time}",
+            "moreFailures": "{count} weiterer in ihrem Terminal | {count} weitere in ihrem Terminal",
+            "noFailureList": "Sie nannte keine Fehler; ihr Terminal enthält die ganze Ausgabe.",
+            "arrivedWith": "Kamen mit",
+            "recentChecks": "Letzte Prüfungen",
+            "passed": "bestanden",
+            "failed": "fehlgeschlagen",
+            "recheck": "Nachprüfung",
+            "open": "Öffnen",
+            "openConversation": "{title} öffnen",
+            "routingWaiting": "Wartet, bis die inzwischen gelandete Arbeit geprüft ist",
+            "routingHeld": "Wartet auf eine Unterhaltung, die noch daran arbeitet",
+            "routingOriginal": "Zurück an die Unterhaltung, die es gelandet hat",
+            "routingFixUp": "Eine neue Unterhaltung behebt es",
+            "routingReported": "Gemeldet; niemand wurde geschickt",
+            "routingResolved": "Bei der nächsten Prüfung verschwunden; niemand wurde geschickt",
+            "routingSpent": "Keine Reparaturversuche mehr; es wartet auf Sie",
+            "routingDeciding": "Es wird entschieden, wer es behebt",
+            "shortWaiting": "wartet",
+            "shortHeld": "angehalten",
+            "shortOriginal": "zurückgeschickt",
+            "shortFixUp": "Reparatur",
+            "shortReported": "gemeldet",
+            "shortResolved": "erledigt",
+            "shortSpent": "erschöpft"
+        },
+        "landCheck": {
+            "checking": "Prüfe main",
+            "checkingHint": "Die Prüfung von main in {project} läuft auf dem, was hier gelandet wurde.",
+            "waiting": "Wartet auf die Prüfung von main",
+            "waitingHint": "Gelandet; die Prüfung von main in {project} misst es als Nächstes, zusammen mit allem, was inzwischen landet.",
+            "passed": "Prüfung von main bestanden",
+            "passedHint": "Die Prüfung von main in {project} lief nach dieser Landung durch, um {time}.",
+            "broke": "{count} kaputt",
+            "brokeMain": "main kaputt",
+            "brokeHint": "Seine Landung hat die Prüfung von main in {project} rot gemacht, mit {failures}. {routing}.",
+            "brokeHintBare": "Seine Landung hat die Prüfung von main in {project} rot gemacht. {routing}.",
+            "checkedRed": "main noch rot",
+            "checkedRedHint": "Die Prüfung von main in {project} war nach dieser Landung rot, wegen Fehlern, die anderer Arbeit zugeschrieben werden.",
+            "openFixUp": "Die Unterhaltung öffnen, die daran arbeitet",
+            "unverified": "Ungeprüft",
+            "unverifiedHint": "Sein letzter Zug hat Code geändert und nach der letzten Änderung nichts ausgeführt, was ihn prüft.",
+            "lastCheckFailed": "Letzte Prüfung fehlgeschlagen",
+            "lastCheckFailedHint": "Die letzte Prüfung seines Zugs ist fehlgeschlagen: {check}",
+            "lastCheckFailedHintBare": "Die letzte Prüfung seines Zugs ist fehlgeschlagen.",
+            "verified": "Geprüft",
+            "verifiedHint": "{check} lief nach seiner letzten Änderung durch.",
+            "verifiedHintBare": "Eine Prüfung lief nach seiner letzten Änderung durch.",
+            "unviewed": "{count} Oberflächendatei geändert, ohne hinzusehen | {count} Oberflächendateien geändert, ohne hinzusehen"
         }
     },
     "app": {
@@ -1260,7 +1325,9 @@
             "resolvingLandConflict": "Löst den Landekonflikt",
             "sentByAppLanding": "Von der App gesendet, das Landen dieser Arbeit wurde verweigert",
             "sentBySandboxLand": "Von der Sandbox gesendet, das Landen seiner Arbeit hat die Prüfung des Hauptbaums rot gemacht",
-            "sentBySandboxTurn": "Von der Sandbox gesendet, jener Zug endete ungeprüft"
+            "sentBySandboxTurn": "Von der Sandbox gesendet, jener Zug endete ungeprüft",
+            "fixingRedMainLine": "Behebt eine rote Hauptlinie",
+            "startedBySandboxRedMain": "Von der Sandbox gestartet: Die Prüfung von main wurde nach dem Landen von Arbeit rot, und keine Unterhaltung, die diese Arbeit hielt, konnte es übernehmen"
         },
         "hostPickerBody": {
             "carriesOnInSame": "Macht in derselben Unterhaltung weiter, auf dem Modell oben — ⌘/Strg + Enter",
@@ -1483,13 +1550,9 @@
             "includeReleaseNoteEach": "Zu jedem Commit eine Release-Notiz hinzufügen."
         },
         "agentChecks": {
-            "lookAtWhatChanged": "Ansehen, was es geändert hat",
-            "promptAssistantToOpen": "Den Assistenten auffordern, die Ansicht nach Änderungen an der Oberfläche zu öffnen.",
             "repairAfterLanding": "Reparieren, was nach dem Landen kaputtgeht",
-            "repairAfterLandingNote": "Wenn eine gelandete Arbeit die Prüfung des Hauptbaums rot macht, geht sie an die Unterhaltung zurück, die sie gelandet hat. Bleibt die CI von main bei einem Fehler rot, startet ein Reparatur-Agent, sobald keine Pushes mehr kommen; ein Fehler der CI-Runner selbst wird neu gestartet.",
-            "lastAsked": "Zuletzt nachgefragt {ago}",
-            "neverAsked": "Nie nachgefragt",
-            "reviews": "Durchsichten"
+            "repairAfterLandingNote": "Wenn eine Landung die Prüfung des Hauptbaums rot macht, wird gewartet, bis auch die inzwischen gelandete Arbeit geprüft ist; dann geht sie an die Unterhaltung zurück, die sie gelandet hat, solange diese sie noch im Kopf hat, oder eine neue Unterhaltung übernimmt sie. Bleibt die CI von main bei einem Fehler rot, startet ein Reparatur-Agent, sobald keine Pushes mehr kommen; ein Fehler der CI-Runner selbst wird einmal neu gestartet.",
+            "afterLanding": "Nachdem Arbeit gelandet ist"
         },
         "agentClock": {
             "clock": "Uhr",
@@ -1614,7 +1677,7 @@
             "readingWhatWorkspacesRepositories": "Es wird gelesen, was die Repositorys dieses Workspace deklarieren…",
             "repositoriesWaitingOnUntil": "{waiting} Repositorys warten auf Sie. Bis Sie sie einschalten, laufen ihre eigenen Prüfungen nicht.",
             "repositoryChecks": "Repository-Prüfungen",
-            "repositoryDeclaresOwnChecks": "Ein Repository deklariert in .intentic/checks.json, was auf seinem eigenen Code läuft: nach jeder Änderung, bevor ein Zug endet, oder nachdem seine Arbeit gelandet ist. Über einen Push entscheidet der eigene Git-pre-push-Hook des Repositorys."
+            "repositoryDeclaresOwnChecks": "Ein Repository deklariert in .intentic/checks.json, was auf seinem eigenen Code läuft: nach jeder Änderung oder nachdem seine Arbeit gelandet ist. Nichts, was es deklariert, blockiert je ein Landen, einen Commit oder einen Push."
         },
         "agentSafetyJudge": {
             "changeInModels": "In „Modelle“ ändern",
@@ -2427,7 +2490,7 @@
             "runChecksDeclares": "Die Prüfungen ausführen, die {name} deklariert",
             "afterEachEdit": "Nach jeder Änderung",
             "afterItLands": "Nachdem es gelandet ist",
-            "beforeTurnEnds": "Bevor ein Zug endet",
+            "turnRetired": "Bevor ein Zug endet — läuft nicht mehr; geprüft wird nach dem Landen",
             "lastFlagged": "zuletzt gemeldet {ago}",
             "neverFlagged": "nie etwas gemeldet",
             "packageScript": "Paket-Skript",
@@ -4171,7 +4234,7 @@
             "declaredIn": "Deklariert in {path}, damit sie mit dem Repository reisen.",
             "repositoryDoesntDeclareAny": "Dieses Repository deklariert keine eigenen Prüfungen. Legen Sie eine Datei ab unter",
             "runTheseChecks": "Diese Prüfungen ausführen",
-            "whenIsOneOf": "{when} ist {edit}, {turn} oder {land}, und der Befehl läuft in diesem Ordner, schreiben Sie ihn also so, wie Sie es hier in einem Terminal täten."
+            "whenIsEditOrLand": "{when} ist {edit} oder {land}, und der Befehl läuft in diesem Ordner, schreiben Sie ihn also so, wie Sie es hier in einem Terminal täten."
         },
         "directoryPersonas": {
             "addNewOneInstead": "Stattdessen eine neue hinzufügen",

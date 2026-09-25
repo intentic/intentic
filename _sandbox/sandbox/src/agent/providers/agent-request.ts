@@ -5,7 +5,6 @@ import type {
     AgentEvent,
     CommandJudgeMode,
     PermissionMode,
-    Rule,
     SystemPromptMode,
     TurnNote,
 } from "@intentic/sandbox-contract";
@@ -17,8 +16,6 @@ import type { CommandGuardOptions } from "../../guard/command-guard.js";
 import type { HostDeviceReach } from "../../hosts/self-host.js";
 import type { PersonaScope } from "../../personas/persona-scope.js";
 import type { HeavyCommands } from "../../platform/resources/heavy-commands.js";
-import type { RuleCommandRun } from "../../rules/rule-command.js";
-import type { FollowUpOutcome, TurnRuleCommand } from "../../rules/turn-ending.js";
 import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import type { DependencyIssue } from "../../workspace/deps/reconcile-deps.js";
 import type { SteeringQueue } from "../checkpoints/agent-steering.js";
@@ -104,8 +101,6 @@ export interface TurnPolicy {
     readonly unattended?: boolean;
     // Whether the persona may install a missing dependency itself, read by the install-steering and deps hooks.
     readonly dependencyInstallAllowed?: boolean;
-    // Owner's rules standing at turn.ending, read at Stop; empty wires nothing.
-    readonly turnEndingRules?: readonly Rule[];
     // What the settings-hook gate found (guard/hook-approvals.ts): `held` runs the turn with every hook off; otherwise
     // `digest` names the approved set, absent when there is none, and a mid-turn edit may not move it.
     readonly settingsHooks?: { readonly held: boolean; readonly digest?: string };
@@ -183,8 +178,9 @@ export type HarnessCredential = Extract<TurnCredential, { readonly kind: "contai
 export type CodexCredential = Extract<TurnCredential, { readonly kind: "container" | "codex-endpoint" }>;
 export type CursorCredential = Extract<TurnCredential, { readonly kind: "cursor-key" }>;
 
-// What the daemon answers while the turn runs: attendance and restored grants, the rule and check callbacks the Stop
-// reads, the safety judge and its log, and the child-agent and background-job seams.
+// What the daemon answers while the turn runs: attendance and restored grants, the per-edit reviewers, the safety judge
+// and its log, and the child-agent and background-job seams. No check runs at the Stop; the harness's own checklist note
+// (run/checklist-close.ts) is the one thing said there.
 export interface TurnHooks {
     // Where the turn parks a card a person answers (a question, a plan, a permission), so a reply finds it.
     readonly cards: ParkedCards;
@@ -194,32 +190,18 @@ export interface TurnHooks {
     readonly restoredGrant?: (toolName: string) => { readonly always: boolean } | undefined;
     // Project-scoped dependency answer for the command-failure hook, so one project's error stays its own.
     readonly dependencyIssue?: (command: string) => Promise<DependencyIssue | undefined>;
-    // Which projects the daemon is installing, asked only after a turn-ending command has already failed.
-    readonly dependencyInstalling?: () => Promise<readonly string[]>;
     // Files the tree says are dirty, by both names, so a Bash edit gets the same diagnostics as a native Edit.
     readonly dirtyFiles?: DirtyFiles;
     // Owner's file.edited rules bound to this turn's placement, run on every file an edit tool or shell writes.
     readonly editReviewers?: readonly EditReviewer[];
     // Every classified image-scoped install this turn attempts, for the install ledger; nothing reaches the model.
     readonly onImageInstall?: (installs: readonly ClassifiedInstall[], command: string) => void;
-    // How to run a turn-ending rule's command, in this turn's own tree.
-    readonly runRuleCommand?: TurnRuleCommand;
-    // Told when a rule actually fires, so settings can show which rules are earning their place.
-    readonly onRuleFired?: (rule: Rule) => void;
-    // Told what every command rule's run said, so end-of-turn landing can hold work whose check went red.
-    readonly onCheckRun?: (rule: Rule, run: RuleCommandRun) => void;
-    // What the model did after a turn.ending follow-up, at the Stop that followed it.
-    readonly onFollowUpOutcome?: (rule: Rule, outcome: FollowUpOutcome) => void;
-    // What the tree says the turn changed, for the Stop's conditions: a shell edit is invisible to the edit ledger.
-    readonly changedPaths?: () => Promise<readonly string[]>;
-    // This tree's repositories, for a rule aimed at one; asked at the Stop only when such a rule stands.
-    readonly turnRepos?: () => Promise<readonly string[]>;
     // The judge and its writes, as functions so no runtime reaches for them; absent skips the judge.
     readonly judge?: CommandGuardOptions["judge"];
     readonly logSafety?: CommandGuardOptions["log"];
     readonly safetyAnswered?: CommandGuardOptions["answered"];
     readonly rememberSafety?: CommandGuardOptions["remember"];
-    // Rebases onto main when the turn parks for a person or reaches its Stop's checks. Absent off-harness or main-tree.
+    // Rebases onto main when the turn parks for a person. Absent off-harness or main-tree.
     readonly resync?: () => Promise<AgentEvent | undefined>;
     // Supervision surface for runtimes that mount child-agent tools as their own, not through the harness's SDK.
     readonly children?: ChildSupervisor;

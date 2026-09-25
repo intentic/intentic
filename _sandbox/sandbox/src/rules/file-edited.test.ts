@@ -17,7 +17,7 @@ const runner = (answer: EditCommandRun) =>
 
 describe("the file.edited moment", () => {
     test("no rule standing there is no reviewer at all, so a workspace without one pays nothing", () => {
-        expect(fileEditedReviewer([rule({ moment: "turn.ending" })], { run: runner({ status: "passed", output: "" }) })).toBeUndefined();
+        expect(fileEditedReviewer([rule({ moment: "agent.finished" })], { run: runner({ status: "passed", output: "" }) })).toBeUndefined();
         expect(fileEditedReviewer([rule({ enabled: false })], { run: runner({ status: "passed", output: "" }) })).toBeUndefined();
     });
 

@@ -10,6 +10,7 @@ import {
     RetryPolicySchema,
     SessionOwnerSchema,
     type TurnProfile,
+    TurnProofSchema,
     UnfinishedWorkSchema,
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
@@ -163,6 +164,9 @@ export const PersistedAgentSchema = z.object({
     ending: EndingSchema,
     // What the last turn left open, written by the finish that measured it, never cleared for silence.
     unfinished: UnfinishedWorkSchema.optional(),
+    // What the last turn that touched code showed of its work, read off its tool calls; a turn that touched none leaves
+    // it standing, since the work on the branch has not moved.
+    proof: TurnProofSchema.optional(),
     postures: PosturesSchema,
     landing: LandingSchema,
     social: SocialSchema,

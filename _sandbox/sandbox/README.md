@@ -22,8 +22,10 @@ flowchart LR
 - Routes are declared in `@intentic/sandbox-contract`, implemented in `*.routes.ts` and assembled in `src/router.ts`.
   `/events` pushes file, git and fleet changes to the browser.
 - One turn: `agent/run/turn/turn-admission.ts` admits it, `turn-plan.ts` picks a runtime, it runs in the
-  conversation's worktree (or the main tree, or a remote runner), `agents/land/land.ts` lands the result as
-  uncommitted changes, and `verify-landed.ts` runs the repository's checks on it.
+  conversation's worktree (or the main tree, or a remote runner), and `agents/land/land.ts` lands the result as
+  uncommitted changes. Nothing checks the turn when it ends. `verify-landed.ts` queues the repository's land check
+  on the main tree (`workspace/deps/verify-deps.ts`), which runs in the background, and `agents/land/land-breakage.ts`
+  decides who is sent a red one.
 - Archive is sticky: only a person's message un-archives a conversation. A turn the daemon starts itself (a retry,
   a nudge, an automation's thread) is refused on an archived one (`agents/actor/conversation-decide.ts`), and a
   thread whose conversation was archived opens a fresh one instead.

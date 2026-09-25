@@ -20,6 +20,15 @@ What the daemon does around you:
   refuses the whole land and raises a conflict card naming the paths; every worktree keeps everything.
   Untracked files shaped like scratch (a new hidden folder, logs and dumps, a checkout of its own) never ride a
   land: they stay in the conversation's copy, listed on its review, until the owner includes or deletes them.
+- **Checks run after your work lands, never at the end of your turn.** You decide when the work is done:
+  nothing checks it when you stop, nothing sends you back, and no check holds a land, a commit or a push. A
+  repository's per-edit checks run on each file you write and answer in that edit's result. After the
+  land, the repository's own land check runs on the main tree in the background. A failure laid at your land
+  comes back to this conversation as a message while you still have the work in mind. Otherwise the daemon
+  starts a fresh fix-up conversation with the failures, each suspect land's diff and `agents show <id>` for
+  its conversation. The "Checks after landing" note in your prompt lists what main already fails: those are
+  not yours to chase unless your task is about them. Run the checks you judge worth running while you work.
+  Your card records whether one passed after your last edit.
 - **Runtimes.** A turn runs on Claude Code (this loop), native Codex, OpenCode (Grok, Gemini), Pi, Cursor or
   an ACP agent, chosen per conversation. Which model actually ran is recorded (`mcp__diagnostics__turns`).
 - **Capabilities** are the connections the owner made: connectors (GitHub, Notion, databases…), browser
@@ -100,13 +109,17 @@ conversation that starts there (a persona's `startIn`).
                                      environment.d fragment, a skill) reaches the daemon when the turn lands,
                                      reviewed like code. The live copy is at /mnt/intentic-main/.intentic/config/
 <repo>/.intentic/checks.json         what THAT repository asks to have run on its own code: a list of
-                                     {when: "turn"|"push", run: "<command>"}, run in the repository itself.
+                                     {when: "edit"|"land", run: "<command>"}, run in the repository itself.
+                                     "edit" runs on each file as it is written ({file} is its path); "land"
+                                     runs on the main tree after work lands, and without one the repo's
+                                     verify or test script runs there. "turn" is retired and runs nothing.
                                      Tracked in the repository, so it travels with a clone; inert until the
                                      owner switches it on (Sandbox ▸ Agent ▸ Finishing, or the repo's own row
                                      in the tree), and held again if it changes afterwards. Propose one as an
                                      ordinary diff; never expect a check you just wrote to run this turn.
 /work/.intentic/records/             sessions/ (transcripts), artifacts/browser/ (screenshots). Shared live
-/work/.intentic/local/               cache/, tmp/, environment.approved.Dockerfile (the composed overlay). Shared live
+/work/.intentic/local/               cache/, tmp/, environment.approved.Dockerfile (the composed overlay),
+                                     verify/ (the last land check's log, per project). Shared live
 /work/.agents/skills/                the loaded skills every runtime reads (Claude links them from .claude/skills/)
 /root/.claude/skills/                the image-baked skills: this one and the task skills routed above
 /history/logs/                       daemon.log, perf.jsonl, resource-metrics.jsonl, client.jsonl (what the
@@ -128,7 +141,10 @@ over a window you choose. They cannot write, and nothing in this playbook restar
 
 - A turn failed, died, or answered with the wrong provider's error → `mcp__diagnostics__turns`
   (`only: "failed"`, or a `conversationId`): which model ran, the error code, the provider's own sentence.
-- A turn finished but nothing checked its work → `mcp__diagnostics__turns` with `only: "unproven"`.
+- A turn changed code and ran no check after its last edit, or its last check failed →
+  `mcp__diagnostics__turns` with `only: "unproven"`. That is the turn's own record, since nothing checks a turn
+  when it ends. Whether the work passed once it landed is the main-line check's answer: the strip at the top of
+  the chat rail, and each project's last log in `/work/.intentic/local/verify/`.
 - Something errored in the daemon (an automation, a sync, a land, a refused provider) →
   `mcp__diagnostics__errors` (`sinceMinutes`; `contains` a conversation id, route or code; `level`).
 - The editor white-screened, stalled or felt slow → `mcp__diagnostics__errors` with `source: "browser"`.
@@ -154,7 +170,10 @@ rebuild, a daemon restart from the host). Say plainly that nothing was changed.
 ## The editor, in the owner's words
 
 - **Chat** (`/`): one conversation. Question cards (`AskUserQuestion`), plan approval, capability asks and
-  payment approvals render here.
+  payment approvals render here. The strip at the top of the chat rail is the main-line check: what it is
+  measuring, what waits, the last verdict, and who is working on a red one. Each session card shows its
+  land's status (checking, waiting, passed, or broke N and who is fixing it) and a badge for what its last turn
+  showed of its own work.
 - **Agents** (`/agents`): the fleet board, every conversation as an agent with its branch and status.
   **Land** applies a conversation's delta to the main tree; a conflict card names the paths.
 - **Capabilities** (`/capabilities`): the connections; each card is a connector, account, device or service.

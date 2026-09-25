@@ -7,6 +7,8 @@ import { agentDisplayTitle, type FleetLane } from "../../agents/fleet/agentStatu
 import { useAgentFilter } from "../../agents/board/useAgentFilter";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { FINISHED_WINDOW, type FleetAgent, finishedLaneOrder, windowFinished } from "../../agents/fleet/useAgents-fleet";
+import MainlineStrip from "../../agents/mainline/MainlineStrip.vue";
+import { provideMainline } from "../../agents/mainline/useMainline";
 import HoverCard from "../../../components/HoverCard.vue";
 import RailCard from "../../../components/RailCard.vue";
 import RailLane from "../../../components/RailLane.vue";
@@ -47,6 +49,9 @@ const emit = defineEmits<{
 
 const { conversations, activeId, tabReveal, panes } = useChat();
 const { agentById, fleet, loadArchived } = useAgents();
+// The main tree's check, read once for the whole list: the strip at its head draws it, and every row's card reads it
+// from here (ChatRowList) rather than asking for its own.
+const mainline = provideMainline();
 
 // One set of row verbs for both cuts; this list draws only their menu, hover card, share dialog and rename error.
 const root = ref<HTMLElement | null>(null);
@@ -305,6 +310,8 @@ const onPersonaSelect = (id: string): void => {
 
 <template>
     <div ref="root" class="flex min-h-0 flex-col gap-1.5">
+        <!-- Sandbox-wide, so above the header that decides what the column lists: it reads the same under either cut. A press on a conversation it names is a pick like a row's, so the docked sheet steps aside. -->
+        <MainlineStrip :status="mainline" @opened="(id: string) => emit('select', id)" />
         <!-- Reading order top to bottom: narrow with the filter, pick a lane, and when the query reaches past what's open, the "Not open" group at the foot. -->
         <!-- The `Aa` case toggle mirrors the board's: a mode only one of the two search boxes could see or undo would be confusing. -->
         <!-- Tabs, not a pill track: this switch decides what the column IS, so it reads as the column's own header — and a bordered track here stacked a second box directly above the filter field's, which made the header two grey boxes rather than a heading over a control. -->

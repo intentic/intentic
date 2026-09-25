@@ -5,6 +5,7 @@ import type { TurnAdmission } from "../../../platform/resources/memory-admission
 import { repoCheckRules } from "../../../rules/repo-checks.js";
 import { createCredentialGrants, type CredentialGrants } from "../../../secrets/credential-grants.js";
 import { loadedSkillCatalogNote } from "../../../store/loaded-skills.js";
+import { landingChecksNoteFor } from "../../../workspace/deps/mainline-note.js";
 import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
 import type { ProjectSetupStatus } from "../../../workspace/layout/workspace-setup.js";
 import { contextNoteIfDue } from "../../context/conversation-context.js";
@@ -58,6 +59,8 @@ export interface AdmittedTurnFacts {
     readonly memoryNote: string | undefined;
     // Read only when the map is due, so present only on a turn that sends it.
     readonly mapNote: string | undefined;
+    // What runs after the work lands and which failures the main tree already has; present only on a turn that owes it.
+    readonly landingChecksNote: TurnNote | undefined;
     readonly sessionStore: string;
 }
 
@@ -169,6 +172,7 @@ export type TurnFactsDeps = Pick<
     | "perf"
     | "personas"
     | "sandboxSettings"
+    | "verifyStore"
     | "workspace"
 >;
 
@@ -199,7 +203,13 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: TurnInput,
     );
     const gates = await gatesOf(services);
     const premise = premiseOf({ entry, settings, personas, areas }, input, runtime);
-    const iqTeaching = await iqTeachingFor(services, premise);
+    const [iqTeaching, landingChecksNote] = await Promise.all([
+        iqTeachingFor(services, premise),
+        // A card that drops the note is never read for it.
+        premise.briefing.sends("checks")
+            ? services.perf.track("turn.plan.mainline", {}, () => landingChecksNoteFor(services, input.conversationId, premise.send.landingChecks))
+            : Promise.resolve(undefined),
+    ]);
     const brief = fieldNotesFor(services, context, settings);
     const card = premise.persona.persona;
     // Only a card that asked for its own prompt is read, so an ordinary turn pays nothing for it.
@@ -222,6 +232,7 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: TurnInput,
         iqTeaching,
         fieldNotes: brief,
         personaPrompt,
+        landingChecksNote,
         ...treeReads(context, premise),
         sessionStore: services.agentWorktrees.sessionStore(entry),
     };

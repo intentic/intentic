@@ -3,6 +3,7 @@ import { useT } from "@intentic/ui/i18n";
 import { boxNameOf } from "../../agents/fleet/fleetScope";
 import { turnInFlight } from "../../agents/fleet/agentStatus";
 import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
+import CardChecks from "../../agents/mainline/CardChecks.vue";
 import OriginMark from "../../../components/OriginMark.vue";
 import RailCard from "../../../components/RailCard.vue";
 import UnsentMark from "../../../components/UnsentMark.vue";
@@ -140,6 +141,8 @@ const act = (event: Event, verb: "close" | "keep"): void => {
                 :class="props.view.cooling.near ? 'text-link' : 'text-muted'"
                 v-tooltip.top="props.view.cooling.hint"
             />
+            <!-- Main's check of its latest land and its last turn's own proof, glyphs with their words in the hover, the way the cache marks beside them say theirs; a red it caused says so in words, and a check running on it counts. -->
+            <CardChecks v-if="props.view.checks !== undefined" :checks="props.view.checks" compact />
             <!-- Provenance marks (external origin, workflow), same as the board's OriginMark in the card body. -->
             <OriginMark :origin="originOf(props.conversation)" compact />
             <WorkflowMark :workflow="props.agent?.workflow" compact />

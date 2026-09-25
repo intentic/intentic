@@ -1,19 +1,20 @@
-// HOW AN ACTOR IS HELD TO ITS OWN FINDINGS AND TO NO OTHERS. Both gates ask every failing check the same question twice
-// — once in the working tree, once in a snapshot of the commit the work is built on (check-snapshot.mjs) — and this
-// reads the second answer against the first. The base differs by caller and nothing here depends on which it is:
-// verify-turn asks about HEAD, so a model answers for its own diff; verify-push asks about the remote tip, so a push
-// answers for its own range. Separate from both because it is the only part with no side effects, and so the only part a
-// test can pin (turn-findings.test.mjs); getting it wrong is expensive in both directions, since a false accusation
-// sends a model to rewrite code it never touched and a missed one lets a new problem land.
+// HOW AN ACTOR IS HELD TO ITS OWN FINDINGS AND TO NO OTHERS. Every caller asks each failing check the same question
+// twice, once in the working tree and once in a snapshot of the commit the work is built on (check-snapshot.mjs), and
+// this reads the second answer against the first. The base differs by caller and nothing here depends on which it is:
+// the check after a land asks about the commit the land departed from (land-tiers.mjs), so a land answers for its own
+// change; verify-push asks about the remote tip, so a push answers for its own range; verify-turn, run by hand, asks
+// about the branch's main-line base. Separate from them because it is the only part with no side effects, and so the
+// only part a test can pin (turn-findings.test.mjs); getting it wrong is expensive in both directions, since a false
+// accusation sends a conversation to rewrite code it never touched and a missed one leaves a new problem to nobody.
 import { CHECKS } from "../../checks/manifest.mjs";
 
-// WHAT A CHECK SAID, FINDING BY FINDING, so a turn can be held to its own problems rather than to the tree's.
+// WHAT A CHECK SAID, FINDING BY FINDING, so a change can be held to its own problems rather than to the tree's.
 //
 // A finding names a location, and that is what tells it apart from the prose around it: either a `- ` bullet (every
 // check that reports through lib/report.mjs's `finish`) or a `path.ext:12` anchor (the ones that print their own, like
 // path-literals and the UI tiers). Headings and explanatory epilogues name no location and are dropped — which is not
-// cosmetic: a turn that rewords a check's own failure message would otherwise be accused of every finding that message
-// introduces, and rewording a message is not tightening a rule.
+// cosmetic: a change that rewords a check's own failure message would otherwise be accused of every finding that
+// message introduces, and rewording a message is not tightening a rule.
 //
 // Line numbers are flattened in the KEY: inserting a line above a standing finding moves it from `:180` to `:181`,
 // which is the same problem. The key maps to the line as written, so what gets reported is the real anchor.

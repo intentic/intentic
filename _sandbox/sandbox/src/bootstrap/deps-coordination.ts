@@ -3,7 +3,7 @@ import type { Services } from "../composition.js";
 import type { DependencyOrigin } from "../workspace/deps/dependency-origin.js";
 import { queueVerify, type VerifyDeps } from "../workspace/deps/verify-deps.js";
 import { adoptedLandCheck } from "../rules/repo-checks.js";
-import { type BreakageRouter, breakageSettled, routeLandBreakage } from "../agents/land/land-breakage.js";
+import { breakageRunSettled, breakageSettled, routeLandBreakage } from "../agents/land/land-breakage.js";
 import { announceUnwatchedWrite, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 
 // Wired before the data gate opens, so a turn arriving as boot finishes queues behind an already reserved repair.
@@ -32,13 +32,7 @@ const attribution = (origin: DependencyOrigin): { conversationId?: string; title
     return { ...(conversationId === undefined ? {} : { conversationId }), ...(title === undefined ? {} : { title }) };
 };
 
-export const wireDependencyCoordinator = (
-    services: Pick<
-        Services,
-        "workspace" | "processes" | "logger" | "verifyStore" | "activity" | "events" | "heavyCommands" | "dependencies" | "sandboxSettings"
-    > &
-        BreakageRouter,
-): void => {
+export const wireDependencyCoordinator = (services: Services): void => {
     const dependencyChecks: VerifyDeps = {
         workspace: services.workspace,
         processes: services.processes,
@@ -49,7 +43,7 @@ export const wireDependencyCoordinator = (
         announce: announceUnwatchedWrite,
         queue: queueWhole(services.heavyCommands.read),
         route: (breakage) => routeLandBreakage(services, breakage),
-        settled: breakageSettled,
+        settled: (project) => breakageSettled(services, project),
         landCheck: async (dir) => adoptedLandCheck(services.workspace.root, dir, (await services.sandboxSettings.get()).adoptedChecks),
     };
     services.dependencies.subscribe(({ dir, origin }) => {
@@ -78,4 +72,6 @@ export const wireDependencyCoordinator = (
             .catch((error: unknown) => services.logger.warn({ err: error }, "dependency coordinator: failure activity append failed"));
     });
     services.dependencies.watch(subscribeWorkspaceChanges);
+    // A red main-line check held on a conversation still working is routed when that conversation's run ends.
+    services.events.subscribe("run.settled", ({ conversationId }) => breakageRunSettled(services, conversationId));
 };

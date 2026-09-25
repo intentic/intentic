@@ -1,14 +1,19 @@
 #!/usr/bin/env node
-// Push gate, from both `pnpm verify:push` and the pre-push hook. Two cheap tiers collect every finding first (the checks,
+// Push check, from both `pnpm verify:push` and the pre-push hook. Two cheap tiers collect every finding first (the checks,
 // the assertion ratchet, the manifest/lockfile lockstep, the linter, rustfmt). The suite CI's verify groups run
 // (typecheck, build, test) is then REPLAYED from a verdict the land's `pnpm verify` or an earlier push check recorded
 // for this tree, and otherwise left to CI: a tree nobody measured is not measured here on the pusher's clock unless
 // `--suite` asks for it. Measures the working tree and every pushed commit's own tree.
 //
-// THE ONE THING ONLY THIS GATE CAN SEE is the tree that becomes main. A turn measures one worktree against its own HEAD
-// and a nightly measures main a day later with nobody attached; the push is the only moment at which the combined tree
-// exists AND somebody is standing there. That is why tidiness is judged here against the range (the checkout-gates block
-// below).
+// THE HOOK IS ADVISORY (`--advisory`, which .githooks/pre-push passes): no check blocks a land, a commit or a push. The
+// two cheap tiers report what they find to whoever pushes, the suite is never run on their clock, and the push goes
+// either way; the land's own check already measured the tree, and CI measures the commit. `pnpm verify:push` by hand
+// still exits non-zero on a finding, for a person or a script that asks for a verdict.
+//
+// WHAT THIS CHECK SEES is the pushed range: every commit that becomes main, whoever made it. The check after each land
+// sees the main tree one land at a time, `pnpm verify:turn` sees one worktree against its own base, and a nightly
+// measures main a day later with nobody attached. That is why tidiness is judged here against the range (the
+// checkout-gates block below).
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -24,6 +29,8 @@ import { testWorkers } from "./test-workers.mjs";
 
 const root = repoRoot(import.meta.url);
 const hook = process.argv.includes("--hook");
+// Reports and never refuses: the hook's mode (see the header).
+const advisory = process.argv.includes("--advisory");
 // Runs typecheck, build and test here when no verdict covers the tree; without it that is CI's to measure.
 const suiteForced = process.argv.includes("--suite");
 
@@ -51,11 +58,12 @@ const ZERO_SHA = /^0+$/;
 const TAG_REF = /^refs\/tags\//;
 
 // Reports to stderr, which git shows the pusher; a tier collects its findings, but the run stops between tiers.
-const { say, step, fail, finish } = createSteps("verify-push", root);
-// Ends the run immediately, for refusals about the push itself, not the tree (e.g. an unmeasurable range).
+const { say, step, fail, finish } = createSteps("verify-push", root, { advisory });
+// Ends the run immediately, for refusals about the push itself, not the tree (e.g. an unmeasurable range); advisory, it
+// is said and the push goes on.
 const refuse = (line) => {
     say(line);
-    process.exit(1);
+    process.exit(advisory ? 0 : 1);
 };
 
 // Bound to this checkout, so a large diff isn't misread as a failed git call (lib/git.mjs's larger maxBuffer).
@@ -181,11 +189,12 @@ const lockfileRewriteOnly = () => {
 // the next morning on a commit with no author attached. That job then failed on 14 of its 24 runs, 13 of them for
 // `layout` or `paths`, every finding traceable to one line in one commit a day or two old.
 //
-// THIS IS THE ONLY MOMENT THAT HAS BOTH HALVES. verify-turn asks the same question of a turn, but a turn measures its own
-// worktree against its own HEAD — a tree that never becomes main. What becomes main is this push, and the difference
-// between the two is every other conversation's work, which is exactly where a counting rule breaks: two turns that each
-// add one file to a directory of thirty are each innocent in their own worktree and over the limit together. The push is
-// where they meet, and it is still early enough for the person pushing to fix it.
+// WHERE THE WORK MEETS. verify-turn, run by hand, asks the same question of a branch, but it measures its own worktree
+// against its own base, a tree that never becomes main. What becomes main is this push, and the difference between the
+// two is every other conversation's work, which is exactly where a counting rule breaks: two branches that each add one
+// file to a directory of thirty are each innocent in their own worktree and over the limit together. Lands meet first on
+// the main tree, where the check after each land asks this question of what that land added (land-tiers.mjs); the push
+// asks it of the whole range, while the person pushing is still there to fix it.
 //
 // Judged against the merge-base rather than refused wholesale, for the reason the tidy job's own comment gives: a gate
 // that refuses a pusher for state nobody in this push produced teaches everyone that red means nothing. What refuses is
@@ -297,7 +306,7 @@ const changed = changedPaths();
 {
     const lint = spawnSync("pnpm", ["lint"], { cwd: root, stdio: "inherit", shell: process.platform === "win32" });
     if (lint.error !== undefined) {
-        say(`lint skipped: ${lint.error.message} (CI does not lint; the turn-ending check does)`);
+        say(`lint skipped: ${lint.error.message} (CI does not lint; each edit's own lint and the check after each land do)`);
     } else if (lint.status !== 0) {
         fail("lint", `exit ${lint.status ?? "signal"} · pnpm lint`);
     }
@@ -317,6 +326,17 @@ if (touched.length > 0) {
 // Prints everything both tiers found; a tree already refused cheaply doesn't go on to the ten-minute suite.
 finish(() => "the checkout gates, the assertion ratchet, the manifest/lockfile lockstep, the linter and rustfmt");
 
+// The hook stops here, whatever was found: the suite is the land check's and CI's to run, never the pusher's to wait on.
+if (advisory) {
+    const known = freshVerdicts(root, [treeHash(root)]).find((verdict) => verdict.suite === "verify");
+    say(
+        known === undefined
+            ? "typecheck, build and tests are not run at a push: the check after each land measures the tree, and CI measures the commit"
+            : `this tree ${known.status === "passed" ? "passed" : "FAILED"} \`pnpm verify\` after its land ${ago(known.at)}; CI measures the commit either way`,
+    );
+    process.exit(0);
+}
+
 // Tier 3: the three steps verify.yml runs.
 
 // Reports how many uncommitted paths this measured but the push doesn't carry; CI won't see them.
@@ -335,7 +355,7 @@ const suite = (buildOnly) => {
     const env = { ...process.env, INDEXNOW_ENABLED: "0", TEST_WORKERS: testWorkers() };
     const linked = isLinkedWorktree();
     if (linked) {
-        say("a linked worktree: `build` cannot run here (EXDEV), so tests run off the prepass dist as the turn-ending check does");
+        say("a linked worktree: `build` cannot run here (EXDEV), so tests run off the prepass dist");
     }
     // A `verify` verdict already covers typecheck and tests; this runs only the build it couldn't, or nothing at all in
     // a linked worktree.

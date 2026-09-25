@@ -1,4 +1,4 @@
-import type { AgentEvent, Rule, WorkspaceEvent } from "@intentic/sandbox-contract";
+import type { AgentEvent, MainlineRouting, Rule, WorkspaceEvent } from "@intentic/sandbox-contract";
 import { landAgent, type LandOutcome, reportLockfileFailures } from "../../../agents/land/land.js";
 import { landingPaths } from "../../../agents/land/landing-paths.js";
 import { type LandVerifier, verifyLandedTree } from "../../../agents/land/verify-landed.js";
@@ -9,12 +9,11 @@ import { landingVerdict, type RuleFacts, standing } from "../../../rules/rules.j
 import type { DependencyLandOrigin } from "../../../workspace/deps/dependency-origin.js";
 import type { ReconcileOutcome } from "../../../workspace/deps/reconcile-deps.js";
 import type { LandBreakage } from "../../../workspace/deps/verify-deps.js";
-import { type CheckVerdict, landingOutcome } from "../../verification/turn-checks.js";
 import { opt } from "../../../opt.js";
 
-// A finished isolated turn's land. Whether its work reaches the main tree or waits on its branch is decided purely,
-// from the rules, the paths it touched and its own check; the land around that decision runs as the sequence below:
-// take the check, decide, land under the lease, record, verify, announce.
+// A finished isolated turn's land. Whether its work reaches the main tree or waits on its branch is decided purely, from
+// the rules and the paths it touched; no check holds it, since checks run after the work lands and never block. The land
+// around that decision runs as the sequence below: decide, land under the lease, record, verify, announce.
 
 // What the land did, for the turn's `turn.settled` event; the card's standing is derived elsewhere.
 export type LandedOutcome = "landed" | "conflict" | "ready";
@@ -29,14 +28,9 @@ export interface LandingDecision {
     readonly writes: readonly LandingWrite[];
 }
 
-// A per-agent override wins over the rules table, unless the turn's own check failed.
-export const landingDecision = (rules: readonly Rule[], facts: RuleFacts, override: boolean | undefined, check: CheckVerdict | undefined): LandingDecision => {
+// A per-agent override wins over the rules table.
+export const landingDecision = (rules: readonly Rule[], facts: RuleFacts, override: boolean | undefined): LandingDecision => {
     const decided = landingVerdict(rules, facts, override);
-    // The one hold no rule decided: the work is finished but its own check failed.
-    const unchecked: LandingWrite[] =
-        decided.held === "checks-failed" && check !== undefined
-            ? [{ kind: "held", content: `"${check.label}" failed on this turn's work (\`${check.command}\`), so it waits on its branch instead of landing.` }]
-            : [];
     const ruled: LandingWrite[] =
         decided.rule === undefined
             ? []
@@ -44,7 +38,7 @@ export const landingDecision = (rules: readonly Rule[], facts: RuleFacts, overri
                   { kind: "fired", rule: decided.rule.id },
                   ...(decided.land ? [] : [{ kind: "held" as const, content: `"${decided.rule.label}" held this work on its branch instead of landing it.` }]),
               ];
-    return { mode: decided.land ? "check" : "measure", writes: [...unchecked, ...ruled] };
+    return { mode: decided.land ? "check" : "measure", writes: ruled };
 };
 
 // What became of a land that changed something: held on its branch, in the main tree, or in conflict with it.
@@ -85,7 +79,7 @@ export interface LandingHooks {
     readonly settleLanding: (conversationId: string) => void;
     // Hands the failures a land's whole-repository check found new back to the conversation that landed them; false
     // when none is named for them.
-    readonly routeBreakage: (breakage: LandBreakage) => Promise<boolean>;
+    readonly routeBreakage: (breakage: LandBreakage) => Promise<MainlineRouting | undefined>;
 }
 
 export interface LandingTurn {
@@ -127,18 +121,17 @@ const landUnderLease = async (deps: LandingDeps, turn: LandingTurn, finished: Is
     return outcome;
 };
 
-// What a land decision reads: the span's repos, the paths only where a rule narrows by them (a git pass per repo), and
-// how the turn's own check went.
+// What a land decision reads: the span's repos, and the paths only where a rule narrows by them (a git pass per repo).
+// A turn that reached its land ended clean: a failed or stopped one never gets here.
 const landingFacts = async (
     deps: Pick<Services, "agentWorktrees" | "logger">,
     rules: readonly Rule[],
     finished: IsolatedAgent,
     span: LandBooks["span"],
-    check: CheckVerdict | undefined,
 ): Promise<RuleFacts> => {
     const narrows = standing(rules, "agent.finished").some((rule) => (rule.when?.paths?.length ?? 0) > 0);
     const paths = narrows ? await landingPaths(deps, finished, span) : undefined;
-    return { repos: span.map(({ repo }) => repo), paths, outcome: landingOutcome(check) };
+    return { repos: span.map(({ repo }) => repo), paths, outcome: "clean" };
 };
 
 // A land that changed something: recorded, verified against the whole repository off the turn's clock where it reached
@@ -180,15 +173,13 @@ async function* recordLand(
 // nor for one that ended to wait on something it armed, whose wake is the turn that finishes the work.
 export async function* landTurn(deps: LandingDeps, hooks: LandingHooks, turn: LandingTurn, books: LandBooks): AsyncGenerator<AgentEvent> {
     const id = turn.conversationId;
-    // Taken whatever the turn did, so a verdict never outlives the turn that ran its check.
-    const check = deps.conversations.send(id, { kind: "verdict-taken" }).reply;
     const finished = deps.agents.entry(id);
     if (turn.failed || turn.aborted || wakesItself(deps.conversations, id) || finished === undefined || !isIsolated(finished)) {
         return;
     }
     const { rules } = await deps.sandboxSettings.get();
-    const facts = await landingFacts(deps, rules, finished, books.span, check);
-    const decision = landingDecision(rules, facts, turn.autoLand ?? finished.postures.autoLand, check);
+    const facts = await landingFacts(deps, rules, finished, books.span);
+    const decision = landingDecision(rules, facts, turn.autoLand ?? finished.postures.autoLand);
     // Under the land lease, so a manual land pressed meanwhile queues rather than rebasing under this one.
     const landed = await deps.conversations.withLandLease(id, () => landUnderLease(deps, turn, finished, decision.mode));
     books.reconciled = true;

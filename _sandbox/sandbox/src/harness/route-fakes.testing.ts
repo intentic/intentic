@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import type { AgentEvent } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { type Logger, pino } from "pino";
 import type { AgentWorktrees } from "../agents/worktrees/worktrees.js";
@@ -12,9 +13,14 @@ import { claudeStoreOf } from "../sessions/session-store.js";
 import type { ManagedProcesses } from "../processes/managed-processes.js";
 import type { ServiceProcesses, ServiceStatus } from "../processes/service-processes.js";
 import { workspacePaths } from "../workspace/workspace.js";
+import { landingChecksNote } from "../workspace/deps/mainline-note.js";
 
 // Route harness's recording fakes: the two process supervisors, inert history/files seams a test overrides selectively,
 // and a temp workspace for repo-discovery suites. `services` composes the inert ones.
+
+// What a conversation's opening turn discloses before its runtime says anything: the note telling it what runs after its
+// work lands (workspace/deps/mainline-note.ts), as the harness's empty verify store reads it, the main tree never red.
+export const OPENING_CHECKS_PREAMBLE: AgentEvent = { kind: "preamble", notes: [landingChecksNote([], false)] };
 
 // Same recording shape as fakeProcesses; seeded keys read as running services on the seeded port.
 export const fakeServiceProcesses = (

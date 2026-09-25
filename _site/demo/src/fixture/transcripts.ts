@@ -1,7 +1,7 @@
-import type { AgentHarness, AgentProvider, SandboxHandlerOutput, TranscriptRow } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, landFixPrompt, type SandboxHandlerOutput, type TranscriptRow } from "@intentic/sandbox-contract";
 import { SUPPORT_SWEEP_PATH } from "./browserShots";
 import { DESK_REVIEW_ID, SEPTEMBER_AFTER, SEPTEMBER_BEFORE } from "./desk";
-import { REVIEW_AGENT_ID, SOFT_DELETES_JOBS, SOFT_E2E_JOB, SOFT_TYPECHECK_JOB } from "./fleet";
+import { LAND_FIX_AGENT_ID, REVIEW_AGENT_ID, SOFT_DELETES_JOBS, SOFT_E2E_JOB, SOFT_TYPECHECK_JOB } from "./fleet";
 import { MAYA_CHAT_ID, OWEN_CHAT_ID, PRIYA_CHAT_ID } from "./openChats";
 
 // Transcript route body: messages plus the session id, provider, harness and account they're bound to. A reopened tab
@@ -295,8 +295,45 @@ const SEPTEMBER_TEMPLATE: AgentTranscript = {
     ],
 };
 
+// The fresh conversation the sandbox started on `web`'s red main line (fixture/mainline.ts). Its first prompt is the
+// daemon's own brief, composed through the contract as the daemon composes it, so the chat folds it into an errand row
+// rather than showing it as something a person typed.
+const LAND_FIX: AgentTranscript = {
+    sessionId: `ses_01j9landfix`,
+    provider: `claude`,
+    harness: `claude-code`,
+    account: `acc_claude_demo`,
+    messages: [
+        {
+            role: `user`,
+            text: landFixPrompt([
+                `\`pnpm verify\` in \`web\` failed on:`,
+                [
+                    `- web/src/pages/changelog.test.ts › lists every release under its own heading`,
+                    `- web/src/pages/changelog.test.ts › links each release to its tag`,
+                    `- web typecheck: src/pages/changelog.ts(41,7): Property 'tag' does not exist on type 'Release'`,
+                ].join(`\n`),
+                `These failures arrived with this land:`,
+                [
+                    `**"Draft the release notes for 2.4" (\`cnv_release_notes\`)**`,
+                    `- src/pages/changelog.ts`,
+                    `- CHANGELOG.md`,
+                    `What it was asked and what it did: \`agents show cnv_release_notes\``,
+                ].join(`\n`),
+                `The conversation that landed it ("Draft the release notes for 2.4") has gone cold or is nearly full, so reading all of it again would cost more than starting fresh.`,
+                `Start by re-running only the failing tests, not the whole suite; they fail on the main tree now, and your worktree starts from it.`,
+            ]),
+        },
+        {
+            role: `assistant`,
+            text: `The release notes renamed \`version\` to \`tag\` in each entry of the changelog, but \`Release\` still types it as \`version\`, so the page drops every heading and every link. Re-running the two changelog tests on their own before touching the type.`,
+        },
+    ],
+};
+
 const TRANSCRIPTS: Record<string, AgentTranscript> = {
     [REVIEW_AGENT_ID]: SOFT_DELETES,
+    [LAND_FIX_AGENT_ID]: LAND_FIX,
     [DESK_REVIEW_ID]: SEPTEMBER_TEMPLATE,
     [MAYA_CHAT_ID]: MAYA_SUPPORT,
     [OWEN_CHAT_ID]: OWEN_LAUNCH,

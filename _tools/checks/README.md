@@ -1,12 +1,12 @@
 # checks
 
-The repository's invariant checks: one Node script per rule, listed once in `manifest.mjs` and run by `run.mjs` after each edit, at turn end, at push and in CI.
+The repository's invariant checks: one Node script per rule, listed once in `manifest.mjs` and run by `run.mjs` after each edit, after each land, at push and in CI.
 
 ```mermaid
 flowchart LR
     edit["Each edited file<br/>.intentic/checks.json"] -->|"--paths"| run(["run.mjs"])
-    turn["Turn end<br/>pnpm verify:turn"] --> run
-    push["Push<br/>.githooks/pre-push"] --> run
+    land["After each land<br/>pnpm verify"] --> run
+    push["Push, reported only<br/>.githooks/pre-push"] --> run
     ci["CI and nightly<br/>ci.yml · nightly.yml"] --> run
     manifest["manifest.mjs<br/>CHECKS"] --> run
     run --> procs["One process per check<br/>exit 0 · 1 · 2"]
@@ -18,13 +18,15 @@ flowchart LR
   1, or prints what it vouched for and exits 0; `cannotMeasure` exits 2 when the check could not look. Then add an
   entry to `CHECKS` in `manifest.mjs`.
 - An entry's `needs` says what it may read (`checkout`, `git` history, or `node_modules` when installed). A `code`
-  gate refuses everywhere. A `tidy` gate refuses only what a turn or a push adds, and fails the nightly tidy job
-  on main. A new check enters as `tidy`.
+  gate fails every run that reads it. A `tidy` gate fails only what a land or a push adds, and fails the nightly
+  tidy job on main. A new check enters as `tidy`.
 - `scoped: true` means the check takes `--paths a,b` and reaches the same verdict on those files as on the whole
   tree. `fix` names the arguments that let it repair the tree itself.
 - After each edit, `.intentic/checks.json` runs `run.mjs --paths {file}`: scoped checks only, silent unless one
-  fails. At turn end `pnpm verify:turn` applies each `fix`, then runs every check against the main-line base. At
-  push `.githooks/pre-push` runs them all through `verify-push.mjs`. CI runs `--tidy=warn`, the nightly `--gate=tidy`.
+  fails. What it prints returns with the edit and never stops the turn. After each land, `pnpm verify` applies each
+  failing check's `fix` in the main tree, then runs them all and counts the tidy lines the land added as failures
+  (`land-tiers.mjs`). At push `.githooks/pre-push` runs them all through `verify-push.mjs`, which reports and never
+  refuses. CI runs `--tidy=warn`, the nightly `--gate=tidy`.
 - Ratcheted checks keep their standing backlog in `baselines/` (`lib/ratchet.mjs`), which may shrink and never
   grow; `--write-baseline` adopts the current findings.
 

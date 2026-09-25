@@ -41,6 +41,7 @@ const PUSHED_READS: Readonly<Record<string, readonly ProcedureName[]>> = {
     "git/changes": WORKING_REVIEW,
     "loop-designs": [`loops.designs`],
     manifests: [`system.manifestProblems`],
+    mainline: [`workspace.mainline`],
     panels: [`panels.list`],
     personas: [`personas.list`, `personas.kit`],
     "rule-firings": [`settings.firings`],

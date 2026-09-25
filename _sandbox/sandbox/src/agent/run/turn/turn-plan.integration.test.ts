@@ -9,6 +9,7 @@ import type { Services } from "../../../composition.js";
 import { conversationAfter, testConfig, memoryFleet } from "../../../testing.js";
 import { SKILL_CATALOG_NOTE_HEADER } from "../../../store/loaded-skills.js";
 import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER, workspaceSetup } from "../../../workspace/layout/workspace-setup.js";
+import { landingChecksNote } from "../../../workspace/deps/mainline-note.js";
 import type { AgentRequest } from "../../providers/agent-request.js";
 import { composeWirePrompt } from "../../prompt/turn-preamble.js";
 import type { TurnContext } from "../../providers/adapter.js";
@@ -87,6 +88,8 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
         }),
         // A measurement seam, not a behavioural one: runs the work, times nothing.
         perf: unstubbed<Services["perf"]>("perf", { track: (_op, _fields, run) => run() }),
+        // The main line's verdicts, read for the checks-after-landing note an opening turn is sent: nothing checked yet.
+        verifyStore: unstubbed<Services["verifyStore"]>("verifyStore", { read: async () => ({ projects: {}, runs: [] }) }),
         // Snapshotted for the judge on every planned turn, so every arm below needs it too.
         safetyPolicy: unstubbed<Services["safetyPolicy"]>("safetyPolicy", { text: async () => DEFAULT_SAFETY_POLICY }),
         // No device connected in these arms, which is what the daemon answers with none granted; a turn asks on
@@ -203,9 +206,11 @@ test("a resumed native session is not charged the same dependency paragraph on e
         codexModels: unstubbed<Services["codexModels"]>("codexModels", {
             models: async () => ({ models: [{ id: "gpt-5.6-codex", label: "GPT 5.6 Codex" }], default: "gpt-5.6-codex" }),
         }),
+        // A follow-up in a conversation two turns in, which its session's own history already told everything.
+        agents: unstubbed<Services["agents"]>("agents", { entry: () => conversationAfter(2) }),
     });
     const resumed = contextIn(root);
-    const prompt = await promptOf(services, { prompt: "do the thing", agent: "codex" } as AgentTurn, {
+    const prompt = await promptOf(services, { prompt: "do the thing", agent: "codex", conversationId: "c-resumed" } as AgentTurn, {
         ...resumed,
         base: { ...resumed.base, spec: { ...resumed.base.spec, sessionId: "codex-session-1" } },
     });
@@ -227,7 +232,7 @@ test("a native Grok turn hears it too: the note belongs to the tree, not to the 
     expect(prompt).toContain(SETUP_NOTICE_HEADER);
 });
 
-test("an installed tree earns no notice, so an ordinary turn is the user's message and nothing else", async () => {
+test("an installed tree earns no notice, so an opening turn is the user's message and the checks note alone", async () => {
     const root = await mkdtemp(join(tmpdir(), "turn-plan-"));
     const services = servicesIn(root, {
         codexThreadExists: async () => true,
@@ -238,7 +243,8 @@ test("an installed tree earns no notice, so an ordinary turn is the user's messa
 
     const prompt = await promptOf(services, { prompt: "do the thing", agent: "codex" } as AgentTurn, contextIn(root));
 
-    expect(prompt).toBe("do the thing");
+    // What runs after the work lands is every opening message's to hear; nothing about the tree's dependencies joins it.
+    expect(prompt).toBe(composeWirePrompt([landingChecksNote([], false)], "do the thing"));
 });
 
 // The probe must ask about the tree the turn itself resolves through, not the daemon's worktree view: a daemon-side

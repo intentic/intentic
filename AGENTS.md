@@ -31,47 +31,69 @@ described, changing an implementation detail it deliberately does not mention.
 
 ## What reads your edit, and when
 
-Every reader below runs without being asked, and each one tells you only about problems your change introduced:
-what main already failed, a test that passes when re-run alone, and anything a tool can fix by itself never reaches
-you. Do not run `pnpm verify:turn` yourself.
+Nothing checks your work when your turn ends, nothing sends you back to it, and no check refuses a land, a commit or
+a push. You decide when the work is done, and the check it gets runs after it lands. Two readers run without being
+asked, one after each file you write and one after the land, and each tells you only about problems your change
+introduced: what main already failed, a test that passes when re-run alone, and anything a tool can fix by itself
+never reaches you.
 
 **After each file you write**: the `edit` checks in `.intentic/checks.json`: every check that can judge one file
 on its own (`node _tools/checks/run.mjs --paths {file}`), and the linter (`node _tools/oxlint/lint-edit.mjs {file}`,
 `.oxlintrc.json`, `.astro` included), which fixes what it can silently and reports only what the edit added over
-the file at `HEAD`. What they print rides back with the edit. Fix it there.
+the file at `HEAD`. What they print rides back with the edit and never stops the turn. Fix it there.
 
-**When the turn ends** (`pnpm verify:turn`, `_tools/scripts/verify/verify-turn.mjs`): the branch is first rebased
-onto today's main, and you are told if that moved anything under you. Mechanical fixes come next: rustfmt on the
-crates you touched, a check's own `fix` (`_tools/checks/manifest.mjs`), and `contract.lock.json` regenerated when
-the contract changed. Then the checks run, judged line by line against the main-line commit your branch stands on,
-the linter runs on your changed files, the assertion ratchet (`assertion-ratchet.mjs`) measures every test file
-you changed against its main-line self, and typecheck and tests run on the affected closure, once more if they
-fail. Failures the last land verdict recorded for your base are listed but never held against you
-(`failure-units.mjs`), and a failure that passes on the re-run or when re-run alone is logged as a flake
-(`flakes.mjs`). A turn still red when it ends waits on its branch. If you weakened a test file on purpose, commit
-it with a `Test-Note: <why>` trailer (the ratchet reads your branch's commits) and end your final message with the
-same line; the land writes it into the landed commit, and the push reads it there.
+**When the turn ends**: nothing runs. Your conversation's card records what the turn showed of its own work
+(`proof`: verified, unproven, failing or no-code, read off the checks you chose to run after your last edit, and how
+many rendered interface files you changed without looking at them), and the editor badges it. Run whatever checks
+you judge worth running while you work. `pnpm verify:turn` (`_tools/scripts/verify/verify-turn.mjs`) is one you may
+choose: it judges what your branch changed since its main-line base (the checks line by line, the linter on your
+changed files, the assertion ratchet, typecheck and tests on the affected closure) and sets aside failures main
+already had (`failure-units.mjs`). Nothing runs it for you.
 
 **After the land, off your clock** (`pnpm verify`, `_tools/scripts/verify/verify.mjs`, every land, either door):
-the whole repository, plus what the land itself added over the commit it landed on (`land-tiers.mjs`: lint on its
-files, tidy lines, rustfmt, weakened tests left undeclared). The verdict is recorded green or red with its
-failures, for the next turn's subtraction and the push. Failures that appeared with a land go back to the
-conversation that landed it as a follow-up (`agents/land/land-breakage.ts`).
+the daemon runs it on the main tree in the background, one project at a time, and lands that arrive while it runs
+wait and are measured together in the next run (`workspace/deps/verify-deps.ts`). It first writes what a machine
+decides: rustfmt on the crates the land touched, each failing check's own `fix` (`_tools/checks/manifest.mjs`), and
+`contract.lock.json` regenerated after the declarations emit when the land changed the contract. These show up in
+the main tree as ordinary uncommitted changes. Then it measures the whole repository, plus what the land itself
+added over the commit it landed on (`land-tiers.mjs`: lint on its files, tidy lines, rustfmt, weakened tests left
+undeclared), and logs a failure that passes when re-run alone as a flake (`flakes.mjs`). The verdict is recorded
+green or red with its failures, and the editor shows it: a main-line strip at the top of the chat rail and a status
+on each session card.
+
+A red run goes to `agents/land/land-breakage.ts`, which decides the same way every time. It waits for the next check
+when more work landed while this one ran, and holds while a conversation still working has unlanded changes in a
+failing package, telling that conversation once. Then it lays the failures at a land, by the paths each land changed
+or by re-running only the failing tests on each suspect's own landed tree (`agents/land/land-bisect.ts`). When it
+names one land and that land's conversation still has the work in mind, the failures go back to that conversation
+as a message. Anything else starts a fresh fix-up conversation with the failures, each suspect's changed files and
+exact diff, and `agents show <id>` to read its conversation. Past a few sends and fix-ups, a red streak waits for a
+person. `docs/architecture/sandbox.md` has the order and the limits. Every conversation is told in a "Checks after
+landing" note which failures main already has. They are not yours to chase unless your task is about them.
+
+If you weakened a test file on purpose, end your final message with a `Test-Note: <why>` line. The land writes it
+into the landed commit, and the push reads it there. If you changed the wire contract (`_shared/sandbox-contract/src`),
+regenerate its lock yourself (`pnpm --filter @intentic/sandbox-contract lock`, or `tsgo -b && node scripts/write-lock.mjs`
+in that package where pnpm cannot link): then your land carries `contract.lock.json`, and its drafted commit gets the
+`!` and `Breaking-Note:` a removal needs. The check after landing regenerates a stale lock too, but that lock belongs
+to no land, so no drafted commit is told what it removed.
 
 ## Before it leaves the machine
 
-The push runs `_tools/scripts/verify/verify-push.mjs` once, from `.githooks/pre-push`, for any branch push from
-the checkout, the app's Push button included; a tag push stands down. Cheapest first: every check the manifest
-lists, with a `tidy` finding refused only when the pushed range added it; the assertion ratchet over the range's
-test files (weaker only with a `test!:` subject or a `Test-Note:` trailer); the manifest/lockfile lockstep; the
-linter; `cargo fmt --check` on crates the push touches. Typecheck, build and test are replayed from a verdict
-`pnpm verify` or an earlier push recorded for the tree, and otherwise left to CI; `pnpm verify:push --suite`
-runs them here. It measures the working tree, and CI measures the commit.
+The push runs `_tools/scripts/verify/verify-push.mjs --hook --advisory` once, from `.githooks/pre-push`, for any
+branch push from the checkout, the app's Push button included; a tag push stands down. It reports what it finds and
+never refuses the push. Cheapest first: every check the manifest lists, with a `tidy` finding counted only when the
+pushed range added it; the assertion ratchet over the range's test files (weaker only with a `test!:` subject or a
+`Test-Note:` trailer); the manifest/lockfile lockstep; the linter; `cargo fmt --check` on crates the push touches.
+It never runs typecheck, build or test on the pusher's clock, and names the verdict `pnpm verify` recorded for the
+tree when there is one. By hand, `pnpm verify:push` exits non-zero on a finding, replays a suite verdict recorded for
+the same tree, and runs the suite itself only with `--suite`. The `commit-msg` hook prints what commitlint finds and
+lets the commit through. The push measures the working tree, and CI still runs everything on the commit.
 
 When main's CI goes red, `_sandbox/sandbox/src/ci/repair-gate.ts` acts only on main's newest run: a run that
 died on the fleet is re-run once, and the same jobs failing twice running, or main sitting red with nothing newer
-for thirty minutes, gets one fix agent. The Agent tab's "Repair what breaks after landing" switch turns this and
-the land follow-ups off.
+for thirty minutes, gets one fix agent. The Agent tab's "Repair what breaks after landing" switch (`autoRepair`)
+turns this and the routing of a red land check into reporting only.
 
 ## Tests
 
@@ -127,13 +149,14 @@ rules are about what a test stands the code up with, not about how it asserts.
   family with a reason attached to each and has no backlog; if one is genuinely right somewhere, say why rather
   than reaching past it.
 - A test file gets stronger by itself and weaker only on purpose – a failing test is fixed by updating the value
-  it expects to the new truth, never by widening the matcher. The push gate measures every test file a range
-  changed against its earlier self (`@intentic/constants/assertion-measure`: exact matchers, loose matchers, the
-  literal text the assertions pin) and refuses a downgrade (`toEqual` → `toMatchObject`) or a narrowing (the
+  it expects to the new truth, never by widening the matcher. The assertion ratchet measures every test file a
+  change touched against its earlier self (`@intentic/constants/assertion-measure`: exact matchers, loose matchers,
+  the literal text the assertions pin) and flags a downgrade (`toEqual` → `toMatchObject`) or a narrowing (the
   asserted text cut past a quarter with no test removed) unless a commit in the range carries a `test!:` subject
-  or a `Test-Note:` trailer saying why. The same measure runs in `pnpm verify:turn`, over the turn's changed test
-  files. On 2026-08-31 about 180 test files were widened in an afternoon with every suite green; that is
-  what this reads for.
+  or a `Test-Note:` trailer saying why. After a land, an undeclared weakening is one of that land's failures,
+  routed like any other. The push reports one in its range, and `pnpm verify:turn` measures your branch's. On
+  2026-08-31 about 180 test files were widened in an afternoon with every suite green; that is what this reads
+  for.
 - Mock a workspace package with every name the code under test imports from it – the `test-programs` check reads
   every `jest.mock("@intentic/…", () => ({…}))` factory against the names the test and the modules it stands up
   import from that package, and refuses a missing one.

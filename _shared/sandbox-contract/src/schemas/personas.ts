@@ -125,9 +125,9 @@ export const TURN_BRIEFING_NOTES: readonly TurnBriefingNote[] = [
     },
     {
         id: "checks",
-        label: "Automatic end-of-turn checks",
-        when: "First message, and again after a compaction, when you have rules that run at the end of a turn.",
-        cost: "Your checks still run; the agent just does not know they are coming, so a failure arrives as a surprise it has to re-read the turn to understand.",
+        label: "Checks after landing",
+        when: "First message and after a compaction, and again whenever the main tree's own check turns red or back to green: what runs after its work lands, and which failures the main tree already has.",
+        cost: "The agent does not know which failures are the main tree's own and not its doing, so it may spend a turn chasing one somebody else is already fixing.",
     },
     {
         id: "dependencies",

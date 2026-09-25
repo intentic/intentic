@@ -274,7 +274,7 @@ jobs:
       # lockfile against the manifests, every test file in a type-check program and under a budget, the workflow
       # policy (fork boundary, permission ceilings, provenance runners, tag triggers), the byte scan, the
       # daemon's structural gates, the publish set, the UI tiers and the rest. One list, read by this job, by the
-      # pre-push hook and by the turn-ending check, so a check cannot again be right and unrun: five of these
+      # pre-push hook and by the check after each land, so a check cannot again be right and unrun: five of these
       # were red for weeks inside a `pnpm check` chain that no job and no hook ran. Checkout only, no
       # node_modules, no network, under two seconds.
       #

@@ -8,6 +8,7 @@ import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { conversationAfter, testConfig, memoryFleet } from "../../testing.js";
 import { workspaceSetup } from "../../workspace/layout/workspace-setup.js";
+import { LANDING_CHECKS_NOTE_TITLE, landingChecksNote } from "../../workspace/deps/mainline-note.js";
 import type { AgentRequest } from "../providers/agent-request.js";
 import type { TurnContext } from "../providers/adapter.js";
 import { planTurn } from "../run/turn/turn-plan.js";
@@ -20,6 +21,9 @@ import { parkedCards } from "../../agents/actor/parked-cards.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);
+
+// What every opening message is told of the checks that run after its work lands, with the main tree green.
+const OPENING_CHECKS_NOTE = landingChecksNote([], false);
 
 // Pins the four turn-plan gates around the workspace map (the generator itself has its own suite): off must mean off,
 // sent once per conversation, honoured on every runtime, and built against the run's actual tree, not the shared
@@ -85,6 +89,8 @@ const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, ov
             sessionStore: (entry) => claudeStoreOf(root, testConfig.historyRoot, entry),
         }),
         perf: unstubbed<Services["perf"]>("perf", { track: (_op, _fields, run) => run() }),
+        // The main line's verdicts, read for the checks-after-landing note an opening turn is sent: nothing checked yet.
+        verifyStore: unstubbed<Services["verifyStore"]>("verifyStore", { read: async () => ({ projects: {}, runs: [] }) }),
         config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
             accounts: async () => ({ codex: [{ name: "sub", label: "sub" }], grok: [], kimi: [], gemini: [] }),
@@ -126,7 +132,8 @@ test("an opt-in that is off adds nothing at all", async () => {
 
     const prompt = await promptOf(servicesIn(root, {}), { prompt: "do the thing" } as AgentTurn, contextIn(root));
 
-    expect(prompt).toBe("do the thing");
+    // The checks note is every opening message's, map or no map; nothing of the map's own rides beside it.
+    expect(prompt).toBe(composeWirePrompt([OPENING_CHECKS_NOTE], "do the thing"));
 });
 
 test("a follow-up in the same conversation is not charged for the map again", async () => {
@@ -199,7 +206,7 @@ test("a persona that drops the map gets none of it, however the sandbox is set",
 
     expect(plan).toMatchObject({ ok: true });
     const request = (plan as { request: AgentRequest }).request;
-    expect(composeWirePrompt(request.spec.notes ?? [], request.spec.prompt)).toBe("do the thing");
+    expect(composeWirePrompt(request.spec.notes ?? [], request.spec.prompt)).toBe(composeWirePrompt([OPENING_CHECKS_NOTE], "do the thing"));
     expect(plan).not.toHaveProperty("experiments.mapArm");
 });
 
@@ -211,5 +218,5 @@ test("the map strips back off the stored message, and the chat is given a row fo
     const prompt = await promptOf(servicesIn(root, { workspaceMap: true }), { prompt: "do the thing" } as AgentTurn, contextIn(root));
 
     expect(stripTurnPreamble(prompt)).toBe("do the thing");
-    expect(preambleNotes(prompt).map((note) => note.title)).toContain("Map of this project");
+    expect(preambleNotes(prompt).map((note) => note.title)).toEqual(["Map of this project", LANDING_CHECKS_NOTE_TITLE]);
 });

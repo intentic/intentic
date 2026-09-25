@@ -1,7 +1,10 @@
 import { type AgentSummary, type AgentTurn, type FixAttemptPlan, type FixResume, planFixAttempt } from "@intentic/sandbox-contract";
-import type { TurnInput } from "../seams/turn-starter.js";
+import type { Services } from "../../composition.js";
+import type { TurnInput } from "../../seams/turn-starter.js";
+import { archiveAgents } from "../registry/archive.js";
 
-/* ONE FAILURE, MANY ATTEMPTS, ONE LIVE ANSWER — the daemon's side of it, for a fix the daemon itself starts (POST /ci/fix). */
+/* ONE FAILURE, MANY ATTEMPTS, ONE LIVE ANSWER — the daemon's side of it, for a fix the daemon itself starts: a red CI
+   run (ci/ci-fix.ts, POST /ci/fix and the repair gate) or a red main-line check after a land (agents/land/land-fix.ts). */
 
 export interface FixAttemptDeps {
     // The live roster and the archive as the registry holds them now; both count toward the next attempt's number.
@@ -76,3 +79,35 @@ export const startFixAttempt = async (deps: FixAttemptDeps, ask: FixAttemptAsk):
     }
     return { kind: "started", conversationId: plan.conversationId, attempt: plan.attempt, continued };
 };
+
+// The earlier attempt would not be filed away, so no new one was started; carries the registry's reason.
+export class AttemptRefused extends Error {}
+
+// How the daemon's own fix attempts reach the fleet, for every failure it starts one on: a failed CI run here, a red
+// main-line check in agents/land/land-fix.ts.
+export const daemonFixAttemptDeps = (services: Services, request: { readonly byPerson: boolean; readonly picked: boolean }): FixAttemptDeps => ({
+    roster: () => services.agents.list(),
+    archivedIds: () => services.agents.listArchived().map((agent) => agent.id),
+    // Whatever runs on the earlier attempt goes: it is being set aside, whichever turn it is on.
+    stop: async (conversationId) => {
+        await services.turns.stop({ conversationId, live: true });
+    },
+    archive: async (conversationId) => {
+        const { failed } = await archiveAgents(services, [conversationId], Date.now());
+        const refused = failed[0];
+        if (refused !== undefined) {
+            throw new AttemptRefused(`The earlier attempt could not be set aside: ${refused.reason}`);
+        }
+    },
+    // Same detached-run boundary as POST /agent, so the run map, journal, transcript and observer stay wired; no composer
+    // holds these words, so a refusal at the door leaves the sandbox keeping the turn.
+    start: async (turn) => {
+        const started = await services.turns.start({ ...turn, byPerson: request.byPerson });
+        return typeof started === "string" ? undefined : started;
+    },
+    // A pick is a choice made now, so it outranks the kept turn's routing: the whole prompt goes on it.
+    rerun: async (conversationId) =>
+        !request.picked && services.conversations.state(conversationId)?.resume.held?.reason === "door"
+            ? services.turns.resume(conversationId, request.byPerson)
+            : undefined,
+});

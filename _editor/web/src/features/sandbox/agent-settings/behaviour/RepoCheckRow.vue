@@ -31,11 +31,13 @@ const name = computed((): string => (entry.repo === `root` ? `This workspace` : 
 
 const MOMENTS: readonly RepoCheckMoment[] = [`edit`, `turn`, `land`];
 
+// `turn` is retired: nothing runs when a turn ends any more, and a declaration naming it still reads but runs nothing, so
+// its label says so rather than promising a check that never comes.
 const momentWords = (when: RepoCheckMoment): string =>
     when === `edit`
         ? t(`sandbox.repoCheckRow.afterEachEdit`)
         : when === `turn`
-          ? t(`sandbox.repoCheckRow.beforeTurnEnds`)
+          ? t(`sandbox.repoCheckRow.turnRetired`)
           : t(`sandbox.repoCheckRow.afterItLands`);
 
 // When a check last flagged something; one that never has is either healthy or aimed at nothing, and worth a look.
@@ -56,9 +58,11 @@ const lines = computed((): Line[] => {
             when: check.when,
             run: check.run,
             paths: check.paths ?? [],
-            // A land's verdict is the activity feed's; only edit and turn checks stamp a firing.
-            note: check.when !== `land` && entry.adopted ? firedWords(entry.fired[index]) : undefined,
-            dim: idle.value,
+            // A land's verdict is the main line's (the chat rail and the board); only an edit check stamps a firing, and
+            // a retired turn check has nothing left to have flagged.
+            note: check.when === `edit` && entry.adopted ? firedWords(entry.fired[index]) : undefined,
+            // A retired check reads as inert as one nobody switched on: neither runs.
+            dim: idle.value || check.when === `turn`,
         }),
     );
     const fallback: Line[] =

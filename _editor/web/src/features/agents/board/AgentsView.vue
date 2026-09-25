@@ -27,6 +27,8 @@ import MatchLine from "../../../components/MatchLine.vue";
 import AgentCard from "./cards/AgentCard.vue";
 import SandboxMetricsStrip from "../metrics/SandboxMetricsStrip.vue";
 import { LIVE_METRICS_KEY, useLiveMetrics } from "../metrics/liveMetrics";
+import MainlineStrip from "../mainline/MainlineStrip.vue";
+import { provideMainline } from "../mainline/useMainline";
 import HeldWakeCard from "./cards/HeldWakeCard.vue";
 import WorkflowRunCard from "./cards/WorkflowRunCard.vue";
 import { useArchiveDoor } from "./view/archiveDoor";
@@ -52,6 +54,8 @@ const { archived, archiveLoading, archiveFailure, archive, restore, notice, dism
 // Read only while this board is mounted and the reader opted in (liveMetrics.ts); the cards take theirs from here.
 const liveMetrics = useLiveMetrics();
 provide(LIVE_METRICS_KEY, liveMetrics);
+// The main tree's own check: one read for the board, drawn as the bar below the header and on every card from here.
+const mainline = provideMainline();
 const drag = useAgentDrag();
 const { dragged, dragging, draggedId, over, action, accepts, ghostStyle, pendingResolve, confirmResolve, cancelResolve } = drag;
 const { resolveNow, landNow, relandNow, unwatchNow } = drag;
@@ -159,6 +163,8 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                 <Button size="small" class="ui-button-thumb shrink-0" @click="startAgent()"> <Icon name="plus" />{{ t(`shared.newAgent`) }} </Button>
             </div>
         </div>
+        <!-- Always on while any land has been checked: work lands without waiting for it, so this is where its verdict is seen. -->
+        <MainlineStrip :status="mainline" bar />
         <!-- Opt-in (Settings ▸ Appearance): absent, nothing was measured, not merely hidden. -->
         <SandboxMetricsStrip v-if="liveMetrics !== undefined" :metrics="liveMetrics" />
         <!-- Failures only: the layout shift and dismissal this costs suit something the user must read, not a routine action's receipt (which floats instead). -->

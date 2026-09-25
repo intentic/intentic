@@ -6,7 +6,6 @@ import { t } from "@intentic/ui/i18n";
 
 // Rules with a dedicated row on the Agent tab; ids are this screen's own, not part of the wire contract.
 export const NAMED_RULES = {
-    viewing: `verify-ui-edits`,
     land: `auto-land`,
     version: `auto-version`,
 } as const;

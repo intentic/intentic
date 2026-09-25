@@ -47,7 +47,6 @@ import { createTurnTaint, publishTurnTaint } from "../../guard/turn-taint.js";
 import { personaScopeHooks } from "../../personas/persona-scope.js";
 import { JS_TOOL_ALIAS, JS_TOOL_NAME, jsExecutionServer } from "../../execution/js-tool.js";
 import { mcpServersOf } from "../tools/agent-tools.js";
-import { turnEndingHooks } from "../../rules/turn-ending.js";
 import { agentShellBusy, bashTmuxHooks, tmuxRunEnabled } from "../tools/agent-terminals.js";
 import { terminalHelpServer } from "../../terminal/terminal-help.js";
 import { EventQueue } from "./event-queue.js";
@@ -111,18 +110,6 @@ const syncOnAnswer = async (
     }
 };
 
-// Commits the rebase at a Stop brought under the branch; 0 when it moved nothing or was skipped.
-const syncedCommits = (frame: AgentEvent | undefined): number => (frame?.kind === "worktree" ? (frame.sync?.commits ?? 0) : 0);
-
-// The Stop's rebase for a turn that has a branch to rebase; undefined for one that has not.
-const stopSync = (
-    conversations: Pick<ConversationActors, "holdings">,
-    request: AgentRequest,
-    push: (event: AgentEvent) => void,
-    shell: { sessionId: string | undefined },
-): (() => Promise<number>) | undefined =>
-    request.hooks.resync === undefined ? undefined : async () => syncedCommits(await quietResync(conversations, request, push, shell));
-
 // Cap the stderr tail folded into an error message so a chatty failure can't flood the UI.
 const STDERR_TAIL = 2000;
 
@@ -173,7 +160,7 @@ const HEADLESS_SETTINGS: Exclude<NonNullable<Options["settings"]>, string> = {
 
 // The flag layer, above the owner's settings.json. Fast mode is asked per session so it never persists sandbox-wide,
 // and omitted rather than false so it never overrides theirs. Unapproved settings hooks switch off every file and
-// plugin hook; the gate, rules and checks wired below are SDK callbacks, which still run.
+// plugin hook; the gate and the per-edit checks wired below are SDK callbacks, which still run.
 const turnSettings = (request: HarnessRequest): Exclude<NonNullable<Options["settings"]>, string> => ({
     ...HEADLESS_SETTINGS,
     ...(request.spec.fast === true ? { fastMode: true, fastModePerSessionOptIn: true } : {}),
@@ -312,10 +299,6 @@ const baseOptions = (
     subagents: SubagentTurn | undefined,
     // Turn's event sink; the command gate uses it to park the turn on a card without ever calling canUseTool.
     push: (event: AgentEvent) => void,
-    // Where a Stop's rebase learns a subagent is still writing in the parent's tree.
-    conversations: Pick<ConversationActors, "holdings">,
-    // The turn's own shell, so a Stop's rebase waits out a command still writing in it.
-    shell: { sessionId: string | undefined },
 ): OauthRecoveryOptions => {
     // This turn's outside-content bit, set once here; the wrap hook sets it, the gate reads it per command.
     const taint = createTurnTaint(request.policy.outsideWake);
@@ -407,19 +390,7 @@ const baseOptions = (
             // Persona's folder limit and config-edit permission; the only layer between an unattended wake and a bad
             // path.
             request.policy.personaScope !== undefined ? personaScopeHooks(request.policy.personaScope) : {},
-            // Every rule standing at turn.ending: a repository's own check, and the look after a surface edit.
-            turnEndingHooks(request.policy.turnEndingRules ?? [], {
-                runCommand: request.hooks.runRuleCommand,
-                installing: request.hooks.dependencyInstalling,
-                cwd: request.spec.cwd,
-                onFired: request.hooks.onRuleFired,
-                onCheckRun: request.hooks.onCheckRun,
-                onFollowUpOutcome: request.hooks.onFollowUpOutcome,
-                changedPaths: request.hooks.changedPaths,
-                repos: request.hooks.turnRepos,
-                syncBeforeChecks: stopSync(conversations, request, push, shell),
-            }),
-            // The harness's own ask beside the owner's rules: a checklist about to be left open is said back once, since
+            // The harness's own ask: a checklist about to be left open is said back once, since
             // the board reads that list to tell a finished session from one that stopped short.
             checklistCloseHooks({ sessionStore: request.spec.sessionStore }),
             // Refuses a mid-turn edit that would change which settings or skill hooks run, which the CLI applies live.
@@ -810,7 +781,7 @@ export async function* runAgent(
     const writing = new Map<string, RequestDocument>();
     let stderr = "";
     const options: Options = {
-        ...baseOptions(request, abortController, permissionMode, tmuxEnabled, subagents, push, conversations, shell),
+        ...baseOptions(request, abortController, permissionMode, tmuxEnabled, subagents, push),
         // Either built-in base plus this harness's guidance, or the owner's own prompt alone; SDK sends an empty prompt if
         // omitted.
         systemPrompt,

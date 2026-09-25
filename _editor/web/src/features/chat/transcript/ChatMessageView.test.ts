@@ -7,6 +7,7 @@ import {
     type AgentWatch,
     agentWordsRow,
     childReportPrompt,
+    landFixPrompt,
     peerMessagePrompt,
     verifyNudgePrompt,
     watchWakePrompt,
@@ -672,9 +673,10 @@ describe(`ChatMessageView errand row`, () => {
         expect(shownText(element)).toContain(`src/auth/session.ts`);
     });
 
-    // The one errand the DAEMON composes rather than this app (verify-nudge.ts). Built here the way the daemon builds
-    // it, through the contract both ends share, so a reworded opening on either side fails rather than quietly
-    // un-recognising the nudge and filing it as something the user typed.
+    // An errand the DAEMON composes rather than this app (verify-nudge.ts). Nothing sends it any more, since checks run
+    // after landing, but transcripts hold it. Built here the way the daemon built it, through the contract both ends
+    // share, so a reworded opening on either side fails rather than quietly un-recognising the nudge and filing it as
+    // something the user typed.
     it(`recognises the sandbox's own follow-up, composed the way the daemon composes it`, () => {
         const sent = verifyNudgePrompt([`This turn changed code and no check has passed since the last edit:\n- src/parser.ts`]);
         const element = mount({ id: 4, role: `user`, text: sent });
@@ -684,6 +686,18 @@ describe(`ChatMessageView errand row`, () => {
         expect(element.querySelector(`button[aria-label="Edit this message"]`)).toBeNull();
         // The asks stay behind the mark: the row says what happened, not the whole of what was asked for.
         expect(shownText(element)).not.toContain(`src/parser.ts`);
+    });
+
+    // The brief a fresh conversation opens on when a red main line had nobody holding the work to take it (land-fix.ts):
+    // the whole first turn is the sandbox's, so it reads as the sandbox's errand, never as the user's own words.
+    it(`shows a fresh fix-up's brief as the sandbox's errand, its failures one press away`, () => {
+        const brief = landFixPrompt([`\`pnpm verify\` in \`web\` failed on:`, `- web/src/pages/changelog.test.ts › lists every release`]);
+        const element = mount({ id: 5, role: `user`, text: brief });
+
+        expect(element.textContent).toContain(errands().landFix.label);
+        expect(element.textContent).toContain(errands().landFix.detail);
+        expect(element.querySelector(`.chat-prompt`)).toBeNull();
+        expect(shownText(element)).not.toContain(`changelog.test.ts`);
     });
 });
 

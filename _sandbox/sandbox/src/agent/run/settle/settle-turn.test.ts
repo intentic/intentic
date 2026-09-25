@@ -1,45 +1,22 @@
-import type { Rule } from "@intentic/sandbox-contract";
+import type { TurnProof } from "@intentic/sandbox-contract";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../../composition.js";
 import { fakeHistory, recordingLogger } from "../../../harness/route-fakes.testing.js";
 import { recordingTurnStores, services } from "../../../harness/route-services.testing.js";
-import * as verifyNudge from "../../verification/verify-nudge.js";
-import type { AgentRequest } from "../../providers/agent-request.js";
-import { daemonStopFindings, performSettlement } from "./settle-turn.js";
+import { beginTurn } from "../../../testing.js";
+import { performSettlement } from "./settle-turn.js";
 import type { SettlementPlan } from "./turn-settlement.js";
-import { parkedCards } from "../../../agents/actor/parked-cards.js";
-import { memoryFleet } from "../../../testing.js";
 
-// Where a turn here parks its cards: one fleet's actors.
-const cards = parkedCards(memoryFleet().conversations);
-
-// The nudge is a follow-up turn, so it is noted in one running order on its way through; the resume records are the
-// conversation's events, noted as they are sent (`traced`).
-const { order, nudged } = { order: [] as string[], nudged: [] as Parameters<typeof verifyNudge.nudgeUnverifiedWork>[0][] };
+// The executor runs in one order, noted as it goes; the resume records and the proof are the conversation's events,
+// noted as they are sent (`traced`).
+const order: string[] = [];
 // Each resume record's event, under the step it is in the running order.
 const RESUME_STEPS: Readonly<Record<string, string>> = { "turn-held": "held", "turn-got-somewhere": "ladder" };
-jest.mock("../../verification/verify-nudge.js", () => ({
-    ...verifyNudge,
-    nudgeUnverifiedWork: async (nudge: Parameters<typeof verifyNudge.nudgeUnverifiedWork>[0]) => {
-        order.push("nudge");
-        nudged.push(nudge);
-        return undefined;
-    },
-}));
 
 afterEach(() => {
     order.length = 0;
-    nudged.length = 0;
 });
 
-const request: AgentRequest = {
-    spec: { prompt: "go", cwd: "/w" },
-    policy: {},
-    tools: {},
-    credential: { kind: "container" },
-    hooks: { cards },
-    signal: new AbortController().signal,
-};
 const input = { prompt: "go", conversationId: "settle-1" };
 const noCode = { state: "no-code", paths: [], check: undefined } as const;
 
@@ -108,63 +85,54 @@ const plan = (change: Partial<SettlementPlan> = {}): SettlementPlan => ({
         costUsd: 0,
         durationMs: 0,
     },
-    daemonStop: {
-        conversationId: undefined,
-        findings: { conversationId: undefined, isolated: false, request, edited: [], cwd: "/w" },
-        nudge: undefined,
-    },
+    proof: undefined,
     snapshot: undefined,
     ...change,
 });
 
-// A command rule standing at the turn's end, and a runner that fails it the way a red suite does.
-const suite: Rule = {
-    id: "suite",
-    label: "Run the suite",
-    moment: "turn.ending",
-    action: { kind: "command", command: "pnpm test", timeoutMs: 900_000 },
-    enabled: true,
-};
-const redSuite: AgentRequest = {
-    ...request,
-    policy: { ...request.policy, turnEndingRules: [suite] },
-    hooks: { ...request.hooks, runRuleCommand: async () => ({ status: "failed", exitCode: 1, output: "1 failed" }) },
-};
-const finding =
-    'Before finishing, "Run the suite" ran this and it exited 1:\n`pnpm test`\n1 failed\nRepair that before finishing, or say plainly why it cannot be repaired here.';
+// What a turn that edited code and ran a red suite showed of its own work.
+const RED: TurnProof = { at: 1_000, verification: "failing", check: "pnpm test" };
 
 describe("a settlement", () => {
-    test("records the resume first, then closes the turn, re-reads, bills, runs the Stop, nudges, flushes and snapshots", async () => {
+    test("records the resume first, then notes the proof, closes the turn, re-reads, bills, flushes and snapshots", () => {
         const { deps, writes } = traced();
-        const stopped = { conversationId: "settle-1", isolated: true, request: redSuite, edited: ["/w/a.ts"], cwd: "/w" };
-        const nudge = {
-            conversationId: "settle-1",
-            profile: {},
-            rules: [suite],
-            ledger: { edited: () => [], verdict: () => undefined, standing: () => noCode, noteEdit: () => {}, noteCommand: () => {}, noteCheck: () => {} },
-        };
-        await performSettlement(
+        performSettlement(
             deps,
             plan({
                 hold: { kind: "held", held: { input, reason: "stopped", ran: true, standing: noCode } },
                 headroomRefresh: { scope: { providers: ["codex"] }, maxAgeMs: 10_000 },
-                daemonStop: { conversationId: "settle-1", findings: stopped, nudge },
+                proof: { conversationId: "settle-1", proof: RED },
                 snapshot: "go",
             }),
             turn,
         );
 
-        expect(order).toStrictEqual(["held", "completion", "refresh", "usage", "nudge", "flush", "snapshot"]);
-        // The nudge reads what the Stop found, so it was awaited first.
-        expect(nudged).toStrictEqual([{ ...nudge, findings: [finding] }]);
+        expect(order).toStrictEqual(["held", "proof-noted", "completion", "refresh", "usage", "flush", "snapshot"]);
         expect(deps.conversations.state("settle-1")?.resume.held).toMatchObject({ reason: "stopped", ran: true });
+        // Kept on the turn until the settle files it: nothing runs a check or sends the turn back.
+        expect(deps.conversations.state("settle-1")?.turn.proof).toStrictEqual(RED);
         expect(writes.headroomRefreshes).toStrictEqual([{ scope: { providers: ["codex"] }, maxAgeMs: 10_000 }]);
         expect(writes.snapshots).toStrictEqual([{ trigger: "turn", label: "go" }]);
     });
 
-    test("of a run that got somewhere resets the ladder, and one with nothing to hold, snapshot or nudge does only the rest", async () => {
+    test("hands the settle the proof it files on the card", async () => {
+        const { deps } = traced();
+        await beginTurn(
+            deps.conversations,
+            { conversationId: "settle-2", isolated: true, prompt: "go", profile: { agent: "codex" }, byPerson: true },
+            1_000,
+        );
+        performSettlement(deps, plan({ proof: { conversationId: "settle-2", proof: RED } }), turn);
+        await deps.conversations.send("settle-2", { kind: "settle" }, 2_000).settled;
+
+        expect(deps.agents.entry("settle-2")?.proof).toStrictEqual(RED);
+        expect(deps.agents.get("settle-2")?.proof).toStrictEqual(RED);
+        expect(deps.conversations.state("settle-2")?.turn.proof).toBeUndefined();
+    });
+
+    test("of a run that got somewhere resets the ladder, and one with nothing to hold, prove or snapshot does only the rest", () => {
         const { deps, writes } = traced();
-        await performSettlement(deps, plan({ hold: { kind: "got-somewhere", conversationId: "settle-1" } }), turn);
+        performSettlement(deps, plan({ hold: { kind: "got-somewhere", conversationId: "settle-1" } }), turn);
         expect(order).toStrictEqual(["ladder", "completion", "usage", "flush"]);
         expect(writes.usage).toStrictEqual([plan().usage]);
         expect(writes.snapshots).toStrictEqual([]);
@@ -175,7 +143,7 @@ describe("a settlement", () => {
             throw new Error("disk full");
         };
         const { lines, logger } = recordingLogger();
-        await performSettlement(
+        performSettlement(
             services({ logger, usage: { record: rejecting }, history: fakeHistory({ snapshot: rejecting }) }),
             plan({ snapshot: "go" }),
             turn,
@@ -188,69 +156,5 @@ describe("a settlement", () => {
                 ]),
             SETTLES,
         );
-    });
-});
-
-describe("the daemon's Stop", () => {
-    const stop = { conversationId: "settle-1", isolated: true, request: redSuite, edited: [], cwd: "/w" };
-
-    test("runs the command rules on a daemon-stopped isolated turn and words what they found", async () => {
-        expect(await daemonStopFindings(services(), stop)).toStrictEqual([finding]);
-    });
-
-    test("rebases before the checks, and says so ahead of what they then find", async () => {
-        const synced: AgentRequest = {
-            ...redSuite,
-            hooks: {
-                ...redSuite.hooks,
-                resync: async () => ({ kind: "worktree", branch: "agent/settle-1", base: "abc1234", sync: { commits: 3, blocked: [] } }),
-            },
-        };
-        const [note, ...found] = await daemonStopFindings(services(), { ...stop, request: synced });
-        expect(note).toContain("3 commit(s) of other work were rebased under this branch");
-        expect(found).toStrictEqual([finding]);
-    });
-
-    test("finds nothing on the main tree, which is everyone's, or for nobody's turn", async () => {
-        expect(await daemonStopFindings(services(), { ...stop, isolated: false })).toStrictEqual([]);
-        expect(await daemonStopFindings(services(), { ...stop, conversationId: undefined })).toStrictEqual([]);
-    });
-
-    test("matches a rule narrowed by path against what the turn edited, workspace-relative, and what changed beside it", async () => {
-        const narrowed: Rule = { ...suite, when: { paths: ["src/**"] } };
-        const ran: string[][] = [];
-        const probe = (changed: readonly string[]): AgentRequest => ({
-            ...request,
-            policy: { ...request.policy, turnEndingRules: [narrowed] },
-            hooks: {
-                ...request.hooks,
-                changedPaths: async () => changed,
-                runRuleCommand: async (command) => {
-                    ran.push([command]);
-                    return { status: "passed", output: "" };
-                },
-            },
-        });
-        await daemonStopFindings(services(), { ...stop, request: probe([]), edited: ["/w/src/a.ts"] });
-        await daemonStopFindings(services(), { ...stop, request: probe(["src/changed.ts"]), edited: [] });
-        await daemonStopFindings(services(), { ...stop, request: probe([]), edited: ["/w/docs/readme.md"] });
-        expect(ran).toStrictEqual([["pnpm test"], ["pnpm test"]]);
-    });
-
-    test("that cannot run is logged and finds nothing", async () => {
-        const { lines, logger } = recordingLogger();
-        const broken: AgentRequest = {
-            ...redSuite,
-            hooks: {
-                ...redSuite.hooks,
-                runRuleCommand: async () => {
-                    throw new Error("no shell");
-                },
-            },
-        };
-        expect(await daemonStopFindings({ logger }, { ...stop, request: broken })).toStrictEqual([]);
-        expect(lines.map(({ level, message, conversationId }) => ({ level, message, conversationId }))).toStrictEqual([
-            { level: "warn", message: "turn-ending checks: could not run after the turn", conversationId: "settle-1" },
-        ]);
     });
 });

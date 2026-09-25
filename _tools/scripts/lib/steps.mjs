@@ -1,9 +1,10 @@
-// Runs every independent step of a gate rather than stopping at the first failure, since a turn gets a bounded number
-// of follow-ups and fail-fast can cost it more than one. A step depending on a failed one is skipped, not run against a
-// broken tree; `finish` prints every failure and skip in one block, where a truncated output tail can't lose it.
+// Runs every independent step of a gate rather than stopping at the first failure, since a run takes minutes and
+// whoever is sent its failures (a conversation, after a land) should get all of them at once. A step depending on a
+// failed one is skipped, not run against a broken tree; `finish` prints every failure and skip in one block at the end
+// of the output, where a reader of its tail finds it.
 import { spawnSync } from "node:child_process";
 
-// Bytes of failure lines the digest prints across every failed step, so the digest fits the ~4,000-byte tail a Stop quotes.
+// Bytes of failure lines the digest prints across every failed step, which keeps the whole digest to about one screen.
 const DETAIL_BYTES = 2_600;
 // One failure line's ceiling, so a single long message cannot spend the whole budget.
 const LINE_BYTES = 240;
@@ -35,8 +36,8 @@ const spell = (command, args, root) => {
 };
 
 // Runner for one gate's steps; `name` prefixes every printed line, `root` is the commands' cwd and the digest's path
-// base.
-export const createSteps = (name, root) => {
+// base. `advisory` prints the same digest and returns instead of exiting 1: a finding is reported, never a refusal.
+export const createSteps = (name, root, { advisory = false } = {}) => {
     const say = (line) => console.error(`${name}: ${line}`);
     const results = [];
     const started = Date.now();
@@ -74,6 +75,8 @@ export const createSteps = (name, root) => {
 
     // Whether any step so far failed.
     const failing = () => results.some((result) => result.status === "failed");
+    // The steps that failed, with why, for a caller that reports them as data.
+    const failedSteps = () => results.filter((result) => result.status === "failed").map(({ label, why }) => ({ label, why }));
 
     // Records a step skipped because a real dependency already failed, so the digest can say that part of the tree is
     // unmeasured.
@@ -89,9 +92,9 @@ export const createSteps = (name, root) => {
     };
 
 
-    // Prints every step's verdict once at the end and exits 1 if anything failed. `summarize` runs only on a clean
-    // tree, so recording a passing verdict is not a caller's side effect on a failed run; failed steps print before
-    // skipped ones.
+    // Prints every step's verdict once at the end and, unless advisory, exits 1 if anything failed. `summarize` runs
+    // only on a clean tree, so recording a passing verdict is not a caller's side effect on a failed run; failed steps
+    // print before skipped ones.
     const finish = (summarize) => {
         const failed = results.filter((result) => result.status === "failed");
         const skipped = results.filter((result) => result.status === "skipped");
@@ -127,8 +130,12 @@ export const createSteps = (name, root) => {
                 ? "every step that could still say something about this tree ran; fix these together, and the skipped ones are unmeasured until they do"
                 : "every step ran; fix these together rather than one per run",
         );
+        if (advisory) {
+            say("reported, not refused: nothing a check finds holds this back");
+            return;
+        }
         process.exit(1);
     };
 
-    return { say, step, skip, fail, failing, finish };
+    return { say, step, skip, fail, failing, failedSteps, finish };
 };

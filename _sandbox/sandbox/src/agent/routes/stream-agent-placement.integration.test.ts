@@ -6,13 +6,12 @@ import * as verifyLanded from "../../agents/land/verify-landed.js";
 import * as versionLanded from "../../agents/land/version-landed.js";
 import type { Services } from "../../composition.js";
 import { collect } from "../../harness/route-client.testing.js";
-import { gitOut, realCheckout, recordingLogger } from "../../harness/route-fakes.testing.js";
+import { gitOut, OPENING_CHECKS_PREAMBLE, realCheckout, recordingLogger } from "../../harness/route-fakes.testing.js";
 import { recordingTurnStores, services } from "../../harness/route-services.testing.js";
 import { beginTurn } from "../../testing.js";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
 import type { AgentRequest } from "../providers/agent-request.js";
 import type { SentTurn } from "../../seams/turn-starter.js";
-import { checkRunOf } from "../verification/turn-checks.js";
 import { streamAgent } from "./agent.routes.js";
 
 // Pins where a conversation's turn runs and what happens after it: the runner, the main tree and the worktree, each
@@ -188,7 +187,12 @@ test("a main-tree turn checkpoints before it runs, snapshots after, and raises n
 
     const frames = await collect(streamAgent(s, { prompt: "tidy the readme", conversationId: "placed-main", byPerson: true }, undefined));
 
-    expect(frames).toStrictEqual([{ kind: "checkpoint", id: "snap-1", index: 0 }, { kind: "delta", text: "done" }, { kind: "done" }]);
+    expect(frames).toStrictEqual([
+        OPENING_CHECKS_PREAMBLE,
+        { kind: "checkpoint", id: "snap-1", index: 0 },
+        { kind: "delta", text: "done" },
+        { kind: "done" },
+    ]);
     expect(writes.checkpoints).toStrictEqual([{ conversationId: "placed-main", index: 0, checkpoint: { kind: "tree", snapshot: "snap-1" } }]);
     expect(writes.snapshots).toStrictEqual([{ trigger: "user" }, { trigger: "turn", label: "tidy the readme" }]);
     expect(s.agents.entry("placed-main")).toMatchObject({ ending: { kind: "idle" } });
@@ -201,7 +205,7 @@ test("a main-tree turn with no conversation keeps its checkpoint unindexed and f
 
     const frames = await collect(streamAgent(s, { prompt: "tidy the readme", byPerson: true }, undefined));
 
-    expect(frames).toStrictEqual([{ kind: "checkpoint", id: "snap-2" }, { kind: "delta", text: "done" }, { kind: "done" }]);
+    expect(frames).toStrictEqual([OPENING_CHECKS_PREAMBLE, { kind: "checkpoint", id: "snap-2" }, { kind: "delta", text: "done" }, { kind: "done" }]);
     expect(writes.checkpoints).toStrictEqual([]);
 });
 
@@ -219,7 +223,7 @@ test("a runtime that throws is observed as the turn's failure, and the throw rea
     })();
 
     await expect(run).rejects.toThrow("the harness crashed");
-    expect(frames).toStrictEqual([{ kind: "delta", text: "starting" }]);
+    expect(frames).toStrictEqual([OPENING_CHECKS_PREAMBLE, { kind: "delta", text: "starting" }]);
     expect(s.agents.entry("placed-throws")).toMatchObject({ ending: { kind: "failed" } });
 });
 
@@ -240,6 +244,7 @@ test("a clean isolated turn rebases onto the main line, lands into the main tree
     expect(frames).toStrictEqual([
         { kind: "worktree", branch: "agent/placed-lands", base: base.slice(0, 7), unenforced: true, sync: { commits: 1, blocked: [] } },
         { kind: "checkpoint", id: "worktree:0", index: 0 },
+        OPENING_CHECKS_PREAMBLE,
         { kind: "delta", text: "shipped" },
         { kind: "done" },
         { kind: "landed", landed: true, deps: { missing: 1, started: ["root"], deferred: false } },
@@ -315,41 +320,38 @@ test("a rule that holds work narrowed by path is read against the turn's own cha
     expect(emitted.map(({ event, outcome }) => ({ event, outcome }))).toStrictEqual([{ event: "turn.settled", outcome: "ready" }]);
 });
 
-test("a turn whose own check failed waits on its branch, and says which check held it", async () => {
-    const { worktree, worktrees } = await checkout("placed-checks");
-    const suite: Rule = {
-        id: "suite",
-        label: "Run the suite",
-        moment: "turn.ending",
-        action: { kind: "command", command: "pnpm test", timeoutMs: 900_000 },
-        enabled: true,
-    };
+// Nothing a turn checks can hold its work: the whole-tree check runs after it lands (verify-deps.ts), and what the turn
+// showed of its own work is only recorded on its card.
+test("a turn whose own check failed still lands, and its card records the check that failed", async () => {
+    const { work, worktree, worktrees } = await checkout("placed-checks");
     const { services: s, writes } = placedServices(
-        async function* () {
-            await writeFile(join(worktree, "app.ts"), "line one\nthe agent's work\n");
-            // What the Stop hook records when the turn-ending command goes red.
-            s.conversations.send("placed-checks", {
-                kind: "check-ran",
-                check: checkRunOf(suite, { status: "failed", exitCode: 1, output: "1 failed" }),
-            });
-            yield { kind: "delta", text: "shipped" };
-            yield { kind: "done" };
-        },
+        editing(worktree, [
+            {
+                kind: "tool_call",
+                id: "call-edit",
+                name: "Edit",
+                category: "edit",
+                status: "completed",
+                locations: [{ path: join(worktree, "app.ts") }],
+            },
+            { kind: "tool_call", id: "call-test", name: "Bash", category: "execute", status: "in_progress", target: "pnpm test" },
+            { kind: "tool_call_update", id: "call-test", status: "completed", content: [{ type: "text", text: "1 failed\n--- [exit 1, 4s]" }] },
+            { kind: "delta", text: "shipped" },
+            { kind: "done" },
+        ]),
         { agentWorktrees: worktrees },
     );
 
-    await collect(streamAgent(s, { prompt: "ship it", conversationId: "placed-checks", isolated: true, autoLand: true, byPerson: true }, undefined));
+    const frames = await collect(
+        streamAgent(s, { prompt: "ship it", conversationId: "placed-checks", isolated: true, autoLand: true, byPerson: true }, undefined),
+    );
 
-    expect(lands(writes)).toStrictEqual([{ name: "agent.land", attrs: { id: "placed-checks", mode: "measure", span: "outstanding" } }]);
-    expect(writes.activity.filter(({ type }) => type === "rule.held_work")).toStrictEqual([
-        {
-            direction: "system",
-            type: "rule.held_work",
-            content: '"Run the suite" failed on this turn\'s work (`pnpm test`), so it waits on its branch instead of landing.',
-            conversationId: "placed-checks",
-        },
-    ]);
+    expect(frames.at(-1)).toMatchObject({ kind: "landed", landed: true });
+    expect(await gitOut(work, "diff")).toContain("+the agent's work");
+    expect(lands(writes)).toStrictEqual([{ name: "agent.land", attrs: { id: "placed-checks", mode: "check", span: "outstanding" } }]);
+    expect(writes.activity.filter(({ type }) => type === "rule.held_work")).toStrictEqual([]);
     expect(writes.ruleFirings).toStrictEqual([]);
+    expect(s.agents.entry("placed-checks")?.proof).toStrictEqual({ at: expect.any(Number), verification: "failing", check: "pnpm test" });
 });
 
 test("a failed isolated turn lands nothing, leaves its books alone, and settles as an error", async () => {
@@ -362,6 +364,7 @@ test("a failed isolated turn lands nothing, leaves its books alone, and settles 
     const frames = await collect(streamAgent(s, { prompt: "ship it", conversationId: "placed-fails", isolated: true, autoLand: true, byPerson: true }, undefined));
 
     expect(frames.slice(2)).toStrictEqual([
+        OPENING_CHECKS_PREAMBLE,
         { kind: "error", code: "context-window-too-small", message: "this model cannot hold the turn" },
         { kind: "done" },
     ]);
@@ -390,7 +393,7 @@ test("a stopped isolated turn lands nothing but settles its books on the branch"
         streamAgent(s, { prompt: "ship it", conversationId: "placed-stopped", isolated: true, autoLand: true, byPerson: true }, controller.signal),
     );
 
-    expect(frames.slice(2)).toStrictEqual([{ kind: "delta", text: "working" }, { kind: "done" }]);
+    expect(frames.slice(2)).toStrictEqual([OPENING_CHECKS_PREAMBLE, { kind: "delta", text: "working" }, { kind: "done" }]);
     expect(lands(writes)).toStrictEqual([{ name: "agent.land", attrs: { id: "placed-stopped", mode: "measure", span: "outstanding" } }]);
     expect(await gitOut(work, "status", "--porcelain")).toBe("");
     expect(await gitOut(work, "show", "--name-only", "--format=%s", "agent/placed-stopped")).toContain("app.ts");
@@ -425,6 +428,7 @@ test("a card settling mid-turn rebases the branch again, restates where it stand
     expect(frames).toStrictEqual([
         { kind: "worktree", branch: "agent/placed-resync", base: base.slice(0, 7), unenforced: true },
         { kind: "checkpoint", id: "worktree:0", index: 0 },
+        OPENING_CHECKS_PREAMBLE,
         { kind: "delta", text: "asked" },
         { kind: "worktree", branch: "agent/placed-resync", base: moved.slice(0, 7), unenforced: true, sync: { commits: 1, blocked: [] } },
         { kind: "done" },

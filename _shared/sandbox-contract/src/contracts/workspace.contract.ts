@@ -16,6 +16,7 @@ import {
     WorkspaceGraphSchema,
     WorkspaceSyncSchema,
 } from "../schemas/workspace/workspace-repos.js";
+import { MainlineStatusSchema } from "../schemas/workspace/mainline.js";
 import { WorkspaceSearchQuerySchema, WorkspaceSearchResultSchema } from "../schemas/workspace/workspace-search.js";
 import { WorkspaceInstallResultSchema, WorkspaceInstallSchema, WorkspaceSetupSchema } from "../schemas/workspace/workspace-setup.js";
 import {
@@ -247,6 +248,16 @@ export const workspaceContract = {
         })
         .input(WorkspaceInstallSchema)
         .output(WorkspaceInstallResultSchema),
+    // Nothing is checked inside a turn; this is the check that runs instead, over the main tree after work lands.
+    mainline: procedure
+        .route({
+            method: "GET",
+            path: "/workspace/mainline",
+            summary: "The checks that run after work lands",
+            description:
+                "What the main tree's own check is measuring right now, which landed work waits for the next run, what the last run in each project said, and what became of a red one: sent back to the conversation that landed it, handed to a fresh conversation, or waiting on one still working. Nothing here ever holds a land, a commit or a push.",
+        })
+        .output(MainlineStatusSchema),
     repos: procedure
         .route({
             method: "GET",

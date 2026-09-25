@@ -43,7 +43,7 @@ const messageOf = (relative: string, how: string, findings: readonly Finding[]):
     [
         `${findings.length} literal control byte${findings.length === 1 ? "" : "s"} in ${relative} after ${how}:`,
         ...findings.map(({ line, column, byte }) => `  ${relative}:${line}:${column}  literal ${byteName(byte)}, write it as ${escapeFor(byte)}`),
-        `Git and every diff viewer read this file as binary, and the push gate refuses it. A tool call carries its arguments ` +
+        `Git and every diff viewer read this file as binary, and the check after landing fails on it. A tool call carries its arguments ` +
             `as JSON, where \\u0000 IS the byte: writing the six characters needs \\\\u0000 in the argument. Rewrite each as its ` +
             `escape (the same code point at runtime), then read the file back; a Read shows a literal control byte as nothing.`,
     ].join("\n");

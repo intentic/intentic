@@ -7,8 +7,9 @@ import type { Services } from "../../../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { conversationAfter, testConfig } from "../../../testing.js";
 import { UNATTENDED_ACCOUNTS_TITLE } from "../../../personas/personas.js";
-import { TURN_ENDING_NOTE_HEADER } from "../../../rules/turn-ending-note.js";
+import { LANDING_CHECKS_NOTE_HEADER, landingChecksNote } from "../../../workspace/deps/mainline-note.js";
 import type { AgentRequest, TurnPolicy, TurnSpec } from "../../providers/agent-request.js";
+import { composeWirePrompt } from "../../prompt/turn-preamble.js";
 import type { MemoryHeadroom } from "../../../platform/resources/memory-admission.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import { conversationExperimentArm } from "../decide/experiments.js";
@@ -389,15 +390,8 @@ test("iq search teaching reaches native Codex and OpenCode as the shipped nudge,
     expect(wire(grok)).not.toContain("iq def createIgnoreScope");
 });
 
-// The turn-ending note only needs to be said once per conversation: by the second turn it is already in the session's
-// own history. Compaction erases that history, so it is the one event that re-earns the note.
-// A repository's turn check as it stands in the merged list the decision reads (repo-checks.ts compiles a declaration
-// into this shape); settings alone refuse a command, so it is laid over the parsed defaults.
-const withTurnCheck = (command: string): SandboxSettings => ({
-    ...SandboxSettingsSchema.parse({}),
-    rules: [{ id: "repo-check-root-1", label: "Verify before you finish", moment: "turn.ending", action: { kind: "command", command, timeoutMs: 900_000 }, enabled: true }],
-});
-const CHECKED_SETTINGS = unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => withTurnCheck("pnpm verify") });
+// The checks-after-landing note only needs to be said once per conversation: by the second turn it is already in the
+// session's own history. Compaction erases that history, so it is the one event that re-earns the note.
 // A conversation as the registry has it: turns run, the turn a compaction happened under (compactedTurn), and the
 // account its last turn actually ran on.
 const conversationAt = (fields: { readonly turns: number; readonly compactedTurn?: number; readonly account?: string }): Services["agents"] =>
@@ -409,15 +403,15 @@ const conversationAt = (fields: { readonly turns: number; readonly compactedTurn
             }),
     });
 
-test("the automatic checks are named on a conversation's opening message", async () => {
-    const plan = await planTurn(harnessServices({ sandboxSettings: CHECKED_SETTINGS }), turn(), context);
+test("what runs after the work lands is named on a conversation's opening message", async () => {
+    const plan = await planTurn(harnessServices(), turn(), context);
 
-    expect(wire(plan)).toContain(TURN_ENDING_NOTE_HEADER);
-    expect(wire(plan)).toContain("pnpm verify");
+    expect(wire(plan)).toContain(LANDING_CHECKS_NOTE_HEADER);
+    expect(wire(plan)).toContain("Nothing checks your work when you finish, and nothing holds it back");
 });
 
-test("a follow-up is not charged for them again: the note stands in the session's own history", async () => {
-    const services = harnessServices({ sandboxSettings: CHECKED_SETTINGS, agents: conversationAt({ turns: 3 }) });
+test("a follow-up is not charged for it again: the note stands in the session's own history", async () => {
+    const services = harnessServices({ agents: conversationAt({ turns: 3 }) });
 
     const plan = await planTurn(services, turn({ conversationId: "conv-1" }), context);
 
@@ -426,19 +420,28 @@ test("a follow-up is not charged for them again: the note stands in the session'
 });
 
 test("a turn whose conversation was just compacted is told again: its history no longer holds the note", async () => {
-    const services = harnessServices({ sandboxSettings: CHECKED_SETTINGS, agents: conversationAt({ turns: 4, compactedTurn: 3 }) });
+    const services = harnessServices({ agents: conversationAt({ turns: 4, compactedTurn: 3 }) });
 
     const plan = await planTurn(services, turn({ conversationId: "conv-2" }), context);
 
-    expect(wire(plan)).toContain(TURN_ENDING_NOTE_HEADER);
+    expect(wire(plan)).toContain(LANDING_CHECKS_NOTE_HEADER);
 });
 
 test("a compaction three turns back does not earn the note on every turn since", async () => {
-    const services = harnessServices({ sandboxSettings: CHECKED_SETTINGS, agents: conversationAt({ turns: 6, compactedTurn: 3 }) });
+    const services = harnessServices({ agents: conversationAt({ turns: 6, compactedTurn: 3 }) });
 
     const plan = await planTurn(services, turn({ conversationId: "conv-3" }), context);
 
-    expect(wire(plan)).not.toContain(TURN_ENDING_NOTE_HEADER);
+    expect(wire(plan)).not.toContain(LANDING_CHECKS_NOTE_HEADER);
+});
+
+test("a card that drops the checks note is never told it, even on its opening message", async () => {
+    const quiet: Persona = { id: "quiet", capabilities: [], powers: PersonaPowersSchema.parse({}), briefing: { omit: ["checks"] } };
+    const services = harnessServices({ personas: unstubbed<Services["personas"]>("personas", { list: async () => [quiet] }) });
+
+    const plan = await planTurn(services, turn({ actsAs: "quiet" }), context);
+
+    expect(wire(plan)).not.toContain(LANDING_CHECKS_NOTE_HEADER);
 });
 
 // A conversation's account is latched at its first turn, like its folder. THE FAILURE THIS PREVENTS: an app-composed
@@ -656,31 +659,26 @@ test("a cwd-isolated runtime gets one worktree explanation, then compact reminde
     }
 });
 
-test("a main-tree turn has no worktree to name, so it says nothing", async () => {
+test("a main-tree turn has no worktree to name, so it says nothing of one", async () => {
     const plan = await planTurn(codexServices(), turn({ agent: "codex" }), context);
 
-    expect(wire(plan)).toBe("do the thing");
+    // The checks note is every opening message's; nothing else stands in front of the user's words.
+    expect(wire(plan)).toBe(composeWirePrompt([landingChecksNote([], false)], "do the thing"));
 });
 
-test("every runtime whose checks will run is told which automatic check runs when its turn ends", async () => {
-    const gated = withTurnCheck("pnpm lint && pnpm verify");
+test("every runtime is told what runs after its work lands, on the main tree or in its own worktree", async () => {
     const isolated: TurnContext = { ...context, localCwd: `${HISTORY_ROOT}/worktrees/abc/work`, effectiveCwd: `${HISTORY_ROOT}/worktrees/abc/work` };
 
-    // Claude Code runs the checks at its own Stop, anywhere; a native runtime gets them from the daemon once its frames
-    // end (settle/settle-turn.ts daemonStopFindings), on an isolated turn only.
+    // No runtime runs a check at its end any more, the Claude Code loop included, so every one is told the same thing.
     for (const plan of [
-        await planTurn(withSettings(harnessServices(), gated), turn(), context),
-        await planTurn(withSettings(codexServices(), gated), turn({ agent: "codex" }), isolated),
+        await planTurn(harnessServices(), turn(), context),
+        await planTurn(harnessServices(), turn(), isolated),
+        await planTurn(codexServices(), turn({ agent: "codex" }), context),
+        await planTurn(codexServices(), turn({ agent: "codex" }), isolated),
     ]) {
-        expect(wire(plan)).toContain("**Verify before you finish:** `pnpm lint && pnpm verify`");
-        expect(wire(plan)).toContain("Do not run or announce them yourself");
+        expect(wire(plan)).toContain(LANDING_CHECKS_NOTE_HEADER);
+        expect(wire(plan)).not.toContain("Do not run or announce them yourself");
     }
-    // A native turn on the main tree has no daemon Stop, so it is promised nothing.
-    expect(wire(await planTurn(withSettings(codexServices(), gated), turn({ agent: "codex" }), context))).not.toContain("Verify before you finish");
-
-    // No command rule stands, so nothing is promised.
-    expect(wire(await planTurn(harnessServices(), turn(), context))).toBe("do the thing");
-    expect(wire(await planTurn(codexServices(), turn({ agent: "codex" }), context))).toBe("do the thing");
 });
 
 // The pre-turn rebase says nothing to the model: telling it only bought a verification sweep reported green. The human

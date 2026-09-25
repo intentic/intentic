@@ -92,16 +92,46 @@ test("on the main tree reads only what the turn edited", async () => {
     expect(text).toContain("Verification: passed, `pnpm test` ran green after the last edit.");
 });
 
-test("falls back to the fold's checklist and the registry's failed check", async () => {
+// After a restart the held turn's ledger is gone; the card's record of the last turn that touched code is the same
+// reading, filed (turn-settlement.ts), so the note reads that instead.
+test("falls back to the fold's checklist and the proof the card recorded", async () => {
     const root = mkdtempSync(join(tmpdir(), "handoff-"));
-    const entry = { id: "c3", repos: [], unfinished: { at: 1, check: "verify:turn" } } as unknown as PersistedAgent;
+    const entry = { id: "c3", repos: [], proof: { at: 1, verification: "failing", check: "pnpm test" } } as unknown as PersistedAgent;
     const note = await handoffStateNote(fakeDeps(root, entry, root), {
         conversationId: "c3",
         checklist: [{ content: "Write the tests", status: "pending" }],
     });
     const text = note?.text ?? "";
     expect(text).toContain("- [ ] Write the tests");
-    expect(text).toContain("the end-of-turn check `verify:turn` was still failing");
+    expect(text).toContain("Verification: FAILING, `pnpm test` was red when the turn stopped. Fix that before anything else.");
+});
+
+test("reads the live ledger over the card's record while the held turn's is still in hand", async () => {
+    const root = mkdtempSync(join(tmpdir(), "handoff-"));
+    const entry = { id: "c6", repos: [], proof: { at: 1, verification: "failing", check: "pnpm test" } } as unknown as PersistedAgent;
+    const note = await handoffStateNote(fakeDeps(root, entry, root), {
+        conversationId: "c6",
+        standing: { state: "verified", paths: [], check: "pnpm test src/a.test.ts" },
+        checklist: [{ content: "Write the tests", status: "pending" }],
+    });
+    const text = note?.text ?? "";
+    expect(text).toContain("Verification: passed, `pnpm test src/a.test.ts` ran green after the last edit.");
+    expect(text).not.toContain("FAILING");
+});
+
+// The retired end-of-turn check's name may still sit on an older entry; nothing verifies inside a turn now, so it is
+// not repeated to the next one as a failure to fix.
+test("says nothing of a check an older entry recorded as still failing when its turn ended", async () => {
+    const root = mkdtempSync(join(tmpdir(), "handoff-"));
+    const entry = { id: "c7", repos: [], unfinished: { at: 1, check: "verify:turn" } } as unknown as PersistedAgent;
+    const note = await handoffStateNote(fakeDeps(root, entry, root), {
+        conversationId: "c7",
+        checklist: [{ content: "Write the tests", status: "pending" }],
+    });
+    const text = note?.text ?? "";
+    expect(text).toContain("- [ ] Write the tests");
+    expect(text).not.toContain("Verification");
+    expect(text).not.toContain("verify:turn");
 });
 
 test("says nothing when there is nothing to measure", async () => {

@@ -8,7 +8,7 @@ flowchart LR
     ext["Extensions<br/>api.sandbox.rpc"] --> contract
     contract --> daemon["Sandbox daemon<br/>route factories"]
     daemon -- "device · webext<br/>runner contracts" --> peers["Machines · browser extension<br/>runners"]
-    contract -. "contract.lock.json" .-> shrink["contract-shrink<br/>push gate"]
+    contract -. "contract.lock.json" .-> shrink["contract-shrink<br/>push check"]
     contract -. "generated from" .-> openapi["sandbox-openapi"]
 ```
 
@@ -22,9 +22,11 @@ flowchart LR
   machine, the browser extension and a runner over the socket each one opens, with the daemon as the client.
 - The daemon names the routes it implements on the `/events` hello frame, and the browser diffs that list against its
   own build, so a route an older daemon lacks shows as a missing feature instead of a 404.
-- `contract.lock.json` is every exported schema as canonical JSON Schema. `pnpm verify:turn` rewrites it, and
-  `_tools/checks/contract-shrink.mjs` refuses a push that shrinks it unless a commit declares the break (`type!:` or
-  `Breaking-Note:`).
+- `contract.lock.json` is every exported schema as canonical JSON Schema. Rewrite it by hand with
+  `pnpm --filter @intentic/sandbox-contract lock`. After a land that changed the contract, the land check's
+  `pnpm verify` rewrites it in the main tree, where it waits as an uncommitted change. `src/state/contract-lock.test.ts`
+  fails while the lock and the schemas disagree. `_tools/checks/contract-shrink.mjs` reports a push that shrinks it
+  with no commit declaring the break (`type!:` or `Breaking-Note:`), and the push goes on.
 
 ## Key files
 

@@ -63,7 +63,7 @@ export interface TurnPremise {
     readonly iqSearchEnabled: boolean;
     // Workspace-relative: the card's own folder, else the one the conversation latched at its first turn.
     readonly startIn: string | undefined;
-    readonly send: { readonly map: boolean; readonly turnEnding: boolean; readonly iqTeaching: boolean };
+    readonly send: { readonly map: boolean; readonly landingChecks: boolean; readonly iqTeaching: boolean };
 }
 
 // The opening (non-fork) message only: the map stays in the transcript, and the layout has not moved by the second
@@ -72,8 +72,9 @@ const mapDue = (briefing: TurnBriefing, settings: SandboxSettings, arm: boolean 
     briefing.sends("map") && (arm ?? EXPERIMENTS.workspaceMap.on(settings)) && input.forkOf === undefined && turns === 0;
 
 // Said once on the opening message, and again after a compaction summarizes away the history that held it. `>=`
-// inside compactedSinceLastTurn, since the turn after the one a compaction is filed under is the one that owes it.
-const turnEndingDue = (input: AgentTurn, entry: ConversationEntry | undefined, turns: number): boolean =>
+// inside compactedSinceLastTurn, since the turn after the one a compaction is filed under is the one that owes it. The
+// note also goes out when the main tree's reds change (mainline-note.ts), which only a read can say.
+const landingChecksDue = (input: AgentTurn, entry: ConversationEntry | undefined, turns: number): boolean =>
     (turns === 0 && input.forkOf === undefined) || compactedSinceLastTurn(entry, turns);
 
 // The Claude Code loop loads the teaching as a plugin; every other runtime is sent it once, then carried by its session.
@@ -104,7 +105,7 @@ export const premiseOf = (facts: PremiseFacts, input: AgentTurn, runtime: TurnRu
         startIn: persona.workspace?.startIn ?? entry?.identity.startIn ?? input.startIn,
         send: {
             map: mapDue(briefing, settings, map, input, runtime.conversationTurns),
-            turnEnding: turnEndingDue(input, entry, runtime.conversationTurns),
+            landingChecks: briefing.sends("checks") && landingChecksDue(input, entry, runtime.conversationTurns),
             iqTeaching: iqTeachingDue(runtime, iqSearchEnabled),
         },
     };

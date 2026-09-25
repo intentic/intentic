@@ -20,10 +20,11 @@ import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 // Same ceiling a rule's own command gets when the form leaves it unsaid.
 const DEFAULT_TIMEOUT_MS = 900_000;
 
-// The occasions that are rule moments; `land` is not one, it is the daemon's own run after an install (verify-deps.ts).
-const MOMENT: Record<Exclude<RepoCheckMoment, "land">, Rule["moment"]> = {
+// The occasions that are rule moments. `land` is not one, it is the daemon's own run after a land (verify-deps.ts); and
+// `turn` runs nothing any more: no check runs inside a conversation, so a declaration naming it still reads, still
+// counts toward what was adopted, and becomes no rule.
+const MOMENT: Record<Exclude<RepoCheckMoment, "land" | "turn">, Rule["moment"]> = {
     edit: "file.edited",
-    turn: "turn.ending",
 };
 
 /** One repository's declaration as it stands on disk, with the fingerprint adoption is measured against. */
@@ -103,11 +104,12 @@ const globsOf = (repo: string, check: RepoCheck): string[] | undefined =>
         ? undefined
         : check.paths.map((glob) => (repo === "root" ? glob : `${repo}/${glob.replace(/^\.?\//, "")}`));
 
-/** One declaration as rules, its land check aside. Pure, so what a repository's file means can be tested without a
- *  workspace. Ids count every check in the file, so declaring a land check shifts no other check's history. */
+/** One declaration as rules, its land check and any retired turn check aside. Pure, so what a repository's file means
+ *  can be tested without a workspace. Ids count every check in the file, so declaring a land check shifts no other
+ *  check's history. */
 export const rulesOf = (declaration: RepoDeclaration): Rule[] =>
     declaration.checks.flatMap((check, index) => {
-        if (check.when === "land") {
+        if (check.when === "land" || check.when === "turn") {
             return [];
         }
         const paths = globsOf(declaration.repo, check);

@@ -1,4 +1,4 @@
-import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
+import { LAND_FIX_OPENING, landFixPrompt, RESUME_NOTES, VERIFY_NUDGE_OPENING, verifyNudgePrompt, withResumeNote } from "@intentic/sandbox-contract";
 import { errands, errandOf, errandPrompt } from "./errands";
 
 /* Errand classification keeps app-generated prose out of user turns. */
@@ -25,6 +25,22 @@ describe(`errandOf`, () => {
         expect(errandOf({ id: 1, role: `assistant`, text: errand.opening })).toBeUndefined();
         expect(errandOf(user(``))).toBeUndefined();
     });
+});
+
+// The first prompt of a fresh conversation the DAEMON starts on a red main line (land-fix.ts), composed here the way the
+// daemon composes it, so a reworded opening on either side fails rather than filing the brief as the user's words.
+it(`recognises the brief a fresh fix-up is started with, through the contract's own reader`, () => {
+    const brief = landFixPrompt([`\`pnpm verify\` in \`web\` failed on:`, `- web/src/pages/changelog.test.ts › lists every release`]);
+    const found = errandOf(user(brief));
+    expect(found?.opening).toBe(LAND_FIX_OPENING);
+    expect(found?.label).toBe(errands().landFix.label);
+    expect(found?.icon).toBe(`wrench`);
+    expect(errandOf(user(withResumeNote(brief, Object.values(RESUME_NOTES)[0]!)))?.opening).toBe(LAND_FIX_OPENING);
+});
+
+// Nothing sends a verify nudge any more, but transcripts already hold them, and they must go on reading as the sandbox's.
+it(`still recognises the retired verify nudge in older transcripts`, () => {
+    expect(errandOf(user(verifyNudgePrompt([`This turn changed code and no check has passed since the last edit.`])))?.opening).toBe(VERIFY_NUDGE_OPENING);
 });
 
 // Two errands sharing an opening would make the pair unresolvable, and the registry is where a new one is

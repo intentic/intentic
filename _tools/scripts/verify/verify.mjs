@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // Runs the whole repo the way CI's verify groups measure it, once each, since typecheck and test would otherwise both
-// pay for the declarations emit. Runs after every land on the main tree, not from the turn-ending check
-// (verify-turn.mjs, the affected closure only) or the push gate (build only). Records its verdict, green or red, for the
-// push gate to replay and for verify-turn to subtract what main already fails (failure-units.mjs).
+// pay for the declarations emit. THE check work gets: the sandbox runs it on the main tree after every land, in the
+// background, never inside a conversation and never holding anything (a land, a commit, a push). Records its verdict,
+// green or red, for the push check to report and for `pnpm verify:turn` (a manual, optional check now) to subtract what
+// main already fails (failure-units.mjs). Run after a land (INTENTIC_LAND_FROM set), it first writes what a machine
+// decides (fixers.mjs), since no turn end does that any more.
 // node _tools/checks/run.mjs the checkout gates
 // node _tools/scripts/build/emit-declarations.mjs every emitted package's dist
 // turbo run typecheck
@@ -11,17 +13,37 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repoRoot } from "../../constants/src/node.mjs";
-import { git } from "../lib/git.mjs";
+import { git,changedSince } from "../lib/git.mjs";
 import { createSteps } from "../lib/steps.mjs";
 import { treeHash, writeVerdict } from "../lib/tree-verdict.mjs";
+import { checkVerdicts } from "./check-snapshot.mjs";
 import { failedTasks, takeSummary, taskOf, unitsOf, verdictUnits } from "./failure-units.mjs";
+import { fixChecks, formatCrates, regenerateContractLock, rustfmtAvailable, touchedCrates } from "./fixers.mjs";
 import { recordFlakes, rerunFailures } from "./flakes.mjs";
 import { landTiers } from "./land-tiers.mjs";
 import { testWorkers } from "./test-workers.mjs";
 
 const root = repoRoot(import.meta.url);
-const { step, skip, fail, failing, finish } = createSteps("verify", root);
+const { say, step, skip, fail, failing, failedSteps, finish } = createSteps("verify", root);
 const head = git(root, "rev-parse", "HEAD")?.trim();
+
+// Set by the daemon to the main-line commit the land it verifies departed from; a run by hand measures no land.
+const landFrom = process.env.INTENTIC_LAND_FROM;
+const afterLand = landFrom !== undefined && landFrom !== "";
+// What the land changed, for the fixers that act only on what changed; undefined (git could not say) widens them.
+const landed = afterLand ? changedSince(root, landFrom) : undefined;
+
+// What a machine decides is written before anything is judged, on the tree the land left: formatting, and each failing
+// check's own fix. These used to run at every turn's end in the turn's own worktree; now they run once, here, and show
+// up in the main tree as ordinary uncommitted changes for whoever commits it.
+if (afterLand) {
+    const formatted = rustfmtAvailable(root) ? formatCrates(root, touchedCrates(root, landed)) : [];
+    const verdicts = checkVerdicts(root);
+    const fixed = verdicts === undefined ? [] : fixChecks(root, verdicts);
+    if (formatted.length + fixed.length > 0) {
+        say(`fixed before judging: ${[...formatted.map((crate) => `${crate} (cargo fmt)`), ...fixed].join(", ")}`);
+    }
+}
 
 // `--tidy=warn`: a tidy rule red for an unrelated directory shouldn't fail this land's verdict and cost the next push
 // ten minutes replaying typecheck and tests. What a tidy failure means: _tools/checks/manifest.mjs.
@@ -60,6 +82,11 @@ const turbo = (label, args, env) => {
 // Typecheck and test both resolve imports through the emitted `.d.ts`, so both are skipped if the emit fails. They're
 // independent of each other: bun strips types, so a suite can mean something on a tree that doesn't type-check.
 if (step("emit declarations", process.execPath, [join(root, "_tools/scripts/build/emit-declarations.mjs")])) {
+    // The wire contract's lock is written from the emitted dist, so only now; the land's contract change is then judged
+    // against a lock that says what it changed, and the lock itself rides the owner's next commit.
+    if (afterLand && regenerateContractLock(root, landed)) {
+        say("contract.lock.json rewritten from the contract this land changed");
+    }
     turbo("typecheck", ["typecheck"], {});
     turbo("test", ["test", "--only"], SUITE_ENV);
 } else {
@@ -70,25 +97,29 @@ if (step("emit declarations", process.execPath, [join(root, "_tools/scripts/buil
 
 rmSync(junitDir, { recursive: true, force: true });
 
-// Set by the daemon to the main-line commit the land it verifies departed from; a run by hand measures no land.
-const landFrom = process.env.INTENTIC_LAND_FROM;
-if (landFrom !== undefined && landFrom !== "") {
+if (afterLand) {
     const added = landTiers(root, landFrom);
     if (added.length > 0) {
         process.stderr.write(`\n✗ ${added.length} problem(s) this land added over ${landFrom.slice(0, 9)}:\n${added.map((unit) => `  ${unit}`).join("\n")}\n`);
-        fail("what this land added", `${added.length} finding(s) the push gate would refuse`);
+        fail("what this land added", `${added.length} finding(s) the land added over the commit it left`);
         units.push(...added);
     }
 }
 
-const kept = verdictUnits(units, measured);
+// A step that failed without naming units (the checkout gates, the script self-tests, the declarations emit) is still a
+// failure the router has to see: it becomes one unit named after the step, or a red report would read as nothing broke.
+const unitless = failedSteps().filter(({ label }) => !["typecheck", "test", "what this land added"].includes(label));
+const kept = verdictUnits([...unitless.map(({ label, why }) => `verify ${label}: ${why}`), ...units], measured);
 if (failing()) {
     writeVerdict(root, treeHash(root), "failed", "verify", { head, ...kept });
 }
-// Where the daemon asked for this run's failures as data (verify-deps.ts), written whether or not the run was red.
+// Where the daemon asked for this run's failures as data (verify-deps.ts), written whether or not the run was red. A red
+// one names the command that re-runs only some of them in another tree (rerun-units.mjs), which the daemon uses to tell
+// several suspect lands apart on their own trees (agents/land/land-bisect.ts).
 const report = process.env.INTENTIC_VERIFY_REPORT;
 if (report !== undefined && report !== "") {
-    writeFileSync(report, `${JSON.stringify({ status: failing() ? "failed" : "passed", ...kept })}\n`);
+    const rerun = failing() ? { rerun: `node ${join(root, "_tools/scripts/verify/rerun-units.mjs")}` } : {};
+    writeFileSync(report, `${JSON.stringify({ status: failing() ? "failed" : "passed", ...kept, ...rerun })}\n`);
 }
 
 finish(() => {

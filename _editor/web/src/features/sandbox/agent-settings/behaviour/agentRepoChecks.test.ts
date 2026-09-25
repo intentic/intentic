@@ -41,7 +41,7 @@ afterEach(() => {
 const declaring = (over: Partial<RepoChecksSummary> = {}): RepoChecksSummary => ({
     repo: `intentic`,
     path: `intentic/.intentic/checks.json`,
-    checks: [{ when: `turn`, run: `pnpm verify` }],
+    checks: [{ when: `land`, run: `pnpm verify` }],
     fired: [null],
     adopted: true,
     changed: false,
@@ -71,8 +71,18 @@ test(`each check is named by the moment it runs at`, () => {
     const lines = [...mount().querySelectorAll(`li`)].map((line) => line.textContent ?? ``);
     expect(lines).toHaveLength(3);
     expect(lines.find((line) => line.includes(`eslint`))).toContain(`After each edit`);
-    expect(lines.find((line) => line.includes(`pnpm lint`))).toContain(`Before a turn ends`);
     expect(lines.find((line) => line.includes(`pnpm test`))).toContain(`After it lands`);
+});
+
+// Nothing runs when a turn ends any more: a declaration still naming that moment reads, but says it runs nothing, and
+// looks as inert as a check nobody switched on.
+test(`a declared turn check says it no longer runs, and where checks run instead`, () => {
+    repos.value = [declaring({ checks: [{ when: `turn`, run: `pnpm lint` }], fired: [FIVE_DAYS_AGO] })];
+    const line = mount().querySelector<HTMLElement>(`li`)!;
+    expect(line.textContent).toContain(`pnpm lint`);
+    expect(line.textContent).toContain(`Before a turn ends — no longer runs; checks run after landing`);
+    expect(line.textContent).not.toContain(`flagged`);
+    expect(line.classList.contains(`opacity-60`)).toBe(true);
 });
 
 // The package script runs after a land whatever the owner adopted, so the row states it, undimmed, with nothing to switch.
@@ -97,12 +107,12 @@ test(`a declared land check replaces the package script`, () => {
 const FIVE_DAYS_AGO = Date.now() - 5 * 86_400_000;
 
 // A check that never flagged anything is either healthy or aimed at nothing; either way the row says which is the case.
-test(`a running check says when it last flagged something, and a land check leaves that to the activity feed`, () => {
+test(`a running edit check says when it last flagged something, and a land check leaves that to the main line`, () => {
     repos.value = [
         declaring({
             checks: [
                 { when: `edit`, run: `pnpm exec eslint {file}` },
-                { when: `turn`, run: `pnpm lint` },
+                { when: `edit`, run: `pnpm exec prettier --check {file}` },
                 { when: `land`, run: `pnpm test` },
             ],
             fired: [FIVE_DAYS_AGO, null, null],
@@ -110,7 +120,7 @@ test(`a running check says when it last flagged something, and a land check leav
     ];
     const lines = [...mount().querySelectorAll(`li`)].map((line) => line.textContent ?? ``);
     expect(lines.find((line) => line.includes(`eslint`))).toContain(`last flagged ${timeAgo(FIVE_DAYS_AGO, { days: true })}`);
-    expect(lines.find((line) => line.includes(`pnpm lint`))).toContain(`never flagged`);
+    expect(lines.find((line) => line.includes(`prettier`))).toContain(`never flagged`);
     expect(lines.find((line) => line.includes(`pnpm test`))).not.toContain(`flagged`);
 });
 
@@ -141,8 +151,10 @@ test(`a declaration nobody has answered yet says so, and counts itself at the fo
 });
 
 // The empty state carries the whole feature for a workspace that has never used it, so it has to name the file.
-test(`a workspace where nothing declares anything names the file that would`, () => {
+test(`a workspace where nothing declares anything names the file that would, and that nothing it declares holds work`, () => {
     repos.value = [];
     const host = mount();
     expect(host.textContent).toContain(`.intentic/checks.json`);
+    expect(host.textContent).toContain(`after each edit, or after its work lands`);
+    expect(host.textContent).toContain(`ever blocks a land, a commit or a push`);
 });

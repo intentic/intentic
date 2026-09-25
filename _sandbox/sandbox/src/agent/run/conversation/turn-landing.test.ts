@@ -1,7 +1,6 @@
 import type { Rule } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { LandOutcome } from "../../../agents/land/land.js";
-import { checkRunOf } from "../../verification/turn-checks.js";
 import { services } from "../../../harness/route-services.testing.js";
 import { beginTurn } from "../../../testing.js";
 import {
@@ -29,25 +28,19 @@ const allow: Rule = {
     action: { kind: "verdict", verdict: "allow" },
     enabled: true,
 };
+// Written when a check could still hold work; a turn that reaches its land always ended clean now, so this matches none.
 const allowRed: Rule = { ...allow, id: "allow-red", label: "Land red work", when: { outcome: ["checks-failed"] } };
-const suite = { ruleId: "suite", label: "Run the suite", command: "pnpm test", status: "failed" as const, at: 1 };
 
+// No check takes part: checks run over the main tree after the work lands, and never hold it (verify-deps.ts).
 describe("a land decision", () => {
-    const decisions: [string, readonly Rule[], "clean" | "checks-failed", boolean | undefined, LandingDecision][] = [
-        ["with no rule and no override holds, quietly", [], "clean", undefined, { mode: "measure", writes: [] }],
-        ["with the override on lands, whatever the table says", [hold], "clean", true, { mode: "check", writes: [] }],
-        ["with the override off holds, quietly", [allow], "clean", false, { mode: "measure", writes: [] }],
-        [
-            "under an allowing rule lands, and stamps it",
-            [allow],
-            "clean",
-            undefined,
-            { mode: "check", writes: [{ kind: "fired", rule: "allow-all" }] },
-        ],
+    const decisions: [string, readonly Rule[], boolean | undefined, LandingDecision][] = [
+        ["with no rule and no override holds, quietly", [], undefined, { mode: "measure", writes: [] }],
+        ["with the override on lands, whatever the table says", [hold], true, { mode: "check", writes: [] }],
+        ["with the override off holds, quietly", [allow], false, { mode: "measure", writes: [] }],
+        ["under an allowing rule lands, and stamps it", [allow], undefined, { mode: "check", writes: [{ kind: "fired", rule: "allow-all" }] }],
         [
             "under a holding rule holds, stamps it and says so",
             [hold],
-            "clean",
             undefined,
             {
                 mode: "measure",
@@ -58,36 +51,21 @@ describe("a land decision", () => {
             },
         ],
         [
-            "after the turn's own check failed holds even against the override, and names the check",
-            [allow],
-            "checks-failed",
-            true,
+            "under a rule naming the retired red outcome is decided by the rest of the table",
+            [allowRed, hold],
+            undefined,
             {
                 mode: "measure",
                 writes: [
-                    {
-                        kind: "held",
-                        content: '"Run the suite" failed on this turn\'s work (`pnpm test`), so it waits on its branch instead of landing.',
-                    },
+                    { kind: "fired", rule: "hold-all" },
+                    { kind: "held", content: '"Hold everything" held this work on its branch instead of landing it.' },
                 ],
             },
         ],
-        [
-            "after a failed check lands only where a rule allows red work",
-            [allowRed],
-            "checks-failed",
-            undefined,
-            { mode: "check", writes: [{ kind: "fired", rule: "allow-red" }] },
-        ],
+        ["with the override on lands past a rule naming the retired red outcome", [allowRed], true, { mode: "check", writes: [] }],
     ];
-    test.each(decisions)("%s", (_case, rules, outcome, override, decision) => {
-        expect(landingDecision(rules, { repos: ["root"], outcome }, override, outcome === "checks-failed" ? suite : undefined)).toStrictEqual(
-            decision,
-        );
-    });
-
-    test("that held for a failed check it cannot name says nothing about it", () => {
-        expect(landingDecision([], { outcome: "checks-failed" }, undefined, undefined)).toStrictEqual({ mode: "measure", writes: [] });
+    test.each(decisions)("%s", (_case, rules, override, decision) => {
+        expect(landingDecision(rules, { repos: ["root"], outcome: "clean" }, override)).toStrictEqual(decision);
     });
 });
 
@@ -140,43 +118,31 @@ describe("a turn that may not land", () => {
         }
         return out;
     };
-    const suiteRule: Rule = {
-        id: "suite",
-        label: "Run the suite",
-        moment: "turn.ending",
-        action: { kind: "command", command: "pnpm test", timeoutMs: 900_000 },
-        enabled: true,
-    };
-
     test.each([
         ["because it failed", { failed: true, aborted: false }],
         ["because it was stopped", { failed: false, aborted: true }],
-    ] as const)("%s lands nothing, reconciles nothing, and still takes its check's verdict", async (_case, ending) => {
+    ] as const)("%s lands nothing and reconciles nothing", async (_case, ending) => {
         const deps = await registered(true);
-        deps.conversations.send("c", { kind: "check-ran", check: checkRunOf(suiteRule, { status: "failed", output: "" }) });
         const kept = books();
         const frames = await drain(
             landTurn(deps, hooks, { conversationId: "c", prompt: "p", autoLand: true, sync: async () => [], ...ending }, kept),
         );
         expect(frames).toStrictEqual([]);
         expect(kept).toStrictEqual(books());
-        expect(deps.conversations.send("c", { kind: "verdict-taken" }).reply).toBeUndefined();
     });
 
     // Auto-land is on and no rule holds anything, so only the armed watch can be what stops this land: past the guard,
     // the unstubbed settings store would name itself. Which jobs count as armed is background-jobs.test.ts's to pin.
-    test("because it ended to wait on a watch it armed lands nothing, reconciles nothing, and still takes its check's verdict", async () => {
+    test("because it ended to wait on a watch it armed lands nothing and reconciles nothing", async () => {
         const deps = await registered(true);
         deps.conversations.send("c", {
             kind: "watches-shown",
             watches: [{ id: "watch-a1b2", note: "CI on the pushed branch", intervalSeconds: 60, deadlineAt: 9_000 }],
         });
-        deps.conversations.send("c", { kind: "check-ran", check: checkRunOf(suiteRule, { status: "passed", output: "" }) });
         const kept = books();
         const turn = { conversationId: "c", prompt: "p", autoLand: true, failed: false, aborted: false, sync: async () => [] };
         expect(await drain(landTurn(deps, hooks, turn, kept))).toStrictEqual([]);
         expect(kept).toStrictEqual(books());
-        expect(deps.conversations.send("c", { kind: "verdict-taken" }).reply).toBeUndefined();
     });
 
     test("once nothing is armed, the same turn goes on to its land", async () => {

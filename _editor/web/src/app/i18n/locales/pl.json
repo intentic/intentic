@@ -388,6 +388,71 @@
             "cappedNote": "Skrócono tam, gdzie wykroczyłoby poza północ, gdy zmienia się data w prompcie, lub poza punkt, w którym odświeżanie kosztuje więcej niż ponowny odczyt.",
             "stopsWhen": "Zatrzymuje się samo, gdy zaczyna się tura, gdy konto przekroczy {reserve}% limitu albo gdy prompt następnej tury przestałby pasować.",
             "stop": "Przestań utrzymywać ciepłą"
+        },
+        "mainline": {
+            "title": "Główna linia",
+            "explain": "Praca jest scalana bez czekania na to sprawdzenie: uruchamia się ono potem na głównym drzewie, po jednym projekcie naraz, i nic, co znajdzie, nie wstrzymuje scalenia, commita ani pusha.",
+            "root": "przestrzeń robocza",
+            "checkingMain": "Sprawdzanie main",
+            "lands": "{count} scalenie | {count} scalenia | {count} scaleń",
+            "mainRed": "main jest czerwony",
+            "failures": "{count} błąd | {count} błędy | {count} błędów",
+            "since": "od {time}",
+            "landsWaiting": "{count} scalenie czeka na sprawdzenie main | {count} scalenia czekają na sprawdzenie main | {count} scaleń czeka na sprawdzenie main",
+            "mainGreen": "main jest zielony",
+            "checkedAgo": "sprawdzono {ago}",
+            "alsoRed": "{project} czerwony",
+            "checkingNow": "Trwa sprawdzanie {project}",
+            "waitingNext": "Czeka na następne sprawdzenie",
+            "redSince": "{project} czerwony od {time}",
+            "moreFailures": "jeszcze {count} w jego terminalu | jeszcze {count} w jego terminalu | jeszcze {count} w jego terminalu",
+            "noFailureList": "Nie wymieniło błędów; jego terminal ma całe wyjście.",
+            "arrivedWith": "Przyszły z",
+            "recentChecks": "Ostatnie sprawdzenia",
+            "passed": "zaliczone",
+            "failed": "niezaliczone",
+            "recheck": "ponowne sprawdzenie",
+            "open": "Otwórz",
+            "openConversation": "Otwórz {title}",
+            "routingWaiting": "Czeka, aż praca scalona w międzyczasie zostanie sprawdzona",
+            "routingHeld": "Czeka na rozmowę, która wciąż nad tym pracuje",
+            "routingOriginal": "Odesłane do rozmowy, która to scaliła",
+            "routingFixUp": "Nowa rozmowa to naprawia",
+            "routingReported": "Zgłoszone; nikogo nie wysłano",
+            "routingResolved": "Zniknęło przy następnym sprawdzeniu; nikogo nie wysłano",
+            "routingSpent": "Wyczerpane próby naprawy; czeka na ciebie",
+            "routingDeciding": "Trwa decyzja, kto to naprawi",
+            "shortWaiting": "czeka",
+            "shortHeld": "wstrzymane",
+            "shortOriginal": "odesłane",
+            "shortFixUp": "naprawa",
+            "shortReported": "zgłoszone",
+            "shortResolved": "rozwiązane",
+            "shortSpent": "wyczerpane"
+        },
+        "landCheck": {
+            "checking": "Sprawdzanie main",
+            "checkingHint": "Sprawdzenie main w {project} działa na tym, co to scaliło.",
+            "waiting": "Czeka na sprawdzenie main",
+            "waitingHint": "Scalone; sprawdzenie main w {project} zmierzy to jako następne, razem z tym, co zostanie scalone w międzyczasie.",
+            "passed": "Przeszło sprawdzenie main",
+            "passedHint": "Sprawdzenie main w {project} przeszło po tym scaleniu, o {time}.",
+            "broke": "Zepsuło {count}",
+            "brokeMain": "Zepsuło main",
+            "brokeHint": "Jego scalenie wywróciło sprawdzenie main w {project}: {failures}. {routing}.",
+            "brokeHintBare": "Jego scalenie wywróciło sprawdzenie main w {project}. {routing}.",
+            "checkedRed": "main wciąż czerwony",
+            "checkedRedHint": "Sprawdzenie main w {project} było czerwone po tym scaleniu, przez błędy przypisane innej pracy.",
+            "openFixUp": "Otwórz rozmowę, która nad tym pracuje",
+            "unverified": "Niezweryfikowane",
+            "unverifiedHint": "Jego ostatnia tura zmieniła kod i po ostatniej zmianie nie uruchomiła niczego, co by go sprawdziło.",
+            "lastCheckFailed": "Ostatnie sprawdzenie nie przeszło",
+            "lastCheckFailedHint": "Ostatnie sprawdzenie uruchomione przez jego turę nie przeszło: {check}",
+            "lastCheckFailedHintBare": "Ostatnie sprawdzenie uruchomione przez jego turę nie przeszło.",
+            "verified": "Zweryfikowane",
+            "verifiedHint": "{check} przeszło po jego ostatniej zmianie.",
+            "verifiedHintBare": "Sprawdzenie przeszło po jego ostatniej zmianie.",
+            "unviewed": "Zmienił {count} plik interfejsu bez patrzenia | Zmienił {count} pliki interfejsu bez patrzenia | Zmienił {count} plików interfejsu bez patrzenia"
         }
     },
     "app": {
@@ -1270,7 +1335,9 @@
             "resolvingLandConflict": "Rozwiązuje konflikt przy scalaniu",
             "sentByAppLanding": "Wysłane przez aplikację — scalenie tej pracy zostało odrzucone",
             "sentBySandboxLand": "Wysłane przez sandbox — scalenie jego pracy wywróciło sprawdzenie głównego drzewa",
-            "sentBySandboxTurn": "Wysłane przez sandbox — tamta tura skończyła się niezweryfikowana"
+            "sentBySandboxTurn": "Wysłane przez sandbox — tamta tura skończyła się niezweryfikowana",
+            "fixingRedMainLine": "Naprawia czerwoną główną linię",
+            "startedBySandboxRedMain": "Uruchomione przez sandbox: sprawdzenie main zrobiło się czerwone po scaleniu pracy, a żadna rozmowa, która ją miała, nie mogła się tym zająć"
         },
         "hostPickerBody": {
             "carriesOnInSame": "Idzie dalej w tej samej rozmowie, na modelu powyżej — ⌘/Ctrl + Enter",
@@ -1491,13 +1558,9 @@
             "includeReleaseNoteEach": "Dołączaj notatkę wydania do każdego commita."
         },
         "agentChecks": {
-            "lookAtWhatChanged": "Zobacz, co zmienił",
-            "promptAssistantToOpen": "Poproś asystenta, żeby otworzył widok po zmianach w interfejsie.",
             "repairAfterLanding": "Naprawiaj to, co psuje się po scaleniu",
-            "repairAfterLandingNote": "Gdy scalenie wywraca sprawdzenie głównego drzewa, wraca ono do rozmowy, która je scaliła. Gdy CI na main pozostaje czerwone na tym samym błędzie, po ucichnięciu pushy startuje agent naprawczy, a błąd samych runnerów CI jest uruchamiany ponownie.",
-            "lastAsked": "Ostatnio poprosił {ago}",
-            "neverAsked": "Nigdy nie poprosił",
-            "reviews": "Przeglądy"
+            "repairAfterLandingNote": "Gdy scalenie wywraca sprawdzenie głównego drzewa, czeka, aż praca scalona w międzyczasie też zostanie sprawdzona, a potem odsyła ją do rozmowy, która ją scaliła, póki ta wciąż ma ją w pamięci, albo zaczyna nad nią nową rozmowę. Gdy CI na main pozostaje czerwone na tym samym błędzie, po ucichnięciu pushy startuje agent naprawczy, a błąd samych runnerów CI jest raz uruchamiany ponownie.",
+            "afterLanding": "Po scaleniu pracy"
         },
         "agentClock": {
             "clock": "Zegar",
@@ -1622,7 +1685,7 @@
             "readingWhatWorkspacesRepositories": "Odczytywanie, co deklarują repozytoria tej przestrzeni roboczej…",
             "repositoriesWaitingOnUntil": "{waiting} repozytoria czekają na Ciebie. Dopóki ich nie włączysz, ich własne sprawdzenia nie działają.",
             "repositoryChecks": "Sprawdzenia repozytorium",
-            "repositoryDeclaresOwnChecks": "Repozytorium deklaruje w .intentic/checks.json, co działa na jego własnym kodzie: po każdej zmianie, zanim tura się skończy, albo po scaleniu jego pracy. O pushu decyduje własny hook pre-push gita w repozytorium."
+            "repositoryDeclaresOwnChecks": "Repozytorium deklaruje w .intentic/checks.json, co działa na jego własnym kodzie: po każdej zmianie albo po scaleniu jego pracy. Nic, co deklaruje, nigdy nie blokuje scalenia, commita ani pusha."
         },
         "agentSafetyJudge": {
             "changeInModels": "Zmień w Modelach",
@@ -2439,7 +2502,7 @@
             "runChecksDeclares": "Uruchom sprawdzenia, które deklaruje {name}",
             "afterEachEdit": "Po każdej zmianie",
             "afterItLands": "Po scaleniu",
-            "beforeTurnEnds": "Zanim tura się skończy",
+            "turnRetired": "Zanim tura się skończy — już nie działa; sprawdzenia działają po scaleniu",
             "lastFlagged": "ostatnio zgłosił {ago}",
             "neverFlagged": "nigdy nic nie zgłosił",
             "packageScript": "skrypt pakietu",
@@ -4205,7 +4268,7 @@
             "declaredIn": "Zadeklarowane w {path}, więc jadą razem z repozytorium.",
             "repositoryDoesntDeclareAny": "To repozytorium nie deklaruje własnych sprawdzeń. Umieść plik w",
             "runTheseChecks": "Uruchamiaj te sprawdzenia",
-            "whenIsOneOf": "{when} to {edit}, {turn} albo {land}, a polecenie wykonuje się w tym folderze, więc napisz je tak, jak zrobiłbyś to tutaj w terminalu."
+            "whenIsEditOrLand": "{when} to {edit} albo {land}, a polecenie wykonuje się w tym folderze, więc napisz je tak, jak zrobiłbyś to tutaj w terminalu."
         },
         "directoryPersonas": {
             "addNewOneInstead": "Dodaj zamiast tego nową",

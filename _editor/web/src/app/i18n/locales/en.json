@@ -399,6 +399,71 @@
             "cappedNote": "Shortened where it would run past midnight, when the date in the prompt changes, or past the point where refreshing costs more than re-reading.",
             "stopsWhen": "Stops by itself when a turn starts, when the account passes {reserve}% of a limit, or when the next turn's prompt would no longer match.",
             "stop": "Stop keeping warm"
+        },
+        "mainline": {
+            "title": "Main line",
+            "explain": "Work lands without waiting for this check: it runs afterwards on the main tree, one project at a time, and nothing it finds holds back a land, a commit or a push.",
+            "root": "workspace",
+            "checkingMain": "Checking main",
+            "lands": "{count} land | {count} lands",
+            "mainRed": "Main is red",
+            "failures": "{count} failure | {count} failures",
+            "since": "since {time}",
+            "landsWaiting": "{count} land waiting for main's check | {count} lands waiting for main's check",
+            "mainGreen": "Main green",
+            "checkedAgo": "checked {ago}",
+            "alsoRed": "{project} red",
+            "checkingNow": "Checking {project} now",
+            "waitingNext": "Waiting for the next check",
+            "redSince": "{project} red since {time}",
+            "moreFailures": "{count} more in its terminal | {count} more in its terminal",
+            "noFailureList": "It named no failures; its terminal holds the whole output.",
+            "arrivedWith": "Arrived with",
+            "recentChecks": "Recent checks",
+            "passed": "passed",
+            "failed": "failed",
+            "recheck": "re-check",
+            "open": "Open",
+            "openConversation": "Open {title}",
+            "routingWaiting": "Waiting for the work landed meanwhile to be checked",
+            "routingHeld": "Waiting for a conversation still working on it",
+            "routingOriginal": "Sent back to the conversation that landed it",
+            "routingFixUp": "A fresh conversation is fixing it",
+            "routingReported": "Reported; nobody was sent",
+            "routingResolved": "Gone at the next check; nobody was sent",
+            "routingSpent": "Out of repair attempts; it waits for you",
+            "routingDeciding": "Deciding who fixes it",
+            "shortWaiting": "waiting",
+            "shortHeld": "held",
+            "shortOriginal": "sent back",
+            "shortFixUp": "fix-up",
+            "shortReported": "reported",
+            "shortResolved": "resolved",
+            "shortSpent": "spent"
+        },
+        "landCheck": {
+            "checking": "Checking main",
+            "checkingHint": "Main's check of {project} is running on what this landed.",
+            "waiting": "Waiting for main's check",
+            "waitingHint": "Landed; main's check of {project} measures it next, with whatever else lands meanwhile.",
+            "passed": "Passed main's check",
+            "passedHint": "Main's check of {project} passed after this landed, at {time}.",
+            "broke": "Broke {count}",
+            "brokeMain": "Broke main",
+            "brokeHint": "Its land turned main's check of {project} red with {failures}. {routing}.",
+            "brokeHintBare": "Its land turned main's check of {project} red. {routing}.",
+            "checkedRed": "Main still red",
+            "checkedRedHint": "Main's check of {project} was red after this landed, on failures laid at other work.",
+            "openFixUp": "Open the conversation working on it",
+            "unverified": "Unverified",
+            "unverifiedHint": "Its last turn changed code and ran nothing that checked it after the last edit.",
+            "lastCheckFailed": "Last check failed",
+            "lastCheckFailedHint": "The last check its turn ran failed: {check}",
+            "lastCheckFailedHintBare": "The last check its turn ran failed.",
+            "verified": "Verified",
+            "verifiedHint": "{check} passed after its last edit.",
+            "verifiedHintBare": "A check it ran passed after its last edit.",
+            "unviewed": "Changed {count} interface file without looking | Changed {count} interface files without looking"
         }
     },
     "app": {
@@ -1316,7 +1381,9 @@
             "resolvingLandConflict": "Resolving the land conflict",
             "sentByAppLanding": "Sent by the app, landing this work refused",
             "sentBySandboxLand": "Sent by the sandbox, its land turned the main tree's check red",
-            "sentBySandboxTurn": "Sent by the sandbox, that turn ended unverified"
+            "sentBySandboxTurn": "Sent by the sandbox, that turn ended unverified",
+            "fixingRedMainLine": "Fixing a red main line",
+            "startedBySandboxRedMain": "Started by the sandbox: main's check went red after work landed, and no conversation holding that work could take it"
         },
         "hostPickerBody": {
             "carriesOnInSame": "Carries on in the same conversation, on the model above — ⌘/Ctrl + Enter",
@@ -1631,13 +1698,9 @@
             "includeReleaseNoteEach": "Include a release note with each commit."
         },
         "agentChecks": {
-            "lookAtWhatChanged": "Look at what it changed",
-            "promptAssistantToOpen": "Prompt the assistant to open the view after changes to the interface.",
             "repairAfterLanding": "Repair what breaks after landing",
-            "repairAfterLandingNote": "When a land turns the main tree's check red, send it back to the conversation that landed it. When main's CI stays red on one failure, start a fix agent once pushes go quiet, and re-run a failure on the CI fleet itself.",
-            "lastAsked": "Last asked {ago}",
-            "neverAsked": "Never asked",
-            "reviews": "Reviews"
+            "repairAfterLandingNote": "When a land turns the main tree's check red, wait until the work landed meanwhile has been checked too, then send it back to the conversation that landed it while that one still has it in mind, or start a fresh conversation on it. When main's CI stays red on one failure, start a fix agent once pushes go quiet, and re-run a failure on the CI fleet itself once.",
+            "afterLanding": "After work lands"
         },
         "agentClock": {
             "clock": "Clock",
@@ -1779,7 +1842,7 @@
             "readingWhatWorkspacesRepositories": "Reading what this workspace's repositories declare…",
             "repositoriesWaitingOnUntil": "{waiting} repositories are waiting on you. Until you switch them on, their own checks do not run.",
             "repositoryChecks": "Repository checks",
-            "repositoryDeclaresOwnChecks": "A repository declares what runs on its own code in .intentic/checks.json: after each edit, before a turn ends, or after its work lands. A push is gated by the repository's own git pre-push hook."
+            "repositoryDeclaresOwnChecks": "A repository declares what runs on its own code in .intentic/checks.json: after each edit, or after its work lands. Nothing it declares ever blocks a land, a commit or a push."
         },
         "agentSafetyJudge": {
             "changeInModels": "Change in Models",
@@ -2610,7 +2673,7 @@
             "runChecksDeclares": "Run the checks {name} declares",
             "afterEachEdit": "After each edit",
             "afterItLands": "After it lands",
-            "beforeTurnEnds": "Before a turn ends",
+            "turnRetired": "Before a turn ends — no longer runs; checks run after landing",
             "lastFlagged": "last flagged {ago}",
             "neverFlagged": "never flagged",
             "packageScript": "package script",
@@ -4469,7 +4532,7 @@
             "declaredIn": "Declared in {path}, so they travel with the repository.",
             "repositoryDoesntDeclareAny": "This repository doesn't declare any checks of its own. Put a file at",
             "runTheseChecks": "Run these checks",
-            "whenIsOneOf": "{when} is {edit}, {turn} or {land}, and the command runs in this folder, so write it as you would in a terminal here."
+            "whenIsEditOrLand": "{when} is {edit} or {land}, and the command runs in this folder, so write it as you would in a terminal here."
         },
         "directoryPersonas": {
             "addNewOneInstead": "Add a new one instead",

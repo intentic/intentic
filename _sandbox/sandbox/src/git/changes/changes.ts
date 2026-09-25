@@ -149,42 +149,6 @@ export const changesBetweenRefs = async (dir: string, base: string, tip: string,
     return withLineStats(dir, [base, tip], parseNameStatusZ(stdout), git);
 };
 
-// The main-line commit a worktree's branch stands on: its fork point with the primary checkout's branch, or HEAD itself
-// in the primary checkout, where there is no other line to stand on.
-export const mainLineBaseOf = async (dir: string, git: GitRunner = defaultGit): Promise<string | undefined> => {
-    try {
-        const primary = (await git(dir, ["worktree", "list", "--porcelain"])).stdout.split("\n\n")[0] ?? "";
-        const top = (await git(dir, ["rev-parse", "--show-toplevel"])).stdout.trim();
-        const branch = /^branch (\S+)$/m.exec(primary)?.[1];
-        if (branch === undefined || primary.startsWith(`worktree ${top}\n`)) {
-            return await headSha(dir, git);
-        }
-        return (await git(dir, ["merge-base", "HEAD", branch])).stdout.trim();
-    } catch {
-        return undefined;
-    }
-};
-
-// Every path a turn changed: what its branch committed since the main-line base, plus the dirty set a sync has not yet committed.
-export const turnPathsAcross = async (root: string, repos: readonly string[], git: GitRunner = defaultGit): Promise<string[]> => {
-    const nested = new Set(repos.flatMap((repo) => [repo, `${repo}/`]));
-    const committed = new Set<string>();
-    const collect = async (dir: string, prefix: string): Promise<void> => {
-        const base = await mainLineBaseOf(dir, git);
-        if (base === undefined || base === (await headSha(dir, git))) {
-            return;
-        }
-        const { stdout } = await git(dir, ["diff", "--name-only", "--no-renames", "-z", base, "HEAD"]).catch(() => ({ stdout: "" }));
-        for (const path of stdout.split("\0")) {
-            if (path !== "" && !(prefix === "" && nested.has(path))) {
-                committed.add(prefix === "" ? path : `${prefix}/${path}`);
-            }
-        }
-    };
-    await Promise.all([collect(root, ""), ...repos.map((repo) => collect(join(root, repo), repo))]);
-    return [...new Set([...committed, ...(await dirtyPathsAcross(root, repos, git))])];
-};
-
 // Every path one repo's status names, both names of a rename: the dirty set alone, one spawn, without the two numstat
 // passes `changedFiles` spends on line counts. What the shell-edit tracker reads around every command a turn runs.
 export const statusPaths = (dir: string, git: GitRunner = defaultGit): Promise<string[]> =>

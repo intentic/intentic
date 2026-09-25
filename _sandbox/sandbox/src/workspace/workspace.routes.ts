@@ -21,6 +21,7 @@ import { syncWorkspaceRepos } from "./layout/sync-repos.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "./layout/templates-config.js";
 import { isControlPlanePath, resolveWithin } from "./files/workspace-files-paths.js";
 import { UnknownArchiveError } from "./files/workspace-extract.js";
+import { mainlineStatus } from "./deps/mainline-status.js";
 import { childrenForRead, containedForRead, containedIn, insideArchive, scopedTarget, workspaceRootFor } from "./layout/workspace-scope.js";
 import {
     fencedChildren,
@@ -349,6 +350,15 @@ export const createWorkspaceRoutes = (services: Services) => {
                 ),
             ),
         })),
+        // The check that runs after work lands, as the strip and the cards read it; a fenced caller sees its own projects.
+        mainline: i.mainline.handler(async ({ context }) => {
+            const inFence = fencedTo(await fenceFor(context), (project: string) => project);
+            const status = await mainlineStatus(services);
+            return {
+                projects: status.projects.filter((project) => inFence(project.project)),
+                recent: status.recent.filter((run) => inFence(run.project)),
+            };
+        }),
         // Queues the named projects on the coordinator an agent's install also uses, so two package managers never run
         // over one tree; an already-ready project is a no-op.
         install: i.install.handler(async ({ input, context }) => {

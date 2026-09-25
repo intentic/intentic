@@ -1,6 +1,7 @@
-// The follow-up the daemon sends when a turn ended with work it could not confirm: the runtimes with no Stop hook get
-// their turn.ending asks this way (verify-nudge.ts), as an ordinary prompt. Its opening lives on the wire because the
-// chat has to recognise it coming back: a prompt nobody typed must not reach a reader as their own words.
+// The follow-up the daemon USED to send when a turn ended with work it could not confirm. Nothing sends it any more:
+// checks run after work lands, never inside a conversation (schemas/workspace/mainline.ts). It stays on the wire because
+// records already hold it, and the chat has to go on recognising it: a prompt nobody typed must not reach a reader as
+// their own words.
 
 // Anchored on by the reader, so it must stay unique and stable across releases — a reworded opening un-recognises every
 // nudge already in a record, and they read as the user's own typing again.

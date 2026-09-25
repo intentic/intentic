@@ -1484,8 +1484,76 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.activity).toEqual({ tool: "Edit", target: "src/app.ts", todo: "current thing" });
     });
 
-    // What a turn left open, from only what it itself measured: the todo checklist and the workspace's own end-of-turn
-    // check. No model is asked, and no agent declares anything.
+    // What a turn showed of its own work, read off its tool calls by the settle (turn-settlement.ts) and filed on the
+    // card: the record the board badges instead of sending the turn back to prove anything.
+    describe("the proof a turn showed", () => {
+        const RED = { at: 1_500, verification: "failing", check: "pnpm test" } as const;
+        const GREEN = { at: 3_500, verification: "verified", check: "pnpm test" } as const;
+
+        it("files what the settling turn noted, and reports it on the card", async () => {
+            const store = memoryStore();
+            const { agents: registry, conversations } = createFleet(store, standings(), presences());
+            await registry.init();
+            await beginTurn(conversations, turn(), 1_000);
+            conversations.send("c1", { kind: "proof-noted", proof: RED });
+            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+            expect(registry.entry("c1")?.proof).toEqual(RED);
+            expect(registry.get("c1")?.proof).toEqual(RED);
+            expect(store.saved().find((entry) => entry.id === "c1")?.proof).toEqual(RED);
+        });
+
+        // The work on the branch has not moved, so what was last shown of it still stands.
+        it("leaves the last proof standing through a turn that touched no code", async () => {
+            const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+            await registry.init();
+            await beginTurn(conversations, turn(), 1_000);
+            conversations.send("c1", { kind: "proof-noted", proof: RED });
+            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+
+            await beginTurn(conversations, turn({ prompt: "what did you change?" }), 3_000);
+            await conversations.send("c1", { kind: "settle" }, 4_000).settled;
+            expect(registry.get("c1")?.proof).toEqual(RED);
+        });
+
+        it("takes the next proof a turn shows over the last one", async () => {
+            const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+            await registry.init();
+            await beginTurn(conversations, turn(), 1_000);
+            conversations.send("c1", { kind: "proof-noted", proof: RED });
+            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+
+            await beginTurn(conversations, turn({ prompt: "fix the test" }), 3_000);
+            conversations.send("c1", { kind: "proof-noted", proof: GREEN });
+            await conversations.send("c1", { kind: "settle" }, 4_000).settled;
+            expect(registry.get("c1")?.proof).toEqual(GREEN);
+        });
+
+        // Unlike the turn's own books, the record is the card's: a restart reads it back off the entry.
+        it("reads back after a restart", async () => {
+            const store = memoryStore();
+            const first = createFleet(store, standings(), presences());
+            await first.agents.init();
+            await beginTurn(first.conversations, turn(), 1_000);
+            first.conversations.send("c1", { kind: "proof-noted", proof: RED });
+            await first.conversations.send("c1", { kind: "settle" }, 2_000).settled;
+
+            const restarted = createFleet(store, standings(), presences());
+            await restarted.agents.init();
+            expect(restarted.agents.get("c1")?.proof).toEqual(RED);
+        });
+
+        it("is absent on a card no turn has proved anything on", async () => {
+            const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+            await registry.init();
+            await beginTurn(conversations, turn(), 1_000);
+            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+            expect(registry.get("c1")?.proof).toBeUndefined();
+            expect(registry.entry("c1")).not.toHaveProperty("proof");
+        });
+    });
+
+    // What a turn left open, from only what it itself measured: the todo checklist. No model is asked, and no agent
+    // declares anything.
     describe("unfinished work", () => {
         const list = (...items: [string, "pending" | "in_progress" | "completed"][]): AgentEvent => ({
             kind: "todos",
@@ -1605,52 +1673,17 @@ describe("agents registry", () => {
             expect(registry.get("c1")?.unfinished).toEqual({ at: 2_000, steps: { open: 1, total: 1, next: "Draw the mark" } });
         });
 
-        // The workspace's own end-of-turn check, independent of any todo list: a turn gets two rounds to repair a
-        // failing check and may still end red (rules/turn-ending.ts).
-        it("marks a turn that ended with its own check still failing", async () => {
+        // Nothing checks a turn's work when it ends any more (checks run after it lands), so no failing check is ever
+        // left open on the card: a red one the turn ran is its proof, below.
+        it("never marks a turn unfinished for the check it ran red", async () => {
             const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
             await registry.init();
             await beginTurn(conversations, turn(), 1_000);
-            conversations.send("c1", {
-                kind: "check-ran",
-                check: { ruleId: "verify", label: "Verify before you finish", command: "pnpm verify", status: "failed" },
-            });
-            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
-            expect(registry.get("c1")?.unfinished).toEqual({ at: 2_000, check: "Verify before you finish" });
-        });
-
-        it("takes the repaired re-run as the verdict", async () => {
-            const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
-            await registry.init();
-            await beginTurn(conversations, turn(), 1_000);
-            conversations.send("c1", {
-                kind: "check-ran",
-                check: { ruleId: "verify", label: "Verify before you finish", command: "pnpm verify", status: "failed" },
-            });
-            conversations.send("c1", {
-                kind: "check-ran",
-                check: { ruleId: "verify", label: "Verify before you finish", command: "pnpm verify", status: "passed" },
-            });
+            conversations.send("c1", { kind: "proof-noted", proof: { at: 1_500, verification: "failing", check: "pnpm verify" } });
             await conversations.send("c1", { kind: "settle" }, 2_000).settled;
             expect(registry.get("c1")?.unfinished).toBeUndefined();
+            expect(registry.entry("c1")?.unfinished).toBeUndefined();
         });
-
-        // Unlike the todo mark, a check verdict is spent with the turn that earned it, not carried into the next.
-        it("does not carry a red check into the next turn", async () => {
-            const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
-            await registry.init();
-            await beginTurn(conversations, turn(), 1_000);
-            conversations.send("c1", {
-                kind: "check-ran",
-                check: { ruleId: "verify", label: "Verify before you finish", command: "pnpm verify", status: "failed" },
-            });
-            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
-
-            await beginTurn(conversations, turn({ prompt: "carry on" }), 3_000);
-            await conversations.send("c1", { kind: "settle" }, 4_000).settled;
-            expect(registry.get("c1")?.unfinished).toBeUndefined();
-        });
-
         // The entry keeps the fact throughout; only what the card shows is held back while a turn works through that
         // very list.
         it("holds the mark back while a turn is in flight and reports it again once the turn settles", async () => {

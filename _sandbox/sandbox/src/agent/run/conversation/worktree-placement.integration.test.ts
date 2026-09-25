@@ -69,7 +69,7 @@ const stepsOf = (composed: ConversationWorktree, runs: WorktreeRun[], bases: unk
         return body([{ kind: "done" }])();
     },
     settleLanding: () => {},
-    routeBreakage: async () => false,
+    routeBreakage: async () => undefined,
 });
 
 test("a runner's mirror is announced under its runner, anchored for a rewind, and settled in `measure` after the remote turn", async () => {
@@ -222,7 +222,7 @@ test("a land whose last rebase fails still lands, on the old base, and says why"
         },
     };
 
-    const frames = await drain(landTurn(deps, { settleLanding: () => {}, routeBreakage: async () => false }, turn, books));
+    const frames = await drain(landTurn(deps, { settleLanding: () => {}, routeBreakage: async () => undefined }, turn, books));
 
     expect(frames).toStrictEqual([{ kind: "landed", landed: false, held: true }]);
     expect(books).toMatchObject({ reconciled: true, outcome: "ready" });

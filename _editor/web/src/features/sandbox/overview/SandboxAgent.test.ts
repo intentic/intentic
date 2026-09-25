@@ -27,7 +27,7 @@ jest.mock(`../agent-settings/behaviour/AgentRecovery.vue`, () => stub(`When a tu
 jest.mock(`../agent-settings/safety/AgentSafetyJudge.vue`, () => stub(`Safety judge`));
 jest.mock(`../agent-settings/safety/AgentSafetyPolicy.vue`, () => stub(`Safety policy`));
 jest.mock(`../agent-settings/safety/AgentSafetyLog.vue`, () => stub(`Recent decisions`));
-jest.mock(`../agent-settings/behaviour/AgentChecks.vue`, () => stub(`Reviews`));
+jest.mock(`../agent-settings/behaviour/AgentChecks.vue`, () => stub(`After work lands`));
 jest.mock(`../agent-settings/behaviour/AgentFinishedWork.vue`, () => stub(`Finished work`));
 jest.mock(`../agent-settings/behaviour/AgentChangelog.vue`, () => stub(`Changelog`));
 
@@ -49,7 +49,7 @@ const EVERY_GROUP = [
     `Safety judge`,
     `Safety policy`,
     `Recent decisions`,
-    `Reviews`,
+    `After work lands`,
     `Finished work`,
     `Changelog`,
 ];
@@ -138,7 +138,7 @@ it(`holds delegation under tools, not under the gate rules`, async () => {
 it(`shows accounts for a sign-in link even while another category is named`, async () => {
     const { el } = await mount({ section: `finishing`, connect: `anthropic` });
     expect(shown(el)).toContain(`AI account`);
-    expect(shown(el)).not.toContain(`Reviews`);
+    expect(shown(el)).not.toContain(`After work lands`);
 });
 
 // Waits for the navigation, not a render tick, since the strip reads its category back off the address.
@@ -146,7 +146,7 @@ it(`writes the picked category to the address, and the default writes no param`,
     const { el, router } = await mount();
     pill(el, `Finishing`).click();
     await waitFor(() => expect(router.currentRoute.value.query[`section`]).toBe(`finishing`));
-    expect(shown(el)).toEqual([`Reviews`, `Finished work`, `Changelog`, `When a turn breaks`]);
+    expect(shown(el)).toEqual([`After work lands`, `Finished work`, `Changelog`, `When a turn breaks`]);
 
     pill(el, `Models`).click();
     await waitFor(() => expect(router.currentRoute.value.query[`section`]).toBeUndefined());

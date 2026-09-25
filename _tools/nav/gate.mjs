@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Proves a refactor slice changed nothing that verify:turn's typecheck/lint/tests can't see: every export that existed
+// Proves a refactor slice changed nothing that typecheck, lint and tests can't see: every export that existed
 // before still exists somewhere (moving is free, deleting is loud), and frozen files (wire contracts, schemas, SQL) are
 // byte-identical. Growth is expected; only shrinkage is a finding.
 import { createHash } from "node:crypto";

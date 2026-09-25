@@ -366,7 +366,7 @@ const STATE_FILES = [
     {
         path: ".intentic/records/verify.json",
         invalidates: [],
-        why: "The dependency verifier's verdict memory; nothing renders it directly, outcomes reach the owner as activity entries and workspace events.",
+        why: "The main-line check's memory: each project's last verdict and red streak, and the latest runs with what became of each red one. Read through GET /workspace/mainline, which the daemon pushes itself (the `mainline` runtime domain), so no file watch is needed.",
         portability: "carry",
     },
     {

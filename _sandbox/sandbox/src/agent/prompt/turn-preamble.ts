@@ -3,7 +3,12 @@ import { REPO_SYNC_NOTE_HEADER } from "../../workspace/layout/sync-repos.js";
 import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER } from "../../workspace/layout/workspace-setup.js";
 import { PERSONA_NOTE_HEADER } from "../../personas/personas.js";
 import { SPAWN_NOTE_HEADER } from "../subagents/spawn-note.js";
-import { TURN_ENDING_NOTE_HEADER, TURN_ENDING_NOTE_TITLE } from "../../rules/turn-ending-note.js";
+import {
+    LANDING_CHECKS_NOTE_HEADER,
+    LANDING_CHECKS_NOTE_TITLE,
+    LEGACY_TURN_ENDING_NOTE_HEADER,
+    LEGACY_TURN_ENDING_NOTE_TITLE,
+} from "../../workspace/deps/mainline-note.js";
 import { IQ_SEARCH_INSTRUCTION_HEADER } from "./iq-search-instruction.js";
 import { TURN_CONTEXT_NOTE_HEADER, TURN_CONTEXT_NOTE_TITLE } from "../run/turn/turn-context.js";
 import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";
@@ -78,7 +83,9 @@ const INJECTED: readonly { readonly header: string; readonly title: string }[] =
     { header: WORKTREE_NOTE_HEADER, title: "Where this turn's files live" },
     { header: REPO_SYNC_NOTE_HEADER, title: "Repos synced with their remotes" },
     // Keep the parser's title aligned with the typed note.
-    { header: TURN_ENDING_NOTE_HEADER, title: TURN_ENDING_NOTE_TITLE },
+    { header: LANDING_CHECKS_NOTE_HEADER, title: LANDING_CHECKS_NOTE_TITLE },
+    // Never sent any more; still parsed out of the prompts records already hold, so they read as notes, not as typing.
+    { header: LEGACY_TURN_ENDING_NOTE_HEADER, title: LEGACY_TURN_ENDING_NOTE_TITLE },
 ];
 
 // Notes go in front of the message, separated exactly once no matter how many passes add to them: merging, not nesting,

@@ -5,16 +5,15 @@ The rules the repository's own checks and linter hold every change to, grouped b
 ```mermaid
 flowchart LR
     list(["_tools/checks/manifest.mjs<br/>one list of checks"]) --> edit["each edit<br/>scoped checks · lint-edit"]
-    list --> turn["turn end<br/>pnpm verify:turn"]
     list --> land["after a land<br/>pnpm verify"]
-    list --> push["pre-push<br/>verify-push"]
+    list --> push["pre-push<br/>verify-push, reports only"]
     list --> ci["CI preflight<br/>and nightly tidy"]
 ```
 
 ## How a rule is enforced
 
-- [`manifest.mjs`](../../_tools/checks/manifest.mjs) lists every check once and [`run.mjs`](../../_tools/checks/run.mjs) runs them, with node and git only. A `code` check means the tree is broken and is refused everywhere. A `tidy` check is a cost to readers: a warning at the push, a refusal for a turn's own new lines and in CI's tidy job.
-- A `scoped` check can judge one file, so [`.intentic/checks.json`](../../.intentic/checks.json) runs it the moment an agent writes that file, together with the linter.
+- [`manifest.mjs`](../../_tools/checks/manifest.mjs) lists every check once and [`run.mjs`](../../_tools/checks/run.mjs) runs them, with node and git only. A `code` check means the tree is broken: it fails the check after a land and CI's preflight. A `tidy` check is a cost to readers: it fails the check after a land only for the lines that land added, and fails CI's nightly tidy job. The pre-push hook reports both kinds and refuses nothing.
+- A `scoped` check can judge one file, so [`.intentic/checks.json`](../../.intentic/checks.json) runs it the moment an agent writes that file, together with the linter. What they find returns with the edit and never stops the turn.
 - Ratcheted checks keep their standing backlog in [`_tools/checks/baselines`](../../_tools/checks/baselines), which may only shrink.
 
 ## Layout

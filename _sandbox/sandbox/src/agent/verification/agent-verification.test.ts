@@ -141,30 +141,6 @@ describe("the ledger", () => {
         ledger.noteEdit(`${WORKSPACE_ROOT}/README.md`);
         expect(ledger.verdict()).toBeUndefined();
     });
-
-    // A declared check is evidence by declaration: its command need not classify as one.
-    test("a declared check proves the edits before it under its own name", () => {
-        const ledger = createVerificationLedger();
-        ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
-        ledger.noteCheck("./gate.sh (end of turn)", true, "");
-        expect(ledger.standing()).toEqual({ state: "verified", paths: ["/work/src/a.ts"], check: "./gate.sh (end of turn)" });
-    });
-
-    test("a failing declared check is the reason the turn is failing", () => {
-        const ledger = createVerificationLedger();
-        ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
-        ledger.noteCheck("pnpm verify:turn (end of turn)", false, "typecheck: 2 errors");
-        expect(ledger.standing()).toEqual({ state: "failing", paths: ["/work/src/a.ts"], check: "pnpm verify:turn (end of turn)" });
-        expect(ledger.verdict()?.failed?.detail).toBe("typecheck: 2 errors");
-    });
-
-    test("an edit after a declared check reopens it", () => {
-        const ledger = createVerificationLedger();
-        ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
-        ledger.noteCheck("pnpm verify:turn (end of turn)", true, "");
-        ledger.noteEdit(`${WORKSPACE_ROOT}/src/b.ts`);
-        expect(ledger.standing().state).toBe("unproven");
-    });
 });
 
 // Same ledger fed provider-normalized frames (agent/tool-calls.ts) instead of hook events, so a case proven here holds

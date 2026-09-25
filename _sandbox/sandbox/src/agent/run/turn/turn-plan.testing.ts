@@ -77,6 +77,9 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
         }),
         // A measurement seam, not a behavioural one: runs the work, times nothing.
         perf: unstubbed<Services["perf"]>("perf", { track: (_op, _fields, run) => run() }),
+        // The main line's verdicts, read for the checks-after-landing note on every turn that owes one: nothing checked
+        // yet, which is what a fresh workspace reads.
+        verifyStore: unstubbed<Services["verifyStore"]>("verifyStore", { read: async () => ({ projects: {}, runs: [] }) }),
         // Pre-turn retrieval asks this on every turn whose prompt carries search intent. Answers "nothing found", so a
         // plan test sees the same notes it did before the lookup existed; the retrieval's own behaviour is pinned in
         // turn-context.integration.test.ts against a real index.

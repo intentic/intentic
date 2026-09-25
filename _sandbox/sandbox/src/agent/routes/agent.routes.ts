@@ -449,7 +449,6 @@ const preflight = async (
     clock.mark("history");
     const settings = await services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get());
     const base = baseRequestOf(services, input, { history, cwd: effectiveCwd, isolation, signal, cliEnv, resumed });
-    // Made before planning so the Stop's checks, bound there, land in the same ledger as the frames.
     const frames = createTurnFrames(effectiveCwd, resumed);
     const context = {
         base,
@@ -461,7 +460,6 @@ const preflight = async (
         settings,
         ...opt("resync", worktree?.resync),
         ...opt("children", childrenOf(services, input, localCwd)),
-        verification: frames.verification,
     };
     return { context, isolation, effectiveCwd, frames, handoffNote, repoSync };
 };
@@ -704,7 +702,7 @@ async function* runTurn(
     if (prepared === undefined) {
         return;
     }
-    const { plan, request, isolation, effectiveCwd, frames } = prepared;
+    const { plan, request, isolation, frames } = prepared;
     const provider = input.agent ?? "claude";
     const account = plan.account;
     const attribution = { ...opt("account", account), ...opt("actor", input.actor) };
@@ -751,11 +749,10 @@ async function* runTurn(
             aborted: aborted(),
             isolated: worktree !== undefined,
             spawnedChild: spawned,
-            cwd: effectiveCwd,
             isolation,
             experiments: plan.experiments,
         });
-        await performSettlement(services, settlement, { record, flush: sniffer.flush });
+        performSettlement(services, settlement, { record, flush: sniffer.flush });
     }
 }
 

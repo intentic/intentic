@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentJob, AgentWatch } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentJob, AgentWatch, TurnProof } from "@intentic/sandbox-contract";
 import { isolatedAgent } from "../../testing.js";
 import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
 import type { PersistedAgent } from "../registry/agents-store.js";
@@ -10,7 +10,7 @@ import { type ConversationState, freshRuntime, idleConversation, NO_USAGE, type 
 // effects in the order they must run, and the answer. Pure, so each row is the whole story of one event.
 
 const NOW = 5_000;
-// A person's message; the sandbox's own turns (a resume, a nudge, a wake) begin the same way with `byPerson: false`.
+// A person's message; the sandbox's own turns (a resume, a follow-up, a wake) begin the same way with `byPerson: false`.
 const OPENING: BeginTurn = { conversationId: "c1", isolated: true, prompt: "Fix the login bug", profile: { agent: "claude", harness: "native" }, byPerson: true };
 const UNATTENDED: BeginTurn = { ...OPENING, prompt: "Picking this back up.", byPerson: false };
 const ENTRY: PersistedAgent = isolatedAgent([]);
@@ -46,6 +46,9 @@ const WATCH: AgentWatch = { id: "watch-k3f9", note: "CI green", intervalSeconds:
 // A person's message waiting for the next turn, and the queue holding it.
 const QUEUED = { id: "m-1", voice: "person", queuedAt: 900, turn: { conversationId: "c1", prompt: "and the docs", messageId: "m-1" } } as const;
 const WAITING = joined(NO_QUEUE, QUEUED);
+// What a settling turn showed of its own work, as settle-turn.ts notes it just ahead of the settle that files it.
+const PROOF: TurnProof = { at: 4_000, verification: "failing", check: "pnpm test" };
+const LATER_PROOF: TurnProof = { at: 4_500, verification: "verified", check: "pnpm test" };
 
 interface Row {
     readonly name: string;
@@ -470,47 +473,38 @@ const rows: readonly Row[] = [
     },
     { name: "a stop with no live turn says nothing", from: idle(), event: { kind: "stop", ending: "stopped" }, to: idle(), effects: [] },
     {
-        name: "a command check's run marks the card and leaves the land its verdict, quietly",
+        name: "a noted proof waits on the turn for the settle to file it, quietly",
         from: running(),
-        event: { kind: "check-ran", check: { ruleId: "suite", label: "Suite", command: "pnpm test", status: "failed" } },
-        to: {
-            ...running({}, { check: { label: "Suite", failed: true } }),
-            verdict: { ruleId: "suite", label: "Suite", command: "pnpm test", status: "failed", at: NOW },
-        },
+        event: { kind: "proof-noted", proof: PROOF },
+        to: running({}, { proof: PROOF }),
         effects: [],
     },
     {
-        name: "a re-run that errored measured nothing: the card reads it as no failure, the verdict is the new run's",
-        from: {
-            ...running({}, { check: { label: "Suite", failed: true } }),
-            verdict: { ruleId: "suite", label: "Suite", command: "pnpm test", status: "failed", at: 1 },
-        },
-        event: { kind: "check-ran", check: { ruleId: "suite", label: "Suite", command: "pnpm test", status: "error" } },
-        to: {
-            ...running({}, { check: { label: "Suite", failed: false } }),
-            verdict: { ruleId: "suite", label: "Suite", command: "pnpm test", status: "error", at: NOW },
-        },
+        name: "a second note replaces the first: the settle files the last reading",
+        from: running({}, { proof: PROOF }),
+        event: { kind: "proof-noted", proof: LATER_PROOF },
+        to: running({}, { proof: LATER_PROOF }),
         effects: [],
     },
     {
-        name: "a rule that is not a command marks the card but leaves the verdict where it was",
-        from: { ...running(), verdict: { ruleId: "suite", label: "Suite", command: "pnpm test", status: "passed", at: 1 } },
-        event: { kind: "check-ran", check: { ruleId: "say", label: "Say hi", status: "failed" } },
+        name: "a begin starts the turn's books without the last turn's proof",
+        from: idle({ proof: PROOF }),
+        event: { kind: "begin", turn: OPENING },
+        entry: SESSIONED,
         to: {
-            ...running({}, { check: { label: "Say hi", failed: true } }),
-            verdict: { ruleId: "suite", label: "Suite", command: "pnpm test", status: "passed", at: 1 },
+            ...idleConversation(),
+            phase: { kind: "running", startedAt: NOW, parked: [], stopping: undefined },
+            turn: { ...freshRuntime(), lastAt: NOW },
         },
-        effects: [],
+        effects: [
+            { kind: "entry-opened", turn: OPENING },
+            { kind: "session-prompt", sessionId: "s-0", prompt: OPENING.prompt },
+            { kind: "conversation-prompt", prompt: OPENING.prompt },
+            { kind: "broadcast" },
+            { kind: "persist" },
+        ],
+        reply: "begun",
     },
-    {
-        name: "the land takes the verdict, once",
-        from: { ...idle(), verdict: { ruleId: "suite", label: "Suite", command: "pnpm test", status: "failed", at: 1 } },
-        event: { kind: "verdict-taken" },
-        to: idle(),
-        effects: [],
-        reply: { ruleId: "suite", label: "Suite", command: "pnpm test", status: "failed", at: 1 },
-    },
-    { name: "a land with no check to take gets nothing", from: idle(), event: { kind: "verdict-taken" }, to: idle(), effects: [] },
     { name: "a new turn starts unwatched", from: { ...idle(), steered: true }, event: { kind: "turn-registered" }, to: idle(), effects: [] },
     {
         name: "a person's words mark the turn watched",
@@ -614,22 +608,6 @@ const rows: readonly Row[] = [
         to: { ...running(), grant: { tool: "Bash", always: false, grantedAt: NOW - 10 * 60_000 - 1 } },
         effects: [],
     },
-    {
-        name: "a sent proof follow-up arms the nudge guard",
-        from: idle(),
-        event: { kind: "nudge-armed" },
-        to: { ...idle(), nudged: true },
-        effects: [],
-    },
-    {
-        name: "the next ask spends an armed guard, and says it was armed",
-        from: { ...idle(), nudged: true },
-        event: { kind: "nudge-disarmed" },
-        to: idle(),
-        effects: [],
-        reply: true,
-    },
-    { name: "an ask with no nudge in flight says so", from: idle(), event: { kind: "nudge-disarmed" }, to: idle(), effects: [], reply: false },
     {
         name: "a job list replaces the card's whole mid-turn, and publishes it",
         from: { ...running(), jobs: [{ ...JOB, id: "j-0" }] },
@@ -910,7 +888,7 @@ describe("the settle", () => {
         sessionId: "s-1",
         usage: { costUsd: 0.5, inputTokens: 10, outputTokens: 3, toolUses: 2, subagents: 1 },
         checklist: [{ content: "a", status: "pending" as const }],
-        check: { label: "Suite", failed: true },
+        proof: PROOF,
     };
     const flushOf = (decision: ReturnType<typeof decide>): SettleFlush | undefined => {
         const settled = decision.effects.find((effect) => effect.kind === "entry-settled");
@@ -946,7 +924,7 @@ describe("the settle", () => {
             usage: NO_USAGE,
             sessionId: undefined,
             checklist: undefined,
-            check: undefined,
+            proof: undefined,
         });
         expect(decision.state).toStrictEqual(idle({ resuming: true }));
     });

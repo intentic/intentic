@@ -8,7 +8,7 @@ const rule = (over: Partial<Rule> & Pick<Rule, "id" | "moment" | "action">): Rul
 });
 
 const command = (id: string, over: Partial<Rule> = {}): Rule =>
-    rule({ id, moment: "turn.ending", action: { kind: "command", command: `run ${id}`, timeoutMs: 900_000 }, ...over });
+    rule({ id, moment: "file.edited", action: { kind: "command", command: `run ${id}`, timeoutMs: 900_000 }, ...over });
 
 const verdict = (id: string, v: "allow" | "hold", over: Partial<Rule> = {}): Rule =>
     rule({ id, moment: "agent.finished", action: { kind: "verdict", verdict: v }, ...over });
@@ -51,8 +51,8 @@ describe(`conditions`, () => {
 });
 
 describe(`which repositories a change is in`, () => {
-    // The moments that know paths but not repositories (a turn ending) work theirs out here, so `when.repo` means the
-    // same thing at every moment rather than only where a repository happens to be handed in.
+    // The moments that know paths but not repositories (an edit) work theirs out here, so `when.repo` means the same
+    // thing at every moment rather than only where a repository happens to be handed in.
     test(`a path belongs to the longest repository id that contains it`, () => {
         expect(reposOf([`extensions/logs/src/index.ts`], [`extensions`, `extensions/logs`])).toEqual([`extensions/logs`]);
     });
@@ -74,7 +74,7 @@ describe(`which repositories a change is in`, () => {
 describe(`matching`, () => {
     test(`a moment that DOES things runs everything that matches, in the owner's order`, () => {
         const rules = [command(`lint`), command(`test`)];
-        expect(matching(rules, `turn.ending`).map((r) => r.id)).toEqual([`lint`, `test`]);
+        expect(matching(rules, `file.edited`).map((r) => r.id)).toEqual([`lint`, `test`]);
     });
 
     test(`a moment that DECIDES stops at the first match, so a narrow rule above a broad one means something`, () => {
@@ -85,12 +85,12 @@ describe(`matching`, () => {
 
     test(`disabled rules and rules for another moment are not consulted`, () => {
         const rules = [command(`off`, { enabled: false }), verdict(`elsewhere`, `allow`), command(`on`)];
-        expect(matching(rules, `turn.ending`).map((r) => r.id)).toEqual([`on`]);
+        expect(matching(rules, `file.edited`).map((r) => r.id)).toEqual([`on`]);
     });
 
     test(`an empty command is OFF, not a no-op run`, () => {
-        const rules = [rule({ id: `blank`, moment: `turn.ending`, action: { kind: `command`, command: `   `, timeoutMs: 900_000 } })];
-        expect(matching(rules, `turn.ending`)).toEqual([]);
+        const rules = [rule({ id: `blank`, moment: `file.edited`, action: { kind: `command`, command: `   `, timeoutMs: 900_000 } })];
+        expect(matching(rules, `file.edited`)).toEqual([]);
     });
 });
 
@@ -118,25 +118,33 @@ describe(`the landing verdict`, () => {
         expect(landingVerdict(rules, { paths: [`docs/intro.md`] }, undefined).land).toBe(true);
     });
 
-    /* A red check holds against everything that was decided before the check ran: the unconditional allow rule, and the owner's own press on the card. */
-    test(`a turn whose own check failed is held, whatever an unconditional rule or the override says`, () => {
+    /* No check takes part in landing: checks run over the main tree after the work lands, and never hold it. A rule
+       written while one could may still name the retired `checks-failed` outcome, which no finished turn has now. */
+    test(`a rule naming the retired checks-failed outcome never matches, and the rest of the table decides`, () => {
+        const holdsRed = verdict(`hold-red`, `hold`, { when: { outcome: [`checks-failed`] } });
+        const landsAll = verdict(`land-everything`, `allow`);
+        expect(landingVerdict([holdsRed, landsAll], { outcome: `clean` }, undefined)).toEqual({ land: true, rule: landsAll });
+        expect(landingVerdict([holdsRed], { outcome: `clean` }, undefined)).toEqual({ land: false });
+    });
+
+    test(`nothing outranks the per-agent override any more, not even a rule about red work`, () => {
+        const holdsRed = verdict(`hold-red`, `hold`, { when: { outcome: [`checks-failed`] } });
+        expect(landingVerdict([holdsRed], { outcome: `clean` }, true)).toEqual({ land: true });
+        expect(landingVerdict([verdict(`land-everything`, `allow`)], { outcome: `clean` }, true)).toEqual({ land: true });
+    });
+
+    // The outcome type still names it, so a caller's facts may too; they are decided like any others now.
+    test(`facts still naming the retired checks-failed outcome are decided by the table and the override like any others`, () => {
         const facts = { outcome: `checks-failed` as const };
-        expect(landingVerdict([verdict(`land-everything`, `allow`)], facts, undefined)).toEqual({ land: false, held: `checks-failed` });
-        expect(landingVerdict([verdict(`land-everything`, `allow`)], facts, true)).toEqual({ land: false, held: `checks-failed` });
-        expect(landingVerdict([], facts, true)).toEqual({ land: false, held: `checks-failed` });
+        expect(landingVerdict([verdict(`land-everything`, `allow`)], facts, undefined)).toEqual({
+            land: true,
+            rule: verdict(`land-everything`, `allow`),
+        });
+        expect(landingVerdict([], facts, true)).toEqual({ land: true });
+        expect(landingVerdict([verdict(`hold-red`, `hold`, { when: { outcome: [`checks-failed`] } })], facts, undefined).rule?.id).toBe(`hold-red`);
     });
 
-    test(`a rule that names checks-failed decides red work, either way`, () => {
-        const facts = { outcome: `checks-failed` as const, repos: [`docs`] };
-        const lands = verdict(`land-red-docs`, `allow`, { when: { outcome: [`checks-failed`], repo: `docs` } });
-        expect(landingVerdict([verdict(`land-everything`, `allow`), lands], facts, undefined)).toEqual({ land: true, rule: lands });
-        // Named but for another repo: not a decision about this work.
-        expect(landingVerdict([lands], { ...facts, repos: [`api`] }, undefined)).toEqual({ land: false, held: `checks-failed` });
-        const holds = verdict(`hold-red`, `hold`, { when: { outcome: [`checks-failed`] } });
-        expect(landingVerdict([holds], facts, true)).toEqual({ land: false, rule: holds });
-    });
-
-    test(`a clean turn is decided exactly as before`, () => {
+    test(`a clean turn is decided by the table and the override alone`, () => {
         expect(landingVerdict([verdict(`land-everything`, `allow`)], { outcome: `clean` }, undefined).land).toBe(true);
         expect(landingVerdict([verdict(`land-everything`, `allow`)], { outcome: `clean` }, false).land).toBe(false);
     });

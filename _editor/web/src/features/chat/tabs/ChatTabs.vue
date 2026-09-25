@@ -79,7 +79,8 @@ const attentionCount = computed(
 
 // Not an AnchoredOverlay: that dismisses on any outside pointerdown, including the row menu's teleported
 // target, before Rename shows its input. Closed by Escape, a second header press, a pick, or an outside click
-// (context menus excepted).
+// (context menus and the list's own popovers excepted: the main-line strip's teleports out of the sheet, and closing the
+// sheet under a press on it would unmount the popover before the press landed).
 const listOpen = ref(false);
 // One ref answers both "is this click ours" and "which document"; null on the rail (no sheet there).
 const bar = ref<HTMLElement | null>(null);
@@ -94,7 +95,7 @@ const onDocumentPointerDown = (event: Event): void => {
     if (!(target instanceof Node)) {
         return;
     }
-    if (bar.value?.contains(target) === true || (target instanceof Element && target.closest(`.p-contextmenu`) !== null)) {
+    if (bar.value?.contains(target) === true || (target instanceof Element && target.closest(`.p-contextmenu, .ui-anchored`) !== null)) {
         return;
     }
     listOpen.value = false;

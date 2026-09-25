@@ -4,7 +4,7 @@ import type { AgentRequest } from "../../providers/agent-request.js";
 import { createTurnFrames } from "../frames/frame-reducers.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
 import type { HeldTurn } from "../turn/turn-resume.js";
-import { daemonStopConversation, settleTurn, type TurnEnd } from "./turn-settlement.js";
+import { settleTurn, type TurnEnd } from "./turn-settlement.js";
 import { parkedCards } from "../../../agents/actor/parked-cards.js";
 import { memoryFleet } from "../../../testing.js";
 
@@ -37,7 +37,6 @@ const ended = (stream: readonly AgentEvent[], change: Partial<Omit<TurnEnd, "fra
         spawnedChild: false,
         aborted: false,
         isolated: false,
-        cwd: WORKSPACE_ROOT,
         isolation: undefined,
         experiments: { turnIndex: 3, mapArm: true },
         frames,
@@ -162,7 +161,8 @@ describe("a finished turn", () => {
             ),
         );
         expect(plan.usage.outcome).toBe("cancelled");
-        expect(plan.daemonStop.conversationId).toBeUndefined();
+        // It changed nothing a check could speak to, so the card's last record stands.
+        expect(plan.proof).toBeUndefined();
     });
 
     test("closes its activity with the summed cost, or with nothing when it billed nothing", () => {
@@ -197,66 +197,71 @@ describe("the resume record", () => {
     });
 });
 
-describe("the daemon's own Stop", () => {
-    const rules = [{ id: "suite", label: "Suite", moment: "turn.ending", action: { kind: "builtin", name: "verify-ui-edits" }, enabled: true }] as const;
+// What the card records of the turn's own proof (AgentSummary.proof): read off its tool calls, never asked of the model,
+// and never a reason to send the turn back. Checks run after the work lands.
+describe("the proof it records", () => {
+    const failed: AgentEvent = {
+        kind: "tool_call_update",
+        id: "t",
+        status: "completed",
+        content: [{ type: "text", text: "1 failed\n--- [exit 1, 4s]" }],
+    };
+    const surface: AgentEvent = { ...edit, id: "v", locations: [{ path: `${WORKSPACE_ROOT}/src/Card.vue` }] };
+    const looked: AgentEvent = { kind: "tool_call", id: "l", name: "mcp__web__browser_take_screenshot", category: "other", status: "completed" };
 
-    test("runs for a runtime with no Stop hook, on the rules and ledgers the turn ran with", () => {
-        const onRuleFired = (): void => {};
-        const isolation = { plan: { worktree: "/w", root: WORKSPACE_ROOT, mirrors: [], overlays: "/o", fence: undefined } };
-        const end = ended([edit], {
-            input: { ...input, agent: "codex", model: "gpt-5", effort: "high", actsAs: "reviewer", unattended: true, permissionMode: "plan" },
-            provider: "codex",
-            isolated: true,
-            cwd: "/w",
-            isolation,
-            request: {
-                ...request,
-                policy: { ...request.policy, turnEndingRules: [...rules] },
-                hooks: { ...request.hooks, onRuleFired },
-            },
-        });
-        const { daemonStop } = settleTurn(end);
+    // `at` is the settle's own clock, so it is bounded by the instants around the call rather than pinned.
+    const proofOf = (end: TurnEnd): ReturnType<typeof settleTurn>["proof"] => {
+        const before = Date.now();
+        const { proof } = settleTurn(end);
+        expect(proof?.proof.at ?? before).toBeGreaterThanOrEqual(before);
+        expect(proof?.proof.at ?? before).toBeLessThanOrEqual(Date.now());
+        return proof;
+    };
 
-        expect(daemonStop).toStrictEqual({
+    test("names the check that passed after the last edit, cut to a line", () => {
+        expect(proofOf(ended([edit, check, passed]))).toStrictEqual({
             conversationId: "c-1",
-            findings: { conversationId: "c-1", isolated: true, request: end.request, edited: ["/work/src/parser.ts"], cwd: "/w" },
-            nudge: {
-                conversationId: "c-1",
-                // The turn's profile whole, and nothing it said or how it was gated.
-                profile: { agent: "codex", model: "gpt-5", effort: "high", actsAs: "reviewer", unattended: true },
-                rules: [...rules],
-                ledger: end.frames.verification,
-                view: end.frames.viewing,
-                cwd: "/w",
-                onFired: onRuleFired,
-            },
+            proof: { at: expect.any(Number), verification: "verified", check: `pnpm test ${"x".repeat(190)}` },
         });
     });
 
-    test("with nothing to run on still asks the rules, which answer for no conversation", () => {
-        const { daemonStop } = settleTurn(ended([], { provider: "codex", input: { prompt: "p" } }));
-        expect(daemonStop).toStrictEqual({
-            conversationId: undefined,
-            findings: { conversationId: undefined, isolated: false, request, edited: [], cwd: WORKSPACE_ROOT },
-            nudge: undefined,
-        });
+    test("names the check that failed, on any runtime, isolated or not", () => {
+        for (const change of [{}, { provider: "codex" as const, isolated: true }, { provider: "cursor" as const }]) {
+            expect(proofOf(ended([edit, check, failed], change))?.proof).toStrictEqual({
+                at: expect.any(Number),
+                verification: "failing",
+                check: `pnpm test ${"x".repeat(190)}`,
+            });
+        }
     });
 
-    test.each([
-        ["a runtime with no Stop hook, that ended well", "codex", "ok", "c-1"],
-        ["one that failed", "codex", "error", undefined],
-        ["one that was stopped", "codex", "cancelled", undefined],
-        ["Cursor, whose hooks gate commands but hold no Stop of their own", "cursor", "ok", "c-1"],
-        ["Claude, which runs its own", "claude", "ok", undefined],
-    ] as const)("is the daemon's for %s", (_case, provider, outcome, conversationId) => {
-        expect(daemonStopConversation(input, provider, outcome, false)).toBe(conversationId);
+    test("says a turn that changed code and checked nothing is unproven", () => {
+        expect(proofOf(ended([edit]))).toStrictEqual({ conversationId: "c-1", proof: { at: expect.any(Number), verification: "unproven" } });
     });
 
-    test("is nobody's without a conversation", () => {
-        expect(daemonStopConversation({ prompt: "p" }, "codex", "ok", false)).toBeUndefined();
+    test("counts the rendered files changed without a look after them, and forgets the ones looked at since", () => {
+        expect(proofOf(ended([surface]))?.proof).toStrictEqual({ at: expect.any(Number), verification: "unproven", unviewed: 1 });
+        expect(proofOf(ended([surface, looked]))?.proof).toStrictEqual({ at: expect.any(Number), verification: "unproven" });
     });
 
-    test("is its parent's for a spawned child, whose own Stop answers for it", () => {
-        expect(daemonStopConversation(input, "codex", "ok", true)).toBeUndefined();
+    test("is nothing for a turn that touched no code and left nothing unlooked at, so the last record stands", () => {
+        expect(settleTurn(ended([{ kind: "delta", text: "nothing to change" }])).proof).toBeUndefined();
+    });
+
+    test("is nothing for a spawned child, whose parent's report carries its proof", () => {
+        expect(settleTurn(ended([edit, check, passed], { spawnedChild: true })).proof).toBeUndefined();
+    });
+
+    // Only frames feed the ledgers on a live turn, and any edit is itself an answer; this is the guard for the ledger a
+    // turn that never answered could still be holding.
+    test("is nothing for a turn the provider never answered, whatever its ledgers hold", () => {
+        const end = ended([{ kind: "error", code: "claude-not-entitled", message: "not enabled" }]);
+        end.frames.verification.noteEdit(`${WORKSPACE_ROOT}/src/parser.ts`);
+        expect(end.frames.verification.standing().state).toBe("unproven");
+        expect(settleTurn(end).proof).toBeUndefined();
+    });
+
+    test("is nothing without a conversation to record it on", () => {
+        expect(settleTurn(ended([edit], { input: { prompt: "p" } })).proof).toBeUndefined();
     });
 });

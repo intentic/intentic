@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import type { Rule } from "@intentic/sandbox-contract";
 import { plainText } from "@intentic/base/plain-text";
 import { conditionHolds, reposOf, standing } from "./rules.js";
-import { workspaceRelative } from "./turn-ending.js";
+import { workspaceRelative } from "./workspace-relative.js";
 
 // Runs every standing file.edited rule on a file the instant it is written, folding the result into that edit's
 // response; fed by tree diffs rather than an Edit/Write hook, so it hears an edit whatever wrote it. Only a failing

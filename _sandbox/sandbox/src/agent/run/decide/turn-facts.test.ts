@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import { type CredentialGate, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type CredentialGate, type Persona, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
 import { createMemoryWarnings, type MemoryHeadroom } from "../../../platform/resources/memory-admission.js";
@@ -8,6 +8,7 @@ import { createCredentialGrants } from "../../../secrets/credential-grants.js";
 import { conversationAfter, testConfig } from "../../../testing.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import { base, context, servicesWith, turn } from "../turn/turn-plan.testing.js";
+import { LANDING_CHECKS_NOTE_TITLE } from "../../../workspace/deps/mainline-note.js";
 import { type AdmittedTurnFacts, gatherTurnFacts, type TurnFacts } from "./turn-facts.js";
 
 // Which reads a turn pays for, named by the `turn.plan.*` span each is timed under: diagnostics read those names, and
@@ -41,6 +42,9 @@ test("a held turn reads nothing past the memory gate", async () => {
     });
 });
 
+// A card that sends every note but the one about checks after landing.
+const QUIET: Persona = { id: "quiet", capabilities: [], briefing: { omit: ["checks"] } };
+
 const resumed: TurnContext = { ...context, base: { ...base, spec: { ...base.spec, sessionId: "session-1" } } };
 const routed: TurnContext = { ...context, settings: SandboxSettingsSchema.parse({}) };
 
@@ -58,6 +62,7 @@ test.each([
             "turn.plan.areas",
             "turn.plan.context",
             "turn.plan.repo-checks",
+            "turn.plan.mainline",
         ],
     ],
     [
@@ -65,7 +70,15 @@ test.each([
         { agent: "claude" },
         routed,
         {},
-        ["turn.plan.window", "turn.plan.capabilities", "turn.plan.personas", "turn.plan.areas", "turn.plan.context", "turn.plan.repo-checks"],
+        [
+            "turn.plan.window",
+            "turn.plan.capabilities",
+            "turn.plan.personas",
+            "turn.plan.areas",
+            "turn.plan.context",
+            "turn.plan.repo-checks",
+            "turn.plan.mainline",
+        ],
     ],
     [
         "native Codex, told of the tree's dependencies in prose",
@@ -81,6 +94,7 @@ test.each([
             "turn.plan.areas",
             "turn.plan.context",
             "turn.plan.repo-checks",
+            "turn.plan.mainline",
         ],
     ],
     [
@@ -96,6 +110,7 @@ test.each([
             "turn.plan.areas",
             "turn.plan.context",
             "turn.plan.repo-checks",
+            "turn.plan.mainline",
         ],
     ],
     [
@@ -113,6 +128,7 @@ test.each([
             "turn.plan.skills",
             "turn.plan.context",
             "turn.plan.repo-checks",
+            "turn.plan.mainline",
         ],
     ],
     [
@@ -129,6 +145,7 @@ test.each([
             "turn.plan.areas",
             "turn.plan.context",
             "turn.plan.repo-checks",
+            "turn.plan.mainline",
         ],
     ],
     [
@@ -145,6 +162,7 @@ test.each([
             "turn.plan.context",
             "turn.plan.repo-checks",
             "turn.plan.turn-context",
+            "turn.plan.mainline",
         ],
     ],
     [
@@ -152,6 +170,22 @@ test.each([
         { agent: "claude" },
         context,
         { config: { ...testConfig, iqTurnContext: true } },
+        [
+            "turn.plan.settings",
+            "turn.plan.window",
+            "turn.plan.capabilities",
+            "turn.plan.personas",
+            "turn.plan.areas",
+            "turn.plan.context",
+            "turn.plan.repo-checks",
+            "turn.plan.mainline",
+        ],
+    ],
+    [
+        "a card that drops the checks note, which is never read for it",
+        { agent: "claude", actsAs: "quiet" },
+        context,
+        { personas: unstubbed<Services["personas"]>("personas", { list: async () => [QUIET] }) },
         [
             "turn.plan.settings",
             "turn.plan.window",
@@ -228,4 +262,32 @@ test.each([
     const facts = admitted(await gatherTurnFacts(services, turn({ agent, conversationId: "c-iq" }), context));
 
     expect(facts.iqTeaching).toEqual(read ? { note: expect.stringContaining("## iq workspace search"), cohort: expect.any(String) } : undefined);
+});
+
+// Said on the opening message and again after a compaction summarizes it away (turn-premise.ts), as every standing note
+// is; a turn in between is only told when the main tree's reds moved under it, which is mainline-note.test.ts's.
+const FORK = { conversationId: "parent", keep: 2, files: "now" } as const;
+
+test.each([
+    ["a conversation's opening message", "c-open", undefined, undefined, true],
+    ["a fork's opening message, whose parent's history already holds it", "c-fork", undefined, FORK, false],
+    ["a follow-up", "c-follow", conversationAfter(3), undefined, false],
+    ["the turn after a compaction", "c-compacted", conversationAfter(4, { compactedTurn: 3 }), undefined, true],
+    ["a fork taken right after a compaction", "c-fork-compacted", conversationAfter(4, { compactedTurn: 3 }), FORK, true],
+    ["a turn three past the compaction", "c-past", conversationAfter(6, { compactedTurn: 3 }), undefined, false],
+] as const)("the checks-after-landing note is read for %s", async (_case, conversationId, entry, forkOf, sent) => {
+    const services = servicesWith({ agents: unstubbed<Services["agents"]>("agents", { entry: () => entry }) });
+
+    const facts = admitted(await gatherTurnFacts(services, turn({ conversationId, forkOf }), context));
+
+    expect(facts.landingChecksNote?.title).toBe(sent ? LANDING_CHECKS_NOTE_TITLE : undefined);
+});
+
+// Codex and OpenCode run no check at their end any more than the Claude Code loop does, so none is told differently.
+test.each(["claude", "codex", "grok"] as const)("%s is read the note on its opening message like every other runtime", async (agent) => {
+    const services = servicesWith({ agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }) });
+
+    const facts = admitted(await gatherTurnFacts(services, turn({ agent, conversationId: `c-${agent}` }), context));
+
+    expect(facts.landingChecksNote?.text).toContain("Nothing checks your work when you finish");
 });

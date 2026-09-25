@@ -6,14 +6,14 @@ The repository's lint setup: the per-edit linter hook, the first-party comment r
 flowchart LR
     edit["an edited file"] --> hook(["lint-edit.mjs"])
     hook --> root[".oxlintrc.json"]
-    lint["pnpm lint<br/>verify gates"] --> root
+    lint["pnpm lint<br/>after a land · push"] --> root
     plugins["pnpm lint:plugins"] --> extra[".oxlintrc.plugins.json"]
     extra -->|"extends"| root
     extra --> rules["anti-slop · comments/one-line<br/>cognitive complexity"]
 ```
 
-- `.oxlintrc.json` is the gate: `pnpm lint` runs it with `--deny-warnings`. Beyond the correctness, suspicious and perf categories, rules are enumerated one by one, which pins the rule set across oxlint upgrades.
-- `lint-edit.mjs` runs after every agent edit (`.intentic/checks.json`). It autofixes the file silently, then reports only diagnostics the HEAD version lacked, matched by rule and message with numbers blanked, so an old finding is never blamed on the edit. It exits 2 with a report, and 0 whenever it cannot measure. `no-unused-vars` is left to `pnpm lint`, since a file mid-edit trips it.
+- `.oxlintrc.json` is the rule set: `pnpm lint` runs it with `--deny-warnings`. The check after each land lints the files that land changed and counts what it finds as the land's failures (`land-tiers.mjs`). The push lints the whole tree and reports. CI does not lint. Beyond the correctness, suspicious and perf categories, rules are enumerated one by one, which pins the rule set across oxlint upgrades.
+- `lint-edit.mjs` runs after every agent edit (`.intentic/checks.json`). It autofixes the file silently, then reports only diagnostics the HEAD version lacked, matched by rule and message with numbers blanked, so an old finding is never blamed on the edit. It exits 2 with a report and 0 whenever it cannot measure. The report rides back with the edit and never stops the turn. `no-unused-vars` is left to `pnpm lint`, since a file mid-edit trips it.
 - `.oxlintrc.plugins.json` adds the JS plugins and runs only through `pnpm lint:plugins`; `lint-edit.mjs` does not read it. `@oxlint/plugins` must match the `oxlint` version exactly.
 - `anti-slop/` is upstream source from dmmulroy/anti-slop under its MIT licence. The root config ignores it, so it stays byte-identical and diffable against upstream.
 - `comments/one-line` enforces the AGENTS.md rule that a comment is one line.

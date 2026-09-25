@@ -2,14 +2,12 @@ import { extname } from "node:path";
 import type { AgentEvent, ToolCallStatus } from "@intentic/sandbox-contract";
 
 // Records which rendered surfaces a turn edited and whether it observed one afterward, mirroring the proof ledger's
-// after-rule. Extensions are an allowlist, since a spurious nudge costs a whole model turn and a browser session.
-// Looking is narrower than any browser call, and asks for a stated expectation against what was seen, not a glance.
+// after-rule. What it finds is recorded on the conversation's card (AgentSummary.proof, turn-settlement.ts), never sent
+// back to the model: checks run after work lands, and whether to look is the model's call. Extensions are an allowlist,
+// so the card never badges a file nobody could render.
 
 // Files only really testable by rendering; anything else is somebody else's question.
 const SURFACE_EXTENSIONS = new Set([".vue", ".astro", ".svelte", ".html", ".htm", ".css", ".scss", ".sass", ".less", ".styl", ".tsx", ".jsx"]);
-
-// How many surfaces the follow-up names before it stops listing.
-const NAMED_MAX = 8;
 
 // Tool verbs that observed the page, matched on the tail since the prefix is a deployment detail.
 const OBSERVING = ["navigate", "take_screenshot", "screenshot", "snapshot", "find", "evaluate", "console_messages", "read", "wait_for", "network_requests"];
@@ -131,24 +129,4 @@ export const createViewFrameLedger = (): ViewFrameLedger => {
             settle(event.id, event.status);
         },
     };
-};
-
-// The verify-ui-edits built-in, as one function. No URL is invented: the daemon doesn't know how this workspace serves
-// the view, so a guessed port would read as the check finding a bug.
-export const verifyUiEditsMessage = (ledger: ViewLedger): string | undefined => {
-    const verdict = ledger.verdict();
-    if (verdict === undefined) {
-        return undefined;
-    }
-    const shown = verdict.paths.slice(0, NAMED_MAX).map((path) => `- ${path}`);
-    const rest = verdict.paths.length - shown.length;
-    return [
-        `This turn changed a rendered surface and never looked at the result:`,
-        [...shown, ...(rest > 0 ? [`- ... and ${rest} more`] : [])].join("\n"),
-        "",
-        `Open the affected view in the browser and check it. Whatever this workspace serves it on, you have the browser tools and the dev server; find the address rather than guessing one.`,
-        "",
-        `State the expectation BEFORE the observation: what should this look like if the change worked. Then what you actually see, and the gap between them, or plainly that there is none. A screenshot on its own is not the check — the failure this exists to catch is work that was screenshotted and approved by the agent that wrote it.`,
-        `Check the things a diff cannot show: text that overflows or clips, elements off their baseline or centre, padding that is even on one side only, borders doubled or cut at a corner, and the layout at a narrow width as well as a wide one.`,
-    ].join("\n");
 };

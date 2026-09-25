@@ -1,6 +1,6 @@
 # Testing
 
-Tests are split into tiers by file name, run through one `suites` wrapper over Bun, and checked at an agent's turn end, after every land, at the push and in CI.
+Tests are split into tiers by file name, run through one `suites` wrapper over Bun, and run after every land and in CI.
 
 ```mermaid
 flowchart LR
@@ -22,8 +22,8 @@ flowchart LR
 
 | Tier | What it needs | Where it runs |
 | --- | --- | --- |
-| Unit | nothing outside the process | turn end, after a land, CI |
-| Integration | temp trees, git, subprocesses, Docker | turn end, after a land, CI |
+| Unit | nothing outside the process | after a land, CI |
+| Integration | temp trees, git, subprocesses, Docker | after a land, CI |
 | `pnpm e2e` | Docker for the daemon image, plus Cloudflare, Discord, Stripe or Fly credentials; `e2eTier` makes a suite stand down without them | nightly |
 | `e2e:hermetic` | a Docker-in-Docker host from [`_tools/dind-host`](../../_tools/dind-host), Postgres, faked Stripe | CI |
 | `e2e:providers` | the real agent CLIs against [`_tools/fake-model`](../../_tools/fake-model), no network | CI before a release; nightly with the newest CLIs |
@@ -35,8 +35,8 @@ flowchart LR
 
 ## Where they run
 
-- **Turn end**, `pnpm verify:turn` ([`verify-turn.mjs`](../../_tools/scripts/verify/verify-turn.mjs)): typecheck and tests on the packages the turn affected, re-run once on failure. [`failure-units.mjs`](../../_tools/scripts/verify/failure-units.mjs) sets aside failures main already had, and [`flakes.mjs`](../../_tools/scripts/verify/flakes.mjs) logs a test that passes on the re-run as a flake. The assertion ratchet refuses a test file made weaker without a `test!:` subject or `Test-Note:` trailer.
-- **After a land**, `pnpm verify` ([`verify.mjs`](../../_tools/scripts/verify/verify.mjs)): the whole repository, recorded as a verdict for the next turn and the push.
-- **Pre-push**, [`verify-push.mjs`](../../_tools/scripts/verify/verify-push.mjs): replays typecheck and test from a recorded verdict for the same tree, or leaves them to CI; `--suite` runs them locally.
+- **After a land**, `pnpm verify` ([`verify.mjs`](../../_tools/scripts/verify/verify.mjs)): the whole repository, run by the daemon on the main tree in the background ([`verify-deps.ts`](../../_sandbox/sandbox/src/workspace/deps/verify-deps.ts)). Nothing runs the tests automatically inside a turn. A failed test is re-run alone before it counts, and [`flakes.mjs`](../../_tools/scripts/verify/flakes.mjs) logs one that passes then as a flake. The assertion ratchet counts a test file the land made weaker, without a `test!:` subject or `Test-Note:` trailer, as a failure. The verdict is recorded for the push, and a red one goes to the conversation that landed the work or to a fresh fix-up ([`land-breakage.ts`](../../_sandbox/sandbox/src/agents/land/land-breakage.ts)). A red run's report names [`rerun-units.mjs`](../../_tools/scripts/verify/rerun-units.mjs), which re-runs only the failing tests on a suspect land's own tree.
+- **Pre-push**, [`verify-push.mjs`](../../_tools/scripts/verify/verify-push.mjs): the hook never runs the suite, and names the verdict recorded for the same tree when there is one. By hand, `pnpm verify:push` replays that verdict or leaves typecheck and test to CI; `--suite` runs them locally.
+- **By hand**, `pnpm verify:turn` ([`verify-turn.mjs`](../../_tools/scripts/verify/verify-turn.mjs)): typecheck and tests on the packages a branch affected, re-run once on failure, with [`failure-units.mjs`](../../_tools/scripts/verify/failure-units.mjs) setting aside failures main already had. Nothing runs it automatically.
 - **CI**, [`.github/workflows`](../../.github/workflows): `ci.yml` builds and tests each affected area through `verify.yml`, runs the provider tier, re-runs a subset of suites under unusual time zones (`verify-clocks`), and runs the hermetic, billing and desktop tiers. `nightly.yml` runs `pnpm e2e`, onboarding and the desktop update tiers. Jobs run on self-hosted runners in the `ci-base` image.
 - `pnpm test` fans out through `turbo run test --only`, with `TEST_WORKERS` sized to the machine's memory by [`test-workers.mjs`](../../_tools/scripts/verify/test-workers.mjs).

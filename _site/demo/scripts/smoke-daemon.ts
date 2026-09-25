@@ -210,6 +210,7 @@ const samplesOf = ({ fleet, automations, ci, workflows, loops, devices }: Awaite
             delete: { path: `web/smoke.txt` },
             repos: undefined,
             search: { query: `checkout` },
+            mainline: undefined,
         },
         git: {
             repos: undefined,

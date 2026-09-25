@@ -3,32 +3,26 @@ import type { AgentTurn, ModelPin, Rule, SandboxSettings } from "@intentic/sandb
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { fromWorktree, inWorktree, type IsolationAnchor, nsenterPrefix } from "../../../agents/worktrees/isolation.js";
 import type { Services } from "../../../composition.js";
-import { dirtyPathsAcross, turnPathsAcross } from "../../../git/changes/changes.js";
+import { dirtyPathsAcross } from "../../../git/changes/changes.js";
 import type { CommandGuardOptions } from "../../../guard/command-guard.js";
 import { editBytesReviewer } from "../../../rules/edit-bytes.js";
 import { fileEditedReviewer, spawnEditCommand } from "../../../rules/file-edited.js";
-import { type RuleCommandDeps, type RuleCommandRun, runRuleCommand } from "../../../rules/rule-command.js";
 import { repoCwd } from "../../../rules/rule-cwd.js";
-import { type FollowUpOutcome, workspaceRelative } from "../../../rules/turn-ending.js";
-import { CHECKS_SESSION } from "../../../terminal/terminal-session.js";
+import { workspaceRelative } from "../../../rules/workspace-relative.js";
 import { discoverRepos } from "../../../workspace/layout/repo-discovery.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import type { TurnHooks } from "../../providers/agent-request.js";
-import { checkRunOf } from "../../verification/turn-checks.js";
 import { opt } from "../../../opt.js";
 
-// What the daemon answers while a turn runs: the checks at every edit and at the Stop, the safety judge and its log, and
-// the ledgers a turn feeds. Every write here is best-effort, since the turn must settle regardless.
+// What the daemon answers while a turn runs: the checks at every edit, the safety judge and its log, and the ledgers a
+// turn feeds. Nothing runs when the turn ends: the model decides when it is done, and the whole-tree check runs after
+// its work lands (workspace/deps/verify-deps.ts). Every write here is best-effort, since the turn must settle regardless.
 
-// What the turn-end hooks reach for, on every runtime: the rule runner's own deps and the ledgers they write.
-export type TurnEndingHooksDeps = RuleCommandDeps & Pick<Services, "activity" | "conversations" | "dependencies" | "ruleFirings">;
-
-// What the harness's hooks reach for: the turn-end hooks' deps, the per-edit reviewers', and the judge.
-export type HarnessHooksDeps = TurnEndingHooksDeps & Pick<Services, "judgeCommand" | "runtimeInstalls" | "safetyLog" | "safetyPolicy">;
-
-// Bytes of a failed turn-ending command's output forwarded to the model; smaller than the pre-push budget since this
-// turn is still running and only needs enough to act on.
-const TURN_RULE_OUTPUT_BYTES = 4_000;
+// What the harness's hooks reach for: the per-edit reviewers' deps, the ledgers they stamp, and the judge.
+export type HarnessHooksDeps = Pick<
+    Services,
+    "workspace" | "logger" | "ruleFirings" | "judgeCommand" | "runtimeInstalls" | "safetyLog" | "safetyPolicy"
+>;
 
 // A rule's command inside the turn's own namespace via nsenter, since the daemon-side worktree has empty dependency
 // directories; `repo` is carried this far because inside the namespace `--wdns`, not the cwd, decides where it runs.
@@ -58,8 +52,8 @@ const underRoots = (file: string, roots: readonly string[]): string | undefined 
     return roots.map((root) => workspaceRelative(file, root)).find((relative) => relative !== file);
 };
 
-// The `file.edited` moment: the byte scan on every written file, then each repository's own edit checks, run where the
-// Stop's command would run and named as the agent sees it. Firings stamp the settings list only, so a per-edit check
+// The `file.edited` moment: the byte scan on every written file, then each repository's own edit checks, run in the
+// turn's own tree and named as the agent sees it. Firings stamp the settings list only, so a per-edit check
 // doesn't spam a feed row per save.
 const editReviewersOf = (deps: HarnessHooksDeps, context: TurnContext, rules: readonly Rule[]): Pick<TurnHooks, "editReviewers"> => {
     const isolation = context.base.spec.isolation;
@@ -77,128 +71,6 @@ const editReviewersOf = (deps: HarnessHooksDeps, context: TurnContext, rules: re
         onFired: (rule: Rule) => stampFiring(deps, rule),
     });
     return { editReviewers: [bytes, commands].filter((each) => each !== undefined) };
-};
-
-// A rule that fires at the Stop continued a turn the model had finished; stamped to the settings list and the feed.
-const ruleFiredAt =
-    (deps: TurnEndingHooksDeps, input: AgentTurn) =>
-    (rule: Rule): void => {
-        stampFiring(deps, rule);
-        void deps.activity
-            .append({
-                direction: "system",
-                type: "rule.continued_turn",
-                content: `"${rule.label}" asked for one more thing before this turn could finish.`,
-                ...opt("conversationId", input.conversationId),
-            })
-            .catch((error: unknown) => deps.logger.warn({ err: error, rule: rule.id }, "rule activity append failed"));
-    };
-
-// What a follow-up bought, in counts, so the rule's cost can be weighed against what it changed.
-const followUpAt =
-    (deps: TurnEndingHooksDeps, input: AgentTurn) =>
-    (rule: Rule, outcome: FollowUpOutcome): void => {
-        const did = [
-            outcome.edits > 0 ? `${outcome.edits} edit${outcome.edits === 1 ? "" : "s"}` : undefined,
-            outcome.looks > 0 ? `${outcome.looks} look${outcome.looks === 1 ? "" : "s"} at the page` : undefined,
-            outcome.commands > 0 ? `${outcome.commands} command${outcome.commands === 1 ? "" : "s"}` : undefined,
-        ].filter((part) => part !== undefined);
-        void deps.activity
-            .append({
-                direction: "system",
-                type: "rule.followup_outcome",
-                content: `"${rule.label}" was answered with ${did.length === 0 ? "no edit, no look and no command" : did.join(", ")}.`,
-                extra: { rule: rule.id, ...outcome },
-                ...opt("conversationId", input.conversationId),
-            })
-            .catch((error: unknown) => deps.logger.warn({ err: error, rule: rule.id }, "rule outcome append failed"));
-    };
-
-// Logged like the push run, since a red `turn.ending` command has two very different causes (broken work, or a
-// check that never saw the workspace's dependencies) told apart only by whether it ran anchored in the turn's namespace.
-const ruleRunnerIn =
-    (deps: TurnEndingHooksDeps, input: AgentTurn, context: TurnContext): NonNullable<TurnHooks["runRuleCommand"]> =>
-    async (command, timeoutMs, repo) => {
-        const anchor = context.base.spec.isolation?.anchor;
-        const from = Date.now();
-        // A rule naming a repository runs inside it, in this turn's own tree: for an isolated turn that is its
-        // worktree's copy of the repository, not the one on /work.
-        const cwd = repoCwd(context.localCwd, repo);
-        // Every line carries the same identity, so each is attributable without the others.
-        const identity = { command, anchored: anchor !== undefined, cwd, session: CHECKS_SESSION, ...opt("conversationId", input.conversationId) };
-        deps.logger.info(identity, "checks: check queued");
-        const run = await runRuleCommand(deps, {
-            command: ruleCommandIn(command, anchor, repo),
-            timeoutMs,
-            cwd,
-            session: CHECKS_SESSION,
-            window: "checks",
-            outputBytes: TURN_RULE_OUTPUT_BYTES,
-            // Every conversation's checks share one session, so the wait behind the others is its own number, not the run's.
-            onStarted: () => deps.logger.info({ ...identity, waitedMs: Date.now() - from }, "checks: check started"),
-        });
-        deps.logger.info(
-            {
-                ...identity,
-                status: run.status,
-                ...opt("exitCode", run.exitCode),
-                ...(run.timedOut === true ? { timedOut: true } : {}),
-                durationMs: Date.now() - from,
-            },
-            "checks: check settled",
-        );
-        return run;
-    };
-
-// A turn.ending command's run as the turn's own proof: after the last edit it verifies or fails the turn. A run that
-// errored or was cancelled measured nothing, as it does for the land (turn-checks.ts landingOutcome).
-const noteEndOfTurnCheck = (ledger: TurnContext["verification"], rule: Rule, run: RuleCommandRun): void => {
-    if (ledger === undefined || rule.action.kind !== "command" || (run.status !== "passed" && run.status !== "failed")) {
-        return;
-    }
-    ledger.noteCheck(`${rule.action.command} (end of turn)`, run.status === "passed", run.output);
-};
-
-// What the tree says an isolated turn changed. Only there: its branch holds nothing but its own work since the
-// main-line base, while the main checkout's dirty set is everyone's.
-const isolatedStopHooks = (deps: TurnEndingHooksDeps, context: TurnContext): Pick<TurnHooks, "changedPaths"> =>
-    context.localCwd === deps.workspace.root
-        ? {}
-        : { changedPaths: async () => turnPathsAcross(context.localCwd, await discoverRepos(context.localCwd)) };
-
-// Everything the Stop reads when `turn.ending` rules stand, whichever runtime runs it (the Claude Code loop's own Stop
-// hook, or the daemon's after the frames end); nothing at all when none do, so no hook is wired.
-export const turnEndingHooksOf = (
-    deps: TurnEndingHooksDeps,
-    input: AgentTurn,
-    context: TurnContext,
-    rules: readonly Rule[],
-): Omit<TurnHooks, "cards"> => {
-    if (rules.length === 0) {
-        return {};
-    }
-    const conversation = input.conversationId;
-    return {
-        onCheckRun: (rule: Rule, run: RuleCommandRun) => {
-            noteEndOfTurnCheck(context.verification, rule, run);
-            // The conversation's actor keeps the card's line and the land's verdict apart: the land takes its copy once,
-            // the card goes on reading its own.
-            if (conversation !== undefined) {
-                void deps.conversations.send(conversation, { kind: "check-ran", check: checkRunOf(rule, run) });
-            }
-        },
-        onRuleFired: ruleFiredAt(deps, input),
-        onFollowUpOutcome: followUpAt(deps, input),
-        runRuleCommand: ruleRunnerIn(deps, input, context),
-        // Asked only after a command has failed, so a healthy turn pays nothing: a check run mid-install isn't a verdict.
-        dependencyInstalling: async () =>
-            (await deps.dependencies.status())
-                .filter((project) => project.state === "installing")
-                .map((project) => (project.dir === "" ? "the workspace root" : project.dir)),
-        // Asked at the Stop and only when a rule aimed at a repository stands (turn-ending.ts touchedRepos).
-        turnRepos: () => discoverRepos(context.localCwd),
-        ...isolatedStopHooks(deps, context),
-    };
 };
 
 // The judge and its writes: snapshots taken here, for one document and one model per turn.

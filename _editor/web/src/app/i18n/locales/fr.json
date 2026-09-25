@@ -384,6 +384,71 @@
             "cappedNote": "Raccourci là où il dépasserait minuit, quand la date de la consigne change, ou le point où rafraîchir coûte plus que relire.",
             "stopsWhen": "S'arrête de lui-même quand un tour commence, quand le compte dépasse {reserve} % d'une limite, ou quand la consigne du prochain tour ne correspondrait plus.",
             "stop": "Ne plus garder chaud"
+        },
+        "mainline": {
+            "title": "Ligne principale",
+            "explain": "Le travail est intégré sans attendre cette vérification : elle tourne ensuite sur l'arbre principal, un projet à la fois, et rien de ce qu'elle trouve ne retient une intégration, un commit ou un push.",
+            "root": "espace de travail",
+            "checkingMain": "Vérification de main",
+            "lands": "{count} intégration | {count} intégrations",
+            "mainRed": "main est rouge",
+            "failures": "{count} échec | {count} échecs",
+            "since": "depuis {time}",
+            "landsWaiting": "{count} intégration attend la vérification de main | {count} intégrations attendent la vérification de main",
+            "mainGreen": "main est vert",
+            "checkedAgo": "vérifié {ago}",
+            "alsoRed": "{project} rouge",
+            "checkingNow": "Vérification de {project} en cours",
+            "waitingNext": "En attente de la prochaine vérification",
+            "redSince": "{project} rouge depuis {time}",
+            "moreFailures": "{count} de plus dans son terminal | {count} de plus dans son terminal",
+            "noFailureList": "Elle n'a nommé aucun échec ; son terminal contient toute la sortie.",
+            "arrivedWith": "Arrivés avec",
+            "recentChecks": "Vérifications récentes",
+            "passed": "réussie",
+            "failed": "échouée",
+            "recheck": "revérification",
+            "open": "Ouvrir",
+            "openConversation": "Ouvrir {title}",
+            "routingWaiting": "En attente de la vérification du travail intégré entre-temps",
+            "routingHeld": "En attente d'une conversation qui y travaille encore",
+            "routingOriginal": "Renvoyé à la conversation qui l'a intégré",
+            "routingFixUp": "Une nouvelle conversation le répare",
+            "routingReported": "Signalé ; personne n'a été envoyé",
+            "routingResolved": "Disparu à la vérification suivante ; personne n'a été envoyé",
+            "routingSpent": "Plus de tentatives de réparation ; il vous attend",
+            "routingDeciding": "Choix en cours de qui le répare",
+            "shortWaiting": "en attente",
+            "shortHeld": "retenu",
+            "shortOriginal": "renvoyé",
+            "shortFixUp": "réparation",
+            "shortReported": "signalé",
+            "shortResolved": "résolu",
+            "shortSpent": "épuisé"
+        },
+        "landCheck": {
+            "checking": "Vérification de main",
+            "checkingHint": "La vérification de main dans {project} tourne sur ce que ceci a intégré.",
+            "waiting": "En attente de la vérification de main",
+            "waitingHint": "Intégré ; la vérification de main dans {project} le mesure ensuite, avec tout ce qui est intégré entre-temps.",
+            "passed": "Vérification de main réussie",
+            "passedHint": "La vérification de main dans {project} a réussi après cette intégration, à {time}.",
+            "broke": "A cassé {count}",
+            "brokeMain": "A cassé main",
+            "brokeHint": "Son intégration a fait passer au rouge la vérification de main dans {project}, avec {failures}. {routing}.",
+            "brokeHintBare": "Son intégration a fait passer au rouge la vérification de main dans {project}. {routing}.",
+            "checkedRed": "main toujours rouge",
+            "checkedRedHint": "La vérification de main dans {project} était rouge après cette intégration, sur des échecs imputés à un autre travail.",
+            "openFixUp": "Ouvrir la conversation qui y travaille",
+            "unverified": "Non vérifié",
+            "unverifiedHint": "Son dernier tour a modifié du code et n'a rien lancé qui le vérifie après la dernière modification.",
+            "lastCheckFailed": "Dernière vérification échouée",
+            "lastCheckFailedHint": "La dernière vérification lancée par son tour a échoué : {check}",
+            "lastCheckFailedHintBare": "La dernière vérification lancée par son tour a échoué.",
+            "verified": "Vérifié",
+            "verifiedHint": "{check} a réussi après sa dernière modification.",
+            "verifiedHintBare": "Une vérification a réussi après sa dernière modification.",
+            "unviewed": "{count} fichier d'interface modifié sans le regarder | {count} fichiers d'interface modifiés sans les regarder"
         }
     },
     "app": {
@@ -1260,7 +1325,9 @@
             "resolvingLandConflict": "Résout le conflit d'intégration",
             "sentByAppLanding": "Envoyé par l'application ; intégrer ce travail a été refusé",
             "sentBySandboxLand": "Envoyé par le sandbox ; intégrer son travail a fait échouer la vérification de l'arbre principal",
-            "sentBySandboxTurn": "Envoyé par le sandbox ; ce tour s'est terminé sans vérification"
+            "sentBySandboxTurn": "Envoyé par le sandbox ; ce tour s'est terminé sans vérification",
+            "fixingRedMainLine": "Répare une ligne principale rouge",
+            "startedBySandboxRedMain": "Lancé par le sandbox : la vérification de main est passée au rouge après l'intégration de travail, et aucune conversation détenant ce travail n'a pu s'en charger"
         },
         "hostPickerBody": {
             "carriesOnInSame": "Continue dans la même conversation, sur le modèle ci-dessus — ⌘/Ctrl + Entrée",
@@ -1481,13 +1548,9 @@
             "includeReleaseNoteEach": "Inclure une note de version avec chaque commit."
         },
         "agentChecks": {
-            "lookAtWhatChanged": "Regarder ce qu'il a changé",
-            "promptAssistantToOpen": "Inviter l'assistant à ouvrir la vue après des changements d'interface.",
             "repairAfterLanding": "Réparer ce qui casse après l'intégration",
-            "repairAfterLandingNote": "Quand une intégration fait échouer la vérification de l'arbre principal, elle retourne à la conversation qui l'a intégrée. Quand la CI de main reste rouge sur un même échec, un agent de réparation démarre dès que les pushs cessent, et un échec des runners de CI eux-mêmes est relancé.",
-            "lastAsked": "Dernière demande {ago}",
-            "neverAsked": "Jamais demandé",
-            "reviews": "Relectures"
+            "repairAfterLandingNote": "Quand une intégration fait passer au rouge la vérification de l'arbre principal, on attend que le travail intégré entre-temps soit vérifié aussi, puis on la renvoie à la conversation qui l'a intégrée tant qu'elle l'a encore en tête, ou on lance une nouvelle conversation dessus. Quand la CI de main reste rouge sur un même échec, un agent de réparation démarre dès que les pushs cessent, et un échec des runners de CI eux-mêmes est relancé une fois.",
+            "afterLanding": "Après l'intégration du travail"
         },
         "agentClock": {
             "clock": "Horloge",
@@ -1611,7 +1674,7 @@
             "readingWhatWorkspacesRepositories": "Lecture de ce que déclarent les dépôts de cet espace de travail…",
             "repositoriesWaitingOnUntil": "{waiting} dépôts vous attendent. Tant que vous ne les activez pas, leurs propres vérifications ne tournent pas.",
             "repositoryChecks": "Vérifications du dépôt",
-            "repositoryDeclaresOwnChecks": "Un dépôt déclare dans .intentic/checks.json ce qui tourne sur son propre code : après chaque modification, avant la fin d'un tour, ou après l'intégration de son travail. Un push est filtré par le hook git pre-push du dépôt lui-même."
+            "repositoryDeclaresOwnChecks": "Un dépôt déclare dans .intentic/checks.json ce qui tourne sur son propre code : après chaque modification, ou après l'intégration de son travail. Rien de ce qu'il déclare ne bloque jamais une intégration, un commit ou un push."
         },
         "agentSafetyJudge": {
             "changeInModels": "Changer dans Modèles",
@@ -2427,7 +2490,7 @@
             "runChecksDeclares": "Lancer les vérifications que {name} déclare",
             "afterEachEdit": "Après chaque modification",
             "afterItLands": "Après son intégration",
-            "beforeTurnEnds": "Avant la fin d'un tour",
+            "turnRetired": "Avant la fin d'un tour — ne tourne plus ; la vérification se fait après l'intégration",
             "lastFlagged": "dernier signalement {ago}",
             "neverFlagged": "jamais rien signalé",
             "packageScript": "script du paquet",
@@ -4163,7 +4226,7 @@
             "declaredIn": "Déclarées dans {path}, elles voyagent donc avec le dépôt.",
             "repositoryDoesntDeclareAny": "Ce dépôt ne déclare aucune vérification propre. Placez un fichier à",
             "runTheseChecks": "Lancer ces vérifications",
-            "whenIsOneOf": "{when} vaut {edit}, {turn} ou {land}, et la commande s'exécute dans ce dossier : écrivez-la donc comme vous le feriez dans un terminal ici."
+            "whenIsEditOrLand": "{when} vaut {edit} ou {land}, et la commande s'exécute dans ce dossier : écrivez-la donc comme vous le feriez dans un terminal ici."
         },
         "directoryPersonas": {
             "addNewOneInstead": "En ajouter un nouveau à la place",

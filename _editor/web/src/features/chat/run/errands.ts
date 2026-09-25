@@ -1,5 +1,5 @@
 import type { IconName } from "@intentic/ui";
-import { LAND_BREAKAGE_OPENING, LAND_CONFLICT_OPENING, VERIFY_NUDGE_OPENING, withoutResumeNote } from "@intentic/sandbox-contract";
+import { isLandFix, LAND_BREAKAGE_OPENING, LAND_CONFLICT_OPENING, LAND_FIX_OPENING, VERIFY_NUDGE_OPENING, withoutResumeNote } from "@intentic/sandbox-contract";
 import type { ChatMessage } from "../transcript/transcript";
 import { t } from "@intentic/ui/i18n";
 
@@ -17,6 +17,8 @@ export interface Errand {
     // The prompt's first paragraph: composed from, and recognized by. Must stay unique and stable across releases, or a
     // reworded opening un-recognizes an already-stored errand.
     readonly opening: string;
+    // The contract's own recogniser, where it ships one, so this side and the daemon's cannot disagree about a prompt.
+    readonly matches?: (prompt: string) => boolean;
 }
 
 export const errands = () =>
@@ -29,7 +31,8 @@ export const errands = () =>
             opening: LAND_CONFLICT_OPENING,
         },
         // Composed by the DAEMON, unlike the one above, so its opening is the contract's: the two ends would drift the
-        // first time either was reworded on its own.
+        // first time either was reworded on its own. Nothing sends it any more (checks run after landing, not inside a
+        // turn); kept so the transcripts that already hold one still read it as the sandbox's, not the user's words.
         verifyNudge: {
             icon: `check-circle`,
             label: t(`chat.errands.checkingWorkJustDid`),
@@ -43,6 +46,15 @@ export const errands = () =>
             detail: t(`chat.errands.sentBySandboxLand`),
             opening: LAND_BREAKAGE_OPENING,
         },
+        // The first prompt of a FRESH conversation the daemon starts on a red main line nobody holding the work could
+        // take (land-fix.ts): the same kind of chore as the follow-up above, handed to somebody new.
+        landFix: {
+            icon: `wrench`,
+            label: t(`chat.errands.fixingRedMainLine`),
+            detail: t(`chat.errands.startedBySandboxRedMain`),
+            opening: LAND_FIX_OPENING,
+            matches: isLandFix,
+        },
     }) as const satisfies Record<string, Errand>;
 
 // The prompt an errand actually sends: its opening, then the parts describing this instance.
@@ -55,5 +67,5 @@ export const errandOf = (message: ChatMessage): Errand | undefined => {
         return undefined;
     }
     const text = withoutResumeNote(message.text.trim());
-    return Object.values(errands()).find((errand) => text.startsWith(errand.opening));
+    return Object.values(errands()).find((errand: Errand) => errand.matches?.(text) ?? text.startsWith(errand.opening));
 };

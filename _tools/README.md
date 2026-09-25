@@ -8,7 +8,7 @@ flowchart LR
     suites["Test runner and fakes<br/>testing · fake-model · fake-upstream"] --> parts
     harnesses["Harnesses<br/>e2e · onboarding · desktop-smoke"] --> product["The built product<br/>app, daemon, installers"]
     standins["Stand-in hosts<br/>dind-host · localhost-https"] --> harnesses
-    gates["Gates<br/>checks · oxlint · perf · scripts/verify"] --> checkout["The checkout<br/>each edit, turn, push, CI"]
+    gates["Gates<br/>checks · oxlint · perf · scripts/verify"] --> checkout["The checkout<br/>each edit, land, push, CI"]
     images["CI images<br/>ci-base · ci-desktop · turbo-cache"] --> gates
 ```
 
@@ -20,7 +20,7 @@ itself depends on a package outside `_shared/` and `_tools/` loses that standing
 | --- | --- |
 | [agent-cli](agent-cli) | Process contract and budgeted output shared by `iq`, `fileq` and `webq` |
 | [base](base) | Runtime primitives every tier shares: when-expressions, disposal, async schedulers |
-| [checks](checks) | The repository's invariant checks, run per edit, turn, push and CI |
+| [checks](checks) | The repository's invariant checks, run per edit, land, push and CI |
 | [ci-base](ci-base) | The image every CI job runs in |
 | [ci-desktop](ci-desktop) | CI image with the Tauri, Rust and Windows cross toolchains |
 | [code-read](code-read) | Grammar resolution and the token walk behind code-only line counts |

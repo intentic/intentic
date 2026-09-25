@@ -27,8 +27,8 @@ export interface RuleFacts {
 
 const repoHolds = (when: RuleCondition, facts: RuleFacts): boolean => when.repo === undefined || (facts.repos ?? []).includes(when.repo);
 
-// Which repositories a set of workspace-relative paths falls in, for the moments that know paths but not repos (a turn
-// ending knows what it edited, not where each file belongs). The longest id wins, since a nested repository is its own
+// Which repositories a set of workspace-relative paths falls in, for the moments that know paths but not repos (an edit
+// knows its file, not which repository it belongs to). The longest id wins, since a nested repository is its own
 // and not its parent's; anything under none of them belongs to the workspace's own repository, "root".
 export const reposOf = (paths: readonly string[], repos: readonly string[]): string[] => {
     // Longest first, so `extensions/logs` is preferred over `extensions` without comparing lengths per candidate.
@@ -49,8 +49,8 @@ const sampleHolds = (when: RuleCondition, facts: RuleFacts): boolean => when.sam
 export const conditionHolds = (when: RuleCondition | undefined, facts: RuleFacts): boolean =>
     when === undefined || (repoHolds(when, facts) && pathsHold(when, facts) && outcomeHolds(when, facts) && sampleHolds(when, facts));
 
-// Enabled rules at a moment, before conditions are checked; turn.ending carries these in since path facts aren't known
-// until the Stop. An empty `command` rule is dropped here, not a no-op: empty has always meant off.
+// Enabled rules at a moment, before conditions are checked. An empty `command` rule is dropped here, not a no-op: empty
+// has always meant off.
 export const standing = (rules: readonly Rule[], moment: RuleMoment): Rule[] =>
     rules.filter((rule) => rule.enabled && rule.moment === moment && !(rule.action.kind === "command" && rule.action.command.trim() === ""));
 
@@ -61,22 +61,9 @@ export const matching = (rules: readonly Rule[], moment: RuleMoment, facts: Rule
     return decidesAt(moment) ? applicable.slice(0, 1) : applicable;
 };
 
-// Whether finished work lands; an empty table holds by default, and a per-agent override wins over the table unless the
-// turn's own check failed, when only a rule naming `checks-failed` may allow it.
-export const landingVerdict = (
-    rules: readonly Rule[],
-    facts: RuleFacts,
-    override: boolean | undefined,
-): { land: boolean; rule?: Rule; held?: "checks-failed" } => {
-    if (facts.outcome === "checks-failed") {
-        const rule = standing(rules, "agent.finished").find(
-            (candidate) => candidate.when?.outcome?.includes("checks-failed") === true && conditionHolds(candidate.when, facts),
-        );
-        if (rule === undefined || rule.action.kind !== "verdict") {
-            return { land: false, held: "checks-failed" };
-        }
-        return { land: rule.action.verdict === "allow", rule };
-    }
+// Whether finished work lands; an empty table holds by default, and a per-agent override wins over the table. No check
+// takes part: checks run after the work lands and never hold it.
+export const landingVerdict = (rules: readonly Rule[], facts: RuleFacts, override: boolean | undefined): { land: boolean; rule?: Rule } => {
     if (override !== undefined) {
         return { land: override };
     }

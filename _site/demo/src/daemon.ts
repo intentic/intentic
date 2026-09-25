@@ -30,6 +30,7 @@ import { demoDevices } from "./fixture/devices";
 import { demoMetrics } from "./fixture/metrics";
 import { demoStorageClean, demoStorageReport, demoStorageScan } from "./fixture/storage";
 import { demoLoops } from "./fixture/loops";
+import { type DemoMainline, demoMainline } from "./fixture/mainline";
 import { demoRuns, demoWorkflows } from "./fixture/workflows";
 import { choresReport, writeLedger } from "./fixture/chores";
 import { ciJobs, ciRunsResponse } from "./fixture/ci";
@@ -435,6 +436,14 @@ const DEMO_CONNECT_STATE = `demo-connect-state`;
 // One version of the document as the text a daemon's fileq would render from it (the diff's Text reading).
 const derivedSide = (content: string) => ({ present: true as const, content, deriver: `docx v2`, notes: [], truncated: false });
 
+// Which main-line story this recording tells (fixture/mainline.ts).
+const mainlineStory = (): DemoMainline => {
+    if (deskEdition) {
+        return `none`;
+    }
+    return demoMode.id === `full` ? `red` : demoMode.id === `default` ? `checking` : `green`;
+};
+
 // Every procedure the fixture serves; an empty-but-real area answers its contract's empty shape, not a 404.
 export const procedures = {
     system: {
@@ -528,6 +537,9 @@ export const procedures = {
         repos: () => ({ repos: [...REPOS] }),
         search: ({ query, mode, literal, word, caseSensitive, include = ``, dir = `` }) =>
             searchWorkspace(query, { smart: mode === `q`, literal: literal === true, word: word === true, caseSensitive: caseSensitive === true, include, dir }),
+        // The main tree's check after work lands: red and handed to a fresh conversation in the whole recording, running
+        // on the curated board, the all-clear in the minimal one the marketing shots are taken of, nothing on a desk.
+        mainline: () => demoMainline(STARTED_AT, mainlineStory()),
     },
     git: {
         repos: () => ({ repos: [...REPOS] }),
@@ -1005,17 +1017,14 @@ const DEMO_SYSTEM_PROMPT: ConversationPrompt = {
     },
 };
 
-/* The checks each repository declares for itself (`<repo>/.intentic/checks.json`), one repository per state the group can be in: `web` running beside its package script, `api` waiting on the owner, the workspace held since its file changed. */
+/* The checks each repository declares for itself (`<repo>/.intentic/checks.json`), one repository per state the group can be in: `web` running beside its package script, `api` waiting on the owner, the workspace held since its file changed. None says `turn`: nothing runs when a turn ends any more. */
 const DEMO_REPO_CHECKS: RepoChecksList = {
     repos: [
         {
             repo: `web`,
             path: `web/${REPO_CHECKS_FILE}`,
-            checks: [
-                { when: `edit`, run: `pnpm exec eslint {file}`, paths: [`src/**`] },
-                { when: `turn`, run: `pnpm lint` },
-            ],
-            fired: [Date.now() - 11 * 60_000, null],
+            checks: [{ when: `edit`, run: `pnpm exec eslint {file}`, paths: [`src/**`] }],
+            fired: [Date.now() - 11 * 60_000],
             adopted: true,
             changed: false,
             landDefault: `pnpm test`,
@@ -1031,7 +1040,7 @@ const DEMO_REPO_CHECKS: RepoChecksList = {
         {
             repo: `root`,
             path: REPO_CHECKS_FILE,
-            checks: [{ when: `turn`, run: `./scripts/release-guard.sh --strict` }],
+            checks: [{ when: `land`, run: `./scripts/release-guard.sh --strict` }],
             fired: [null],
             adopted: false,
             changed: true,

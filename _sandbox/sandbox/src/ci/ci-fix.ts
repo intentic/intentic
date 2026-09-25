@@ -1,10 +1,9 @@
 import { ciFixConversationId, type PipelineRun } from "@intentic/sandbox-contract";
 import { isInfraStep } from "@intentic/constants/ci-infra-steps";
 import type { Logger } from "pino";
-import { archiveAgents } from "../agents/registry/archive.js";
 import type { Services } from "../composition.js";
 import type { TurnInput } from "../seams/turn-starter.js";
-import { type FixAttemptOutcome, startFixAttempt } from "./fix-attempts.js";
+import { daemonFixAttemptDeps, type FixAttemptOutcome, startFixAttempt } from "../agents/fix/fix-attempts.js";
 import type { CiProject } from "./projects.js";
 import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
 
@@ -63,9 +62,6 @@ export const ciFailureEvidence = async (project: CiProject, runId: number, logge
     };
 };
 
-// The earlier attempt would not be filed away, so no new one was started; carries the registry's reason.
-export class AttemptRefused extends Error {}
-
 export interface CiFixRequest {
     readonly project: CiProject;
     readonly runId: number;
@@ -113,32 +109,7 @@ export const startCiFix = async (services: Services, request: CiFixRequest, fetc
         `Carry on from where you left off; the failed job logs earlier in this conversation are still the evidence. You are in an isolated worktree: commit your fix and it goes through review.`,
     ].join("\n\n");
     return startFixAttempt(
-        {
-            roster: () => services.agents.list(),
-            archivedIds: () => services.agents.listArchived().map((agent) => agent.id),
-            // Whatever runs on the earlier attempt goes: it is being set aside, whichever turn it is on.
-            stop: async (conversationId) => {
-                await services.turns.stop({ conversationId, live: true });
-            },
-            archive: async (conversationId) => {
-                const { failed } = await archiveAgents(services, [conversationId], Date.now());
-                const refused = failed[0];
-                if (refused !== undefined) {
-                    throw new AttemptRefused(`The earlier attempt could not be set aside: ${refused.reason}`);
-                }
-            },
-            // Same detached-run boundary as POST /agent, so the run map, journal, transcript and observer stay wired;
-            // no composer holds these words, so a refusal at the door leaves the sandbox keeping the turn.
-            start: async (turn) => {
-                const started = await services.turns.start({ ...turn, byPerson: request.byPerson });
-                return typeof started === "string" ? undefined : started;
-            },
-            // A pick is a choice made now, so it outranks the kept turn's routing: the whole prompt goes on it.
-            rerun: async (conversationId) =>
-                request.picked !== true && services.conversations.state(conversationId)?.resume.held?.reason === "door"
-                    ? services.turns.resume(conversationId, request.byPerson)
-                    : undefined,
-        },
+        daemonFixAttemptDeps(services, { byPerson: request.byPerson, picked: request.picked === true }),
         {
             base: ciFixConversationId(project.repo, runId),
             prompt: promptOf(request, where),

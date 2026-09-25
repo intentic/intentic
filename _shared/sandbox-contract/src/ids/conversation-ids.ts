@@ -178,6 +178,13 @@ const digest = (text: string): string => {
 
 export const pushFixConversationId = (scope: string, signature: string): string => `${PUSH_FIX_PREFIX}${repoSlug(scope)}-${digest(signature)}`;
 
+// A red main-line check that no conversation still holding the work could take: keyed by the project and the moment its
+// red streak began, so every attempt at one streak shares a base and a later streak in the same project starts over.
+// Seconds in base36 keep it short; the workspace root is spelled `workspace`, since its project folder is empty.
+export const LAND_FIX_PREFIX = "land-fix-";
+export const landFixConversationId = (project: string, redSince: number): string =>
+    `${LAND_FIX_PREFIX}${repoSlug(project === "" ? "workspace" : project)}-${Math.floor(redSince / 1000).toString(36)}`;
+
 // ONE FAILURE, MANY ATTEMPTS, ONE LIVE ANSWER. The derived id above names the FAILURE; an attempt at it is a
 // conversation of its own, so starting over (another model, a clean worktree) never rewrites a record some other window
 // is showing, and every attempt keeps its own transcript, cost and URL. Attempt 1 wears the bare id, so every id minted

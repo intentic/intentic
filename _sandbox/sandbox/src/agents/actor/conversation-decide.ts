@@ -11,11 +11,11 @@ import {
     type SessionOwner,
     type TodoItem,
     type TurnProfile,
+    type TurnProof,
 } from "@intentic/sandbox-contract";
 import type { TurnCheckpoint } from "../../agent/checkpoints/turn-checkpoints.js";
 import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
 import type { HeldTurn } from "../../agent/run/turn/turn-resume.js";
-import type { CheckRun, CheckVerdict } from "../../agent/verification/turn-checks.js";
 import { opt } from "../../opt.js";
 import type { FailedEnding, PersistedAgent } from "../registry/agents-store.js";
 import {
@@ -91,7 +91,8 @@ export interface SettleFlush {
     readonly usage: TurnUsage;
     readonly sessionId: string | undefined;
     readonly checklist: readonly TodoItem[] | undefined;
-    readonly check: { readonly label: string; readonly failed: boolean } | undefined;
+    // What the turn showed of its own work; absent for one that touched no code, which leaves the card's last record.
+    readonly proof: TurnProof | undefined;
 }
 
 export type ConversationEvent =
@@ -108,10 +109,8 @@ export type ConversationEvent =
     | { readonly kind: "frame"; readonly frame: AgentEvent }
     // A stop or a dismissal, recorded the instant it lands, ahead of the seconds-long unwind.
     | { readonly kind: "stop"; readonly ending: StopEnding }
-    // A turn.ending check ran: the card's line on it, and, for a command rule, the verdict the land will take.
-    | { readonly kind: "check-ran"; readonly check: CheckRun }
-    // The land takes the verdict, whatever the turn did, so a verdict never outlives the turn that ran its check.
-    | { readonly kind: "verdict-taken" }
+    // What the settling turn showed of its own work, read off its tool calls; the settle files it on the card.
+    | { readonly kind: "proof-noted"; readonly proof: TurnProof }
     // The turn is over, however it ended; a manual land settles a resting card the same way.
     | { readonly kind: "settle" }
     // A restored card's answer will re-run the turn; holds the card through the settle that precedes it.
@@ -151,10 +150,6 @@ export type ConversationEvent =
     | { readonly kind: "grant-restored"; readonly tool: string; readonly always: boolean }
     // The gate asks for a grant on this tool; answered once, and only while fresh.
     | { readonly kind: "grant-taken"; readonly tool: string }
-    // A proof follow-up was sent; the turn it starts must not be nudged in turn.
-    | { readonly kind: "nudge-armed" }
-    // The nudge guard is spent, by the next ask or by a follow-up that never started; answers whether it was armed.
-    | { readonly kind: "nudge-disarmed" }
     // The card's list of the conversation's background jobs, whole, as their registry now reads it.
     | { readonly kind: "jobs-shown"; readonly jobs: readonly AgentJob[] }
     // The card's list of its armed watches, whole; empty once the last one fires or is stopped.
@@ -221,8 +216,6 @@ interface Replies {
     readonly "steer-reserved": number | undefined;
     readonly "steers-taken": readonly (TurnCheckpoint | undefined)[];
     readonly "grant-taken": { readonly always: boolean } | undefined;
-    readonly "nudge-disarmed": boolean;
-    readonly "verdict-taken": CheckVerdict | undefined;
     readonly "resume-abandoned": boolean;
     readonly "rewind-leased": boolean;
     readonly "queue-removed": QueueChange;
@@ -480,10 +473,10 @@ const onSettle = (state: ConversationState, entry: PersistedAgent | undefined): 
         usage: turn.usage,
         sessionId: turn.sessionId,
         checklist: turn.checklist,
-        check: turn.check,
+        proof: turn.proof,
     };
     return {
-        state: { ...state, phase, turn: { ...turn, usage: NO_USAGE, sessionId: undefined, failure: undefined, check: undefined } },
+        state: { ...state, phase, turn: { ...turn, usage: NO_USAGE, sessionId: undefined, failure: undefined, proof: undefined } },
         effects: [{ kind: "entry-settled", flush }, { kind: "persist" }, { kind: "reprobe" }, { kind: "broadcast" }],
         reply: undefined,
     };
@@ -538,21 +531,6 @@ const onRewindLeased = (state: ConversationState): Decision<boolean> =>
 
 const onRewindReleased = (state: ConversationState): Decision<undefined> =>
     unchanged(state.phase.kind === "rewinding" ? { ...state, phase: { kind: "idle" } } : state, undefined);
-
-// Only a settled failure marks the card: `error` never ran and `cancelled` was cut short, neither measured the work. A
-// rule that is not a command leaves the verdict where it was.
-const onCheckRan = (state: ConversationState, check: CheckRun, now: number): Decision<undefined> =>
-    unchanged(
-        {
-            ...state,
-            turn: { ...state.turn, check: { label: check.label, failed: check.status === "failed" } },
-            verdict:
-                check.command === undefined
-                    ? state.verdict
-                    : { ruleId: check.ruleId, label: check.label, command: check.command, status: check.status, at: now },
-        },
-        undefined,
-    );
 
 const withResume = (state: ConversationState, resume: Partial<ConversationState["resume"]>): ConversationState => ({
     ...state,
@@ -671,8 +649,7 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
     unjournalled: onUnjournalled,
     frame: (state, event, now) => onFrame(state, event.frame, now),
     stop: (state, event) => onStop(state, event.ending),
-    "check-ran": (state, event, now) => onCheckRan(state, event.check, now),
-    "verdict-taken": (state) => unchanged({ ...state, verdict: undefined }, state.verdict),
+    "proof-noted": (state, event) => unchanged({ ...state, turn: { ...state.turn, proof: event.proof } }, undefined),
     settle: (state, _event, _now, entry) => onSettle(state, entry),
     "resume-promised": (state) => unchanged({ ...state, turn: { ...state.turn, resuming: true } }, undefined),
     "resume-abandoned": (state, event, _now, entry) => onAbandon(state, event.reason, entry),
@@ -695,8 +672,6 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
     "steer-captured": (state, event) => onSteerCaptured(state, event.slot, event.checkpoint),
     "grant-restored": (state, event, now) => unchanged({ ...state, grant: { tool: event.tool, always: event.always, grantedAt: now } }, undefined),
     "grant-taken": (state, event, now) => onGrantTaken(state, event.tool, now),
-    "nudge-armed": (state) => unchanged({ ...state, nudged: true }, undefined),
-    "nudge-disarmed": (state) => unchanged({ ...state, nudged: false }, state.nudged),
     "jobs-shown": (state, event) => ({ state: { ...state, jobs: event.jobs }, effects: BROADCAST, reply: undefined }),
     "watches-shown": (state, event) => ({ state: { ...state, watches: event.watches }, effects: BROADCAST, reply: undefined }),
     "loop-shown": (state, event) => ({ state: { ...state, loop: event.loop }, effects: BROADCAST, reply: undefined }),

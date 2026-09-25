@@ -26,7 +26,7 @@ Un-shipping is `rollback-stable.sh <version>`, which moves the same pointers bac
 
 Sandboxes update when their owner accepts the update card, so the hosted editor talks to daemons of several versions at once.
 
-- The wire contract is [`@intentic/sandbox-contract`](_shared/sandbox-contract). Its `contract.lock.json` records every exported schema. Additions pass; a push that removes or narrows one is refused unless a commit declares it with a `type!:` subject or a `Breaking-Note:` trailer.
+- The wire contract is [`@intentic/sandbox-contract`](_shared/sandbox-contract). Its `contract.lock.json` records every exported schema. Additions pass. A change that removes or narrows one is declared with a `type!:` subject or a `Breaking-Note:` trailer. The push reports a shrink with no such declaration in its range, without refusing it, and the package's lock test fails in CI on any commit whose lock no longer matches the schemas.
 - A `Breaking-Note:` becomes the release's `## Breaking changes` section, and the update card turns into a warning that names what stops working before anyone takes the update.
 - The daemon lists its routes and their shape fingerprints on the `/events` hello frame. The editor hides a feature an older daemon lacks instead of calling a route that is not there.
 - Extensions declare `engines.intentic`, a semver range matched against `extensionApiVersion` in [`_shared/extension-api/src/version.ts`](_shared/extension-api/src/version.ts): a minor bump for an addition, a major one for a break. That package is the one exception to the repository's no-legacy rule.

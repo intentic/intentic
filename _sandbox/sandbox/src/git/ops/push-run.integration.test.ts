@@ -9,7 +9,7 @@ import { unstubbed } from "@intentic/testing";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../composition.js";
 import type { TerminalRunner } from "../../terminal/terminal-run.js";
-import { CHECKS_SESSION, PUSH_SESSION } from "../../terminal/terminal-session.js";
+import { PUSH_SESSION } from "../../terminal/terminal-session.js";
 import { createPushRuns, type PushRunDeps } from "./push-run.js";
 
 // Real git and hooks, a fake terminal (the real one would open actual tmux sessions) keeping the real one's contract: tests
@@ -270,24 +270,6 @@ test("two repos take turns in the one terminal window", async () => {
     expect(one.status).toBe("passed");
     expect(two.status).toBe("passed");
     expect(two.session).toBe(PUSH_SESSION);
-});
-
-// Every conversation's turn checks take turns in the checks session, minutes each; a push pressed meanwhile waited out
-// all of them with no terminal to show for it, then shared its pane with the next one.
-test("a push starts at once while a turn check holds the checks session", async () => {
-    const { clone, origin } = await ahead();
-    const { services } = fakes();
-    const check = new AbortController();
-    const holding = services.terminalRun.tryRun(CHECKS_SESSION, "sleep 30", { cwd: tmpdir(), signal: check.signal }).catch(() => undefined);
-    try {
-        const runs = createPushRuns(services, () => {});
-        await runs.start("app", clone, {});
-        expect(await settled(runs, "app")).toMatchObject({ status: "passed", session: PUSH_SESSION });
-        expect(await sh(origin, "log", "--format=%s", "-1", "main")).toBe("two");
-    } finally {
-        check.abort();
-        await holding;
-    }
 });
 
 test("a push queued behind another repo's has its whole ceiling to run in", async () => {

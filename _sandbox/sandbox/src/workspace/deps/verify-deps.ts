@@ -1,23 +1,26 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pollUntil } from "@intentic/base/async";
-import type { WorkspaceEvent } from "@intentic/sandbox-contract";
+import { MAINLINE_FAILURES_KEPT, type MainlineLand, type MainlineRouting, type WorkspaceEvent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { ActivityStore } from "../../activity/activity-store.js";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
 import { QUEUE_SKIPPED_EXIT_CODE } from "../../platform/resources/heavy-commands.js";
+import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { z } from "zod";
 import { markCheckRunning } from "./checks-in-flight.js";
 import type { DependencyLandOrigin, DependencyOrigin } from "./dependency-origin.js";
 import { statePath } from "../../state-paths.js";
-import type { VerifyStore } from "./verify-store.js";
+import type { RecordedVerdict, VerifyStore } from "./verify-store.js";
 import { installPanelKey, workspaceSetup } from "../layout/workspace-setup.js";
 
 // Runs a project's land check (its repository's declared `land` check, else the `verify` script, else `test`) after its
-// install settles, records the verdict, hands failures that appeared with a land back to it (`route`), and emits
+// install settles, records the verdict and the run, hands a red one to the breakage router (`route`), and emits
 // `deps.broken`/`deps.fixed` for a chore to wake on when nobody took them. A causeless run (the reconciler's own
 // installs, not a land) still checks and records, but never wakes anyone.
+// This is the ONLY verification the sandbox runs on work: nothing checks inside a turn, and nothing here holds a land, a
+// commit or a push. It runs one project at a time, and lands that arrive meanwhile wait and are measured together.
 
 export const verifyPanelKey = (dir: string): string => `${dir === "" ? "root" : dir.replace(/[^a-zA-Z0-9_-]/g, "_")}--verify`;
 
@@ -41,9 +44,10 @@ export interface VerifyDeps {
     readonly announce: () => void;
     // Same queue an agent's turn uses, so a check can't stack beside live turns; absent means unqueued.
     readonly queue?: (command: string) => Promise<string>;
-    // Hands a red that named new failures to the land that caused them; true when it did, so no chore wakes on it too.
-    readonly route?: (breakage: LandBreakage) => Promise<boolean>;
-    // Told when a project comes back green, so whatever `route` counted for it starts over.
+    // Hands every red run to the breakage router, which decides what its failures are owed (mainline.ts's routing kinds);
+    // undefined when there was nothing to decide. Anything but `reported` means somebody took it, so no chore wakes too.
+    readonly route?: (breakage: LandBreakage) => Promise<MainlineRouting | undefined>;
+    // Told when a project comes back green, so whatever `route` counted or held for it starts over.
     readonly settled?: (project: string) => void;
     // The land check the project's repository declares and the owner adopted; undefined runs the package's own script.
     readonly landCheck?: (dir: string) => Promise<{ readonly run: string; readonly timeoutMs?: number | undefined } | undefined>;
@@ -57,8 +61,22 @@ export interface LandBreakage {
     readonly project: string;
     readonly command: string;
     readonly lands: readonly DependencyLandOrigin[];
+    // What appeared with this run: not in the red verdict before it (all of them, after a green).
     readonly fresh: readonly string[];
+    // Everything it failed on, fresh or standing; what a failure carried from an earlier run is checked against.
+    readonly failures: readonly string[];
     readonly logTail: string;
+    // Which run this is, as the history files it: the project and the instant it ended.
+    readonly runAt: number;
+    // When the project's red streak began; a fresh fix-up's id is derived from it.
+    readonly redSince: number;
+    // Whether more lands for this project are queued behind it, whose check will measure this tree again.
+    readonly queuedBehind: boolean;
+    // A command the check named that re-runs only named failures, when it has one (the report's `rerun`).
+    readonly rerun?: string | undefined;
+    // Whether the check wrote a list at all. A red run with none (a crash, a timeout, a repository whose check writes no
+    // report) says nothing about which earlier failures still stand, so nothing carried may be read as resolved by it.
+    readonly measured: boolean;
 }
 
 interface PendingVerify {
@@ -69,8 +87,10 @@ interface PendingVerify {
     readonly lands: readonly DependencyLandOrigin[];
 }
 
-// The report a project's check may write (INTENTIC_VERIFY_REPORT): what it failed on, as units it names itself.
-const ReportSchema = z.object({ failures: z.array(z.string()) });
+// The report a project's check may write (INTENTIC_VERIFY_REPORT): what it failed on, as units it names itself, and a
+// command that re-runs only some of them (fed the units by file, INTENTIC_RERUN_UNITS), which blame may use.
+const ReportSchema = z.object({ failures: z.array(z.string()), rerun: z.string().min(1).optional() });
+type VerifyReport = z.infer<typeof ReportSchema>;
 
 // The land span's entry for a project dir; the workspace repo is "root" in a span and "" as a dir.
 const spanOf = (land: DependencyLandOrigin, dir: string): DependencyLandOrigin["repos"][number] | undefined =>
@@ -78,6 +98,43 @@ const spanOf = (land: DependencyLandOrigin, dir: string): DependencyLandOrigin["
 
 const pending: PendingVerify[] = [];
 let running = false;
+
+// When each land asked for its check, for the history and the cards; a land is one object for its whole queue life.
+const queuedAt = new WeakMap<DependencyLandOrigin, number>();
+
+// The check under way, for the main-line status; one at a time across every caller.
+interface CurrentRun {
+    readonly dir: string;
+    readonly command: string;
+    readonly startedAt: number;
+    readonly lands: readonly DependencyLandOrigin[];
+}
+let current: CurrentRun | undefined;
+
+// A land as the history and the editor name it.
+export const mainlineLandOf = (land: DependencyLandOrigin): MainlineLand => ({
+    conversationId: land.agentId,
+    ...(land.title === undefined ? {} : { title: land.title }),
+    at: queuedAt.get(land) ?? 0,
+});
+
+// What is running and what waits, as plain data, for the main-line status (mainline-status.ts).
+export interface VerifyQueueSnapshot {
+    readonly current: CurrentRun | undefined;
+    readonly pending: readonly { readonly dirs: readonly string[]; readonly lands: readonly DependencyLandOrigin[] }[];
+}
+
+export const verifyQueueSnapshot = (): VerifyQueueSnapshot => ({
+    current,
+    pending: pending.map(({ dirs, lands }) => ({ dirs, lands })),
+});
+
+// Whether lands for `dir` wait behind the run now settling: their check measures this tree again, with them in it.
+const queuedBehind = (dir: string): boolean => pending.some((entry) => entry.dirs.includes(dir) && entry.lands.length > 0);
+
+// Whether a check of `dir` that answers for some land is running or waiting: a red found now will be measured again.
+export const landCheckAhead = (dir: string): boolean =>
+    queuedBehind(dir) || (current !== undefined && current.dir === dir && current.lands.length > 0);
 
 // Waits until `key` stops running or the watch window closes; true means it stopped.
 const watchPanel = (deps: VerifyDeps, key: string, timeoutMs?: number): Promise<boolean> =>
@@ -160,6 +217,8 @@ const runPanel = async (verify: PendingVerify, dir: string, command: string, tim
     // Open across the whole run: the build inside it empties and rewrites an output dir the repo may track, and a
     // review scanning mid-build would otherwise report the rewrite as the owner's own deletion.
     const checkDone = markCheckRunning(dir);
+    current = { dir, command, startedAt: Date.now(), lands: verify.lands };
+    publishRuntimeChange("mainline");
     try {
         await deps.processes.start(paths.key, {
             command: `mkdir -p ${paths.dir} && rm -f ${paths.status} ${paths.report} && { ${exported.join("; ")}; ${queued}; } 2>&1 | tee ${paths.log}; echo $pipestatus[1] > ${paths.status}`,
@@ -171,6 +230,9 @@ const runPanel = async (verify: PendingVerify, dir: string, command: string, tim
         // Closed before the announcement, so the rescan it triggers reads the settled tree rather than the held-back
         // one.
         checkDone();
+        // However the run ended, a panel that never started included: nothing runs now for the status or the router.
+        current = undefined;
+        publishRuntimeChange("mainline");
         // `dist/` is pruned from the watcher, so nothing else can say those files came back, and a review scanned
         // mid-build keeps reporting them deleted for as long as it stays cached. Sent however the run ended: it wrote
         // either way.
@@ -182,7 +244,9 @@ const runPanel = async (verify: PendingVerify, dir: string, command: string, tim
 const verifyProject = async (verify: PendingVerify, dir: string, command: string, timeoutMs: number | undefined): Promise<void> => {
     const { deps, origin } = verify;
     const paths = artifactsOf(deps, dir);
-    if (!(await runPanel(verify, dir, command, timeoutMs))) {
+    const startedAt = Date.now();
+    const ran = await runPanel(verify, dir, command, timeoutMs);
+    if (!ran) {
         await deps.processes.stop(paths.key);
         activity(
             deps,
@@ -206,20 +270,38 @@ const verifyProject = async (verify: PendingVerify, dir: string, command: string
         );
         return;
     }
-    await settleVerdict(verify, dir, command, { exitCode, logTail, report: paths.report, key: paths.key });
+    await settleVerdict(verify, dir, command, { exitCode, logTail, report: paths.report, key: paths.key, startedAt });
+    publishRuntimeChange("mainline");
 };
 
-// Records a settled run and says what it means: the activity row, the new failures to the lands that caused them, and
-// the edge to any chore when nobody took them.
+// Records a settled run and says what it means: the activity row, the run in the history, a red one handed to the router,
+// and the edge to any chore when nobody took it.
 const settleVerdict = async (
     verify: PendingVerify,
     dir: string,
     command: string,
-    run: { readonly exitCode: number; readonly logTail: string; readonly report: string; readonly key: string },
+    run: { readonly exitCode: number; readonly logTail: string; readonly report: string; readonly key: string; readonly startedAt: number },
 ): Promise<void> => {
     const { deps, origin } = verify;
     const { exitCode, logTail } = run;
-    const verdict = await deps.verifyStore.record(dir, exitCode === 0 ? "green" : "red", Date.now(), await readReport(run.report));
+    const report = await readReport(run.report);
+    const at = Date.now();
+    const status = exitCode === 0 ? "green" : "red";
+    const verdict = await deps.verifyStore.record(dir, status, at, report?.failures);
+    const failures = report?.failures ?? [];
+    await deps.verifyStore
+        .noteRun({
+            project: dir,
+            command,
+            status,
+            startedAt: run.startedAt,
+            at,
+            lands: verify.lands.map(mainlineLandOf),
+            failures: failures.slice(0, MAINLINE_FAILURES_KEPT),
+            failureCount: failures.length,
+            attempt: verdict.attempt,
+        })
+        .catch((error: unknown) => deps.logger.warn({ err: error, project: dir }, "dependency verify: the run could not be filed"));
     if (exitCode === 0) {
         deps.settled?.(dir);
         activity(deps, "deps.verify_green", `Checks green for ${whereOf(dir)} (${command}).`, "ok", origin);
@@ -232,9 +314,27 @@ const settleVerdict = async (
             origin,
         );
     }
-    const routed = await routeFresh(verify, dir, command, verdict.fresh ?? [], logTail);
-    // A breakage handed to the land that caused it wakes no chore as well: one repair per failure.
-    if (verdict.edge === "fixed" || (verdict.edge === "broken" && !routed)) {
+    const routing =
+        exitCode === 0
+            ? undefined
+            : await routeRed(verify, {
+                  project: dir,
+                  command,
+                  lands: verify.lands,
+                  fresh: freshOf(report, verdict, command, exitCode),
+                  failures,
+                  logTail,
+                  runAt: at,
+                  redSince: await redSinceOf(deps, dir, at),
+                  queuedBehind: queuedBehind(dir),
+                  rerun: report?.rerun,
+                  measured: report !== undefined,
+              });
+    if (routing !== undefined) {
+        await deps.verifyStore.routed(dir, at, routing).catch((error: unknown) => deps.logger.warn({ err: error, project: dir }, "dependency verify: routing not filed"));
+    }
+    // A breakage somebody took wakes no chore as well: one repair per failure.
+    if (verdict.edge === "fixed" || (verdict.edge === "broken" && (routing === undefined || routing.kind === "reported"))) {
         announceEdge(verify, dir, command, { exitCode, logTail, edge: verdict.edge, attempt: verdict.attempt });
     }
 };
@@ -261,23 +361,43 @@ const announceEdge = (
     });
 };
 
-// The failures a report named, or undefined when the check wrote none or none that parses.
-const readReport = async (path: string): Promise<readonly string[] | undefined> => {
+// What a report named, or undefined when the check wrote none or none that parses.
+const readReport = async (path: string): Promise<VerifyReport | undefined> => {
     try {
-        return ReportSchema.parse(JSON.parse(await readFile(path, "utf8"))).failures;
+        return ReportSchema.parse(JSON.parse(await readFile(path, "utf8")));
     } catch {
         return undefined;
     }
 };
 
-// Offers what appeared with this run to the lands it covered; false when there is nothing new or nobody to hand it to.
-const routeFresh = async (verify: PendingVerify, dir: string, command: string, fresh: readonly string[], logTail: string): Promise<boolean> => {
-    if (fresh.length === 0 || verify.lands.length === 0 || verify.deps.route === undefined) {
-        return false;
+// What appeared with a red run. A check that names its failures is read unit by unit against the red before it; one that
+// names none has one failure, itself, but only where it turned the project red: a red that follows a red with no list
+// on either side cannot say whether anything new broke, and blaming every land of it would send people after nothing.
+const freshOf = (report: VerifyReport | undefined, verdict: RecordedVerdict, command: string, exitCode: number): readonly string[] => {
+    if (report !== undefined) {
+        return verdict.fresh ?? [];
     }
-    return verify.deps.route({ project: dir, command, lands: verify.lands, fresh, logTail }).catch((error: unknown) => {
-        verify.deps.logger.warn({ err: error, project: dir }, "dependency verify: routing the breakage failed");
-        return false;
+    return verdict.attempt === 1 ? [`${command} exited ${exitCode} without naming its failures`] : [];
+};
+
+// When the project's red streak began, as the verdict just recorded says; this run's own end if it cannot be read.
+const redSinceOf = async (deps: VerifyDeps, dir: string, at: number): Promise<number> => {
+    try {
+        return (await deps.verifyStore.read()).projects[dir]?.since ?? at;
+    } catch (error) {
+        deps.logger.warn({ err: error, project: dir }, "dependency verify: the red streak's start could not be read");
+        return at;
+    }
+};
+
+// Hands a red run to the router, which decides what its failures are owed; undefined when there is no router or it threw.
+const routeRed = async (verify: PendingVerify, breakage: LandBreakage): Promise<MainlineRouting | undefined> => {
+    if (verify.deps.route === undefined) {
+        return undefined;
+    }
+    return verify.deps.route(breakage).catch((error: unknown) => {
+        verify.deps.logger.warn({ err: error, project: breakage.project }, "dependency verify: routing the breakage failed");
+        return undefined;
     });
 };
 
@@ -345,7 +465,11 @@ export const queueVerify = (deps: VerifyDeps, origin: DependencyOrigin, dirs: re
     // then answers for the lands the replaced one carried.
     const same = pending.findIndex((entry) => entry.dirs.length === wanted.length && entry.dirs.every((dir) => wanted.includes(dir)));
     const carried = same === -1 ? [] : (pending.splice(same, 1)[0]?.lands ?? []);
+    if (origin.kind === "land" && !queuedAt.has(origin)) {
+        queuedAt.set(origin, Date.now());
+    }
     pending.push({ deps, origin, dirs: wanted, lands: [...carried, ...(origin.kind === "land" ? [origin] : [])] });
+    publishRuntimeChange("mainline");
     if (running) {
         return;
     }

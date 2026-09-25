@@ -275,6 +275,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // In-memory: every inbound fire resolves its conversation through this; suites only need consistent answers.
         threadSessions: memoryThreadSessionsStore((conversationId) => agents.entry(conversationId)?.archivedAt !== undefined),
         activity: { append: async () => {}, list: async () => [] },
+        // The main line's verdicts: nothing checked yet. Every planned turn that owes the checks-after-landing note reads
+        // them, and GET /workspace/mainline serves them.
+        verifyStore: unstubbed<Services["verifyStore"]>("verifyStore", { read: async () => ({ projects: {}, runs: [] }) }),
         usage: unstubbed("usage", { record: async () => {}, rollup: async () => [], turns: async () => [], ...usage }),
         // Schema's own defaults: parsing an empty object is exactly what an unwritten settings file reads as.
         sandboxSettings: unstubbed("sandboxSettings", {

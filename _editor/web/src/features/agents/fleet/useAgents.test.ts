@@ -1115,8 +1115,8 @@ describe("the finished fold", () => {
     });
 
     // Below the unsent card the lane is a plain timeline: what each card still owes is drawn on it and never moves it,
-    // so an unfinished check (`a3`, oldest) sorts under a press (`a2`) that sorts under a receipt (`a0`) that is newer
-    // than both.
+    // so an unfinished checklist (`a3`, oldest) sorts under a press (`a2`) that sorts under a receipt (`a0`) that is
+    // newer than both.
     it("orders everything but the unsent card by time, whatever it still owes", () => {
         const writing = new Conversation(`a1`);
         writing.registered.value = true;
@@ -1143,7 +1143,9 @@ describe("the finished fold", () => {
         const now = 100_000_000;
         setAgents(
             [
-                { ...landed(`unfinished-2h`, now - 2 * hour), unfinished: { at: now - 2 * hour, check: `Verify before you finish` } },
+                // Steps it never completed: the one thing a turn is still recorded as leaving open, now that no check
+                // runs inside it to be left failing.
+                { ...landed(`unfinished-2h`, now - 2 * hour), unfinished: { at: now - 2 * hour, steps: { open: 1, total: 4, next: `Run it against staging` } } },
                 { ...landed(`ready-3h`, now - 3 * hour), status: `ready` },
                 landed(`just-finished`, now),
                 { ...landed(`reland-15h`, now - 15 * hour), landedPresence: { landed: 2, present: 1 } },

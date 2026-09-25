@@ -1,15 +1,14 @@
 #!/bin/sh
-# The push gate, wired by the root `prepare` script (core.hooksPath=.githooks); git's ref lines on stdin name the range.
-# The app pushes with plain `git push`, so its pushes run this hook too, and git's exit is the app's verdict.
+# The push check, wired by the root `prepare` script (core.hooksPath=.githooks); git's ref lines on stdin name the range.
+# The app pushes with plain `git push`, so its pushes run this hook too.
 #
-# What _tools/scripts/verify/verify-push.mjs does, cheapest first, stopping at the first refusal: every check the
-# manifest lists (_tools/checks/run.mjs: the lockfile, the test programs, the workflow policy, the byte scan, the daemon's
-# structural gates and the rest, under two seconds and needing nothing installed), the assertion ratchet over
-# the range's test files, the manifest/lockfile lockstep, and the linter; rustfmt on any Rust crate the push
-# touches. The three steps CI's verify groups run (typecheck, build, test) are replayed from the verdict the
-# land's `pnpm verify` or an earlier push check recorded for this tree, and otherwise left to CI; `pnpm verify:push
-# --suite` runs them here. The header of that script says why each tier is there.
+# ADVISORY: it never refuses a push. No check blocks a land, a commit or a push in this repository; the whole tree was
+# already checked after each land (`pnpm verify`, run by the sandbox in the background), and CI measures the commit.
+# What _tools/scripts/verify/verify-push.mjs does here, cheapest first: every check the manifest lists
+# (_tools/checks/run.mjs: the lockfile, the test programs, the workflow policy, the byte scan, the daemon's structural
+# gates and the rest, under two seconds and needing nothing installed), the assertion ratchet over the range's test
+# files, the manifest/lockfile lockstep, the linter, and rustfmt on any Rust crate the push touches. It prints what it
+# finds and exits 0. `pnpm verify:push` by hand still answers with an exit code, and `--suite` runs the full suite.
 #
-# No dependency guard: this needs node, which is the thing running the repo; the heavy tier needs pnpm and says so
-# when it is missing. `git push --no-verify` when you genuinely mean to push a tree that does not pass.
-exec node _tools/scripts/verify/verify-push.mjs --hook
+# No dependency guard: this needs node, which is the thing running the repo.
+exec node _tools/scripts/verify/verify-push.mjs --hook --advisory

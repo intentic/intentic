@@ -1,7 +1,6 @@
 import { type Capability, type CredentialGate, type Persona, PersonaPowersSchema, type Rule, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { createMemoryWarnings, type MemoryHeadroom, type TurnAdmission } from "../../../platform/resources/memory-admission.js";
-import { TURN_ENDING_NOTE_TITLE } from "../../../rules/turn-ending-note.js";
 import { createCredentialGrants } from "../../../secrets/credential-grants.js";
 import { GATED_CREDENTIALS_TITLE } from "../../../secrets/credential-gating.js";
 import type { FieldNotes } from "../../prompt/field-notes.js";
@@ -13,6 +12,7 @@ import { SPAWN_NOTE_TITLE } from "../../subagents/spawn-note.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import { conversationExperimentArm } from "./experiments.js";
 import { conversationAfter } from "../../../testing.js";
+import { LANDING_CHECKS_NOTE_TITLE, landingChecksNote } from "../../../workspace/deps/mainline-note.js";
 import { base, context, ROOT, turn } from "../turn/turn-plan.testing.js";
 import { decideTurn, type TurnDecision } from "./turn-decision.js";
 import type { AdmittedTurnFacts, TurnFacts } from "./turn-facts.js";
@@ -41,6 +41,7 @@ const FACTS: AdmittedTurnFacts = {
     personaPrompt: undefined,
     memoryNote: undefined,
     mapNote: undefined,
+    landingChecksNote: undefined,
     sessionStore: `${ROOT}/sessions`,
 };
 
@@ -232,40 +233,46 @@ test.each([
     expect(decision.experiments).toEqual(experiments);
 });
 
-// the automatic checks: named on the opening message, and again on the turn after a compaction
+// what runs after the work lands: told to every runtime alike, isolated or not, whenever the facts carry the note (when a
+// turn owes it is turn-facts.test.ts's), and never past a card that dropped it
 
-// A repository's turn check as repo-checks.ts compiles it; settings refuse a command, so it arrives as a declared check.
-const TURN_CHECK: Rule = {
-    id: "repo-check-root-1",
-    label: "Verify before you finish",
-    moment: "turn.ending",
-    action: { kind: "command", command: "pnpm verify", timeoutMs: 900_000 },
-    enabled: true,
-};
+// The note as gatherTurnFacts reads it for a turn that owes it, with the main tree green.
+const LANDING_NOTE = landingChecksNote([], false);
+const QUIET: Persona = { id: "quiet", capabilities: [], briefing: { omit: ["checks"] } };
+const IN_WORKTREE: TurnContext = { ...context, localCwd: `${ROOT}-worktree`, effectiveCwd: `${ROOT}-worktree` };
 
 test.each([
-    ["a conversation's opening message", undefined, undefined, true],
-    ["a fork's opening message, whose parent's history already holds it", undefined, FORK, false],
-    ["a follow-up", conversationAfter(3), undefined, false],
-    ["the turn after a compaction", conversationAfter(4, { compactedTurn: 3 }), undefined, true],
-    ["a fork taken right after a compaction", conversationAfter(4, { compactedTurn: 3 }), FORK, true],
-    ["a turn three past the compaction", conversationAfter(6, { compactedTurn: 3 }), undefined, false],
-] as const)("the checks note on %s", (_case, entry, forkOf, sent) => {
-    const decision = decided({ ...FACTS, repoChecks: [TURN_CHECK], entry }, turn({ conversationId: "c-checks", forkOf }));
+    ["the Claude Code loop on the main tree", "claude", context],
+    ["the Claude Code loop in its own worktree", "claude", IN_WORKTREE],
+    ["native Codex on the main tree", "codex", context],
+    ["native Codex in its own worktree", "codex", IN_WORKTREE],
+    ["OpenCode", "grok", context],
+] as const)("the checks-after-landing note reaches %s", (_case, agent, turnContext) => {
+    const decision = decided({ ...FACTS, landingChecksNote: LANDING_NOTE }, turn({ agent, conversationId: "c-checks" }), turnContext);
 
-    expect(titles(decision).includes(TURN_ENDING_NOTE_TITLE)).toBe(sent);
+    expect(decision.context.base.spec.notes?.filter((note) => note.title === LANDING_CHECKS_NOTE_TITLE)).toEqual([LANDING_NOTE]);
 });
 
-test("a check a repository declares joins the owner's rules, and the turn is told it will run", () => {
-    const look = { id: "verify-ui-edits", label: "Look at what it changed", moment: "turn.ending", action: { kind: "builtin", name: "verify-ui-edits" } };
-    const declared: Rule = { ...TURN_CHECK, id: "repo-verify", label: "Repository checks", action: { kind: "command", command: "pnpm verify:turn", timeoutMs: 900_000 } };
+test("a turn whose facts carry no checks note is told nothing about checks, whatever rules stand", () => {
+    const declared: Rule = {
+        id: "repo-check-root-0",
+        label: "Lint the edit",
+        moment: "file.edited",
+        when: { repo: "root" },
+        action: { kind: "command", command: "pnpm lint {file}", timeoutMs: 900_000 },
+        enabled: true,
+    };
 
-    const decision = decided({ ...FACTS, settings: SandboxSettingsSchema.parse({ rules: [look] }), repoChecks: [declared] });
+    const decision = decided({ ...FACTS, repoChecks: [declared] }, turn({ agent: "codex" }), IN_WORKTREE);
 
-    expect(decision.context.settings?.rules.map((rule) => rule.id)).toEqual(["verify-ui-edits", "repo-verify"]);
-    expect(decision.context.base.spec.notes?.find((note) => note.title === TURN_ENDING_NOTE_TITLE)?.text).toContain(
-        "**Repository checks:** `pnpm verify:turn`",
-    );
+    expect(decision.context.settings?.rules.map((rule) => rule.id)).toEqual(["repo-check-root-0"]);
+    expect(titles(decision)).not.toContain(LANDING_CHECKS_NOTE_TITLE);
+});
+
+test("a card that drops the checks note never shows it, even where the facts carry one", () => {
+    const decision = decided({ ...FACTS, personas: [QUIET], landingChecksNote: LANDING_NOTE }, turn({ actsAs: "quiet", conversationId: "c-quiet" }));
+
+    expect(titles(decision)).not.toContain(LANDING_CHECKS_NOTE_TITLE);
 });
 
 // the iq teaching: runtimes with no plugin loader, on a conversation's opening turn

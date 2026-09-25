@@ -224,6 +224,7 @@ export * from "./schemas/webext.js";
 export * from "./schemas/workflows.js";
 export * from "./schemas/workspace/workspace-repos.js";
 export * from "./schemas/workspace/workspace-search.js";
+export * from "./schemas/workspace/mainline.js";
 export * from "./schemas/workspace/workspace-setup.js";
 export * from "./schemas/workspace/workspace-tree.js";
 export * from "./state/arrival.js";

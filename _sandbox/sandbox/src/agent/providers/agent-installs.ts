@@ -443,10 +443,6 @@ const notFoundBinaries = (output: string): string[] => {
     return names;
 };
 
-// The shell's report with no question asked about where the name came from. A check legitimately reaches its tools
-// through a package script, where the command-position guard below would be wrong.
-export const notFoundBinary = (output: string): string | undefined => notFoundBinaries(output)[0];
-
 // The script a shell wrapper carries, or nothing when this invocation is not one; already unquoted off the tokenizer.
 const nestedScript = (words: readonly string[]): string | undefined => {
     if (!SHELLS.has(executableOf(words) ?? "")) {

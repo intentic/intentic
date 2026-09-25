@@ -4,7 +4,6 @@ import { resolveTurnJobs } from "../agent/tools/job-fates.js";
 import { type ChildReportDeps, reportChildTurn } from "../agent/subagents/child-report.js";
 import { childKillNote } from "../agent/subagents/children.js";
 import { conversationProfile } from "../agents/registry/agents-store.js";
-import { startVerifyNudges } from "../agent/verification/verify-nudge.js";
 import { startWatchers } from "../agent/verification/watchers.js";
 import { approvalsExecutorFor } from "../approvals/approvals-executor.js";
 import { createAutomationsScheduler } from "../automations/scheduler.js";
@@ -60,9 +59,6 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
         keepWarm.start();
         shutdown.push(services.events.subscribe("run.settled", (settled) => autoKeepWarm(services, settled)));
     }
-
-    // For runtimes with no SDK Stop hook: the follow-up turn it starts goes through the TurnStarter port.
-    shutdown.push(startVerifyNudges(services));
 
     // Armed, not polled: the deadline is the item's own scheduledAt on disk, so dropping the timer loses nothing.
     const approvalsExecutor = approvalsExecutorFor(services);

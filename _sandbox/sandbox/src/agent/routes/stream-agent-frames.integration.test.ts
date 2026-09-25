@@ -2,35 +2,25 @@ import type { AgentEvent, UsageWindow } from "@intentic/sandbox-contract";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../composition.js";
 import { collect } from "../../harness/route-client.testing.js";
-import { recordingLogger } from "../../harness/route-fakes.testing.js";
+import { OPENING_CHECKS_PREAMBLE, recordingLogger } from "../../harness/route-fakes.testing.js";
 import { codexConnectedProxy, recordingTurnStores, services, withTranslator } from "../../harness/route-services.testing.js";
 import type { ConversationEvent } from "../../agents/actor/conversation-decide.js";
 import { notedFleet } from "../../testing.js";
 import { recordProviderSuccess } from "../providers/provider-health.js";
 import type { SentTurn } from "../../seams/turn-starter.js";
-import * as verifyNudge from "../verification/verify-nudge.js";
 import type { AgentRequest } from "../providers/agent-request.js";
+import { landingChecksNote } from "../../workspace/deps/mainline-note.js";
 import { streamAgent } from "./agent.routes.js";
 
 // streamAgent's wiring with a scripted runtime: frames, settled stores, the recorded hold; the matrix is classify-failure.test.ts.
 
-// The resume bookkeeping is what the turn tells its conversation, noted as it is sent (`turnServices`); the verify nudge
-// is module state, recorded on its way through to the real one.
+// The resume bookkeeping is what the turn tells its conversation, noted as it is sent (`turnServices`).
 const resumes = [] as { readonly conversationId: string; readonly event: ConversationEvent }[];
-const nudges = [] as Parameters<typeof verifyNudge.nudgeUnverifiedWork>[0][];
 // The events that are resume bookkeeping, among everything else a turn tells its conversation.
 const RESUME_EVENTS: ReadonlySet<string> = new Set(["resume-superseded", "turn-got-somewhere", "turn-held"]);
-jest.mock("../verification/verify-nudge.js", () => ({
-    ...verifyNudge,
-    nudgeUnverifiedWork: async (nudge: Parameters<typeof verifyNudge.nudgeUnverifiedWork>[0]) => {
-        nudges.push(nudge);
-        return undefined;
-    },
-}));
 
 afterEach(() => {
     resumes.length = 0;
-    nudges.length = 0;
     // The outage breaker is one clock per provider for the whole process.
     recordProviderSuccess("claude");
     recordProviderSuccess("codex");
@@ -131,6 +121,7 @@ test("a clean turn streams every frame once, stamps the ones that name an accoun
 
     const stamp = { account: "default", actor: "ada@example.com" };
     expect(frames).toStrictEqual([
+        OPENING_CHECKS_PREAMBLE,
         { kind: "session", sessionId: "s-clean", ...stamp },
         { kind: "delta", text: "Looking." },
         edit,
@@ -223,8 +214,13 @@ test("a clean turn streams every frame once, stamps the ones that name an accoun
         { conversationId: "frames-clean", event: { kind: "turn-got-somewhere" } },
     ]);
     expect(failureLines(lines)).toStrictEqual([]);
-    // Claude runs its own Stop: the daemon neither runs the turn-ending rules nor nudges.
-    expect(nudges).toStrictEqual([]);
+    // Nothing checks the work at its end or sends it back: the card records the check it ran green after its edit.
+    expect(s.agents.entry("frames-clean")?.proof).toStrictEqual({
+        at: expect.any(Number),
+        verification: "verified",
+        check: "pnpm test src/parser.test.ts",
+    });
+    expect(s.conversations.running("frames-clean")).toBe(false);
 });
 
 test("a spent allowance naming its reset is held whole, filed as a limit, and re-measured", async () => {
@@ -246,6 +242,7 @@ test("a spent allowance naming its reset is held whole, filed as a limit, and re
 
     const stamp = { account: "default", actor: "ada@example.com" };
     expect(frames).toStrictEqual([
+        OPENING_CHECKS_PREAMBLE,
         { kind: "session", sessionId: "s-limit", ...stamp },
         { kind: "rate_limit_info", status: "rejected", resetsAt: 1_900_000_000, ...stamp },
         {
@@ -357,6 +354,7 @@ test("an outage goes out as the breaker's retry frame, and remembers the session
     const frames = await collect(streamAgent(s, input, undefined));
 
     expect(frames).toStrictEqual([
+        OPENING_CHECKS_PREAMBLE,
         { kind: "session", sessionId: "s-outage", account: "default" },
         {
             kind: "error",
@@ -408,6 +406,7 @@ test("a refused credential is promised a re-mint and held for it, unless the tur
     const frames = await collect(streamAgent(s, input, undefined));
 
     expect(frames).toStrictEqual([
+        OPENING_CHECKS_PREAMBLE,
         { kind: "session", sessionId: "s-token", account: "default" },
         { kind: "error", code: "claude-token-refused", message: "401 invalid bearer token", autoResume: "scheduled" },
         { kind: "done" },
@@ -460,6 +459,7 @@ test("a turn that ends with nothing to show gets its failure synthesized ahead o
     const sentence =
         "The turn ended with nothing to show for it: 1 tool call and then a stop, no reply and no change to a file. Nothing failed: the session is intact, so carrying on continues from where it stopped.";
     expect(frames).toStrictEqual([
+        OPENING_CHECKS_PREAMBLE,
         { kind: "tool_call", id: "call-read", name: "Read", category: "read", status: "completed", locations: [{ path: "/work/src/parser.ts" }] },
         { kind: "error", message: sentence, held: { ran: true }, autoResume: "available" },
         { kind: "done" },
@@ -489,6 +489,7 @@ test("a stopped turn's error frames never reach the stream, and the ledger calls
     const frames = await collect(streamAgent(s, { prompt: "go", conversationId: "frames-cancel", byPerson: true }, controller.signal));
 
     expect(frames).toStrictEqual([
+        OPENING_CHECKS_PREAMBLE,
         { kind: "session", sessionId: "s-cancel", account: "default" },
         { kind: "delta", text: "working" },
         { kind: "done" },
@@ -502,7 +503,7 @@ test("a stopped turn's error frames never reach the stream, and the ledger calls
     ]);
 });
 
-test("a runtime with no Stop hook gets the daemon's: routed readings re-measured, the cache clock dropped, the nudge asked", async () => {
+test("a routed runtime's readings are re-measured, the cache clock dropped, and what it proved filed on its card", async () => {
     const input: SentTurn = { prompt: "carry on", conversationId: "frames-codex", agent: "codex", byPerson: true };
     const codex = scripted([
         { kind: "session", sessionId: "thread-1" },
@@ -519,8 +520,8 @@ test("a runtime with no Stop hook gets the daemon's: routed readings re-measured
 
     const stamp = { account: "codex-subscription" };
     expect(frames).toStrictEqual([
-        // Planning's own note, disclosed before the runtime says anything.
-        { kind: "preamble", notes: [{ title: "Spawning child agents", text: expect.any(String) }] },
+        // Planning's own notes, disclosed before the runtime says anything: how to spawn, and what runs after it lands.
+        { kind: "preamble", notes: [{ title: "Spawning child agents", text: expect.any(String) }, landingChecksNote([], false)] },
         { kind: "session", sessionId: "thread-1", ...stamp },
         { kind: "delta", text: "on it" },
         edit,
@@ -537,8 +538,7 @@ test("a runtime with no Stop hook gets the daemon's: routed readings re-measured
         // And the settled turn's files are re-read, since a routed turn never learns which one served it.
         { scope: { providers: ["codex"] }, maxAgeMs: 10_000 },
     ]);
-    expect(nudges.map(({ conversationId, profile, rules, cwd, findings }) => ({ conversationId, profile, rules, cwd, findings }))).toStrictEqual([
-        { conversationId: "frames-codex", profile: { agent: "codex" }, rules: [], cwd: "/work", findings: [] },
-    ]);
-    expect(nudges[0]?.ledger.standing()).toStrictEqual({ state: "unproven", paths: ["/work/src/parser.ts"], check: undefined });
+    // It edited and checked nothing, which its card says; nothing sends it back to prove it, whatever runtime ran it.
+    expect(s.agents.entry("frames-codex")?.proof).toStrictEqual({ at: expect.any(Number), verification: "unproven" });
+    expect(s.conversations.running("frames-codex")).toBe(false);
 });

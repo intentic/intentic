@@ -10,7 +10,7 @@ const PROSE_EXTENSIONS = new Set([".md", ".markdown", ".mdx", ".rst", ".txt", ".
 // Prose even without a prose extension.
 const PROSE_FILENAMES = new Set(["license", "licence", "notice", "authors", "contributors", "changelog", "codeowners"]);
 
-// How much of a failing check's own output rides back with the nudge; enough to act on, not a full re-paste.
+// How much of a failing check's own output a verdict keeps; enough to act on, not a full re-paste.
 const EVIDENCE_DETAIL_MAX = 800;
 
 export type VerificationKind = "test" | "typecheck" | "lint" | "build";
@@ -53,13 +53,11 @@ export interface VerificationStanding {
 export interface VerificationLedger {
     readonly noteEdit: (path: string) => void;
     readonly noteCommand: (command: string, passed: boolean, detail: string) => void;
-    // A turn.ending rule's run: evidence by being the declared check, whatever its command would classify as.
-    readonly noteCheck: (name: string, passed: boolean, detail: string) => void;
     // Undefined ⇒ nothing to ask for: no code was edited, or a passing check followed the last edit.
     readonly verdict: () => VerificationVerdict | undefined;
     // Every code path edited, deduped, newest last, whether or not it has since been proven.
     readonly edited: () => readonly string[];
-    // Where the work stands, for surfaces that report rather than nudge; see VerificationStanding.
+    // Where the work stands, for the card's proof record and the reports that read it; see VerificationStanding.
     readonly standing: () => VerificationStanding;
 }
 
@@ -211,7 +209,6 @@ export const createVerificationLedger = (): VerificationLedger => {
                 note(command, passed, detail);
             }
         },
-        noteCheck: note,
         edited: () => [...new Set(edits.map((edit) => edit.path))],
         verdict: () => {
             const { paths, after } = read();

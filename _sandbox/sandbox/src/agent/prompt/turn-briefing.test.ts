@@ -1,5 +1,5 @@
 import { type Persona, type TurnBriefingNoteId, type TurnNote, TURN_BRIEFING_FIXTURES, TURN_BRIEFING_NOTES } from "@intentic/sandbox-contract";
-import { TURN_ENDING_NOTE_TITLE } from "../../rules/turn-ending-note.js";
+import { LANDING_CHECKS_NOTE_TITLE } from "../../workspace/deps/mainline-note.js";
 import { SETUP_NOTICE_TITLE, STALE_NOTICE_TITLE } from "../../workspace/layout/workspace-setup.js";
 import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
 import { HANDOFF_STATE_NOTE_TITLE } from "./handoff-state.js";
@@ -35,7 +35,9 @@ test("a named id drops its note and leaves every other one standing", () => {
 
     expect(briefing.sends("map")).toBe(false);
     expect(briefing.sends("checks")).toBe(true);
-    expect(briefing.keep(titled(WORKSPACE_MAP_NOTE_TITLE, TURN_ENDING_NOTE_TITLE, HANDOFF_STATE_NOTE_TITLE))).toEqual(titled(TURN_ENDING_NOTE_TITLE));
+    expect(briefing.keep(titled(WORKSPACE_MAP_NOTE_TITLE, LANDING_CHECKS_NOTE_TITLE, HANDOFF_STATE_NOTE_TITLE))).toEqual(
+        titled(LANDING_CHECKS_NOTE_TITLE),
+    );
 });
 
 test("dropping the dependency notice drops both of its wordings, since they are one question", () => {

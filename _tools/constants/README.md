@@ -8,7 +8,7 @@ flowchart LR
     c -->|"index: browser-safe values"| web["Web app · public site"]
     c -->|"index"| daemon["Daemon · platform api · CLIs"]
     c -->|"./node: repoRoot"| scripts["Scripts, configs,<br/>dev servers"]
-    c -->|"plain .mjs tables"| gates["_tools/checks · push gate<br/>daemon's own checks"]
+    c -->|"plain .mjs tables"| gates["_tools/checks · verify scripts<br/>daemon's own checks"]
 ```
 
 - The index has no Node imports, so the web app and the public site bundle the same values the daemon reads.
@@ -17,8 +17,8 @@ flowchart LR
 - `./node` holds `repoRoot` and `packageRoot`, which find the monorepo by walking up to `pnpm-workspace.yaml`
   instead of counting `../..`. The `paths` check refuses counted roots.
 - The `.mjs` modules (`control-bytes`, `contract-shrink`, `assertion-measure`, `mirror-roots`, `test-suites`,
-  `vocabulary`, `ci-infra-steps`) are plain JavaScript with `.d.mts` types, so the checks and the push gate import
-  them by path before any install or build, and the daemon applies the same rule from the same file.
+  `vocabulary`, `ci-infra-steps`) are plain JavaScript with `.d.mts` types, so the checks and the verify scripts
+  import them by path before any install or build, and the daemon applies the same rule from the same file.
 - `WORKSPACE_ROOT` and `HISTORY_ROOT` are defaults only: a running daemon reads its real roots from config.
 
 ## Key files

@@ -1,59 +1,10 @@
 import type { Services } from "../../../composition.js";
-import { commandRuleFindings, touchedRepos, withSyncedNote, workspaceRelative } from "../../../rules/turn-ending.js";
-import { nudgeUnverifiedWork } from "../../verification/verify-nudge.js";
 import type { TurnActivity } from "../frames/frame-effects.js";
-import type { DaemonStopTurn, SettlementPlan } from "./turn-settlement.js";
+import type { SettlementPlan } from "./turn-settlement.js";
 
 // Carries a settlement plan out in the order a turn's exit always has: the resume records first, then the rows and
-// re-reads, each fire-and-forget with its own named failure line. The daemon's Stop alone is awaited, since the land
-// decision reads the verdict its rules record and the follow-up carries what they found.
-
-// Commits a rebase brought under the branch before the daemon runs a Stop's checks itself; 0 when nothing moved.
-const syncForChecks = async (request: DaemonStopTurn["request"]): Promise<number> => {
-    const synced = await request.hooks.resync?.().catch(() => undefined);
-    return synced?.kind === "worktree" ? (synced.sync?.commits ?? 0) : 0;
-};
-
-// What the turn.ending command rules found on a daemon-stopped isolated turn, worded for the model; empty when the
-// turn is not one, is unisolated (the main tree is everyone's), or the rules passed. Their verdict is recorded through
-// `onCheckRun` as it runs, which is what the land decision reads.
-export const daemonStopFindings = async (deps: Pick<Services, "logger">, turn: DaemonStopTurn): Promise<string[]> => {
-    if (turn.conversationId === undefined || !turn.isolated) {
-        return [];
-    }
-    const { request } = turn;
-    try {
-        // The checks read the tree that would land, as the hook path's Stop does.
-        const commits = await syncForChecks(request);
-        // Unread, the rules judge only the paths the turn's own tools edited, so a rule scoped to a shell's edits stays quiet.
-        const changed =
-            request.hooks.changedPaths === undefined
-                ? []
-                : await request.hooks.changedPaths().catch((error: unknown): readonly string[] => {
-                      deps.logger.warn({ err: error, conversationId: turn.conversationId }, "turn-ending checks: the branch's changed paths could not be read");
-                      return [];
-                  });
-        const rules = request.policy.turnEndingRules ?? [];
-        const paths = [...new Set([...turn.edited.map((path) => workspaceRelative(path, turn.cwd)), ...changed])];
-        const findings = await commandRuleFindings(
-            rules,
-            // Same facts the hook path builds at its own Stop, repositories included, or the same rule would mean two
-            // different things depending on which runtime ran the turn.
-            { paths, draw: Math.random(), repos: await touchedRepos(rules, paths, { repos: request.hooks.turnRepos }) },
-            {
-                runCommand: request.hooks.runRuleCommand,
-                onCheckRun: request.hooks.onCheckRun,
-                onFired: request.hooks.onRuleFired,
-                installing: request.hooks.dependencyInstalling,
-                cwd: turn.cwd,
-            },
-        );
-        return withSyncedNote(findings, commits);
-    } catch (error) {
-        deps.logger.warn({ err: error, conversationId: turn.conversationId }, "turn-ending checks: could not run after the turn");
-        return [];
-    }
-};
+// re-reads, each fire-and-forget with its own named failure line. Nothing here runs a check or sends the turn back to
+// work: the model decides when it is done, and its work is checked after it lands (workspace/deps/verify-deps.ts).
 
 // Tells the conversation what the turn's exit leaves the resume pass: a held turn, or proof the run got somewhere.
 const recordResumes = (deps: Pick<Services, "conversations">, { hold }: SettlementPlan): void => {
@@ -64,7 +15,7 @@ const recordResumes = (deps: Pick<Services, "conversations">, { hold }: Settleme
     }
 };
 
-export const performSettlement = async (
+export const performSettlement = (
     deps: Pick<Services, "usage" | "headroom" | "events" | "logger" | "conversations">,
     plan: SettlementPlan,
     turn: {
@@ -73,19 +24,17 @@ export const performSettlement = async (
         // Records the outbound calls whose results never arrived.
         readonly flush: () => void;
     },
-): Promise<void> => {
+): void => {
     recordResumes(deps, plan);
+    // Before the settle that files it: the actor keeps it with the turn's other readings until then.
+    if (plan.proof !== undefined) {
+        deps.conversations.send(plan.proof.conversationId, { kind: "proof-noted", proof: plan.proof.proof });
+    }
     turn.record(plan.completion);
     if (plan.headroomRefresh !== undefined) {
         void deps.headroom.refresh(plan.headroomRefresh);
     }
     void deps.usage.record(plan.usage).catch((error: unknown) => deps.logger.warn({ err: error }, "usage: ledger append failed"));
-    const findings = await daemonStopFindings(deps, plan.daemonStop.findings);
-    if (plan.daemonStop.nudge !== undefined) {
-        void nudgeUnverifiedWork({ ...plan.daemonStop.nudge, findings }).catch((error: unknown) =>
-            deps.logger.warn({ err: error }, "verify nudge: could not be decided"),
-        );
-    }
     turn.flush();
     if (plan.snapshot !== undefined) {
         deps.events.publish("tree.changed", { label: plan.snapshot });

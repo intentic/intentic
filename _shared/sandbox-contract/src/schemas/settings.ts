@@ -13,13 +13,15 @@ export const SystemPromptModeSchema = z.enum(["intentic", "claude", "custom"]);
 export type SystemPromptMode = z.infer<typeof SystemPromptModeSchema>;
 // Excludes "custom": there is nothing to fetch, it's whatever the owner already typed into the settings field.
 export const BuiltinPromptSchema = z.object({ base: z.enum(["intentic", "claude"]) });
-// Rules: "at this moment, if this is true, do this". The owner's rules decide (land, hold, version) and switch the
-// daemon's built-in reviews; every command a moment runs is a repository's own check (`<repo>/.intentic/checks.json`),
-// compiled into this same table by the daemon, so no command lives in settings.
+// Rules: "at this moment, if this is true, do this". The owner's rules decide (land, hold, version); every command a
+// moment runs is a repository's own check (`<repo>/.intentic/checks.json`), compiled into this same table by the daemon,
+// so no command lives in settings. Nothing verifies inside a turn: the whole-tree check runs after work lands and never
+// holds anything (schemas/workspace/mainline.ts).
 export const RuleMomentSchema = z.enum([
     // A command here runs on the just-written file (`{file}` is its path); the cheapest moment to catch a defect.
     "file.edited",
-    // The assistant is about to stop. A rule here can send it back to work, which is the only moment that can.
+    // Retired: the assistant stopping. Nothing runs here any more and nothing sends a turn back to work; the value stays
+    // so settings written before it went still read, and a rule standing here is inert.
     "turn.ending",
     // An agent's turn is over and its delta is sitting on its branch. A rule here decides whether it lands.
     "agent.finished",
@@ -30,7 +32,8 @@ export type RuleMoment = z.infer<typeof RuleMomentSchema>;
 // command: a repository's check; its exit code is the verdict.
 // verdict: allows or holds what is about to happen.
 // builtin: a daemon behaviour that reads a record only the daemon keeps.
-// verify-ui-edits: rendered surfaces a turn changed, against whether it ever looked at one.
+// verify-ui-edits: retired with `turn.ending`, read only so older settings parse; whether a turn looked at the surfaces it
+// changed is recorded on its card instead (AgentSummary.proof), never asked of the model.
 // version-landed: commits what a land brought, in the main tree, under the subject drafted for it, and the tree's own
 // remainder before the next isolated turn starts; the only way a person who never commits keeps every agent seeing
 // the latest tree, since worktrees are cut from HEAD.
@@ -47,8 +50,8 @@ export const RuleActionSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("builtin"), name: RuleBuiltinSchema }),
 ]);
 export type RuleAction = z.infer<typeof RuleActionSchema>;
-// `checks-failed` is a clean turn whose `turn.ending` check went red on the tree about to land; unlike the others, it
-// defaults to HELD unless a rule explicitly allows it.
+// `checks-failed` was a clean turn whose `turn.ending` check went red. Nothing produces it now that no check runs inside a
+// turn, and a check never holds work; it stays so older rules naming it still read.
 export const RuleOutcomeSchema = z.enum(["clean", "error", "conflict", "checks-failed"]);
 export type RuleOutcome = z.infer<typeof RuleOutcomeSchema>;
 // Every key absent means the rule always matches.
@@ -57,9 +60,10 @@ export const RuleConditionSchema = z.object({
     repo: z.string().min(1).optional(),
     // Globs the change has to touch for the rule to fire. Absent/empty ⇒ any.
     paths: z.array(z.string().min(1)).max(20).optional(),
-    // How the turn ended. Absent/empty ⇒ any, except that `checks-failed` never lands by omission.
+    // How the turn ended. Absent/empty ⇒ any.
     outcome: z.array(RuleOutcomeSchema).optional(),
-    // The fraction of occasions a rule fires on, at moments that draw one (turn.ending); absent ⇒ every occasion.
+    // The fraction of occasions a rule fires on, at a moment that draws one; absent ⇒ every occasion. No moment draws
+    // now that `turn.ending` is retired, so a sampled rule fires every time.
     sample: z.number().gt(0).lt(1).optional(),
 });
 export type RuleCondition = z.infer<typeof RuleConditionSchema>;
@@ -419,14 +423,16 @@ export const SandboxSettingsSchema = z.object({
         ),
     // Worth it since the container is recreated on every update or environment approval — otherwise approving a
     // Dockerfile change costs the run that asked for it.
-    // What happens to breakage found after the work that caused it has left the turn: a land that turns the main tree's own
-    // check red is sent back to the conversation that landed it, and main's CI staying red on one failure gets a fix agent
-    // once pushes go quiet, with a fleet failure re-run instead. Off, both are only reported.
+    // What happens to breakage found after the work that caused it has left the turn. A land that turns the main tree's own
+    // check red waits for the lands queued behind it to be checked too, then goes back to the conversation that landed it
+    // while that one still has it in mind, or to a fresh conversation when nobody can be named or the one named has gone
+    // cold; main's CI staying red on one failure gets a fix agent once pushes go quiet, with a fleet failure re-run instead.
+    // Off, all of it is only reported.
     autoRepair: z
         .boolean()
         .default(true)
         .describe(
-            "Whether breakage found after the work left its turn is repaired without asking: a land that turns the main tree's check red goes back to the conversation that landed it, and main's CI staying red on the same failure gets a fix agent once pushes go quiet. A failure on the CI fleet itself is re-run once instead. Off, both are only reported.",
+            "Whether breakage found after the work left its turn is repaired without asking. A land that turns the main tree's check red is repaired once the work queued behind it has been checked too: by the conversation that landed it while it still has the work in mind, otherwise by a fresh conversation handed the failures and the suspects' changes. Main's CI staying red on the same failure gets a fix agent once pushes go quiet, and a failure on the CI fleet itself is re-run once instead. Off, all of it is only reported.",
         ),
     autoResumeOnRestart: z
         .boolean()
@@ -454,7 +460,7 @@ export const SandboxSettingsSchema = z.object({
             message: "a command belongs in the repository's own .intentic/checks.json, not in settings",
         })
         .describe(
-            "Standing decisions about the sandbox's own work: land or hold finished work, save a version of what landed, ask the assistant to look at an interface it changed. Empty is the default and is exactly the behaviour of a fresh sandbox, because each of those defaults is what no rule matched means at its own moment. A command to run is a repository's own check, declared in its .intentic/checks.json.",
+            "Standing decisions about the sandbox's own work: land or hold finished work, save a version of what landed. Empty is the default and is exactly the behaviour of a fresh sandbox, because each of those defaults is what no rule matched means at its own moment. A command to run is a repository's own check, declared in its .intentic/checks.json.",
         ),
     automationFailureLimit: z
         .number()
@@ -626,9 +632,9 @@ export type SavingsReport = z.infer<typeof SavingsReportSchema>;
 // spelling for the daemon that reads it, the screen that names it and the demo that mimics it.
 export const REPO_CHECKS_FILE = `${STATE_DIR}/checks.json`;
 
-// Named for the occasion as a repository would say it: `edit` is `file.edited`, `turn` is `turn.ending`, and `land` is
-// the daemon's run over the main tree after an install a land caused (rules/repo-checks.ts maps them). A push is gated by
-// the repository's own git pre-push hook, which every push runs, the app's included.
+// Named for the occasion as a repository would say it: `edit` is `file.edited`, and `land` is the daemon's run over the
+// main tree after every land (rules/repo-checks.ts maps them). `turn` is retired: nothing runs when a turn ends any more,
+// and a declaration naming it still reads but runs nothing. No check refuses a land, a commit or a push.
 // `edit` runs on one file (`{file}`) and its output rides back in the edit's own response, so a command declared there is
 // paid per edit and has to take the file.
 export const RepoCheckMomentSchema = z.enum(["edit", "turn", "land"]);
@@ -636,7 +642,7 @@ export type RepoCheckMoment = z.infer<typeof RepoCheckMomentSchema>;
 
 export const RepoCheckSchema = z.object({
     when: RepoCheckMomentSchema.describe(
-        "When to run it: `edit` on each file as it is written (`{file}` is its path), `turn` before the assistant finishes, `land` on the main tree after finished work lands (absent, the package's own verify or test script runs there).",
+        "When to run it: `edit` on each file as it is written (`{file}` is its path), `land` on the main tree after finished work lands (absent, the package's own verify or test script runs there). `turn` is retired and runs nothing: checks no longer run while a conversation works.",
     ),
     run: z.string().min(1).max(500).describe("The command, run in this repository's own directory, so it reads as it would in a terminal there."),
     label: z.string().min(1).max(80).optional().describe("What to call it on screen. Absent names it after the command."),

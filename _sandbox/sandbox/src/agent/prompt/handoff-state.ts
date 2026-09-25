@@ -2,7 +2,7 @@ import type { TodoItem, TurnNote } from "@intentic/sandbox-contract";
 import { plural } from "@intentic/base/format";
 import type { Services } from "../../composition.js";
 import { changedFiles } from "../../git/changes/changes.js";
-import { workspaceRelative } from "../../rules/turn-ending.js";
+import { workspaceRelative } from "../../rules/workspace-relative.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import { readTaskStore, type StoredTask, taskStoreDir } from "../run/task-store.js";
 import type { VerificationStanding } from "../verification/agent-verification.js";
@@ -161,20 +161,19 @@ const repoLine = (reading: RepoReading, withPaths: boolean): string => {
     return `${head}\n  ${shown.join(", ")}${rest > 0 ? `, +${rest} more` : ""}`;
 };
 
-const verificationLine = (standing: VerificationStanding | undefined, failedCheck: string | undefined): string | undefined => {
-    if (standing !== undefined) {
-        switch (standing.state) {
-            case "verified":
-                return `- Verification: passed, \`${standing.check ?? "a check"}\` ran green after the last edit.`;
-            case "failing":
-                return `- Verification: FAILING, \`${standing.check ?? "the last check"}\` was red when the turn stopped. Fix that before anything else.`;
-            case "unproven":
-                return "- Verification: unproven, no check ran after the last edit. Run the workspace's checks on the paths above before building on them.";
-            case "no-code":
-                return undefined;
-        }
+// The live standing when the held turn's ledger is still in hand, else what the card recorded of the last turn that
+// touched code: after a restart the ledger is gone, and the record is the same reading, filed.
+const verificationLine = (standing: Pick<VerificationStanding, "state" | "check"> | undefined): string | undefined => {
+    switch (standing?.state) {
+        case "verified":
+            return `- Verification: passed, \`${standing.check ?? "a check"}\` ran green after the last edit.`;
+        case "failing":
+            return `- Verification: FAILING, \`${standing.check ?? "the last check"}\` was red when the turn stopped. Fix that before anything else.`;
+        case "unproven":
+            return "- Verification: unproven, no check ran after the last edit. Run the workspace's checks on the paths above before building on them.";
+        default:
+            return undefined;
     }
-    return failedCheck === undefined ? undefined : `- Verification: the end-of-turn check \`${failedCheck}\` was still failing when the last turn ended.`;
 };
 
 const stamp = (now: number): string => {
@@ -252,7 +251,8 @@ export const handoffStateNote = async (deps: HandoffStateDeps, state: HandoffSta
     try {
         const [tree, checklist] = await Promise.all([readTree(deps, state), readChecklist(deps, state)]);
         const edited = (state.standing?.paths ?? []).map((path) => workspaceRelative(path, deps.workspace.root));
-        const verification = verificationLine(state.standing, deps.agents.entry(state.conversationId)?.unfinished?.check);
+        const proof = deps.agents.entry(state.conversationId)?.proof;
+        const verification = verificationLine(state.standing ?? (proof === undefined ? undefined : { state: proof.verification, check: proof.check }));
         if (!measured(tree, edited, verification, checklist)) {
             return undefined;
         }

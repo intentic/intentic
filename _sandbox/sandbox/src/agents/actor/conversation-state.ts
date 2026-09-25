@@ -1,8 +1,7 @@
-import type { AgentEvent, AgentJob, AgentSummary, AgentWatch, KeepWarm, TodoItem } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentJob, AgentSummary, AgentWatch, KeepWarm, TodoItem, TurnProof } from "@intentic/sandbox-contract";
 import type { TurnCheckpoint } from "../../agent/checkpoints/turn-checkpoints.js";
 import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
 import type { HeldTurn } from "../../agent/run/turn/turn-resume.js";
-import type { CheckVerdict } from "../../agent/verification/turn-checks.js";
 import type { FailedEnding } from "../registry/agents-store.js";
 import { NO_QUEUE, type TurnQueue } from "./conversation-queue.js";
 
@@ -51,7 +50,7 @@ export interface TurnActivity {
     readonly todo?: string;
 }
 
-// Everything `begin` starts afresh. The settle clears the turn's books (usage, session, failure, check) and leaves the
+// Everything `begin` starts afresh. The settle clears the turn's books (usage, session, failure, proof) and leaves the
 // readings a card keeps showing between turns (activity, context fill, cache deadline, checklist, landing, resuming).
 export interface TurnRuntime {
     // When the last frame arrived; a live card's recency, never a settled one's.
@@ -76,8 +75,8 @@ export interface TurnRuntime {
     // A failure the live turn hit, written whole from one frame, so a later refusal can't leave a stale code or countdown
     // behind from an earlier one; the ending the settle files. Its presence is what "errored" means.
     readonly failure: FailedEnding | undefined;
-    // How the end-of-turn check went, last run wins; spent with the turn, unlike the checklist.
-    readonly check: { readonly label: string; readonly failed: boolean } | undefined;
+    // What the turn showed of its own work, noted as it settles and filed on the card by the settle; spent with the turn.
+    readonly proof: TurnProof | undefined;
     // A recovery the daemon is already running and will re-run on its own; the one ending that survives the settle.
     readonly resuming: boolean;
     // What the card shows of the land lease; `begin` hides it, the next acquisition shows it again.
@@ -120,8 +119,6 @@ export interface ConversationState {
     readonly phase: ConversationPhase;
     readonly turn: TurnRuntime;
     readonly land: LandLease;
-    // The last turn.ending check's verdict, until the land takes it; the last run wins, so a repaired tree passes.
-    readonly verdict: CheckVerdict | undefined;
     readonly resume: ResumeRecords;
     // Whether a person has steered the turn now running: proof somebody is at the composer, read live by the gates that
     // would otherwise refuse an unattended turn's asks. The next turn starts unwatched again.
@@ -130,8 +127,6 @@ export interface ConversationState {
     // A permission granted on a card restored after a restart, taken once by the resumed turn's re-run of the same tool
     // so the gate doesn't ask twice.
     readonly grant: RestoredGrant | undefined;
-    // A proof follow-up is in flight; the next turn's ask consumes it, so a nudge never answers a nudge.
-    readonly nudged: boolean;
     // What the card lists of its background jobs, running first and then how recent ones ended, as background-jobs.ts
     // last published it. No turn resets it: a job ends whenever its command does, as often as not between turns.
     readonly jobs: readonly AgentJob[];
@@ -175,7 +170,7 @@ export const freshRuntime = (): TurnRuntime => ({
     sessionId: undefined,
     usage: NO_USAGE,
     failure: undefined,
-    check: undefined,
+    proof: undefined,
     resuming: false,
     landing: false,
 });
@@ -186,12 +181,10 @@ export const idleConversation = (queue: TurnQueue = NO_QUEUE): ConversationState
     phase: { kind: "idle" },
     turn: freshRuntime(),
     land: { held: 0 },
-    verdict: undefined,
     resume: NO_RESUME,
     steered: false,
     steers: { next: 0, slots: [] },
     grant: undefined,
-    nudged: false,
     jobs: [],
     watches: [],
     loop: undefined,

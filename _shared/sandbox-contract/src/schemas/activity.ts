@@ -20,7 +20,9 @@ export const ActivityEventSchema = z.object({
     // in: message.received, voice_utterance.received, voice_transcript.received
     // out: message.send, reaction.add, messages.read, api.call (unclassified endpoint)
     // system: gateway.login_failed, dispatch.failed, voice.session_started, voice.session_ended, automation.run,
-    // turn.started, turn.plan, turn.error, turn.completed, rule.blocked_push, rule.held_work, rule.continued_turn
+    // turn.started, turn.plan, turn.error, turn.completed, rule.held_work, deps.verify_green, deps.verify_red,
+    // deps.breakage_routed, deps.breakage_fixup, deps.breakage_waiting, deps.breakage_held, deps.breakage_resolved,
+    // deps.breakage_spent; rule.blocked_push and rule.continued_turn are retired and only appear in older logs
     type: z
         .string()
         .describe(

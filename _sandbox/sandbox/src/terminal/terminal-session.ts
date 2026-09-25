@@ -19,9 +19,6 @@ export const capabilityJobSession = (id: string): string => `${JOB_SESSION_PREFI
 // Infra Check flow session: `intentic deploy resolve` and `intentic deploy plan` run here as windows.
 export const INFRA_CHECK_SESSION = `${JOB_SESSION_PREFIX}infra-check`;
 
-// Every conversation's turn checks, one after another; nothing the owner starts by hand may run here and queue behind them.
-export const CHECKS_SESSION = `${JOB_SESSION_PREFIX}checks`;
-
 // The owner's pushes: only another push can queue ahead of one, and only a push can take over its pane afterwards.
 export const PUSH_SESSION = `${JOB_SESSION_PREFIX}push`;
 

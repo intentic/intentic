@@ -135,13 +135,9 @@ const checklistOf = (entry: PersistedAgent, state: ConversationState | undefined
 const cardReadings = (state: ConversationState | undefined): Partial<Pick<ConversationState, "loop" | "workflow" | "watches" | "jobs">> =>
     state ?? {};
 
-// The check's verdict, only when it ran and failed; passed, cancelled, or never run leaves nothing.
-const failedCheck = (flush: SettleFlush): string | undefined => (flush.check?.failed === true ? flush.check.label : undefined);
-
-// The moment of measurement, not of the write: a settle that observed neither the list nor a check learned nothing
-// new, and stamping `now` there would restart the age of an old abandonment.
-const leftAt = (entry: PersistedAgent, flush: SettleFlush, now: number): number =>
-    flush.checklist === undefined && flush.check === undefined ? (entry.unfinished?.at ?? now) : now;
+// The moment of measurement, not of the write: a settle that never observed the list learned nothing new, and stamping
+// `now` there would restart the age of an old abandonment.
+const leftAt = (entry: PersistedAgent, flush: SettleFlush, now: number): number => (flush.checklist === undefined ? (entry.unfinished?.at ?? now) : now);
 
 /* THE STEPS A TURN LEAVES, and why a list it never saw is not always the old list. */
 const stepsLeft = (entry: PersistedAgent, flush: SettleFlush): UnfinishedWork["steps"] => {
@@ -158,11 +154,10 @@ const unfinishedOf = (entry: PersistedAgent, flush: SettleFlush, now: number): U
         return entry.unfinished;
     }
     const steps = stepsLeft(entry, flush);
-    const check = failedCheck(flush);
-    if (steps === undefined && check === undefined) {
+    if (steps === undefined) {
         return undefined;
     }
-    return { at: leftAt(entry, flush, now), ...(steps !== undefined ? { steps } : {}), ...(check !== undefined ? { check } : {}) };
+    return { at: leftAt(entry, flush, now), steps };
 };
 
 // The failure fields, only while the card still reads as `error`; once the standing has moved on, they would describe a
@@ -362,6 +357,8 @@ const settledEntry = (entry: PersistedAgent, flush: SettleFlush, now: number): P
         ...opt("sessionId", flush.sessionId ?? entry.sessionId),
         // The one field here that can be true even of a turn that ended perfectly cleanly.
         ...opt("unfinished", unfinishedOf(entry, flush, now)),
+        // A turn that touched no code brings no proof, and the branch's last record stands.
+        ...opt("proof", flush.proof ?? entry.proof),
         ending: flush.failure ?? (flush.stopped === "stopped" ? { kind: "stopped" } : { kind: "idle" }),
         totals: {
             costUsd: entry.totals.costUsd + flush.usage.costUsd,
@@ -810,6 +807,7 @@ export const createFleet = (
             },
             ...describedBy(entry),
             ...reportedUnfinished(entry, state),
+            ...opt("proof", entry.proof),
             ...reportedFailure(entry.ending, status),
             ...postures(entry.postures),
             ...spentBy(entry.totals, state?.turn.usage ?? NO_USAGE, subagentCountsOf(conversations, entry.id).running),

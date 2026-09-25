@@ -8,9 +8,10 @@ flowchart LR
     admit --> plan["turn-plan<br/>adapter · placement"]
     plan --> run(["runtime adapter<br/>main tree · worktree · runner"])
     run -->|"frames"| feed["transcript<br/>/agent stream"]
-    run --> settle["settle<br/>rules · checks"]
+    run --> settle["settle<br/>land rules · proof"]
     settle --> land["land<br/>patch into /work"]
-    land --> verify["verify-landed<br/>repo check"]
+    land --> verify["verify-deps<br/>land check, in the background"]
+    verify -->|"red"| route["land-breakage<br/>send back or fix-up"]
     settle -->|"domain events"| react["push · chores · history"]
 ```
 

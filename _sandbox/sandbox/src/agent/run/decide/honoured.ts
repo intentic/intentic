@@ -16,7 +16,6 @@ import {
     personaWithheldAccounts,
     unattendedAccountsNote,
 } from "../../../personas/personas.js";
-import { turnEndingNote } from "../../../rules/turn-ending-note.js";
 import { gatedCliEnv, gatedCredentialsNote, gatedSkills } from "../../../secrets/credential-gating.js";
 import { SKILL_CATALOG_NOTE_TITLE } from "../../../store/loaded-skills.js";
 import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
@@ -92,15 +91,8 @@ const workspaceNotes = (
     ];
 };
 
-// What the turn is taught, what it cannot reach and why, and which checks its end will run.
-const turnNotes = (
-    facts: AdmittedTurnFacts,
-    premise: TurnPremise,
-    settings: SandboxSettings,
-    spawn: string | undefined,
-    withheld: readonly CredentialGate[],
-    turnEnding: boolean,
-): TurnNote[] => [
+// What the turn is taught, what it cannot reach and why, and what runs after its work lands.
+const turnNotes = (facts: AdmittedTurnFacts, premise: TurnPremise, spawn: string | undefined, withheld: readonly CredentialGate[]): TurnNote[] => [
     ...(premise.send.iqTeaching && facts.iqTeaching !== undefined ? [{ title: IQ_SEARCH_INSTRUCTION_TITLE, text: facts.iqTeaching.note }] : []),
     // Last of the standing notes and nearest the message, since it answers this message rather than the workspace.
     ...(facts.turnContext !== undefined && "note" in facts.turnContext ? [{ title: TURN_CONTEXT_NOTE_TITLE, text: facts.turnContext.note }] : []),
@@ -109,7 +101,8 @@ const turnNotes = (
     ...[gatedCredentialsNote(withheld)].filter((note) => note !== undefined),
     // The other reason an account can be missing: nobody is at the composer, so the turn acts as no one.
     ...[unattendedAccountsNote(premise.persona, personaWithheldAccounts(facts.installed, premise.persona))].filter((note) => note !== undefined),
-    ...(turnEnding ? [turnEndingNote(settings.rules)].filter((note) => note !== undefined) : []),
+    // Every runtime alike, isolated or not: no runtime runs a check at its end any more, so none is told of one.
+    ...[facts.landingChecksNote].filter((note) => note !== undefined),
 ];
 
 // The posture the route folded into the request, kept only where this runtime's record honours it; anything else
@@ -181,15 +174,7 @@ export const honoured = (
                 // First, when there is one: who the turn acts as belongs ahead of anything about files or tools.
                 ...(placement.userNotes ?? []),
                 ...workspaceNotes(facts, context, capabilities, send, isolated),
-                // The Claude Code loop runs the checks at its own Stop; the daemon runs them for the rest on an isolated turn only.
-                ...turnNotes(
-                    facts,
-                    premise,
-                    settings,
-                    planned.spawn,
-                    access.withheld,
-                    send.turnEnding && (capabilities.runtime === "claude-code" || isolated),
-                ),
+                ...turnNotes(facts, premise, planned.spawn, access.withheld),
             ]),
             systemPromptMode: prompt.mode,
             ...opt("systemPrompt", placement.systemPrompt),

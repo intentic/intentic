@@ -32,10 +32,14 @@ import {
     reviewAction,
     standingChip,
     tileRim,
+    turnInFlight,
     turnWorking,
     unreadHint,
     unregistered,
 } from "../../fleet/agentStatus";
+import CardChecks from "../../mainline/CardChecks.vue";
+import { type CardChecks as CardChecksView, cardChecks } from "../../mainline/landCheck";
+import { injectMainline } from "../../mainline/useMainline";
 import KeepWarmPanel from "../../fleet/KeepWarmPanel.vue";
 // Not an emit: the destination is the same for every host this card has, and the review panel's own ladder sends the
 // user to exactly this place for exactly this refusal.
@@ -285,6 +289,18 @@ const reactionsStrip = useTemplateRef<{ open: (from: HTMLElement) => void }>(`re
 // One wrapping line (stats left, standing/time right) rather than two rows, so a lane fits more cards.
 const summary = computed(() => stats.value || review.value !== undefined || completed.value || dated.value || working.value || reactable.value);
 const loopLine = computed(() => (props.agent.loop === undefined ? undefined : loopMeta(props.agent.loop)));
+// What main's own check made of its latest land and what its last turn showed of its work, off the board's one read.
+// Held while value-equal, so a push about some other card's land redraws none of this one.
+const mainline = injectMainline();
+let heldChecks: { readonly print: string; readonly value: CardChecksView | undefined } = { print: ``, value: undefined };
+const checks = computed(() => {
+    const next = cardChecks(props.agent, mainline?.value, turnInFlight(props.agent));
+    const print = JSON.stringify(next ?? null);
+    if (print !== heldChecks.print) {
+        heldChecks = { print, value: next };
+    }
+    return heldChecks.value;
+});
 // Either mark opens the same question the chat's status bar asks, answered for this card.
 const warmOpen = ref(false);
 const warmAnchor = ref<HTMLElement>();
@@ -646,6 +662,9 @@ const grab = (event: PointerEvent): void => {
                 <Icon name="repeat" :spin="loopLine?.spin" class="shrink-0 text-2xs" />
                 <span class="truncate">{{ loopLine?.text }}</span>
             </p>
+
+            <!-- Checks happen after landing now, never inside the turn, so the card says what they found: main's verdict on its land (and who has a red it caused), and whether its last turn proved or looked at its own work. -->
+            <CardChecks v-if="checks !== undefined" :checks="checks" :quiet="receipt" :class="dense ? 'w-full' : ''" />
 
             <!-- The one board state that's a decision, not a report: the agent redoes the merge in its own worktree, so a wrong answer costs nothing. -->
             <div v-if="resolvable" class="flex min-w-0 flex-col gap-1">
