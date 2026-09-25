@@ -9,7 +9,7 @@ import { useSandboxReadout } from "./sandboxFigures";
 // hold the memory, side by side while the dock is wide. The kinds take whatever width is left and flow into as many
 // columns as fit, so the panel stays about as tall as its three gauges rather than growing a scrollbar. Every figure
 // explains itself on hover, since "load" or "pressure" is a number only a reader who already knows it can read bare. Its
-// heading is the dock's header (AgentsDock.vue).
+// heading is the status bar panel's header (BoardStatusBar.vue).
 
 const t = useT();
 

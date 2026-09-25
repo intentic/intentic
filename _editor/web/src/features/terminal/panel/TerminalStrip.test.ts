@@ -176,6 +176,16 @@ describe(`the context menus`, () => {
         expect(tabs.joinTabs.mock.calls).toEqual([[[`a`, `b`, `c`]]]);
     });
 
+    // VSCode's list behaviour: inside the selection a right-click acts on all of it; outside, it retargets it.
+    it(`retargets a selection a right-click lands outside of, to that one pill`, async () => {
+        const { host } = await stage();
+        await press(pill(host, `b`), `click`, { shiftKey: true });
+        await press(pill(host, `d`), `contextmenu`);
+        expect(menuRows().slice(0, 3)).toEqual([`Split terminal`, `—`, `Rename`]);
+        const marked = [...host.querySelectorAll<HTMLElement>(`[data-term-tab]`)].map((tab) => tab.className.includes(`bg-primary-500/14`));
+        expect(marked).toEqual([false, false, true]);
+    });
+
     it(`opens the strip-wide rows alone on empty bar space`, async () => {
         const { host } = await stage({ order: [shell(`a`), shell(`b`, { activityAt: minutesAgo(30) })], groups: [[`a`], [`b`]] });
         await press(host.firstElementChild!, `contextmenu`);

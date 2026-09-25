@@ -26,8 +26,7 @@ import { chatStrip } from "../../chat/panel/useChat-strip";
 import LaneHeader from "../../../components/LaneHeader.vue";
 import MatchLine from "../../../components/MatchLine.vue";
 import AgentCard from "./cards/AgentCard.vue";
-import AgentsDock from "../dock/AgentsDock.vue";
-import { boardDock } from "../dock/dockState";
+import BoardStatusBar from "../status-bar/BoardStatusBar.vue";
 import { LIVE_METRICS_KEY, useLiveMetrics } from "../metrics/liveMetrics";
 import { provideMainline } from "../mainline/useMainline";
 import HeldWakeCard from "./cards/HeldWakeCard.vue";
@@ -472,7 +471,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
         <!-- The board's status bar: the main line whenever a land has been checked (work lands without waiting for it, so
              this is where its verdict is seen), and the opt-in geek metrics (Settings ▸ Appearance). At the foot, since
              the header is the board's own; a segment's panel docks above it and stays until the reader closes it. -->
-        <AgentsDock :mainline="mainline" :metrics="liveMetrics" :state="boardDock" :label="t(`agents.dock.boardLabel`)" />
+        <BoardStatusBar :mainline="mainline" :metrics="liveMetrics" />
         <!-- Discard is destructive and has no lane of its own, so it only exists while a card is actually being dragged. -->
         <div
             v-if="dragging"

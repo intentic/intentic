@@ -69,7 +69,7 @@ step and the update pre-flight read). These show up in
 the main tree as ordinary uncommitted changes. Then it measures the whole repository, plus what the land itself
 added over the commit it landed on (`land-tiers.mjs`: lint on its files, the plugin rules' additions to them, tidy
 lines, rustfmt, weakened tests left undeclared), and logs a failure that passes when re-run alone as a flake (`flakes.mjs`). The verdict is recorded
-green or red with its failures, and the editor shows it: the Main line segment of the board's status dock and a
+green or red with its failures, and the editor shows it: the Main line segment of the board's status bar and a
 status on each session card.
 
 A red run goes to `agents/land/land-breakage.ts`, which decides the same way every time. It waits for the next check

@@ -4,31 +4,35 @@ import { reloadOnHotUpdate } from "../../app/hotReload";
 import { uuid } from "../../lib/uuid";
 
 // A floating panel (chat, terminal, preview) is a real window at /floating/<panel> (FloatingSection.vue); every window
-// derives `floats`/`here`/`shows` from its heartbeats. Only a hand-back (`gone`) ends a claim at once; any other end,
-// a reload's included, waits out the claim's deadline and its lock. Duplicates resolve oldest-claim-wins.
+// derives `floats`/`here`/`shows` from the claims it hears. A claim is alive while its window holds the claim's Web Lock:
+// the browser drops that lock with the realm (a close, a crash, a kill, a reload), and every other window, queued on
+// the same lock, is granted it at that moment, so nothing polls. A hand-back (`gone`) ends a claim at once; a reload
+// says `unloading` first and keeps the panel's place for a moment, so the panel does not flash back between two realms.
+// Duplicates resolve oldest-claim-wins. Where Web Locks are unavailable (a plain-http origin), the claim beats instead
+// and a silent one expires: the one timer this module keeps.
 
 export type FloatingPanel = `chat` | `terminal` | `preview`;
 
 // Resolved against BASE_URL, not root-absolute: this build can be served under a path prefix.
 const floatingPath = (panel: FloatingPanel): string => `${import.meta.env.BASE_URL}floating/${panel}`;
 
-// STALE_MS is silence after which a running window is gone; a reloading one says so first and holds its place longer.
+// How long a reloading window's place is held for its successor to claim it.
+const RELOAD_HOLD_MS = 3000;
+// How long after its lock drops a claim is kept, so an `unloading` sent in the same breath is still heard as a reload.
+const LOCK_GRACE_MS = 500;
+// Only without Web Locks: how often a claim says it is still there, and how long its silence is taken for a close.
 const HEARTBEAT_MS = 750;
 const STALE_MS = 2500;
-const SWEEP_MS = 500;
-
-// Caps an unloading window's promised return: a first boot that sat on a sign-in is no measure of a reload.
-const MAX_RETURN_MS = 10_000;
 
 // Frames smaller than this are treated as a bad reading (closing/minimized window), not a real size.
 const MIN_FRAME = 240;
 
 // Notes exchanged between floating windows over BroadcastChannel; `here`, `unloading` and `gone` carry state, the rest
-// are requests. `roll` lets a newly loaded window learn current state without waiting for a heartbeat.
+// are requests. `roll` lets a newly loaded window learn current state without waiting for anything.
 export type FloatingNote =
     | { readonly kind: `here`; readonly panel: FloatingPanel; readonly id: string; readonly since: number }
-    // A reload unloads exactly like a close, so this holds the panel's place for `within` ms rather than handing it back.
-    | { readonly kind: `unloading`; readonly panel: FloatingPanel; readonly id: string; readonly within: number }
+    // A reload unloads exactly like a close, so this holds the panel's place rather than handing it back.
+    | { readonly kind: `unloading`; readonly panel: FloatingPanel; readonly id: string }
     // Handed back on purpose (a Dock press, the window's ×, a lost race), while that window was still running.
     | { readonly kind: `gone`; readonly panel: FloatingPanel; readonly id: string }
     | { readonly kind: `dock`; readonly panel: FloatingPanel }
@@ -42,6 +46,11 @@ const post = (note: FloatingNote): void => {
     channel?.postMessage(note);
 };
 
+const locks = (): LockManager | undefined => globalThis.navigator?.locks;
+
+// One Web Lock per claim, named `panel.id`, held by its window for the realm's lifetime; never used as a mutex.
+const lockName = (panel: FloatingPanel, id: string): string => `intentic.floating.${panel}.${id}`;
+
 // Other windows' claims only; a BroadcastChannel never delivers to its own poster, so this window's own claim is
 // `own`. Kept in a plain Map rather than reactive state, since presence changes rarely.
 interface Sighting {
@@ -49,10 +58,12 @@ interface Sighting {
     readonly id: string;
     // When that window's claim began; used to break ties between competing claims for the same panel.
     readonly since: number;
-    // When the claim may be retired, if its lock agrees: STALE_MS past its last beat, or its promised return.
-    readonly until: number;
+    // When the claim is retired unless something renews it; none while its lock says it is alive.
+    readonly until: number | undefined;
     // Its window said it was unloading: the claim only holds the panel's place until a live claim or the deadline.
     readonly unloading: boolean;
+    // Stops waiting on its lock, once the claim ends by some other route.
+    readonly unwatch: () => void;
 }
 
 const sightings = new Map<string, Sighting>();
@@ -76,21 +87,72 @@ const publish = (): void => {
     elsewhere.value = next;
 };
 
-// One Web Lock per claim, named `panel.id` and held by the browser for the realm's lifetime; it catches a throttled or
-// frozen window a heartbeat alone would miss, and never acts as a mutex.
-const lockName = (panel: FloatingPanel, id: string): string => `intentic.floating.${panel}.${id}`;
+const forget = (id: string): void => {
+    sightings.get(id)?.unwatch();
+    sightings.delete(id);
+};
+
+// THE ONE TIMER: armed for the earliest deadline among the claims that have one, and re-armed whenever those change.
+let expiry: ReturnType<typeof setTimeout> | undefined;
+const expire = (): void => {
+    clearTimeout(expiry);
+    expiry = undefined;
+    const now = Date.now();
+    for (const [id, sighting] of sightings) {
+        if (sighting.until !== undefined && sighting.until <= now) {
+            forget(id);
+        }
+    }
+    publish();
+    const next = Math.min(...[...sightings.values()].map((sighting) => sighting.until ?? Number.POSITIVE_INFINITY));
+    if (Number.isFinite(next)) {
+        expiry = setTimeout(expire, Math.max(0, next - now));
+    }
+};
+
+const setDeadline = (id: string, until: number | undefined, change: Partial<Pick<Sighting, `unloading`>> = {}): void => {
+    const sighting = sightings.get(id);
+    if (sighting !== undefined) {
+        sightings.set(id, { ...sighting, ...change, until });
+        expire();
+    }
+};
+
+/**
+ * Queues on a claim's lock: granted only once its window lets go, which is the moment that window is gone. Resolves
+ * nothing and holds the lock no longer than it takes to say so. Returns the way to stop waiting.
+ */
+const watchLock = (panel: FloatingPanel, id: string): (() => void) => {
+    const manager = locks();
+    if (manager === undefined) {
+        return () => undefined;
+    }
+    const stop = new AbortController();
+    void manager
+        .request(lockName(panel, id), { signal: stop.signal }, () => {
+            const sighting = sightings.get(id);
+            // An unloading claim already has its hold; any other gets a moment for its `unloading` to arrive.
+            if (sighting !== undefined && !sighting.unloading) {
+                setDeadline(id, Date.now() + LOCK_GRACE_MS);
+            }
+        })
+        // Aborted (the claim ended some other way) or refused: either way there is nothing left to wait for.
+        .catch(() => undefined);
+    return () => stop.abort();
+};
 
 /**
  * Holds the lock for this realm's lifetime and returns a function to release it early, e.g. a route unmounting while
  * the window stays open. No-op if Web Locks is unavailable.
  */
 const holdLiveness = (name: string): (() => void) => {
-    if (globalThis.navigator?.locks === undefined) {
+    const manager = locks();
+    if (manager === undefined) {
         return () => undefined;
     }
     let drop: (() => void) | undefined;
     let dropped = false;
-    void navigator.locks
+    void manager
         .request(
             name,
             () =>
@@ -104,60 +166,12 @@ const holdLiveness = (name: string): (() => void) => {
                     drop = resolve;
                 }),
         )
-        .catch(() => undefined); // If refused, the heartbeat alone carries this window.
+        // silent-catch: refused, the claim beats instead (claimFloating's fallback), which a lockless window does anyway.
+        .catch(() => undefined);
     return () => {
         dropped = true;
         drop?.();
     };
-};
-
-let looking = false;
-let sweep: ReturnType<typeof setInterval> | undefined;
-
-// Expiry must use a fresh lock query; a cached result can predate a browser suspension or a new claim.
-const retireSightings = (heldLocks: ReadonlySet<string>): void => {
-    for (const [id, sighting] of sightings) {
-        if (Date.now() > sighting.until && !heldLocks.has(lockName(sighting.panel, id))) {
-            sightings.delete(id);
-        }
-    }
-    publish();
-    if (sightings.size === 0 && sweep !== undefined) {
-        clearInterval(sweep);
-        sweep = undefined;
-    }
-};
-
-const sweepSightings = (): void => {
-    if (looking) {
-        return;
-    }
-    if (globalThis.navigator?.locks === undefined) {
-        retireSightings(new Set());
-        return;
-    }
-    looking = true;
-    void navigator.locks
-        .query()
-        .then((state) => {
-            retireSightings(new Set((state.held ?? []).flatMap((lock) => (lock.name === undefined ? [] : [lock.name]))));
-        })
-        // Unavailable: fall back to heartbeat alone by clearing held locks.
-        .catch(() => {
-            retireSightings(new Set());
-        })
-        .finally(() => {
-            looking = false;
-        });
-};
-
-// Retires a panel once its heartbeat is stale past STALE_MS and its liveness lock is not held; runs only while
-// something is floating.
-const startSweeping = (): void => {
-    if (sweep !== undefined) {
-        return;
-    }
-    sweep = setInterval(sweepSightings, SWEEP_MS);
 };
 
 // This window's own claim, if any; set when a floating route mounts and cleared when it lets go.
@@ -287,28 +301,28 @@ const centred = (size: { width: number; height: number }): Frame => ({
 export const claimFloating = (panel: FloatingPanel, close: () => void): (() => void) => {
     const id = uuid();
     const since = Date.now();
-    // A reload is a boot, so this realm's own boot (navigation to claim) says how soon a reload of it is back.
-    const within = Math.round(Math.min(Math.max(STALE_MS, 2 * performance.now()), MAX_RETURN_MS));
 
-    // Acquired before the first heartbeat, so the window is never announced without its liveness token.
-    const dropLiveness = holdLiveness(lockName(panel, id));
+    // Acquired before the claim is announced, so any window that queues on it queues behind this one.
+    let dropLiveness = holdLiveness(lockName(panel, id));
 
-    let lastFrame = ``;
-    const beat = (): void => {
-        post({ kind: `here`, panel, id, since });
-        // Position changes fire no event, so the frame is polled on each heartbeat; only saved when it changes.
-        const frame = [window.screenX, window.screenY, window.outerWidth, window.outerHeight].join(`,`);
-        if (frame !== lastFrame) {
-            lastFrame = frame;
-            rememberOwnFrame(panel);
-        }
-    };
-    const timer = setInterval(beat, HEARTBEAT_MS);
+    const announce = (): void => post({ kind: `here`, panel, id, since });
+    // Only without Web Locks: a claim nothing else can see alive has to keep saying so.
+    const timer = locks() === undefined ? setInterval(announce, HEARTBEAT_MS) : undefined;
+    // Position changes fire no event, so the frame is written when it can matter: a resize, and every way out.
+    const remember = (): void => rememberOwnFrame(panel);
 
-    // pagehide is alike for a reload, a close and bfcache (whose pageshow resumes this claim): hold the place, keep the lock.
+    // pagehide is alike for a reload, a close and bfcache: hold the place, say so.
     const unloading = (): void => {
         rememberOwnFrame(panel);
-        post({ kind: `unloading`, panel, id, within });
+        post({ kind: `unloading`, panel, id });
+    };
+    // Back from bfcache as this same realm: the lock may have gone with the freeze, so it is taken again first.
+    const resumed = (event: PageTransitionEvent): void => {
+        if (event.persisted) {
+            dropLiveness();
+            dropLiveness = holdLiveness(lockName(panel, id));
+        }
+        announce();
     };
 
     let released = false;
@@ -321,7 +335,8 @@ export const claimFloating = (panel: FloatingPanel, close: () => void): (() => v
         clearInterval(timer);
         claimants.delete(heard);
         window.removeEventListener(`pagehide`, unloading);
-        window.removeEventListener(`pageshow`, beat);
+        window.removeEventListener(`pageshow`, resumed);
+        window.removeEventListener(`resize`, remember);
         if (own.value?.id === id) {
             own.value = undefined;
         }
@@ -336,7 +351,7 @@ export const claimFloating = (panel: FloatingPanel, close: () => void): (() => v
 
     const heard = (note: FloatingNote): void => {
         if (note.kind === `roll`) {
-            beat();
+            announce();
             return;
         }
         if (note.panel !== panel) {
@@ -359,8 +374,10 @@ export const claimFloating = (panel: FloatingPanel, close: () => void): (() => v
     own.value = { panel, id, handBack };
     claimants.add(heard);
     window.addEventListener(`pagehide`, unloading);
-    window.addEventListener(`pageshow`, beat);
-    beat();
+    window.addEventListener(`pageshow`, resumed);
+    window.addEventListener(`resize`, remember);
+    announce();
+    remember();
     if (getCurrentScope() !== undefined) {
         onScopeDispose(release);
     }
@@ -377,14 +394,14 @@ const endFloat = (panel: FloatingPanel, id: string | undefined): void => {
     let ended = false;
     for (const [other, sighting] of sightings) {
         if (sighting.panel === panel && (other === id || sighting.unloading)) {
-            sightings.delete(other);
+            forget(other);
             ended = true;
         }
     }
     if (!ended) {
         return;
     }
-    publish();
+    expire();
     for (const react of dockedReactions) {
         react(panel);
     }
@@ -396,14 +413,21 @@ const endFloat = (panel: FloatingPanel, id: string | undefined): void => {
  */
 export const receiveFloatingNote = (note: FloatingNote): void => {
     if (note.kind === `here`) {
-        sightings.set(note.id, { panel: note.panel, id: note.id, since: note.since, until: Date.now() + STALE_MS, unloading: false });
-        publish();
-        startSweeping();
+        const known = sightings.get(note.id);
+        // With Web Locks a claim is alive until its lock drops; without, until it goes quiet.
+        const until = locks() === undefined ? Date.now() + STALE_MS : undefined;
+        sightings.set(note.id, {
+            panel: note.panel,
+            id: note.id,
+            since: note.since,
+            until,
+            unloading: false,
+            unwatch: known?.unwatch ?? watchLock(note.panel, note.id),
+        });
+        expire();
     } else if (note.kind === `unloading`) {
-        const sighting = sightings.get(note.id);
-        if (sighting?.panel === note.panel) {
-            sightings.set(note.id, { ...sighting, until: Date.now() + note.within, unloading: true });
-            publish();
+        if (sightings.get(note.id)?.panel === note.panel) {
+            setDeadline(note.id, Date.now() + RELOAD_HOLD_MS, { unloading: true });
         }
     } else if (note.kind === `gone`) {
         endFloat(note.panel, note.id);
@@ -417,7 +441,7 @@ export const receiveFloatingNote = (note: FloatingNote): void => {
 
 channel?.addEventListener(`message`, (event: MessageEvent<FloatingNote>) => receiveFloatingNote(event.data));
 
-// A newly loaded window can't see who's already floating; asking is cheaper than waiting for a heartbeat.
+// A newly loaded window can't see who's already floating, so it asks.
 if (channel !== undefined) {
     post({ kind: `roll` });
 }

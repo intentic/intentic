@@ -400,8 +400,8 @@
             "stopsWhen": "Stops by itself when a turn starts, when the account passes {reserve}% of a limit, or when the next turn's prompt would no longer match.",
             "stop": "Stop keeping warm"
         },
-        "dock": {
-            "boardLabel": "Board status",
+        "statusBar": {
+            "label": "Board status",
             "close": "Close {title}"
         },
         "mainline": {

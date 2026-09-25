@@ -389,8 +389,8 @@
             "stopsWhen": "Se detiene sola cuando empieza un turno, cuando la cuenta supera el {reserve} % de un límite o cuando la indicación del siguiente turno ya no coincidiría.",
             "stop": "Dejar de mantener caliente"
         },
-        "dock": {
-            "boardLabel": "Estado del tablero",
+        "statusBar": {
+            "label": "Estado del tablero",
             "close": "Cerrar {title}"
         },
         "mainline": {

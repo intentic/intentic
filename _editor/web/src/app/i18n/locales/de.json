@@ -384,8 +384,8 @@
             "stopsWhen": "Endet von selbst, wenn ein Zug beginnt, wenn das Konto {reserve} % eines Limits überschreitet oder wenn der Prompt des nächsten Zuges nicht mehr passen würde.",
             "stop": "Nicht mehr warm halten"
         },
-        "dock": {
-            "boardLabel": "Board-Status",
+        "statusBar": {
+            "label": "Board-Status",
             "close": "{title} schließen"
         },
         "mainline": {

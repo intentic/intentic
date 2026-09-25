@@ -9,7 +9,8 @@ import * as desktopOriginal from "../../app/environments/desktop";
 //
 // 1. `here`: a window claims the panel; every other window collapses its place for it.
 // 2. `gone`: that window handed the panel back on purpose; it lands here at once, and visibly.
-// 3. `unloading`, or silence past the deadline: that window may be reloading, so its place is held until it is not.
+// 3. `unloading`: that window may be reloading, so its place is held for a moment. Otherwise a claim ends when its Web Lock
+//    drops, or, where there are no Web Locks, when its beat goes silent.
 // 4. Two `here` claims for the same panel: the older one wins.
 
 // What the floating window does to ITSELF goes through one seam (browser: the DOM; desktop app: a link, desktop.test.ts);
@@ -45,8 +46,8 @@ const size = () => ({ width: 800, height: 600 });
 // The note a floating window beats out; `since` (claim start) is what settles a race between two of them.
 const here = (panel: `chat` | `terminal` | `preview`, id: string, since = 1_000) => ({ kind: `here` as const, panel, id, since });
 
-// What a floating window's pagehide says, for a reload and a close alike; `within` is the return it promises.
-const unloading = (panel: `chat` | `terminal` | `preview`, id: string, within = 2_500) => ({ kind: `unloading` as const, panel, id, within });
+// What a floating window's pagehide says, for a reload and a close alike.
+const unloading = (panel: `chat` | `terminal` | `preview`, id: string) => ({ kind: `unloading` as const, panel, id });
 
 // A surface's dock reactions, held in a scope the way PoppablePanels holds them.
 const watchDocks = (surface: ReturnType<typeof createFloatingSurface>) => {
@@ -56,17 +57,36 @@ const watchDocks = (surface: ReturnType<typeof createFloatingSurface>) => {
     return { docked, stop: () => scope.stop() };
 };
 
-// Web Lock stub: jsdom has no Web Locks, so a test that skips this runs the beat-only path instead.
-let lockedNames: Set<string> | undefined;
+// Web Locks as another window's realm holds them: a request for a held name waits until that window lets go (or the
+// asker gives up), which is how the browser tells every other window that one has gone. jsdom has none, so a test that
+// skips this runs the lockless path, where a claim beats and its silence is what ends it.
+let dropAll: (() => void) | undefined;
 
 const stubLocks = (held: readonly string[]) => {
-    const names = new Set(held);
-    lockedNames = names;
-    Object.defineProperty(navigator, `locks`, {
-        value: { query: () => Promise.resolve({ held: [...names].map((name) => ({ name })), pending: [] }) },
-        configurable: true,
-    });
-    return { drop: (): void => names.clear() };
+    const waiting = new Map<string, (() => void)[]>(held.map((name) => [name, []]));
+    // The module under test only ever waits on a lock (its grant returns nothing) or holds one (its grant is pending).
+    type Granted = () => void | Promise<void>;
+    const request = async (name: string, ...rest: [Granted] | [LockOptions, Granted]): Promise<void> => {
+        const [granted, signal] = rest.length === 1 ? [rest[0], undefined] : [rest[1], rest[0].signal];
+        const queue = waiting.get(name);
+        if (queue === undefined) {
+            return granted();
+        }
+        return new Promise<void>((resolve, reject) => {
+            queue.push(() => void Promise.resolve(granted()).then(resolve));
+            signal?.addEventListener(`abort`, () => reject(new DOMException(`aborted`, `AbortError`)));
+        });
+    };
+    Object.defineProperty(navigator, `locks`, { value: { request }, configurable: true });
+    const drop = (name: string): void => {
+        const queue = waiting.get(name) ?? [];
+        waiting.delete(name);
+        for (const grant of queue) {
+            grant();
+        }
+    };
+    dropAll = () => [...waiting.keys()].forEach(drop);
+    return { drop };
 };
 
 beforeEach(() => {
@@ -77,16 +97,16 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-    // Ends every test with the arrangement empty, like a fresh window. Tokens go first, then the clock runs out fully,
-    // so the module's one sweep interval fully retires and doesn't wedge the next test's.
-    lockedNames?.clear();
+    // Ends every test with the arrangement empty, like a fresh window. Locks go first, then the clock runs out fully,
+    // so the module's one timer has retired every claim before the next test's.
+    dropAll?.();
     await advanceTimersByTimeAsync(10_000);
     jest.useRealTimers();
     unstubAllGlobals();
     jest.restoreAllMocks();
     jest.clearAllMocks();
     Reflect.deleteProperty(navigator, `locks`);
-    lockedNames = undefined;
+    dropAll = undefined;
 });
 
 describe(`a panel nobody floats`, () => {
@@ -151,35 +171,23 @@ describe(`a panel floating in another window`, () => {
         stop();
     });
 
-    it(`takes the panel back quietly, once its promised return has passed, when that window never comes back`, () => {
+    it(`takes the panel back quietly, once its hold has passed, when that window never comes back`, () => {
         const surface = createFloatingSurface(`chat`, size);
         const { docked, stop } = watchDocks(surface);
         receiveFloatingNote(here(`chat`, `w-1`));
         jest.advanceTimersByTime(740);
         receiveFloatingNote(unloading(`chat`, `w-1`));
 
-        // Past the deadline w-1's last beat would have set; its promise, made at the unload, still runs.
-        jest.advanceTimersByTime(2_460);
+        // Past the deadline w-1's last beat would have set; the hold, taken at the unload, still runs.
+        jest.advanceTimersByTime(2_900);
         expect(surface.shows.value).toBe(false);
 
-        jest.advanceTimersByTime(400);
+        jest.advanceTimersByTime(200);
 
         expect(surface.shows.value).toBe(true);
         // A close is not a dock: the panel is back, and nothing moves the reader to it.
         expect(docked).not.toHaveBeenCalled();
         stop();
-    });
-
-    it(`holds the place of a window that boots slowly for as long as it promised`, () => {
-        const surface = createFloatingSurface(`chat`, size);
-        receiveFloatingNote(here(`chat`, `w-1`));
-        receiveFloatingNote(unloading(`chat`, `w-1`, 6_000));
-
-        jest.advanceTimersByTime(5_900);
-        expect(surface.shows.value).toBe(false);
-
-        jest.advanceTimersByTime(600);
-        expect(surface.shows.value).toBe(true);
     });
 
     it(`reports a hand-back as a dock, and only one that brings the panel back here`, () => {
@@ -252,22 +260,29 @@ describe(`a panel floating in another window`, () => {
         expect(surface.floats.value).toBe(true);
         expect(surface.shows.value).toBe(false);
 
-        // When that window really goes, the browser drops the token with it: no beat, no realm, no claim.
-        locks.drop();
-        await advanceTimersByTimeAsync(2_000);
+        // When that window really goes, the browser drops the lock with it, and this window, queued on it, hears so.
+        locks.drop(`intentic.floating.chat.w-1`);
+        await advanceTimersByTimeAsync(600);
 
         expect(surface.shows.value).toBe(true);
     });
 
-    it(`waits for a fresh liveness query before expiring a claim after suspension`, async () => {
+    // The browser can drop a reloading window's lock a moment before its `unloading` arrives; that moment must not read
+    // as a close, or the panel flashes back here between the two realms.
+    it(`hears a reload whose lock dropped before it said it was unloading`, async () => {
         const surface = createFloatingSurface(`chat`, size);
-        stubLocks([`intentic.floating.chat.w-1`]);
+        const locks = stubLocks([`intentic.floating.chat.w-1`]);
         receiveFloatingNote(here(`chat`, `w-1`));
 
-        jest.advanceTimersByTime(4_000);
-        await Promise.resolve();
-
+        locks.drop(`intentic.floating.chat.w-1`);
+        await advanceTimersByTimeAsync(100);
+        receiveFloatingNote(unloading(`chat`, `w-1`));
+        await advanceTimersByTimeAsync(2_000);
         expect(surface.shows.value).toBe(false);
+
+        receiveFloatingNote(here(`chat`, `w-2`, 5_000));
+        await advanceTimersByTimeAsync(5_000);
+        expect([surface.shows.value, floatingOwner(`chat`).value]).toEqual([false, `w-2`]);
     });
 
     it(`raises that window instead of opening a second one`, () => {
@@ -361,6 +376,23 @@ describe(`the floating window itself`, () => {
         expect(letGo).toBe(true);
     });
 
+    // The lock is what every other window watches, so a window holding one has nothing to repeat; one without keeps
+    // saying it is there, since its silence is the only close anyone else can see.
+    it(`says it is there once where it holds a lock, and keeps saying so where it cannot`, async () => {
+        stubLocks([]);
+        const locked = claim(`chat`, jest.fn());
+        await advanceTimersByTimeAsync(5_000);
+        const withLock = posted.filter((note) => note.kind === `here`).length;
+        locked();
+
+        Reflect.deleteProperty(navigator, `locks`);
+        posted.length = 0;
+        const lockless = claim(`terminal`, jest.fn());
+        await advanceTimersByTimeAsync(1_600);
+        expect([withLock, posted.filter((note) => note.kind === `here`).length]).toEqual([1, 3]);
+        lockless();
+    });
+
     // The window's close would unload it, which says nothing final; the hand-back has to be heard before that.
     const closeAfterHandBack = () =>
         jest.fn(() => {
@@ -400,9 +432,7 @@ describe(`the floating window itself`, () => {
     });
 
     // A reload, a close and a trip into bfcache all fire pagehide, and only the last comes back as this same realm.
-    it(`holds its claim through pagehide, saying only that it is unloading and when it would be back`, () => {
-        // Claimed 1.8s after its navigation began; a reload is that same boot again, so twice that is promised.
-        jest.spyOn(performance, `now`).mockReturnValue(1_800);
+    it(`holds its claim through pagehide, saying only that it is unloading`, () => {
         const release = claim(`chat`, jest.fn());
         const [announced] = posted;
         if (announced?.kind !== `here`) {
@@ -411,7 +441,7 @@ describe(`the floating window itself`, () => {
 
         window.dispatchEvent(new Event(`pagehide`));
 
-        expect(posted.filter((note) => note.kind !== `here`)).toEqual([{ kind: `unloading`, panel: `chat`, id: announced.id, within: 3_600 }]);
+        expect(posted.filter((note) => note.kind !== `here`)).toEqual([{ kind: `unloading`, panel: `chat`, id: announced.id }]);
         expect(floatingWindowPanel.value).toBe(`chat`);
         release();
     });

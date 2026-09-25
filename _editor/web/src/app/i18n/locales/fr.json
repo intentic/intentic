@@ -385,8 +385,8 @@
             "stopsWhen": "S'arrête de lui-même quand un tour commence, quand le compte dépasse {reserve} % d'une limite, ou quand la consigne du prochain tour ne correspondrait plus.",
             "stop": "Ne plus garder chaud"
         },
-        "dock": {
-            "boardLabel": "État du tableau",
+        "statusBar": {
+            "label": "État du tableau",
             "close": "Fermer {title}"
         },
         "mainline": {

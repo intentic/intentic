@@ -389,8 +389,8 @@
             "stopsWhen": "Zatrzymuje się samo, gdy zaczyna się tura, gdy konto przekroczy {reserve}% limitu albo gdy prompt następnej tury przestałby pasować.",
             "stop": "Przestań utrzymywać ciepłą"
         },
-        "dock": {
-            "boardLabel": "Stan tablicy",
+        "statusBar": {
+            "label": "Stan tablicy",
             "close": "Zamknij {title}"
         },
         "mainline": {

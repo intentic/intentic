@@ -4,7 +4,7 @@ import { t } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { focusInput } from "@intentic/ui/inline-rename";
-import { clickIntent } from "../../../lib/multiSelect";
+import { clickIntent, useMultiSelect } from "../../../lib/multiSelect";
 import { TERMINAL } from "../../../shell/commands/categories";
 import { commandShortcut, registerCommand, withShortcut } from "../../../shell/commands/useCommands";
 import { KINDS, setTerminalMeta, TERMINAL_COLORS, TERMINAL_ICONS, type TerminalColor, terminalMeta } from "../terminalMeta";
@@ -15,7 +15,6 @@ import { showWorkTerminals } from "../useWorkTerminals";
 import { hasWork, killAsks, killQuestion } from "./killPlan";
 import { panelCommands } from "./panelCommands";
 import { clearedLabel, cycled, iconFor, labelFor, segmentColor, stripIndex, tooltipFor } from "./stripSegments";
-import { groupKey, NO_SELECTION, type SelectionEvent, selects, type StripSelection, stepSelection } from "./stripSelection";
 
 // Every kill goes through `requestKill`, so each route to it (×, middle-click, menu, chord) asks the same question.
 
@@ -36,21 +35,32 @@ const segmentLabel = (name: string): string => labelFor(name, tabByName.value.ge
 // Skeleton of the strip's last-known shape while its list is in flight: unlabelled and inert, capped at six groups.
 const placeholders = computed(() => (tabs.answer.value === `waiting` && groups.value.length === 0 ? tabs.remembered.value.slice(0, 6) : []));
 
-const selection = ref<StripSelection>(NO_SELECTION);
-const select = (event: SelectionEvent): void => {
-    selection.value = stepSelection(selection.value, event);
-};
-const selectedGroups = computed(() => groups.value.filter((group) => selects(selection.value, group)));
+// A group is keyed by its first session. The strip's multi-selection (VSCode's) is the app's one model (useMultiSelect)
+// over those keys; it feeds only the context menu's mass actions, so a plain press, which switches, leaves nothing
+// selected.
+const groupKey = (group: readonly string[]): string => group[0] ?? ``;
+const keys = computed(() => groups.value.map(groupKey));
+const selecting = useMultiSelect(keys);
+const selectedGroups = computed(() => groups.value.filter((group) => selecting.selection.value.has(groupKey(group))));
+const selects = (group: readonly string[]): boolean => selecting.selection.value.has(groupKey(group));
 // Flattened in strip order, so a joined pane reads left to right as the strip did.
 const selectedNames = computed(() => selectedGroups.value.flat());
 const activeGroupIndex = computed(() => groups.value.findIndex((group) => activeName.value !== undefined && group.includes(activeName.value)));
 
 const onSegmentClick = (event: MouseEvent, groupIndex: number, name: string): void => {
     const kind = clickIntent(event);
-    select({ kind, groups: groups.value, at: groupIndex, active: activeGroupIndex.value });
+    const key = keys.value[groupIndex] ?? ``;
     if (kind === `single`) {
+        selecting.clear();
+        selecting.anchor.value = key;
         switchTab(name);
+        return;
     }
+    // A Shift range with nothing pressed yet runs from the group on screen.
+    if (kind === `range` && selecting.anchor.value === null) {
+        selecting.anchor.value = keys.value[activeGroupIndex.value] ?? key;
+    }
+    selecting.select(key, event);
 };
 
 const killable = computed(() => order.value.filter((tab) => !KINDS[tab.kind].logs).map((tab) => tab.name));
@@ -63,7 +73,7 @@ const killPrompt = computed(() => killQuestion(order.value, pendingKill.value ??
 
 const kill = (names: string[]): void => {
     killTabs?.(names);
-    select({ kind: `clear` });
+    selecting.clear();
 };
 const requestKill = (names: string[]): void => {
     if (killTabs === undefined || names.length === 0) {
@@ -136,7 +146,11 @@ const openMenu = (event: MouseEvent, target: { groupIndex: number; name: string 
     menu.value?.show(event);
 };
 const openTabMenu = (event: MouseEvent, groupIndex: number, name: string): void => {
-    select({ kind: `retarget`, groups: groups.value, at: groupIndex });
+    // Inside the selection a right-click acts on all of it; outside, it retargets it (VSCode's list behaviour).
+    const key = keys.value[groupIndex] ?? ``;
+    if (!selecting.selection.value.has(key)) {
+        selecting.selectSingle(key);
+    }
     openMenu(event, { groupIndex, name });
 };
 const onBarContextMenu = (event: MouseEvent): void => {
@@ -187,7 +201,7 @@ const stripItems = computed<MenuItem[]>(() => {
 const joinSelected = (): void => {
     if (selectedGroups.value.length > 1) {
         joinTabs(selectedNames.value);
-        select({ kind: `clear` });
+        selecting.clear();
     }
 };
 
@@ -313,7 +327,7 @@ onBeforeUnmount(() => {
                 class="group flex h-6 shrink-0 cursor-pointer select-none items-center rounded-md transition-colors"
                 :class="[
                     vertical ? 'w-full min-w-0' : '',
-                    selects(selection, group)
+                    selects(group)
                         ? 'bg-primary-500/14 text-content'
                         : gi === activeGroupIndex
                           ? 'bg-overlay text-content'

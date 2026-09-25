@@ -40,9 +40,6 @@ const props = defineProps<{
     summary: MainlineSummary;
 }>();
 
-// A conversation was opened from here, so a host that is a sheet can get out of the way.
-const emit = defineEmits<{ opened: [conversationId: string] }>();
-
 const landTitle = useLandTitle();
 
 // How much of a red run and of the record the panel lists before the terminal is the better place to read.
@@ -83,7 +80,6 @@ const minute = computed(() => Math.floor(now.value / 60_000) * 60_000);
 
 const open = (conversationId: string, title?: string): void => {
     openLandConversation(conversationId, title);
-    emit(`opened`, conversationId);
 };
 
 const showLogs = (project: string): void => {
@@ -289,7 +285,6 @@ const eventKey = (event: MainlineEvent): string => (event.kind === `land` ? `lan
                         :debt="debt"
                         :pushes="pushes"
                         :minute="minute"
-                        @opened="(id: string) => emit(`opened`, id)"
                     />
                 </div>
             </section>

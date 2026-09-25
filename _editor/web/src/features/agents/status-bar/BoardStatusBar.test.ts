@@ -3,7 +3,6 @@ import { type MainlinePush, type MainlineRun, type MainlineStatus, type PushFind
 import { IconStub } from "@intentic/ui/testing";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import type { PushFixAttempt } from "../mainline/useMainline";
-import type { DockState } from "./dockState";
 
 const opened = jest.fn((_conversationId: string, _title?: string) => undefined);
 const watched = jest.fn((_session: string) => undefined);
@@ -14,12 +13,13 @@ const handed = jest.fn(async (_project: string, _pick?: unknown, _mode?: unknown
 // The hand-over's live attempt as the roster would report it; none unless a test puts one there.
 const attemptOnIt = ref<PushFixAttempt | undefined>(undefined);
 
-// The seam's dragging is the kit's own suite; here only what the dock draws and when. The run button is its own
+// The seam's dragging is the kit's own suite; here only what the status bar draws and when. The run button is its own
 // suite's too: here it is a button that says its label and runs on a press.
 jest.mock("@intentic/ui", async () => {
     const vue = await import("vue");
     return {
         ResizeSeam: vue.defineComponent({ setup: () => () => vue.h(`div`, { role: `separator` }) }),
+        Meter: vue.defineComponent({ setup: () => () => vue.h(`div`, { "data-meter": `` }) }),
         AgentRunButton: vue.defineComponent({
             props: { label: { type: String, required: true } },
             emits: [`run`],
@@ -33,7 +33,12 @@ jest.mock("@intentic/ui", async () => {
             choose: async () => false,
             clear: () => undefined,
         }),
-        ui: { iconButton: (extra: string) => extra, linkButton: (extra: string) => extra, textAction: (extra: string) => extra },
+        ui: {
+            iconButton: (extra: string) => extra,
+            linkButton: (extra: string) => extra,
+            textAction: (extra: string) => extra,
+            sectionLabelSm: (extra: string) => extra,
+        },
     };
 });
 jest.mock("../mainline/useMainline", () => ({
@@ -53,7 +58,8 @@ jest.mock("../mainline/openLanded", () => ({
 }));
 jest.mock("../../terminal/useWorkTerminals", () => ({ openWorkTerminal: watched }));
 
-const { default: AgentsDock } = await import("./AgentsDock.vue");
+const { default: BoardStatusBar } = await import("./BoardStatusBar.vue");
+const { openPanel, panelHeight } = await import("./statusBarState");
 const { sinceWhen } = await import("../mainline/mainlineView");
 const { showLiveMetrics } = await import("../metrics/liveMetrics");
 const { useNotifications } = await import("../../../shell/notifications/notifications");
@@ -65,27 +71,23 @@ const GIB = 2 ** 30;
 
 let app: App | undefined;
 
-const freshState = (open?: string): DockState => ({ open: ref(open), height: ref(240) });
-
 interface Mounted {
     readonly element: HTMLElement;
-    readonly state: DockState;
 }
 
-const mount = (
-    mainline: MainlineStatus | undefined,
-    options: { metrics?: SandboxMetrics; state?: DockState; onOpened?: (id: string) => void } = {},
-): Mounted => {
+// The bar's memory is the window's (two preferences), so a case that starts with a panel open sets it there.
+const mount = (mainline: MainlineStatus | undefined, options: { metrics?: SandboxMetrics; open?: `mainline` | `metrics` } = {}): Mounted => {
+    openPanel.value = options.open;
+    panelHeight.value = 240;
     const element = document.createElement(`div`);
     document.body.append(element);
-    const state = options.state ?? freshState();
     app = createApp({
-        render: () => h(AgentsDock, { mainline, metrics: options.metrics, state, label: `Board status`, onOpened: options.onOpened }),
+        render: () => h(BoardStatusBar, { mainline, metrics: options.metrics }),
     });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(element);
-    return { element, state };
+    return { element };
 };
 
 // An element's text pieces joined by a space, as they read; the compiled template keeps no whitespace between them.
@@ -329,11 +331,11 @@ describe(`the main line's panel`, () => {
         [...within.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => wordsOf(button) === words)!;
 
     it(`opens docked above the bar onto the road a land travels: queued, checking, result, then the record`, async () => {
-        const { element, state } = mount(redStatus());
+        const { element } = mount(redStatus());
         segment(element).click();
         await nextTick();
 
-        expect(state.open.value).toBe(`mainline`);
+        expect(openPanel.value).toBe(`mainline`);
         expect(segment(element).getAttribute(`aria-expanded`)).toBe(`true`);
         const docked = panel(element)!;
         expect(segment(element).getAttribute(`aria-controls`)).toBe(docked.id);
@@ -347,7 +349,7 @@ describe(`the main line's panel`, () => {
     });
 
     it(`says of a failing project who has it, what it is laid at, then what failed, test names first`, () => {
-        const { element } = mount(redStatus(), { state: freshState(`mainline`) });
+        const { element } = mount(redStatus(), { open: `mainline` });
         const web = section(element, `result`).querySelector<HTMLElement>(`[data-result="web"]`)!;
         expect(wordsOf(web.firstElementChild)).toBe(`web failing since ${sinceWhen(RED.at)} Logs`);
         expect(wordsOf(web.querySelector(`[data-fix]`))).toBe(`Being fixed in Fix main after "Release notes"`);
@@ -362,7 +364,7 @@ describe(`the main line's panel`, () => {
     });
 
     it(`lists every land the running check measures, and says a project with nothing failing passes`, () => {
-        const { element } = mount(runningStatus(), { state: freshState(`mainline`) });
+        const { element } = mount(runningStatus(), { open: `mainline` });
         expect(wordsOf(section(element, `queued`))).toBe(`Queued Nothing queued`);
         expect(wordsOf(section(element, `checking`))).toBe(`Checking web 1m 5s Logs Add Stripe checkout Tighten the pricing copy`);
         expect(wordsOf(section(element, `result`))).toBe(`Result web passing 11m ago`);
@@ -373,11 +375,16 @@ describe(`the main line's panel`, () => {
             const run: MainlineRun = { ...RED, routing };
             return { projects: [{ project: `web`, queued: [], last: run, redSince: run.at }], recent: [run] };
         };
-        const lineOf = (routing: MainlineRun[`routing`]): { words: string; tone: string; detail: string } => {
-            const { element } = mount(redWith(routing), { state: freshState(`mainline`) });
+        interface FixLine {
+            readonly words: string;
+            readonly tone: string;
+            readonly detail: string;
+        }
+        const lineOf = (routing: MainlineRun[`routing`]): FixLine => {
+            const { element } = mount(redWith(routing), { open: `mainline` });
             const web = section(element, `result`).querySelector<HTMLElement>(`[data-result="web"]`)!;
             const fix = web.querySelector<HTMLElement>(`[data-fix]`)!;
-            const line = { words: wordsOf(fix), tone: [`text-muted`, `text-warning`, `text-success`].find((ink) => fix.classList.contains(ink)) ?? ``, detail: wordsOf(fix.nextElementSibling?.tagName === `P` ? fix.nextElementSibling : null) };
+            const line: FixLine = { words: wordsOf(fix), tone: [`text-muted`, `text-warning`, `text-success`].find((ink) => fix.classList.contains(ink)) ?? ``, detail: wordsOf(fix.nextElementSibling?.tagName === `P` ? fix.nextElementSibling : null) };
             app?.unmount();
             app = undefined;
             document.body.innerHTML = ``;
@@ -403,8 +410,7 @@ describe(`the main line's panel`, () => {
 
     // Opened to be watched: nothing but the reader closes it.
     it(`stays open through a click elsewhere, a conversation opened from it, and its logs opened`, async () => {
-        const onOpened = jest.fn((_id: string) => undefined);
-        const { element, state } = mount(redStatus(), { state: freshState(`mainline`), onOpened });
+        const { element } = mount(redStatus(), { open: `mainline` });
 
         document.body.click();
         document.body.dispatchEvent(new PointerEvent(`pointerdown`, { bubbles: true }));
@@ -414,7 +420,6 @@ describe(`the main line's panel`, () => {
         buttonNamed(section(element, `result`), `Release notes`).click();
         await nextTick();
         expect(opened).toHaveBeenCalledWith(`notes`, `Release notes`);
-        expect(onOpened).toHaveBeenCalledWith(`notes`);
         expect(panel(element)).not.toBeNull();
 
         buttonNamed(section(element, `result`), `Fix main after "Release notes"`).click();
@@ -429,7 +434,7 @@ describe(`the main line's panel`, () => {
         await nextTick();
         expect(watched).toHaveBeenCalledWith(`panel-web--verify`);
         expect(panel(element)).not.toBeNull();
-        expect(state.open.value).toBe(`mainline`);
+        expect(openPanel.value).toBe(`mainline`);
     });
 
     // One terminal per project: while it is being checked again, its Logs sit with the running check.
@@ -439,7 +444,7 @@ describe(`the main line's panel`, () => {
             ...status,
             projects: [{ ...status.projects[0]!, queued: [], running: { command: `pnpm verify`, startedAt: NOW - 5_000, lands: [] } }],
         };
-        const { element } = mount(checking, { state: freshState(`mainline`) });
+        const { element } = mount(checking, { open: `mainline` });
         expect(buttonNamed(section(element, `result`), `Logs`)).toBeUndefined();
         buttonNamed(section(element, `checking`), `Logs`).click();
         expect(watched).toHaveBeenCalledWith(`panel-web--verify`);
@@ -447,7 +452,7 @@ describe(`the main line's panel`, () => {
     });
 
     it(`closes on its segment, its ×, or Escape inside it, and hands focus back to the segment`, async () => {
-        const { element, state } = mount(redStatus(), { state: freshState(`mainline`) });
+        const { element } = mount(redStatus(), { open: `mainline` });
 
         segment(element).click();
         await nextTick();
@@ -459,7 +464,7 @@ describe(`the main line's panel`, () => {
         await nextTick();
         expect(panel(element)).toBeNull();
 
-        state.open.value = `mainline`;
+        openPanel.value = `mainline`;
         await nextTick();
         panel(element)!.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Escape`, bubbles: true }));
         await nextTick();
@@ -468,7 +473,7 @@ describe(`the main line's panel`, () => {
         expect(document.activeElement).toBe(segment(element));
     });
     it(`lays out what a push left, the tree's own breakage first, six at a time`, async () => {
-        const { element } = mount(pushedStatus(), { state: freshState(`mainline`) });
+        const { element } = mount(pushedStatus(), { open: `mainline` });
         const block = panel(element)!.querySelector<HTMLElement>(`[data-section="push-intentic"]`)!;
         const rows = (): string[] => [...block.querySelectorAll(`[data-finding]`)].map((row) => wordsOf(row));
 
@@ -495,7 +500,7 @@ describe(`the main line's panel`, () => {
     });
 
     it(`dismisses one finding or all of them, with an Undo that opens exactly those again`, async () => {
-        const { element } = mount(pushedStatus(), { state: freshState(`mainline`) });
+        const { element } = mount(pushedStatus(), { open: `mainline` });
         const block = panel(element)!.querySelector<HTMLElement>(`[data-section="push-intentic"]`)!;
 
         block.querySelector<HTMLButtonElement>(`button[aria-label="Dismiss layout"]`)!.click();
@@ -517,7 +522,7 @@ describe(`the main line's panel`, () => {
     });
 
     it(`measures the project again on a press and says what the measurement found`, async () => {
-        const { element } = mount(pushedStatus(), { state: freshState(`mainline`) });
+        const { element } = mount(pushedStatus(), { open: `mainline` });
         panel(element)!.querySelector<HTMLButtonElement>(`[data-section="push-intentic"] button[aria-label="Measure again"]`)!.click();
         await nextTick();
         await Promise.resolve();
@@ -526,8 +531,7 @@ describe(`the main line's panel`, () => {
     });
 
     it(`hands the findings to an agent only on a press, and opens the conversation it answers with`, async () => {
-        const onOpened = jest.fn((_id: string) => undefined);
-        const { element } = mount(pushedStatus(), { state: freshState(`mainline`), onOpened });
+        const { element } = mount(pushedStatus(), { open: `mainline` });
         expect(handed).not.toHaveBeenCalled();
 
         panel(element)!.querySelector<HTMLButtonElement>(`[data-section="push-intentic"] [data-run]`)!.click();
@@ -535,12 +539,11 @@ describe(`the main line's panel`, () => {
         await Promise.resolve();
         expect(handed).toHaveBeenCalledWith(`intentic`, undefined, undefined);
         expect(opened).toHaveBeenCalledWith(`push-fix-intentic-0abc123`);
-        expect(onOpened).toHaveBeenCalledWith(`push-fix-intentic-0abc123`);
     });
 
     it(`opens the attempt already running when the daemon refuses a second one`, async () => {
         handed.mockRejectedValueOnce(new SandboxHttpError(409, `An agent is already on these findings.`));
-        const { element } = mount(pushedStatus(), { state: freshState(`mainline`) });
+        const { element } = mount(pushedStatus(), { open: `mainline` });
         panel(element)!.querySelector<HTMLButtonElement>(`[data-section="push-intentic"] [data-run]`)!.click();
         await nextTick();
         await Promise.resolve();
@@ -551,7 +554,6 @@ describe(`the main line's panel`, () => {
     });
 
     it(`shows the agent already on them in place of a second press, with the way to its conversation`, async () => {
-        const onOpened = jest.fn((_id: string) => undefined);
         attemptOnIt.value = {
             agent: {
                 id: `push-fix-intentic-0abc123`,
@@ -565,7 +567,7 @@ describe(`the main line's panel`, () => {
             attempt: 1,
             stance: { kind: `working`, ongoing: true, retry: false, label: `Agent working`, hint: `An agent is already working on this failure.` },
         };
-        const { element } = mount(pushedStatus(), { state: freshState(`mainline`), onOpened });
+        const { element } = mount(pushedStatus(), { open: `mainline` });
         const block = panel(element)!.querySelector<HTMLElement>(`[data-section="push-intentic"]`)!;
 
         expect(block.querySelector(`[data-run]`)).toBeNull();
@@ -573,12 +575,11 @@ describe(`the main line's panel`, () => {
         block.querySelector<HTMLButtonElement>(`[data-attempt] button`)!.click();
         await nextTick();
         expect(opened).toHaveBeenCalledWith(`push-fix-intentic-0abc123`);
-        expect(onOpened).toHaveBeenCalledWith(`push-fix-intentic-0abc123`);
     });
 
     it(`keeps pushes in the record beside the lands' checks, by what each left`, () => {
         const status = pushedStatus();
-        const { element } = mount({ ...status, pushes: [PUSHED, { ...CLEAN_PUSH, branch: `docs/verify-push` }] }, { state: freshState(`mainline`) });
+        const { element } = mount({ ...status, pushes: [PUSHED, { ...CLEAN_PUSH, branch: `docs/verify-push` }] }, { open: `mainline` });
         const events = [...panel(element)!.querySelectorAll<HTMLElement>(`[data-section="history"] [data-event]`)];
         // Aged from the minute the panel reads, 40s before NOW: 12m reads as 11, 20m as 19, 300m as 4h. Two projects
         // between the lands and the pushes, so every row names its own. A push row says "push" to a screen reader and
@@ -591,13 +592,13 @@ describe(`the main line's panel`, () => {
     });
 });
 
-describe(`the board's dock`, () => {
+describe(`the board's status bar`, () => {
     afterEach(() => {
         showLiveMetrics.value = false;
     });
 
     it(`carries the geek metrics as a second segment at the bar's far end, and opens one panel at a time`, async () => {
-        const { element, state } = mount(redStatus(), { metrics: metrics() });
+        const { element } = mount(redStatus(), { metrics: metrics() });
         const segments = [...element.querySelectorAll<HTMLElement>(`[data-segment]`)].map((button) => button.dataset[`segment`]);
         expect(segments).toEqual([`mainline`, `metrics`]);
         expect(wordsOf(segment(element, `metrics`))).toContain(`CPU 23%`);
@@ -609,7 +610,17 @@ describe(`the board's dock`, () => {
         // Tabs: the second press swaps the panel rather than adding one beside it.
         expect([...element.querySelectorAll<HTMLElement>(`[data-panel]`)].map((section) => section.dataset[`panel`])).toEqual([`mainline`]);
         expect(segment(element, `metrics`).getAttribute(`aria-expanded`)).toBe(`false`);
-        expect(state.open.value).toBe(`mainline`);
+        expect(openPanel.value).toBe(`mainline`);
+    });
+
+    // One maximum for the seam and the drawing: a height kept from a taller window is drawn at this one's half, never
+    // saved as something the panel cannot show.
+    it(`draws a panel no taller than half the window, and no taller than 720px anywhere`, async () => {
+        const { element } = mount(redStatus(), { open: `mainline` });
+        const drawn = (): string => element.querySelector<HTMLElement>(`[data-status-panel]`)!.style.height;
+        panelHeight.value = 700;
+        await nextTick();
+        expect([window.innerHeight, drawn()]).toEqual([768, `384px`]);
     });
 
     it(`draws metrics alone when main has never been checked`, () => {

@@ -26,8 +26,6 @@ const props = defineProps<{
     minute: number;
 }>();
 
-// A conversation was opened from here, so a host that is a sheet can get out of the way.
-const emit = defineEmits<{ opened: [conversationId: string] }>();
 
 const { say, warn } = useNotifications();
 
@@ -74,7 +72,6 @@ const findingHint = (finding: PushFinding): string =>
 
 const openNamed = (conversationId: string): void => {
     openLandConversation(conversationId);
-    emit(`opened`, conversationId);
 };
 
 // Measured again over the main tree: whatever it no longer prints resolves, and the column redraws from the status.
