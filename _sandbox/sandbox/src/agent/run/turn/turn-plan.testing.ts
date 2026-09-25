@@ -6,7 +6,7 @@ import type { Services } from "../../../composition.js";
 import type { MemoryReading } from "@intentic/constants/memory-room";
 import { createResourceBudget, type ResourceBudget } from "../../../workload/resource-budget.js";
 import { RUNTIME_ADAPTERS } from "../../../runtimes/runtime-table.js";
-import { testConfig, memoryFleet } from "../../../testing.js";
+import { testConfig, memoryFleet, testTurnMounts } from "../../../testing.js";
 import type { AgentRequest, TurnBase } from "../../providers/agent-request.js";
 import { composeWirePrompt } from "../../prompt/turn-preamble.js";
 import type { TurnContext } from "../../providers/adapter.js";
@@ -110,11 +110,8 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
         hostReach: async () => undefined,
         // Same for the owner's own browsers: none connected, which every planned turn asks about too.
         webextReach: async () => undefined,
-        // Read on every planned turn that mounts a browser stack, to open that turn's routers in this daemon.
-        browserRouters: unstubbed<Services["browserRouters"]>("browserRouters", {
-            open: () => ({ id: "router", url: "http://127.0.0.1:1/mcp/browser/router", token: "test-router-token" }),
-            close: () => undefined,
-        }),
+        // Leased by every planned turn: its browsers, peers and extension cards mount here.
+        ...testTurnMounts(),
         // No translator and no api key: the state both Codex gates refuse from, where most cases here start.
         config: testConfig,
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", { accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }) }),

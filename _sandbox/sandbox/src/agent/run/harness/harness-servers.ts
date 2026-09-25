@@ -2,7 +2,7 @@ import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import { type AgentTurn, type Capability, type CredentialGateKind, profileOf } from "@intentic/sandbox-contract";
 import type { TurnPlacement } from "../../../agents/worktrees/isolation.js";
 import { accountsServer } from "../../../browser/tools/accounts-tools.js";
-import type { BrowserTurnTools } from "../../../browser/tools/browser-tools.js";
+import { ANONYMOUS_BROWSER_SERVER, type BrowserTurnTools } from "../../../browser/tools/browser-tools.js";
 import { fetchEmailCode } from "../../../browser/tools/email-codes.js";
 import { secretsServer } from "../../../browser/tools/secrets-tools.js";
 import type { Services } from "../../../composition.js";
@@ -96,7 +96,10 @@ export const turnSecretAccess = (deps: HarnessServersDeps, input: AgentTurn, sig
 // The browser exit for stored secrets: types a named value into a live page's focused field, scoped to exactly the
 // turn's own browser list.
 const browserSecretsServer = (browser: BrowserTurnTools, secrets: SecretAccess): McpServerConfig =>
-    secretsServer({ secrets, accounts: { ...browser.accounts, ...("web" in browser.servers ? { web: "web" } : {}) } });
+    secretsServer({
+        secrets,
+        accounts: { ...browser.accounts, ...(browser.servers.some((server) => server.name === ANONYMOUS_BROWSER_SERVER) ? { web: "web" } : {}) },
+    });
 
 const watchPlacementOf = (isolation: TurnPlacement | undefined): { readonly placement?: WatchPlacement } =>
     isolation === undefined ? {} : { placement: { worktree: isolation.plan.worktree, fenced: isolation.plan.fence !== undefined } };
@@ -141,9 +144,8 @@ export const harnessServers = (
 ): Record<string, McpServerConfig> => {
     const { input, context, persona } = turn;
     return {
-        ...turn.browser.servers,
-        // Mounted only when this turn drives a browser at all.
-        ...(Object.keys(turn.browser.servers).length > 0 ? { secrets: browserSecretsServer(turn.browser, turn.secrets) } : {}),
+        // Mounted only when this turn drives a browser at all; the browsers themselves ride the turn's remote mounts.
+        ...(turn.browser.servers.length > 0 ? { secrets: browserSecretsServer(turn.browser, turn.secrets) } : {}),
         // hashlineEdits swaps the native Edit/Write (disabled in the policy) for hash-anchored file tools.
         ...(turn.hashlineEdits ? { hashline: createHashlineServer(context.localCwd) } : {}),
         // `wait` parks until a child of this turn settles, and `spawn` (same server) starts a full agent on any connected

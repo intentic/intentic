@@ -6,6 +6,8 @@ import { repoRoot } from "@intentic/constants/node";
 import type { ListenerContribution } from "@intentic/extension-manifest";
 import { unstubbed } from "@intentic/testing";
 import { turnDoors } from "./agent/run/turn/turn-doors.js";
+import { createTurnMounts, TURN_MOUNT_BASE } from "./agent/tools/turn-mounts.js";
+import type { BrowserRouter } from "./browser/tools/browser-router.js";
 import type { ConversationActors } from "./agents/actor/conversation-actors.js";
 import { turnJournalRows } from "./agent/run/turn/turn-journal.js";
 import { createFleet, type Fleet, type FleetStore } from "./agents/registry/agents-registry.js";
@@ -278,3 +280,11 @@ export const memoryVerifyStore = (): VerifyStore => {
         },
     });
 };
+
+// A turn's MCP mounts as the daemon composes them, over routers that never start a browser: every planned turn leases
+// its mounts, and no suite built on this calls a browser tool. The real hub, so a suite reads what a turn mounted the
+// way the door would.
+export const testTurnMounts = (): Pick<Services, "turnMounts" | "browserRouters"> => ({
+    turnMounts: createTurnMounts({ baseUrl: () => `http://127.0.0.1:${testConfig.sandbox.port}${TURN_MOUNT_BASE}` }),
+    browserRouters: () => unstubbed<BrowserRouter>("browserRouter", { close: () => undefined }),
+});

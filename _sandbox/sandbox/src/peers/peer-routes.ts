@@ -6,7 +6,8 @@ import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/websocket";
 import type { Context } from "hono";
 import type { z } from "zod";
-import { bearerFrom, tokenEquals } from "../auth/auth.js";
+import type { MountCall } from "../agent/tools/turn-mounts.routes.js";
+import type { RpcMessage } from "../agent/tools/turn-mounts.js";
 import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
@@ -20,9 +21,9 @@ import type { PeerStore } from "./peer-store.js";
 // - /system/<slug>/enroll: redeems the one-time pairing for the durable token
 // - /system/<slug>/pair: owner mints a single-use pairing for one id
 // - /system/<slug>: roster; DELETE /system/<slug>/:id drops enrollment and the live socket
-// - /mcp/<slug>/:id: tunnels JSON-RPC to the peer for MCP-reachable doors
-// A per-boot bridge token, never the peer's own enrollment token, gates the MCP pipe; it forwards JSON-RPC unparsed,
-// with only a pre-call judgement and a post-call seal as interpretation.
+// For an MCP-reachable door, `mcp` is the endpoint the daemon's one MCP door (agent/tools/turn-mounts.routes.ts) hands
+// a message to once the turn's lease holds this peer: never the peer's own enrollment token, and the conversation comes
+// from the lease. It forwards JSON-RPC unparsed, with only a pre-call judgement and a post-call seal as interpretation.
 
 // How long a fresh socket may stay anonymous before the daemon closes it; its only job then is send hello.
 const AUTH_DEADLINE_MS = 10_000;
@@ -38,10 +39,8 @@ export interface PeerRouteDeps<Client extends PeerClient<Facts, Scopes>, Announc
     readonly hub: PeerHub<Client, Announced, Facts, Scopes>;
     // Every enrolled peer plus what the hub knows now; must distinguish never-connected from connected-but-away.
     readonly summaries: () => Promise<readonly unknown[]>;
-    // Per-boot secret the agent's tools carry to the MCP bridge; required exactly when the door has one.
-    readonly bridgeToken?: string;
     // Refusal returns as a tool result, not an error, so the model reads it; the peer's own scopes stay the floor.
-    readonly beforeCall?: (payload: unknown, c: Context) => Promise<{ readonly refusal: string } | undefined>;
+    readonly beforeCall?: (payload: unknown, call: { readonly id: string; readonly conversationId: string | undefined }) => Promise<{ readonly refusal: string } | undefined>;
     // A peer came up and said what it is. Fire-and-forget by contract: the hosts door uses it to put an agent in the
     // rest of that computer, and a connect must not wait on a download.
     readonly onConnected?: (id: string, facts: Facts) => void;
@@ -124,59 +123,25 @@ export const greetPeer = async <Client extends PeerClient<Facts, Scopes>, Facts,
     peer.onConnected?.(peer.id, facts);
 };
 
-interface McpRequest {
-    readonly id?: unknown;
-    readonly method?: unknown;
-    readonly params?: { readonly name?: unknown };
-}
-
-// Who may knock and what they carried. A message with no id is a notification, answered 202 per the transport spec; GET
-// (the optional server→client stream) is refused honestly since nothing is server-initiated.
-const admitMcp = async (
-    c: Context,
-    bridgeToken: string,
-    noun: string,
-    store: Pick<PeerStore<unknown>, "enrolled">,
-): Promise<Response | { readonly id: string; readonly payload: unknown; readonly request: McpRequest }> => {
-    if (!tokenEquals(bearerFrom(c.req.header("authorization")), bridgeToken)) {
-        return c.json({ error: "unauthorized" }, 401);
-    }
-    const id = c.req.param("id") ?? "";
-    if (!(await store.enrolled(id))) {
-        return c.json({ error: `no connected ${noun} named "${id}"` }, 404);
-    }
-    if (c.req.method === "GET") {
-        return c.json({ error: "this endpoint has no server-initiated stream" }, 405);
-    }
-    if (c.req.method === "DELETE") {
-        return c.body(null, 204);
-    }
-    const payload = (await c.req.json().catch(() => undefined)) as unknown;
-    if (payload === undefined) {
-        return c.json({ error: "invalid json" }, 400);
-    }
-    return { id, payload, request: payload as McpRequest };
-};
-
 // Handshake and tools/list are answered here when the peer is offline, so a sleeping device doesn't drop out of the
 // turn entirely; everything else still reaches the peer, arriving there as an "asleep" error.
 const answeredLocally = (
     hub: Pick<PeerHub<never, unknown, unknown, unknown>, "state" | "knownTools">,
     serverName: string,
     id: string,
-    request: McpRequest,
-): Record<string, unknown> | undefined => {
+    request: RpcMessage,
+): RpcMessage | undefined => {
     if (request.method === "initialize") {
         // Last announced build, or "offline" if never seen; must not claim knowledge it doesn't have.
         const version = (hub.state(id).announced as { version?: string } | undefined)?.version;
         return {
             jsonrpc: "2.0",
-            id: request.id,
+            id: request.id ?? null,
             result: { protocolVersion: MCP_PROTOCOL_VERSION, capabilities: { tools: {} }, serverInfo: { name: serverName, version: version ?? "offline" } },
         };
     }
     if (request.method === "tools/list") {
-        return { jsonrpc: "2.0", id: request.id, result: hub.knownTools(id) ?? { tools: [] } };
+        return { jsonrpc: "2.0", id: request.id ?? null, result: hub.knownTools(id) ?? { tools: [] } };
     }
     return undefined;
 };
@@ -187,25 +152,24 @@ const forwarded = async (
     hub: Pick<PeerHub<never, unknown, unknown, unknown>, "mcp" | "rememberTools">,
     sealAnswer: ((id: string, tool: string, answer: unknown) => unknown) | undefined,
     id: string,
-    payload: unknown,
-    request: McpRequest,
-): Promise<unknown> => {
+    request: RpcMessage,
+): Promise<RpcMessage> => {
     try {
-        const answer = await hub.mcp(id, payload);
+        const answer = (await hub.mcp(id, request)) as RpcMessage;
         if (request.method === "tools/list") {
             // The peer is software on someone else's machine, at whatever build they last installed; what it publishes
             // still has to convert for a local model, where one unconvertible schema fails the whole turn's tool set.
             const listed = (answer as { result?: unknown }).result;
             const result = converterReadable(listed);
             hub.rememberTools(id, result);
-            return listed === undefined ? answer : { ...(answer as Record<string, unknown>), result };
+            return listed === undefined ? answer : { ...answer, result };
         }
         if (request.method === "tools/call" && sealAnswer !== undefined) {
-            return sealAnswer(id, typeof request.params?.name === "string" ? request.params.name : "", answer);
+            return sealAnswer(id, typeof request.params?.["name"] === "string" ? request.params["name"] : "", answer) as RpcMessage;
         }
         return answer;
     } catch (error) {
-        return { jsonrpc: "2.0", id: request.id, error: { code: -32000, message: errorMessage(error) } };
+        return { jsonrpc: "2.0", id: request.id ?? null, error: { code: -32000, message: errorMessage(error) } };
     }
 };
 
@@ -293,31 +257,28 @@ export const createPeerRoutes = <
         };
     });
 
-    // Agent's door onto a peer: Streamable HTTP MCP in, the peer's answer out. Present only when the door declares a
-    // bridge; a runner's contract is typed end-to-end and needs no pipe.
+    // Agent's way onto a peer: one JSON-RPC message in, the peer's answer out. A door that declares no bridge (a runner's
+    // contract is typed end-to-end) answers every message with that, though no turn ever mounts one.
     const mcpSpec = door.mcp;
-    const bridgeToken = deps.bridgeToken;
-    const mcp =
-        mcpSpec === undefined || bridgeToken === undefined
-            ? undefined
-            : async (c: Context): Promise<Response> => {
-                  const admitted = await admitMcp(c, bridgeToken, door.noun, store);
-                  if (admitted instanceof Response) {
-                      return admitted;
-                  }
-                  const { id, payload, request } = admitted;
-                  const stopped = deps.beforeCall === undefined ? undefined : await deps.beforeCall(payload, c);
-                  if (stopped !== undefined) {
-                      return c.json({ jsonrpc: "2.0", id: request.id, result: { content: [{ type: "text", text: stopped.refusal }], isError: true } });
-                  }
-                  if (request.id === undefined) {
-                      // Forwarded and forgotten: a notification expects no answer; skipped when the peer is offline.
-                      void hub.mcp(id, payload).catch(() => undefined);
-                      return c.body(null, 202);
-                  }
-                  const local = hub.online(id) ? undefined : answeredLocally(hub, mcpSpec.serverName(id), id, request);
-                  return c.json(local ?? (await forwarded(hub, deps.sealAnswer, id, payload, request)));
-              };
+    const mcp = async (target: { readonly id: string }, message: RpcMessage, call: MountCall): Promise<RpcMessage | undefined> => {
+        const { id } = target;
+        if (mcpSpec === undefined) {
+            return message.id === undefined ? undefined : { jsonrpc: "2.0", id: message.id, error: { code: -32601, message: `a ${door.noun} has no MCP bridge` } };
+        }
+        if (!(await store.enrolled(id))) {
+            return message.id === undefined ? undefined : { jsonrpc: "2.0", id: message.id, error: { code: -32000, message: `no connected ${door.noun} named "${id}"` } };
+        }
+        const stopped = deps.beforeCall === undefined ? undefined : await deps.beforeCall(message, { id, conversationId: call.conversationId });
+        if (stopped !== undefined) {
+            return { jsonrpc: "2.0", id: message.id ?? null, result: { content: [{ type: "text", text: stopped.refusal }], isError: true } };
+        }
+        if (message.id === undefined) {
+            // Forwarded and forgotten: a notification expects no answer; skipped when the peer is offline.
+            void hub.mcp(id, message).catch(() => undefined);
+            return undefined;
+        }
+        return (hub.online(id) ? undefined : answeredLocally(hub, mcpSpec.serverName(id), id, message)) ?? (await forwarded(hub, deps.sealAnswer, id, message));
+    };
 
     return {
         connect,
@@ -366,7 +327,7 @@ export const createPeerRoutes = <
 export type PeerRoutes = ReturnType<typeof createPeerRoutes>;
 
 // Mounted before the oRPC catch-all, like the terminal's, each under its declaration; one mount ensures a door's socket
-// and enroll route share the same slug. A runner has no MCP bridge, so its door declares none.
+// and enroll route share the same slug. The MCP bridge is not among them: it is reached through the daemon's one MCP door.
 export const mountPeerRoutes = (
     serve: ReturnType<typeof rawRouteServer>,
     door: Pick<PeerDoor<{ token: string }, unknown, z.ZodRawShape>, "slug">,
@@ -377,9 +338,4 @@ export const mountPeerRoutes = (
     serve(`GET /system/${door.slug}`, routes.list);
     serve(`DELETE /system/${door.slug}/{id}`, routes.revoke);
     serve(`GET /system/${door.slug}/connect`, routes.connect);
-    if (routes.mcp !== undefined && door.slug !== "runners") {
-        serve(`POST /mcp/${door.slug}/{id}`, routes.mcp);
-        serve(`GET /mcp/${door.slug}/{id}`, routes.mcp);
-        serve(`DELETE /mcp/${door.slug}/{id}`, routes.mcp);
-    }
 };

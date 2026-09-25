@@ -1,35 +1,20 @@
-import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { TurnTools } from "../../agent/providers/agent-request.js";
 import { browserOutputDir } from "../cast/browser-artifacts.js";
 import type { BrowserTurnTools } from "./browser-tools.js";
 
-// The request fields a browser stack rides on, all five or none: an output dir or a port map without the servers they
-// belong to would have the prompt promise tools the turn never mounted. Its own module, not browser-tools.ts, so an
-// arm can compose a request without pulling the Chromium bring-up in behind it.
-// A turn's loop that closes its browser routers when it ends, however it ends: the routers live in the daemon, so
-// nothing else notices the turn is over and kills the browsers they started. Anything else the turn mounted in the
-// daemon rides the same release (its extension cards' mount, turn-tools.ts).
-export const releasingBrowsers = <R>(loop: (request: R) => AsyncGenerator<AgentEvent>, ...held: readonly Pick<BrowserTurnTools, "release">[]) =>
-    async function* (request: R): AsyncGenerator<AgentEvent> {
-        try {
-            yield* loop(request);
-        } finally {
-            for (const mount of held) {
-                mount.release();
-            }
-        }
-    };
-
+// The request fields a browser stack's facts ride on: the output dir only beside a mounted server, and each map only
+// when it holds something, since an output dir or a port map without the servers they belong to would have the prompt
+// promise tools the turn never mounted. The servers themselves ride `remote` with every other mount (turn-tools.ts).
+// Its own module, not browser-tools.ts, so an arm can compose a request without pulling the Chromium bring-up in.
 export const browserFields = (
     root: string,
     browser: BrowserTurnTools,
-): Pick<TurnTools, "sdkServers" | "browserOutputDir" | "browserPorts" | "browserPasskeys" | "browserAccounts"> =>
-    Object.keys(browser.servers).length === 0
+): Pick<TurnTools, "browserOutputDir" | "browserPorts" | "browserPasskeys" | "browserAccounts"> =>
+    browser.servers.length === 0
         ? {}
         : {
-              sdkServers: browser.servers,
               browserOutputDir: browserOutputDir(root),
-              browserPorts: browser.ports,
-              browserPasskeys: browser.passkeys,
-              browserAccounts: browser.accounts,
+              ...(Object.keys(browser.ports).length > 0 ? { browserPorts: browser.ports } : {}),
+              ...(Object.keys(browser.passkeys).length > 0 ? { browserPasskeys: browser.passkeys } : {}),
+              ...(Object.keys(browser.accounts).length > 0 ? { browserAccounts: browser.accounts } : {}),
           };

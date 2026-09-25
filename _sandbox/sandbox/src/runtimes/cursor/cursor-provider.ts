@@ -1,8 +1,7 @@
 import { join } from "node:path";
 import type { AgentEvent, AgentTurn, Capability } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import { browserFields, releasingBrowsers } from "../../browser/tools/browser-fields.js";
-import { browserServersOf } from "../../browser/tools/browser-tools.js";
+import { browserFields } from "../../browser/tools/browser-fields.js";
 import {
     attemptProbe,
     armPlan,
@@ -17,7 +16,8 @@ import type { AgentRequest, CursorCredential } from "../../agent/providers/agent
 import { opt } from "../../opt.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
-import { turnToolsOf } from "../../agent/tools/turn-tools.js";
+import { releasingMounts } from "../../agent/tools/turn-mounts.js";
+import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";
 import type { Services } from "../../composition.js";
 import { mayDelegate, turnPersona } from "../../personas/personas.js";
 import { createCursorAgent } from "./cursor-agent.js";
@@ -62,26 +62,11 @@ export const createCursorSlice = (input: { readonly authRoot: string; readonly l
 
 // What a Cursor turn is planned from: the account store and catalog, the refusal ledger that places an unnamed account,
 // and the seams its MCP tools and browser stack are mounted from.
-export type CursorPlanDeps = Pick<
-    Services,
-    | "browserRouters"
-    | "capabilities"
-    | "config"
-    | "cursorAgent"
-    | "cursorModels"
-    | "cursorStore"
-    | "extensionMcpMounts"
-    | "files"
-    | "hostBridgeToken"
-    | "observedLimits"
-    | "tools"
-    | "webextBridgeToken"
-    | "workspace"
->;
+export type CursorPlanDeps = TurnToolsDeps &
+    Pick<Services, "capabilities" | "config" | "cursorAgent" | "cursorModels" | "cursorStore" | "files" | "observedLimits" | "workspace">;
 
 // Credential rides the request as a key, not an env var: Cursor runs inside this daemon, where an env var is
-// daemon-wide, unlike Codex's or OpenCode's processes. Browser MCP servers come along too, the one foreign runtime that
-// manages them.
+// daemon-wide, unlike Codex's or OpenCode's processes.
 export const planCursorTurn = async (
     services: CursorPlanDeps,
     input: AgentTurn,
@@ -95,27 +80,23 @@ export const planCursorTurn = async (
     }
     const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
     // Never empty, so this always resolves: keeps the pinned model while offered, else the catalog default.
-    const [catalog, browser] = await Promise.all([
-        services.cursorModels.models(),
-        browserServersOf(granted, services.workspace.root, services.browserRouters, persona.powers.browser, input.conversationId),
-    ]);
+    const catalog = await services.cursorModels.models();
     const model = input.model !== undefined && catalog.models.some((entry) => entry.id === input.model) ? input.model : catalog.default;
     // Placed after the model resolves, because which connection can still serve is a question about that model's own
     // pool: Cursor meters some models apart, so one account can be out of everything but the one being asked for.
     const account = await cursorAccountForTurn(services, input.account, model);
     if (account === undefined) {
         // Reachable only if disconnected after the readiness check, or a pinned id never existed; both mean pick one.
-        browser.release();
         return { ok: false, message: "That Cursor account is no longer connected. Pick another one, or connect it again in Sandbox ▸ Agent." };
     }
-    // The same remote MCP set the harness and ACP arms mount, which cursorMcpServers turns into http servers: a machine,
-    // a connected browser or an mcp capability the owner granted must reach a Cursor turn like any other.
-    const mounted = await turnToolsOf(services, granted, input.conversationId);
+    // The same remote MCP set every arm mounts, which cursorMcpServers turns into http servers: a browser, a machine, an
+    // extension card or an mcp capability the owner granted must reach a Cursor turn like any other.
+    const mounted = await turnToolsOf(services, granted, { conversationId: input.conversationId, anonymousBrowser: persona.powers.browser });
     const tools = mounted.tools;
     const request: AgentRequest<CursorCredential> = {
         ...context.base,
         spec: { ...context.base.spec, model, ...opt("steering", context.steering) },
-        tools: { ...context.base.tools, ...(tools.length > 0 ? { remote: tools } : {}), ...browserFields(services.workspace.root, browser) },
+        tools: { ...context.base.tools, ...(tools.length > 0 ? { remote: tools } : {}), ...browserFields(services.workspace.root, mounted.browser) },
         credential: { kind: "cursor-key", apiKey: account.apiKey },
         hooks: {
             ...context.base.hooks,
@@ -125,7 +106,7 @@ export const planCursorTurn = async (
     };
     // Real account id, not a shared marker: usage and rate-limit frames can name which connection paid. Attachments fold
     // into the prompt as a file list; Cursor's read tool takes them off disk, like OpenCode/Pi.
-    return armPlan(releasingBrowsers(services.cursorAgent, browser, mounted), withAttachments(request, context.attachmentPaths), account.id);
+    return armPlan(releasingMounts(services.cursorAgent, mounted), withAttachments(request, context.attachmentPaths), account.id);
 };
 
 // Nothing to probe on PATH, no server to reach: what can be missing is the SDK module (a pack) or a usable credential,

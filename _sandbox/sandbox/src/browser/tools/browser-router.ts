@@ -1,9 +1,9 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { spawnAs } from "../../workload/workload-class.js";
-import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
+import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
 
 // One MCP server standing in for every browser a turn may drive, hosted in this daemon and reached over HTTP, so a
 // session costs no router process of its own. Each tool takes an `account`, resolved through the turn's manifest to an
@@ -11,17 +11,9 @@ import { errorMessage } from "@intentic/base/errors";
 // A sole-owner manifest drops the `account` parameter and routes everything to that one owner: how the credential-free
 // browser gets the same lazy spawn without its tool names growing an argument that has one legal value.
 // The handshake and the tool list are answered from a schema cache, so a turn that never calls a browser tool never
-// pays for one. Backends are this daemon's children and die when the turn that opened the router ends.
-
-// Newline-delimited JSON-RPC 2.0, the only framing either side of the router speaks.
-export interface RpcMessage {
-    readonly jsonrpc?: "2.0";
-    readonly id?: string | number | null;
-    readonly method?: string;
-    readonly params?: Record<string, unknown>;
-    readonly result?: unknown;
-    readonly error?: unknown;
-}
+// pays for one. Backends are this daemon's children and die when the turn that opened the router ends: the router is
+// one of the turn's mounts (agent/tools/turn-mounts.ts), reached at the daemon's one MCP door and closed with the lease.
+// Newline-delimited JSON-RPC 2.0 is the only framing the router speaks to a backend.
 
 // One MCP tool as tools/list describes it; only the input schema is read here.
 export interface McpToolSchema {
@@ -424,62 +416,5 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
     };
 };
 
-// ---- every turn's router, keyed by an unguessable id, reached at one daemon route ---------------------------------
-
-interface Registered {
-    readonly router: BrowserRouter;
-    readonly token: string;
-    readonly openedAt: number;
-}
-
-// A turn that was planned but never run leaves its router behind with nothing to close it; it holds no process
-// until a call spawns one, so a day is only a bound on the map, not on anything running.
-const ABANDONED_MS = 24 * 3_600_000;
-
-export interface BrowserRouterHub {
-    // Registers one turn's router; the URL and bearer are what its MCP server config carries.
-    readonly open: (manifest: RouterManifest) => { readonly id: string; readonly url: string; readonly token: string };
-    readonly find: (id: string, token: string | undefined) => BrowserRouter | undefined;
-    // Ends a turn's browsing: its backends are killed and its id stops answering.
-    readonly close: (id: string) => void;
-    readonly closeAll: () => void;
-}
-
-export const createBrowserRouterHub = (deps: {
-    // Where the route answers, up to and excluding the id: http://127.0.0.1:<port>/mcp/browser
-    readonly baseUrl: () => string;
-    readonly router: RouterDeps;
-    readonly tokenEquals: (given: string, expected: string) => boolean;
-    readonly now?: () => number;
-}): BrowserRouterHub => {
-    const routers = new Map<string, Registered>();
-    const now = deps.now ?? Date.now;
-    const close = (id: string): void => {
-        routers.get(id)?.router.close();
-        routers.delete(id);
-    };
-    return {
-        open: (manifest) => {
-            for (const [id, registered] of routers) {
-                if (registered.openedAt <= now() - ABANDONED_MS) {
-                    close(id);
-                }
-            }
-            const id = randomBytes(12).toString("hex");
-            const token = randomBytes(32).toString("hex");
-            routers.set(id, { router: createBrowserRouter(manifest, deps.router), token, openedAt: now() });
-            return { id, url: `${deps.baseUrl()}/${id}`, token };
-        },
-        find: (id, token) => {
-            const registered = routers.get(id);
-            return registered !== undefined && token !== undefined && deps.tokenEquals(token, registered.token) ? registered.router : undefined;
-        },
-        close,
-        closeAll: () => {
-            // Deleting the entry being visited is safe for a Map iterator.
-            for (const id of routers.keys()) {
-                close(id);
-            }
-        },
-    };
-};
+// Makes one turn's router: the turn's lease owns it from there, and closes it when the turn ends.
+export type BrowserRouterFactory = (manifest: RouterManifest) => BrowserRouter;

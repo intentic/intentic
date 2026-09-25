@@ -15,8 +15,13 @@ export interface AgentCapabilities {
     readonly permissions: "modes" | "plan";
     // Can stop mid-turn and ask the user a multiple-choice question (`question` frames).
     readonly questions: boolean;
-    // Which tools reach the agent, full down to none; never rounded up or down from what a runtime has.
-    readonly mcp: "full" | "tools" | "browser" | "http" | "none";
+    // Which tools reach the agent, full down to none; never rounded up or down from what a runtime has. Every runtime
+    // but `none` takes the turn's whole remote list (TurnTools.remote: the daemon's MCP door's mounts, browsers
+    // included, and the mcp-kind cards), so no granted server reaches one runtime and misses another:
+    // full - that list, the daemon's own in-process servers (ui, secrets, watch, …), and plugin checkouts.
+    // tools - that list, and the daemon's own tools through the runtime's host callbacks; no plugins.
+    // http - that list alone, as http MCP servers.
+    readonly mcp: "full" | "tools" | "http" | "none";
     // Which ways of executing the daemon stands behind here; distinct from `mcp`, which names tools, not execution.
     readonly execution: readonly ExecutionBackend[];
     // Reasoning-effort selection is forwarded to the model.
@@ -68,14 +73,15 @@ export const CLAUDE_CODE: AgentCapabilities = {
     secrets: "masked",
 };
 
-// Codex app-server: item-level events, process-backed MCP, and four seams (steer, a question request, the skills list,
-// the shared mount namespace). Daemon-side servers, plugins, server approvals stay unwired.
+// Codex app-server: item-level events, the turn's remote MCP servers over http, and four seams (steer, a question
+// request, the skills list, the shared mount namespace). The daemon's in-process servers, plugins and server approvals
+// stay unwired.
 export const CODEX: AgentCapabilities = {
     runtime: "codex",
     steering: true,
     permissions: "plan",
     questions: true,
-    mcp: "browser",
+    mcp: "http",
     execution: ["shell"],
     effort: true,
     fastMode: false,
@@ -122,7 +128,7 @@ export const OPENCODE_GEMINI: AgentCapabilities = {
 };
 
 // Any agent speaking the Agent Client Protocol: a documented floor, not the native ceiling. Publishes commands and
-// terminals, takes http MCP tools when offered, but owns its own model, effort and permission posture.
+// terminals, takes the turn's remote MCP servers when it advertises http MCP, but owns its own model, effort and permission posture.
 export const ACP: AgentCapabilities = {
     runtime: "acp",
     steering: false,
@@ -177,7 +183,7 @@ export const CURSOR: AgentCapabilities = {
     permissions: "plan",
     // True since the daemon supplies its own ask tool; Cursor's own can fabricate an answer, so it's disallowed.
     questions: true,
-    // stdio + http/sse MCP servers plus host callbacks; everything but a Claude Code plugin checkout.
+    // The turn's remote MCP servers plus host callbacks; everything but a Claude Code plugin checkout.
     mcp: "tools",
     // The JS backend rides Cursor's custom-tool seam rather than an MCP server, and consults the rulebook in its
     // handler, since the hook file only covers the shell.

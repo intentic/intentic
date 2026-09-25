@@ -183,8 +183,8 @@ describe("conformance: the reserved list is exactly what the daemon mounts", () 
         return keys;
     };
 
-    // The browser router's two names and the JS backend's name enter the mount blocks by constant, not as a literal
-    // key, so they are discovered from their defining modules as text: a rename there fails this scan too.
+    // The browser router's two names (mounted on the turn's lease) and the JS backend's name are constants, not literal
+    // keys in a mount block, so they are discovered from their defining modules as text: a rename there fails this scan too.
     const constantValue = (file: string, name: string): string => {
         const match = new RegExp(String.raw`export const ${name}\s*=\s*"([^"]+)"`).exec(readFileSync(join(SRC, file), "utf8"));
         expect(match, `${name} not found in ${file}`).not.toBeNull();
@@ -194,7 +194,7 @@ describe("conformance: the reserved list is exactly what the daemon mounts", () 
     test("every server the daemon mounts is reserved, and every reserved name is mounted", () => {
         const discovered = new Set([
             ...mountedIn("agent/run/agent.ts", /mcpServers:\s*\{[\s\S]*?\n\s{8}\}/),
-            ...mountedIn("agent/run/harness/harness-servers.ts", /return \{\n\s+\.\.\.turn\.browser\.servers,[\s\S]*?\n {4}\};/),
+            ...mountedIn("agent/run/harness/harness-servers.ts", /(?<=export const harnessServers[\s\S]*?)\n {4}return \{\n[\s\S]*?\n {4}\};/),
             constantValue("browser/tools/browser-tools.ts", "ROUTED_BROWSER_SERVER"),
             constantValue("browser/tools/browser-tools.ts", "ANONYMOUS_BROWSER_SERVER"),
             constantValue("execution/js-tool.ts", "JS_SERVER_NAME"),

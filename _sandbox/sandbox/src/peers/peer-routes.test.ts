@@ -1,6 +1,9 @@
 import { join } from "node:path";
+import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import { z } from "zod";
+import { createTurnMounts } from "../agent/tools/turn-mounts.js";
+import { createTurnMountRoute, type MountEndpoints } from "../agent/tools/turn-mounts.routes.js";
 import type { Services } from "../composition.js";
 import type { PeerDoor } from "./peer.js";
 import type { PeerHub } from "./peer-hub.js";
@@ -16,10 +19,9 @@ const peerFiles =
         consumed: join(root, `${stem}-pair-consumed.json`),
     });
 
-// Peer MCP routes, mounted on a bare Hono; pins the door's decisions (who may knock, what an offline peer looks like,
-// verbatim forwarding) plus its two hooks (judgement before a call, seal on the answer).
-
-const BRIDGE = "bridge-token";
+// A peer's MCP bridge, reached the way a turn reaches it: mounted on a turn's lease and served by the daemon's one MCP
+// door on a bare Hono. Pins the bridge's decisions (what an unknown or offline peer looks like, verbatim forwarding)
+// plus its two hooks (judgement before a call, seal on the answer).
 
 const door: PeerDoor<{ type: "hello"; token: string; version: string }, { version: string }, Record<never, never>> = {
     slug: "hosts",
@@ -44,7 +46,7 @@ const routeFor = (
         enrolled?: boolean;
         online?: boolean;
         knownTools?: unknown;
-        beforeCall?: (payload: unknown) => Promise<{ refusal: string } | undefined>;
+        beforeCall?: (payload: unknown, call: { readonly id: string; readonly conversationId: string | undefined }) => Promise<{ refusal: string } | undefined>;
         sealAnswer?: (id: string, tool: string, answer: unknown) => unknown;
     } = {},
 ) => {
@@ -60,32 +62,31 @@ const routeFor = (
     const routes = createPeerRoutes({ logger: { warn: () => {} } } as unknown as Services, door, {
         store,
         hub,
-        bridgeToken: BRIDGE,
         summaries: async () => [],
         ...(overrides.beforeCall === undefined ? {} : { beforeCall: overrides.beforeCall }),
         ...(overrides.sealAnswer === undefined ? {} : { sealAnswer: overrides.sealAnswer }),
     });
-    if (routes.mcp === undefined) {
-        throw new Error("a door with an mcp spec and a bridge token has a bridge route");
-    }
-    return Object.assign(new Hono().all("/mcp/hosts/:id", routes.mcp), { remembered });
+    const mounts = createTurnMounts({ baseUrl: () => "http://127.0.0.1:1/mcp" });
+    const { token } = mounts.lease("conv-1").open({ name: "laptop", target: { kind: "device", id: "laptop" } });
+    const app = new Hono().all("/mcp/:mount", createTurnMountRoute(mounts, unstubbed<MountEndpoints>("endpoints", { device: routes.mcp })));
+    return Object.assign(app, { remembered, token: token ?? "" });
 };
 
-const post = async (app: Hono, body: unknown, token = BRIDGE): Promise<Response> =>
-    app.request("/mcp/hosts/laptop", {
+const post = async (app: Hono & { token: string }, body: unknown, token = app.token): Promise<Response> =>
+    app.request("/mcp/laptop", {
         method: "POST",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
         body: JSON.stringify(body),
     });
 
-test("a request without the bridge token is refused", async () => {
+test("a request without a live mount bearer is refused", async () => {
     expect((await post(routeFor(), { jsonrpc: "2.0", id: 1, method: "tools/list" }, "wrong")).status).toBe(401);
 });
 
-test("a peer that was never enrolled is a 404 naming the door's noun, not a hanging call", async () => {
+test("a peer that was never enrolled is a readable error naming the door's noun, not a hanging call", async () => {
     const response = await post(routeFor({ enrolled: false }), { jsonrpc: "2.0", id: 1, method: "tools/list" });
-    expect(response.status).toBe(404);
-    expect(await response.json()).toEqual({ error: `no connected device named "laptop"` });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ jsonrpc: "2.0", id: 1, error: { code: -32000, message: `no connected device named "laptop"` } });
 });
 
 test("a request is forwarded verbatim and its answer returned unchanged", async () => {
@@ -206,23 +207,37 @@ test("a tool call's answer goes through the door's seal, under the tool's name; 
 });
 
 test("the optional server→client stream is refused honestly rather than left open", async () => {
-    const response = await routeFor().request("/mcp/hosts/laptop", { method: "GET", headers: { authorization: `Bearer ${BRIDGE}` } });
+    const app = routeFor();
+    const response = await app.request("/mcp/laptop", { method: "GET", headers: { authorization: `Bearer ${app.token}` } });
     expect(response.status).toBe(405);
 });
 
 test("a session teardown is accepted", async () => {
-    const response = await routeFor().request("/mcp/hosts/laptop", { method: "DELETE", headers: { authorization: `Bearer ${BRIDGE}` } });
+    const app = routeFor();
+    const response = await app.request("/mcp/laptop", { method: "DELETE", headers: { authorization: `Bearer ${app.token}` } });
     expect(response.status).toBe(204);
 });
 
-test("a door without a bridge has no mcp route", () => {
+test("a door without a bridge answers every message with that, and reaches for no peer", async () => {
     const { mcp: _bridge, ...silent } = door;
     const routes = createPeerRoutes({ logger: { warn: () => {} } } as unknown as Services, silent, {
         store: {} as PeerStore<Record<never, never>>,
         hub: {} as Hub,
         summaries: async () => [],
     });
-    expect(routes.mcp).toBeUndefined();
+    const call = { name: "laptop", conversationId: undefined, signal: new AbortController().signal };
+    expect(await routes.mcp({ id: "laptop" }, { jsonrpc: "2.0", id: 1, method: "tools/list" }, call)).toEqual({
+        jsonrpc: "2.0",
+        id: 1,
+        error: { code: -32601, message: "a device has no MCP bridge" },
+    });
+});
+
+// The conversation comes from the bearer's lease, never from the request: it is what the host command gate judges in.
+test("the door's judgement is told which machine and which conversation a call came from", async () => {
+    const beforeCall = jest.fn(async () => undefined);
+    await post(routeFor({ beforeCall }), { jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "run_command" } });
+    expect(beforeCall).toHaveBeenCalledWith({ jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "run_command" } }, { id: "laptop", conversationId: "conv-1" });
 });
 
 // The hello frame resolves which peer is knocking; the card decides whether anything still grants it a machine, and its

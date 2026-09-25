@@ -318,8 +318,9 @@ export const cursorCustomTools = (request: AgentRequest, guard: CursorGuard, pus
         : {}),
 });
 
-// stdio servers are the browser stack; environment passes whole, not a delta, since Cursor spawns them itself, not
-// merging over an inherited one. In-process SDK instances are skipped: the gap behind mcp:"tools", not "full".
+// Every remote mount as an http server, the same list every runtime projects. stdio specs among sdkServers pass whole,
+// environment and all, not a delta, since Cursor spawns them itself rather than merging over an inherited one;
+// in-process SDK instances are skipped: the gap behind mcp:"tools", not "full".
 export const cursorMcpServers = (request: AgentRequest): Record<string, CursorMcpServer> => {
     const servers: Record<string, CursorMcpServer> = {};
     for (const tool of request.tools.remote ?? []) {
@@ -330,11 +331,6 @@ export const cursorMcpServers = (request: AgentRequest): Record<string, CursorMc
         };
     }
     for (const [name, server] of Object.entries(request.tools.sdkServers ?? {})) {
-        // The daemon-hosted browser routers.
-        if (server.type === "http") {
-            servers[name] = { type: "http", url: server.url, ...(server.headers !== undefined ? { headers: server.headers } : {}) };
-            continue;
-        }
         if (server.type !== undefined && server.type !== "stdio") {
             continue;
         }

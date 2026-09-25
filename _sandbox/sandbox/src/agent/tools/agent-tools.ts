@@ -9,6 +9,8 @@ export const agentToolSchema = z.object({
     url: z.url(),
     // The scoped bearer sent as `Authorization: Bearer <token>`. Absent for unauthenticated endpoints.
     token: z.string().optional(),
+    // How long a client should wait on one call before giving up, where the runtime takes a per-server bound.
+    timeoutMs: z.number().int().positive().optional(),
 });
 export type AgentTool = z.infer<typeof agentToolSchema>;
 
@@ -31,6 +33,7 @@ export const mcpServersOf = (tools: readonly AgentTool[]): Record<string, McpSer
             type: "http",
             url: tool.url,
             ...(tool.token !== undefined ? { headers: { Authorization: `Bearer ${tool.token}` } } : {}),
+            ...(tool.timeoutMs !== undefined ? { timeout: tool.timeoutMs } : {}),
         };
     }
     return servers;

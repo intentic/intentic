@@ -26,6 +26,7 @@ const appWith = (permissions: readonly string[]) =>
                 status: () => ({ state: "stopped", extensions: [] }),
                 statusOf: () => undefined,
                 proxyTarget: () => undefined,
+                isToolPath: () => false,
                 verifyExtensionToken: (presented) =>
                     presented === "ext-tok"
                         ? { id: "intentic.connectors", permissions }

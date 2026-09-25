@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { type AgentTurn, type Persona, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
-import { conversationAfter, testConfig, memoryFleet } from "../../testing.js";
+import { conversationAfter, testConfig, memoryFleet, testTurnMounts } from "../../testing.js";
 import { workspaceSetup } from "../../workspace/layout/workspace-setup.js";
 import { LANDING_CHECKS_NOTE_TITLE, landingChecksNote } from "../../workspace/deps/mainline-note.js";
 import type { AgentRequest } from "../providers/agent-request.js";
@@ -100,10 +100,8 @@ const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, ov
         // every plan, so every arm needs it.
         hostReach: async () => undefined,
         webextReach: async () => undefined,
-        browserRouters: unstubbed<Services["browserRouters"]>("browserRouters", {
-            open: () => ({ id: "router", url: "http://127.0.0.1:1/mcp/browser/router", token: "test-router-token" }),
-            close: () => undefined,
-        }),
+        // Leased by every planned turn: its browsers, peers and extension cards mount here.
+        ...testTurnMounts(),
         async *codexAgent() {},
         async *grokAgent() {},
         async *agent() {},

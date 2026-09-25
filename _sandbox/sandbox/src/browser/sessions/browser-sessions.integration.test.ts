@@ -48,8 +48,8 @@ test(
         // The turn reserves the port; the call that names the browser is what builds it. Driven here without the router
         // in between, since what is under test is the session the browser becomes, not how a call reaches it.
         const { ports } = await browserServersOf([], root, {
-            open: () => ({ id: "r", url: "http://127.0.0.1:1/mcp/browser/r", token: "t" }),
-            close: () => undefined,
+            routers: () => ({ handle: async () => undefined, close: () => undefined, live: () => [] }),
+            lease: { open: ({ name }) => ({ name, url: `http://127.0.0.1:1/mcp/${name}`, token: "t" }) },
         });
         const port = ports["web"];
         if (port === undefined) {

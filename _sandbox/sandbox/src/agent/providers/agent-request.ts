@@ -117,9 +117,11 @@ export interface TurnPolicy {
 
 // What is mounted: the servers and plugins the model can call, the shell's environment and filters, and the browser stack.
 export interface TurnTools {
-    // Intent-declared internal services plus configured integrations, each a remote MCP server.
+    // Every MCP server the turn reaches over http, the one list every runtime projects: intent-declared internal
+    // services, mcp-kind cards, and the turn's mounts at the daemon's MCP door (browsers, machines, extension cards).
     readonly remote?: readonly AgentTool[];
-    // In-process SDK MCP servers whose handlers run in the daemon itself, merged into mcpServers alongside `remote`.
+    // In-process SDK MCP servers whose handlers run in the daemon itself, merged into mcpServers alongside `remote`;
+    // only the Claude Code loop can reach a live object.
     readonly sdkServers?: Record<string, McpServerConfig>;
     // Accounts tools as a factory rather than a built server, closed over this turn's event stream and abort signal.
     readonly accountsServer?: AccountsServerFactory;

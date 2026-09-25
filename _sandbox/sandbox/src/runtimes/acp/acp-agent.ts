@@ -28,8 +28,9 @@ import { decidePermission, type PermissionPhase } from "./acp-permissions.js";
 // documented floor, not the native ceiling: the agent owns its model settings, MCP tools pass through only when
 // advertised.
 
-// The agent's MCP servers: the daemon's http tools pass through when the agent advertises http MCP support;
-// in-process SDK servers have no ACP projection (accepted loss for ACP turns).
+// The agent's MCP servers: the turn's remote list (every mount at the daemon's MCP door, browsers included, and the
+// mcp-kind cards) passes through when the agent advertises http MCP support; in-process SDK servers have no ACP
+// projection (accepted loss for ACP turns).
 const mcpServersOf = (request: AgentRequest, connection: AcpConnection): McpServer[] => {
     if (connection.capabilities.mcpCapabilities?.http !== true) {
         return [];

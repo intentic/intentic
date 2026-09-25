@@ -48,7 +48,7 @@ import { toolChildrenOf, transcriptPageOf } from "../sessions/agent-transcript.j
 import { spokenLinesOf } from "../sessions/transcript-search.js";
 import { pairings } from "../peers/enrollment.js";
 import { createTerminalRunner } from "../terminal/terminal-run.js";
-import { fleetStoreOver, memoryFleet, noIsolation, testConfig } from "../testing.js";
+import { fleetStoreOver, memoryFleet, noIsolation, testConfig, testTurnMounts } from "../testing.js";
 import { sqliteAgentsStore } from "../agents/registry/agents-store.js";
 import { openConversationsDb } from "../store/conversations-db.js";
 import { conversationUnits } from "../store/conversation-units.js";
@@ -184,6 +184,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             status: () => ({ state: "stopped", extensions: [] }),
             statusOf: () => undefined,
             proxyTarget: () => undefined,
+            isToolPath: () => false,
             verifyExtensionToken: () => undefined,
             grantFor: (extension) => `extension-token-${extension.id}`,
         },
@@ -297,12 +298,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         hostReach: async () => undefined,
         // Same for the owner's own browsers: none connected, asked by every planned turn.
         webextReach: async () => undefined,
-        // Opened by every planned turn whose browser stack mounts; no suite here calls a browser tool through it.
-        browserRouters: unstubbed<Services["browserRouters"]>("browserRouters", {
-            open: () => ({ id: "router", url: "http://127.0.0.1:1/mcp/browser/router", token: "test-router-token" }),
-            close: () => undefined,
-            closeAll: () => undefined,
-        }),
+        // Leased by every planned turn: its browsers, peers and extension cards mount here.
+        ...testTurnMounts(),
         // Both composed exactly as composition.ts composes them, over this harness's own history root and stores, so a
         // suite exercises the real reader and the real queue rather than a second description of them.
         syncFleet: () => enrolledFleet((rest.config ?? testConfig).historyRoot),

@@ -1,8 +1,9 @@
 import { join } from "node:path";
 import type { AgentEvent, AgentTurn, Capability } from "@intentic/sandbox-contract";
 import type { Config } from "../../env.config.js";
-import { browserFields, releasingBrowsers } from "../../browser/tools/browser-fields.js";
-import { browserServersOf } from "../../browser/tools/browser-tools.js";
+import { releasingMounts } from "../../agent/tools/turn-mounts.js";
+import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";
+import { browserFields } from "../../browser/tools/browser-fields.js";
 import {
     attemptProbe,
     armPlan,
@@ -50,11 +51,12 @@ export const createCodexSlice = (input: { readonly config: Config; readonly auth
     };
 };
 
-// What a native Codex turn is planned from: the translator's accounts, the catalog, and the browser bridge.
-export type CodexPlanDeps = Pick<Services, "browserRouters" | "cliProxy" | "codexAgent" | "codexModels" | "config" | "workspace">;
+// What a native Codex turn is planned from: the translator's accounts, the catalog, and the turn's MCP mounts.
+export type CodexPlanDeps = TurnToolsDeps & Pick<Services, "cliProxy" | "codexAgent" | "codexModels" | "config" | "workspace">;
 
-// Native Codex turns ride app-server behind the translator, with process-backed MCP servers from the persona-filtered
-// manifest. Mid-turn steering rides a real queue (`turn/steer`), like Pi's.
+// Native Codex turns ride app-server behind the translator, with the turn's remote MCP servers (browsers, machines,
+// extension cards, mcp cards) as http servers in its per-thread config. Mid-turn steering rides a real queue
+// (`turn/steer`), like Pi's.
 export const planCodexTurn = async (
     services: CodexPlanDeps,
     input: AgentTurn,
@@ -75,17 +77,21 @@ export const planCodexTurn = async (
     }
     // Empty model resolves the catalog default (discovery, never empty); an explicit one rides through as-is.
     const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
-    const [model, browser] = await Promise.all([
+    const [model, mounted] = await Promise.all([
         input.model !== undefined && input.model !== ""
             ? Promise.resolve(input.model)
             : services.codexModels.models().then((catalog) => catalog.default),
         // Plan emulation restarts app-server between review and execution; a fresh process rereads the same manifest.
-        browserServersOf(granted, services.workspace.root, services.browserRouters, persona.powers.browser, input.conversationId),
+        turnToolsOf(services, granted, { conversationId: input.conversationId, anonymousBrowser: persona.powers.browser }),
     ]);
     const request: AgentRequest<CodexCredential> = {
         ...context.base,
         spec: { ...context.base.spec, model, ...opt("steering", context.steering) },
-        tools: { ...context.base.tools, ...browserFields(services.workspace.root, browser) },
+        tools: {
+            ...context.base.tools,
+            ...(mounted.tools.length > 0 ? { remote: mounted.tools } : {}),
+            ...browserFields(services.workspace.root, mounted.browser),
+        },
         // Subscription turns use the translator endpoint with a fixed bearer; the dev path falls to Codex's own key.
         credential: translatorReady
             ? { kind: "codex-endpoint", baseUrl: services.config.translator.url, authToken: services.config.translator.token }
@@ -93,7 +99,7 @@ export const planCodexTurn = async (
     };
     // Attribution key: the shared subscription serving every Codex turn, else undefined for the api-key fallback.
     return armPlan(
-        releasingBrowsers(services.codexAgent, browser),
+        releasingMounts(services.codexAgent, mounted),
         withAttachments(request, context.attachmentPaths),
         translatorReady ? "codex-subscription" : undefined,
     );

@@ -10,8 +10,8 @@ import {
     type TurnContext,
 } from "../../agent/providers/adapter.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
-import { turnToolsOf } from "../../agent/tools/turn-tools.js";
-import { releasingBrowsers } from "../../browser/tools/browser-fields.js";
+import { releasingMounts } from "../../agent/tools/turn-mounts.js";
+import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";
 import type { Services } from "../../composition.js";
 
 // Any provider id outside the native six is an installed `agent`-kind capability served over the Agent Client Protocol.
@@ -19,13 +19,10 @@ import type { Services } from "../../composition.js";
 // catalog, credentials and packs are the capability system's business.
 
 // What the ACP adapter reads: the installed manifest, the daemon's tools it passes through, and the warm connection pool.
-export type AcpAdapterDeps = Pick<
-    Services,
-    "acpAgent" | "capabilities" | "config" | "extensionMcpMounts" | "files" | "hostBridgeToken" | "tools" | "webextBridgeToken" | "workspace"
->;
+export type AcpAdapterDeps = TurnToolsDeps & Pick<Services, "acpAgent" | "capabilities" | "config" | "files" | "workspace">;
 
-// Harness doesn't apply here, the agent is its own loop, and neither do the Claude-only request fields; MCP tools pass
-// through when the agent advertises support.
+// Harness doesn't apply here, the agent is its own loop, and neither do the Claude-only request fields; the turn's MCP
+// servers, browsers included, pass through when the agent advertises http MCP.
 export const planAcpTurn = async (
     services: AcpAdapterDeps,
     input: AgentTurn,
@@ -38,14 +35,21 @@ export const planAcpTurn = async (
         return { ok: false, message: `Unknown agent provider "${provider}", add it as an Agent capability first.` };
     }
     const acpConfig = capability.config;
-    const mounted = await turnToolsOf(services, granted, input.conversationId);
+    // Resolved by planTurn; without one the turn is the open, attended default, which may drive the credential-free browser.
+    const mounted = await turnToolsOf(services, granted, {
+        conversationId: input.conversationId,
+        anonymousBrowser: context.persona?.powers.browser ?? true,
+    });
     const tools = mounted.tools;
     return armPlan(
-        // The agent's warm session keeps the mount bearer across turns; the release only empties it until the next.
-        releasingBrowsers((request) => services.acpAgent(provider, acpConfig, request), mounted),
+        // The agent's warm session keeps the conversation's bearer and each server's URL across turns; the release only
+        // empties what the bearer reaches until the next turn leases it again.
+        releasingMounts((request) => services.acpAgent(provider, acpConfig, request), mounted),
         withAttachments(
             {
                 ...context.base,
+                // The browser stack's facts (ports, output dir) feed the Claude Code hooks and observer, which an ACP agent
+                // has none of: its browsers are servers in `remote` like everything else.
                 tools: tools.length > 0 ? { ...context.base.tools, remote: tools } : context.base.tools,
                 credential: { kind: "container" },
             },

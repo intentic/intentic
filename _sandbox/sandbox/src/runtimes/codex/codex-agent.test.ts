@@ -227,6 +227,27 @@ test("process-backed browser MCP servers ride Codex's per-thread config", async 
     });
 });
 
+// Every runtime projects the same remote list, so a granted machine, extension card or browser reaches Codex too.
+test("the turn's remote MCP servers ride Codex's per-thread config as http servers with their bearer and bound", async () => {
+    const { runner, calls } = fakeCodexRunner([]);
+    await collect(createTestAgent(runner), {
+        ...request,
+        tools: {
+            ...request.tools,
+            remote: [
+                { name: "browser", url: "http://127.0.0.1:8787/mcp/browser", token: "bearer", timeoutMs: 120_000 },
+                { name: "saldeo", url: "https://saldeo.example/mcp" },
+            ],
+        },
+    });
+
+    expect(calls[0]!.config).toEqual({
+        "mcp_servers.browser": { url: "http://127.0.0.1:8787/mcp/browser", http_headers: { Authorization: "Bearer bearer" }, tool_timeout_sec: 120 },
+        "mcp_servers.saldeo": { url: "https://saldeo.example/mcp" },
+        "tools.experimental_request_user_input.enabled": true,
+    });
+});
+
 test("a failed command surfaces its output as a failed update", async () => {
     const { runner } = fakeCodexRunner([
         {

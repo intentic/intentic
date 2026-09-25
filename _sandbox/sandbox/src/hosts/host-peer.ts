@@ -158,7 +158,6 @@ export const hostPeerRoutes = (services: Services) =>
     createPeerRoutes(services, HOST_PEER, {
         store: services.hosts,
         hub: services.hostHub,
-        bridgeToken: services.hostBridgeToken,
         summaries: () => hostSummaries(services),
         // One install connects the whole computer: whichever side the owner ran it on, the daemon puts an agent in
         // the rest from here (environment-bootstrap.ts).
@@ -166,11 +165,11 @@ export const hostPeerRoutes = (services: Services) =>
         // The owner's safety policy, applied here since the bridge is the last thing to see a call while someone can
         // still be asked. The machine's own scopes remain the floor; a refusal here only stops what the machine might
         // otherwise have run.
-        beforeCall: async (payload, c) => {
+        beforeCall: async (payload, call) => {
             const command = commandInCall(payload);
             if (command === undefined) {
                 return undefined;
             }
-            return judgeHostCommand(services, { machine: c.req.param("id") ?? "", command, conversationId: c.req.query("conversation") });
+            return judgeHostCommand(services, { machine: call.id, command, conversationId: call.conversationId });
         },
     });

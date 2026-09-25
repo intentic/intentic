@@ -31,7 +31,7 @@ describe("every provider/harness pair declares what it can do", () => {
 
         expect(["claude-code", "codex", "cursor", "opencode", "opencode-gemini", "acp", "pi"]).toContain(capabilities.runtime);
         expect(["modes", "plan"]).toContain(capabilities.permissions);
-        expect(["full", "tools", "browser", "http", "none"]).toContain(capabilities.mcp);
+        expect(["full", "tools", "http", "none"]).toContain(capabilities.mcp);
         expect(capabilities.execution).toContain("shell");
         for (const backend of capabilities.execution) {
             expect(["shell", "js"]).toContain(backend);
@@ -135,8 +135,8 @@ test("the ceiling has nothing to disclose; a floor names what it lacks", () => {
     expect(acpCaps.terminals).toBe(true);
 
     const codexCaps = capabilitiesOf("codex", "native");
-    expect(codexCaps.mcp).toBe("browser");
-    expect(limitationsOf(codexCaps).some((line) => line.includes("browser"))).toBe(true);
+    expect(codexCaps.mcp).toBe("http");
+    expect(limitationsOf(codexCaps)).toContain("MCP servers only, none of the daemon's own tools, no plugins");
     expect(limitationsOf(codexCaps).length).toBeLessThan(limitationsOf({ ...grokCaps, mcp: "none" }).length + 5);
 });
 

@@ -141,7 +141,6 @@ export const webextPeerRoutes = (services: Services) =>
     createPeerRoutes(services, WEBEXT_PEER, {
         store: services.webexts,
         hub: services.webextHub,
-        bridgeToken: services.webextBridgeToken,
         summaries: () => webextSummaries(services),
         sealAnswer,
     });

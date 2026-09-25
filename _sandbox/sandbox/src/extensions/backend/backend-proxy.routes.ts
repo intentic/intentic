@@ -65,7 +65,7 @@ const stalledCount = (calls: ReadonlySet<WaitingCall>, now: number): number => {
     return stalled;
 };
 
-// Also the extension MCP door's way in (extension-mcp.ts), with `url` rewritten onto the card's /x path.
+// Also the MCP door's way in to an extension card (extension-mcp.ts), with `url` rewritten onto the card's /x path.
 export const forwardToBackend = async (
     c: Context<AppEnv>,
     target: { port: number; hostToken: string },
@@ -99,17 +99,21 @@ export const forwardToBackend = async (
 
 // Proxies /x/<id>/* verbatim to the backend host; the request already passed the boot gate, CORS and bearer role floor.
 // Credentials are stripped before forwarding, the backend authenticates only with its own scoped token; 503 during a
-// restart is the client's retry cue.
+// restart is the client's retry cue. An extension's declared MCP endpoint is refused here: it is reached only through the
+// daemon's MCP door, which checks that the calling turn was granted the card, never by a panel's or a member's bearer.
 export const createBackendProxyRoute = (services: Pick<Services, "extensionBackend">) => {
     // Per route, not per request: the cap is only a cap if every call in flight counts against the same set.
     const waiting = new Map<string, Set<WaitingCall>>();
     return async (c: Context<AppEnv>): Promise<Response> => {
+        const url = new URL(c.req.url);
+        if (services.extensionBackend.isToolPath(url.pathname)) {
+            return c.json({ error: "an extension's MCP endpoint is reached only through a turn's MCP mount, not /x" }, 403);
+        }
         const target = services.extensionBackend.proxyTarget();
         if (target === undefined) {
             const backend = services.extensionBackend.status();
             return c.json({ error: `extension backends are ${backend.state}${backend.detail !== undefined ? `, ${backend.detail}` : ""}` }, 503);
         }
-        const url = new URL(c.req.url);
         const extension = extensionOf(url.pathname);
         const calls = waiting.get(extension) ?? new Set<WaitingCall>();
         const stalled = stalledCount(calls, Date.now());

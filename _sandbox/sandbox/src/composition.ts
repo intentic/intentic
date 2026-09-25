@@ -129,7 +129,7 @@ import {
 } from "./auth/auth.js";
 import { fileBrowserAccess } from "./auth/browser-access.js";
 import { createBrowserRouters } from "./browser/tools/browser-prepare.js";
-import type { BrowserRouterHub } from "./browser/tools/browser-router.js";
+import type { BrowserRouterFactory } from "./browser/tools/browser-router.js";
 import { createAuthConnections, type AuthConnections } from "./auth/connections.js";
 import { createSessions, type MintedSession } from "./auth/session.js";
 
@@ -292,7 +292,7 @@ import { conversationBusy } from "./agent/run/turn/turn-liveness.js";
 import { type UsageStore, fileUsageStore } from "./usage/usage-store.js";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { createExtensionBackend, type ExtensionBackend } from "./extensions/backend/backend-supervisor.js";
-import { createExtensionMcpMounts, type ExtensionMcpMounts } from "./extensions/backend/extension-mcp.js";
+import { createTurnMounts, TURN_MOUNT_BASE, type TurnMounts } from "./agent/tools/turn-mounts.js";
 import { type SecretKeyResolver, vaultExtensionSettingSecrets } from "./extensions/extension-settings.js";
 import { enabledExtensions, installedExtensions } from "./extensions/installed-extensions.js";
 import { workspaceArrivedEmpty } from "./scaffold/starter-site.js";
@@ -371,8 +371,6 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly panelToken: string;
     // Per-boot secret the vpn/otp CLIs present; dials/drops tunnels, mints codes, never reads credentials.
     readonly agentToken: string;
-    // Per-boot secret the agent's host tools carry to reach /mcp/hosts/:id; dies with the daemon, container-only.
-    readonly hostBridgeToken: string;
     // The user's own computers as a peer door: durable enrollment plus who is holding a socket right now.
     readonly hosts: HostStore;
     readonly hostHub: HostHub;
@@ -382,13 +380,11 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // The desktop-sync enrollments, for the same reason and in the same shape: the devices view merges them with host
     // pulls without the hosts subsystem importing the platform's sync store.
     readonly syncFleet: () => Promise<SyncFleet>;
-    // Every live turn's browser router, reached at /mcp/browser/:id with a bearer of its own.
-    readonly browserRouters: BrowserRouterHub;
-    // Same pair for the user's own browsers; a separate bridge token so one leaking can't open the other's door.
-    readonly webextBridgeToken: string;
-    // Every live turn's hold on its granted extension cards, reached at /mcp/extensions/:id with a mount bearer of its
-    // own that opens only those cards, and only while the turn runs.
-    readonly extensionMcpMounts: ExtensionMcpMounts;
+    // Makes a turn's browser router, which the turn then mounts.
+    readonly browserRouters: BrowserRouterFactory;
+    // Every live turn's MCP mounts (its browser routers, peers and extension cards), reached at /mcp/<name> with its
+    // conversation's bearer, which opens only what the running turn mounted.
+    readonly turnMounts: TurnMounts;
     readonly webexts: WebExtStore;
     readonly webextHub: WebExtHub;
     // Which of the owner's own browsers a turn may work in, and what each of them is, for the same reason hostReach
@@ -1300,15 +1296,13 @@ export const createServices = (config: Config, logger: Logger): Services => {
         mediaTickets: createMediaTickets(),
         panelToken: randomBytes(32).toString("hex"),
         agentToken: randomBytes(32).toString("hex"),
-        hostBridgeToken: randomBytes(32).toString("hex"),
         hosts: filePeerStore(config.historyRoot, HOST_PEER.store),
         // Reads only readings already held (hosts/self-host.ts), so composing a turn never waits on a laptop.
         hostReach: (granted) => hostDeviceReach(services, granted),
         syncFleet: () => enrolledFleet(config.historyRoot),
         hostHub: createPeerHub<HostClient, HostAnnounced, DeviceFacts, DeviceScopes>(HOST_PEER.hub, logger, peerTools),
         browserRouters: createBrowserRouters(() => services),
-        webextBridgeToken: randomBytes(32).toString("hex"),
-        extensionMcpMounts: createExtensionMcpMounts(),
+        turnMounts: createTurnMounts({ baseUrl: () => `http://127.0.0.1:${config.sandbox.port}${TURN_MOUNT_BASE}` }),
         webexts: filePeerStore(config.historyRoot, WEBEXT_PEER.store),
         webextHub: createPeerHub<WebExtClient, WebExtAnnounced, WebExtFacts, WebExtScopes>(WEBEXT_PEER.hub, logger, peerTools),
         // Held readings only (webext/webext-peer.ts), like hostReach: a browser that is closed costs the turn nothing.

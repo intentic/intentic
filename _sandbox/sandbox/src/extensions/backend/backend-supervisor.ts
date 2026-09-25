@@ -51,6 +51,9 @@ export interface ExtensionBackend {
     statusOf(id: string): BackendStatus | undefined;
     // Where the /x proxy forwards while the host is up; undefined means answer 503 with the current state's detail.
     proxyTarget(): { readonly port: number; readonly hostToken: string } | undefined;
+    // Whether an /x path lands in an extension's declared MCP endpoint (a cli contribution's `mcp`), as of the last
+    // converge: only the daemon's MCP door, which checks the turn's lease, may forward there, so /x/* refuses it.
+    isToolPath(pathname: string): boolean;
     // Extension grant resolver (auth/grants.ts): maps a minted per-extension token to the extension and its declared
     // daemon reach, as of the last converge or grantFor.
     verifyExtensionToken(presented: string): ExtensionGrant | undefined;
@@ -59,6 +62,26 @@ export interface ExtensionBackend {
     // stops resolving at the converge its toggle or removal triggers.
     grantFor(extension: InstalledExtension): string;
 }
+
+// The MCP endpoint paths an extension's cli contributions declare, relative to its /x/<id> namespace.
+const declaredToolPaths = (extension: InstalledExtension): readonly string[] =>
+    (extension.manifest.contributes?.capabilities ?? []).flatMap((spec) => (spec.kind === "cli" && spec.mcp !== undefined ? [spec.mcp] : []));
+
+// An /x path as the backend host routes it: segments decoded and empty ones dropped, so neither `%6Dcp` nor `//mcp`
+// reads as a different path here than it does there.
+const namespacePath = (pathname: string): { readonly extension: string; readonly rest: string } | undefined => {
+    const segments = pathname
+        .split("/")
+        .filter((segment) => segment !== "")
+        .map((segment) => {
+            try {
+                return decodeURIComponent(segment);
+            } catch {
+                return segment;
+            }
+        });
+    return segments[0] !== "x" || segments[1] === undefined ? undefined : { extension: segments[1], rest: segments.slice(2).join("/") };
+};
 
 // Resolves the host entry beside this file so dev and dist take the same code path (.js under node, .ts under tsx).
 // Uses an absolute path so the spawn's cwd cannot change which one runs.
@@ -96,6 +119,8 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
     };
     // Token to the grant it was minted for, as of the last converge: every enabled extension, backend or not.
     let reach = new Map<string, ExtensionGrant>();
+    // Extension id to the MCP endpoint paths its cli contributions declare, as of the last converge.
+    let toolPaths = new Map<string, readonly string[]>();
     const grantOf = (extension: InstalledExtension): ExtensionGrant => ({
         id: extension.id,
         permissions: extension.manifest.permissions?.daemon ?? [],
@@ -124,10 +149,12 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         runnable: BackendHostExtension[];
         reported: BackendStatus[];
         tokenReach: Map<string, ExtensionGrant>;
+        tools: Map<string, readonly string[]>;
     }> => {
         const runnable: BackendHostExtension[] = [];
         const reported: BackendStatus[] = [];
         const tokenReach = new Map<string, ExtensionGrant>();
+        const tools = new Map<string, readonly string[]>();
         for (const extension of await enabledExtensions(services())) {
             // Every enabled extension resolves, not just a backend's: its processes carry the same token.
             const grant = grantOf(extension);
@@ -136,6 +163,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
             if (server === undefined) {
                 continue;
             }
+            tools.set(extension.id, declaredToolPaths(extension));
             if (!satisfiesEngines(extension.manifest.engines.intentic, extensionApiVersion)) {
                 reported.push({
                     id: extension.id,
@@ -151,7 +179,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
             }
             runnable.push({ id: extension.id, dir: extension.dir, server, daemonToken: tokenFor(extension.id), daemonPermissions: grant.permissions });
         }
-        return { runnable, reported, tokenReach };
+        return { runnable, reported, tokenReach, tools };
     };
 
     // The host's /health answer, or undefined if it died first or never answered in time; the caller treats both misses
@@ -186,7 +214,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         const run = ++generation;
         clearTimeout(retry);
         kill();
-        let collected: { runnable: BackendHostExtension[]; reported: BackendStatus[]; tokenReach: Map<string, ExtensionGrant> };
+        let collected: Awaited<ReturnType<typeof collect>>;
         try {
             collected = await collect();
         } catch (error) {
@@ -197,6 +225,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
             return;
         }
         reach = collected.tokenReach;
+        toolPaths = collected.tools;
         if (collected.runnable.length === 0) {
             state = { state: "stopped", extensions: collected.reported };
             return;
@@ -274,6 +303,10 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         status: () => state,
         statusOf: (id) => state.extensions.find((extension) => extension.id === id),
         proxyTarget: () => (host !== undefined && state.state === "running" ? { port: host.port, hostToken: host.hostToken } : undefined),
+        isToolPath: (pathname) => {
+            const at = namespacePath(pathname);
+            return at !== undefined && (toolPaths.get(at.extension) ?? []).some((path) => at.rest === path || at.rest.startsWith(`${path}/`));
+        },
         verifyExtensionToken: (presented) => {
             for (const [token, grant] of reach) {
                 if (tokenEquals(presented, token)) {

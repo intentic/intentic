@@ -10,7 +10,9 @@ import type { Capability } from "@intentic/sandbox-contract";
 import { workloadStamp } from "../../seams/workload-stamp.js";
 import { freePort as bindEphemeral } from "../../processes/free-port.js";
 import { browserOutputDir } from "../cast/browser-artifacts.js";
-import { type BrowserBackendSpec, type BrowserRouterHub, createSchemaCache, type McpToolSchema, type RouterManifest } from "./browser-router.js";
+import type { AgentTool } from "../../agent/tools/agent-tools.js";
+import type { TurnLease } from "../../agent/tools/turn-mounts.js";
+import { type BrowserBackendSpec, type BrowserRouterFactory, createSchemaCache, type McpToolSchema, type RouterManifest } from "./browser-router.js";
 import { type ProfileExit, resolveProfileExit } from "../sessions/browser-exit.js";
 import { chromiumWindowArgs, type Display, ensureDisplay } from "../cast/display.js";
 import { acceptLanguage, browserFingerprint, type BrowserFingerprint } from "../sessions/fingerprint.js";
@@ -238,18 +240,16 @@ const browserRuntime = async (): Promise<BrowserRuntime | undefined> => {
     }
 };
 
-// Per-turn output: servers, the account-to-owner map behind `browser`, each owner's port, and its passkey store.
-// Ports/passkeys ride with servers since watching and passkey arming both key off the same owner.
+// Per-turn output: the mounted servers, the account-to-owner map behind `browser`, each owner's port, and its passkey
+// store. Ports/passkeys ride with servers since watching and passkey arming both key off the same owner. The routers
+// close with the turn's lease, which the turn's loop releases when it ends (turn-tools.ts).
 export interface BrowserTurnTools {
-    readonly servers: Record<string, McpServerConfig>;
+    readonly servers: readonly AgentTool[];
     // Account or identity id to profile owner; owners map to themselves.
     readonly accounts: Record<string, string>;
     readonly ports: Record<string, number>;
     // Owner to passkey store path; absent for `web`, which holds no identity.
     readonly passkeys: Record<string, string>;
-    // Ends this turn's browsing: closes its routers in the daemon, killing any browser they started. Called once the
-    // turn's loop ends (releasingBrowsers); a router nobody releases holds no process until a call spawns one.
-    readonly release: () => void;
 }
 
 const backendOf = (spec: McpServerConfig): BrowserBackendSpec | { readonly refusal: string } =>
@@ -257,7 +257,7 @@ const backendOf = (spec: McpServerConfig): BrowserBackendSpec | { readonly refus
         ? { command: spec.command, args: spec.args ?? [], env: spec.env ?? {} }
         : { refusal: "the browser server came back with a transport nothing here can spawn" };
 
-const NO_BROWSER_TOOLS: BrowserTurnTools = { servers: {}, accounts: {}, ports: {}, passkeys: {}, release: () => undefined };
+export const NO_BROWSER_TOOLS: BrowserTurnTools = { servers: [], accounts: {}, ports: {}, passkeys: {} };
 
 const schemaCache = createSchemaCache();
 
@@ -344,13 +344,13 @@ export const prepareBrowserOwner = async (
 // standalone get two. `anonymous` controls the separate credential-free browser: a different question from whose name
 // this turn may use.
 // Nothing here spawns a process, starts a display or resolves an exit: the routers live in this daemon and are reached
-// over HTTP, and this only declares what the turn *may* reach, at the cost of a reserved port per owner. The router
-// answers the handshake and the tool list from a schema cache, so a turn that never calls a browser tool never pays
-// for one.
+// at its one MCP door as the turn's mounts, and this only declares what the turn *may* reach, at the cost of a reserved
+// port per owner. The router answers the handshake and the tool list from a schema cache, so a turn that never calls a
+// browser tool never pays for one.
 export const browserServersOf = async (
     capabilities: readonly Capability[],
     root: string,
-    routers: Pick<BrowserRouterHub, "open" | "close">,
+    mounts: { readonly routers: BrowserRouterFactory; readonly lease: Pick<TurnLease, "open"> },
     anonymous = true,
     // Stamped onto the backends a router spawns, so the process scan attributes a browser to its conversation.
     conversationId?: string,
@@ -362,24 +362,17 @@ export const browserServersOf = async (
     await sweepConfigs(Date.now());
     const ports: Record<string, number> = {};
     const passkeys: Record<string, string> = {};
-    const servers: Record<string, McpServerConfig> = {};
-    const opened: string[] = [];
-    const mount = (manifest: Omit<RouterManifest, "backendEnv">): McpServerConfig => {
-        const router = routers.open({ ...manifest, backendEnv: conversationId === undefined ? {} : workloadStamp(conversationId) });
-        opened.push(router.id);
-        // Not alwaysLoad: the router's schemas defer behind ToolSearch like every other MCP tool; system append names it.
-        return { type: "http", url: router.url, headers: { Authorization: `Bearer ${router.token}` }, timeout: BROWSER_CALL_TIMEOUT_MS };
-    };
-    const release = (): void => {
-        for (const id of opened.splice(0)) {
-            routers.close(id);
-        }
+    const servers: AgentTool[] = [];
+    // Not alwaysLoad: the router's schemas defer behind ToolSearch like every other MCP tool; system append names it.
+    const mount = (name: string, manifest: Omit<RouterManifest, "backendEnv">): void => {
+        const router = mounts.routers({ ...manifest, backendEnv: conversationId === undefined ? {} : workloadStamp(conversationId) });
+        servers.push(mounts.lease.open({ name, target: { kind: "browser", router }, timeoutMs: BROWSER_CALL_TIMEOUT_MS }));
     };
     if (anonymous) {
         ports[ANONYMOUS_BROWSER_SERVER] = await freePort();
         // Its own router, not a second account on the shared one: `mcp__web__*` takes no `account` argument, and a
         // sole-owner manifest is what keeps that parameter off its schemas.
-        servers[ANONYMOUS_BROWSER_SERVER] = mount({
+        mount(ANONYMOUS_BROWSER_SERVER, {
             soleOwner: ANONYMOUS_BROWSER_SERVER,
             accounts: {},
             owners: { [ANONYMOUS_BROWSER_SERVER]: { port: ports[ANONYMOUS_BROWSER_SERVER] } },
@@ -388,7 +381,7 @@ export const browserServersOf = async (
     const granted = capabilities.filter((capability) => capability.kind === "browser" || capability.kind === "identity");
     const owners = new Set(granted.map((capability) => profileOwner(capability)).filter((owner) => !isProfileOpen(owner)));
     if (owners.size === 0) {
-        return { ...NO_BROWSER_TOOLS, servers, ports, release };
+        return { ...NO_BROWSER_TOOLS, servers, ports };
     }
     // Router's manifest: every granted id resolves to its profile owner; one held by the login window is left out.
     const accounts: Record<string, string> = {};
@@ -407,6 +400,6 @@ export const browserServersOf = async (
         passkeys[owner] = passkeyPath(root, owner);
         backends[owner] = { port: ports[owner] };
     }
-    servers[ROUTED_BROWSER_SERVER] = mount({ accounts, owners: backends });
-    return { servers, accounts, ports, passkeys, release };
+    mount(ROUTED_BROWSER_SERVER, { accounts, owners: backends });
+    return { servers, accounts, ports, passkeys };
 };

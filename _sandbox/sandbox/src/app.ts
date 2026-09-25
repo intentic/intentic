@@ -37,11 +37,11 @@ import { createDefinitionRoutes } from "./portability/definition.routes.js";
 import { createArrivalRoutes } from "./portability/arrival.routes.js";
 import { createCiWebhookRoute } from "./ci/webhook.routes.js";
 import { createBackendProxyRoute } from "./extensions/backend/backend-proxy.routes.js";
-import { createExtensionMcpRoute } from "./extensions/backend/extension-mcp.js";
+import { createExtensionMcpEndpoint } from "./extensions/backend/extension-mcp.js";
+import { createTurnMountRoute } from "./agent/tools/turn-mounts.routes.js";
 import { createExtensionBundleRoute } from "./extensions/extension-bundle.routes.js";
 import { createListenerRoutes } from "./extensions/listener.routes.js";
 import { createBrowserProfileRoute } from "./browser/sessions/browser-profile.js";
-import { createBrowserMcpRoute } from "./browser/tools/browser-prepare.js";
 import { HOST_PEER, hostPeerRoutes } from "./hosts/host-peer.js";
 import { mountPeerRoutes } from "./peers/peer-routes.js";
 import { RUNNER_PEER, runnerPeerRoutes } from "./runners/runner-peer.js";
@@ -371,11 +371,6 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // An extension's prebuilt ESM bundle, and the backend namespace /x/<id>/* proxied verbatim to the backend host.
     serve("GET /extensions/{id}/bundle", createExtensionBundleRoute(services));
     serve("ALL /x/*", createBackendProxyRoute(services));
-    // An extension card's MCP endpoint in that same backend, the door a turn's tool config points at.
-    const extensionMcp = createExtensionMcpRoute(services);
-    serve("POST /mcp/extensions/{id}", extensionMcp);
-    serve("GET /mcp/extensions/{id}", extensionMcp);
-    serve("DELETE /mcp/extensions/{id}", extensionMcp);
 
     // The capability setup gate, the `capabilities` CLI's two routes: `connectable` is discovery only, `ask` parks the
     // call on an owner-decided chat card.
@@ -436,15 +431,23 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     const sync = createSyncRoutes(services);
     serve("POST /system/sync/pair", sync.pair);
 
-    // The peer doors: each device, browser and runner gets pairing, enrollment, roster, revoke, socket, MCP bridge.
-    mountPeerRoutes(serve, HOST_PEER, hostPeerRoutes(services));
-    mountPeerRoutes(serve, WEBEXT_PEER, webextPeerRoutes(services));
+    // The peer doors: each device, browser and runner gets pairing, enrollment, roster, revoke and socket.
+    const hostRoutes = hostPeerRoutes(services);
+    const webextRoutes = webextPeerRoutes(services);
+    mountPeerRoutes(serve, HOST_PEER, hostRoutes);
+    mountPeerRoutes(serve, WEBEXT_PEER, webextRoutes);
     mountPeerRoutes(serve, RUNNER_PEER, runnerPeerRoutes(services));
-    // A turn's browser routers: the agent's MCP client reaching the browsers its turn may drive.
-    const browserMcp = createBrowserMcpRoute(services);
-    serve("POST /mcp/browser/{id}", browserMcp);
-    serve("GET /mcp/browser/{id}", browserMcp);
-    serve("DELETE /mcp/browser/{id}", browserMcp);
+    // Every MCP server a turn mounted in this daemon, behind one door: its browser routers, the machines and browsers
+    // it was granted (their peer bridges), and its extension cards' endpoints on the backend host.
+    serve(
+        "ALL /mcp/{mount}",
+        createTurnMountRoute(services.turnMounts, {
+            browser: (target, message, call) => target.router.handle(message, call.signal),
+            device: hostRoutes.mcp,
+            webext: webextRoutes.mcp,
+            extension: createExtensionMcpEndpoint(services),
+        }),
+    );
     // A browser's two credential doors: `session` moves a site sign-in in, `lend` moves one back out.
     serve("POST /system/webext/session", createWebExtSessionRoute(services));
     serve("POST /system/webext/lend", createWebExtLendRoute(services));

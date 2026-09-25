@@ -3,7 +3,9 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
-import type { BrowserRouterHub, RouterManifest } from "./browser-router.js";
+import type { AgentTool } from "../../agent/tools/agent-tools.js";
+import { createTurnMounts, type TurnLease } from "../../agent/tools/turn-mounts.js";
+import type { BrowserRouterFactory, RouterManifest } from "./browser-router.js";
 import { browserServerSpec, browserServersOf, isolatedBrowserSpec, prepareBrowserOwner, writeBrowserConfig } from "./browser-tools.js";
 import { chromiumWindowArgs, type Display, DISPLAY_HEIGHT, DISPLAY_WIDTH } from "../cast/display.js";
 import { browserFingerprint } from "../sessions/fingerprint.js";
@@ -17,23 +19,23 @@ const tempRoot = (): string => mkdtempSync(join(tmpdir(), "browser-tools-"));
 // declares, and declaring is the half that costs nothing.
 const opened: RouterManifest[] = [];
 const closed: string[] = [];
-const BRIDGE: Pick<BrowserRouterHub, "open" | "close"> = {
-    open: (manifest) => {
-        opened.push(manifest);
-        const id = `router-${opened.length}`;
-        return { id, url: `http://127.0.0.1:1/mcp/browser/${id}`, token: `token-${id}` };
-    },
-    close: (id) => {
-        closed.push(id);
-    },
+const routers: BrowserRouterFactory = (manifest) => {
+    opened.push(manifest);
+    const id = `router-${opened.length}`;
+    return { handle: async () => undefined, close: () => closed.push(id), live: () => [] };
 };
+const mounts = createTurnMounts({ baseUrl: () => "http://127.0.0.1:1/mcp" });
+// A turn's own lease each time, unless a test means one it releases itself.
+const BRIDGE = (lease: TurnLease = mounts.lease()) => ({ routers, lease });
+const named = (servers: readonly AgentTool[]): string[] => servers.map((server) => server.name);
+const serverNamed = (servers: readonly AgentTool[], name: string): AgentTool | undefined => servers.find((entry) => entry.name === name);
 const reddit: Capability = { id: "reddit", kind: "browser", config: { platform: "reddit" } };
 
 // Any owner works: these tests check wiring, not device values.
 const anyDevice = async (): Promise<Awaited<ReturnType<typeof browserFingerprint>>> => browserFingerprint(tempRoot(), "reddit");
 
 // CI images may lack Chromium; shape assertions stay version-independent regardless.
-const chromiumInstalled = async (): Promise<boolean> => Object.keys((await browserServersOf([], tempRoot(), BRIDGE)).servers).length > 0;
+const chromiumInstalled = async (): Promise<boolean> => (await browserServersOf([], tempRoot(), BRIDGE())).servers.length > 0;
 
 test("browser MCP configs live in a private directory, each one written exclusively", async () => {
     const server = `permissions-${process.hrtime.bigint()}`;
@@ -130,34 +132,40 @@ test("config directories left by dead daemons are swept, and the live one is kep
     utimesSync(join(dead, "web-40000-abcdef01.json"), stale, stale);
     utimesSync(dead, stale, stale);
 
-    const { servers } = await browserServersOf([], tempRoot(), BRIDGE);
+    const { servers } = await browserServersOf([], tempRoot(), BRIDGE());
 
     expect(existsSync(dead)).toBe(false);
     // A turn writes no file at all now: its router lives in the daemon, and the browser config is written when a call
     // arrives, by prepareBrowserOwner.
-    expect(servers["web"]).toMatchObject({ type: "http", url: expect.stringContaining("/mcp/browser/") });
+    expect(serverNamed(servers, "web")).toMatchObject({ name: "web", url: "http://127.0.0.1:1/mcp/web" });
 });
 
-test("each mount is a router in the daemon, reached over HTTP with its own bearer, and released together", async () => {
+test("each mount is a router in the daemon, reached at the MCP door under its name on the turn's lease, and released together", async () => {
     if (!(await chromiumInstalled())) {
         return;
     }
     const before = opened.length;
-    const tools = await browserServersOf([reddit], tempRoot(), BRIDGE, true, "conversation-1");
-    const web = tools.servers["web"] as { type: string; url: string; headers: Record<string, string> };
-    const routed = tools.servers["browser"] as { type: string; url: string; headers: Record<string, string> };
-    expect(web.type).toBe("http");
-    expect(routed.type).toBe("http");
-    expect(web.headers["Authorization"]).not.toBe(routed.headers["Authorization"]);
+    const lease = mounts.lease("conversation-1");
+    const tools = await browserServersOf([reddit], tempRoot(), BRIDGE(lease), true, "conversation-1");
+    const web = serverNamed(tools.servers, "web");
+    const routed = serverNamed(tools.servers, "browser");
+    expect(web?.url).toBe("http://127.0.0.1:1/mcp/web");
+    expect(routed?.url).toBe("http://127.0.0.1:1/mcp/browser");
+    // One bearer for the conversation; the lease is what tells the two apart, by name.
+    expect(web?.token).toBe(routed?.token);
+    expect(mounts.resolve(web?.token, "browser")).toMatchObject({ target: { kind: "browser" }, conversationId: "conversation-1" });
+    // A page can take minutes; the bound rides with the server so every runtime can apply it.
+    expect(web?.timeoutMs).toBe(120_000);
     // The backends a router spawns carry the turn's stamp, so the process scan charges them to the conversation.
     expect(opened.slice(before).map((manifest) => manifest.backendEnv)).toEqual([
         { INTENTIC_TURN_OWNER: "conversation-1" },
         { INTENTIC_TURN_OWNER: "conversation-1" },
     ]);
     expect(opened[before]?.soleOwner).toBe("web");
-    tools.release();
-    tools.release();
+    lease.release();
+    lease.release();
     expect(closed.slice(-2).toSorted()).toEqual([`router-${before + 1}`, `router-${before + 2}`]);
+    expect(mounts.resolve(web?.token, "browser")).toEqual({ refused: "unleased" });
 });
 
 test("browserServerSpec is a HEADED stdio server bound to the profile + stealth + display", () => {
@@ -240,9 +248,9 @@ test("a browser is available with no capabilities and no login at all", async ()
     if (!(await chromiumInstalled())) {
         return;
     }
-    expect(Object.keys((await browserServersOf([], tempRoot(), BRIDGE)).servers)).toEqual(["web"]);
+    expect(named((await browserServersOf([], tempRoot(), BRIDGE())).servers)).toEqual(["web"]);
     const github: Capability = { id: "gh", kind: "cli", config: { provider: "github", token: "x" } };
-    expect(Object.keys((await browserServersOf([github], tempRoot(), BRIDGE)).servers)).toEqual(["web"]);
+    expect(named((await browserServersOf([github], tempRoot(), BRIDGE())).servers)).toEqual(["web"]);
 });
 
 // A pending account's browser still mounts: only the profile lock gates it now, not the connected marker.
@@ -251,14 +259,14 @@ test("a browser capability mounts the ONE routed server before anyone has logged
     if (!(await chromiumInstalled())) {
         return;
     }
-    const { servers, accounts, passkeys } = await browserServersOf([reddit], tempRoot(), BRIDGE);
-    expect(Object.keys(servers).toSorted()).toEqual(["browser", "web"]);
+    const { servers, accounts, passkeys } = await browserServersOf([reddit], tempRoot(), BRIDGE());
+    expect(named(servers).toSorted()).toEqual(["browser", "web"]);
     expect(accounts["reddit"]).toBe("reddit");
     // The passkey store is armed from the first page: a sign-up is exactly when the account enrolls its key.
     expect(Object.keys(passkeys)).toContain("reddit");
     // Neither server pins its schemas into the prompt; discovery is one line in the system append.
-    expect(servers["browser"]).not.toHaveProperty("alwaysLoad");
-    expect(servers["web"]).not.toHaveProperty("alwaysLoad");
+    expect(serverNamed(servers, "browser")).not.toHaveProperty("alwaysLoad");
+    expect(serverNamed(servers, "web")).not.toHaveProperty("alwaysLoad");
 });
 
 test("a login in progress suppresses that account's server (the profile is locked)", async () => {
@@ -269,7 +277,7 @@ test("a login in progress suppresses that account's server (the profile is locke
     await markConnected(root, "reddit");
     expect(acquireProfileLock("reddit")).toBe(true);
     // The credential-free browser is unaffected: it holds no profile to lock.
-    expect(Object.keys((await browserServersOf([reddit], root, BRIDGE)).servers)).toEqual(["web"]);
+    expect(named((await browserServersOf([reddit], root, BRIDGE())).servers)).toEqual(["web"]);
     releaseProfileLock("reddit");
 });
 
@@ -284,10 +292,10 @@ test("accounts of the same site each stand behind one server, declared without b
     await markConnected(root, "reddit-work");
     await markConnected(root, "reddit-personal");
 
-    const { servers, accounts, passkeys } = await browserServersOf([work, personal], root, BRIDGE);
+    const { servers, accounts, passkeys } = await browserServersOf([work, personal], root, BRIDGE());
 
     // The prompt pays for one server however many accounts stand behind it.
-    expect(Object.keys(servers).toSorted()).toEqual(["browser", "web"]);
+    expect(named(servers).toSorted()).toEqual(["browser", "web"]);
     expect(accounts).toEqual({ "reddit-work": "reddit-work", "reddit-personal": "reddit-personal" });
     const manifest = opened.at(-1) as RouterManifest & { owners: Record<string, { port: number; command?: string }> };
     expect(manifest.accounts).toEqual(accounts);
@@ -342,8 +350,8 @@ test("an identity-born account routes to its identity's browser", async () => {
     const main: Capability = { id: "main", kind: "identity", config: { email: "studio@gmail.com", openAccounts: "off" } };
     const born: Capability = { id: "reddit-main", kind: "browser", config: { platform: "reddit", identity: "main" } };
 
-    const { servers, accounts, ports } = await browserServersOf([main, born], root, BRIDGE);
-    expect(Object.keys(servers).toSorted()).toEqual(["browser", "web"]);
+    const { servers, accounts, ports } = await browserServersOf([main, born], root, BRIDGE());
+    expect(named(servers).toSorted()).toEqual(["browser", "web"]);
     expect(accounts).toEqual({ main: "main", "reddit-main": "main" });
     // One profile owner, one debugging port: the observer's map is per owner, not per account.
     expect(Object.keys(ports)).toContain("main");
@@ -357,5 +365,5 @@ test("no Chromium on disk means no browser servers at all", async () => {
     }
     const root = tempRoot();
     await markConnected(root, "reddit");
-    expect(await browserServersOf([reddit], root, BRIDGE)).toMatchObject({ servers: {}, accounts: {}, ports: {}, passkeys: {} });
+    expect(await browserServersOf([reddit], root, BRIDGE())).toEqual({ servers: [], accounts: {}, ports: {}, passkeys: {} });
 });

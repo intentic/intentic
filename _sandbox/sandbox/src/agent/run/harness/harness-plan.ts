@@ -1,7 +1,5 @@
 import { type AgentTurn, type Capability, profileOf, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
-import { browserOutputDir } from "../../../browser/cast/browser-artifacts.js";
-import { releasingBrowsers } from "../../../browser/tools/browser-fields.js";
-import { browserServersOf, type BrowserTurnTools } from "../../../browser/tools/browser-tools.js";
+import { browserFields } from "../../../browser/tools/browser-fields.js";
 import { pluginDirsOf } from "../../../capabilities/plugin-dirs.js";
 import type { Services } from "../../../composition.js";
 import { extensionAgentDirsOf } from "../../../extensions/installed-extensions.js";
@@ -22,7 +20,8 @@ import {
 } from "../../providers/harness-credentials.js";
 import { withAttachmentNote } from "../../prompt/attachment-note.js";
 import { LITERAL_SLASH_NOTE } from "../../prompt/turn-preamble.js";
-import { turnToolsOf } from "../../tools/turn-tools.js";
+import { releasingMounts } from "../../tools/turn-mounts.js";
+import { turnToolsOf, type TurnToolsDeps } from "../../tools/turn-tools.js";
 import { opt } from "../../../opt.js";
 import { harnessHooks, type HarnessHooksDeps } from "./harness-hooks.js";
 import { harnessAccounts, harnessServers, type HarnessServersDeps, turnSecretAccess } from "./harness-servers.js";
@@ -34,22 +33,8 @@ import { harnessAccounts, harnessServers, type HarnessServersDeps, turnSecretAcc
 export type HarnessPlanDeps = HarnessCredentialDeps &
     HarnessHooksDeps &
     HarnessServersDeps &
-    Pick<
-        Services,
-        | "agent"
-        | "capabilities"
-        | "extensionMcpMounts"
-        | "browserRouters"
-        | "files"
-        | "heavyCommands"
-        | "hostBridgeToken"
-        | "hostReach"
-        | "perf"
-        | "sandboxSettings"
-        | "tools"
-        | "webextBridgeToken"
-        | "webextReach"
-    >;
+    TurnToolsDeps &
+    Pick<Services, "agent" | "capabilities" | "files" | "heavyCommands" | "hostReach" | "perf" | "sandboxSettings" | "webextReach">;
 
 // The schema's own defaults, so an untouched setting can be told from one the owner set to the same value; not restated
 // here to avoid a second, driftable copy.
@@ -72,13 +57,14 @@ const harnessReads = (deps: HarnessPlanDeps, input: AgentTurn, context: TurnCont
         deps.safetyPolicy.text(),
     ]);
 
-// The last planning I/O, run together rather than chained: an extension scan, the browser bring-up (filtered to this
-// persona's accounts, each call bound to its account's persisted profile), and the card's own folder as a plugin dir.
+// The last planning I/O, run together rather than chained: an extension scan, the turn's MCP mounts (the browsers
+// filtered to this persona's accounts, each call bound to its account's persisted profile), and the card's own folder
+// as a plugin dir.
 const harnessMounts = (deps: HarnessPlanDeps, input: AgentTurn, granted: readonly Capability[], persona: TurnPersona) =>
     Promise.all([
         deps.perf.track("turn.plan.extensions", {}, () => extensionAgentDirsOf(deps)),
-        deps.perf.track("turn.plan.browser", {}, () =>
-            browserServersOf(granted, deps.workspace.root, deps.browserRouters, persona.powers.browser, input.conversationId),
+        deps.perf.track("turn.plan.mounts", {}, () =>
+            turnToolsOf(deps, granted, { conversationId: input.conversationId, anonymousBrowser: persona.powers.browser }),
         ),
         persona.persona === undefined ? Promise.resolve(undefined) : personaKitPlugin(deps.workspace.root, persona.persona.id),
     ]);
@@ -171,15 +157,6 @@ const shellTools = (deps: HarnessPlanDeps, settings: SandboxSettings): Pick<Turn
     ...(queueRunEnabled() && offloadRunEnabled() ? { offloadCommands: async () => (await deps.sandboxSettings.get()).offload.commands } : {}),
 });
 
-// Where the browser stack's own facts ride: the servers' --output-dir, so the screenshot redirect shares one source, and
-// the ports, passkey stores and account map the session observer reads.
-const browserTools = (root: string, browser: BrowserTurnTools): TurnTools => ({
-    ...(Object.keys(browser.servers).length > 0 ? { browserOutputDir: browserOutputDir(root) } : {}),
-    ...(Object.keys(browser.ports).length > 0 ? { browserPorts: browser.ports } : {}),
-    ...(Object.keys(browser.passkeys).length > 0 ? { browserPasskeys: browser.passkeys } : {}),
-    ...(Object.keys(browser.accounts).length > 0 ? { browserAccounts: browser.accounts } : {}),
-});
-
 // The Claude Code harness: a native Claude turn's subscription OAuth (with mid-turn refresh) or the translator endpoint a
 // routed provider rides. Credentials resolve through harness-credentials.ts; its refusals become the connect-gate's error.
 export const planHarnessTurn = async (
@@ -192,15 +169,14 @@ export const planHarnessTurn = async (
     if (!resolved.ok) {
         return { ok: false, ...opt("code", resolved.code), message: resolved.message };
     }
-    const mounted = await turnToolsOf(deps, granted, input.conversationId);
-    const remote = mounted.tools;
-    // What this turn may reach out of the container, and the owner's own browsers: the cards peerToolsOf just mounted,
-    // through Services, since the hosts and webext subsystems reach back into this one.
+    // What this turn may reach out of the container, and the owner's own browsers: the cards peerToolsOf mounts, through
+    // Services, since the hosts and webext subsystems reach back into this one.
     const hostDevices = await deps.hostReach(granted);
     const ownBrowsers = await deps.webextReach(granted);
     // Resolved by planTurn and already applied to `granted`; the open, attended fallback is only for the bench.
     const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
-    const [extensionAgentDirs, browser, personaKit] = await harnessMounts(deps, input, granted, persona);
+    const [extensionAgentDirs, mounted, personaKit] = await harnessMounts(deps, input, granted, persona);
+    const { browser, tools: remote } = mounted;
     // Resolved once and read twice (the plugin list and `iqAvailable`), so the notice and the load can't disagree.
     const iqLoaded = deps.config.iqPluginDir !== "" && (context.iqSearchEnabled ?? settings.iqSearch);
     const plugins = pluginsOf(deps.config, iqLoaded, granted, deps.workspace.root, { extensionAgentDirs, personaKit });
@@ -211,7 +187,7 @@ export const planHarnessTurn = async (
         ...(plugins.length > 0 ? { plugins } : {}),
         ...(remote.length > 0 ? { remote } : {}),
         sdkServers,
-        ...browserTools(deps.workspace.root, browser),
+        ...browserFields(deps.workspace.root, browser),
         // Named in the prompt only where its tools can actually be called.
         ...(sdkServers["diagnostics"] === undefined ? {} : { diagnostics: true }),
         hostDevices,
@@ -231,7 +207,7 @@ export const planHarnessTurn = async (
         }),
     );
     return armPlan(
-        releasingBrowsers(deps.agent, browser, mounted),
+        releasingMounts(deps.agent, mounted),
         {
             ...context.base,
             ...gated,

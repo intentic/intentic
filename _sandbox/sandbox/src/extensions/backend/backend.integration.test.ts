@@ -51,9 +51,16 @@ const echoServer = `export const activateServer = (api, context) => {
 const historyOf = (root: string): string => `${root}-history`;
 
 // Written and approved, as the owner's own extension would be, unless the test is about one nobody approved.
-const writeExtension = async (root: string, name: string, server: string, approved = true): Promise<void> => {
+const writeExtension = async (root: string, name: string, server: string, approved = true, contributes?: Record<string, unknown>): Promise<void> => {
     const dir = join(workspaceExtensionsRoot(root), name);
-    const manifest = { publisher: "acme", name, version: "1.0.0", engines: { intentic: "^2.1.0" }, server: "server.js" };
+    const manifest = {
+        publisher: "acme",
+        name,
+        version: "1.0.0",
+        engines: { intentic: "^2.1.0" },
+        server: "server.js",
+        ...(contributes === undefined ? {} : { contributes }),
+    };
     await mkdir(dir, { recursive: true });
     await writeFile(join(dir, "intentic-extension.json"), JSON.stringify(manifest));
     await writeFile(join(dir, "server.js"), server);
@@ -209,4 +216,32 @@ test("one extension's failing activation is its own row, never the host's death"
     const broken = await app.request("http://sandbox.test/x/acme.broken/anything");
     expect(broken.status).toBe(404);
     expect(((await broken.json()) as { error: string }).error).toContain("no config");
+});
+
+// A card's MCP endpoint answers only through the daemon's MCP door, which checks the calling turn's lease: /x/* is
+// reachable with a panel's or a member's bearer, so it refuses that path however it is spelled, and nothing else.
+test("an extension's declared MCP endpoint is refused under /x, beside its ordinary routes", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ext-backend-tools-"));
+    const card = {
+        id: "ledger",
+        kind: "cli",
+        catalog: { name: "Ledger", icon: "plug", description: "Ledger", category: "business" },
+        fields: [{ key: "token", label: "Token", secret: true }],
+        env: { LEDGER_TOKEN: "${token}" },
+        skill: "SKILL.md",
+        mcp: "tools/mcp",
+    };
+    await writeExtension(root, "echo", echoServer, true, { capabilities: [card] });
+    const { svc, backend } = harness(root);
+    await backend.start();
+    const app = createApp(svc);
+
+    expect(backend.isToolPath("/x/acme.echo/tools/mcp/billing")).toBe(true);
+    for (const path of ["/x/acme.echo/tools/mcp/billing", "/x/acme.echo/tools/mcp", "/x/acme.echo//tools/%6Dcp/billing", "/x/acme%2Eecho/tools/mcp/billing"]) {
+        const refused = await app.request(`http://sandbox.test${path}`, { method: "POST", body: "{}" });
+        expect({ path, status: refused.status }).toEqual({ path, status: 403 });
+    }
+    // A sibling path that merely begins the same is the extension's own route, not its MCP endpoint.
+    expect(backend.isToolPath("/x/acme.echo/tools/mcpx")).toBe(false);
+    expect((await app.request("http://sandbox.test/x/acme.echo/ping")).status).toBe(200);
 });

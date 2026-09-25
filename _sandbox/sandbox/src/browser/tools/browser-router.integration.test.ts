@@ -1,7 +1,8 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type BrowserRouter, createBrowserRouter, createSchemaCache, type Prepared, type RpcMessage } from "./browser-router.js";
+import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
+import { type BrowserRouter, createBrowserRouter, createSchemaCache, type Prepared } from "./browser-router.js";
 
 // The router's contract, driven in-process against real child processes:
 // 1. handshake and tools/list are answered with no backend and no prepare; every listed tool gains an injected

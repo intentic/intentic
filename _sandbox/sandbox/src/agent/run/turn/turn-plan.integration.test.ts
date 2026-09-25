@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { type AgentTurn, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
-import { conversationAfter, testConfig, memoryFleet } from "../../../testing.js";
+import { conversationAfter, testConfig, memoryFleet, testTurnMounts } from "../../../testing.js";
 import { SKILL_CATALOG_NOTE_HEADER } from "../../../store/loaded-skills.js";
 import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER, workspaceSetup } from "../../../workspace/layout/workspace-setup.js";
 import { landingChecksNote } from "../../../workspace/deps/mainline-note.js";
@@ -94,11 +94,8 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
         // every plan, so every arm needs it.
         hostReach: async () => undefined,
         webextReach: async () => undefined,
-        // Opened on every plan whose browser stack mounts; nothing here calls a browser tool.
-        browserRouters: unstubbed<Services["browserRouters"]>("browserRouters", {
-            open: () => ({ id: "router", url: "http://127.0.0.1:1/mcp/browser/router", token: "test-router-token" }),
-            close: () => undefined,
-        }),
+        // Leased by every planned turn: its browsers, peers and extension cards mount here.
+        ...testTurnMounts(),
         config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
             accounts: async () => ({ codex: [{ name: "sub", label: "sub" }], grok: [], kimi: [], gemini: [] }),

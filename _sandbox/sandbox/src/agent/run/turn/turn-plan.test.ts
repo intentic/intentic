@@ -43,7 +43,7 @@ beforeEach(() => {
     credentials.mockReset();
     credentials.mockResolvedValue({ ok: true, credentials: { oauthToken: "sk-oauth", account: "acc-1" } });
     browserServers.mockReset();
-    browserServers.mockResolvedValue({ servers: {}, accounts: {}, ports: {}, passkeys: {} });
+    browserServers.mockResolvedValue({ servers: [], accounts: {}, ports: {}, passkeys: {} });
 });
 
 // the gates: each refuses for an ordinary state of a sandbox, and says which one
@@ -308,8 +308,10 @@ test("Codex receives the connected browser granted to its persona, and no other 
     };
     const reddit = { id: "reddit-radarsuspam", kind: "browser" as const, config: { platform: "reddit" } };
     const other = { id: "reddit-other", kind: "browser" as const, config: { platform: "reddit" } };
+    const routed = { name: "browser", url: "http://127.0.0.1:1/mcp/browser", token: "conversation-bearer", timeoutMs: 120_000 };
     browserServers.mockResolvedValue({
-        servers: { identity: { type: "stdio", command: "/usr/bin/socat", args: ["STDIO", "UNIX-CONNECT:/tmp/identity.sock"] } },
+        servers: [routed],
+        accounts: { "reddit-radarsuspam": "identity" },
         ports: { identity: 41_111 },
         passkeys: { identity: "/state/identity/passkeys.json" },
     });
@@ -322,11 +324,11 @@ test("Codex receives the connected browser granted to its persona, and no other 
     const plan = await planTurn(services, turn({ agent: "codex", actsAs: "reddit-writer", conversationId: "reddit-conversation" }), context);
     const request = (plan as { request: AgentRequest }).request;
 
-    // The routers open in this daemon's own hub, so the turn's router can bring that profile up later.
-    expect(browserServers).toHaveBeenCalledWith([reddit], ROOT, services.browserRouters, true, "reddit-conversation");
-    expect(request.tools.sdkServers).toEqual({
-        identity: { type: "stdio", command: "/usr/bin/socat", args: ["STDIO", "UNIX-CONNECT:/tmp/identity.sock"] },
-    });
+    // The routers are made by this daemon and mounted on the turn's lease, so the turn's router can bring that profile
+    // up later; Codex reaches them in `remote`, like every other runtime.
+    expect(browserServers).toHaveBeenCalledWith([reddit], ROOT, expect.objectContaining({ routers: services.browserRouters }), true, "reddit-conversation");
+    expect(request.tools.remote).toEqual([routed]);
+    expect(request.tools.sdkServers).toBeUndefined();
     expect(request.tools.browserPorts).toEqual({ identity: 41_111 });
     expect(request.tools.browserPasskeys).toEqual({ identity: "/state/identity/passkeys.json" });
 });

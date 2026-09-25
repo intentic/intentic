@@ -81,11 +81,10 @@ export const RAW_ROUTES = {
     "GET /extensions/{id}/bundle": { lane: "bulk" },
     // An extension backend's own namespace, proxied verbatim.
     "ALL /x/*": {},
-    // An extension card's MCP endpoint (its manifest's `mcp`), forwarded to the backend host; its handler checks the
-    // per-turn mount token the turn's tool config carries, and that the card is one that turn was granted.
-    "POST /mcp/extensions/{id}": { auth: "door" },
-    "GET /mcp/extensions/{id}": { auth: "door" },
-    "DELETE /mcp/extensions/{id}": { auth: "door" },
+    // Every MCP server the daemon hosts for a turn (its browser routers, the machines and browsers it was granted, its
+    // extension cards' endpoints), by server name: the handler checks the conversation's mount bearer the turn's tool
+    // config carries, and that the running turn mounted that name.
+    "ALL /mcp/{mount}": { auth: "door", control: "never" },
     // The `capabilities` CLI: discovery by name, and the ask that parks on an owner-decided card.
     "GET /capabilities/connectable": { floor: "maintainer", agent: true, control: "never" },
     "POST /capabilities/ask": { floor: "maintainer", agent: true, control: "never" },
@@ -124,27 +123,16 @@ export const RAW_ROUTES = {
     "DELETE /system/hosts/{id}": { control: "never" },
     // A peer's socket reconnects on its own backoff, so it answers before boot.
     "GET /system/hosts/connect": { auth: "door", beforeBoot: true, control: "never" },
-    // The MCP bridge onto a peer, carrying the per-boot bridge token its handler checks.
-    "POST /mcp/hosts/{id}": { auth: "door" },
-    "GET /mcp/hosts/{id}": { auth: "door" },
-    "DELETE /mcp/hosts/{id}": { auth: "door" },
     "POST /system/webext/pair": { control: "never" },
     "POST /system/webext/enroll": { auth: "door", control: "never" },
     "GET /system/webext": { control: "never" },
     "DELETE /system/webext/{id}": { control: "never" },
     "GET /system/webext/connect": { auth: "door", beforeBoot: true, control: "never" },
-    "POST /mcp/webext/{id}": { auth: "door" },
-    "GET /mcp/webext/{id}": { auth: "door" },
-    "DELETE /mcp/webext/{id}": { auth: "door" },
     "POST /system/runners/pair": { control: "never" },
     "POST /system/runners/enroll": { auth: "door", control: "never" },
     "GET /system/runners": { control: "never" },
     "DELETE /system/runners/{id}": { control: "never" },
     "GET /system/runners/connect": { auth: "door", beforeBoot: true, control: "never" },
-    // A turn's browser routers, hosted in the daemon; each carries its own per-turn bearer, checked by the handler.
-    "POST /mcp/browser/{id}": { auth: "door", control: "never" },
-    "GET /mcp/browser/{id}": { auth: "door", control: "never" },
-    "DELETE /mcp/browser/{id}": { auth: "door", control: "never" },
     // A connected browser's credential doors, on its durable token: a sign-in moves in (`session`) or out (`lend`).
     "POST /system/webext/session": { auth: "door", control: "never" },
     "POST /system/webext/lend": { auth: "door", control: "never" },

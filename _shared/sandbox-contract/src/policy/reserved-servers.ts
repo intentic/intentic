@@ -1,4 +1,4 @@
-// The MCP servers the daemon mounts in its OWN process, and whether each carries content from outside this container.
+// The MCP servers the daemon mounts under its own names, and whether each carries content from outside this container.
 // One source of truth: the outside-content guard's exemption list is the `control` subset of this, and a capability
 // whose id would become `mcp__<id>__…` is refused when the id is one of these, so nothing the owner configures can
 // shadow a daemon server. A daemon server's name is what reaches the model as the `mcp__<name>__` prefix.
@@ -8,9 +8,9 @@
 // - outside: the server carries content from beyond the container (a web page, a provider's verbatim sentence)
 export type ServerProvenance = "control" | "outside";
 
-// Every server agent/run/agent.ts and agent/run/harness/harness-servers.ts mount themselves; the browser router's two
-// names (web, browser) come in through `...turn.browser.servers`, so they are named here rather than discovered by the
-// text scan. A server added anywhere else without a row here fails the conformance test in the sandbox guard package.
+// Every server agent/run/agent.ts and agent/run/harness/harness-servers.ts mount themselves, plus the browser router's two
+// names (web, browser), which every turn mounts on its lease at the daemon's MCP door (browser-tools.ts) and which the
+// text scan reads from their constants. A server added anywhere else without a row here fails the conformance test in the sandbox guard package.
 export const DAEMON_MCP_SERVERS: Readonly<Record<string, ServerProvenance>> = {
     ui: "control", // agent.ts: AskUserQuestion
     accounts: "control", // agent.ts: the account roster and the credential typists
@@ -22,8 +22,8 @@ export const DAEMON_MCP_SERVERS: Readonly<Record<string, ServerProvenance>> = {
     watch: "control", // harness: condition watches
     deps: "control", // harness: dependency readiness
     diagnostics: "outside", // harness: two tools relay a provider's own sentence verbatim
-    web: "outside", // harness browser: the anonymous router; the page is the internet
-    browser: "outside", // harness browser: the signed-in router; the page is the internet
+    web: "outside", // the turn's mounts: the anonymous browser router; the page is the internet
+    browser: "outside", // the turn's mounts: the signed-in browser router; the page is the internet
 };
 
 // Every daemon-mounted server name, the set a capability id may not collide with.
@@ -38,7 +38,7 @@ export const CONTROL_MCP_SERVERS: ReadonlySet<string> = new Set(
 );
 
 // Capability kinds whose id becomes an MCP server name for the turn (`mcp` → its own endpoint; `device`/`webext` → the
-// loopback peer bridge), and so whose id must not collide with a daemon server. Other kinds mint accounts, providers or
+// peer bridge, mounted at the daemon's MCP door), and so whose id must not collide with a daemon server. Other kinds mint accounts, providers or
 // infrastructure, never a `mcp__<id>__` server keyed by the id.
 export const MCP_SERVER_MINTING_KINDS: ReadonlySet<string> = new Set(["mcp", "device", "webext"]);
 

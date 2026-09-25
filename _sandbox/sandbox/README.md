@@ -32,9 +32,13 @@ flowchart LR
   thread whose conversation was archived opens a fresh one instead.
 - Extension code never runs in the daemon process; it runs in a supervised backend host and in declared processes.
   Both reach the daemon on one token per extension, held to its manifest's `permissions.daemon` (`auth/grants.ts`).
-  A turn reaches an extension card's MCP endpoint on a bearer minted per turn for the cards that turn was granted
-  (`extensions/backend/extension-mcp.ts`). The panel token that repo operator panels hold reaches no route that
-  returns a stored secret.
+  The panel token that repo operator panels hold reaches no route that returns a stored secret.
+- Every MCP server the daemon hosts for a turn (its browser routers, the machines and browsers it was granted, its
+  extension cards' endpoints) is a mount at one door, `ALL /mcp/<name>` (`agent/tools/turn-mounts.ts`). A
+  conversation holds one bearer; each turn leases it the names it mounted, and the door refuses any name the current
+  lease does not hold, so between turns the bearer reaches nothing. `agent/tools/turn-tools.ts` composes these mounts
+  with the mcp-kind cards into one `remote` list, which every runtime projects the same way. `/x/*` refuses an
+  extension's declared MCP path, so a backend's tools are reached only through that door.
 - A process the daemon starts is put in a workload class by whoever starts it (`workload/workload-class.ts`,
   `spawnAs`): its niceness, IO class and rank for the kernel's OOM killer, inherited by everything it forks. Builds
   go first, agent runtimes last, children before their parents. Nothing ranks a process by its command line.

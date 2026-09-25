@@ -116,12 +116,10 @@ export const limitationsOf = (capabilities: AgentCapabilities): string[] => [
     ...(capabilities.mcp === "none"
         ? ["no MCP tools or plugins"]
         : capabilities.mcp === "http"
-          ? ["MCP tools only, no plugins or browser"]
-          : capabilities.mcp === "browser"
-            ? ["browser tools only, no other MCP"]
-            : capabilities.mcp === "tools"
-              ? ["no plugins"]
-              : []),
+          ? ["MCP servers only, none of the daemon's own tools, no plugins"]
+          : capabilities.mcp === "tools"
+            ? ["no plugins"]
+            : []),
     ...(capabilities.execution.includes("js") ? [] : ["no code runs, shell only"]),
     ...(capabilities.effort ? [] : ["no effort control"]),
     ...(capabilities.commands ? [] : ["no slash commands"]),

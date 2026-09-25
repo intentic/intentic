@@ -4,15 +4,19 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract";
+import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
+import { createTurnMounts } from "../../agent/tools/turn-mounts.js";
+import { createTurnMountRoute, type MountEndpoints } from "../../agent/tools/turn-mounts.routes.js";
 import type { AppEnv } from "../../app-env.js";
 import { readWorkspaceFile } from "../../workspace/files/workspace-files.js";
 import type { ExtensionHost } from "../installed-extensions.js";
 import type { ExtensionBackend } from "./backend-supervisor.js";
-import { createExtensionMcpMounts, createExtensionMcpRoute, type ExtensionMcpMounts, extensionMcpToolsOf } from "./extension-mcp.js";
+import { createExtensionMcpEndpoint, extensionMcpToolsOf } from "./extension-mcp.js";
 
-// A card whose extension declares `mcp` gets one server per granted card, and the door forwards to that card's path in
-// the backend with the turn's bearer swapped for the host token; everything else gets nothing.
+// A card whose extension declares `mcp` gets one server per granted card, mounted on the turn's lease, and the daemon's
+// MCP door forwards to that card's path in the backend with the conversation's bearer swapped for the host token;
+// everything else gets nothing.
 
 const HOST_TOKEN = "host-token";
 
@@ -44,63 +48,33 @@ const extensionsDir = (): string => {
     return root;
 };
 
-const hostFor = (capabilities: Capability[], extensionMcpMounts: ExtensionMcpMounts = createExtensionMcpMounts()) => ({
-    workspace: { root: mkdtempSync(join(tmpdir(), "ext-mcp-ws-")) },
-    files: { read: readWorkspaceFile },
-    capabilities: { list: async () => capabilities },
-    config: { extensionsDir: extensionsDir(), historyRoot: mkdtempSync(join(tmpdir(), "ext-mcp-history-")) },
-    extensionMcpMounts,
-}) satisfies ExtensionHost & { extensionMcpMounts: ExtensionMcpMounts };
+const hostFor = (capabilities: Capability[]) =>
+    ({
+        workspace: { root: mkdtempSync(join(tmpdir(), "ext-mcp-ws-")) },
+        files: { read: readWorkspaceFile },
+        capabilities: { list: async () => capabilities },
+        config: { extensionsDir: extensionsDir(), historyRoot: mkdtempSync(join(tmpdir(), "ext-mcp-history-")) },
+    }) satisfies ExtensionHost;
+
+const mountsAt = () => createTurnMounts({ baseUrl: () => "http://127.0.0.1:8787/mcp" });
 
 const acme: Capability = { id: "billing", kind: "cli", config: { provider: "acme", token: "t" } };
 const plain: Capability = { id: "other", kind: "cli", config: { provider: "plain", token: "t" } };
 // A card named after a daemon server would shadow it, so it mounts nothing.
 const reserved: Capability = { id: "ui", kind: "cli", config: { provider: "acme", token: "t" } };
 
-test("mounts one server per granted card whose contribution declares mcp, on a bearer reaching exactly those", async () => {
+test("mounts one server per granted card whose contribution declares mcp, on the turn's lease", async () => {
     const host = hostFor([acme, plain, reserved]);
-    const mounted = await extensionMcpToolsOf(host, [acme, plain, reserved], 8787, "conv-a");
-    const token = mounted.tools[0]?.token ?? "";
-    expect(mounted.tools).toEqual([{ name: "billing", url: "http://127.0.0.1:8787/mcp/extensions/billing", token }]);
-    expect([...(host.extensionMcpMounts.reach(token) ?? [])]).toEqual(["billing"]);
+    const mounts = mountsAt();
+    const tools = await extensionMcpToolsOf(host, [acme, plain, reserved], mounts.lease("conv-a"));
+    const token = tools[0]?.token ?? "";
+    expect(tools).toEqual([{ name: "billing", url: "http://127.0.0.1:8787/mcp/billing", token }]);
+    expect(mounts.resolve(token, "billing")).toEqual({ target: { kind: "extension", card: "billing" }, conversationId: "conv-a" });
+    // The plain card serves no MCP, and the reserved one would shadow a daemon server: neither is on the lease.
+    expect(mounts.resolve(token, "other")).toEqual({ refused: "unleased" });
+    expect(mounts.resolve(token, "ui")).toEqual({ refused: "unleased" });
     // Nothing granted mounts nothing, and mints no bearer.
-    expect((await extensionMcpToolsOf(host, [], 8787)).tools).toEqual([]);
-});
-
-// The mount registry alone: one bearer per conversation, leased the cards of each turn, reaching nothing between turns
-// and nothing another conversation was granted.
-test("a turn's bearer reaches its own granted cards only, and nothing once the turn ends", () => {
-    let clock = 1_000;
-    const mounts = createExtensionMcpMounts(() => clock);
-    const turnA = mounts.open(["billing"], "conv-a");
-    const turnB = mounts.open(["payroll"], "conv-b");
-    expect(turnA.token).not.toBe(turnB.token);
-    expect([...(mounts.reach(turnA.token) ?? [])]).toEqual(["billing"]);
-    expect([...(mounts.reach(turnB.token) ?? [])]).toEqual(["payroll"]);
-    expect(mounts.reach("forged")).toBeUndefined();
-    expect(mounts.reach(undefined)).toBeUndefined();
-
-    turnA.release();
-    expect([...(mounts.reach(turnA.token) ?? ["gone"])]).toEqual([]);
-    // The conversation's next turn gets the same bearer (an ACP session keeps it), leased that turn's own grant.
-    const nextA = mounts.open(["ledger"], "conv-a");
-    expect(nextA.token).toBe(turnA.token);
-    expect([...(mounts.reach(nextA.token) ?? [])]).toEqual(["ledger"]);
-    // A stale release of the earlier turn takes nothing from the later one.
-    turnA.release();
-    expect([...(mounts.reach(nextA.token) ?? [])]).toEqual(["ledger"]);
-
-    // A turn with no conversation has a bearer of its own, forgotten outright when it ends.
-    const loose = mounts.open(["billing"]);
-    loose.release();
-    expect(mounts.reach(loose.token)).toBeUndefined();
-
-    // A lease nobody released is swept a day on; closeAll forgets every bearer.
-    clock += 25 * 3_600_000;
-    mounts.open([], "conv-c");
-    expect(mounts.reach(nextA.token)).toBeUndefined();
-    mounts.closeAll();
-    expect(mounts.reach(turnB.token)).toBeUndefined();
+    expect(await extensionMcpToolsOf(host, [], mounts.lease())).toEqual([]);
 });
 
 // The backend host stand-in: records what arrived and answers 200.
@@ -114,33 +88,39 @@ const backend = async (): Promise<{ server: Server; port: number; seen: { url?: 
     return { server, port: (server.address() as AddressInfo).port, seen };
 };
 
-test("the door checks its token, resolves the card and forwards onto the card's backend path", async () => {
+test("the door checks the bearer's lease, resolves the card and forwards onto the card's backend path", async () => {
     const upstream = await backend();
     try {
         const capabilities = [acme, plain];
         const host = hostFor(capabilities);
+        const mounts = mountsAt();
+        const card = (id: string) => ({ name: id, target: { kind: "extension", card: id } as const });
         // Turn A is granted billing (and the plain card, which serves no MCP); turn B, another conversation, is granted
-        // nothing that serves MCP but mints a bearer of its own through a card of the same kind.
-        const TOKEN = host.extensionMcpMounts.open(["billing", "other"], "conv-a").token;
-        const turnB = host.extensionMcpMounts.open(["payroll"], "conv-b");
+        // nothing that serves MCP but holds a bearer of its own through a card of the same kind.
+        const turnA = mounts.lease("conv-a");
+        const TOKEN = turnA.open(card("billing")).token ?? "";
+        turnA.open(card("other"));
+        const turnB = mounts.lease("conv-b");
+        const tokenB = turnB.open(card("payroll")).token ?? "";
         const extensionBackend = {
             proxyTarget: () => ({ port: upstream.port, hostToken: HOST_TOKEN }),
             status: () => ({ state: "running", extensions: [] }),
         } as unknown as ExtensionBackend;
-        const route = createExtensionMcpRoute({
+        const extension = createExtensionMcpEndpoint({
             ...host,
             capabilities: { list: async () => capabilities, get: async (id: string) => capabilities.find((entry) => entry.id === id) },
             extensionBackend,
-        } as unknown as Parameters<typeof createExtensionMcpRoute>[0]);
-        const app = new Hono<AppEnv>().all("/mcp/extensions/:id", route);
+        } as unknown as Parameters<typeof createExtensionMcpEndpoint>[0]);
+        const route = createTurnMountRoute(mounts, unstubbed<MountEndpoints>("endpoints", { extension }));
+        const app = new Hono<AppEnv>().all("/mcp/:mount", route);
         const post = (id: string, token: string) =>
-            app.request(`/mcp/extensions/${id}?probe=1`, { method: "POST", headers: { authorization: `Bearer ${token}` }, body: "{}" });
+            app.request(`/mcp/${id}?probe=1`, { method: "POST", headers: { authorization: `Bearer ${token}` }, body: "{}" });
 
         expect((await post("billing", "wrong")).status).toBe(401);
         expect((await post("other", TOKEN)).status).toBe(404);
         expect((await post("missing", TOKEN)).status).toBe(403);
         // A valid bearer from turn B cannot call a card turn B was not granted, whatever the path names.
-        expect((await post("billing", turnB.token)).status).toBe(403);
+        expect((await post("billing", tokenB)).status).toBe(403);
         expect(upstream.seen).toEqual([]);
 
         const answered = await post("billing", TOKEN);
@@ -151,11 +131,9 @@ test("the door checks its token, resolves the card and forwards onto the card's 
         expect(upstream.seen[0]?.headers?.["authorization"]).toBeUndefined();
 
         // Once turn A ends, its bearer stops opening the card it was granted.
-        const ended = host.extensionMcpMounts.open(["billing"], "conv-ended");
-        expect((await post("billing", ended.token)).status).toBe(200);
-        ended.release();
-        expect((await post("billing", ended.token)).status).toBe(403);
-        expect(upstream.seen).toHaveLength(2);
+        turnA.release();
+        expect((await post("billing", TOKEN)).status).toBe(403);
+        expect(upstream.seen).toHaveLength(1);
     } finally {
         upstream.server.close();
     }
