@@ -290,7 +290,7 @@ import { workspaceArrivedEmpty } from "./scaffold/starter-site.js";
 import { type WorkspacePaths, workspacePaths } from "./workspace/workspace.js";
 import { writeWorkspaceFileStream } from "./workspace/files/workspace-files-upload.js";
 import { extractArchive } from "./workspace/files/workspace-extract.js";
-import { createWorkspaceTrash, type WorkspaceTrash } from "./workspace/files/workspace-trash.js";
+import { createWorkspaceTrash, type WorkspaceTrash } from "./workspace/files/trash/workspace-trash.js";
 import {
     copyWorkspacePath,
     makeWorkspaceDir,

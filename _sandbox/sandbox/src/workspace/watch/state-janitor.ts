@@ -3,7 +3,7 @@ import { readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { Logger } from "pino";
 import { statePath } from "../../state-paths.js";
-import { createWorkspaceTrash } from "../files/workspace-trash.js";
+import { createWorkspaceTrash } from "../files/trash/workspace-trash.js";
 
 // Garbage collection for everything under `.intentic` classified as disposable; the state table says what a tree is,
 // this decides what happens to it. Every rule is derived from a class, not a judgment about content:

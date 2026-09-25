@@ -2,7 +2,7 @@ import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { computed, type Ref, ref, watch } from "vue";
 import type { useNotifications } from "../../../../shell/notifications/notifications";
 import type { BarrenChain } from "../emptyDirs";
-import type { DeleteBatch } from "../deleteUndo";
+import type { DeleteBatch } from "../undo/deleteUndo";
 import { deletedReceipt, joinPath } from "../entryNames";
 import type { useEmptyDirs } from "../useEmptyDirs";
 import type { useWorkspaceTree } from "../useWorkspaceTree";

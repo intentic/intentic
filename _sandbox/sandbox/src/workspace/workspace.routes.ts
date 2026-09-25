@@ -21,7 +21,7 @@ import { syncWorkspaceRepos } from "./layout/sync-repos.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "./layout/templates-config.js";
 import { isControlPlanePath, resolveWithin } from "./files/workspace-files-paths.js";
 import { UnknownArchiveError } from "./files/workspace-extract.js";
-import { TrashMissError } from "./files/workspace-trash.js";
+import { TrashMissError } from "./files/trash/workspace-trash.js";
 import { mainlineStatus } from "./deps/mainline-status.js";
 import { childrenForRead, containedForRead, containedIn, insideArchive, scopedTarget, workspaceRootFor } from "./layout/workspace-scope.js";
 import {

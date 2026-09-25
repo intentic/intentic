@@ -6,8 +6,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } f
 import { WORKSPACE } from "../../../shell/commands/categories";
 import { commandShortcut, type CommandRegistration, registerCommand } from "../../../shell/commands/useCommands";
 import { publishContextKey } from "../../../shell/commands/contextKeys";
-import { deleteUndoable } from "../explorer/deleteUndo";
-import { UNDO_DELETE, useDeleteUndo } from "../explorer/useDeleteUndo";
+import { deleteUndoable } from "../explorer/undo/deleteUndo";
+import { UNDO_DELETE, useDeleteUndo } from "../explorer/undo/useDeleteUndo";
 import { useAudience } from "../../../app/useAudience";
 import { useVocabulary } from "../../../core-views/vocabulary";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";

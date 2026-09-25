@@ -13,7 +13,7 @@ import { useT } from "@intentic/ui/i18n";
 import { nextTick } from "vue";
 import { useVocabulary } from "../../../core-views/vocabulary";
 import { useNotifications } from "../../../shell/notifications/notifications";
-import { useDeleteUndo } from "./useDeleteUndo";
+import { useDeleteUndo } from "./undo/useDeleteUndo";
 import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
 import { viewersOfPath } from "../../../shell/presence/usePresence";
 import { useLayout } from "../../../shell/window/useLayout";

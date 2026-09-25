@@ -1,8 +1,8 @@
-import { commandShortcut } from "../../../shell/commands/useCommands";
-import { useNotifications } from "../../../shell/notifications/notifications";
+import { commandShortcut } from "../../../../shell/commands/useCommands";
+import { useNotifications } from "../../../../shell/notifications/notifications";
 import { type DeleteBatch, takeDelete } from "./deleteUndo";
-import { restoredReceipt } from "./entryNames";
-import { useWorkspaceTree } from "./useWorkspaceTree";
+import { restoredReceipt } from "../entryNames";
+import { useWorkspaceTree } from "../useWorkspaceTree";
 
 // The command Mod+Z runs; the page that binds it registers it under this name.
 export const UNDO_DELETE = `workspace.undoDelete`;

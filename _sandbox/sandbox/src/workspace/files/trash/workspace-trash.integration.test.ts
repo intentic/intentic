@@ -1,3 +1,4 @@
+import { STATE_DIR } from "@intentic/constants";
 import { mkdir, mkdtemp, readdir, readFile, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -5,7 +6,7 @@ import { createWorkspaceTrash, freeRestoreTarget, TRASH_RETENTION_MS, TrashMissE
 
 const scratch = async (): Promise<{ root: string; trashDir: string }> => {
     const root = await mkdtemp(join(tmpdir(), "trash-"));
-    return { root, trashDir: join(root, ".intentic", "local", "trash") };
+    return { root, trashDir: join(root, STATE_DIR, "local", "trash") };
 };
 
 test("a trashed file comes back to its own path, recreating the folders that went since", async () => {
@@ -15,7 +16,7 @@ test("a trashed file comes back to its own path, recreating the folders that wen
     await writeFile(join(root, "a", "b", "note.md"), "hello");
 
     const id = await trash.put(join(root, "a"), "a");
-    expect(await readdir(root)).toEqual([".intentic"]);
+    expect(await readdir(root)).toEqual([STATE_DIR]);
 
     const landed = await trash.restore(id ?? "", async (rel) => join(root, rel));
     expect(landed).toBe(join(root, "a"));

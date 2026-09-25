@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { cp, lstat, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join, sep } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 
 // The file view's trash: a delete moves the entry here instead of erasing it, so Undo can put it back. One folder per
 // delete holds the entry itself and where it came from. A rename is instant for a folder of any size; the trash sits
@@ -106,7 +107,7 @@ export const createWorkspaceTrash = (trashDir: string): WorkspaceTrash => {
             () => undefined,
         );
         const held = join(slot, ENTRY);
-        const entry = await lstat(held).catch(() => undefined);
+        const entry = await lstat(held).catch(undefinedIfMissing);
         if (origin === undefined || entry === undefined) {
             throw new TrashMissError(`no trashed entry "${id}"`);
         }
@@ -118,12 +119,13 @@ export const createWorkspaceTrash = (trashDir: string): WorkspaceTrash => {
     };
 
     const sweep = async (now: number): Promise<void> => {
-        const ids = await readdir(trashDir).catch(() => [] as string[]);
+        const ids = (await readdir(trashDir).catch(undefinedIfMissing)) ?? [];
         await Promise.all(
             ids.map(async (id) => {
                 const slot = join(trashDir, id);
-                const stats = await stat(slot).catch(() => undefined);
+                const stats = await stat(slot).catch(undefinedIfMissing);
                 if (stats !== undefined && now - stats.mtimeMs > TRASH_RETENTION_MS) {
+                    // silent-catch: a slot that cannot be removed now is swept again on the next pass.
                     await rm(slot, { recursive: true, force: true }).catch(() => undefined);
                 }
             }),

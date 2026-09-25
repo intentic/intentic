@@ -26,7 +26,7 @@ import { MAX_RAW_BYTES } from "./files/workspace-files-download.js";
 import { UnknownArchiveError } from "./files/workspace-extract.js";
 import { UploadTooLargeError } from "./files/workspace-files-upload.js";
 import { sha256Text, statWorkspaceFileSize } from "./files/workspace-files.js";
-import { createWorkspaceTrash } from "./files/workspace-trash.js";
+import { createWorkspaceTrash } from "./files/trash/workspace-trash.js";
 
 import { clientFor, errorCode, proven } from "../harness/route-client.testing.js";
 import { fakeFiles, fakeHistory, tempWorkspace } from "../harness/route-fakes.testing.js";

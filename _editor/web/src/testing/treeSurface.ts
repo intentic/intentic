@@ -2,7 +2,7 @@ import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { noticeOf, type NoticeModel } from "@intentic/ui/async";
 import { mock } from "bun:test";
 import { computed, effectScope, ref, shallowRef } from "vue";
-import type { DeleteBatch } from "../features/workspace/explorer/deleteUndo";
+import type { DeleteBatch } from "../features/workspace/explorer/undo/deleteUndo";
 import { barrenChainOf, barrenChildren, barrenRoots } from "../features/workspace/explorer/emptyDirs";
 import type { RowAction } from "../features/workspace/explorer/rowActions";
 import type { DroppedFile } from "../features/workspace/explorer/transfer/dropEntries";

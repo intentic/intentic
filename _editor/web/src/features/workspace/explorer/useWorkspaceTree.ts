@@ -14,7 +14,7 @@ import { useRole } from "../../sandbox/secrets/useRole";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 import { dropProvisional, markSettled, noteArriving, noteLeaving, reconcileProvisional } from "../files/provisionalEntries";
 import { renameOpenPaths } from "../tabs/useWorkspaceTabs";
-import { type DeleteBatch, rememberDelete, type TrashedEntry } from "./deleteUndo";
+import { type DeleteBatch, rememberDelete, type TrashedEntry } from "./undo/deleteUndo";
 import { changedDirs } from "../changes/live/useWorkspaceLive";
 import { useHome } from "../home/useHome";
 import { readExpandedDirs, writeExpandedDirs } from "../tabs/workspaceSnapshot";

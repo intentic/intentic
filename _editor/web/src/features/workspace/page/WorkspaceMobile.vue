@@ -29,7 +29,7 @@ import { useWorkspaceRoute } from "../health/useWorkspaceRoute";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
 import { useNotifications } from "../../../shell/notifications/notifications";
-import { useDeleteUndo } from "../explorer/useDeleteUndo";
+import { useDeleteUndo } from "../explorer/undo/useDeleteUndo";
 import DiffToolbar from "../viewers/DiffToolbar.vue";
 import DiffSkeleton from "../viewers/DiffSkeleton.vue";
 import FileDiffPane from "../viewers/FileDiffPane.vue";
