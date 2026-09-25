@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
 import { StringDecoder } from "node:string_decoder";
+import { homeDir } from "@intentic/local-agent";
 import { sleep } from "@intentic/base/async";
 import { COMMAND_CLASS_LABELS, type CommandClass, type DeviceScopes, matchCommand } from "@intentic/sandbox-contract";
 import { assertPath, assertScope, rootsOf, ScopeError } from "../policy.js";
@@ -182,7 +182,7 @@ const nativeInterpreter = async (script: string, cwd: string | undefined, scopes
     return {
         command: shell.command,
         args: shell.args(script),
-        cwd: cwd === undefined ? (rootsOf(scopes)[0] ?? homedir()) : await assertPath(cwd, scopes, "run a command in"),
+        cwd: cwd === undefined ? (rootsOf(scopes)[0] ?? homeDir()) : await assertPath(cwd, scopes, "run a command in"),
         env: process.env,
     };
 };

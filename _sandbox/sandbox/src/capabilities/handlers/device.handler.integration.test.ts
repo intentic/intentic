@@ -147,6 +147,6 @@ test("renaming a device carries every OS install to the new name, each keeping i
 
     expect(await ids()).toEqual(["desk", "desk::wsl:archlinux", "omen::wsl:archlinux", "rogue"]);
     // No re-pairing: the distro's own token now answers to the new name.
-    expect(await hosts.verify(tokens.get("rog::wsl:archlinux") ?? "")).toEqual({ kind: "enrolled", id: "desk::wsl:archlinux" });
+    expect(await hosts.verify(tokens.get("rog::wsl:archlinux") ?? "")).toEqual({ kind: "enrolled", id: "desk::wsl:archlinux", card: "desk" });
     expect(disconnected).toEqual(["rog", "rog::wsl:archlinux"]);
 });

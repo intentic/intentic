@@ -1,8 +1,9 @@
 import { execFile, spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { homeDir } from "@intentic/local-agent";
 import {
     type DeviceSandbox,
     DeviceSandboxSchema,
@@ -64,7 +65,7 @@ export const fleetFrom = (stdout: string): DeviceSandbox[] => {
 // "what runs on me", whoever is asking.
 export const fleet = async (): Promise<DeviceSandbox[]> => {
     await ensureCurrentIc();
-    const candidates = icCandidates(process.platform, homedir());
+    const candidates = icCandidates(process.platform, homeDir());
     for (const [index, binary] of candidates.entries()) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are tried in order; ENOENT means try the next
         const answer = await exec(binary, ["sandbox", "list", "--json"], { timeout: LIST_TIMEOUT_MS, maxBuffer: MAX_BUFFER, windowsHide: true }).catch(
@@ -351,7 +352,7 @@ export const runIc = async (
     env: Readonly<Record<string, string>> = {},
 ): Promise<{ code: number; output: string }> => {
     await ensureCurrentIc();
-    const candidates = icCandidates(process.platform, homedir());
+    const candidates = icCandidates(process.platform, homeDir());
     for (const [index, binary] of candidates.entries()) {
         const attempt = await runStreamed(binary, args, onLine, env);
         if (attempt !== "missing") {

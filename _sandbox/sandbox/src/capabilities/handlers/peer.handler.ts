@@ -20,42 +20,21 @@ export interface PeerHandlerSpec<Scopes extends { readonly platform: string }> {
     // What the entry says of an enrolled peer not holding a socket right now.
     readonly awayHint: string;
     readonly added: (id: string) => string;
-    readonly store: (ctx: CapabilityCtx) => Pick<PeerStore<unknown>, "enrolled" | "list" | "rename" | "revoke">;
+    readonly store: (ctx: CapabilityCtx) => Pick<PeerStore<unknown>, "enrolled" | "relabelCard" | "revokeCard">;
     readonly hub: (ctx: CapabilityCtx) => Pick<PeerHub<never, unknown, unknown, Scopes>, "disconnect" | "online" | "pushScopes">;
     // Every field is a permission, none secret: the entry renders the grant back to the owner.
     readonly echo: (config: Scopes) => Record<string, string | number | boolean>;
-    // The card an enrollment belongs to, when one card holds several (a device's other OS installs pair as
-    // `<card>::<environment>`); absent, an enrollment is its card. The door's own rule (PeerDoor.cardOf).
-    readonly cardOf?: (enrolled: string) => string;
-    // The id an enrollment of this card takes when the card is renamed to `card`; absent, the new name itself.
-    readonly rekey?: (enrolled: string, card: string) => string;
 }
-
-// The card's own enrollment and every other one it holds. Removing or renaming the card has to take all of them: one
-// left behind is a key into this sandbox that no card lists and no screen can withdraw.
-const heldBy = async <Scopes extends { readonly platform: string }>(
-    spec: PeerHandlerSpec<Scopes>,
-    ctx: CapabilityCtx,
-    card: string,
-): Promise<string[]> => {
-    const cardOf = spec.cardOf;
-    if (cardOf === undefined) {
-        return [card];
-    }
-    const others = (await spec.store(ctx).list()).map((peer) => peer.id).filter((id) => id !== card && cardOf(id) === card);
-    return [card, ...others];
-};
 
 export const peerHandler = <Scopes extends { readonly platform: string }>(spec: PeerHandlerSpec<Scopes>): CapabilityHandler => ({
     echo: (config) => spec.echo(config as Scopes),
-    // Enrollment travels with the name; no re-pairing needed. The live socket is cut instead, since the far end is
-    // authenticated by a token this daemon still honors, and reconnecting announces the new name.
+    // Enrollment travels with the name; no re-pairing needed. Every enrollment the card holds (each OS install of a
+    // machine) is relabelled in one write, then each live socket is cut, since the far end is authenticated by a token
+    // this daemon still honors and reconnecting announces the new name.
     rename: {
         carry: async (ctx, from, to) => {
-            for (const id of await heldBy(spec, ctx, from)) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- each rename rewrites the enrollments file whole
-                await spec.store(ctx).rename(id, spec.rekey?.(id, to) ?? to);
-                spec.hub(ctx).disconnect(id, `this ${spec.noun} was renamed: reconnecting under its new name`);
+            for (const moved of await spec.store(ctx).relabelCard(from, to)) {
+                spec.hub(ctx).disconnect(moved.from, `this ${spec.noun} was renamed: reconnecting under its new name`);
             }
             await removeLoadedSkill(ctx.files, ctx.workspace.root, from);
         },
@@ -97,11 +76,11 @@ export const peerHandler = <Scopes extends { readonly platform: string }>(spec: 
     },
     // Revokes the peer's key and cuts its socket; the software installed over there stays; only someone at that
     // keyboard can remove it, and it can no longer reach this sandbox once revoked.
+    // Every enrollment of the card goes in one write, before any socket is cut: a failure leaves the card whole rather
+    // than some of its keys live with no card listing them.
     remove: async (ctx, id) => {
-        for (const held of await heldBy(spec, ctx, id)) {
+        for (const held of await spec.store(ctx).revokeCard(id)) {
             spec.hub(ctx).disconnect(held, `this ${spec.noun} was disconnected from the sandbox`);
-            // oxlint-disable-next-line eslint/no-await-in-loop -- each revoke rewrites the enrollments file whole
-            await spec.store(ctx).revoke(held);
         }
         await removeLoadedSkill(ctx.files, ctx.workspace.root, id);
     },

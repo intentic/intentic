@@ -71,6 +71,10 @@
     {
       "type": "{ hosts: { enrolledAt: number; hash: string; id: string }[] }",
       "since": "v1.312.0"
+    },
+    {
+      "type": "{ hosts: { card: string; enrolledAt: number; environment: string; hash: string; id: string; machineId: string }[] }",
+      "since": "unreleased"
     }
   ],
   "history:host-pair-consumed.json": [
@@ -153,6 +157,10 @@
     {
       "type": "{ enrolledAt: number; key: string; machine: string; mode: \"sync\" | \"mirror\"; seenAt?: number; tokenDigest: string }",
       "since": "v1.312.0"
+    },
+    {
+      "type": "{ enrolledAt: number; environment?: string; key: string; machine: string; machineId?: string; mode: \"sync\" | \"mirror\"; seenAt?: number; tokenDigest: string }",
+      "since": "unreleased"
     }
   ],
   "history:sync-pair-consumed.json": [

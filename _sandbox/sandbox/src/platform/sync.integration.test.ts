@@ -8,6 +8,7 @@ import {
     enrollSyncKey,
     isFileSyncEnrolled,
     isKeyEnrolled,
+    recordDeviceReport,
     restoreAuthorizedKeys,
     revokeEnrollmentByMachine,
     revokeEnrollmentByToken,
@@ -263,5 +264,30 @@ describe("enrollment store", () => {
         // Revoking the last one leaves the store readable as nobody enrolled.
         expect(await revokeEnrollmentByMachine(history, "laptop-a")).toBe(true);
         expect(await isKeyEnrolled(history)).toBe(false);
+    });
+
+    // WHICH COMPUTER HOLDS AN ENROLLMENT: said by the agent when it enrolls, or stamped once from the first report of an
+    // agent that enrolled before it could say, never from a report filed under another machine's token.
+    it("records the machine an agent says it is on, at enrollment or from its first report", async () => {
+        await enrollSyncKey({ historyRoot: history, key: key("laptop-a"), mode: "mirror", takeover: false, machineId: "m-laptop-a-0001", environment: "native" });
+        const older = await token(await enrollSyncKey({ historyRoot: history, key: key("laptop-b"), mode: "sync", takeover: false }));
+        const report = {
+            machineId: "m-laptop-b-0001",
+            hostname: "laptop-b",
+            os: "linux",
+            wsl: { distro: "Arch" },
+            pairings: [],
+            ports: [],
+            agent: { running: true },
+            capturedAt: 1,
+        };
+        expect(await recordDeviceReport(history, older, report)).toBe(true);
+        expect((await enrolledFleet(history)).machines).toEqual([
+            { machine: "laptop-a", mode: "mirror", machineId: "m-laptop-a-0001", environment: "native" },
+            { machine: "laptop-b", mode: "sync", machineId: "m-laptop-b-0001", environment: "wsl:Arch" },
+        ]);
+        // A token nobody holds files nothing and stamps nothing.
+        expect(await recordDeviceReport(history, "ist_nobody", { ...report, machineId: "m-intruder-00001" })).toBe(false);
+        expect((await enrolledFleet(history)).machines.map((row) => row.machineId)).toEqual(["m-laptop-a-0001", "m-laptop-b-0001"]);
     });
 });

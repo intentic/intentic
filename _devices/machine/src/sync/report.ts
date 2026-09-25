@@ -4,6 +4,7 @@ import { livePidRecord } from "@intentic/local-agent";
 import type { DeviceAgent, DevicePairing, DevicePort, DeviceReport } from "@intentic/sandbox-contract";
 import { runPidPath } from "../config.js";
 import { installedBuild } from "../installed.js";
+import { machineId } from "../machine-id.js";
 import { wslEnvironment } from "../wsl.js";
 import { mirrorHeartbeatPath, type Pairing, readState, type SyncState } from "./config.js";
 import { backupSessionName, ensureMutagen, readSessionState, sessionName } from "./mutagen.js";
@@ -87,7 +88,10 @@ export const buildReport = (
     agent: DeviceAgent,
     capturedAt: number,
     wsl?: { readonly distro: string } | undefined,
+    machine?: string | undefined,
 ): DeviceReport => ({
+    // Which computer this is: how a sync enrollment made before its agent could say learns it (the daemon stamps it).
+    ...(machine === undefined ? {} : { machineId: machine }),
     hostname: hostname(),
     os: platform(),
     // Omitted rather than set to undefined off WSL, so a report says nothing at all about it instead of saying no.
@@ -101,7 +105,7 @@ export const buildReport = (
 // The report for this machine right now, the one entry point every carrier uses.
 export const deviceReport = async (mutagen: string | undefined): Promise<DeviceReport> => {
     const [state, agent, wsl] = await Promise.all([readState(), agentState(installedBuild()), wslEnvironment()]);
-    return buildReport(state, mutagen, agent, Date.now(), wsl);
+    return buildReport(state, mutagen, agent, Date.now(), wsl, machineId());
 };
 
 // One pairing's slice for posting to its sandbox: only that pairing and its ports cross the network. A `mirror`

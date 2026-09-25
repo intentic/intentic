@@ -1,14 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, rename, rm, symlink } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
-import type { Log } from "@intentic/local-agent";
+import { homeDir, type Log } from "@intentic/local-agent";
 import { DEV_VERSION } from "@intentic/sandbox-contract";
 import { binDir } from "./config.js";
 import { adoptRunningDistros } from "./environments/commands.js";
 import { launchUpgrade, UPGRADE_ENV, upgradeHereToMachine } from "./environments/machine-upgrade.js";
+import { machineId } from "./machine-id.js";
 import { runningAsInstalledAgent } from "./installed.js";
 import { agentPath, download, launcherAssetUrl, launcherPath } from "./release.js";
 import { type UpgradeOutcome, upgradeMessage } from "./upgrade.js";
@@ -60,7 +60,7 @@ export const realSelfUpdateIo = (out: Log): SelfUpdateIo => ({
 // real rather than a promise the installer couldn't keep. POSIX gets a symlink into ~/.local/bin; Windows gets
 // the bin dir appended to the per-user PATH.
 const posixPathRepair = async (out: Log): Promise<void> => {
-    const linkDir = join(homedir(), ".local", "bin");
+    const linkDir = join(homeDir(), ".local", "bin");
     const link = join(linkDir, "intentic-machine");
     try {
         await mkdir(linkDir, { recursive: true });
@@ -192,6 +192,8 @@ export const prepareSetup = async (out: Log, args: readonly string[]): Promise<v
 // What every `setup` runs once it has enrolled: the Windows side takes over distros already running an agent, and a
 // setup that moved this side onto a newer release brings the rest of the PC level with it, in the background.
 export const completeSetup = async (out: Log): Promise<void> => {
+    // Which computer this is, minted here at install when nothing has minted it yet (machine-id.ts).
+    machineId();
     await adoptRunningDistros(out);
     if (process.env[UPGRADE_ENV] === undefined) {
         return;

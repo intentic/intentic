@@ -29,9 +29,14 @@ export interface PeerStore<Extra> {
     // the only authorization on the WebSocket.
     readonly verify: (presented: string) => Promise<Presented>;
     readonly enrolled: (id: string) => Promise<boolean>;
-    readonly list: () => Promise<Pairing<Extra>[]>;
-    // Moves an enrollment onto a new id, keeping the peer's key valid; no re-pairing needed at the far end.
-    readonly rename: (from: string, to: string) => Promise<void>;
+    // Every enrollment, with the card each is a connection of.
+    readonly list: () => Promise<(Pairing<Extra> & { readonly card: string })[]>;
+    // The card a pairing for `id` would be a connection of: what the pair route checks the grant by before minting.
+    readonly cardFor: (id: string) => string;
+    // A card's enrollments onto its new name, and dropping them all: one write each (Enrollments says why).
+    readonly relabelCard: (from: string, to: string) => Promise<readonly { readonly from: string; readonly to: string }[]>;
+    readonly revokeCard: (card: string) => Promise<readonly string[]>;
+    readonly amend: (id: string, patch: Partial<Extra>) => Promise<void>;
     // Drop a peer's enrollment; its next connect is refused and its live socket is closed by the caller.
     readonly revoke: (id: string) => Promise<boolean>;
 }
@@ -43,12 +48,14 @@ export const filePeerStore = <Shape extends z.ZodRawShape>(
     type Extra = z.infer<z.ZodObject<Shape>>;
     const files = spec.files(historyRoot);
     const pending = pairings<Pairing<Extra>>(files.consumed, spec.pairTtlMs);
-    const records = enrollments({ path: files.enrollments, key: spec.key, prefix: spec.prefix, extra: spec.extra });
+    const records = enrollments({ path: files.enrollments, key: spec.key, prefix: spec.prefix, extra: spec.extra, card: spec.card });
     const replayable = spec.replayable === true;
+    // What a pairing for `id` records beside it: the door's own card rule, under whatever a caller passed explicitly.
+    const pairingExtra = (id: string, extra: Extra | undefined): Extra => ({ ...spec.card?.pairing(id), ...extra }) as Extra;
 
     return {
-        mintPairing: (id, extra) => pending.mint({ ...(extra as Extra), id }, { replayable }),
-        seedPairing: (id, token, extra) => pending.arm(token, { ...(extra as Extra), id }),
+        mintPairing: (id, extra) => pending.mint({ ...pairingExtra(id, extra), id }, { replayable }),
+        seedPairing: (id, token, extra) => pending.arm(token, { ...pairingExtra(id, extra), id }),
         enroll: async (pairToken) => {
             const pairing = await pending.redeem(pairToken);
             if (pairing === undefined) {
@@ -61,7 +68,10 @@ export const filePeerStore = <Shape extends z.ZodRawShape>(
         verify: records.verify,
         enrolled: records.enrolled,
         list: records.list,
-        rename: records.rename,
+        cardFor: (id) => (spec.card === undefined ? id : spec.card.of({ id, ...spec.card.pairing(id) })),
+        relabelCard: records.relabelCard,
+        revokeCard: records.revokeCard,
+        amend: records.amend,
         revoke: records.revoke,
     };
 };

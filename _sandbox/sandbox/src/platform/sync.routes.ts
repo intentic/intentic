@@ -1,4 +1,4 @@
-import { DeviceReportSchema } from "@intentic/sandbox-contract";
+import { DeviceReportSchema, MachineIdSchema } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
@@ -42,8 +42,11 @@ export const createSyncRoutes = (services: Services) => ({
                 return denied;
             }
         }
-        const body = (await c.req.json().catch(() => undefined)) as { key?: unknown } | undefined;
+        const body = (await c.req.json().catch(() => undefined)) as { key?: unknown; machineId?: unknown; environment?: unknown } | undefined;
         const key = typeof body?.key === "string" ? body.key : undefined;
+        // Which computer and install is enrolling, when its agent is new enough to say; a malformed id is left unsaid.
+        const machineId = MachineIdSchema.safeParse(body?.machineId).data;
+        const environment = typeof body?.environment === "string" && body.environment !== "" ? body.environment : undefined;
         if (key === undefined || !isValidAuthorizedKey(key)) {
             return c.json({ error: "invalid key" }, 400);
         }
@@ -51,7 +54,7 @@ export const createSyncRoutes = (services: Services) => ({
         const mode: SyncMode = paired ?? "sync";
         // Sync enroll is single-holder: a conflict returns 423 before consuming the token, so a retry can reuse it.
         const takeover = c.req.header("x-intentic-sync-takeover") === "1";
-        const result = await enrollSyncKey({ historyRoot: services.config.historyRoot, key, mode, takeover });
+        const result = await enrollSyncKey({ historyRoot: services.config.historyRoot, key, mode, takeover, machineId, environment });
         if ("locked" in result) {
             return c.json({ error: "sync already active", machine: result.locked }, 423);
         }

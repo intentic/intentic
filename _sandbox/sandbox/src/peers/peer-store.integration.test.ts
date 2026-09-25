@@ -30,7 +30,7 @@ test("a pairing enrolls exactly the id it was minted for, and the token carries 
     const enrolled = await store.enroll(token);
     expect(enrolled?.id).toBe("laptop");
     expect(enrolled?.token.startsWith("iht_")).toBe(true);
-    expect(await store.verify(enrolled?.token ?? "")).toEqual({ kind: "enrolled", id: "laptop" });
+    expect(await store.verify(enrolled?.token ?? "")).toEqual({ kind: "enrolled", id: "laptop", card: "laptop" });
 });
 
 test("a pairing is spent by one enrollment, and an unknown one enrolls nothing", async () => {
@@ -45,7 +45,7 @@ test("re-enrolling a peer rotates its token: the old one stops verifying", async
     const { store } = tempStore();
     const first = await store.enroll(store.mintPairing("laptop").token);
     const second = await store.enroll(store.mintPairing("laptop").token);
-    expect(await store.verify(second?.token ?? "")).toEqual({ kind: "enrolled", id: "laptop" });
+    expect(await store.verify(second?.token ?? "")).toEqual({ kind: "enrolled", id: "laptop", card: "laptop" });
     expect(await store.verify(first?.token ?? "")).toEqual({ kind: "unknown" });
 });
 
@@ -53,7 +53,7 @@ test("revoke drops the peer; verify, enrolled and list all stop reporting it", a
     const { store } = tempStore();
     const enrolled = await store.enroll(store.mintPairing("desktop").token);
     expect(await store.enrolled("desktop")).toBe(true);
-    expect(await store.list()).toEqual([{ id: "desktop" }]);
+    expect(await store.list()).toEqual([{ id: "desktop", card: "desktop" }]);
     expect(await store.revoke("desktop")).toBe(true);
     // Revoking again is a no-op that reports false, not an error.
     expect(await store.revoke("desktop")).toBe(false);
@@ -65,8 +65,8 @@ test("revoke drops the peer; verify, enrolled and list all stop reporting it", a
 test("a rename carries the enrollment, so the far end's own key keeps working", async () => {
     const { store } = tempStore();
     const enrolled = await store.enroll(store.mintPairing("chrome").token);
-    await store.rename("chrome", "personal-chrome");
-    expect(await store.verify(enrolled?.token ?? "")).toEqual({ kind: "enrolled", id: "personal-chrome" });
+    expect(await store.relabelCard("chrome", "personal-chrome")).toEqual([{ from: "chrome", to: "personal-chrome" }]);
+    expect(await store.verify(enrolled?.token ?? "")).toEqual({ kind: "enrolled", id: "personal-chrome", card: "personal-chrome" });
     expect(await store.enrolled("chrome")).toBe(false);
 });
 
@@ -155,8 +155,8 @@ test("a door's extra record travels from the pairing to the enrollment", async (
     expect(await store.enroll(store.mintPairing("rig", { host: "rog" }).token)).toMatchObject({ id: "rig", host: "rog" });
     await store.enroll(store.mintPairing("hand-made").token);
     expect((await store.list()).toSorted((left, right) => left.id.localeCompare(right.id))).toEqual([
-        { id: "hand-made" },
-        { id: "rig", host: "rog" },
+        { id: "hand-made", card: "hand-made" },
+        { id: "rig", card: "rig", host: "rog" },
     ]);
 });
 

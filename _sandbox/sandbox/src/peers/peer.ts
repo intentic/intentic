@@ -1,5 +1,6 @@
 import type { RuntimeDomain } from "@intentic/sandbox-contract";
 import type { z } from "zod";
+import type { CardRule } from "./enrollment.js";
 
 // A peer is something of the user's that dials this sandbox and serves a contract back over the socket it opened: their
 // computer (hosts/), their browser (webext/), or one of this sandbox's own runners (runners/). A door is the data that
@@ -27,6 +28,9 @@ export interface PeerStoreSpec<Shape extends z.ZodRawShape> {
     readonly replayable?: boolean;
     // How long an unredeemed pairing lives; absent means the ten minutes it takes to walk over and paste one.
     readonly pairTtlMs?: number;
+    // Which capability card each enrollment is a connection of, read off its record; absent ⇒ each enrollment is its own
+    // card, which is every door but the hosts one (a machine card holds every OS install on that computer).
+    readonly card?: CardRule<z.infer<z.ZodObject<Shape>>>;
 }
 
 export interface PeerHubSpec {
@@ -56,10 +60,6 @@ export interface PeerDoor<Hello extends { readonly token: string }, Announced, S
         readonly announced: (hello: Hello) => Announced;
     };
     readonly scopesKind?: "device" | "webext";
-    // Which capability a connection's grant comes from, where a peer's id is finer than its card: a machine card is
-    // one computer and each OS install on it connects under its own key, all on the one grant. Absent ⇒ the id IS the
-    // card, which is every other door.
-    readonly cardOf?: (id: string) => string;
     readonly mcp?: PeerMcpSpec;
     // The sentence a spent or unknown pairing is refused with, naming where a fresh one comes from.
     readonly expired: string;

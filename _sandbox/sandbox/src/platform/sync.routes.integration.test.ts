@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unstubbed } from "@intentic/testing";
-import type { Capability } from "@intentic/sandbox-contract";
+import { type Capability, hostEntryOf } from "@intentic/sandbox-contract";
 import { stubEnv } from "@intentic/testing/bun";
 import { createApp } from "../app.js";
 import type { Services } from "../composition.js";
@@ -19,13 +19,11 @@ const hostDoor = (enrolled: string[]) => ({
     ids: enrolled,
     store: unstubbed<Services["hosts"]>("hosts", {
         enrolled: async (id: string) => enrolled.includes(id),
-        list: async () => enrolled.map((id) => ({ id }) as never),
-        revoke: async (id: string) => {
-            const at = enrolled.indexOf(id);
-            if (at !== -1) {
-                enrolled.splice(at, 1);
-            }
-            return at !== -1;
+        // A card's enrollments go in one write: every connection whose key names the card.
+        revokeCard: async (card: string) => {
+            const dropped = enrolled.filter((id) => hostEntryOf(id) === card);
+            enrolled.splice(0, enrolled.length, ...enrolled.filter((id) => hostEntryOf(id) !== card));
+            return dropped;
         },
     }),
 });

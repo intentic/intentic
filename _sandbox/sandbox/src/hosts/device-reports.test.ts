@@ -13,6 +13,7 @@ import { waitFor } from "@intentic/testing/bun";
 import type { Services } from "../composition.js";
 import { enrolledFleet, type SyncEnrollmentRow } from "../platform/sync.js";
 import { devices, manageDeviceSandbox, mergeDevices, type PullResult, runDeviceAgentFlow, sandboxesFromTool } from "./device-reports.js";
+import { HOST_CARD_RULE } from "./host-peer.js";
 
 // The push half, recorded rather than fed to a live /events feed: subscribing for real would start the runtime
 // sampler (tmux, procfs) for a fact this file states in one line.
@@ -111,104 +112,82 @@ test("reads a sync-only machine's platform off its report", () => {
     expect(merged.map((row) => row.platform)).toEqual(["windows", "macos"]);
 });
 
-// Rows join on hostname, not on the enrollment name or capability id, which can each differ.
-test("folds a sync enrollment and a host capability into one row when the hostname agrees", () => {
+// ROWS JOIN ON THE MACHINE, never on a name. A sync enrollment and a host connection are one row when both name the same
+// computer and the same OS install on it; the enrollment name, the card id and the hostname can each differ, and a
+// hostname is shared by a PC and every WSL distro on it.
+const ROG = "m-rog-0123456789";
+const OMEN = "m-omen-012345678";
+const stamped = (machine: string, machineId: string, environment = HOST_NATIVE_ENVIRONMENT): SyncEnrollmentRow => ({ ...enrolled(machine), machineId, environment });
+const saidBy = (machineId: string, environment?: string): Pick<HostSummary, "facts"> => ({
+    facts: { os: "Windows", arch: "x64", shell: "pwsh", home: "C:\\", roots: [], machineId, ...(environment === undefined ? {} : { wsl: { distro: environment } }) },
+});
+
+test("folds a sync enrollment and a host connection into one row when both name the same machine and install", () => {
     const pulled: PullResult = {
         report: report("blackbox"),
         sandboxes: [{ slug: "work", container: "intentic-sandbox-work", running: true, image: "img" }],
     };
-    const merged = mergeDevices([enrolled("laptop")], [{ machine: "laptop", report: report("blackbox") }], [{ host: host("my-pc"), result: pulled }]);
+    const merged = mergeDevices([stamped("laptop", ROG)], [{ machine: "laptop", report: report("whitebox") }], [{ host: host("my-pc", saidBy(ROG)), result: pulled }]);
 
     expect(merged).toHaveLength(1);
-    expect(merged[0]).toMatchObject({ key: "blackbox", label: "laptop", sync: enrolled("laptop"), hostId: "my-pc", online: true });
+    expect(merged[0]).toMatchObject({ key: "whitebox", label: "laptop", sync: stamped("laptop", ROG), hostId: "my-pc", machineId: ROG, online: true });
     // The containers arrive through the host door and land on the row, never inside the volunteered report.
     expect(merged[0]?.sandboxes).toHaveLength(1);
 });
 
-test("joins an offline device to the machine it is already syncing", () => {
-    const merged = mergeDevices(
-        [enrolled("radarsu-rog")],
-        [{ machine: "radarsu-rog", report: report("radarsu-rog") }],
-        [{ host: host("radarsu-rog", { online: false, platform: "linux" }), result: { gap: "offline" } }],
-    );
+// A side asleep since this daemon booted has no facts; its enrollment still says which computer it was last on.
+test("joins an offline device to the machine it is already syncing, by the machine its enrollment recorded", () => {
+    const asleep = host("rog", {
+        online: false,
+        platform: "windows",
+        environments: [{ key: HOST_NATIVE_ENVIRONMENT, online: false, machineId: ROG }],
+    });
+    const merged = mergeDevices([stamped("radarsu-rog", ROG)], [{ machine: "radarsu-rog", report: report("radarsu-rog") }], [{ host: asleep, result: { gap: "offline" } }]);
     expect(merged).toHaveLength(1);
-    expect(merged[0]).toMatchObject({ key: "radarsu-rog", label: "radarsu-rog", hostId: "radarsu-rog", online: false, platform: "linux" });
-    expect(merged[0]?.report?.hostname).toBe("radarsu-rog");
+    expect(merged[0]).toMatchObject({ label: "radarsu-rog", hostId: "rog", machineId: ROG, online: false, platform: "windows" });
     expect(merged[0]?.gap).toBeUndefined();
 });
 
-// environments that share a name
-// WSL hands a distro the Windows machine's own hostname, and the distro is usually named after the machine too, so
-// both of merge's keys collide between two environments that share nothing else: separate filesystems, separate
-// agents, separate containers. Folding them would put one machine's buttons on the other's row.
-
-test("keeps a Windows card off the Linux row that shares its name", () => {
-    const merged = mergeDevices(
-        [enrolled("radarsu-rog")],
-        [{ machine: "radarsu-rog", report: report("radarsu-rog") }],
-        [{ host: host("radarsu-rog", { online: false, platform: "windows" }), result: { gap: "offline" } }],
-    );
-    expect(merged).toHaveLength(2);
-    expect(merged.map((row) => row.platform)).toEqual(["linux", "windows"]);
-    // The sync half stays on the machine that actually reported it, rather than riding the Windows card.
-    expect(merged.find((row) => row.sync !== undefined)?.hostId).toBeUndefined();
-});
-
-test("keeps a WSL distro apart from the Windows install hosting it", () => {
-    const distro = report("radarsu-rog", { wsl: { distro: "Arch" } });
-    const merged = mergeDevices(
-        [enrolled("radarsu-rog")],
-        [{ machine: "radarsu-rog", report: distro }],
-        [{ host: host("radarsu-rog", { platform: "windows" }), result: { report: report("radarsu-rog", { os: "win32" }) } }],
-    );
-    expect(merged).toHaveLength(2);
-    expect(merged.map((row) => row.platform)).toEqual(["linux", "windows"]);
-});
-
-test("keeps two WSL distros on one machine apart", () => {
-    const merged = mergeDevices(
-        [enrolled("radarsu-rog")],
-        [{ machine: "radarsu-rog", report: report("radarsu-rog", { wsl: { distro: "Arch" } }) }],
-        [{ host: host("radarsu-rog-ubuntu"), result: { report: report("radarsu-rog", { wsl: { distro: "Ubuntu-22.04" } }) } }],
-    );
-    expect(merged).toHaveLength(2);
-    expect(merged.map((row) => row.hostId)).toEqual([undefined, "radarsu-rog-ubuntu"]);
-});
-
-test("still folds one distro seen through both doors", () => {
-    const distro = { distro: "Arch" };
-    const merged = mergeDevices(
-        [enrolled("radarsu-rog")],
-        [{ machine: "radarsu-rog", report: report("radarsu-rog", { wsl: distro }) }],
-        [{ host: host("radarsu-rog-wsl-arch"), result: { report: report("radarsu-rog", { wsl: distro }) } }],
-    );
+// An enrollment made by an agent too old to say is stamped by its first report; until then the report itself speaks.
+test("reads the machine off a sync report its enrollment has not been stamped with yet", () => {
+    const merged = mergeDevices([enrolled("radarsu-rog")], [{ machine: "radarsu-rog", report: report("radarsu-rog", { machineId: ROG }) }], [
+        { host: host("rog", saidBy(ROG)), result: { gap: "scope-off" } },
+    ]);
     expect(merged).toHaveLength(1);
-    expect(merged[0]).toMatchObject({ hostId: "radarsu-rog-wsl-arch", sync: enrolled("radarsu-rog") });
+    expect(merged[0]).toMatchObject({ hostId: "rog", sync: enrolled("radarsu-rog") });
 });
 
-// An agent too old to report `wsl` must keep folding exactly as it did before the field existed, rather than
-// splitting every row that has only ever been described by one of the two doors.
-test("folds as it always did when neither side mentions WSL", () => {
+// WSL hands a distro the Windows machine's own hostname, and the distro is usually named after the machine too. Folding
+// them would put one install's buttons on the other's row; the machine is shared, the install is not.
+test("keeps a WSL distro apart from the Windows install on the same machine", () => {
     const merged = mergeDevices(
-        [enrolled("radarsu-rog")],
-        [{ machine: "radarsu-rog", report: report("radarsu-rog") }],
-        [{ host: host("radarsu-rog-wsl-arch"), result: { report: report("radarsu-rog") } }],
+        [stamped("radarsu-rog", ROG, "wsl:Arch")],
+        [{ machine: "radarsu-rog", report: report("radarsu-rog", { wsl: { distro: "Arch" }, machineId: ROG }) }],
+        [{ host: host("rog", { platform: "windows", ...saidBy(ROG) }), result: { report: report("radarsu-rog", { os: "win32" }) } }],
     );
+    expect(merged).toHaveLength(2);
+    expect(merged.map((row) => row.hostId)).toEqual([undefined, "rog"]);
+});
+
+test("folds one distro seen through both doors, by its connection's own environment", () => {
+    const distro = host(hostConnectionKey("rog", "wsl:Arch"), {
+        environments: [{ key: "wsl:Arch", online: true, machineId: ROG }],
+    });
+    const merged = mergeDevices([stamped("radarsu-rog", ROG, "wsl:Arch")], [], [{ host: distro, result: { gap: "scope-off" } }]);
     expect(merged).toHaveLength(1);
-    expect(merged[0]?.hostId).toBe("radarsu-rog-wsl-arch");
+    expect(merged[0]).toMatchObject({ hostId: "rog::wsl:Arch", sync: stamped("radarsu-rog", ROG, "wsl:Arch") });
 });
 
-test("lets the device that answered take the row before one that only shares its name", () => {
+// An agent too old to carry a machine id leaves its rows apart. The hostname it would once have been joined on is the
+// thing that joined a PC to a distro inside it, so no name stands in for an id nobody said.
+test("keeps rows apart while either door has not said which machine it is, however their names agree", () => {
     const merged = mergeDevices(
         [enrolled("radarsu-rog")],
         [{ machine: "radarsu-rog", report: report("radarsu-rog") }],
-        [
-            { host: host("radarsu-rog", { online: false, platform: "windows" }), result: { gap: "offline" } },
-            { host: host("radarsu-rog-wsl"), result: { report: report("radarsu-rog") } },
-        ],
+        [{ host: host("radarsu-rog"), result: { report: report("radarsu-rog") } }],
     );
-    expect(merged.find((row) => row.sync !== undefined)).toMatchObject({ hostId: "radarsu-rog-wsl", online: true });
-    expect(merged.map((row) => row.hostId).toSorted()).toEqual(["radarsu-rog", "radarsu-rog-wsl"]);
+    expect(merged).toHaveLength(2);
+    expect(merged.map((row) => row.hostId)).toEqual([undefined, "radarsu-rog"]);
 });
 
 test("keeps two devices apart when they report one hostname", () => {
@@ -224,11 +203,11 @@ test("keeps two devices apart when they report one hostname", () => {
     expect(new Set(merged.map((row) => row.key)).size).toBe(2);
 });
 
-test("keeps two machines apart when nothing says they are the same box", () => {
+test("keeps two machines apart when they name different machines", () => {
     const merged = mergeDevices(
-        [enrolled("ada-laptop")],
+        [stamped("ada-laptop", ROG)],
         [{ machine: "ada-laptop", report: report("ada-box") }],
-        [{ host: host("grace-pc"), result: { report: report("grace-box") } }],
+        [{ host: host("grace-pc", saidBy(OMEN)), result: { report: report("grace-box") } }],
     );
     expect(merged.map((row) => row.key)).toEqual(["ada-box", "grace-box"]);
     expect(merged.map((row) => row.sync?.mode)).toEqual(["sync", undefined]);
@@ -277,7 +256,7 @@ const fakeServices = (id: string, respond: (call: FakeCall) => Promise<unknown>)
         perf: { track: async <T>(_op: string, _fields: unknown, run: () => Promise<T>): Promise<T> => await run() },
         capabilities: { list: async () => [{ kind: "device", id, config: { platform: "linux" } }] },
         // One enrollment per card here, named after it: these machines have a single OS install.
-        hosts: { list: async () => [{ id }] },
+        hosts: { list: async () => [{ id, ...HOST_CARD_RULE.pairing(id) }] },
         hostHub: {
             state: () => ({ online: true, version: "0.1.0" }),
             // One connection per card here, named after it: these machines have a single OS install.
@@ -426,7 +405,7 @@ test("gives every environment of one machine its own door, read through its own 
         syncFleet: () => enrolledFleet(NO_HISTORY),
         perf: { track: async <T>(_op: string, _fields: unknown, run: () => Promise<T>): Promise<T> => await run() },
         capabilities: { list: async () => [{ kind: "device", id: "pc-rog", config: { platform: "windows" } }] },
-        hosts: { list: async () => [{ id: "pc-rog" }, { id: distro }] },
+        hosts: { list: async () => [{ id: "pc-rog", ...HOST_CARD_RULE.pairing("pc-rog") }, { id: distro, ...HOST_CARD_RULE.pairing(distro) }] },
         hostHub: {
             state: (key: string) => ({
                 online: true,
@@ -712,31 +691,4 @@ test("an answer the device's RPC layer sent comes through as the refusal it is",
         ),
     );
     expect(lines).toEqual([{ kind: "error", message: "This device's agent has no such flow. Run `intentic-machine upgrade` on that device." }]);
-});
-
-// A card with "Run commands" off never reports, and a report was the only thing that said which environment a door
-// is. Its connect-time facts say so too now, so a silent distro no longer folds onto its neighbour's row.
-test("keeps a silent distro off the row of the distro beside it, on its facts alone", () => {
-    const merged = mergeDevices(
-        [enrolled("radarsu-rog")],
-        [{ machine: "radarsu-rog", report: report("radarsu-rog", { wsl: { distro: "Arch" } }) }],
-        [
-            {
-                host: host("radarsu-rog", {
-                    facts: {
-                        os: "Ubuntu",
-                        arch: "x64",
-                        shell: "/bin/bash",
-                        home: "/home/r",
-                        roots: [],
-                        hostname: "radarsu-rog",
-                        wsl: { distro: "Ubuntu-22.04" },
-                    },
-                }),
-                result: { gap: "scope-off" },
-            },
-        ],
-    );
-    expect(merged).toHaveLength(2);
-    expect(merged.find((row) => row.sync !== undefined)?.hostId).toBeUndefined();
 });

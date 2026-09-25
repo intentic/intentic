@@ -1,6 +1,6 @@
 import type { Services } from "../composition.js";
 import { createPeerHub } from "../peers/peer-hub.js";
-import { HOST_PEER, type HostClient, hostConnections, hostSummaries } from "./host-peer.js";
+import { HOST_CARD_RULE, HOST_PEER, type HostClient, hostConnections, hostSummaries } from "./host-peer.js";
 import {
     type Device,
     environmentKeyOf,
@@ -17,8 +17,8 @@ import {
 } from "@intentic/sandbox-contract";
 
 // The join behind "one PC, two doors": environments of one card are one computer by construction, and a distro with a
-// card of its own joins the machine whose hostname it carries, which is the one fact that makes a name safe to join
-// on. Tested beside the daemon's reader of it, like hostRunningSandbox; the contract directory holding it is at its
+// card of its own joins the machine whose id it carries (the id its Windows side handed it). A hostname is never the
+// join: a PC and its distros share one, and so can two unrelated computers. Tested beside the daemon's reader of it, like hostRunningSandbox; the contract directory holding it is at its
 // layout cap.
 
 const device = (key: string, over: Partial<Device> = {}): Device => ({ key, label: key, ...over });
@@ -26,31 +26,36 @@ const device = (key: string, over: Partial<Device> = {}): Device => ({ key, labe
 const WINDOWS = { os: "Microsoft Windows 11 Home", arch: "x64", shell: "PowerShell 7", home: "C:\\Users\\radar", roots: ["C:\\Users\\radar"] };
 const ARCH = { os: "Arch Linux", arch: "x64", shell: "/usr/bin/zsh", home: "/home/radarsu", roots: ["/home/radarsu"] };
 
+const ROG = "m-rog-0123456789";
+
 test("folds a Windows install and the distro on it into one machine, Windows first", () => {
-    const distro = device("rog-wsl-arch", { facts: { ...ARCH, hostname: "radarsu-rog", wsl: { distro: "Arch" } } });
-    const windows = device("radarsu-rog", { facts: { ...WINDOWS, hostname: "radarsu-rog" } });
+    const distro = device("rog-wsl-arch", { facts: { ...ARCH, machineId: ROG, hostname: "radarsu-rog", wsl: { distro: "Arch" } } });
+    const windows = device("radarsu-rog", { facts: { ...WINDOWS, machineId: ROG, hostname: "radarsu-rog" } });
     const [machine, ...rest] = machinesOf([distro, windows]);
     expect(rest).toEqual([]);
-    expect(machine).toMatchObject({ key: "radarsu-rog", label: "radarsu-rog" });
+    expect(machine).toMatchObject({ key: ROG, label: "radarsu-rog" });
     expect(machine?.environments.map((environment) => environment.key)).toEqual(["radarsu-rog", "rog-wsl-arch"]);
 });
 
-// The report is the older evidence and still counts: a sync-only distro folds onto the Windows card beside it.
-test("reads the hostname off the report when the door has no facts", () => {
+// The report and the sync enrollment say it too: a sync-only distro folds onto the Windows card beside it.
+test("reads the machine off the report or the sync enrollment when the door has no facts", () => {
     const synced = device("radarsu-rog", {
         sync: { machine: "radarsu-rog", mode: "sync" },
-        report: { hostname: "radarsu-rog", os: "linux", wsl: { distro: "Arch" }, pairings: [], ports: [], agent: { running: true }, capturedAt: 1 },
+        report: { machineId: ROG, hostname: "radarsu-rog", os: "linux", wsl: { distro: "Arch" }, pairings: [], ports: [], agent: { running: true }, capturedAt: 1 },
     });
-    const windows = device("radarsu-rog:win", { hostId: "win", facts: { ...WINDOWS, hostname: "RADARSU-ROG" } });
-    expect(machinesOf([synced, windows]).map((machine) => machine.environments.length)).toEqual([2]);
+    const stamped = device("radarsu-rog-2", { sync: { machine: "radarsu-rog-2", mode: "mirror", machineId: ROG } });
+    const windows = device("radarsu-rog:win", { hostId: "win", facts: { ...WINDOWS, machineId: ROG, hostname: "RADARSU-ROG" } });
+    expect(machinesOf([synced, stamped, windows]).map((machine) => machine.environments.length)).toEqual([3]);
 });
 
-test("keeps two native installs apart even when they share a name", () => {
+test("keeps two installs apart when they share only a name", () => {
     const linux = device("box", { facts: { ...ARCH, hostname: "box" } });
     const windows = device("box:win", { hostId: "win", facts: { ...WINDOWS, hostname: "box" } });
     // A carded machine is addressed by its card and an uncarded one by its own key; neither is the other's.
     expect(machinesOf([linux, windows]).map((machine) => machine.key)).toEqual(["box", "win"]);
-    expect(machinesOf([linux, windows]).map((machine) => machine.environments.length)).toEqual([1, 1]);
+    // Nor does a WSL distro join the PC whose name it carries without the id: a name is not evidence.
+    const distro = device("rog-wsl", { facts: { ...ARCH, hostname: "rog", wsl: { distro: "Arch" } } });
+    expect(machinesOf([distro, device("rog", { hostId: "rog", facts: { ...WINDOWS, hostname: "rog" } })])).toHaveLength(2);
 });
 
 // ONE CARD IS ONE COMPUTER. Hub liveness resets when the daemon restarts, so a side nobody has reached since holds no
@@ -73,14 +78,14 @@ test("folds a card's environments into one machine while its sides are asleep", 
 });
 
 // The other half of the same computer: a distro connected as a card of its own, which is what the Windows side's
-// "connect this distro" link still mints. The hostname joins it to the card it runs on, and that join carries the
-// card's other environments with it.
-test("joins a separately carded distro to the machine whose hostname it carries", () => {
+// "connect this distro" link still mints. The machine id joins it to the card it runs on, and that join carries the
+// card's other environments with it — including one asleep, known only by the machine its enrollment recorded.
+test("joins a separately carded distro to the machine whose id it carries", () => {
     const arch = hostConnectionKey("rog", "wsl:archlinux");
     const machines = machinesOf([
-        device("rog", { hostId: "rog", facts: { ...WINDOWS, hostname: "rog" } }),
+        device("rog", { hostId: "rog", machineId: ROG, gap: "offline" }),
         device(arch, { hostId: arch, gap: "offline" }),
-        device("rog-wsl-ubuntu", { hostId: "rog-wsl-ubuntu", facts: { ...ARCH, hostname: "rog", wsl: { distro: "Ubuntu" } } }),
+        device("rog-wsl-ubuntu", { hostId: "rog-wsl-ubuntu", facts: { ...ARCH, machineId: ROG, hostname: "rog", wsl: { distro: "Ubuntu" } } }),
     ]);
     const [machine, ...rest] = machines;
     expect(rest).toEqual([]);
@@ -91,7 +96,7 @@ test("joins a separately carded distro to the machine whose hostname it carries"
 test("keeps a lone device's own key, so its address does not change", () => {
     const lone = device("ada-laptop", { facts: { ...ARCH, hostname: "ada" } });
     expect(machinesOf([lone])).toEqual([{ key: "ada-laptop", label: "ada-laptop", environments: [lone] }]);
-    // No hostname at all is a device that has never described itself: a machine of its own.
+    // No machine id at all is a device that has never said which computer it is: a machine of its own.
     expect(machinesOf([device("quiet")])[0]?.environments).toHaveLength(1);
 });
 
@@ -152,7 +157,7 @@ test("gives one card a row per environment, native first, each with its own live
 
     const services = {
         capabilities: { list: async () => [{ kind: "device", id: "rog", config: { platform: "windows" } }] },
-        hosts: { list: async () => [{ id: "rog" }, { id: distroKey }] },
+        hosts: { list: async () => [{ id: "rog", ...HOST_CARD_RULE.pairing("rog") }, { id: distroKey, ...HOST_CARD_RULE.pairing(distroKey) }] },
         hostHub: hub,
     } as unknown as Services;
     const [machine, ...rest] = await hostSummaries(services);
@@ -191,12 +196,12 @@ test("lists an enrolled environment that has not connected since this daemon boo
     const hub = createPeerHub<HostClient, { version: string }, DeviceFacts, DeviceScopes>(HOST_PEER.hub, { warn: () => {} });
     const services = {
         capabilities: { list: async () => [{ kind: "device", id: "rog", config: { platform: "windows" } }] },
-        hosts: { list: async () => [{ id: "rog" }, { id: hostConnectionKey("rog", "wsl:archlinux") }, { id: "omen" }] },
+        hosts: { list: async () => [{ id: "rog", ...HOST_CARD_RULE.pairing("rog") }, { id: hostConnectionKey("rog", "wsl:archlinux"), ...HOST_CARD_RULE.pairing(hostConnectionKey("rog", "wsl:archlinux")) }, { id: "omen", ...HOST_CARD_RULE.pairing("omen") }] },
         hostHub: hub,
     } as unknown as Services;
     const [machine] = await hostSummaries(services);
-    // "omen" is another card's enrollment; an environment belongs to the card its key names, never to whichever card
-    // was read first.
+    // "omen" is another card's enrollment; an environment belongs to the card its record names, never to whichever
+    // card was read first.
     expect(machine?.environments).toEqual([
         { key: HOST_NATIVE_ENVIRONMENT, online: false },
         { key: "wsl:archlinux", online: false },
@@ -223,4 +228,26 @@ test("turns a card's environments into one connection each", () => {
     // A distro is a Linux install sitting on a Windows PC: its own platform decides which shell a line is written for.
     expect(distro).toMatchObject({ id: "rog::wsl:archlinux", platform: "linux", online: false, version: "1.278.0" });
     expect(distro?.facts?.shell).toBe(ARCH.shell);
+});
+
+// The machine an enrollment recorded rides its environment, so a side asleep still joins the computer it is on; an id
+// derived from the card before its agent said is the card's own and is never offered as a machine.
+test("carries the machine each enrollment recorded, and never a derived one", async () => {
+    const hub = createPeerHub<HostClient, { version: string }, DeviceFacts, DeviceScopes>(HOST_PEER.hub, { warn: () => {} });
+    const distroKey = hostConnectionKey("rog", "wsl:archlinux");
+    const services = {
+        capabilities: { list: async () => [{ kind: "device", id: "rog", config: { platform: "windows" } }] },
+        hosts: {
+            list: async () => [
+                { id: "rog", ...HOST_CARD_RULE.pairing("rog"), machineId: ROG },
+                { id: distroKey, ...HOST_CARD_RULE.pairing(distroKey) },
+            ],
+        },
+        hostHub: hub,
+    } as unknown as Services;
+    const [machine] = await hostSummaries(services);
+    expect(machine?.environments).toEqual([
+        { key: HOST_NATIVE_ENVIRONMENT, machineId: ROG, online: false },
+        { key: "wsl:archlinux", online: false },
+    ]);
 });

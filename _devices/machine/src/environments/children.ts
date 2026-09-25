@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { LOG_ROTATE_BYTES, type Log, ROTATE_LOG_SH } from "@intentic/local-agent";
 import { MACHINE_AUTOSTART } from "../autostart.js";
 import { listDistros } from "../wsl.js";
+import { MACHINE_ID_ENV, machineId } from "../machine-id.js";
 import { crossEnv, NO_AGENT_EXIT } from "./crossing.js";
 import { SUPERVISOR_ENV, WINDOWS_SUPERVISOR } from "./machine.js";
 
@@ -50,11 +51,15 @@ export interface ChildSpawner {
     readonly now: () => number;
 }
 
+// What a distro's agent is started with: that it is supervised, and which computer it is an environment of (this PC's
+// own id, so its enrollments and rows join the PC's rather than standing as a computer of their own).
+export const childEnv = (id: string): Record<string, string> => ({ [SUPERVISOR_ENV]: WINDOWS_SUPERVISOR, [MACHINE_ID_ENV]: id });
+
 // Not detached: a child that outlived the root would be a distro agent nothing supervises, so it dies with the root.
 const realSpawner: ChildSpawner = {
     spawn: (distro) => {
         const { command, args } = childArgv(distro);
-        return spawn(command, [...args], { windowsHide: true, stdio: "ignore", env: crossEnv({ [SUPERVISOR_ENV]: WINDOWS_SUPERVISOR }, "u") });
+        return spawn(command, [...args], { windowsHide: true, stdio: "ignore", env: crossEnv(childEnv(machineId()), "u") });
     },
     distros: async () => await listDistros(),
     now: Date.now,

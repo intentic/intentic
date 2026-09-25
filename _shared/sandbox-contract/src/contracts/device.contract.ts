@@ -7,15 +7,17 @@ import { DeviceFactsSchema } from "../schemas/hosts.js";
 import { OkSchema } from "../schemas/shared.js";
 
 // What a connected device can be asked, over the socket it opened; the machine is the oRPC server, the daemon the
-// client. No `.route()`: the procedure path is the address, not HTTP. `mcp` stays opaque (`z.unknown()`) so a machine
+// client. No `.route()`: the procedure path is the address, not HTTP. Every input is strict (devices.ts says why). `mcp` stays opaque (`z.unknown()`) so a machine
 // can add tools without a daemon release; validated on the machine and by the agent's MCP client.
 export const deviceContract = {
     // Device facts, refreshed on connect and on demand; the agent's skill pack is written against this shape.
     describe: oc.output(DeviceFactsSchema),
     // The machine's folders, ports and agent health, answered by the agent itself; refused (FORBIDDEN) with "Run commands" off.
     report: oc.output(DeviceReportSchema),
-    // Pushed on connect and on edit; the machine enforces the grant, nothing on the sandbox side checks a scope.
-    setScopes: oc.input(DeviceScopesSchema).output(OkSchema),
+    // Pushed on connect and on edit; the machine enforces the grant, nothing on the sandbox side checks a scope. Strict,
+    // like every input here: a switch this agent does not know is refused rather than silently not enforced. The daemon
+    // sends the card's whole config, so the card's `platform` is accepted and ignored.
+    setScopes: oc.input(DeviceScopesSchema.extend({ platform: z.string().optional() }).strict()).output(OkSchema),
     // Daemon-driven liveness; doubles as keepalive against an idle tunnel and the gone-vs-quiet probe.
     ping: oc.output(OkSchema),
     // One MCP JSON-RPC message forwarded verbatim in both directions, unmodified.

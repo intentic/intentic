@@ -12,8 +12,8 @@ import {
     DEVICE_FEATURE_RESHAPE_LATER,
     DEVICE_FEATURE_SET_SHAPE,
     deviceSupports,
-    differentEnvironment,
     environmentOf,
+    hostEnvironmentOf,
     REPORT_QUIET_AFTER_MS,
 } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
@@ -214,11 +214,6 @@ const PLATFORM_SLUGS: Record<string, string> = { win32: "windows", darwin: "maco
 const platformOf = (declared: string | undefined, report: DeviceReport | undefined): string | undefined =>
     declared ?? (report === undefined ? undefined : (PLATFORM_SLUGS[report.os] ?? report.os));
 
-// Two declared platforms that disagree are two machines, whatever they call themselves. Unknown on either side is not
-// disagreement: a card is often connected before its machine has ever answered.
-const differentPlatform = (left: string | undefined, right: string | undefined): boolean =>
-    left !== undefined && right !== undefined && left !== right;
-
 // One host pull as the pieces a row is assembled from: the machine's own description, where it lands, everything this
 // side knows about the machine regardless of whether it described itself, and the gap standing in for a missing
 // description. Containers sit in `known` rather than the report because they answer to their own switch.
@@ -239,6 +234,7 @@ const pulledHost = (
         known: {
             hostId: host.id,
             online: host.online,
+            ...(machineOfHost(host) === undefined ? {} : { machineId: machineOfHost(host) }),
             ...(platform === undefined ? {} : { platform }),
             ...(host.facts === undefined ? {} : { facts: host.facts }),
             ...(host.version === undefined ? {} : { agentVersion: host.version }),
@@ -250,8 +246,20 @@ const pulledHost = (
     };
 };
 
-// Pure reconciliation of enrollments, volunteered reports and host pulls into rows, testable without IO. Conservative:
-// a sync enrollment and host capability fold into one row only when both report and their hostnames agree.
+// The computer a host connection is on: what its agent said at connect, else what its enrollment recorded when it last
+// did (a side asleep since this daemon booted has no facts, and still has a machine).
+const machineOfHost = (host: HostSummary): string | undefined => host.facts?.machineId ?? host.environments[0]?.machineId;
+
+// The one join between the two doors: the same computer, and the same OS install on it. Both halves must have said:
+// an agent too old to carry a machine id leaves its rows apart, which is honest, where the hostname this replaced
+// joined a PC to a distro inside it, or two machines that shared a name.
+const sameEnvironment = (
+    left: { readonly machineId: string | undefined; readonly environment: string | undefined },
+    right: { readonly machineId: string | undefined; readonly environment: string | undefined },
+): boolean => left.machineId !== undefined && left.machineId === right.machineId && left.environment !== undefined && left.environment === right.environment;
+
+// Pure reconciliation of enrollments, volunteered reports and host pulls into rows, testable without IO. A sync
+// enrollment and a host connection fold into one row only when both name the same machine and environment.
 export const mergeDevices = (
     // Full enrollments, not names: a row must say which half of sync a machine holds and address it to revoke.
     enrolled: readonly SyncEnrollmentRow[],
@@ -267,24 +275,22 @@ export const mergeDevices = (
             key: report?.hostname ?? enrollment.machine,
             label: enrollment.machine,
             sync: enrollment,
+            ...(enrollment.machineId === undefined ? {} : { machineId: enrollment.machineId }),
             ...(platform === undefined ? {} : { platform }),
             ...(report === undefined ? {} : { report }),
         };
     });
 
-    // Claims a row by hostname if the host answered, else by capability id matching the enrollment's name. Answered
-    // hosts claim first, so a name match never outranks a real answer, and no rule may steal an occupied row.
-    // Neither key is unique across environments: WSL hands a distro the Windows machine's hostname, and a distro is
-    // usually named after the machine too, so both rules would happily merge a Windows install with a Linux one
-    // sitting inside it. A row is claimable only while nothing positively says the two are different environments,
-    // judged on the host's connect-time facts as well as its report, so a card with commands off still says which.
-    const claim = (host: HostSummary, report: DeviceReport | undefined, platform: string | undefined): Device | undefined => {
-        const environment = environmentOf(host.facts, report);
-        const free = (row: Device): boolean =>
-            row.hostId === undefined && !differentEnvironment(environmentOf(undefined, row.report), environment) && !differentPlatform(row.platform, platform);
-        return report === undefined
-            ? rows.find((row) => free(row) && row.label.toLowerCase() === host.id.toLowerCase())
-            : rows.find((row) => free(row) && row.key === report.hostname);
+    // A sync row's own say about which computer and install it is: its enrollment's record, else the report it posted.
+    const syncIdentity = (row: Device) => ({
+        machineId: row.sync?.machineId ?? row.report?.machineId,
+        environment: row.sync?.environment ?? environmentOf(undefined, row.report),
+    });
+    // No rule may steal an occupied row.
+    const claim = (host: HostSummary, report: DeviceReport | undefined): Device | undefined => {
+        // The environment the enrollment names (the connection's own), which no report can contradict.
+        const identity = { machineId: machineOfHost(host), environment: host.environments[0]?.key ?? hostEnvironmentOf(host.id) };
+        return rows.find((row) => row.hostId === undefined && sameEnvironment(syncIdentity(row), identity));
     };
 
     // Row keys must be unique, a shared key is a rendering fault; the capability id always works as a fallback.
@@ -292,11 +298,9 @@ export const mergeDevices = (
     const distinct = (preferred: string, id: string): string =>
         [preferred, id, `${preferred}:${id}`].find((candidate) => !taken.has(candidate)) ?? `${preferred}:${id}:${rows.length}`;
 
-    const answered = hosts.filter((entry) => "report" in entry.result);
-    const silent = hosts.filter((entry) => !("report" in entry.result));
-    for (const { host, result } of [...answered, ...silent]) {
-        const { report, platform, known, gap } = pulledHost(host, result);
-        const existing = claim(host, report, platform);
+    for (const { host, result } of hosts) {
+        const { report, known, gap } = pulledHost(host, result);
+        const existing = claim(host, report);
         if (existing !== undefined) {
             // Pulled report wins; a shut door removes nothing, only sets online:false. gap only when nothing else
             // shows.

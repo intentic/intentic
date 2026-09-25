@@ -252,7 +252,7 @@ const admission = async (presented: Presented, cards: readonly (typeof laptopCar
         "presented-token",
     );
 
-const enrolled = (id: string): Presented => ({ kind: "enrolled", id });
+const enrolled = (id: string, card = id): Presented => ({ kind: "enrolled", id, card });
 
 test("an enrolled peer whose card still grants it attaches with that card's config as its scopes", async () => {
     expect(await admission(enrolled("laptop"), [laptopCard])).toEqual({ id: "laptop", scopes: laptopCard.config });

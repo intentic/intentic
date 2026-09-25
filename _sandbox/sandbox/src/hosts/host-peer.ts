@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import {
+    derivedMachineId,
     HOST_HEARTBEAT_MS,
     HOST_NATIVE_ENVIRONMENT,
     hostEntryOf,
@@ -7,6 +8,7 @@ import {
     type deviceContract,
     hostEnvironmentOf,
     type HostEnvironment,
+    isDerivedMachineId,
     type DeviceFacts,
     type HostHello,
     HostHelloSchema,
@@ -17,6 +19,8 @@ import type { ContractRouterClient } from "@orpc/contract";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { deviceHandler } from "../capabilities/handlers/device.handler.js";
 import type { Services } from "../composition.js";
+import type { CardRule } from "../peers/enrollment.js";
+import { HostEnrollmentFieldsSchema } from "../peers/enrollment.js";
 import { PEER_BRIDGES, type PeerDoor } from "../peers/peer.js";
 import type { PeerHub } from "../peers/peer-hub.js";
 import { createPeerRoutes } from "../peers/peer-routes.js";
@@ -35,15 +39,30 @@ export interface HostAnnounced {
     readonly version: string;
 }
 export type HostHub = PeerHub<HostClient, HostAnnounced, DeviceFacts, DeviceScopes>;
-export type HostStore = PeerStore<Record<string, never>>;
+// What a host enrollment records beside its digest: which computer, which OS install on it, which card lends it.
+export type HostEnrollmentFields = { readonly card: string; readonly environment: string; readonly machineId: string };
+export type HostStore = PeerStore<HostEnrollmentFields>;
 
-export const HOST_PEER: PeerDoor<HostHello, HostAnnounced, Record<never, never>> = {
+// ONE CARD IS ONE COMPUTER, EACH OS INSTALL ON IT A CONNECTION OF THAT CARD, and the record says which. The owner asks to
+// pair a connection by its key (`<card>` or `<card>::wsl:<distro>`), which is parsed here, once, into the card and the
+// environment the enrollment records; from then on the card is read off the record, a rename is a new label on it,
+// and the connection key follows from the label. The machine id is the card's derived one until the agent says its own.
+export const HOST_CARD_RULE: CardRule<HostEnrollmentFields> = {
+    of: (entry) => entry.card,
+    pairing: (id) => ({ card: hostEntryOf(id), environment: hostEnvironmentOf(id), machineId: derivedMachineId(hostEntryOf(id)) }),
+    relabel: (entry, card) => ({ ...entry, card, id: hostConnectionKey(card, entry.environment) }),
+};
+
+export const HOST_PEER: PeerDoor<HostHello, HostAnnounced, typeof HostEnrollmentFieldsSchema.shape> = {
     slug: PEER_BRIDGES.device,
     noun: "device",
     listKey: "hosts",
     store: {
         files: (historyRoot) => ({ enrollments: join(historyRoot, "host-enrollments.json"), consumed: join(historyRoot, "host-pair-consumed.json") }),
-        key: "hosts", prefix: "iht_", extra: {}
+        key: "hosts",
+        prefix: "iht_",
+        extra: HostEnrollmentFieldsSchema.shape,
+        card: HOST_CARD_RULE,
     },
     hub: {
         domain: "hosts",
@@ -55,9 +74,6 @@ export const HOST_PEER: PeerDoor<HostHello, HostAnnounced, Record<never, never>>
     },
     hello: { schema: HostHelloSchema, announced: (hello) => ({ version: hello.version }) },
     scopesKind: "device",
-    // A machine card is one computer; each OS install on it connects under its own key and is admitted on the card's
-    // own switches (peer-routes.ts). The native environment's key is the card id, so a one-OS machine is unchanged.
-    cardOf: hostEntryOf,
     mcp: { serverName: (id) => `intentic-machine:${id}` },
     expired: "pairing expired, click Connect again in your browser for a fresh command.",
 };
@@ -71,14 +87,18 @@ const byEnvironment = (a: HostEnvironment, b: HostEnvironment): number =>
 // sibling that has held a socket, and every sibling this sandbox has an enrollment for. Enrollments are read because
 // hub liveness resets on a daemon restart — without them a distro that has not dialled in yet would vanish from its own
 // computer rather than reading as asleep. A card is a computer, so a card with nothing connected is still a computer
-// with one environment nobody has reached.
-const environmentsOf = (services: Services, card: string, enrolled: readonly string[]): HostEnvironment[] => {
-    const keys = new Set([card, ...[...services.hostHub.known(), ...enrolled].filter((key) => hostEntryOf(key) === card)]);
+// with one environment nobody has reached. Which card an enrollment is a connection of is the record's own say.
+const environmentsOf = (services: Services, card: string, enrolled: readonly { readonly id: string; readonly card: string; readonly machineId: string }[]): HostEnvironment[] => {
+    const records = new Map(enrolled.filter((entry) => entry.card === card).map((entry) => [entry.id, entry]));
+    // Only enrolled connections can hold a socket (peers/invariant.ts), so the records name every side there is.
+    const keys = new Set([card, ...records.keys()]);
     return [...keys]
         .map((key) => {
             const state = services.hostHub.state(key);
+            const machineId = records.get(key)?.machineId;
             return {
                 key: hostEnvironmentOf(key),
+                ...(machineId === undefined || isDerivedMachineId(machineId) ? {} : { machineId }),
                 online: state.online,
                 ...(state.announced === undefined ? {} : { version: state.announced.version }),
                 ...(state.facts === undefined ? {} : { facts: state.facts }),
@@ -97,7 +117,7 @@ export const hostSummaries = async (services: Services): Promise<HostSummary[]> 
     if (!cards.some((capability) => capability.kind === "device")) {
         return [];
     }
-    const enrolled = (await services.hosts.list()).map((pairing) => pairing.id);
+    const enrolled = await services.hosts.list();
     return cards.flatMap((capability): HostSummary[] => {
         if (capability.kind !== "device") {
             return [];
@@ -141,6 +161,14 @@ export const hostConnections = (summaries: readonly HostSummary[]): HostSummary[
         })),
     );
 
+// The machine id an enrollment records, from what its agent said at connect: one write, and none when it already
+// says so or the agent is too old to say.
+export const identifyMachine = async (services: Pick<Services, "hosts">, id: string, facts: Pick<DeviceFacts, "machineId">): Promise<void> => {
+    if (facts.machineId !== undefined) {
+        await services.hosts.amend(id, { machineId: facts.machineId });
+    }
+};
+
 // A card is the whole of a device's grant, so an enrollment outliving one is a credential nothing lists and nothing can
 // withdraw: dropped with the rest of that machine's access. A carded device is left alone, since its card owns it.
 export const revokeCardlessHost = async (services: Services, id: string): Promise<boolean> => {
@@ -160,8 +188,12 @@ export const hostPeerRoutes = (services: Services) =>
         hub: services.hostHub,
         summaries: () => hostSummaries(services),
         // One install connects the whole computer: whichever side the owner ran it on, the daemon puts an agent in
-        // the rest from here (environment-bootstrap.ts).
-        onConnected: (id, facts) => bootstrapEnvironments(services, id, facts),
+        // the rest from here (environment-bootstrap.ts). And the enrollment learns which computer it is on, replacing
+        // the id it was derived with, the first time its agent says.
+        onConnected: (id, facts) => {
+            void identifyMachine(services, id, facts).catch((err: unknown) => services.logger.warn({ err, id }, "hosts: could not record which machine connected"));
+            bootstrapEnvironments(services, id, facts);
+        },
         // The owner's safety policy, applied here since the bridge is the last thing to see a call while someone can
         // still be asked. The machine's own scopes remain the floor; a refusal here only stops what the machine might
         // otherwise have run.

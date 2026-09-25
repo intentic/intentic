@@ -1,6 +1,6 @@
 import { realpath } from "node:fs/promises";
-import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { homeDir } from "@intentic/local-agent";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 
 // The enforcement point: every scope the owner ticked is checked here, on the machine, and nowhere else. The
@@ -17,12 +17,12 @@ export const rootsOf = (scopes: DeviceScopes): string[] => {
         .map((line) => line.trim())
         .filter((line) => line !== "");
     if (lines.length === 0) {
-        return [resolve(homedir())];
+        return [resolve(homeDir())];
     }
     return (
         lines
             // A leading ~ is what a user types; nothing expands it for us here (it arrives as data from a form).
-            .map((line) => (line.startsWith("~") ? join(homedir(), line.slice(1)) : line))
+            .map((line) => (line.startsWith("~") ? join(homeDir(), line.slice(1)) : line))
             .filter((line) => isAbsolute(line))
             .map((line) => resolve(line))
     );

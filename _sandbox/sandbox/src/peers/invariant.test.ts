@@ -1,4 +1,5 @@
 import type { Capability, CapabilityKind } from "@intentic/sandbox-contract";
+import { HOST_CARD_RULE } from "../hosts/host-peer.js";
 import { checks, type PeerRegistryDeps } from "./invariant.js";
 
 /* Revocation is two calls, one on each record, and the one that matters for safety is the second. */
@@ -7,8 +8,10 @@ const fail = (message: string): never => {
     throw new Error(message);
 };
 
+// Records as the hosts door writes them (card, environment and a derived machine id, read off the id once at pairing);
+// a browser's card is its id, which the same rule answers for an id with no environment.
 const door = (enrolled: readonly string[], connected: readonly string[]) => ({
-    store: { list: async () => enrolled.map((id) => ({ id })) },
+    store: { list: async () => enrolled.map((id) => ({ id, ...HOST_CARD_RULE.pairing(id) })) },
     hub: { connected: () => connected },
 });
 
@@ -22,6 +25,7 @@ const DOORS: Record<string, "hosts" | "webexts" | "runners"> = {
     "live-browsers-are-enrolled": "webexts",
     "enrolled-browsers-have-cards": "webexts",
     "live-runners-are-enrolled": "runners",
+    "one-card-per-machine-environment": "hosts",
 };
 
 // `cards` defaults to the enrolled ids, so a test about live sockets never trips the grant checks by accident.
@@ -89,4 +93,31 @@ test("a machine's other OS installs are held by the machine's card, and named wh
 
 test("a card of another kind is not a grant: same name, different door", async () => {
     await expect(run("enrolled-devices-have-cards", ["laptop"], [], [card("laptop", "webext")])).rejects.toThrow(/\(laptop\)/);
+});
+
+// ONE OS INSTALL, ONE CARD. Two cards over the same computer's same install are two grants over one agent; only ids
+// the agents said count, since a derived id is its own card's by construction.
+test("names a machine environment enrolled under two cards, and nothing when each card has its own", async () => {
+    const identity = { listing: [] as { id: string; card: string; environment: string; machineId: string }[] };
+    const deps = (): PeerRegistryDeps => ({
+        hosts: { list: async () => identity.listing },
+        hostHub: { connected: () => [] },
+        webexts: { list: async () => [] },
+        webextHub: { connected: () => [] },
+        runners: { list: async () => [] },
+        runnerHub: { connected: () => [] },
+        capabilities: { list: async () => [] },
+    });
+    const check = checks(deps()).find((entry) => entry.name === "one-card-per-machine-environment");
+    identity.listing = [
+        { id: "rog", card: "rog", environment: "native", machineId: "m-rog-0123456789" },
+        { id: "rog::wsl:Arch", card: "rog", environment: "wsl:Arch", machineId: "m-rog-0123456789" },
+        { id: "omen", card: "omen", environment: "native", machineId: "card:omen" },
+        { id: "radarsu-omen", card: "radarsu-omen", environment: "native", machineId: "card:radarsu-omen" },
+    ];
+    await expect(check?.run({ moment: "sweep", fail })).resolves.toBeUndefined();
+    identity.listing.push({ id: "radarsu-rog", card: "radarsu-rog", environment: "native", machineId: "m-rog-0123456789" });
+    await expect(check?.run({ moment: "sweep", fail })).rejects.toThrow(
+        "1 machine environment(s) are enrolled under more than one card (native of machine m-rog-0123456789 under radarsu-rog and rog): two grants over one agent, whose switches can disagree",
+    );
 });

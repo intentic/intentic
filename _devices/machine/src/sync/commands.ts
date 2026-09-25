@@ -1,14 +1,15 @@
 import { spawnSync } from "node:child_process";
 import { mkdir } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
-import { createUi, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
-import { sandboxIdFromUrl } from "@intentic/sandbox-contract";
+import { createUi, homeDir, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
+import { environmentKeyOf, sandboxIdFromUrl } from "@intentic/sandbox-contract";
 import { buildCommand, buildRouteMap, type CommandContext, type FlagParametersForType } from "@stricli/core";
 import { postWhileWarming } from "../daemon-base.js";
 import { completeSetup, prepareSetup } from "../install.js";
+import { machineId } from "../machine-id.js";
+import { wslEnvironment } from "../wsl.js";
 import { ensureResident, readResidentPid } from "../resident.js";
 import { machineLauncher } from "../supervision.js";
 import {
@@ -75,7 +76,19 @@ export const enrollKey = async (
     sandboxUrl: string,
     pairToken: string,
     key: string,
-    { attempts, delayMs, takeover = false }: { attempts?: number; delayMs?: number; takeover?: boolean } = {},
+    {
+        attempts,
+        delayMs,
+        takeover = false,
+        identity,
+    }: {
+        attempts?: number;
+        delayMs?: number;
+        takeover?: boolean;
+        // Which computer and which OS install on it is enrolling, so the sandbox joins this enrollment to the same
+        // machine's card; an older sandbox ignores both.
+        identity?: { readonly machineId: string; readonly environment: string };
+    } = {},
 ): Promise<{ syncToken: string; mode: SyncMode }> => {
     const response = await postWhileWarming(
         sandboxUrl,
@@ -86,7 +99,7 @@ export const enrollKey = async (
                 "x-intentic-pair": pairToken,
                 ...(takeover ? { "x-intentic-sync-takeover": "1" } : {}),
             },
-            body: JSON.stringify({ key }),
+            body: JSON.stringify({ key, ...identity }),
         },
         {
             doing: "enrolling the sync key",
@@ -186,7 +199,10 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     // Enrollment can retry for ~30s while the sandbox tunnel warms; overlapped with the two binary downloads
     // (independent: distinct endpoints, distinct install paths).
     const [{ syncToken, mode }, mutagen] = await Promise.all([
-        enrollKey(flags.url, flags.pair, publicKey, { takeover: flags.takeover }),
+        enrollKey(flags.url, flags.pair, publicKey, {
+            takeover: flags.takeover,
+            identity: { machineId: machineId(), environment: environmentKeyOf({ wsl: await wslEnvironment() }) },
+        }),
         ensureMutagen(),
     ]);
     out(`enrolled SSH key with ${flags.url}`);
@@ -202,8 +218,8 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
         mode === "sync"
             ? resolve(
                   flags.dir === undefined
-                      ? join(homedir(), "intentic", sandboxIdFromUrl(flags.url) ?? sandboxId)
-                      : flags.dir.replace(/^~(?=[\\/]|$)/, homedir()),
+                      ? join(homeDir(), "intentic", sandboxIdFromUrl(flags.url) ?? sandboxId)
+                      : flags.dir.replace(/^~(?=[\\/]|$)/, homeDir()),
               )
             : undefined;
     if (localDir !== undefined) {

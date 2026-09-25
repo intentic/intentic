@@ -1,6 +1,6 @@
 // What one of the user's own machines is running.
 import { z } from "zod";
-import { hostEntryOf, hostEnvironmentOf, type DeviceFacts, DeviceFactsSchema, userDistrosOf, WslEnvironmentSchema } from "./hosts.js";
+import { hostEntryOf, hostEnvironmentOf, type DeviceFacts, DeviceFactsSchema, MachineIdSchema, userDistrosOf, WslEnvironmentSchema } from "./hosts.js";
 import { DEV_VERSION } from "../state/versions.js";
 // Desktop-sync report shape shared by the agent, daemon and browser, produced only by the agent's own `deviceReport`.
 // The agent never reports `sandboxes`; the docker half is filled in by whoever reads the report, scoped to the reader's
@@ -104,7 +104,11 @@ export const DeviceSandboxOpSchema = z.enum([
     "runner-remove",
 ]);
 export type DeviceSandboxOp = z.infer<typeof DeviceSandboxOpSchema>;
-export const DeviceSandboxFlowSchema = z.object({
+// STRICT, like every input a device is sent: an agent rejects a field it does not know instead of dropping it and doing
+// something else (an older agent once dropped `later` and restarted a sandbox it had been asked to leave running). New
+// behaviour is a new `op`, which an older agent refuses by name, and the daemon refuses an op the agent has not
+// advertised before sending it (device-reports.ts).
+export const DeviceSandboxFlowSchema = z.strictObject({
     op: DeviceSandboxOpSchema,
     // Sandbox slug, the runner's name for the runner ops (as `/system/runners`/`ic runner list` know it), or for
     // `create` the name the claim is about to produce — the one op where the slug is an expectation rather than a
@@ -173,7 +177,7 @@ export type DeviceFlowLine = z.infer<typeof DeviceFlowLineSchema>;
 // dropping one is always somebody's decision.
 export const DeviceAgentOpSchema = z.enum(["upgrade", "restart", "forget-unreachable"]);
 export type DeviceAgentOp = z.infer<typeof DeviceAgentOpSchema>;
-export const DeviceAgentFlowSchema = z.object({ op: DeviceAgentOpSchema });
+export const DeviceAgentFlowSchema = z.strictObject({ op: DeviceAgentOpSchema });
 export type DeviceAgentFlow = z.infer<typeof DeviceAgentFlowSchema>;
 // Adds the device id to the flow input.
 export const DeviceAgentFlowInputSchema = DeviceAgentFlowSchema.extend({ id: z.string().min(1) });
@@ -412,8 +416,10 @@ export const AGENT_STALL_AFTER_MS = 60_000;
 export const agentStalled = (agent: DeviceAgent, now: number): boolean =>
     agent.running && agent.lastTickAt !== undefined && now - agent.lastTickAt > AGENT_STALL_AFTER_MS;
 export const DeviceReportSchema = z.object({
-    // OS hostname; the join key that dedupes a machine seen via sync and via its `host` capability. Not unique on its
-    // own: a WSL distro inherits the Windows machine's name, so `wsl` below is what tells those apart.
+    // The computer this reading is from (MachineIdSchema): what a sync enrollment is stamped with when its agent posts,
+    // and so what joins a machine seen through sync to the same machine seen through its card. Absent from an older agent.
+    machineId: MachineIdSchema.optional(),
+    // OS hostname, for the owner to read; not a join key (a WSL distro inherits the Windows machine's name).
     hostname: z.string(),
     os: z.string(),
     // Present only inside a WSL distro; the same fact rides the connect-time facts, which no scope can withhold.
@@ -470,9 +476,8 @@ export const DeviceGapSchema = z.enum([
     "unreported",
 ]);
 export type DeviceGap = z.infer<typeof DeviceGapSchema>;
-// A machine may be reachable via desktop sync and a host capability at once; the two are reconciled on `hostname` plus
-// the environment it came from (`environmentOf`), and left as separate rows when there is nothing to reconcile them by
-// or when the environments positively disagree.
+// A machine may be reachable via desktop sync and a host capability at once; the two are one row when both say the same
+// `machineId` and the same environment, and separate rows whenever either has not said (an agent too old to carry it).
 // `machine` is the enrollment's name for the box (the ssh key's comment): what reports are filed under and what the
 // revoke route takes. Two machines sharing a key comment share one enrollment identity.
 export const DeviceSyncSchema = z.object({
@@ -481,6 +486,10 @@ export const DeviceSyncSchema = z.object({
     mode: z.enum(["sync", "mirror"]),
     // When this machine last used its enrollment; absent means never, not merely unknown, and is not healthy.
     seenAt: z.number().optional(),
+    // The computer and the environment on it that hold this enrollment, as its agent said when enrolling or in a report
+    // since; absent until an agent new enough to say has done so.
+    machineId: MachineIdSchema.optional(),
+    environment: z.string().optional(),
 });
 export type DeviceSync = z.infer<typeof DeviceSyncSchema>;
 export const DeviceSchema = z.object({
@@ -492,6 +501,9 @@ export const DeviceSchema = z.object({
     sync: DeviceSyncSchema.optional(),
     // The host capability's id, when this machine is also a connected device. Absent otherwise.
     hostId: z.string().optional(),
+    // The computer this row is an environment of, from whichever door has said (MachineIdSchema): what `machinesOf`
+    // groups by. Absent when no door has, which leaves the row a computer of its own.
+    machineId: MachineIdSchema.optional(),
     // Host-capability liveness; absent when there is no host capability, not the same as offline.
     online: z.boolean().optional(),
     // Carried beside the report so a device with no report still has an OS; `platform` is the normalised slug, `facts`
@@ -545,24 +557,23 @@ export const deviceDistro = (device: Device): string | undefined => {
 const byEnvironment = (a: Device, b: Device): number =>
     Number(isWslDevice(a)) - Number(isWslDevice(b)) || (deviceDistro(a) ?? a.label).localeCompare(deviceDistro(b) ?? b.label);
 
-const hostnameKey = (device: Device): string | undefined => deviceHostname(device)?.toLowerCase();
-
 // The card a device's door hangs off: one card is one computer, so two doors naming the same card are one machine
 // whatever either has said about itself — which is the whole of what an environment that has never connected says.
 const cardKey = (device: Device): string | undefined => (device.hostId === undefined ? undefined : hostEntryOf(device.hostId));
 
-// What makes two devices one computer: a shared card, or a shared hostname where a distro answers to it, since WSL
-// hands a distro the Windows machine's name. Two native installs that merely share a name stay two machines.
-const tokensOf = (device: Device, distroNames: ReadonlySet<string>): string[] => {
+// The computer a device is on, by whichever door said: its row, its connect-time facts, its report, its sync enrollment.
+export const deviceMachineId = (device: Device): string | undefined =>
+    device.machineId ?? device.facts?.machineId ?? device.report?.machineId ?? device.sync?.machineId;
+
+// What makes two devices one computer: a shared card, or a shared machine id. Nothing else: a hostname is shared by a
+// PC and its WSL distros and by two unrelated machines with the same name, so it joined things by accident.
+const tokensOf = (device: Device): string[] => {
     const card = cardKey(device);
-    const hostname = hostnameKey(device);
-    return [
-        ...(card === undefined ? [] : [`card:${card.toLowerCase()}`]),
-        ...(hostname !== undefined && distroNames.has(hostname) ? [`host:${hostname}`] : []),
-    ];
+    const machine = deviceMachineId(device);
+    return [...(card === undefined ? [] : [`card:${card.toLowerCase()}`]), ...(machine === undefined ? [] : [`machine:${machine}`])];
 };
 
-// Components over both joins at once: a device holding a card token and a hostname token is the evidence that merges
+// Components over both joins at once: a device holding a card token and a machine token is the evidence that merges
 // the machines those tokens named, so a distro connected under a card of its own still lands on the PC it runs on.
 interface Component {
     readonly tokens: Set<string>;
@@ -570,10 +581,9 @@ interface Component {
 }
 
 const componentsOf = (devices: readonly Device[]): Component[] => {
-    const distroNames = new Set(devices.filter(isWslDevice).map(hostnameKey).filter((name) => name !== undefined));
     const components: Component[] = [];
     for (const device of devices) {
-        const tokens = tokensOf(device, distroNames);
+        const tokens = tokensOf(device);
         const [head, ...merged] = components.filter((component) => tokens.some((token) => component.tokens.has(token)));
         if (head === undefined) {
             components.push({ tokens: new Set(tokens), devices: [device] });
@@ -594,7 +604,7 @@ const componentsOf = (devices: readonly Device[]): Component[] => {
 
 // Addressed by the card of the side that owns the screen, an address that does not change when a second environment
 // connects — unlike a row key, which is a hostname another environment can take first. An uncarded fold has only the
-// hostname its doors share, and an uncarded lone device its own key. Called what the owner calls it: the name the
+// machine id its doors share, and an uncarded lone device its own key. Called what the owner calls it: the name the
 // leading environment carries, unless that is nothing but its door id, which reads as a PC named after one of its
 // own sides.
 const machineOf = (environments: readonly Device[]): Machine => {
@@ -603,7 +613,7 @@ const machineOf = (environments: readonly Device[]): Machine => {
     if (first === undefined) {
         return { key: "", label: "", environments };
     }
-    const named = environments.map(cardKey).find((key) => key !== undefined) ?? (rest.length === 0 ? undefined : deviceHostname(first));
+    const named = environments.map(cardKey).find((key) => key !== undefined) ?? (rest.length === 0 ? undefined : deviceMachineId(first));
     const label = first.label === first.hostId ? (cardKey(first) ?? first.label) : first.label;
     return { key: named ?? first.key, label, environments };
 };

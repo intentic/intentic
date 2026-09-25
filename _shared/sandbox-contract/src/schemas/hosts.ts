@@ -9,9 +9,22 @@ import { z } from "zod";
 export const WslEnvironmentSchema = z.object({ distro: z.string() });
 export type WslEnvironment = z.infer<typeof WslEnvironmentSchema>;
 
+// WHICH PHYSICAL COMPUTER A DOOR IS ON. The machine agent mints this once, at install, and keeps it in its own state
+// (`~/.intentic/machine/machine-id`); a WSL distro's agent is handed its Windows side's, since a distro is an
+// environment of the PC, not a second computer. It is what an enrollment, a sync enrollment and a device row are
+// joined on — never a hostname, which WSL shares between a PC and its distros and a user can rename.
+export const MachineIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/);
+// An id the daemon stands in for a machine that has not said its own yet (an enrollment made before agents reported
+// one): named after the card, so every environment of that card shares it until each reports the real id. Never
+// sent by an agent, and never the join key of two different cards.
+export const derivedMachineId = (card: string): string => `card:${card}`;
+export const isDerivedMachineId = (machineId: string): boolean => machineId.startsWith("card:");
+
 // What a machine reports once at connect (`host.describe`), cached until it reconnects: the skill pack says how to
 // drive Windows, this says which Windows it is.
 export const DeviceFactsSchema = z.object({
+    // The computer this environment is on (MachineIdSchema). Absent from an agent older than the field.
+    machineId: MachineIdSchema.optional(),
     // The OS's own name for itself, e.g. "Windows 11 Pro 24H2".
     os: z.string(),
     arch: z.string(),
@@ -24,8 +37,7 @@ export const DeviceFactsSchema = z.object({
     // Docker engine's size (WSL guest on Windows, Desktop VM on macOS, host on Linux); the ceiling a sandbox's share is
     // bounded by.
     engine: z.object({ memoryBytes: z.number(), cpus: z.number() }).optional(),
-    // OS hostname: the key that joins the doors of one physical machine. Reported by every agent that also reports
-    // `wsl`, so a hostname with no `wsl` beside it is a native install; absent from an agent older than both.
+    // OS hostname, for the owner to read. Not a join key: `machineId` is.
     hostname: z.string().optional(),
     // Present only inside a WSL distro.
     wsl: WslEnvironmentSchema.optional(),
@@ -35,19 +47,31 @@ export const DeviceFactsSchema = z.object({
     // the rest are other sandboxes' addresses, and a sandbox has no business learning its siblings'. Absent from an
     // agent older than this field, which is why "none unreachable" is not the same value as "did not say".
     links: z.object({ total: z.number(), unreachable: z.number(), unreachableSince: z.number().optional() }).optional(),
-    // What this agent understands beyond the ops every agent has, so a caller can refuse up front rather than send a
-    // field an older agent drops without a word. Absent from an agent older than this field: it supports none of them.
+    // Which of the optional ops this agent AND the `ic` it drives implement (DeviceFeatureSchema), for a page to offer
+    // only what works and for the daemon to refuse an op before sending it. Strings on the wire, so a newer agent's
+    // feature never fails an older daemon's read; `deviceFeatures` keeps the ones this build knows. Nothing is
+    // detected by a field's presence any more: the device RPC inputs are strict, and an agent rejects a field it does
+    // not know rather than dropping it.
     features: z.array(z.string()).optional(),
 });
 export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 
-// `reshape` with `later`: save the change for the next restart. An agent without it strips `later` from the request and
-// reshapes NOW, restarting the sandbox and interrupting everyone in it, which is why a later-reshape is never sent to one.
-export const DEVICE_FEATURE_RESHAPE_LATER = "reshape-later";
-// The `set-shape`/`forget-shape` ops, and `start`/`restart` applying a saved shape through ic. An agent without it
-// refuses the op by name, so this is for the daemon to say why before sending and for a page to offer only what works.
-export const DEVICE_FEATURE_SET_SHAPE = "set-shape";
-export const deviceSupports = (facts: Pick<DeviceFacts, "features"> | undefined, feature: string): boolean => facts?.features?.includes(feature) === true;
+// The optional device ops, by what enables them:
+// - `reshape-later`: the old `reshape` op with `later`, saving the change for the next restart. An agent from before it
+//   strips `later` and reshapes NOW, which is why a later-reshape is never sent to one.
+// - `set-shape`: the `set-shape`/`forget-shape` ops, and `start`/`restart` applying a saved shape, all through an `ic`
+//   that has `ic sandbox shape`; advertised only when the agent's `ic` answers that verb.
+export const DeviceFeatureSchema = z.enum(["reshape-later", "set-shape"]);
+export type DeviceFeature = z.infer<typeof DeviceFeatureSchema>;
+export const DEVICE_FEATURE_RESHAPE_LATER: DeviceFeature = "reshape-later";
+export const DEVICE_FEATURE_SET_SHAPE: DeviceFeature = "set-shape";
+// The features an agent advertised that this build knows; an unknown one is a newer agent's and means nothing here.
+export const deviceFeatures = (facts: Pick<DeviceFacts, "features"> | undefined): DeviceFeature[] =>
+    (facts?.features ?? []).flatMap((feature) => {
+        const known = DeviceFeatureSchema.safeParse(feature);
+        return known.success ? [known.data] : [];
+    });
+export const deviceSupports = (facts: Pick<DeviceFacts, "features"> | undefined, feature: DeviceFeature): boolean => deviceFeatures(facts).includes(feature);
 
 // Docker Desktop's own distros: `wsl -l -q` lists them like any other, and none ever runs an agent or holds a checkout.
 export const WSL_SYSTEM_DISTROS: ReadonlySet<string> = new Set(["docker-desktop", "docker-desktop-data"]);
@@ -94,6 +118,9 @@ export const hostEnvironmentOf = (connection: string): string => {
 // version — one side can be asleep, or running a build behind.
 export const HostEnvironmentSchema = z.object({
     key: z.string().min(1),
+    // The computer this environment's enrollment is on, once its agent has said (never a derived id): what joins it to
+    // a sync enrollment and to the other environments of that computer, whether or not it is connected right now.
+    machineId: MachineIdSchema.optional(),
     online: z.boolean(),
     version: z.string().optional(),
     lastSeen: z.number().optional(),

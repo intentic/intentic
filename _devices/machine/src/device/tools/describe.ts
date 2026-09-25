@@ -1,11 +1,14 @@
 import { execFile } from "node:child_process";
-import { arch, homedir, hostname, platform, release, type } from "node:os";
+import { arch, hostname, platform, release, type } from "node:os";
+import { homeDir } from "@intentic/local-agent";
 import { promisify } from "node:util";
-import { DEVICE_FEATURE_RESHAPE_LATER, DEVICE_FEATURE_SET_SHAPE, type DeviceFacts, type DeviceScopes } from "@intentic/sandbox-contract";
+import type { DeviceFacts, DeviceScopes } from "@intentic/sandbox-contract";
 import { type LinkReading, readLinkStates, unreachableIn } from "../config.js";
 import { rootsOf, rootsText } from "../policy.js";
 import { shellFor } from "./shell.js";
 import { listDistros, WINDOWS_SIDE, wslEnvironment } from "../../wsl.js";
+import { machineId } from "../../machine-id.js";
+import { deviceFeatures } from "./ic-binary.js";
 
 // What this device IS: without it an agent guesses (apt-get on Fedora, bash on Windows, paths outside its own
 // boundary) and reports the refusal as a bug. Sent unprompted in the hello frame and on the sandbox's
@@ -67,20 +70,29 @@ export const linkFacts = (stamped: Readonly<Record<string, LinkReading>> | undef
 };
 
 export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
-    const [os, engine, wsl, distros, stamped] = await Promise.all([osName(), engineFacts(), wslEnvironment(), wslDistros(), readLinkStates()]);
+    const [os, engine, wsl, distros, stamped, features] = await Promise.all([
+        osName(),
+        engineFacts(),
+        wslEnvironment(),
+        wslDistros(),
+        readLinkStates(),
+        deviceFeatures(),
+    ]);
     const links = linkFacts(stamped);
     return {
+        machineId: machineId(),
         os,
         arch: arch(),
         shell: shellFor(platform()).label,
-        home: homedir(),
+        home: homeDir(),
         roots: rootsOf(scopes),
         hostname: hostname(),
         ...(engine === undefined ? {} : { engine }),
         ...(wsl === undefined ? {} : { wsl }),
         ...(distros === undefined ? {} : { wslDistros: distros }),
         ...(links === undefined ? {} : { links }),
-        features: [DEVICE_FEATURE_RESHAPE_LATER, DEVICE_FEATURE_SET_SHAPE],
+        // What this agent and the ic under it implement, asked of that ic rather than written down here.
+        features,
     };
 };
 

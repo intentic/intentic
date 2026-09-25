@@ -69,7 +69,7 @@ export type PeerAdmission<Scopes> =
 // peers/invariant.ts and healed by dropping the enrollment, which is what turns it into an honest 1008.
 export const admitPeer = async <Scopes>(
     services: Services,
-    door: Pick<PeerDoor<{ token: string }, unknown, Record<never, never>>, "noun" | "scopesKind" | "cardOf">,
+    door: Pick<PeerDoor<{ token: string }, unknown, Record<never, never>>, "noun" | "scopesKind">,
     store: Pick<PeerStore<unknown>, "verify">,
     token: string,
 ): Promise<PeerAdmission<Scopes>> => {
@@ -80,13 +80,13 @@ export const admitPeer = async <Scopes>(
     if (presented.kind === "unknown") {
         return { refusal: "unauthorized", retry: false };
     }
-    const { id } = presented;
+    const { id, card } = presented;
     if (door.scopesKind === undefined) {
         return { id, scopes: undefined };
     }
     // The grant is the CARD's, which a connection may be finer than: every environment of one machine is admitted on
-    // the one set of switches its owner ticked for that machine.
-    const scopes = await scopesOf<Scopes>(services, door.scopesKind, door.cardOf?.(id) ?? id);
+    // the one set of switches its owner ticked for that machine. The record says which card; nothing re-parses the id.
+    const scopes = await scopesOf<Scopes>(services, door.scopesKind, card);
     return scopes === undefined
         ? { refusal: `no capability card grants this ${door.noun} anything right now`, retry: true }
         : { id, scopes };
@@ -293,7 +293,7 @@ export const createPeerRoutes = <
             if (door.scopesKind !== undefined) {
                 // Through the card, as admission is: one environment of a machine is a connection of the machine's own
                 // card, so re-pairing a distro is the same grant as re-pairing the PC it runs on.
-                if ((await scopesOf(services, door.scopesKind, door.cardOf?.(id) ?? id)) === undefined) {
+                if ((await scopesOf(services, door.scopesKind, store.cardFor(id))) === undefined) {
                     return c.json({ error: `no connected-${door.noun} capability with that id` }, 404);
                 }
             } else if (id === "") {

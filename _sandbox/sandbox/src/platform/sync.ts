@@ -2,7 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import type { DeviceReport } from "@intentic/sandbox-contract";
+import { type DeviceReport, environmentOf } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { type JsonFile, jsonEntries } from "../store/json-file.js";
@@ -33,6 +33,10 @@ const SyncEnrollmentSchema = z.object({
     enrolledAt: z.number(),
     // When this machine last used its enrollment (see verifySyncToken); absent until the first poll.
     seenAt: z.number().optional(),
+    // Which computer, and which OS install on it, holds this enrollment: what joins it to the same machine's card.
+    // Said by the agent when it enrolls, or stamped from the first report it posts; absent from an agent too old to say.
+    machineId: z.string().optional(),
+    environment: z.string().optional(),
 });
 type SyncEnrollment = z.infer<typeof SyncEnrollmentSchema>;
 
@@ -104,6 +108,9 @@ export const enrollSyncKey = async (args: {
     key: string;
     mode: SyncMode;
     takeover: boolean;
+    // What the agent said it is; absent from an agent too old to say, when the first report it posts stamps it instead.
+    machineId?: string | undefined;
+    environment?: string | undefined;
 }): Promise<{ syncToken: string } | { locked: string }> => {
     const key = args.key.trim();
     let outcome: { syncToken: string } | { locked: string } = { locked: "" };
@@ -118,7 +125,15 @@ export const enrollSyncKey = async (args: {
         // Drops this machine's prior record, and on takeover the existing sync holder; mirror always survives.
         const kept = enrollments.filter((entry) => entry.key !== key && !(args.mode === "sync" && entry.mode === "sync"));
         const token = `ist_${randomBytes(32).toString("base64url")}`;
-        kept.push({ key, tokenDigest: digestOf(token), mode: args.mode, machine: machineOf(key), enrolledAt: Date.now() });
+        kept.push({
+            key,
+            tokenDigest: digestOf(token),
+            mode: args.mode,
+            machine: machineOf(key),
+            enrolledAt: Date.now(),
+            ...(args.machineId === undefined ? {} : { machineId: args.machineId }),
+            ...(args.environment === undefined ? {} : { environment: args.environment }),
+        });
         outcome = { syncToken: token };
         return kept;
     });
@@ -165,10 +180,20 @@ export const isFileSyncEnrolled = async (historyRoot: string): Promise<boolean> 
 
 // One row per enrolled machine, present whether or not it has ever reported (a never-polled machine is a real case to
 // show). Excludes the key and token digest; those have no business reaching a browser.
-export type SyncEnrollmentRow = Pick<SyncEnrollment, "machine" | "mode"> & { readonly seenAt?: number };
+export type SyncEnrollmentRow = Pick<SyncEnrollment, "machine" | "mode"> & {
+    readonly seenAt?: number;
+    readonly machineId?: string;
+    readonly environment?: string;
+};
 
 const rowsOf = (enrollments: readonly SyncEnrollment[]): SyncEnrollmentRow[] =>
-    enrollments.map((entry) => ({ machine: entry.machine, mode: entry.mode, ...(entry.seenAt === undefined ? {} : { seenAt: entry.seenAt }) }));
+    enrollments.map((entry) => ({
+        machine: entry.machine,
+        mode: entry.mode,
+        ...(entry.seenAt === undefined ? {} : { seenAt: entry.seenAt }),
+        ...(entry.machineId === undefined ? {} : { machineId: entry.machineId }),
+        ...(entry.environment === undefined ? {} : { environment: entry.environment }),
+    }));
 
 // Machine names only, for a filter that only needs to check "is this still enrolled".
 const labelsOf = (enrollments: readonly SyncEnrollment[]): string[] => enrollments.map((entry) => entry.machine);
@@ -177,13 +202,23 @@ const labelsOf = (enrollments: readonly SyncEnrollment[]): string[] => enrollmen
 const reports = new Map<string, { readonly report: DeviceReport; readonly receivedAt: number }>();
 
 // Files a report under the enrollment the token matched, never the hostname it claims, so a machine can't post under
-// another's name.
+// another's name. The first report that says which computer and install it is from stamps the enrollment with both:
+// how an enrollment made by an agent too old to say learns it, once, without re-pairing. Only the matched record moves.
 export const recordDeviceReport = async (historyRoot: string, presented: string, report: DeviceReport): Promise<boolean> => {
     const matched = matchEnrollment(await readEnrollments(historyRoot), presented);
     if (matched === undefined) {
         return false;
     }
     reports.set(matched.machine, { report, receivedAt: Date.now() });
+    const environment = environmentOf(undefined, report);
+    if (report.machineId !== undefined && (matched.machineId !== report.machineId || matched.environment !== environment)) {
+        await persist(historyRoot, (current) =>
+            current.map((entry) =>
+                // oxlint-disable-next-line oxc/no-map-spread -- Each enrollment update creates a fresh record.
+                entry.key === matched.key ? { ...entry, machineId: report.machineId, ...(environment === undefined ? {} : { environment }) } : entry,
+            ),
+        );
+    }
     return true;
 };
 

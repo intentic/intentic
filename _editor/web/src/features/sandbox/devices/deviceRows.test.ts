@@ -143,8 +143,11 @@ test(`puts the machines worth reading first, and breaks ties by name`, () => {
 
 // one PC, several doors
 
-// The Windows side and the distro on it: separate agents and separate doors, one hostname, one engine.
+// The Windows side and the distro on it: separate agents and separate doors, one machine (the id the Windows side hands
+// the distro's agent), one engine. The hostname they share is not what joins them.
+const ROG = `m-0f0e0d0c-0b0a-4908-8706-050403020100`;
 const WINDOWS: Device[`facts`] = {
+    machineId: ROG,
     os: `Microsoft Windows 11 Home`,
     arch: `x64`,
     shell: `PowerShell 7`,
@@ -154,6 +157,7 @@ const WINDOWS: Device[`facts`] = {
     wslDistros: [`Arch`, `Ubuntu`],
 };
 const ARCH: Device[`facts`] = {
+    machineId: ROG,
     os: `Arch Linux`,
     arch: `x64`,
     shell: `/usr/bin/zsh`,

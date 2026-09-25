@@ -1,8 +1,8 @@
 import { execFile } from "node:child_process";
 import { chmod, rename, rm } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homeDir } from "@intentic/local-agent";
 import { promisify } from "node:util";
-import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract";
+import { DEV_VERSION, DEVICE_FEATURE_RESHAPE_LATER, DEVICE_FEATURE_SET_SHAPE, type DeviceFeature, isNewer } from "@intentic/sandbox-contract";
 import { archToken, download, exe, osToken } from "../../release.js";
 import { MACHINE_VERSION } from "../../version.js";
 
@@ -25,7 +25,7 @@ export const icCandidates = (platform: NodeJS.Platform, home: string | undefined
 };
 
 // The per-user install location, the one this agent may write without asking anybody: the first candidate.
-const userIcPath = (): string | undefined => icCandidates(process.platform, homedir())[0];
+const userIcPath = (): string | undefined => icCandidates(process.platform, homeDir())[0];
 
 // The release asset, named the way the shims fetch it (`ic-<os>-<arch>[.exe]`), from the agent's own release.
 export const icAssetUrl = (version: string): string =>
@@ -40,7 +40,7 @@ export const icNeedsFetch = (installed: string | undefined, agent: string): bool
     agent !== DEV_VERSION && (installed === undefined || isNewer(agent, installed));
 
 const installedVersion = async (): Promise<string | undefined> => {
-    for (const candidate of icCandidates(process.platform, homedir())) {
+    for (const candidate of icCandidates(process.platform, homeDir())) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are tried in order; the first that answers wins
         const answer = await exec(candidate, ["--version"], { timeout: 30_000, windowsHide: true }).catch(() => undefined);
         if (answer !== undefined) {
@@ -77,4 +77,46 @@ export const ensureCurrentIc = async (): Promise<void> => {
         }
     })();
     await checked.catch(() => undefined);
+};
+
+/* WHAT THIS DEVICE CAN BE ASKED TO DO, derived from the `ic` it drives rather than written down beside the code: every
+   optional op runs through ic, so an agent is only as capable as the ic under it. */
+
+// A verb's help, from the first `ic` that answers; undefined when none does or this one does not know the verb (clap
+// refuses an unknown subcommand with a usage error).
+const helpOf = async (verb: readonly string[]): Promise<string | undefined> => {
+    for (const candidate of icCandidates(process.platform, homeDir())) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are tried in order; the first that answers wins
+        const answer = await exec(candidate, [...verb, "--help"], { timeout: 30_000, windowsHide: true }).then(
+            ({ stdout }) => stdout,
+            (error: NodeJS.ErrnoException) => (error.code === "ENOENT" ? undefined : ""),
+        );
+        if (answer !== undefined) {
+            return answer === "" ? undefined : answer;
+        }
+    }
+    return undefined;
+};
+
+// Which optional ops this device implements, from what its `ic`'s own help says it has. Pure over the two helps, so
+// the derivation is asserted without an ic.
+export const featuresFrom = (reshapeHelp: string | undefined, shapeHelp: string | undefined): DeviceFeature[] => [
+    ...(reshapeHelp?.includes("--later") === true ? [DEVICE_FEATURE_RESHAPE_LATER] : []),
+    ...(shapeHelp?.includes("--when") === true ? [DEVICE_FEATURE_SET_SHAPE] : []),
+];
+
+// Asked once per process when it answers: the agent keeps its ic current before asking (ensureCurrentIc), so the answer
+// holds until the agent itself is replaced.
+let features: Promise<DeviceFeature[]> | undefined;
+export const deviceFeatures = async (): Promise<DeviceFeature[]> => {
+    features ??= (async () => {
+        await ensureCurrentIc();
+        const [reshape, shape] = await Promise.all([helpOf(["sandbox", "reshape"]), helpOf(["sandbox", "shape"])]);
+        return featuresFrom(reshape, shape);
+    })();
+    const answered = await features;
+    if (answered.length === 0) {
+        features = undefined;
+    }
+    return answered;
 };

@@ -48,7 +48,7 @@ export const spawnServices = (
                 environmentHash: "",
             }),
         }),
-        runners: unstubbed<Services["runners"]>("runners", { list: async () => fleet.map((runner) => ({ id: runner.id })) }),
+        runners: unstubbed<Services["runners"]>("runners", { list: async () => fleet.map((runner) => ({ id: runner.id, card: runner.id })) }),
         runnerHub: unstubbed<Services["runnerHub"]>("runnerHub", {
             state: (id: string) => {
                 const found = fleet.find((runner) => runner.id === id);

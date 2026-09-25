@@ -21,7 +21,7 @@ import {
     swapSandbox,
     tailSandboxLogs,
 } from "./sandboxes.js";
-import { icCandidates, icNeedsFetch, icVersionFrom } from "./ic-binary.js";
+import { featuresFrom, icCandidates, icNeedsFetch, icVersionFrom } from "./ic-binary.js";
 
 const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     shell: "on",
@@ -285,6 +285,17 @@ test("an ic older than the agent, or none, is fetched; a newer one and a dev age
     expect(icNeedsFetch("1.4.2", "1.4.2")).toBe(false);
     expect(icNeedsFetch("1.10.0", "1.9.0")).toBe(false);
     expect(icNeedsFetch(undefined, "0.0.0")).toBe(false);
+});
+
+// The optional ops are advertised from what the device's ic says it has, not from a list written beside the agent: an
+// agent whose ic predates `shape` must not be sent an op it would run against a verb that is not there.
+test("advertises an optional op only when the ic under the agent has the verb behind it", () => {
+    const reshape = "Usage: ic sandbox reshape [OPTIONS] <SLUG>\n      --later   Save the ask…";
+    const shape = "Usage: ic sandbox shape [OPTIONS] <SLUG>\n      --when <WHEN>";
+    expect(featuresFrom(reshape, shape)).toEqual(["reshape-later", "set-shape"]);
+    expect(featuresFrom("Usage: ic sandbox reshape [OPTIONS] <SLUG>", undefined)).toEqual([]);
+    expect(featuresFrom(reshape, undefined)).toEqual(["reshape-later"]);
+    expect(featuresFrom(undefined, undefined)).toEqual([]);
 });
 
 test("a machine with no home still tries the rest", () => {

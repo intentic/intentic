@@ -28,6 +28,15 @@ flowchart LR
 - **sync** (`src/sync/`): `sync setup` enrolls an SSH key and runs Mutagen against the sandbox's sshd, reached
   through a loopback port tunnelled over a WebSocket. It keeps a folder two-way synced, forwards every workspace
   port to the same localhost port, and fast-forwards local git clones from the sandbox.
+- **Which computer this is** ([`machine-id.ts`](src/machine-id.ts)): a `machineId` minted once at install and kept
+  in `~/.intentic/machine/machine-id`, sent in the connect-time facts, the sync report and the sync enrollment. The
+  Windows side hands its own to the agent it starts in each distro, so every OS install of one PC answers with one id;
+  a sandbox joins enrollments, sync enrollments and device rows on it, never on a hostname.
+- The features a device advertises (`set-shape`, `reshape-later`) are read off the `ic` under it, from that `ic`'s own
+  help, rather than listed beside the code; the device RPC inputs are strict, so an op or field this agent does not
+  know is refused rather than dropped.
+- Every path under the user's home goes through `homeDir()` from [local-agent](../local-agent), which follows a `HOME`
+  set after startup; a test holds the sources to it.
 - Scopes are enforced here and nowhere else: the sandbox only asks, and a refusal names the switch that is off.
   Files stay inside the configured roots, writes need their own switch, and every call is appended to
   `~/.intentic/machine/audit.jsonl`. While an agent drives input on Windows, a notice shows on screen and

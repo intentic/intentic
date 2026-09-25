@@ -1,7 +1,9 @@
 import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { childArgv, childVerdict, type ChildSpawner, superviseChildren } from "./children.js";
+import { MACHINE_ID_ENV } from "../machine-id.js";
+import { childArgv, childEnv, childVerdict, type ChildSpawner, superviseChildren } from "./children.js";
+import { SUPERVISOR_ENV, WINDOWS_SUPERVISOR } from "./machine.js";
 import { NO_AGENT_EXIT } from "./crossing.js";
 
 describe("childVerdict", () => {
@@ -28,6 +30,14 @@ describe("childVerdict", () => {
     // A child that ran for ten minutes and then crashed is a crash, not a loop: it starts from the first rung again.
     it("forgets the ladder after a long healthy run", () => {
         expect(childVerdict(1, 10 * 60_000, 4)).toEqual({ kind: "restart", delayMs: 1_000, failures: 1 });
+    });
+});
+
+// A distro is an environment of the PC, so its agent is started with the PC's own machine id beside the supervision mark.
+test("starts a distro's agent supervised, and on this PC's machine id", () => {
+    expect(childEnv("m-0f0e0d0c-0b0a-4908-8706-050403020100")).toEqual({
+        [SUPERVISOR_ENV]: WINDOWS_SUPERVISOR,
+        [MACHINE_ID_ENV]: "m-0f0e0d0c-0b0a-4908-8706-050403020100",
     });
 });
 
