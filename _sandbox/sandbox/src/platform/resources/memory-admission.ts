@@ -8,7 +8,7 @@ import { type CgroupReading, readCgroup } from "./cgroup.js";
 export interface MemoryHeadroom {
     // Undefined when uncapped or cgroup v2 is unavailable; the gate treats both as no opinion.
     readonly limitBytes: number | undefined;
-    // Working set plus swapped: with `--memory-swap -1` a paged-out page leaves memory.current, so paging must not read as relief.
+    // Working set plus swapped: a sandbox may swap past its cap, and a paged-out page leaves memory.current, so paging must not read as relief.
     readonly usedBytes: number | undefined;
     // The swapped half of `usedBytes`, kept apart only so a hold can name it; 0 when swap is off or unaccounted.
     readonly swapBytes: number;

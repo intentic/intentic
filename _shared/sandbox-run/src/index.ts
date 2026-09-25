@@ -48,8 +48,11 @@ const GIB = 1024 ** 3;
 const SANDBOX_MEMORY_RESERVE = 3 * GIB;
 // Below this any cap, derived or asked, breaks the image's own toolchain.
 const SANDBOX_MEMORY_FLOOR = 4 * GIB;
-// Unbounded (`-1`): no-swap cgroups livelock reclaiming file-backed pages rather than triggering OOM.
-export const SANDBOX_MEMORY_SWAP = "-1";
+// Swap a capped sandbox may page into, as a share of its cap: runway for a peak past the cap, never the engine's whole
+// swap. Unbounded (`-1`), one sandbox paged 24 of a WSL guest's 28 GiB of swap until the guest itself ran dry; bounded,
+// an overrun ends in an OOM kill inside the sandbox's own cgroup. Never zero: a no-swap cgroup livelocks reclaiming
+// file-backed pages rather than triggering OOM.
+const SANDBOX_SWAP_SHARE = 0.5;
 
 // Formats a byte cap as docker's `<n>g`; shared so a derived and an explicit ask round identically.
 const capString = (capBytes: number): string => `${Math.max(1, Math.floor(capBytes / GIB))}g`;
@@ -73,6 +76,17 @@ export const localSandboxMemory = (totalBytes: number, override?: string): strin
         return LOCAL_SANDBOX_MEMORY;
     }
     return capString(Math.max(totalBytes - SANDBOX_MEMORY_RESERVE, SANDBOX_MEMORY_FLOOR));
+};
+
+// Docker's `--memory-swap` for a `<n>g` cap: the cap plus its swap share, rounded up to a whole GiB and at least one.
+// Every cap this package emits is `<n>g`; anything else throws, since falling back to unbounded is the failure above.
+export const localSandboxMemorySwap = (memory: string): string => {
+    const cap = /^(\d+)g$/u.exec(memory.trim());
+    if (cap === null) {
+        throw new Error(`a sandbox memory cap must be whole GiB spelled '<n>g' (e.g. '10g'), got '${memory}'`);
+    }
+    const capGib = Number(cap[1]);
+    return `${capGib + Math.max(1, Math.ceil(capGib * SANDBOX_SWAP_SHARE))}g`;
 };
 
 // No derived cap, unlike memory: 'nothing asked' means every core, since `--cpus` is a hard CFS ceiling, not a share.
@@ -271,12 +285,15 @@ export interface SandboxRun {
 
 // The `docker …` argv for a sandbox container, ordered the way connect.sh always wrote it; one builder shared by every
 // dialect (sh, PowerShell, the SSH provider).
-// Cgroup ceilings, local shape only (`init: false` sizes elsewhere). `--memory-swap -1` always rides with a cap so an
-// overrun pages instead of livelocking; `--cpus` only when the owner asked.
-const resourceArgs = (run: SandboxRun): string[] =>
-    run.init === false
-        ? []
-        : ["--memory", run.memory ?? LOCAL_SANDBOX_MEMORY, "--memory-swap", SANDBOX_MEMORY_SWAP, ...(run.cpus === undefined ? [] : ["--cpus", run.cpus])];
+// Cgroup ceilings, local shape only (`init: false` sizes elsewhere). A bounded `--memory-swap` always rides with a cap so
+// an overrun pages for a while instead of livelocking, then stops inside the sandbox; `--cpus` only when the owner asked.
+const resourceArgs = (run: SandboxRun): string[] => {
+    if (run.init === false) {
+        return [];
+    }
+    const memory = run.memory ?? LOCAL_SANDBOX_MEMORY;
+    return ["--memory", memory, "--memory-swap", localSandboxMemorySwap(memory), ...(run.cpus === undefined ? [] : ["--cpus", run.cpus])];
+};
 
 // Resolves both directive sources into one deduped union; everything downstream sees only the union, so an owner-asked
 // GPU is probed and dropped exactly like a capability-asked one. `stamps` also names the overlay's half alone.

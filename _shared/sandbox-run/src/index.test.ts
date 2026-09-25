@@ -6,6 +6,7 @@ import {
     localDaemonUrlInsecure,
     localSandboxCpus,
     localSandboxMemory,
+    localSandboxMemorySwap,
     OPTIONAL_DIRECTIVES,
     ORIGIN_HOST,
     OVERLAY_RUNTIME_ENV,
@@ -38,7 +39,7 @@ test("the local shape carries the full posture: init, alias, all three volumes, 
         "--network", "intentic-workspace-abc-123", "--network-alias", ORIGIN_HOST,
         "--add-host", "host.docker.internal:host-gateway",
         "--log-opt", "max-size=10m", "--log-opt", "max-file=3",
-        "--memory", "7g", "--memory-swap", "-1",
+        "--memory", "7g", "--memory-swap", "11g",
         "--cap-add=SYS_ADMIN", "--cap-add=SYS_PTRACE",
         "-v", "intentic-workspace-abc-123:/work", "-v", "intentic-history-abc-123:/history", "-v", "intentic-docker-abc-123:/var/lib/docker",
         "-e", "SANDBOX_NAME=intentic-sandbox-abc-123", "-e", "SANDBOX_IMAGE=img:1", "-e", "SANDBOX_BASE_IMAGE=img:1",
@@ -58,21 +59,38 @@ test("a definition rides as base64 in SANDBOX_DEFINITION_SEED, so its quotes and
 
 test("a measured caller's cap reaches the argv; an unmeasured one falls back to the constant", () => {
     const measured = sandboxRunArgv({ names, image: "img:1", baseImage: "img:1", memory: "22g" });
-    expect(measured.join(" ")).toContain("--memory 22g --memory-swap -1");
+    expect(measured.join(" ")).toContain("--memory 22g --memory-swap 33g");
     const unmeasured = sandboxRunArgv({ names, image: "img:1", baseImage: "img:1" });
-    expect(unmeasured.join(" ")).toContain(`--memory ${LOCAL_SANDBOX_MEMORY} --memory-swap -1`);
+    expect(unmeasured.join(" ")).toContain(`--memory ${LOCAL_SANDBOX_MEMORY} --memory-swap 11g`);
 });
 
-test("every capped sandbox may page: --memory-swap is unbounded on every shape that carries a cap", () => {
-    const shapes = [
-        sandboxRunArgv({ names, image: "img:1", baseImage: "img:1" }),
-        sandboxRunArgv({ names, image: "img:1", baseImage: "img:1", memory: "22g" }),
-        sandboxRunArgv({ names, image: "img:1", baseImage: "img:1", memory: localSandboxMemory(20479632 * 1024) }),
-        sandboxRunArgv({ names, image: "img:1", baseImage: "img:1", memory: localSandboxMemory(0, "10g") }),
+test("every capped sandbox may page, and only so far: --memory-swap is bounded on every shape that carries a cap", () => {
+    const shapes: [string[], string, string][] = [
+        [sandboxRunArgv({ names, image: "img:1", baseImage: "img:1" }), "7g", "11g"],
+        [sandboxRunArgv({ names, image: "img:1", baseImage: "img:1", memory: "22g" }), "22g", "33g"],
+        [sandboxRunArgv({ names, image: "img:1", baseImage: "img:1", memory: localSandboxMemory(20479632 * 1024) }), "16g", "24g"],
+        [sandboxRunArgv({ names, image: "img:1", baseImage: "img:1", memory: localSandboxMemory(0, "10g") }), "10g", "15g"],
     ];
-    for (const argv of shapes) {
-        expect(argv.indexOf("--memory")).toBeGreaterThan(-1);
-        expect(argv[argv.indexOf("--memory-swap") + 1]).toBe("-1");
+    for (const [argv, memory, memorySwap] of shapes) {
+        expect(argv[argv.indexOf("--memory") + 1]).toBe(memory);
+        expect(argv[argv.indexOf("--memory-swap") + 1]).toBe(memorySwap);
+    }
+});
+
+// The guest that prompted the bound: a 20g cap paged 24 GiB of its 28 GiB swap with `-1`, and the guest ran dry.
+test("the swap bound is half the cap, rounded up to a whole GiB, never zero", () => {
+    expect(localSandboxMemorySwap("20g")).toBe("30g");
+    // Odd caps round the share up, so the runway never shrinks below half.
+    expect(localSandboxMemorySwap("7g")).toBe("11g");
+    // The floor cap and a cap below it still get a GiB: a no-swap cgroup livelocks instead of meeting its OOM killer.
+    expect(localSandboxMemorySwap("4g")).toBe("6g");
+    expect(localSandboxMemorySwap("1g")).toBe("2g");
+    expect(localSandboxMemorySwap(" 10g ")).toBe("15g");
+});
+
+test("a cap the swap bound cannot read stops the run by name rather than falling back to unbounded", () => {
+    for (const bad of ["-1", "512m", "10G", "10.5g", "", "ten"]) {
+        expect(() => localSandboxMemorySwap(bad), bad).toThrowError(/whole GiB/u);
     }
 });
 
@@ -141,7 +159,7 @@ test("SANDBOX_MEMORY survives the replay allowlist and is re-emitted onto the co
         memory: "10g",
         env: [["SANDBOX_MEMORY", "10g"]],
     });
-    expect(argv.join(" ")).toContain("--memory 10g --memory-swap -1");
+    expect(argv.join(" ")).toContain("--memory 10g --memory-swap 15g");
     expect(argv.join(" ")).toContain("-e SANDBOX_MEMORY=10g");
 });
 
@@ -356,7 +374,7 @@ test("a CPU ask is whole cores, held between one and the engine's own count", ()
 
 test("--cpus rides after the memory cap on the local shape and never on the hosted one", () => {
     const local = sandboxRunArgv({ names, image: "i", baseImage: "i", memory: "10g", cpus: "4" });
-    expect(local.join(" ")).toContain("--memory 10g --memory-swap -1 --cpus 4");
+    expect(local.join(" ")).toContain("--memory 10g --memory-swap 15g --cpus 4");
     const hosted = sandboxRunArgv({ names, image: "i", baseImage: "i", init: false, cpus: "4" });
     expect(hosted).not.toContain("--cpus");
 });

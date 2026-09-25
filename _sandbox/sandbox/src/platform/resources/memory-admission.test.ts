@@ -76,7 +76,7 @@ test("a stalled box is refused even when the byte count looks survivable", () =>
     expect(admitTurn(box(10, 3, 5)).admit).toBe(true);
 });
 
-// THE INVERSION THIS READING EXISTS TO CLOSE. A sandbox runs with `--memory-swap -1`, so anon pushed to swap leaves
+// THE INVERSION THIS READING EXISTS TO CLOSE. A sandbox may swap past its cap (`--memory-swap`), so anon pushed to swap leaves
 // memory.current and lands in memory.swap.current. Reading only the first made freeBytes RISE as the box began to
 // thrash — measured on a 16 GiB cap holding 12.4 resident + 6.8 swapped: 3.6 GiB reported free, every turn admitted,
 // while the machine had 350 MB and was paging at 230 MB/s. Whole GiB here so the sum is exact.
