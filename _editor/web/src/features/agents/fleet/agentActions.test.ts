@@ -205,7 +205,7 @@ it("refuses the ask when every blocked path is the user's own uncommitted work, 
     // The failure this prevents: a turn spent on a prompt whose "What blocked the land:" section is empty, ending in an
     // identical refusal.
     expect(chat.enqueued).toEqual([]);
-    expect(ask).toEqual({ kind: `refused`, why: expect.stringContaining(`Commit or stash them`) });
+    expect(ask).toEqual({ kind: `refused`, why: expect.stringContaining(`Commit them, then land again`) });
 });
 
 // The repo-unavailable refusal reads as a conflict on the card and names nothing a rebase could act on, so it's the

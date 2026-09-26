@@ -44,7 +44,6 @@ import { injectMainline } from "../../mainline/useMainline";
 import KeepWarmPanel from "../../fleet/KeepWarmPanel.vue";
 // Not an emit: the destination is the same for every host this card has, and the review panel's own ladder sends the
 // user to exactly this place for exactly this refusal.
-import { openChanges } from "../../../workspace/changes/openChanges";
 import { type MatchSnippet, providerLabel } from "@intentic/sandbox-contract";
 import { sessionCategory } from "../../../../app/sessionCategory";
 import IdentityTile from "../../../capabilities/connect/IdentityTile.vue";
@@ -165,16 +164,12 @@ const review = computed(() => (mobile.value ? undefined : reviewAction(props.age
 // effect.
 const resolvable = computed(() => props.agent.archivedAt === undefined && dropActionFor(props.agent, `finished`) === `resolve`);
 // The other half of a refused land, and the reason `resolvable` can be false on a card that is plainly conflicted: no
-// rebase reaches a file the user has uncommitted edits on, so the card offers the press that does, in the same seat.
-// Never both: `conflictIsYours` is exactly the case laneDrop withholds `resolve` for.
-// `localOnly`, since the edits in the way are in that agent's own sandbox and this press opens the Changes panel of the
-// one the reader is standing in; the review panel's ladder is where a card from another box gets its door.
+// rebase reaches a file the user has uncommitted edits on, so the card says so in the same seat instead of offering the
+// agent. Never both: `conflictIsYours` is exactly the case laneDrop withholds `resolve` for.
+// A sentence, not a press: the card cannot commit those edits, and the daemon re-reads the refusal once they are
+// committed, moving the card on by itself. The review panel's ladder, one click away, names the files.
 const yoursToClear = computed(
-    () =>
-        props.agent.archivedAt === undefined &&
-        localOnly.value &&
-        (props.agent.attention.conflict || props.agent.status === `conflict`) &&
-        conflictIsYours(props.agent),
+    () => props.agent.archivedAt === undefined && (props.agent.attention.conflict || props.agent.status === `conflict`) && conflictIsYours(props.agent),
 );
 // Work this agent landed that's no longer in the tree; excluded in the archive, like every other press here (restore
 // first).
@@ -701,13 +696,10 @@ const grab = (event: PointerEvent): void => {
                 <span class="text-2xs leading-snug text-subtle">{{ words.resolveConflictHint }}</span>
             </div>
 
-            <!-- Same seat, the refusals the agent cannot touch: the press goes to the Changes panel, where the user's own edits are. -->
-            <div v-else-if="yoursToClear" class="flex min-w-0 flex-col gap-1">
-                <Button size="small" class="self-start whitespace-nowrap" @click.stop="openChanges()">
-                    <Icon name="file-edit" />{{ words.clearYours }}
-                </Button>
-                <span class="text-2xs leading-snug text-subtle">{{ words.clearYoursHint }}</span>
-            </div>
+            <!-- Same seat, the refusals the agent cannot touch: a fact, not a press. Nothing on the card can commit the edits in its way, a button that only changed the view read as one that did nothing, and the card leaves this seat by itself once they are committed. The footer's review link names the files. -->
+            <p v-else-if="yoursToClear" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-muted">
+                <Icon name="file-edit" class="mt-0.5 shrink-0 text-2xs text-warning" /><span class="min-w-0">{{ words.clearYoursHint }}</span>
+            </p>
 
             <!-- One row (fact left, press right), not a stack: this is a fact the card owes the reader regardless of action, unlike the decision blocks above. -->
             <div v-if="away !== undefined" class="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-0.5">

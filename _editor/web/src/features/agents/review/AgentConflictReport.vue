@@ -140,10 +140,10 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
             <!-- The user's own half, which nothing else here can do for them; primary only when it's the sole thing left blocking. -->
             <div v-if="box === undefined && theirs.length > 0" :class="ROW">
                 <Button size="small" :severity="mine.length === 0 ? undefined : `secondary`" :class="INLINE" @click="emit('commit')">
-                    <Icon name="file-edit" />{{ t(`agents.words.commitStashYours`) }}
+                    <Icon name="file-edit" />{{ t(`agents.agentConflictReport.openChanges`) }}
                 </Button>
-                <!-- Says what the button does inline instead of behind a pointer-only tooltip. -->
-                <span class="text-2xs text-subtle">{{ t(`agents.agentConflictReport.opensChangesPanelLand`) }}</span>
+                <!-- The label names where the press goes, since it cannot commit anything itself; the line says what to do there. -->
+                <span class="text-2xs text-subtle">{{ t(`agents.agentConflictReport.commitThereThenLand`) }}</span>
             </div>
 
             <!-- Last and quiet: the only option here that writes to the user's tree on failure. -->

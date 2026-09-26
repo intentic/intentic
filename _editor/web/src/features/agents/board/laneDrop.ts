@@ -148,7 +148,7 @@ const rejectionForTarget = (agent: FleetAgent, target: DropTarget): string => {
     }
     // Two ways to reach here: the blocked-on-the-user guard, and a refusal only the user can clear. The second names
     // the press that works, since it's the one refusal where "ask the agent" is the wrong answer rather than a busy one.
-    return conflictIsYours(agent) ? `Commit or stash your own edits first` : `Answer the agent first`;
+    return conflictIsYours(agent) ? `Commit your own edits first` : `Answer the agent first`;
 };
 
 // The verb shown on the drag hint while a legal target is hovered.

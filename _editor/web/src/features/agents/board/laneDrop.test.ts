@@ -76,7 +76,7 @@ describe("dropActionFor", () => {
     it("withholds the resolve for a refusal only the user can clear, and names the press that clears it", () => {
         const mine = agent({ status: `conflict`, conflictCauses: [`workspace`] });
         expect(dropActionFor(mine, `finished`)).toBeUndefined();
-        expect(dropRejection(mine, `finished`)).toBe(`Commit or stash your own edits first`);
+        expect(dropRejection(mine, `finished`)).toBe(`Commit your own edits first`);
     });
 
     it("refuses to land an agent that is blocked on the user: it is mid-task, not done", () => {

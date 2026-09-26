@@ -81,7 +81,7 @@ it(`offers the agent, the user and the merge when the conflict is the agent's al
 it(`replaces both of those rungs with one crossing when the agent is in another box`, async () => {
     const el = await mount({ conflicts: agentsToFix, box: `acme-laptop` });
     expect(hasButton(el, `Have the agent resolve it`)).toBe(false);
-    expect(hasButton(el, `Commit or stash yours`)).toBe(false);
+    expect(hasButton(el, `Open Changes`)).toBe(false);
     expect(hasButton(el, `Open in acme-laptop`)).toBe(true);
     // The land is addressed by agent id and writes into the actual workspace, so it crosses intact.
     expect(hasButton(el, `Land with conflict markers`)).toBe(true);
@@ -109,7 +109,7 @@ it(`only promises the merge when the merge is actually on offer`, async () => {
 // The local path is unaffected: a conflict in the box you're standing in still ends on the user's own move.
 it(`keeps the user's own rung on a local conflict held by their uncommitted edits`, async () => {
     const el = await mount({ conflicts: mixed });
-    expect(hasButton(el, `Commit or stash yours`)).toBe(true);
+    expect(hasButton(el, `Open Changes`)).toBe(true);
     expect(hasButton(el, `Have the agent resolve it`)).toBe(true);
     expect(hasButton(el, `Land with conflict markers`)).toBe(false);
     expect(hasButton(el, `Open in`)).toBe(false);

@@ -562,12 +562,18 @@ export interface FleetStore {
 
 // Milliseconds between two sends of the roster, however many changes land between them.
 export const ROSTER_WINDOW_MS = 100;
+// How long a change the feed reports waits before a refusing card is re-probed: long enough for a commit's burst of
+// ref and file events to arrive as one, short enough that the card moves while the person is still looking.
+export const REFUSAL_RECHECK_MS = 1_000;
 
 export const createFleet = (
     store: FleetStore,
     standings: LandStandings,
     presences: LandedPresences,
-    { rosterWindowMs = ROSTER_WINDOW_MS }: { readonly rosterWindowMs?: number } = {},
+    {
+        rosterWindowMs = ROSTER_WINDOW_MS,
+        refusalRecheckMs = REFUSAL_RECHECK_MS,
+    }: { readonly rosterWindowMs?: number; readonly refusalRecheckMs?: number } = {},
 ): Fleet => {
     let entries: PersistedAgent[] = [];
     // Entries changed since the last write, and the journal row of each turn opened since, which goes down with its
@@ -688,6 +694,35 @@ export const createFleet = (
             },
         );
         return following;
+    };
+
+    const refreshStandings = async (): Promise<void> => {
+        const live = entries.filter(isIsolated).filter((entry) => entry.archivedAt === undefined);
+        if (watched && probed.fresh() && landingInputs(live) === probedInputs) {
+            return;
+        }
+        if (await reprobe()) {
+            broadcast();
+        }
+    };
+
+    // A refused land is the one standing a person is busy clearing (committing the edits in its way, a version commit
+    // absorbing another agent's land), and the feed marking it stale is not enough for that: only a roster read
+    // re-derives, and a board left open never makes one, so the card went on asking for edits already gone. While any
+    // live card holds a refusal, a reported change is re-probed and published by itself, at most once a window; a
+    // change arriving mid-probe is the follow-up `reprobe` already chains. An ordinary board pays nothing.
+    let rechecking: ReturnType<typeof setTimeout> | undefined;
+    const refusing = (): boolean =>
+        entries.some((entry) => isIsolated(entry) && entry.archivedAt === undefined && (entry.landing.conflicts?.length ?? 0) > 0);
+    const recheckRefusals = (): void => {
+        if (rechecking !== undefined || !refusing()) {
+            return;
+        }
+        rechecking = setTimeout(() => {
+            rechecking = undefined;
+            // allow(silent-catch): reprobe never throws; a broadcast that does leaves the next change to carry the standings.
+            refreshStandings().catch(() => undefined);
+        }, refusalRecheckMs);
     };
 
     const books: ConversationBooks = {
@@ -918,21 +953,18 @@ export const createFleet = (
             presences.forget(ids);
             broadcast();
         },
-        refreshStandings: async () => {
-            const live = entries.filter(isIsolated).filter((entry) => entry.archivedAt === undefined);
-            if (watched && probed.fresh() && landingInputs(live) === probedInputs) {
-                return;
-            }
-            if (await reprobe()) {
-                broadcast();
-            }
-        },
+        refreshStandings,
         watchStandings: (changes) => {
             watched = true;
             probed.changed();
-            const stop = changes(probed.changed);
+            const stop = changes(() => {
+                probed.changed();
+                recheckRefusals();
+            });
             return () => {
                 watched = false;
+                clearTimeout(rechecking);
+                rechecking = undefined;
                 stop();
             };
         },

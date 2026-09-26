@@ -31,8 +31,7 @@ export interface Vocabulary {
     // The conflict card's one costless press, and the sentence under it.
     readonly resolveConflict: string;
     readonly resolveConflictHint: string;
-    // The other half of a refused land: the press for a clash only the user can clear, and the sentence under it.
-    readonly clearYours: string;
+    // The other half of a refused land: the sentence a card carries for a clash only the user can clear.
     readonly clearYoursHint: string;
     readonly restorePoints: string;
     readonly restorePointsHint: string;
@@ -83,7 +82,6 @@ const developer = (): Vocabulary => ({
     review: t(`shared.review`),
     resolveConflict: t(`views.vocabulary.agentResolve`),
     resolveConflictHint: t(`views.vocabulary.mergesInOwnWorktree`),
-    clearYours: t(`agents.words.commitStashYours`),
     clearYoursHint: t(`views.vocabulary.ownUncommittedEditsOn`),
     restorePoints: t(`views.vocabulary.restorePoints`),
     restorePointsHint: t(`views.vocabulary.restorePointsAutomaticFile`),
@@ -131,7 +129,6 @@ const maker = (): Vocabulary => ({
     review: t(`views.vocabulary.look`),
     resolveConflict: t(`views.vocabulary.askAssistantToRedo`),
     resolveConflictHint: t(`views.vocabulary.triesAgainOnOwn`),
-    clearYours: t(`views.vocabulary.setOwnChangesAside`),
     clearYoursHint: t(`views.vocabulary.changesOwnOnFiles`),
     restorePoints: t(`views.vocabulary.versions`),
     restorePointsHint: t(`views.vocabulary.versionsEveryChangeWay`),

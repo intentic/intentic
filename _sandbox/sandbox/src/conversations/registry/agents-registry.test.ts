@@ -154,6 +154,67 @@ describe("agents registry", () => {
         }
     });
 
+    // The board never re-reads the roster by itself, so a refusal whose blocker was cleared (the edits in its way
+    // committed) must be re-probed and published on the feed's word, or the card keeps asking for edits already gone.
+    it("re-probes and publishes a refusing card by itself once the feed reports a change", async () => {
+        const verdicts = standings();
+        let probes = 0;
+        const clearing = {
+            ...verdicts,
+            refresh: async () => {
+                probes += 1;
+                // What the real probe finds once the edits in the way are committed.
+                verdicts.set("c1", "ready");
+                return true;
+            },
+        };
+        const refused = isolatedAgent([{ repo: "intentic", base: "b0" }], {
+            landing: { conflicts: [{ repo: "intentic", paths: [{ path: "a.ts", reason: "workspace" }], clean: 0 }] },
+        });
+        const { agents: registry } = createFleet(memoryStore([refused]), clearing, presences(), { refusalRecheckMs: 5 });
+        await registry.init();
+        verdicts.set("c1", "conflict", ["workspace"]);
+        await waitFor(() => expect(probes).toBe(1));
+        let report: (() => void) | undefined;
+        registry.watchStandings((changed) => {
+            report = changed;
+            return () => undefined;
+        });
+        const frames: AgentSummary[][] = [];
+        registry.subscribe((agents) => frames.push(agents));
+        expect(frames.at(-1)?.[0]?.status).toBe("conflict");
+
+        report?.();
+        report?.();
+        await waitFor(() => expect(frames.at(-1)?.[0]?.status).toBe("ready"));
+        // One burst of reports, one probe.
+        expect(probes).toBe(2);
+    });
+
+    it("leaves a board with no refusing card to its roster reads when the feed reports a change", async () => {
+        let probes = 0;
+        const counted = {
+            ...standings(),
+            refresh: async () => {
+                probes += 1;
+                return false;
+            },
+        };
+        const { agents: registry } = createFleet(memoryStore([isolatedAgent([{ repo: "intentic", base: "b0" }])]), counted, presences(), {
+            refusalRecheckMs: 1,
+        });
+        await registry.init();
+        await waitFor(() => expect(probes).toBe(1));
+        let report: (() => void) | undefined;
+        registry.watchStandings((changed) => {
+            report = changed;
+            return () => undefined;
+        });
+        report?.();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(probes).toBe(1);
+    });
+
     it("begin creates an entry with title, branch, and running status", async () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();

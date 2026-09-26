@@ -5,7 +5,7 @@ import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import { landAgent, reportLockfileFailures } from "./land.js";
 import { syncBeforeLand } from "./sync.js";
 import { verifyLandedTree } from "./verify-landed.js";
-import { settleLandingInBackground } from "./version-landed.js";
+import { settleLandingInBackground, versionCommitsSettled } from "./version-landed.js";
 
 // A land a person pressed: the same pre-land rebase an automatic land takes, then the whole repository's check queued
 // behind it. Runs inside the conversation's land lease, which the route holds.
@@ -47,6 +47,11 @@ const announceLanded = (services: LandByHandDeps, entry: IsolatedAgent, span: re
 };
 
 export const landByHand = async (services: LandByHandDeps, entry: IsolatedAgent, mode: LandMode, rung: AgentSpan): Promise<LandResult> => {
+    // As an automatic land does (turn-landing.ts): another land's version commit first, so its work is history here.
+    await versionCommitsSettled(
+        services,
+        entry.placement.repos.map(({ repo }) => repo),
+    );
     const composition = await syncedComposition(services, entry);
     // Snapshotted after the sync: a rebase orphans the sha a stale span would name.
     const span = composition.map(({ repo, base, landedTip }) => ({

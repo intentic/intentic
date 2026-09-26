@@ -3,7 +3,7 @@ import type { LandedMessage, Rule } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { committableSubject, subjectFromPaths } from "../../git/ops/commit-message.js";
-import { settleLanding, versionRuleOf } from "./version-landed.js";
+import { settleLanding, settleLandingInBackground, versionCommitsSettled, versionRuleOf } from "./version-landed.js";
 import { isolatedAgent } from "../../testing.js";
 
 const describeLanding = jest.fn<() => Promise<void>>();
@@ -125,6 +125,58 @@ describe(`settling a landing`, () => {
         await settleLanding(servicesWith([], `fix: cascading markers`), `c1`);
         expect(describeLanding).toHaveBeenCalledTimes(1);
         expect(commitOnly).not.toHaveBeenCalled();
+    });
+});
+
+// Until its version commit, a land's paths are uncommitted edits in the main tree: a second land judged then read them
+// as the owner's and was refused on them, the card asking the owner to commit what the version commit took a moment later.
+describe(`a land into a repo whose last land is still being versioned`, () => {
+    // The subject's draft held open, the way a model takes its time over it.
+    const drafting = (): (() => void) => {
+        const { promise, resolve } = Promise.withResolvers<void>();
+        describeLanding.mockReturnValue(promise);
+        return resolve;
+    };
+    const order: string[] = [];
+    beforeEach(() => {
+        order.length = 0;
+        commitOnly.mockImplementation(async () => {
+            order.push(`committed`);
+            return true;
+        });
+    });
+
+    test(`waits for that commit before it rebases and is judged`, async () => {
+        const services = servicesWith([version(`auto-version`)], `fix: cascading markers`);
+        const finish = drafting();
+        settleLandingInBackground(services, `c1`);
+        const next = versionCommitsSettled(services, [`root`]).then(() => order.push(`judged`));
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        expect(order).toEqual([]);
+        finish();
+        await next;
+        expect(order).toEqual([`committed`, `judged`]);
+    });
+
+    test(`does not wait on a draft when no commit is coming`, async () => {
+        const services = servicesWith([], `fix: cascading markers`);
+        const finish = drafting();
+        settleLandingInBackground(services, `c1`);
+        await versionCommitsSettled(services, [`root`]);
+        expect(describeLanding).toHaveBeenCalledTimes(1);
+        finish();
+        expect(commitOnly).not.toHaveBeenCalled();
+    });
+
+    test(`judges the tree as it stands once the draft outlasts the wait`, async () => {
+        const services = servicesWith([version(`auto-version`)], `fix: cascading markers`);
+        const finish = drafting();
+        settleLandingInBackground(services, `c1`);
+        await versionCommitsSettled(services, [`root`], 5);
+        expect(commitOnly).not.toHaveBeenCalled();
+        finish();
+        await versionCommitsSettled(services, [`root`]);
+        expect(commitOnly).toHaveBeenCalledTimes(1);
     });
 });
 

@@ -466,11 +466,15 @@ const conflicted = (causes?: FleetAgent[`conflictCauses`]): FleetAgent => ({
 const pressFor = (el: HTMLElement, text: string): HTMLButtonElement | undefined =>
     [...el.querySelectorAll(`button`)].find((button) => (button.textContent ?? ``).includes(text));
 
-it(`offers the user's own press, not the agent's, for a refusal only the user can clear`, () => {
+// ...and it says so rather than pressing anything. The card cannot commit the edits in the way; a press that only moved
+// the view to the Changes panel read as a button that did nothing, since the card stayed put after it. The sentence
+// stays until the daemon re-reads the refusal, and the review link beside it names the files.
+it(`says, without a press of its own, that a refusal is the user's own to clear`, () => {
     const el = mount(conflicted([`workspace`]));
     expect(pressFor(el, `Have the agent resolve it`)).toBeUndefined();
-    expect(pressFor(el, `Commit or stash yours`)).toEqual(expect.any(Object));
-    // The chip says whose refusal it is, so the card's corner and its button agree.
+    expect(pressFor(el, `Commit or stash yours`)).toBeUndefined();
+    expect(el.textContent ?? ``).toContain(`Your own uncommitted edits are on the files it needs: once you commit them, it is ready to land.`);
+    // The chip says whose refusal it is, so the card's corner and its sentence agree.
     expect(el.textContent ?? ``).toContain(`Your edits`);
 });
 
@@ -478,7 +482,7 @@ it(`keeps the agent's press while any cause is still one a rebase reaches`, () =
     for (const agent of [conflicted([`workspace`, `diverged`]), conflicted()]) {
         const el = mount(agent);
         expect(pressFor(el, `Have the agent resolve it`)).toEqual(expect.any(Object));
-        expect(pressFor(el, `Commit or stash yours`)).toBeUndefined();
+        expect(el.textContent ?? ``).not.toContain(`Your own uncommitted edits`);
         app?.unmount();
         app = undefined;
     }

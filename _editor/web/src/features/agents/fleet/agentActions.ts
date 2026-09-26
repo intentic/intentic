@@ -212,7 +212,7 @@ const answerFor = async (id: string, conflicts: AgentChangesResponse[`conflicts`
         kind: `refused`,
         why:
             yours > 0
-                ? `A rebase can't reach this: ${yours === 1 ? `the blocked file is` : `all ${yours} blocked files are`} held by your own uncommitted edits. Commit or stash them, then land again.`
+                ? `A rebase can't reach this: ${yours === 1 ? `the blocked file is` : `all ${yours} blocked files are`} held by your own uncommitted edits. Commit them, then land again.`
                 : // A refusal naming no path at all is a repo the land couldn't reach (land.ts). Naming it beats sending
                   // the reader to a report whose entire content is this one sentence.
                   `The land couldn't reach your workspace's copy of ${conflicts.map((conflict) => conflict.repo).join(`, `)}, so there's nothing here for the agent to rebase.`,

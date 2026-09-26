@@ -1,4 +1,5 @@
 import { landedCommitMessage, type Rule } from "@intentic/sandbox-contract";
+import { sleep } from "@intentic/base/async";
 import type { Services } from "../../composition.js";
 import { commitOnly } from "../../git/changes/changes-index.js";
 import { committableSubject, commitSubjectFlaw, markSubjectBreaking } from "../../git/ops/commit-message.js";
@@ -93,28 +94,91 @@ const commitClaim = async (services: Services, id: string): Promise<string[]> =>
 
 // What happens to a landing once it is in the tree: the subject is drafted first, then, with the rule standing, the
 // claim is committed under it. A draft that fails is already told on its report; it must not cost the commit, which
-// falls back to the title.
-export const settleLanding = async (services: Services, id: string): Promise<void> => {
-    const { rules } = await services.sandboxSettings.get();
-    const rule = versionRuleOf(rules);
-    await describeLanding(services, id).catch((error: unknown) => services.logger.debug({ err: error, agent: id }, "landed subject: draft failed"));
-    if (rule === undefined) {
+// falls back to the title. `unhold` is called the moment no commit is coming: at once when the rule does not stand,
+// otherwise once the claim is committed (or failed to be).
+export const settleLanding = async (services: Services, id: string, unhold: () => void = () => undefined): Promise<void> => {
+    try {
+        const { rules } = await services.sandboxSettings.get();
+        const rule = versionRuleOf(rules);
+        if (rule === undefined) {
+            unhold();
+        }
+        await describeLanding(services, id).catch((error: unknown) => services.logger.debug({ err: error, agent: id }, "landed subject: draft failed"));
+        if (rule === undefined) {
+            return;
+        }
+        const committed = await commitClaim(services, id);
+        if (committed.length === 0) {
+            return;
+        }
+        // The commit itself moves HEAD, which the daemon's ref watcher already announces to every panel; only the firing
+        // needs recording here.
+        services.ruleFirings.stamp(rule.id, Date.now()).catch((error: unknown) => services.logger.warn({ err: error }, "rule firing stamp failed"));
+        services.logger.info({ agent: id, repos: committed }, "landed: versioned");
+    } finally {
+        unhold();
+    }
+};
+
+// Lands whose version commit is still to come, per main checkout, from the moment the land reached the tree. Until that
+// commit, the landed paths are uncommitted edits in the main tree like any of the owner's, so a second land judged in
+// that window would read another agent's work as the owner's and be refused on it: a card asking the owner to commit
+// edits the version commit takes a moment later, and a rebase that never saw the work it has to merge with.
+const versioning = new Map<string, Set<Promise<void>>>();
+
+// Longest a land waits on another's version commit. The subject is drafted by a model first, and one that hangs must
+// not hold every later land in the repo; past this the land judges the tree as it stands, as it always did.
+export const VERSION_WAIT_MS = 60_000;
+
+// Holds each named main checkout until `until` settles.
+const holdVersioning = (dirs: readonly string[], until: Promise<void>): void => {
+    for (const dir of dirs) {
+        const held = versioning.get(dir) ?? new Set<Promise<void>>();
+        held.add(until);
+        versioning.set(dir, held);
+    }
+    void until.finally(() => {
+        for (const dir of dirs) {
+            const held = versioning.get(dir);
+            held?.delete(until);
+            if (held?.size === 0) {
+                versioning.delete(dir);
+            }
+        }
+    });
+};
+
+// Resolves once no land into these repos is waiting on its version commit, or after `capMs`; never rejects. Awaited
+// before a land's pre-land rebase, so the branch is rebased onto the commit and the land judged against it.
+export const versionCommitsSettled = async (
+    services: Pick<Services, "agentWorktrees">,
+    repos: readonly string[],
+    capMs: number = VERSION_WAIT_MS,
+): Promise<void> => {
+    if (versioning.size === 0) {
         return;
     }
-    const committed = await commitClaim(services, id);
-    if (committed.length === 0) {
+    const pending = repos.flatMap((repo) => [...(versioning.get(services.agentWorktrees.mainDir(repo)) ?? [])]);
+    if (pending.length === 0) {
         return;
     }
-    // The commit itself moves HEAD, which the daemon's ref watcher already announces to every panel; only the firing
-    // needs recording here.
-    services.ruleFirings.stamp(rule.id, Date.now()).catch((error: unknown) => services.logger.warn({ err: error }, "rule firing stamp failed"));
-    services.logger.info({ agent: id, repos: committed }, "landed: versioned");
+    const cap = new AbortController();
+    await Promise.race([Promise.allSettled(pending), sleep(capMs, { signal: cap.signal, unref: true })]);
+    cap.abort();
 };
 
 // Never throws and never awaited on a land's own response: a land that already succeeded must not fail on its
-// bookkeeping.
+// bookkeeping. Holds the repos it landed in synchronously, before anything else can land into them.
 export const settleLandingInBackground = (services: Services, id: string): void => {
-    void settleLanding(services, id).catch((error: unknown) => services.logger.warn({ err: error, agent: id }, "landed: settling failed"));
+    const entry = services.agents.entry(id);
+    const { promise: settled, resolve: unhold } = Promise.withResolvers<void>();
+    if (entry !== undefined) {
+        holdVersioning(
+            reposOf(entry).map((composed) => services.agentWorktrees.mainDir(composed.repo)),
+            settled,
+        );
+    }
+    void settleLanding(services, id, unhold).catch((error: unknown) => services.logger.warn({ err: error, agent: id }, "landed: settling failed"));
 };
 
 // The subject of the owner's own remainder, committed before an isolated turn reads the tree.

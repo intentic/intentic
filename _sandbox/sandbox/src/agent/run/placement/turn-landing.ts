@@ -2,6 +2,7 @@ import type { AgentEvent, Rule, WorkspaceEvent } from "@intentic/sandbox-contrac
 import { landAgent, type LandOutcome, reportLockfileFailures } from "../../../conversations/land/land.js";
 import { landingPaths } from "../../../conversations/land/landing-paths.js";
 import { type LandVerifier, verifyLandedTree } from "../../../conversations/land/verify-landed.js";
+import { versionCommitsSettled } from "../../../conversations/land/version-landed.js";
 import { type IsolatedAgent, isIsolated } from "../../../conversations/registry/agents-store.js";
 import type { Services } from "../../../composition.js";
 import { landingVerdict, type RuleFacts, standing } from "../../../rules/rules.js";
@@ -111,6 +112,12 @@ const performLandingWrites = (deps: Pick<Services, "activity" | "ruleFirings" | 
 // checkpoint an orphaned base.
 const landUnderLease = async (deps: LandingDeps, turn: LandingTurn, finished: IsolatedAgent, mode: LandingDecision["mode"]): Promise<LandOutcome> => {
     const id = turn.conversationId;
+    // Another agent's land still waiting on its version commit reads as the owner's uncommitted edits; rebased and
+    // judged after that commit instead, it is history this branch can merge with.
+    await versionCommitsSettled(
+        deps,
+        finished.placement.repos.map(({ repo }) => repo),
+    );
     try {
         await turn.sync();
     } catch (error) {
