@@ -128,13 +128,15 @@ export const BrowsersListSchema = z.object({
 });
 export type BrowsersList = z.infer<typeof BrowsersListSchema>;
 export const BrowserNameParamSchema = z.object({ name: z.string().describe("Which browser.") });
-// Two kinds of started agent, listed together since from outside both are just another agent working that you did not
-// start:
-// subagent: the SDK's Agent/Task tool, tracked via SubagentStart/Stop hooks and task_* messages joined on toolUseId.
-// spawned: a full child agent on any provider, started through the daemon's spawn door (children/children.ts); the
-// daemon reports its life directly.
-// id is the spawning tool call's id for a subagent, the child's own conversation id for a spawned one. A kind changes
-// only how you watch it live.
+// A subagent is any agent another agent started, and every surface shows one the same way whichever mechanism started
+// it. The kind names the mechanism, never a second sort of thing:
+// subagent: in-process, the runtime's own Agent/Task tool, tracked via SubagentStart/Stop hooks and task_* messages
+// joined on toolUseId; it works in its parent's turn and tree, on its parent's provider.
+// spawned: a full agent on any provider, started through the daemon's spawn door (agent/subagents/children.ts) as a
+// conversation of its own, in its own worktree; the daemon reports its life directly, and it can outlive its parent's
+// turn, be steered, and land its own work.
+// id is the spawning tool call's id for an in-process one, its own conversation id for a spawned one. The kind changes
+// only where its record is read from and what else can be done with it, never how it looks.
 export const SubagentKindSchema = z.enum(["subagent", "spawned"]);
 export type SubagentKind = z.infer<typeof SubagentKindSchema>;
 // running/pending/blocked are live, the rest terminal. Uses the SDK's own task vocabulary rather than AgentStatus.
@@ -168,7 +170,7 @@ export const SubagentSessionSchema = z.object({
             "The id of the tool call that started it (an SDK child) or the child's own conversation id (a spawned one); either way both sides already hold it, so a card links to its subagent with the id it has and the subagent points back the same way.",
         ),
     kind: SubagentKindSchema.describe(
-        "What sort of subagent: one the runtime's own Task tool spawned in-process, or a full child agent the daemon started for the turn. It changes only how you watch it.",
+        "How it was started: in-process by the runtime's own Agent/Task tool, or spawned by the daemon as a conversation of its own, on any provider. It changes where its record is read from and what else can be done with it, never what it is.",
     ),
     // The conversation whose turn started it; how a card links back to the chat it belongs to.
     conversationId: z.string().describe("The conversation whose turn started it, and the way back to the chat it belongs to."),
@@ -216,7 +218,7 @@ export const SubagentSessionSchema = z.object({
 });
 export type SubagentSession = z.infer<typeof SubagentSessionSchema>;
 export const SubagentsListSchema = z.object({
-    sessions: z.array(SubagentSessionSchema).describe("Every subagent and child agent this sandbox's conversations have started."),
+    sessions: z.array(SubagentSessionSchema).describe("Every subagent this sandbox's conversations have started, in-process and spawned alike."),
 });
 export type SubagentsList = z.infer<typeof SubagentsListSchema>;
 export const SubagentIdParamSchema = z.object({ id: z.string() });

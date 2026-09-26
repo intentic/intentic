@@ -1,6 +1,6 @@
 import { PLAN_DOCUMENTS_DIR } from "@intentic/sandbox-contract";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
-import { numberedFileBody, present, TEXT_CAP } from "./toolPresentation";
+import { delegates, numberedFileBody, present, TEXT_CAP } from "./toolPresentation";
 
 // A completed call with no output, spread over per-case.
 const tool = (over: Partial<TranscriptTool> & Pick<TranscriptTool, "name">): TranscriptTool => ({
@@ -29,6 +29,22 @@ describe(`present: icons`, () => {
         expect(present(tool({ name: `Task`, category: `other` })).icon).toBe(`users`);
     });
 
+    // A subagent is one thing whichever door started it: the runtime's own tool, the sandbox's spawn tool (as Claude and
+    // Cursor mount it), or a shell's `agents spawn`, known by the subagent the transcript put on its card.
+    it(`marks every call that started a subagent as one, whichever door it came through`, () => {
+        expect([`Agent`, `Task`, `mcp__subagents__spawn`, `mcp__custom-user-tools__spawn`].map((name) => present(tool({ name })).delegates)).toEqual([
+            true,
+            true,
+            true,
+            true,
+        ]);
+        const shell = tool({ name: `Bash`, category: `execute`, target: `agents spawn --provider codex --model gpt-5 'port it'` });
+        expect([present(shell).delegates, present(shell).icon]).toEqual([false, `code`]);
+        const placed = { ...shell, subagent: { id: `sub-x`, kind: `spawned` as const, status: `running` as const } };
+        expect([delegates(placed), present(placed).delegates, present(placed).icon]).toEqual([true, true, `users`]);
+        expect(present(tool({ name: `mcp__subagents__wait` })).delegates).toBe(false);
+    });
+
     it(`matches presenter names case-insensitively, so a backend's lowercase id resolves`, () => {
         expect(present(withText(`grep`, `a/b.ts`)).body?.kind).toBe(`files`);
         expect(present(withText(`Grep`, `a/b.ts`)).body?.kind).toBe(`files`);
@@ -36,6 +52,15 @@ describe(`present: icons`, () => {
 });
 
 describe(`present: bodies`, () => {
+    // The spawn door answers the model in JSON; a reader is shown what it said, not the envelope.
+    it(`reads the spawn door's answer as its words`, () => {
+        const started = withText(`mcp__subagents__spawn`, `{"ok":true,"child":"sub-x","note":"Started; supervise it with wait."}`);
+        expect(present(started).body).toEqual({ kind: `text`, text: `Started; supervise it with wait.` });
+        const refused = withText(`mcp__subagents__spawn`, `{"ok":false,"message":"A spawn needs a provider and a model."}`);
+        expect(present(refused).body).toEqual({ kind: `text`, text: `A spawn needs a provider and a model.` });
+        expect(present(withText(`mcp__subagents__spawn`, `not json`)).body).toEqual({ kind: `text`, text: `not json` });
+    });
+
     it(`gives an output-less call no body, so its card renders as a bare header`, () => {
         expect(present(tool({ name: `Read` })).body).toBeUndefined();
     });

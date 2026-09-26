@@ -20,6 +20,11 @@ import { unspokenPromptRow } from "../events/agent-words.js";
 // Folds a turn's frames into rows once, live and for the settled record alike, so a reopened chat matches what was on
 // screen. `tag` selects the stream read: undefined is the main turn, a tool-call id is the subagent it spawned; other
 // frames nest under the card that spawned them. Rows mutate in place; every patch carries a copy of what it names.
+//
+// Every subagent lands on the card of the call that started it, whichever mechanism started it. An in-process one (the
+// runtime's own Agent/Task tool) is named by that call's id, so its card is found at once. A spawned one is named by its
+// own conversation id, and every door that spawns one answers with that id (the spawn tool's `child`, the `agents
+// spawn` CLI's first line), so its frames wait until a card's result names it, then ride that card from there on.
 
 export type TurnEnding = "settled" | "stopped";
 
@@ -39,6 +44,13 @@ const defined = <T extends object>(value: T): Partial<T> =>
 
 // A card's own fields: what a `tool` patch carries, so a delegation's growing subtree never rides one.
 const ownFields = ({ children: _children, thinking: _thinking, ...own }: TranscriptTool): TranscriptTool => own;
+
+// Everything a card's result said, as one string: what a subagent waiting for its card is looked for in.
+const resultWords = (tool: TranscriptTool): string =>
+    (tool.content ?? [])
+        .filter((entry) => entry.type === "text")
+        .map((entry) => entry.text)
+        .join("\n");
 
 const cardOf = (event: Extract<AgentEvent, { kind: "tool_call" }>): TranscriptTool => ({
     id: event.id,
@@ -212,6 +224,11 @@ export class TranscriptFold {
     // Index of the open assistant bubble; always the last row, since every other row kind closes it first.
     private bubble: number | undefined;
     private readonly cards = new Map<string, CardPlace>();
+    // A subagent's own id to the card of the call that started it, once that card is known.
+    private readonly placed = new Map<string, string>();
+    // A subagent heard before its card: born, and perhaps already moving, while the call that started it had not yet
+    // said its id. Placed as soon as a card claims it; dropped with the fold if none ever does.
+    private readonly unplaced = new Map<string, TranscriptSubagent>();
     // requestId to the row holding its card, for frames landing on it later (a reply, a late sentence, a receipt).
     private readonly parked = new Map<string, number>();
     // The turn's opening user row, where the checkpoint and daemon notes land; cleared once `retract` takes it back.
@@ -266,6 +283,7 @@ export class TranscriptFold {
                 const row = this.rows[index]!;
                 row.tools = [...(row.tools ?? []), tool];
                 this.cards.set(tool.id, { tool, row: index });
+                this.claimById(tool);
                 return [...opened, { op: "tool", index, tool: structuredClone(tool) }];
             }
             case "tool_call_update":
@@ -276,27 +294,16 @@ export class TranscriptFold {
                     }
                     if (event.content !== undefined) {
                         tool.content = event.content;
+                        this.claimByResult(tool);
                     }
                     if (event.locations !== undefined) {
                         tool.locations = event.locations;
                     }
                 });
-            case "subagent": {
-                // The frame's id is the spawning call's id, so the subagent record lands on that card.
-                const { kind: _kind, id, subagentKind, ...rest } = event;
-                return this.patchCard(id, (tool) => {
-                    tool.subagent = { ...rest, kind: subagentKind, status: "running" };
-                });
-            }
-            case "subagent_update": {
-                // Present fields replace, absent ones leave the child alone, as in tool_call_update.
-                const { kind: _kind, id, ...patch } = event;
-                return this.patchCard(id, (tool) => {
-                    if (tool.subagent !== undefined) {
-                        tool.subagent = { ...tool.subagent, ...(defined(patch) as Partial<TranscriptSubagent>) };
-                    }
-                });
-            }
+            case "subagent":
+                return this.subagentBorn(event);
+            case "subagent_update":
+                return this.subagentMoved(event);
             case "todos": {
                 const [index, opened] = this.open();
                 this.rows[index]!.todos = [...event.items];
@@ -561,9 +568,81 @@ export class TranscriptFold {
             const child = cardOf(event);
             place.tool.children = [...(place.tool.children ?? []), child];
             this.cards.set(child.id, { tool: child, row: place.row, parent });
+            this.claimById(child);
             return [{ op: "tool", index: place.row, tool: structuredClone(child), parent }];
         }
         return [];
+    }
+
+    // A subagent starts: on its card when that is known, else held until a card claims it. A later birth under the same
+    // id (a follow-up turn of the same subagent) starts its card's state over.
+    private subagentBorn(event: Extract<AgentEvent, { kind: "subagent" }>): TranscriptPatch[] {
+        const { kind: _kind, id, subagentKind, ...rest } = event;
+        const born: TranscriptSubagent = { ...rest, kind: subagentKind, status: "running" };
+        const card = this.cardOfSubagent(id);
+        if (card === undefined) {
+            this.unplaced.set(id, born);
+            return [];
+        }
+        return this.patchCard(card, (tool) => this.place(tool, id, born));
+    }
+
+    // A subagent moves: present fields replace, absent ones leave it alone, as in tool_call_update; one still waiting for
+    // its card moves where it waits.
+    private subagentMoved(event: Extract<AgentEvent, { kind: "subagent_update" }>): TranscriptPatch[] {
+        const { kind: _kind, id, ...patch } = event;
+        const moved = defined(patch) as Partial<TranscriptSubagent>;
+        const card = this.cardOfSubagent(id);
+        if (card !== undefined) {
+            return this.patchCard(card, (tool) => {
+                if (tool.subagent !== undefined) {
+                    tool.subagent = { ...tool.subagent, ...moved };
+                }
+            });
+        }
+        const waiting = this.unplaced.get(id);
+        if (waiting !== undefined) {
+            this.unplaced.set(id, { ...waiting, ...moved });
+        }
+        return [];
+    }
+
+    // The card a subagent's frames land on: the one already carrying it, else the one sharing its id (an in-process
+    // subagent is named by the call that started it); undefined while the call that started it has not yet named it.
+    private cardOfSubagent(id: string): string | undefined {
+        return this.placed.get(id) ?? (this.cards.has(id) ? id : undefined);
+    }
+
+    // Puts a subagent on the card that started it. Its own id rides along only where it differs from the card's, so the
+    // card can still name it to the roster, `wait` and its own page.
+    private place(tool: TranscriptTool, id: string, subagent: TranscriptSubagent): void {
+        const { id: _id, ...state } = subagent;
+        tool.subagent = id === tool.id ? state : { ...state, id };
+        this.placed.set(id, tool.id);
+        this.unplaced.delete(id);
+    }
+
+    // A card appearing under the id a subagent was already heard by: the stream said the child before the call.
+    private claimById(tool: TranscriptTool): void {
+        const waiting = this.unplaced.get(tool.id);
+        if (waiting !== undefined) {
+            this.place(tool, tool.id, waiting);
+        }
+    }
+
+    // A call whose result names a subagent still waiting for its card is the call that started it. A card carries one
+    // subagent, so one that already has its own claims nothing more.
+    private claimByResult(tool: TranscriptTool): void {
+        if (this.unplaced.size === 0 || tool.subagent !== undefined) {
+            return;
+        }
+        const words = resultWords(tool);
+        for (const [id, waiting] of this.unplaced) {
+            if (words.includes(id)) {
+                this.place(tool, id, waiting);
+                return;
+            }
+        }
     }
 
     // Returns the bubble frames write to, opening a fresh assistant row when the last one was retired.

@@ -7,6 +7,7 @@ import ChatCodeBody from "../transcript/ChatCodeBody.vue";
 import ChatDocumentBody from "../transcript/cards/ChatDocumentBody.vue";
 import ChatToolDiff from "./ChatToolDiff.vue";
 import { present } from "./toolPresentation";
+import { subagentView } from "./subagentCard";
 import { useT } from "@intentic/ui/i18n";
 
 // One tool call: per-tool facts (icon, summary, output shape, default-open) come from the presentation
@@ -113,12 +114,16 @@ const agentTerminal = computed(() => (view.value.body?.kind === `command` ? surf
 // selected. Every browser tool gets it, since a click or fill is worth watching even without a returned picture.
 const agentBrowser = computed(() => (props.tool.name.toLowerCase().startsWith(`browser `) ? surface.commandBrowser?.() : undefined));
 
-// The agent this call started; the card's own id is the subagent's id in the registry. Shows progress and
-// spend while it runs, its conclusion once it stops — the only signal a backgrounded child has.
-const subagent = computed(() => props.tool.subagent);
-const subagentLive = computed(
-    () => subagent.value?.status === `running` || subagent.value?.status === `pending` || subagent.value?.status === `blocked`,
-);
+// The subagent this call started, whichever mechanism started it: one the runtime ran in-process, or one the sandbox
+// spawned as a conversation of its own. Both are drawn alike, from what the turn recorded brought up to date by the
+// roster (subagentCard.ts). Shows progress and spend while it runs, its conclusion once it stops, the only signal a
+// backgrounded one has.
+const started = computed(() => subagentView(props.tool.id, props.tool.subagent, surface.subagent, props.live));
+const subagent = computed(() => started.value?.subagent);
+const subagentLive = computed(() => started.value?.working === true);
+// A call that starts a subagent is named as the subagent it starts, not as the door it came through (`Agent`, the spawn
+// tool, a shell's `agents spawn`).
+const name = computed(() => (view.value.delegates ? t(`shared.subagent`) : props.tool.name));
 // The row above the fold, in reading order: what type it runs as, then what it was asked to do.
 const subagentTitle = computed(() => [subagent.value?.agentType, subagent.value?.description].filter(Boolean).join(` · `));
 // The quiet numbers line: tokens are the child's own spend, worth stating since the parent's cost readout
@@ -135,11 +140,25 @@ const subagentFacts = computed<string[]>(() => {
     ];
 });
 
+// Where the card's door leads: the subagent's own page, or, for a spawned one the roster has let go since its turn
+// stopped streaming, its own conversation, which keeps it for good.
+const subagentDoor = computed<{ readonly href: string; readonly label: string } | undefined>(() => {
+    const seen = started.value;
+    if (seen === undefined) {
+        return undefined;
+    }
+    if (seen.subagent.kind === `spawned` && !seen.rostered && !props.live && surface.conversationRoute !== undefined) {
+        return { href: surface.conversationRoute(seen.id), label: t(`chat.chatToolCard.openItsConversation`) };
+    }
+    const href = surface.subagentRoute?.(seen.id);
+    return href === undefined ? undefined : { href, label: seen.working ? t(`chat.chatToolCard.watchAgent`) : t(`chat.chatToolCard.openAgentsTranscript`) };
+});
+
 // Behaves like any in-app link: a plain click is routed, a modified one (new tab/window) is left to the
 // browser, and a surface with no router just lets the anchor load. Hand-written rather than RouterLink (see
 // chatToolSurface.ts).
-const openSubagent = (event: MouseEvent, toolId: string): void => {
-    const route = surface.subagentRoute?.(toolId);
+const openSubagent = (event: MouseEvent): void => {
+    const route = subagentDoor.value?.href;
     // Already answered: a popped-out window routes every in-app link to the app's own window first.
     if (event.defaultPrevented || route === undefined || surface.navigate === undefined) {
         return;
@@ -166,13 +185,13 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
             >
                 <Icon :name="isOpen ? 'chevron-down' : 'chevron-right'" class="text-2xs" />
                 <Icon v-bind="statusIcon" class="text-2xs" />
-                <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ tool.name }}</span>
+                <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ name }}</span>
             </button>
             <template v-else>
                 <!-- Kept as one protected flex item too: chat messages inherit `overflow-wrap: anywhere`. -->
                 <span class="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
                     <Icon v-bind="statusIcon" class="text-2xs" />
-                    <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ tool.name }}</span>
+                    <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ name }}</span>
                 </span>
             </template>
             <!-- Who it delegated to and what it asked for, in the slot a path would take; a sentence, not mono. -->
@@ -195,7 +214,7 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                 t(`chat.chatToolCard.background`)
             }}</span>
             <!-- The delegate itself reports being stuck on a permission or question; the one live state worth shouting. -->
-            <span v-if="subagent?.status === `blocked`" class="ui-status-pill shrink-0 bg-overlay text-2xs text-warning">{{
+            <span v-if="subagentLive && subagent?.status === `blocked`" class="ui-status-pill shrink-0 bg-overlay text-2xs text-warning">{{
                 t(`chat.chatToolCard.needsInput`)
             }}</span>
             <!-- Collapsed calls keep their result or pending clock visible. -->
@@ -231,14 +250,14 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
             >
                 <Icon name="globe" class="text-2xs" />
             </button>
-            <!-- The third door: the child's own transcript. -->
+            <!-- The third door: the subagent itself, on its own page or in its own conversation. -->
             <a
-                v-if="subagent && surface.subagentRoute"
-                :href="surface.subagentRoute(tool.id)"
+                v-if="subagentDoor"
+                :href="subagentDoor.href"
                 class="shrink-0 transition-colors hover:text-content"
-                v-tooltip.top="subagentLive ? t(`chat.chatToolCard.watchAgent`) : t(`chat.chatToolCard.openAgentsTranscript`)"
-                :aria-label="subagentLive ? t(`chat.chatToolCard.watchAgent`) : t(`chat.chatToolCard.openAgentsTranscript`)"
-                @click="openSubagent($event, tool.id)"
+                v-tooltip.top="subagentDoor.label"
+                :aria-label="subagentDoor.label"
+                @click="openSubagent($event)"
             >
                 <Icon name="users" class="text-2xs" />
             </a>

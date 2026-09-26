@@ -111,7 +111,8 @@ const headline = (words: TranscriptAgentWords): string => {
     if (words.kind === "peer") {
         return `Message from another conversation: ${sender}.`;
     }
-    return `Child agent ${sender} ${words.failed === true ? "failed" : "finished"}.`;
+    // Named as the editor names every agent another one started, whichever mechanism started it.
+    return `Subagent ${sender} ${words.failed === true ? "failed" : "finished"}.`;
 };
 
 /** Another agent's words are a notice: it is neither this conversation's user nor its agent. */

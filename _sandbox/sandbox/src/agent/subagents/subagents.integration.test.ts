@@ -25,6 +25,10 @@ import {
     type SubagentTurn,
 } from "./subagents.js";
 import { memoryFleet } from "../../testing.js";
+import { startTurnRun } from "../run/turn/turn-runs.js";
+import { createDomainEvents } from "../../seams/domain-events.js";
+import type { TurnStarter } from "../../seams/turn-starter.js";
+import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 
 // One fleet's actors, which hold every record the registry under test files.
 const actors = memoryFleet().conversations;
@@ -340,6 +344,107 @@ describe("spawned children", () => {
         expect(listSubagentSessions(actors)[0]).toMatchObject({ description: "also handle nested arrays" });
     });
 
+    // An in-process subagent's frames reach the parent's transcript and its actor through the turn's own pump; a
+    // spawned one's are told to both by hand, so it lands on its spawn call's card and counts on the parent's card.
+    describe("reaching its parent the way an in-process one does", () => {
+        // A parent turn held open through the real pump, so `turnRunOf` finds a live run to fold into.
+        const liveParent = () => {
+            let release = (): void => {};
+            const held = new Promise<void>((resolve) => {
+                release = resolve;
+            });
+            // eslint-disable-next-line require-yield
+            const forever: TurnStarter["stream"] = async function* pump() {
+                await held;
+            };
+            startTurnRun({ conversations: actors, events: createDomainEvents(() => {}) }, forever, { conversationId: "conv-1", prompt: "fan out" });
+            return { release };
+        };
+        // What the parent's actor heard of this child, frame by frame.
+        type Sent = ReturnType<typeof jest.spyOn<typeof actors, "send">>;
+        const toldOf = (spy: Sent): AgentEvent[] =>
+            spy.mock.calls.flatMap(([id, event]) => (id === "conv-1" && event.kind === "frame" ? [event.frame] : []));
+
+        let sent: Sent;
+        beforeEach(() => {
+            sent = jest.spyOn(actors, "send");
+        });
+        afterEach(() => sent.mockRestore());
+
+        it("lands on the card of the call that spawned it, in the parent's live transcript", () => {
+            const live = liveParent();
+            try {
+                const run = turnRunOf(actors, "conv-1");
+                run?.push({ kind: "tool_call", id: "call-9", name: "mcp__subagents__spawn", category: "other", status: "in_progress" });
+                openSpawnedChild(turn(), birth);
+                run?.push({ kind: "tool_call_update", id: "call-9", status: "completed", content: [{ type: "text", text: `{"ok":true,"child":"${birth.id}"}` }] });
+                noteSpawnedChild(actors, birth.id, { status: "blocked", summary: "Which port?" });
+                expect(run?.rows.flatMap((row) => row.tools ?? []).find((tool) => tool.id === "call-9")?.subagent).toEqual({
+                    id: birth.id,
+                    kind: "spawned",
+                    agentType: "Cursor",
+                    description: "Port the parser",
+                    model: "composer-2.5",
+                    provider: "cursor",
+                    background: true,
+                    status: "blocked",
+                    summary: "Which port?",
+                });
+            } finally {
+                live.release();
+            }
+        });
+
+        it("tells the parent's card of its birth while the parent's turn runs, and of every change of standing", () => {
+            const live = liveParent();
+            try {
+                openSpawnedChild(turn(), birth);
+                noteSpawnedChild(actors, birth.id, { toolUses: 2, lastTool: "Edit" });
+                noteSpawnedChild(actors, birth.id, { status: "blocked", summary: "Which port?" });
+            } finally {
+                live.release();
+            }
+            settleSpawnedChild(actors, birth.id, { status: "completed", report: "Ported." });
+            expect(toldOf(sent)).toEqual([
+                expect.objectContaining({ kind: "subagent", id: birth.id, subagentKind: "spawned" }),
+                expect.objectContaining({ kind: "subagent_update", id: birth.id, status: "blocked" }),
+                expect.objectContaining({ kind: "subagent_update", id: birth.id, status: "completed" }),
+            ]);
+        });
+
+        it("counts a follow-up turn as the same subagent, not another birth", () => {
+            const live = liveParent();
+            try {
+                openSpawnedChild(turn(), birth);
+                settleSpawnedChild(actors, birth.id, { status: "completed", report: "first pass done" });
+                openSpawnedChild(turn(), { ...birth, description: "also handle nested arrays" });
+            } finally {
+                live.release();
+            }
+            expect(toldOf(sent).map((frame) => `${frame.kind}:${frame.kind === "subagent_update" ? (frame.status ?? "") : ""}`)).toEqual([
+                "subagent:",
+                "subagent_update:completed",
+                "subagent_update:running",
+            ]);
+        });
+
+        // The roster forgets a settled subagent after a while; its next turn is still the same subagent.
+        it("counts a follow-up as the same subagent even once the roster has let its record go", () => {
+            const live = liveParent();
+            try {
+                openSpawnedChild(turn(), { ...birth, again: true });
+            } finally {
+                live.release();
+            }
+            expect(toldOf(sent)).toEqual([{ kind: "subagent_update", id: birth.id, status: "running" }]);
+        });
+
+        it("counts nothing for a birth with no parent turn to count it into", () => {
+            openSpawnedChild(turn(), birth);
+            expect(toldOf(sent)).toEqual([]);
+        });
+    });
+
     it("drops a late move from a child already settled", () => {
         openSpawnedChild(turn(), birth);
         settleSpawnedChild(actors, birth.id, { status: "completed", report: "done" });
@@ -495,6 +600,12 @@ describe("how a subagent ends", () => {
         );
         const frame = update(noteSubagentTask(turn(), { subtype: "task_notification", tool_use_id: "call-v", status: "completed", summary: "done" }));
         expect(frame.verification).toEqual({ state: "verified", paths: ["src/a.ts"], check: "pnpm test" });
+    });
+
+    // The CLI names the delegating tool `Agent` and older ones `Task`; a hook bound to one name alone never fires on the
+    // other, and the parent would read an unproven report as it reads a spawned subagent's, with no warning beside it.
+    it("hooks the delegating call under either of its names", () => {
+        expect(subagentHooks(turn()).PostToolUse?.[0]?.matcher?.split("|")).toEqual(["Agent", "Task"]);
     });
 
     it("appends the warning to a Task result the parent is about to read", async () => {

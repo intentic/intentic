@@ -666,7 +666,7 @@ describe(`ChatMessageView child-agent card`, () => {
             requestId: `perm-child`,
             status: `pending`,
             toolName: `agents.spawn`,
-            title: `Start a child agent on Claude Code?`,
+            title: `Start a subagent on Claude Code?`,
             displayName: `Start it`,
             reason: `this turn has taken in content from outside (shell-fetch)`,
             child: { ...asked, ...child },
@@ -686,7 +686,7 @@ describe(`ChatMessageView child-agent card`, () => {
 
     it(`names the child it would start and everything it runs on`, () => {
         const element = mount(held());
-        expect(element.querySelector(`.chat-card-title`)?.textContent).toBe(`Start a child agent on Claude Code?`);
+        expect(element.querySelector(`.chat-card-title`)?.textContent).toBe(`Start a subagent on Claude Code?`);
         expect(element.textContent).toContain(`Port the parser to zig`);
         expect(chip(element)?.textContent).toContain(`Claude Opus 4.6`);
         expect(element.textContent).toContain(`Account: work`);
@@ -748,8 +748,8 @@ describe(`ChatMessageView child-agent card`, () => {
     });
 
     it(`a message to a running child shows the words and the child's run, which it cannot change`, () => {
-        const element = mount(held({ move: `send`, child: `sub-1`, message: `Now the lexer too.` }, { title: `Send this to a child agent on Claude Code?` }));
-        expect(element.querySelector(`.chat-card-title`)?.textContent).toBe(`Send this to a child agent on Claude Code?`);
+        const element = mount(held({ move: `send`, child: `sub-1`, message: `Now the lexer too.` }, { title: `Send this to a subagent on Claude Code?` }));
+        expect(element.querySelector(`.chat-card-title`)?.textContent).toBe(`Send this to a subagent on Claude Code?`);
         expect(element.textContent).toContain(`Now the lexer too.`);
         expect(element.textContent).toContain(`Claude Opus 4.6`);
         expect(chip(element)).toBeNull();
@@ -1176,9 +1176,9 @@ describe(`another agent's words`, () => {
         expect(element.querySelector(`pre`)?.textContent).toBe(PEER);
     });
 
-    it(`weights a child that failed like a watch that gave up`, () => {
+    it(`weights a subagent that failed like a watch that gave up`, () => {
         const element = mount(rowOf(REPORT));
-        expect(element.textContent).toContain(`Child agent "Port the parser" (sub-x7) failed.`);
+        expect(element.textContent).toContain(`Subagent "Port the parser" (sub-x7) failed.`);
         expect(element.querySelector(`.text-danger`)).not.toBeNull();
         expect(mount(rowOf(PEER)).querySelector(`.text-danger`)).toBeNull();
     });

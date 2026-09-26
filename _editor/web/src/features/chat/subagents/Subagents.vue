@@ -23,9 +23,10 @@ import RailLane from "../../../components/RailLane.vue";
 import { fileLinkDecorator } from "../../../lib/markdown/renderMarkdown";
 import { useT } from "@intentic/ui/i18n";
 
-// The page for agents this sandbox's agents started, alongside the terminal panel and Browsers area. A
-// subagent's only view is its transcript, so this is a column of chat components, not a pane. No
-// composer: steering a child goes through its parent (`/children/send`), never directly.
+// The page for every subagent this sandbox's agents started, alongside the terminal panel and Browsers area, drawn the
+// same way whichever mechanism started it: in-process by the runtime's own Agent tool, or spawned as a conversation of
+// its own. A subagent's view here is its transcript, so this is a column of chat components, not a pane. No composer:
+// steering one goes through its parent (`/children/send`); a spawned one is also a conversation, one press away.
 
 // The transcript is the one thing still polled; the roster itself is pushed.
 const t = useT();
@@ -54,16 +55,21 @@ const selected = computed<string | undefined>(() => {
 });
 const current = computed(() => visible.value.find((session) => session.id === selected.value));
 
-// This page's tool surface; paths resolve against the child's parent's tree, where a subagent actually runs.
+// Where a subagent works: an in-process one in its parent's tree, a spawned one in its own conversation's.
+const workedIn = (session: SubagentSession): string => (session.kind === `spawned` ? session.id : session.conversationId);
+
+// This page's tool surface; paths resolve against the tree the subagent actually works in.
 provide(
     CHAT_SURFACE,
     workspaceSurface({
         agent: () => {
-            const conversationId = current.value?.conversationId;
+            const conversationId = current.value === undefined ? undefined : workedIn(current.value);
             return conversationId !== undefined && agentById(conversationId)?.branch !== undefined ? conversationId : undefined;
         },
         // A child that itself delegated routes to its own transcript here, rather than reloading.
         navigate: (to) => void router.push(to),
+        // So a subagent this one started reads as the rest of the roster does.
+        subagents: () => sessions.value,
     }),
 );
 
@@ -80,16 +86,16 @@ const lanes = computed<{ readonly label: string; readonly dot: string; readonly 
 const titleOf = (session: SubagentSession): string =>
     [session.description, session.agentType].find((part) => part !== undefined && part !== ``) ?? `Agent ${session.id.slice(-6)}`;
 
-// Opens the parent conversation in the dock on desktop, or navigates to its page on mobile or when the
-// roster doesn't have it.
-const parentTo = (session: SubagentSession): string => `/agents/${encodeURIComponent(session.conversationId)}`;
-const openParent = (session: SubagentSession): void => {
-    const parent = agentById(session.conversationId);
-    if (parent !== undefined && !mobile.value) {
-        openAgent(parent);
+// Opens a conversation in the dock on desktop, or navigates to its page on mobile or when the fleet doesn't have it:
+// the parent's, or a spawned subagent's own.
+const conversationTo = (id: string): string => `/agents/${encodeURIComponent(id)}`;
+const openConversation = (id: string): void => {
+    const conversation = agentById(id);
+    if (conversation !== undefined && !mobile.value) {
+        openAgent(conversation);
         return;
     }
-    void router.push(parentTo(session));
+    void router.push(conversationTo(id));
 };
 
 // An SDK subagent wears its parent's provider (falling back to Claude); a spawned child names its own.
@@ -280,7 +286,7 @@ watch(
             </div>
             <div class="max-w-sm text-xs text-muted">
                 <template v-if="focus === undefined">
-                    {{ t(`chat.subagents.agentDelegatesAgentTool`) }}
+                    {{ t(`chat.subagents.subagentsAppearHere`) }}
                 </template>
                 <template v-else>{{ t(`chat.subagents.agentsStartedFinishedAged`, { focusTitle }) }}</template>
             </div>
@@ -435,12 +441,22 @@ watch(
                     <ChatToolCallsToggle />
                     <!-- A control and an address: plain click docks the parent conversation, Ctrl/⌘-click opens its own tab. -->
                     <ActionLink
-                        :to="parentTo(current)"
+                        :to="conversationTo(current.conversationId)"
                         :class="FOOTER_ACTION"
                         v-tooltip.top="t(`chat.subagents.openConversationStartedAgent`)"
-                        @activate="openParent(current)"
+                        @activate="openConversation(current.conversationId)"
                     >
                         <Icon name="comments" class="text-2xs" />{{ t(`chat.subagents.parent`) }}
+                    </ActionLink>
+                    <!-- A spawned subagent is a conversation of its own too: where its work lands and a person can speak to it. -->
+                    <ActionLink
+                        v-if="current.kind === `spawned`"
+                        :to="conversationTo(current.id)"
+                        :class="FOOTER_ACTION"
+                        v-tooltip.top="t(`chat.chatToolCard.openItsConversation`)"
+                        @activate="openConversation(current.id)"
+                    >
+                        <Icon name="arrow-up-right" class="text-2xs" />{{ t(`chat.subagents.itsConversation`) }}
                     </ActionLink>
                 </div>
             </div>

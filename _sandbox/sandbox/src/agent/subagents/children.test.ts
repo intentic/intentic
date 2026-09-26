@@ -965,7 +965,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
             // Names the move and provider, so answering it isn't a guess about what it does; offers the turn-long allow.
             expect(cardOf(requestId)).toMatchObject({
                 toolName: "agents.spawn",
-                title: "Start a child agent on Claude Code?",
+                title: "Start a subagent on Claude Code?",
                 displayName: "Start it",
                 alwaysLabel: "Allow for the rest of this turn",
             });
@@ -1218,7 +1218,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
                 message: "Your last message to it still waits for the owner's approval: wait for that, then send again.",
             });
             const requestId = await cardOn();
-            expect(cardOf(requestId)?.title).toBe("Send this to a child agent on Claude Code?");
+            expect(cardOf(requestId)?.title).toBe("Send this to a subagent on Claude Code?");
             expect(cardOf(requestId)?.child).toMatchObject({
                 move: "send",
                 child: first.id,

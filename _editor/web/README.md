@@ -52,7 +52,8 @@ One word per idea on screen and in code. The retired spellings are refused by
 | slot | An empty element a mounted surface publishes for a panel to teleport into (`shell/window/panelSlots.ts`) |
 | docked | A panel living in the main window, as opposed to floating in a window of its own (`floating.ts`) |
 | status bar | The board's foot: the main line's segment, which leads to the Main line view, and the metrics' segment, which opens its panel above the bar (`features/agents/status-bar/`) |
-| tray | The rows hung under a board card for the child agents it spawned: asks and working ones in sight, stopped ones one row per thing they stopped on, settled ones folded behind a count (`features/agents/board/view/childFold.ts`) |
+| subagent | Any agent another agent started: in-process by its runtime's own Agent tool, or spawned by the sandbox as a conversation of its own. Drawn one way wherever it shows, on the card of the call that started it (`features/chat/tools/subagentCard.ts`) and on the Subagents page; how it was started changes only what else it offers, such as its own conversation. Not "child agent" |
+| tray | The rows hung under a board card for the subagents it spawned, which are conversations of their own: asks and working ones in sight, stopped ones one row per thing they stopped on, settled ones folded behind a count (`features/agents/board/view/childFold.ts`) |
 | quick bar | The parked chat's pill that grows into the composer (`ChatQuickBar.vue`); what it unfolds is its transcript |
 | quick look | A card a hover raises: a home tile's preview, a bigger picture, an attached file's first lines |
 | peek | A tab opened as a look, which closes when the reader moves on unless kept (`Conversation.peek`), and nothing else |

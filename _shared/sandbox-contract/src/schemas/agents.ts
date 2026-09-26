@@ -455,7 +455,7 @@ export const AgentSummarySchema = z.object({
         })
         .optional()
         .describe(
-            "Subagents and child agents this one delegated to. Absent means it never has, which is most conversations. Their spend is their own and is not folded into this conversation's cost.",
+            "Subagents this one started, in-process and spawned alike. Absent means it never has, which is most conversations. Their spend is their own and is not folded into this conversation's cost.",
         ),
     // Cumulative output across every repo (base → branch tip), refreshed on each land; independent of what has actually
     // landed.

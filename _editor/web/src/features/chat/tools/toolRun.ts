@@ -1,6 +1,6 @@
 import type { IconName } from "@intentic/ui";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
-import { present } from "./toolPresentation";
+import { delegates as startsSubagent, present } from "./toolPresentation";
 
 // Summary of a turn's tool-call run for its collapsed mark (ChatTurnAsides.vue): how many top-level calls it made (a
 // sub-agent's own calls count as the one delegation that spawned them) and which was the most notable.
@@ -17,8 +17,9 @@ export interface ToolRun {
 const CATEGORY_SCORES: Partial<Record<TranscriptTool["category"], number>> = { fetch: 40, execute: 30, search: 20, read: 10 };
 
 // `nested` stands in for `children` on a transcript page, which counts a delegation's calls rather than carrying them; a
-// delegation must rank the same either way, or a reopened turn's mark changes on its own.
-const delegates = (tool: TranscriptTool): boolean => tool.subagent !== undefined || (tool.children?.length ?? 0) > 0 || (tool.nested ?? 0) > 0;
+// delegation must rank the same either way, or a reopened turn's mark changes on its own. A spawned subagent's call ranks
+// as one too, though its calls live in its own conversation.
+const delegates = (tool: TranscriptTool): boolean => startsSubagent(tool) || (tool.children?.length ?? 0) > 0 || (tool.nested ?? 0) > 0;
 
 const writes = (tool: TranscriptTool): boolean =>
     tool.category === `edit` || tool.category === `delete` || tool.category === `move` || (tool.content ?? []).some((entry) => entry.type === `diff`);

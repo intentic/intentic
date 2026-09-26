@@ -7,7 +7,7 @@
             "nothingLanded": "Nie ma czego scalać: gałąź tej rozmowy nie zawiera pracy, której Twoja przestrzeń robocza jeszcze nie ma."
         },
         "agentCard": {
-            "agentsStarted": "Agenty, które uruchomił",
+            "subagentsStarted": "Podagenty, które uruchomił",
             "archiveAgent": "Zarchiwizuj agenta",
             "archiveBranchDiffConversation": "Zarchiwizuj — gałąź, diff i rozmowa zostają",
             "archiveConversationKept": "Zarchiwizuj — rozmowa zostaje",
@@ -1366,6 +1366,7 @@
             "more": "… {hidden} więcej",
             "needsInput": "czeka na wejście",
             "openAgentsTranscript": "Otwórz zapis rozmowy tego agenta",
+            "openItsConversation": "Otwórz jego rozmowę",
             "viewLarger": "Powiększ",
             "watchAgent": "Obserwuj tego agenta",
             "watchBrowser": "Obserwuj przeglądarkę"
@@ -1508,8 +1509,8 @@
             "unread": "bez odczytu"
         },
         "subagents": {
-            "agentDelegatesAgentTool": "Kiedy agent deleguje — swoim narzędziem Agent albo sterując Codexem czy Grokiem z powłoki — agent, którego uruchomił, pojawia się tutaj, z własnym zapisem rozmowy.",
             "agentsStartedFinishedAged": "Agenty uruchomione przez {focusTitle} skończyły i wypadły z tej listy. Jego własny zapis rozmowy jest świadectwem tego, co zameldowały.",
+            "itsConversation": "Jego rozmowa",
             "noAgentsStarted": "Nie uruchomiono żadnych agentów",
             "noTranscriptRecordedAgent": "Dla tego agenta nie zapisano żadnej rozmowy.",
             "nothingRunningAgent": "Dla tego agenta nic nie działa",
@@ -1520,6 +1521,7 @@
             "showAll": "Pokaż wszystkie",
             "showEveryAgent": "Pokaż każdego agenta",
             "showFullReport": "Pokaż pełny raport",
+            "subagentsAppearHere": "Kiedy agent uruchamia podagenta — w swoim procesie, własnym narzędziem Agent, albo na dowolnym podłączonym dostawcy — pojawia się on tutaj, z własnym zapisem rozmowy.",
             "watchingLiveWhatAgent": "Podgląd na żywo: to, co pisze ten agent, ląduje tutaj w trakcie pracy.",
             "work": "Praca"
         },
@@ -1568,9 +1570,9 @@
             "doneHandBack": "Gotowe: oddaj"
         },
         "chatChildAgentAsk": {
-            "spawnTitle": "Uruchomić agenta podrzędnego na {provider}?",
-            "sendTitle": "Wysłać to agentowi podrzędnemu na {provider}?",
-            "answerTitle": "Odpowiedzieć agentowi podrzędnemu na {provider}?",
+            "spawnTitle": "Uruchomić podagenta na {provider}?",
+            "sendTitle": "Wysłać to podagentowi na {provider}?",
+            "answerTitle": "Odpowiedzieć podagentowi na {provider}?",
             "spawn": "Uruchom",
             "send": "Wyślij",
             "answer": "Odpowiedz",
@@ -1945,12 +1947,12 @@
             "toDropOneDrop": "żeby jakąś usunąć, usuń to, co ją przynosi"
         },
         "agentSubagents": {
-            "childAgentSpendsSame": "Agent potomny wydaje te same podłączone konta co ten.",
-            "delegationRefusedOutrightThree": "Delegowanie jest odrzucane wprost, więc trzy limity poniżej niczego nie ograniczają, dopóki tego nie zmienisz.",
             "maximumDelegatedAgentsRunning": "Maksymalna liczba delegowanych agentów działających równolegle.",
             "maximumDelegationDepth": "Maksymalna głębokość delegowania.",
             "nestingDepth": "Głębokość zagnieżdżenia",
-            "startAgentsOwn": "Uruchamiaj własne agenty",
+            "spawnSubagents": "Uruchamiaj podagenty",
+            "spawnedSubagentSpends": "Uruchomiony podagent działa jako osobna rozmowa, na dowolnym podłączonym dostawcy, i wydaje te same podłączone konta co ten.",
+            "spawningRefusedOutright": "Uruchamianie jest odrzucane wprost, więc limity poniżej ograniczają tylko podagenty, które środowisko uruchomieniowe startuje w swoim procesie.",
             "subagentsAtOnce": "Podagentów naraz",
             "subagentsPerConversation": "Podagentów na rozmowę",
             "totalDelegatedAgentsAllowed": "Łączna liczba delegowanych agentów dozwolona na rozmowę."
@@ -2661,7 +2663,7 @@
             "runCode": "Uruchamiać kod",
             "runCommands": "Uruchamiać polecenia",
             "shellTestsBuildsEvery": "Powłoka, testy, budowania i każde CLI w obrazie.",
-            "spawnSubAgentsRun": "Uruchamiać podagenty i workflow.",
+            "startSubagentsRun": "Uruchamiać podagenty i workflow.",
             "with": "Z"
         },
         "planLimitsPanel": {
@@ -3775,6 +3777,7 @@
         "secret": "sekret",
         "settings": "Ustawienia",
         "shared": "Udostępnione",
+        "subagent": "Podagent",
         "subagents": "Podagenty",
         "thisMachine": "ta maszyna",
         "thisSandbox": "Ten sandbox",

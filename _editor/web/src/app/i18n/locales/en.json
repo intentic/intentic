@@ -7,7 +7,7 @@
             "nothingLanded": "Nothing to land: this conversation's branch holds no work your workspace doesn't already have."
         },
         "agentCard": {
-            "agentsStarted": "Agents it started",
+            "subagentsStarted": "Subagents it started",
             "archiveAgent": "Archive agent",
             "archiveBranchDiffConversation": "Archive, the branch, diff and conversation are kept",
             "archiveConversationKept": "Archive, the conversation is kept",
@@ -1419,6 +1419,7 @@
             "more": "… {hidden} more",
             "needsInput": "needs input",
             "openAgentsTranscript": "Open this agent's transcript",
+            "openItsConversation": "Open its conversation",
             "viewLarger": "View larger",
             "watchAgent": "Watch this agent",
             "watchBrowser": "Watch the browser"
@@ -1569,8 +1570,8 @@
             "unread": "unread"
         },
         "subagents": {
-            "agentDelegatesAgentTool": "When an agent delegates: with its Agent tool, or by driving Codex or Grok from its shell, the agent it started appears here, with its own transcript.",
             "agentsStartedFinishedAged": "The agents {focusTitle} started have finished and aged out of this list. Its own transcript is the record of what they reported back.",
+            "itsConversation": "Its conversation",
             "noAgentsStarted": "No agents started",
             "noTranscriptRecordedAgent": "No transcript was recorded for this agent.",
             "nothingRunningAgent": "Nothing running for this agent",
@@ -1581,6 +1582,7 @@
             "showAll": "Show all",
             "showEveryAgent": "Show every agent",
             "showFullReport": "Show the full report",
+            "subagentsAppearHere": "When an agent starts a subagent, in-process with its own Agent tool or spawned on any connected provider, it appears here with its own transcript.",
             "watchingLiveWhatAgent": "Watching live: what this agent writes lands here as it works.",
             "work": "Work"
         },
@@ -1662,9 +1664,9 @@
             "doneHandBack": "Done: hand back"
         },
         "chatChildAgentAsk": {
-            "spawnTitle": "Start a child agent on {provider}?",
-            "sendTitle": "Send this to a child agent on {provider}?",
-            "answerTitle": "Answer a child agent on {provider}?",
+            "spawnTitle": "Start a subagent on {provider}?",
+            "sendTitle": "Send this to a subagent on {provider}?",
+            "answerTitle": "Answer a subagent on {provider}?",
             "spawn": "Start it",
             "send": "Send it",
             "answer": "Answer it",
@@ -2136,12 +2138,12 @@
             "toDropOneDrop": "to drop one, drop the thing that ships it"
         },
         "agentSubagents": {
-            "childAgentSpendsSame": "A child agent spends the same connected accounts this one does.",
-            "delegationRefusedOutrightThree": "Delegation is refused outright, so the three limits below bound nothing until this is changed.",
             "maximumDelegatedAgentsRunning": "Maximum delegated agents running in parallel.",
             "maximumDelegationDepth": "Maximum delegation depth.",
             "nestingDepth": "Nesting depth",
-            "startAgentsOwn": "Start agents of its own",
+            "spawnSubagents": "Spawn subagents",
+            "spawnedSubagentSpends": "A spawned subagent runs as a conversation of its own, on any connected provider, and spends the same connected accounts this one does.",
+            "spawningRefusedOutright": "Spawning is refused outright, so the limits below bound only the subagents a runtime starts in-process.",
             "subagentsAtOnce": "Subagents at once",
             "subagentsPerConversation": "Subagents per conversation",
             "totalDelegatedAgentsAllowed": "Total delegated agents allowed per conversation."
@@ -2861,7 +2863,7 @@
             "runCode": "Run code",
             "runCommands": "Run commands",
             "shellTestsBuildsEvery": "Shell, tests, builds, and every CLI on the image.",
-            "spawnSubAgentsRun": "Spawn sub-agents and run workflows.",
+            "startSubagentsRun": "Start subagents and run workflows.",
             "with": "With"
         },
         "placement": {
@@ -4058,6 +4060,7 @@
         "secret": "secret",
         "settings": "Settings",
         "shared": "Shared",
+        "subagent": "Subagent",
         "subagents": "Subagents",
         "terminal": "Terminal",
         "thisMachine": "this machine",

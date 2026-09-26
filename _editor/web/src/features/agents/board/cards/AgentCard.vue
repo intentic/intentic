@@ -832,7 +832,7 @@ const grab = (event: PointerEvent): void => {
                     v-tooltip.top="
                         agent.subagents.running > 0
                             ? t(`agents.agentCard.stillWorking`, { running: agent.subagents.running, total: agent.subagents.total })
-                            : t(`agents.agentCard.agentsStarted`)
+                            : t(`agents.agentCard.subagentsStarted`)
                     "
                     @click.stop
                 >

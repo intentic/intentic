@@ -7,9 +7,11 @@ import { commitCount } from "../models/numberInputs";
 import { type Posture, postureOf, postures, withPosture } from "../safety/spawnPosture";
 import { useT } from "@intentic/ui/i18n";
 
-// Four rows over one activity: whether it may delegate at all, how wide one fan-out is, the lifetime budget per
-// conversation, and how deep delegation nests. Raising only the width just hits the per-conversation ceiling
-// later. Bounds mirror SandboxSettingsSchema so the box never accepts a number the save would reject.
+// Four rows over one activity, starting subagents: whether it may spawn them (a conversation of their own, on any
+// provider), how wide one fan-out is, the lifetime budget per conversation, and how deep delegation nests. The three
+// ceilings bound every subagent, spawned or started in-process by the runtime's own Agent tool; the posture governs
+// spawning alone. Raising only the width just hits the per-conversation ceiling later. Bounds mirror
+// SandboxSettingsSchema so the box never accepts a number the save would reject.
 const t = useT();
 
 const { settings, patch } = useSandboxSettings();
@@ -24,28 +26,28 @@ const rules = computed<Readonly<Record<string, AdmissionRule>>>(() => settings.v
 const posture = computed<Posture>(() => postureOf(rules.value));
 const setPosture = (next: Posture): void => patch({ actionRules: withPosture(rules.value, next) });
 
-// Whether the three ceilings below bound anything, since a denied posture makes tuning them moot.
+// Whether spawning is refused, which leaves the ceilings below bounding only the subagents a runtime starts itself.
 const spawnDenied = computed(() => posture.value === `deny`);
 </script>
 
 <template>
     <RowGroup :label="t(`shared.subagents`)">
         <!-- Leads the group: narrows from "may it delegate" to "how far", the natural reading order. -->
-        <Row icon="robot" :title="t(`sandbox.agentSubagents.startAgentsOwn`)" :description="t(`sandbox.agentSubagents.childAgentSpendsSame`)">
+        <Row icon="robot" :title="t(`sandbox.agentSubagents.spawnSubagents`)" :description="t(`sandbox.agentSubagents.spawnedSubagentSpends`)">
             <template #control>
                 <Picker
                     :model-value="posture"
                     :options="postures()"
                     :disabled="settings === undefined"
                     class="w-36 justify-between text-xs"
-                    :aria-label="t(`sandbox.agentSubagents.startAgentsOwn`)"
-                    :header="t(`sandbox.agentSubagents.startAgentsOwn`)"
+                    :aria-label="t(`sandbox.agentSubagents.spawnSubagents`)"
+                    :header="t(`sandbox.agentSubagents.spawnSubagents`)"
                     @update:model-value="(next: Posture | undefined) => next !== undefined && setPosture(next)"
                 />
             </template>
             <template v-if="spawnDenied" #below>
                 <p class="text-2xs text-muted">
-                    {{ t(`sandbox.agentSubagents.delegationRefusedOutrightThree`) }}
+                    {{ t(`sandbox.agentSubagents.spawningRefusedOutright`) }}
                 </p>
             </template>
         </Row>

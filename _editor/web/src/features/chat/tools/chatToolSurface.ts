@@ -1,4 +1,4 @@
-import type { TranscriptTool } from "@intentic/sandbox-contract";
+import type { SubagentSession, TranscriptTool } from "@intentic/sandbox-contract";
 import type { MarkdownDecorator } from "@intentic/ui/markdown";
 import { inject, type InjectionKey } from "vue";
 
@@ -22,8 +22,14 @@ export interface ChatSurface {
     // A delegation's own calls, for a card whose page carried their count instead of the calls themselves. Absent
     // wherever the transcript arrives whole (a published page, a subagent's own view), where there is nothing to fetch.
     readonly toolChildren?: (toolId: string) => Promise<TranscriptTool[]>;
-    // Route to a delegation's transcript; a string, not RouterLink, since the card may render with no router.
-    readonly subagentRoute?: (toolId: string) => string;
+    // Route to a subagent's own page, by its own id (the card's for an in-process one, its conversation's for a spawned
+    // one); a string, not RouterLink, since the card may render with no router.
+    readonly subagentRoute?: (id: string) => string;
+    // The roster's record of a subagent a card started, by its own id: how it is doing now, which outlasts the turn that
+    // started a spawned one. Undefined once the roster forgets it (a settled one ages out) or where none is reachable.
+    readonly subagent?: (id: string) => SubagentSession | undefined;
+    // Route to a spawned subagent's own conversation, which keeps it after the roster has let it go.
+    readonly conversationRoute?: (id: string) => string;
     // How a route is entered without a page load; present wherever `subagentRoute` is.
     readonly navigate?: (route: string) => void;
 }

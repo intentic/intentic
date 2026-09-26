@@ -50,7 +50,7 @@ describe("another agent's words", () => {
             role: "notice",
             text: 'Message from another conversation: "Bun migration" (sharp-shale-htw8).',
         });
-        expect(agentWordsRow(report({ failed: true }))?.text).toBe('Child agent "Port the parser" (sub-x7) failed.');
+        expect(agentWordsRow(report({ failed: true }))?.text).toBe('Subagent "Port the parser" (sub-x7) failed.');
     });
 
     it("ignores every other prompt, so any reader can ask without checking first", () => {

@@ -97,9 +97,15 @@ export const TranscriptToolSchema: z.ZodType<TranscriptTool> = z.lazy(() =>
         ),
     }),
 );
-// The child a call started, keyed by that call's own id, so `subagent`/`subagent_update` frames need no separate
-// correlation. Identifying fields arrive once; status/spend/activity replace on each update.
+// The subagent a call started, on that call's card whichever mechanism started it (transcript-fold.ts places it).
+// Identifying fields arrive once; status/spend/activity replace on each update.
 export const TranscriptSubagentSchema = z.object({
+    id: z
+        .string()
+        .optional()
+        .describe(
+            "Its own id, where that is not the card's: a spawned subagent is named by its own conversation, which is what the roster, `wait` and its page call it. Absent, the card's id is its id, as it is for one the runtime started in-process.",
+        ),
     kind: SubagentKindSchema,
     agentType: z.string().optional(),
     description: z.string().optional(),

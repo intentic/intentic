@@ -7,7 +7,7 @@
             "nothingLanded": "Nada que integrar: la rama de esta conversación no tiene trabajo que tu espacio de trabajo no tenga ya."
         },
         "agentCard": {
-            "agentsStarted": "Agentes que ha iniciado",
+            "subagentsStarted": "Subagentes que ha iniciado",
             "archiveAgent": "Archivar el agente",
             "archiveBranchDiffConversation": "Archivar; la rama, el diff y la conversación se conservan",
             "archiveConversationKept": "Archivar; la conversación se conserva",
@@ -1362,6 +1362,7 @@
             "more": "… {hidden} más",
             "needsInput": "necesita entrada",
             "openAgentsTranscript": "Abrir la transcripción de este agente",
+            "openItsConversation": "Abrir su conversación",
             "viewLarger": "Ver más grande",
             "watchAgent": "Mirar este agente",
             "watchBrowser": "Mirar el navegador"
@@ -1508,8 +1509,8 @@
             "unread": "sin leer"
         },
         "subagents": {
-            "agentDelegatesAgentTool": "Cuando un agente delega —con su herramienta Agent, o conduciendo Codex o Grok desde su shell— el agente que ha iniciado aparece aquí, con su propia transcripción.",
             "agentsStartedFinishedAged": "Los agentes que inició {focusTitle} han terminado y han salido de esta lista con el tiempo. Su propia transcripción es el registro de lo que informaron.",
+            "itsConversation": "Su conversación",
             "noAgentsStarted": "No se ha iniciado ningún agente",
             "noTranscriptRecordedAgent": "No se registró ninguna transcripción para este agente.",
             "nothingRunningAgent": "No hay nada en marcha para este agente",
@@ -1520,6 +1521,7 @@
             "showAll": "Mostrar todo",
             "showEveryAgent": "Mostrar todos los agentes",
             "showFullReport": "Mostrar el informe completo",
+            "subagentsAppearHere": "Cuando un agente inicia un subagente —dentro de su proceso con su propia herramienta Agent, o lanzado en cualquier proveedor conectado— aparece aquí, con su propia transcripción.",
             "watchingLiveWhatAgent": "Mirando en vivo: lo que escribe este agente aparece aquí mientras trabaja.",
             "work": "Trabajo"
         },
@@ -1568,9 +1570,9 @@
             "doneHandBack": "Listo: devolver"
         },
         "chatChildAgentAsk": {
-            "spawnTitle": "¿Iniciar un agente hijo en {provider}?",
-            "sendTitle": "¿Enviar esto a un agente hijo en {provider}?",
-            "answerTitle": "¿Responder a un agente hijo en {provider}?",
+            "spawnTitle": "¿Iniciar un subagente en {provider}?",
+            "sendTitle": "¿Enviar esto a un subagente en {provider}?",
+            "answerTitle": "¿Responder a un subagente en {provider}?",
             "spawn": "Iniciarlo",
             "send": "Enviarlo",
             "answer": "Responderle",
@@ -1945,12 +1947,12 @@
             "toDropOneDrop": "para quitar una, quita lo que la trae"
         },
         "agentSubagents": {
-            "childAgentSpendsSame": "Un agente hijo gasta las mismas cuentas conectadas que este.",
-            "delegationRefusedOutrightThree": "La delegación está rechazada de plano, así que los tres límites de abajo no acotan nada hasta que se cambie esto.",
             "maximumDelegatedAgentsRunning": "Máximo de agentes delegados en paralelo.",
             "maximumDelegationDepth": "Profundidad máxima de delegación.",
             "nestingDepth": "Profundidad de anidamiento",
-            "startAgentsOwn": "Iniciar agentes propios",
+            "spawnSubagents": "Lanzar subagentes",
+            "spawnedSubagentSpends": "Un subagente lanzado funciona como una conversación propia, en cualquier proveedor conectado, y gasta las mismas cuentas conectadas que este.",
+            "spawningRefusedOutright": "Lanzar subagentes está rechazado de plano, así que los límites de abajo solo acotan los subagentes que un entorno inicia dentro de su proceso.",
             "subagentsAtOnce": "Subagentes a la vez",
             "subagentsPerConversation": "Subagentes por conversación",
             "totalDelegatedAgentsAllowed": "Total de agentes delegados permitidos por conversación."
@@ -2662,7 +2664,7 @@
             "runCode": "Ejecutar código",
             "runCommands": "Ejecutar comandos",
             "shellTestsBuildsEvery": "Shell, pruebas, compilaciones y todas las CLI de la imagen.",
-            "spawnSubAgentsRun": "Lanzar subagentes y ejecutar flujos de trabajo.",
+            "startSubagentsRun": "Iniciar subagentes y ejecutar flujos de trabajo.",
             "with": "Con"
         },
         "planLimitsPanel": {
@@ -3773,6 +3775,7 @@
         "secret": "secreto",
         "settings": "Ajustes",
         "shared": "Compartido",
+        "subagent": "Subagente",
         "subagents": "Subagentes",
         "thisMachine": "esta máquina",
         "thisSandbox": "Este sandbox",

@@ -103,8 +103,10 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("terminal"), session: z.string() }),
     // The agent used a browser tool; one per turn, since one Chromium serves every browser call the turn makes.
     z.object({ kind: z.literal("browser"), session: z.string() }),
-    // One frame per spawned child (Agent/Task subagent, or a driven Codex/Grok CLI), then `subagent_update` as it
-    // works, mirroring `tool_call`/`tool_call_update`. `id` is the spawning call's id, so both land on one card.
+    // One frame per subagent a turn starts, whichever mechanism starts it, then `subagent_update` as it works, mirroring
+    // `tool_call`/`tool_call_update`. `id` is its roster id: the spawning call's own id for an in-process subagent (the
+    // runtime's Agent/Task tool), its own conversation id for a spawned one, whose card is the call whose result names
+    // that id (transcript-fold.ts). Either way both frames land on the card of the call that started it.
     z.object({
         kind: z.literal("subagent"),
         id: z.string(),

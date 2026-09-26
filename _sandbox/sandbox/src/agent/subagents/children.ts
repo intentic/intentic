@@ -547,7 +547,7 @@ export const adoptChildTurn = (services: Services, started: DomainEventMap["run.
     const seats = services.conversations.holdings(SEATS);
     const ledger = seats.get(kid.parent) ?? { live: 0, total: 0 };
     seats.hold(kid.parent, kid.parent, { live: ledger.live + 1, total: ledger.total });
-    openSpawnedChild(rosterHandle(services, kid.parent, kid.cwd), childBirth(childId, kid.spec, kid.depth));
+    openSpawnedChild(rosterHandle(services, kid.parent, kid.cwd), { ...childBirth(childId, kid.spec, kid.depth), again: true });
     void followChildRun(services, childId, kid.parent, kid, run, freshTally());
     const why = startedWhy(started);
     if (why !== undefined) {
@@ -598,11 +598,12 @@ const refusedByRules = async (services: Services, provider: string): Promise<str
     return verdict.effect === "deny" ? `Refused: ${verdict.reason}.` : undefined;
 };
 
-// Which supervisor move is held, so the card names the action truthfully rather than a generic one.
+// Which supervisor move is held, so the card names the action truthfully rather than a generic one. The owner reads a
+// spawned child as the editor names every agent another one started, whichever mechanism started it.
 const MOVE_TITLE: Readonly<Record<ChildMove, string>> = {
-    spawn: "Start a child agent",
-    send: "Send this to a child agent",
-    answer: "Answer a child agent",
+    spawn: "Start a subagent",
+    send: "Send this to a subagent",
+    answer: "Answer a subagent",
 };
 const MOVE_BUTTON: Readonly<Record<ChildMove, string>> = { spawn: "Start it", send: "Send it", answer: "Answer it" };
 
@@ -1030,7 +1031,7 @@ const followUp = async (services: Services, parent: ChildParent, kid: ChildRecor
             ...opt("sessionId", kid.sessionId),
         };
         // Reopens the roster record under the same id with fresh state, so `wait` sees it running again.
-        openSpawnedChild(rosterHandle(services, parent.conversationId, kid.cwd), childBirth(childId, kid.spec, kid.depth));
+        openSpawnedChild(rosterHandle(services, parent.conversationId, kid.cwd), { ...childBirth(childId, kid.spec, kid.depth), again: true });
         // A turn somebody else started (a person in its chat, a land conflict) is not the parent's to steer: the
         // follow-up waits for it to end instead, which is worth saying now.
         const occupied = liveRunOf(services.conversations, childId) !== undefined;

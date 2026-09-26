@@ -1,5 +1,6 @@
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { diffStat } from "./chatToolDiff";
+import { delegates } from "./toolPresentation";
 
 // Groups consecutive tool calls that do the same thing (30 edits to one file, a batch of reads) into one
 // collapsed row with a count and aggregated stats, expandable to the individual cards. Rendering only: the
@@ -19,7 +20,9 @@ export interface ToolGroup {
 
 export type ToolEntry = TranscriptTool | ToolGroup;
 
-const groupKey = (tool: TranscriptTool): string => `${tool.name}\0${tool.target ?? ""}`;
+// Calls that each started a subagent group as one kind of call, whichever door each came through (`Agent`, the spawn
+// tool), since the card draws each as the subagent it started.
+const groupKey = (tool: TranscriptTool): string => `${delegates(tool) ? `\0subagent` : tool.name}\0${tool.target ?? ""}`;
 
 export const groupConsecutiveTools = (tools: readonly TranscriptTool[]): readonly ToolEntry[] => {
     if (tools.length < GROUP_THRESHOLD) {

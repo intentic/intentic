@@ -4,7 +4,7 @@ import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { useChatSurface } from "./chatToolSurface";
 import ChatToolCard from "./ChatToolCard.vue";
 import { type ToolGroup, groupDiffSummary } from "./toolGrouping";
-import { present } from "./toolPresentation";
+import { delegates, present } from "./toolPresentation";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -26,6 +26,8 @@ const toggle = (): void => {
 
 // Use the first tool's presentation for the icon (all tools in the group share the same name).
 const icon = computed(() => present(props.group.tools[0]!).icon);
+// A run of calls that each started a subagent is named as the subagents they are, as each card is (ChatToolCard).
+const name = computed(() => (delegates(props.group.tools[0]!) ? t(`shared.subagent`) : props.group.name));
 
 // Whether any tool in the group is still running: shows the spinner instead of the icon.
 const running = computed(() => props.group.tools.some((tool) => tool.status === `pending` || tool.status === `in_progress`));
@@ -51,7 +53,7 @@ const location = computed(() => props.group.tools[0]?.locations?.[0]);
                 <Icon :name="expanded ? 'chevron-down' : 'chevron-right'" class="text-2xs" />
                 <Icon v-if="running && live" name="spinner" :spin="true" class="text-2xs text-link" />
                 <Icon v-else :name="icon" class="text-2xs" :class="failed ? 'text-danger' : 'text-link'" />
-                <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ group.name }}</span>
+                <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ name }}</span>
             </button>
             <button
                 v-if="location && openFile"

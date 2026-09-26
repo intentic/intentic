@@ -3,7 +3,7 @@
 import "@intentic/testing/dom";
 import { type App, createApp, h, nextTick } from "vue";
 import { STATE_DIR } from "@intentic/constants";
-import type { TranscriptTool } from "@intentic/sandbox-contract";
+import type { SubagentSession, TranscriptTool } from "@intentic/sandbox-contract";
 import type { ChatSurface } from "./chatToolSurface";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -52,7 +52,8 @@ describe(`ChatToolCard`, () => {
         });
 
         const names = [...element.querySelectorAll(`span.font-medium`)].map((node) => node.textContent);
-        expect(names).toContain(`Agent`);
+        // Named as the subagent it started, not as the tool that started it.
+        expect(names).toContain(`Subagent`);
         expect(names).toContain(`Bash`);
         expect(element.textContent).toContain(`ls -la`);
         // The sub-agent's thinking rides on the card, not the parent turn.
@@ -132,7 +133,7 @@ describe(`ChatToolCard`, () => {
         element.querySelector<HTMLElement>(`[aria-expanded]`)?.click();
         await nextTick();
 
-        expect(element.textContent).toContain(`Agent`);
+        expect(element.textContent).toContain(`Subagent`);
     });
 
     // A screenshot is looked at, not edited: its picture opens the conversation's viewer, and a surface with no viewer
@@ -162,6 +163,86 @@ describe(`ChatToolCard`, () => {
         const element = mount(screenshot, false, { imageUrl: () => `blob:after`, openFile: (path) => opened.push(path) });
         element.querySelector<HTMLButtonElement>(`button:has(img[src="blob:after"])`)?.click();
         expect(opened).toEqual([`${STATE_DIR}/records/artifacts/browser/after.png`]);
+    });
+
+    // A subagent is one thing whichever mechanism started it: the runtime's own Agent tool, in-process, or the sandbox's
+    // spawn door, as a conversation of its own. The card of either call draws the subagent it started, the same way.
+    describe(`the subagent a call started`, () => {
+        const inProcess: TranscriptTool = {
+            id: `call-1`,
+            name: `Agent`,
+            category: `other`,
+            status: `completed`,
+            content: [{ type: `text`, text: `Async agent launched.` }],
+            subagent: { kind: `subagent`, agentType: `Explore`, description: `Map the UI`, background: true, status: `running`, lastTool: `Grep`, toolUses: 4 },
+        };
+        const spawned: TranscriptTool = {
+            id: `call-9`,
+            name: `mcp__subagents__spawn`,
+            category: `other`,
+            status: `completed`,
+            content: [{ type: `text`, text: `{"ok":true,"child":"sub-x","note":"Started."}` }],
+            subagent: { id: `sub-x`, kind: `spawned`, agentType: `Codex`, description: `Port the parser`, background: true, status: `running`, lastTool: `Edit`, toolUses: 4 },
+        };
+        // The roster's word on each, as the pane's surface hands it over.
+        const surfaceWith = (...roster: SubagentSession[]): ChatSurface => ({
+            imageUrl: () => undefined,
+            subagentRoute: (id) => `/subagents/${id}`,
+            conversationRoute: (id) => `/agents/${id}`,
+            subagent: (id) => roster.find((session) => session.id === id),
+        });
+        const header = (tool: TranscriptTool, live: boolean, surface: ChatSurface) => {
+            const row = mount(tool, live, surface).firstElementChild!.firstElementChild!;
+            const drawn = {
+                name: row.querySelector(`span.font-medium`)?.textContent,
+                title: row.querySelector(`span.min-w-0.truncate`)?.textContent,
+                icons: [...row.querySelectorAll(`[data-icon]`)].map((icon) => icon.getAttribute(`data-icon`)),
+                pills: [...row.querySelectorAll(`.ui-status-pill`)].map((pill) => pill.textContent?.trim()),
+                facts: [...row.querySelectorAll(`.tabular-nums > span`)].map((fact) => fact.textContent),
+                door: [row.querySelector(`a`)?.getAttribute(`href`), row.querySelector(`a`)?.getAttribute(`aria-label`)],
+            };
+            app?.unmount();
+            app = undefined;
+            return drawn;
+        };
+
+        it(`draws a spawned subagent's call exactly as an in-process one's`, () => {
+            expect(header(inProcess, true, surfaceWith())).toEqual({
+                name: `Subagent`,
+                title: `Explore · Map the UI`,
+                icons: [`chevron-right`, `users`, `users`],
+                pills: [`background`],
+                facts: [`Grep`, `4 tools`],
+                door: [`/subagents/call-1`, `Watch this agent`],
+            });
+            expect(header(spawned, true, surfaceWith())).toEqual({
+                name: `Subagent`,
+                title: `Codex · Port the parser`,
+                icons: [`chevron-right`, `users`, `users`],
+                pills: [`background`],
+                facts: [`Edit`, `4 tools`],
+                door: [`/subagents/sub-x`, `Watch this agent`],
+            });
+        });
+
+        // The spawned one works on after the turn that started it stopped streaming; the roster keeps its card current.
+        it(`keeps a spawned subagent's card current from the roster once its turn stopped`, () => {
+            const blocked: SubagentSession = {
+                id: `sub-x`,
+                kind: `spawned`,
+                conversationId: `c1`,
+                status: `blocked`,
+                summary: `Which port?`,
+                startedAt: 1,
+                activityAt: 2,
+            };
+            expect(header(spawned, false, surfaceWith(blocked))).toMatchObject({ pills: [`background`, `needs input`], door: [`/subagents/sub-x`, `Watch this agent`] });
+        });
+
+        // Its turn ended and the roster let it go: the record's last word is a snapshot, and its conversation keeps it.
+        it(`leads to a spawned subagent's own conversation once the roster lets it go, claiming nothing in flight`, () => {
+            expect(header(spawned, false, surfaceWith())).toMatchObject({ pills: [], door: [`/agents/sub-x`, `Open its conversation`] });
+        });
     });
 
     it(`freezes a sub-agent's nested calls with the delegation that holds them`, () => {

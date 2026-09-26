@@ -43,7 +43,7 @@ afterEach(() => {
 const numberBox = (host: HTMLElement, label: string): HTMLInputElement => host.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
 
 // Reached by its aria-label, not `numberBox`: the posture control isn't a number input.
-const postureTrigger = (host: HTMLElement): HTMLElement => host.querySelector<HTMLElement>(`[aria-label="Start agents of its own"]`)!;
+const postureTrigger = (host: HTMLElement): HTMLElement => host.querySelector<HTMLElement>(`[aria-label="Spawn subagents"]`)!;
 
 test("draws the posture and all three ceilings together", () => {
     const host = mount();
@@ -120,18 +120,19 @@ test("leaves the rules it was given alone", () => {
     expect(before).toEqual({ "agents.spawn": `hold` });
 });
 
-test("says the ceilings bound nothing while delegation is refused", async () => {
+// Refusing the spawn door leaves the runtime's own Agent tool, which the same ceilings still bound.
+test("says the ceilings bound only in-process subagents while spawning is refused", async () => {
     settings.value = { ...settings.value, actionRules: { "agents.spawn": `deny` } };
     const host = mount();
     await nextTick();
 
-    expect(host.textContent).toContain(`bound nothing`);
+    expect(host.textContent).toContain(`the limits below bound only the subagents a runtime starts in-process`);
 });
 
-test("says nothing of the kind while delegation runs", async () => {
+test("says nothing of the kind while spawning runs", async () => {
     const host = mount();
     await nextTick();
 
     expect(settings.value.actionRules[`agents.spawn`]).toBeUndefined();
-    expect(host.textContent).not.toContain(`bound nothing`);
+    expect(host.textContent).not.toContain(`bound only`);
 });

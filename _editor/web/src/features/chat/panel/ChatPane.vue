@@ -21,6 +21,7 @@ import { usePaneFocus } from "./pane/paneFocus";
 import { usePaneScroll } from "./pane/paneScroll";
 import { paneSurface } from "./pane/paneSurface";
 import { CHAT_SURFACE } from "../tools/chatToolSurface";
+import { useSubagentsQuery } from "../subagents/subagentsQuery";
 import ChatPaneTurns from "./pane/ChatPaneTurns.vue";
 import ChatEditNotice from "./pane/ChatEditNotice.vue";
 import ChatPaneEmpty from "./pane/ChatPaneEmpty.vue";
@@ -105,9 +106,11 @@ const filePicker = ref<HTMLInputElement | null>(null);
 
 usePaneAttach({ conversation: () => props.conversation, focused: () => props.focused, streaming });
 
+// The roster the rail already holds (one cache), so a subagent's card says how it is doing after its turn stopped.
+const { sessions: subagents } = useSubagentsQuery();
 provide(
     CHAT_SURFACE,
-    paneSurface(() => props.conversation, useRouter()),
+    paneSurface(() => props.conversation, useRouter(), () => subagents.value),
 );
 
 const { composerCap, grow } = useComposerSize({ scroller, footer, input });

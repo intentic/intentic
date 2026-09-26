@@ -1,4 +1,5 @@
 import { STATE_DIR } from "@intentic/constants";
+import type { SubagentSession } from "@intentic/sandbox-contract";
 import "@intentic/testing/dom";
 import { unstubbed } from "@intentic/testing";
 import type { Router } from "vue-router";
@@ -45,4 +46,15 @@ it(`hands a card the chat's own terminal and browser, and a route to the app's w
     expect([surface.commandTerminal?.(), surface.commandBrowser?.()]).toEqual([`agent-s1`, `browser-s1`]);
     surface.watchBrowser?.(`browser-s1`);
     expect(push.mock.calls).toEqual([[`/browsers/browser-s1`]]);
+});
+
+// A spawned subagent works on after the turn that started it; its card asks the roster how it is doing, and once the
+// roster lets it go, the card leads to its own conversation.
+it(`hands a card the roster's word on the subagents its calls started, and a way to each`, () => {
+    const chat = new Conversation(`c1`);
+    const roster: SubagentSession[] = [{ id: `sub-x`, kind: `spawned`, conversationId: `c1`, status: `blocked`, startedAt: 1, activityAt: 2 }];
+    const surface = paneSurface(() => chat, router, () => roster);
+
+    expect([surface.subagent?.(`sub-x`)?.status, surface.subagent?.(`sub-y`)]).toEqual([`blocked`, undefined]);
+    expect([surface.subagentRoute?.(`sub-x`), surface.conversationRoute?.(`sub x`)]).toEqual([`/subagents/sub-x`, `/agents/sub%20x`]);
 });

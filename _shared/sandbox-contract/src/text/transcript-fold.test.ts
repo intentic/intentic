@@ -108,6 +108,113 @@ describe("foldTurn", () => {
         ]);
     });
 
+    // A spawned subagent is named by its own conversation, not the call that started it; the spawn answers with that
+    // name, which is how its card is found, so it reads on its card exactly as an in-process one does.
+    it("puts a spawned subagent on the card of the call whose result names it", () => {
+        const events: AgentEvent[] = [
+            { kind: "tool_call", id: "call-9", name: "mcp__subagents__spawn", category: "other", status: "in_progress" },
+            { kind: "subagent", id: "sub-brave-otter", subagentKind: "spawned", agentType: "Codex", description: "Port the parser", provider: "codex", background: true },
+            { kind: "subagent_update", id: "sub-brave-otter", status: "pending", summary: "Waiting for memory." },
+            { kind: "tool_call_update", id: "call-9", status: "completed", content: [{ type: "text", text: '{"ok":true,"child":"sub-brave-otter"}' }] },
+            { kind: "subagent_update", id: "sub-brave-otter", status: "running", toolUses: 3, lastTool: "Edit" },
+        ];
+        expect(foldOf("fan out", events).at(-1)?.tools).toEqual([
+            {
+                id: "call-9",
+                name: "mcp__subagents__spawn",
+                category: "other",
+                status: "completed",
+                content: [{ type: "text", text: '{"ok":true,"child":"sub-brave-otter"}' }],
+                subagent: {
+                    id: "sub-brave-otter",
+                    kind: "spawned",
+                    agentType: "Codex",
+                    description: "Port the parser",
+                    provider: "codex",
+                    background: true,
+                    status: "running",
+                    summary: "Waiting for memory.",
+                    toolUses: 3,
+                    lastTool: "Edit",
+                },
+            },
+        ]);
+    });
+
+    // The shell door prints the new id on its first line, so a runtime with no spawn tool of its own gets the same card.
+    it("puts a subagent spawned from the shell on its command's card", () => {
+        const events: AgentEvent[] = [
+            { kind: "subagent", id: "sub-quiet-fox", subagentKind: "spawned", agentType: "Grok", description: "Draft the docs" },
+            { kind: "tool_call", id: "b1", name: "Bash", category: "execute", status: "in_progress", target: "agents spawn --provider grok --model grok-4 'Draft the docs'" },
+            { kind: "tool_call_update", id: "b1", status: "completed", content: [{ type: "text", text: "sub-quiet-fox\nStarted." }] },
+            { kind: "subagent_update", id: "sub-quiet-fox", status: "completed", summary: "Drafted." },
+        ];
+        expect(foldOf("fan out", events).at(-1)?.tools?.[0]?.subagent).toEqual({
+            id: "sub-quiet-fox",
+            kind: "spawned",
+            agentType: "Grok",
+            description: "Draft the docs",
+            status: "completed",
+            summary: "Drafted.",
+        });
+    });
+
+    // Parallel spawns answer in any order; each card takes the one its own result names, and a card holds one subagent.
+    it("keeps each of several spawned subagents on its own card", () => {
+        const events: AgentEvent[] = [
+            { kind: "tool_call", id: "s1", name: "mcp__subagents__spawn", category: "other", status: "in_progress" },
+            { kind: "tool_call", id: "s2", name: "mcp__subagents__spawn", category: "other", status: "in_progress" },
+            { kind: "subagent", id: "sub-a", subagentKind: "spawned", description: "A" },
+            { kind: "subagent", id: "sub-b", subagentKind: "spawned", description: "B" },
+            { kind: "tool_call_update", id: "s2", status: "completed", content: [{ type: "text", text: '{"ok":true,"child":"sub-b"}' }] },
+            { kind: "tool_call_update", id: "s1", status: "completed", content: [{ type: "text", text: '{"ok":true,"child":"sub-a"}' }] },
+            { kind: "tool_call", id: "w1", name: "mcp__subagents__wait", category: "other", status: "in_progress" },
+            { kind: "tool_call_update", id: "w1", status: "completed", content: [{ type: "text", text: '{"agent":{"id":"sub-a"},"also":"sub-b"}' }] },
+        ];
+        const tools = foldOf("fan out", events).at(-1)?.tools ?? [];
+        expect(tools.map((tool) => [tool.id, tool.subagent?.id, tool.subagent?.description])).toEqual([
+            ["s1", "sub-a", "A"],
+            ["s2", "sub-b", "B"],
+            ["w1", undefined, undefined],
+        ]);
+    });
+
+    // An in-process subagent heard a beat before its call still lands on that call, under the call's own id.
+    it("holds a subagent heard before its card until the card appears", () => {
+        const events: AgentEvent[] = [
+            { kind: "subagent", id: "task-2", subagentKind: "subagent", agentType: "Explore" },
+            { kind: "tool_call", id: "task-2", name: "Agent", category: "other", status: "in_progress" },
+        ];
+        expect(foldOf("delegate", events).at(-1)?.tools?.[0]?.subagent).toEqual({ kind: "subagent", agentType: "Explore", status: "running" });
+    });
+
+    // Live, the card's claim goes out as the patch of the result that made it, so a watching window draws the same card.
+    it("sends a spawned subagent's placement as the claiming card's own patch", () => {
+        const fold = new TranscriptFold(openingOf("fan out"));
+        fold.apply({ kind: "tool_call", id: "call-9", name: "mcp__subagents__spawn", category: "other", status: "in_progress" });
+        expect(fold.apply({ kind: "subagent", id: "sub-x", subagentKind: "spawned", description: "Port" })).toEqual([]);
+        const [patch] = fold.apply({ kind: "tool_call_update", id: "call-9", status: "completed", content: [{ type: "text", text: "sub-x" }] });
+        expect(patch).toEqual({
+            op: "tool",
+            index: 1,
+            tool: {
+                id: "call-9",
+                name: "mcp__subagents__spawn",
+                category: "other",
+                status: "completed",
+                content: [{ type: "text", text: "sub-x" }],
+                subagent: { id: "sub-x", kind: "spawned", description: "Port", status: "running" },
+            },
+        });
+        expect(fold.apply({ kind: "subagent_update", id: "sub-x", status: "blocked", summary: "Which port?" })).toEqual([
+            {
+                op: "tool",
+                index: 1,
+                tool: expect.objectContaining({ subagent: { id: "sub-x", kind: "spawned", description: "Port", status: "blocked", summary: "Which port?" } }),
+            },
+        ]);
+    });
+
     it("drops a subagent's frames when the card that spawned them is absent", () => {
         const events: AgentEvent[] = [
             { kind: "delta", text: "delegating" },

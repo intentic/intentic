@@ -1,3 +1,4 @@
+import type { SubagentSession } from "@intentic/sandbox-contract";
 import { agentToolChildren } from "../transcript/agentTranscript";
 import { picture } from "../../workspace/home/thumbnails";
 import { fileLinkDecorator } from "../../../lib/markdown/renderMarkdown";
@@ -19,6 +20,8 @@ export interface WorkspaceSurfaceOptions {
     readonly conversation?: () => { readonly id: string; readonly at: string | undefined };
     // How a route is entered; passed in (not useRouter()) so this stays a plain function for either caller.
     readonly navigate?: (route: string) => void;
+    // The sandbox's subagent roster, as the rail and the Subagents area read it; absent, a card knows only its record.
+    readonly subagents?: (() => readonly SubagentSession[]) | undefined;
 }
 
 export const workspaceSurface = (options: WorkspaceSurfaceOptions): ChatSurface => ({
@@ -39,7 +42,9 @@ export const workspaceSurface = (options: WorkspaceSurfaceOptions): ChatSurface 
                   return chat === undefined ? Promise.resolve([]) : agentToolChildren(chat.id, toolId, chat.at);
               },
           }),
-    subagentRoute: (toolId) => `/subagents/${toolId}`,
+    subagentRoute: (id) => `/subagents/${id}`,
+    conversationRoute: (id) => `/agents/${encodeURIComponent(id)}`,
+    subagent: (id) => options.subagents?.().find((session) => session.id === id),
     // No navigate still yields a working link, just a full page load; the honest fallback rather than a dead anchor.
     ...(options.navigate === undefined ? {} : { navigate: options.navigate }),
 });

@@ -126,6 +126,26 @@ it(`opens the parent conversation in the chat instead of leaving for its diff`, 
     expect(mounted?.currentRoute.value.name).toBe(`subagents`);
 });
 
+// A spawned subagent is a conversation of its own as well as its parent's subagent: both are a press away, and the
+// press opens it as any conversation opens, the dock where the fleet has it, its own page where not.
+it(`offers a spawned subagent's own conversation beside its parent's`, async () => {
+    sessions.value = [child({ id: `sub-x`, kind: `spawned`, agentType: `Codex`, provider: `codex`, description: `Port the parser` })];
+    const el = await mount({});
+    const own = [...el.querySelectorAll(`a`)].find((link) => link.textContent?.includes(`Its conversation`));
+    expect(own?.getAttribute(`href`)).toBe(`/agents/sub-x`);
+    own?.click();
+    await mounted?.isReady();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mounted?.currentRoute.value.fullPath).toBe(`/agents/sub-x`);
+});
+
+// One started in-process works inside its parent's turn and tree, so there is no conversation of its own to offer.
+it(`offers an in-process subagent only its parent's conversation`, async () => {
+    sessions.value = [child({})];
+    const el = await mount({});
+    expect([...el.querySelectorAll(`a`)].some((link) => link.textContent?.includes(`Its conversation`))).toBe(false);
+});
+
 // The spawning call named no model, so the row falls back to the parent's inherited model, named as every surface names it.
 it(`names the model on the card and drops the facts that crowded it out`, async () => {
     sessions.value = [child({ background: true, toolUses: 6, tokens: 19_000 })];

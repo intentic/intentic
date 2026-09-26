@@ -63,6 +63,8 @@ export interface SubagentRecord {
 
 // Where the roster and everything kept beside it is held: each conversation's actor.
 type Actors = Pick<ConversationActors, "holdings">;
+// The same actors, with the door a frame raised outside a turn's own stream reaches its conversation by.
+type ParentActors = Pick<ConversationActors, "holdings" | "send">;
 
 // Drop records aged past RETAIN_FINISHED_MS; called on every list and every write.
 const sweep = (actors: Actors, now: number): void => {
@@ -200,7 +202,7 @@ export const subagentCountsOf = (actors: Actors, conversationId: string): { read
 export interface SubagentTurn {
     readonly conversationId: string;
     // The actors its conversation lives in, which hold every child this turn opens.
-    readonly conversations: Actors;
+    readonly conversations: ParentActors;
     readonly cwd: string;
     sessionId: string | undefined;
     subagentsDir: string | undefined;
@@ -546,11 +548,13 @@ export const subagentVerification = (actors: Actors, id: string): SubagentVerifi
     actors.holdings(ROSTER).get(id)?.verification ?? childVerification(actors, id);
 
 export const subagentHooks = (turn: SubagentTurn): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
-    // Appends the verification verdict to the Task tool's result as the parent reads it, via `additionalContext` rather
-    // than rewriting the report itself. Nothing is appended when there is nothing to warn about.
+    // Appends the verification verdict to the delegating call's result as the parent reads it, via `additionalContext`
+    // rather than rewriting the report itself, as a spawned subagent's report and `wait` answer carry it. Nothing is
+    // appended when there is nothing to warn about. The tool is `Agent` today and `Task` in older CLIs (the stream's
+    // own spelling, sdk-stream.ts): a plain list, so it matches either.
     PostToolUse: [
         {
-            matcher: "Task",
+            matcher: "Agent|Task",
             hooks: [
                 async (input): Promise<{ continue: true; hookSpecificOutput?: { hookEventName: "PostToolUse"; additionalContext: string } }> => {
                     if (input.hook_event_name !== "PostToolUse") {
@@ -606,13 +610,27 @@ export const subagentHooks = (turn: SubagentTurn): Partial<Record<HookEvent, Hoo
 // The daemon runs these children directly and reports each move by call, not by sniffing a stream. The record's id is
 // the child's own conversation id, so spawn, wait, and the roster all name it the same way.
 
-// Feeds the parent's live frame log; a service call has no stream of its own to draw from.
-const pushToParentRun = (actors: Actors, conversationId: string, frame: AgentEvent | undefined): void => {
+// A spawned subagent's moves reach its parent the way an in-process one's do. The pump carries those to both the
+// parent's transcript and its actor, which counts the child and redraws the parent's card; a service call has no pump,
+// so it does both by hand, as a card raised outside the turn does (card-offers.ts). The actor hears `told`, where that
+// differs from what the transcript gets.
+const toParent = (actors: ParentActors, conversationId: string, frame: AgentEvent | undefined, told: AgentEvent | undefined = frame): void => {
     if (frame === undefined) {
         return;
     }
-    turnRunOf(actors, conversationId)?.push(frame);
+    const run = turnRunOf(actors, conversationId);
+    run?.push(frame);
+    if (told !== undefined && tellsParentCard(told, run !== undefined && !run.done)) {
+        void actors.send(conversationId, { kind: "frame", frame: told });
+    }
 };
+
+// What the parent's card is told. A birth is counted into the parent's live turn, which files the count as it settles,
+// so only while that turn runs: the next one starts its count afresh. A change of standing redraws the card's running
+// count whenever it comes, since a spawned subagent outlives the turn that started it. Progress within a standing (a
+// tool, a token) moves nothing the card shows.
+const tellsParentCard = (told: AgentEvent, live: boolean): boolean =>
+    told.kind === "subagent" ? live : told.kind === "subagent_update" && told.status !== undefined;
 
 export interface SpawnedChildBirth {
     // The child's conversation id; also the record's id.
@@ -624,6 +642,9 @@ export interface SpawnedChildBirth {
     readonly provider?: AgentProvider;
     readonly harness?: AgentHarness;
     readonly spawnDepth?: number;
+    // Another turn of a subagent already started (a follow-up, a turn begun without its parent), never another subagent,
+    // however long ago the roster let its record go.
+    readonly again?: true;
 }
 
 /**
@@ -647,7 +668,11 @@ export const openSpawnedChild = (turn: SubagentTurn, birth: SpawnedChildBirth, r
         ...(birth.harness !== undefined ? { harness: birth.harness } : {}),
         ...(birth.spawnDepth !== undefined ? { spawnDepth: birth.spawnDepth } : {}),
     });
-    pushToParentRun(turn.conversations, turn.conversationId, bornFrame(record));
+    // Counted once: a record already under this id is the same subagent, starting a follow-up or the start its owner
+    // just allowed, so its parent's actor hears that as the move it is rather than as another birth.
+    const born = bornFrame(record);
+    const counted = existing === undefined && birth.again !== true;
+    toParent(turn.conversations, turn.conversationId, born, counted ? born : { kind: "subagent_update", id: record.id, status: record.status });
 };
 
 /**
@@ -655,7 +680,7 @@ export const openSpawnedChild = (turn: SubagentTurn, birth: SpawnedChildBirth, r
  * settled.
  */
 export const noteSpawnedChild = (
-    actors: Actors,
+    actors: ParentActors,
     id: string,
     move: {
         // `pending` is a child queued for memory before its turn starts.
@@ -671,7 +696,7 @@ export const noteSpawnedChild = (
     if (record === undefined || !subagentRunning(record)) {
         return;
     }
-    pushToParentRun(actors, record.conversationId, patch(actors, id, move));
+    toParent(actors, record.conversationId, patch(actors, id, move));
 };
 
 /**
@@ -679,7 +704,7 @@ export const noteSpawnedChild = (
  * that died under it, whose session a follow-up can still continue.
  */
 export const settleSpawnedChild = (
-    actors: Actors,
+    actors: ParentActors,
     id: string,
     outcome: { readonly status: "completed" | "failed" | "killed"; readonly report: string; readonly error?: string },
 ): void => {
@@ -688,7 +713,7 @@ export const settleSpawnedChild = (
         return;
     }
     const summary = outcome.report.trim().slice(0, REPORT_TAIL).trim();
-    pushToParentRun(
+    toParent(
         actors,
         record.conversationId,
         patch(

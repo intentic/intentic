@@ -1,4 +1,5 @@
 import type { IconName } from "@intentic/ui";
+import { z } from "zod";
 import { type RequestDocument, documentOf, type ToolCallContent, type TranscriptTool } from "@intentic/sandbox-contract";
 import { codeLangForPath } from "@intentic/code-read";
 import { plural } from "@intentic/base/format";
@@ -37,6 +38,9 @@ export interface ToolPresentation {
     readonly summary: string | undefined;
     // Whether the card starts expanded; a manual toggle overrides it and sticks (see ChatToolCard).
     readonly defaultOpen: boolean;
+    // Whether the call started a subagent, whichever mechanism it used; such a card is titled and marked as the
+    // subagent it started rather than as the tool that started it.
+    readonly delegates: boolean;
 }
 
 // Category → icon fallback used when no per-name presenter claims the tool.
@@ -90,6 +94,8 @@ const filesBody = (text: string): ToolBody => {
 // What a presenter may override; a presenter states only what differs from the category default.
 interface Presenter {
     readonly icon?: IconName;
+    // The call starts a subagent (see ToolPresentation.delegates).
+    readonly delegates?: true;
     // Shapes the joined text output; absent renders the plain text box, undefined return renders no body (bare header).
     readonly body?: (text: string, tool: TranscriptTool) => ToolBody | undefined;
     // Header's result phrase, from the joined text and the call itself; absent means no summary.
@@ -176,9 +182,9 @@ const PRESENTERS: Record<string, Presenter> = {
     write: { summary: diffSummary },
     multiedit: { summary: diffSummary },
     notebookedit: { summary: diffSummary },
-    // Covers both names for a subagent call: the Claude SDK's `Agent` and native backends' lowercase `task`.
-    agent: { icon: `users` },
-    task: { icon: `users` },
+    // Covers both names for an in-process subagent call: the Claude SDK's `Agent` and native backends' lowercase `task`.
+    agent: { icon: `users`, delegates: true },
+    task: { icon: `users`, delegates: true },
     websearch: { icon: `search` },
     webfetch: { icon: `globe` },
     // Asking the user is its own act, not `other`; the category default reads as a second fold chevron.
@@ -191,9 +197,51 @@ const BROWSER_PRESENTER: Presenter = {
     summary: (text, tool) => (tool.name.toLowerCase() === `browser snapshot` && text !== `` ? plural(countLines(text), `line`) : undefined),
 };
 
+// The sandbox's spawn door as a runtime calls it: its own `subagents` server, or the custom tools Cursor mounts it as.
+// The `agents spawn` CLI arrives as a shell command and is known by the subagent its answer names (transcript-fold.ts).
+const SPAWN_TOOL = /^mcp__(?:subagents|custom-user-tools)__spawn$/;
+
+// The door answers the model in JSON (`{ ok, child, note }`, or `{ ok: false, message }`); a reader gets its words.
+const SpawnAnswerSchema = z.object({ note: z.string().min(1).optional(), message: z.string().min(1).optional() });
+
+const spawnAnswer = (text: string): ToolBody | undefined => {
+    if (text === ``) {
+        return undefined;
+    }
+    // An answer that is not the door's JSON (an older one, a runtime's own wrapper) is shown as it came.
+    const asItCame: ToolBody = { kind: `text`, text };
+    try {
+        const answer = SpawnAnswerSchema.safeParse(JSON.parse(text));
+        if (!answer.success) {
+            return asItCame;
+        }
+        const words = answer.data.note ?? answer.data.message;
+        return words === undefined ? undefined : { kind: `text`, text: words };
+    } catch {
+        return asItCame;
+    }
+};
+
+const SPAWN_PRESENTER: Presenter = { icon: `users`, delegates: true, body: spawnAnswer };
+
 const presenterFor = (name: string): Presenter => {
     const lower = name.toLowerCase();
-    return PRESENTERS[lower] ?? (lower.startsWith(`browser `) ? BROWSER_PRESENTER : {});
+    return PRESENTERS[lower] ?? (lower.startsWith(`browser `) ? BROWSER_PRESENTER : SPAWN_TOOL.test(name) ? SPAWN_PRESENTER : {});
+};
+
+/** Whether a call started a subagent: a delegating tool, or any call the transcript put a subagent on. */
+export const delegates = (tool: TranscriptTool): boolean => tool.subagent !== undefined || presenterFor(tool.name).delegates === true;
+
+// A call that started a subagent wears the subagent's glyph, whichever door it came through. A document wears its own:
+// a plan file matches the plan card, other write-ups get the reading icon. Anything else, its presenter's or category's.
+const iconOf = (tool: TranscriptTool, presenter: Presenter, document: RequestDocument | undefined): IconName => {
+    if (delegates(tool)) {
+        return `users`;
+    }
+    if (document !== undefined) {
+        return document.plan === true ? `list-check` : `book`;
+    }
+    return presenter.icon ?? CATEGORY_ICONS[tool.category];
 };
 
 export const present = (tool: TranscriptTool): ToolPresentation => {
@@ -216,8 +264,7 @@ export const present = (tool: TranscriptTool): ToolPresentation => {
     const shown = body !== undefined && (body.kind !== `command` || body.command !== `` || body.output !== ``) ? body : undefined;
 
     return {
-        // A document wears its own icon: a plan file matches the plan card; other write-ups get the reading icon.
-        icon: document === undefined ? (presenter.icon ?? CATEGORY_ICONS[tool.category]) : document.plan === true ? `list-check` : `book`,
+        icon: iconOf(tool, presenter, document),
         document,
         diffs,
         images,
@@ -226,5 +273,6 @@ export const present = (tool: TranscriptTool): ToolPresentation => {
         summary: failed ? `failed` : presenter.summary?.(text, tool),
         // Collapsed once a call settles cleanly; images and documents stay open regardless.
         defaultOpen: running || failed || images.length > 0 || document !== undefined,
+        delegates: delegates(tool),
     };
 };

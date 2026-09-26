@@ -24,6 +24,13 @@ describe(`groupConsecutiveTools`, () => {
         expect(groupConsecutiveTools(tools)).toEqual(tools);
     });
 
+    // A fan-out reads as one run of subagents whether each came through the runtime's own tool or the spawn door.
+    it(`groups consecutive calls that each started a subagent as one run, whichever door each came through`, () => {
+        const tools = [tool(`Agent`, undefined, `a1`), tool(`mcp__subagents__spawn`, undefined, `s1`), tool(`Task`, undefined, `a2`), tool(`Read`, `a.ts`, `r1`)];
+        const result = groupConsecutiveTools(tools);
+        expect(result.map((entry) => (`kind` in entry ? entry.tools.map((member) => member.id) : entry.id))).toEqual([[`a1`, `s1`, `a2`], `r1`]);
+    });
+
     it(`groups 3+ consecutive calls with the same name and target`, () => {
         const tools = [tool(`Edit`, `a.ts`, `t1`), tool(`Edit`, `a.ts`, `t2`), tool(`Edit`, `a.ts`, `t3`)];
         const result = groupConsecutiveTools(tools);

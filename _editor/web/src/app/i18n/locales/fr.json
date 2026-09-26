@@ -7,7 +7,7 @@
             "nothingLanded": "Rien à intégrer : la branche de cette conversation ne contient aucun travail que votre espace de travail n'a pas déjà."
         },
         "agentCard": {
-            "agentsStarted": "Agents qu'il a lancés",
+            "subagentsStarted": "Sous-agents qu'il a lancés",
             "archiveAgent": "Archiver l'agent",
             "archiveBranchDiffConversation": "Archiver ; la branche, le diff et la conversation sont conservés",
             "archiveConversationKept": "Archiver ; la conversation est conservée",
@@ -1355,6 +1355,7 @@
             "more": "… {hidden} de plus",
             "needsInput": "attend une saisie",
             "openAgentsTranscript": "Ouvrir la transcription de cet agent",
+            "openItsConversation": "Ouvrir sa conversation",
             "viewLarger": "Agrandir",
             "watchAgent": "Suivre cet agent",
             "watchBrowser": "Suivre le navigateur"
@@ -1500,8 +1501,8 @@
             "unread": "sans relevé"
         },
         "subagents": {
-            "agentDelegatesAgentTool": "Quand un agent délègue — avec son outil Agent, ou en pilotant Codex ou Grok depuis son shell — l'agent qu'il a lancé apparaît ici, avec sa propre transcription.",
             "agentsStartedFinishedAged": "Les agents lancés par {focusTitle} ont terminé et ont quitté cette liste avec le temps. Sa propre transcription est le compte rendu de ce qu'ils ont rapporté.",
+            "itsConversation": "Sa conversation",
             "noAgentsStarted": "Aucun agent lancé",
             "noTranscriptRecordedAgent": "Aucune transcription n'a été enregistrée pour cet agent.",
             "nothingRunningAgent": "Rien ne tourne pour cet agent",
@@ -1511,6 +1512,7 @@
             "showAll": "Tout afficher",
             "showEveryAgent": "Afficher tous les agents",
             "showFullReport": "Afficher le rapport complet",
+            "subagentsAppearHere": "Quand un agent démarre un sous-agent — dans son propre processus avec son outil Agent, ou lancé sur n'importe quel fournisseur connecté — il apparaît ici, avec sa propre transcription.",
             "watchingLiveWhatAgent": "Suivi en direct : ce que cet agent écrit arrive ici pendant qu'il travaille.",
             "work": "Travail"
         },
@@ -1559,9 +1561,9 @@
             "doneHandBack": "Terminé : rendre la main"
         },
         "chatChildAgentAsk": {
-            "spawnTitle": "Démarrer un agent enfant sur {provider} ?",
-            "sendTitle": "Envoyer ceci à un agent enfant sur {provider} ?",
-            "answerTitle": "Répondre à un agent enfant sur {provider} ?",
+            "spawnTitle": "Démarrer un sous-agent sur {provider} ?",
+            "sendTitle": "Envoyer ceci à un sous-agent sur {provider} ?",
+            "answerTitle": "Répondre à un sous-agent sur {provider} ?",
             "spawn": "Le démarrer",
             "send": "L'envoyer",
             "answer": "Lui répondre",
@@ -1934,12 +1936,12 @@
             "toDropOneDrop": "pour en retirer un, retirez ce qui le livre"
         },
         "agentSubagents": {
-            "childAgentSpendsSame": "Un agent enfant dépense les mêmes comptes connectés que celui-ci.",
-            "delegationRefusedOutrightThree": "La délégation est refusée d'emblée : les trois limites ci-dessous ne bornent donc rien tant que cela n'est pas changé.",
             "maximumDelegatedAgentsRunning": "Nombre maximal d'agents délégués tournant en parallèle.",
             "maximumDelegationDepth": "Profondeur maximale de délégation.",
             "nestingDepth": "Profondeur d'imbrication",
-            "startAgentsOwn": "Lancer ses propres agents",
+            "spawnSubagents": "Lancer des sous-agents",
+            "spawnedSubagentSpends": "Un sous-agent lancé tourne comme une conversation à part entière, sur n'importe quel fournisseur connecté, et dépense les mêmes comptes connectés que celui-ci.",
+            "spawningRefusedOutright": "Le lancement est refusé d'emblée : les limites ci-dessous ne bornent donc que les sous-agents qu'un environnement démarre dans son propre processus.",
             "subagentsAtOnce": "Sous-agents à la fois",
             "subagentsPerConversation": "Sous-agents par conversation",
             "totalDelegatedAgentsAllowed": "Total d'agents délégués autorisés par conversation."
@@ -2650,7 +2652,7 @@
             "runCode": "Exécuter du code",
             "runCommands": "Exécuter des commandes",
             "shellTestsBuildsEvery": "Shell, tests, compilations, et chaque CLI présente sur l'image.",
-            "spawnSubAgentsRun": "Lancer des sous-agents et exécuter des workflows.",
+            "startSubagentsRun": "Lancer des sous-agents et exécuter des workflows.",
             "with": "Avec"
         },
         "planLimitsPanel": {
@@ -3744,6 +3746,7 @@
         "running": "En marche",
         "settings": "Paramètres",
         "shared": "Partagé",
+        "subagent": "Sous-agent",
         "subagents": "Sous-agents",
         "thisMachine": "cette machine",
         "thisSandbox": "Ce sandbox",

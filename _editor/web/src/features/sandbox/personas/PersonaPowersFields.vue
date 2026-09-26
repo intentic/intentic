@@ -86,7 +86,7 @@ const OUTWARD_SHELVES = computed(() => [
         key: `delegate` as const,
         icon: `sitemap` as const,
         label: t(`sandbox.personaPowersFields.delegate`),
-        hint: t(`sandbox.personaPowersFields.spawnSubAgentsRun`),
+        hint: t(`sandbox.personaPowersFields.startSubagentsRun`),
     },
 ]);
 
