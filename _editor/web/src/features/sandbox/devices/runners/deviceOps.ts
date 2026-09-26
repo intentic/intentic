@@ -398,9 +398,11 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             return;
         }
         const share = group.sandbox?.resources;
+        // Whether the machine's ic takes the contract's shape: which op carries it, and how the typed fallback spells it.
+        const takesSet = canSetShape(managerOf(machine())?.device.facts);
         let flow: ReturnType<typeof shapeFlow> | undefined;
         try {
-            flow = intent === undefined || share === undefined ? undefined : shapeFlow(intent, canSetShape(managerOf(machine())?.device.facts), runningShape(share));
+            flow = intent === undefined || share === undefined ? undefined : shapeFlow(intent, takesSet, runningShape(share));
         } catch (error) {
             failure.value = { key: rowKey(group), notice: noticeFrom(error, TOO_OLD_TO_SAVE) };
             return;
@@ -423,7 +425,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             // A log tail's result line would only restate the pane above it, so it's left to be the answer.
             outcome.value = verb === `logs` ? undefined : { key, message };
         } catch (error) {
-            failure.value = { key, notice: noticeFrom(error, `That didn't work on this device.`), command: sandboxFallback(verb, slug, intent) };
+            failure.value = { key, notice: noticeFrom(error, `That didn't work on this device.`), command: sandboxFallback(verb, slug, intent, { takesSet }) };
             if (verb === `logs`) {
                 openLog.value = undefined;
             }

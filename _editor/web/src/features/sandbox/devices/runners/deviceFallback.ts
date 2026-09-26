@@ -24,12 +24,39 @@ const LOG_LINES = 200;
 const IC_VERB: Partial<Record<SandboxVerb, string>> = { update: `update`, rollback: `rollback`, remove: `remove` };
 const POWER = new Set<SandboxVerb>([`start`, `stop`, `restart`]);
 
+// The shape as flags, for a machine whose `ic` predates `--set` (its agent advertises no `set-shape`, shapeFlow). That
+// machine is the one this line is most often printed for, and its ic refuses `--set`. `reshape` is the verb every such
+// ic answers, the flags its own: a cap `<n>g`/`<n>` or `default`, a switch on/off, `--later` to save, `--forget`.
+const cap = (value: number | null, spell: (value: number) => string): string => (value === null ? `default` : spell(value));
+const onOff = (value: boolean): string => (value ? `on` : `off`);
+const olderIcArgs = (slug: string, intent: ShapeIntent): string[] => {
+    if (`forget` in intent) {
+        return [`sandbox`, `reshape`, slug, `--forget`];
+    }
+    const { memoryGib, cpus, privileged, gpu } = intent.shape;
+    return [
+        `sandbox`,
+        `reshape`,
+        slug,
+        `--memory`,
+        cap(memoryGib, (gib) => `${gib}g`),
+        `--cpus`,
+        cap(cpus, String),
+        `--privileged`,
+        onOff(privileged),
+        `--gpus`,
+        onOff(gpu),
+        ...(intent.when === `now` ? [] : [`--later`]),
+    ];
+};
+
 /**
  * The command that does this verb to this sandbox by hand, or undefined for a verb with no single-line equivalent.
  * `resources` is the form's answer: a whole shape with when it takes effect, or forgetting the one saved, spelled by
- * the contract's own `ic` argv so this line and the machine agent's run cannot differ.
+ * the contract's own `ic` argv so this line and the machine agent's run cannot differ. `takesSet` is whether the
+ * machine's `ic` takes the contract's `--set` (its agent advertises `set-shape`); without it the line is ic's older flags.
  */
-export const sandboxFallback = (verb: SandboxVerb, slug: string, intent?: ShapeIntent): string | undefined => {
+export const sandboxFallback = (verb: SandboxVerb, slug: string, intent?: ShapeIntent, { takesSet = true }: { readonly takesSet?: boolean } = {}): string | undefined => {
     const ic = IC_VERB[verb];
     if (ic !== undefined) {
         return `ic sandbox ${ic} ${slug}`;
@@ -42,6 +69,9 @@ export const sandboxFallback = (verb: SandboxVerb, slug: string, intent?: ShapeI
     }
     if (intent === undefined) {
         return undefined;
+    }
+    if (!takesSet) {
+        return `ic ${olderIcArgs(slug, intent).join(` `)}`;
     }
     return `ic ${(`forget` in intent ? icForgetShapeArgs(slug) : icShapeArgs(slug, intent.shape, intent.when)).join(` `)}`;
 };

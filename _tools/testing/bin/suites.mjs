@@ -54,7 +54,7 @@ const gitIgnoredDirs = () => {
             .filter((path) => path.endsWith("/"))
             .map((dir) => `${dir}**`);
     } catch {
-        // allow(silent-catch): no git or no repository (an unpacked tarball) leaves the fixed list and the bunfig's
+        // allow(silent-catch): no git or no repository (an unpacked tarball) leaves the fixed list and the bunfig's own patterns
         return [];
     }
 };

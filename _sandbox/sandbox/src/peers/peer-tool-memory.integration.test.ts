@@ -47,3 +47,19 @@ test("a peer that has already answered this boot beats what the file remembers",
 test("nothing remembered is the answer before anything is written, not a failure", async () => {
     expect(filePeerTools(await root(), silent).get("webext:chrome")).toBeUndefined();
 });
+
+// A rekeyed peer moves its table (PeerHub.rekey): the old key is forgotten in the file too, or the next boot would list
+// the renamed machine's tools under its old name as well.
+test("a forgotten key is gone from the file, and from the next boot", async () => {
+    const historyRoot = await root();
+    const memory = filePeerTools(historyRoot, silent);
+    memory.set("hosts:rog", { tools: [{ name: "run_command" }] });
+    memory.set("hosts:desk", { tools: [{ name: "run_command" }] });
+    memory.delete("hosts:rog");
+    expect(memory.get("hosts:rog")).toBeUndefined();
+    await waitFor(async () => expect(Object.keys(JSON.parse(await readFile(peerToolsFile(historyRoot), "utf8")).peers)).toEqual(["hosts:desk"]));
+
+    const afterRestart = filePeerTools(historyRoot, silent);
+    await waitFor(() => expect(afterRestart.get("hosts:desk")).toEqual({ tools: [{ name: "run_command" }] }));
+    expect(afterRestart.get("hosts:rog")).toBeUndefined();
+});

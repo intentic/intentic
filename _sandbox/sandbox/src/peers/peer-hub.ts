@@ -258,9 +258,11 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
             if (remembered !== undefined) {
                 seen.set(to, remembered);
             }
+            // Moved, not copied: the old id is gone, and a table left under it would list this peer's tools twice.
             const tools = memory.get(toolKey(from));
             if (tools !== undefined) {
                 memory.set(toolKey(to), tools);
+                memory.delete(toolKey(from));
             }
             said();
         },

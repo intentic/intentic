@@ -53,12 +53,18 @@ export const DeviceFactsSchema = z.object({
     // detected by a field's presence any more: the device RPC inputs are strict, and an agent rejects a field it does
     // not know rather than dropping it.
     features: z.array(z.string()).optional(),
+    // Why the `ic` this agent drives is older than the agent, as one sentence, when fetching the current one failed:
+    // what explains `features` missing what this agent's release has (a stale ic has no logs verb and no `--set`).
+    // Absent when ic is current, and from an agent older than the field.
+    icOutOfDate: z.string().optional(),
 });
 export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 
 // The optional device ops, by what enables them:
 // - `reshape-later`: the old `reshape` op with `later`, saving the change for the next restart. An agent from before it
-//   strips `later` and reshapes NOW, which is why a later-reshape is never sent to one.
+//   strips `later` and reshapes NOW, which is why a later-reshape is never sent to one. Redundant with `set-shape`'s
+//   `when` for every current page; kept only for pages and daemons from before `set-shape` (v1.312.0 and older),
+//   which check it. REMOVE IN v1.314.0, with the old `reshape` op it gates.
 // - `set-shape`: the `set-shape`/`forget-shape` ops, and `start`/`restart` applying a saved shape, all through an `ic`
 //   whose `ic sandbox shape` takes the contract's own shape (`--set`); advertised only when the agent's `ic` does.
 //   Both features ride that verb, so an agent advertises both or neither.

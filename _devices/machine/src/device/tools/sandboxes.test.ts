@@ -9,6 +9,7 @@ import {
     icRemoveArgs,
     icRunnerArgs,
     icSwapArgs,
+    lineSplitter,
     olderResizePlan,
     listSandboxes,
     manageSandbox,
@@ -21,7 +22,7 @@ import {
     swapSandbox,
     tailSandboxLogs,
 } from "./sandboxes.js";
-import { featuresFrom, icCandidates, icNeedsFetch, icVersionFrom } from "./ic-binary.js";
+import { featuresFrom, fetchIc, icCandidates, icNeedsFetch, icVersionFrom } from "./ic-binary.js";
 
 const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     shell: "on",
@@ -266,6 +267,44 @@ test("advertises an optional op only when the ic under the agent takes the contr
     // An ic from before `--set` has the verb but not the shape as the contract spells it.
     expect(featuresFrom("Usage: ic sandbox shape [OPTIONS] <SLUG>\n      --when <WHEN>")).toEqual([]);
     expect(featuresFrom(undefined)).toEqual([]);
+});
+
+// A log is a stream of chunks whose boundaries fall anywhere: a line split across two chunks is one line, and a blank
+// line is the log's own spacing, not noise to drop.
+test("a streamed run's lines survive chunk boundaries and keep their blank lines", () => {
+    const lines: string[] = [];
+    const split = lineSplitter((line) => lines.push(line));
+    split.push("first half of a long ");
+    split.push("line\n\nafter a blank\r");
+    split.push("\nlast without a newline");
+    expect(lines).toEqual(["first half of a long line", "", "after a blank"]);
+    split.end();
+    expect(lines).toEqual(["first half of a long line", "", "after a blank", "last without a newline"]);
+    // A final newline ends the last line; it does not start an empty one.
+    const ended: string[] = [];
+    const tidy = lineSplitter((line) => ended.push(line));
+    tidy.push("one\n");
+    tidy.end();
+    expect(ended).toEqual(["one"]);
+});
+
+// A failed fetch used to vanish: the old ic kept answering, the device's features shrank, and nothing said why. It is
+// logged with its reason, and the same sentence is what the device reports beside its features.
+test("a failed fetch of the current ic is logged with its reason and names the stale ic", async () => {
+    const warned: string[] = [];
+    const note = await fetchIc("/nonexistent-intentic-test/ic", "1.300.0", "1.313.0", {
+        download: async () => {
+            throw new Error("HTTP 404 for ic-linux-x64");
+        },
+        warn: (line) => warned.push(line),
+    });
+    expect(note).toContain("ic is out of date");
+    expect(note).toContain("1.300.0");
+    expect(note).toContain("1.313.0");
+    expect(note).toContain("HTTP 404 for ic-linux-x64");
+    expect(warned).toEqual([note!]);
+    // No ic at all is said as such rather than as a version.
+    expect(await fetchIc("/nonexistent-intentic-test/ic", undefined, "1.313.0", { download: async () => await Promise.reject(new Error("offline")), warn: () => {} })).toContain("none is installed");
 });
 
 test("a machine with no home still tries the rest", () => {

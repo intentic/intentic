@@ -542,7 +542,7 @@ export const AgentSummarySchema = z.object({
                     .boolean()
                     .optional()
                     .describe(
-                        "Left running for the person: the turn's reply gave its address, so it outlives the turn, wakes nothing and is theirs to stop.",
+                        "Left running for the person: the agent kept it for them with the `keep` tool (or it holds a port this conversation already left them), so it outlives the turn, wakes nothing and is theirs to stop.",
                     ),
                 ports: z.array(z.number().int()).optional().describe("The ports it was listening on when its turn ended."),
                 stoppedBy: z

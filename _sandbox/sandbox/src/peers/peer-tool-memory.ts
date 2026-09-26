@@ -13,6 +13,8 @@ import { openDocument } from "../store/open-document.js";
 export interface PeerToolMemory {
     readonly get: (key: string) => unknown;
     readonly set: (key: string, tools: unknown) => void;
+    // Forgets a key: a peer held under a new one (PeerHub.rekey) must leave nothing behind under the old.
+    readonly delete: (key: string) => void;
 }
 
 const PeerToolsFileSchema = z.object({ peers: z.record(z.string(), z.unknown()) });
@@ -24,7 +26,7 @@ export const peerToolsFile = (historyRoot: string): string => join(historyRoot, 
 
 export const memoryPeerTools = (): PeerToolMemory => {
     const tools = new Map<string, unknown>();
-    return { get: (key) => tools.get(key), set: (key, value) => void tools.set(key, value) };
+    return { get: (key) => tools.get(key), set: (key, value) => void tools.set(key, value), delete: (key) => void tools.delete(key) };
 };
 
 // Reads are synchronous (a bridge call is answering an MCP client that is waiting), so the file is hydrated into a map
@@ -34,22 +36,43 @@ export const filePeerTools = (historyRoot: string, logger: { warn: (data: object
     const path = peerToolsFile(historyRoot);
     const file = openDocument(peerToolsDocument, path, { fallback: (): PeerToolsFile => ({ peers: {} }) });
     const live = memoryPeerTools();
+    const forgetInFile = async (key: string): Promise<void> => {
+        try {
+            await file.update((current) => {
+                const { [key]: _gone, ...peers } = current.peers;
+                return { peers };
+            });
+        } catch (error) {
+            logger.warn({ err: error, key }, "peers: could not forget this peer's tool list in the file");
+        }
+    };
     const hydrated = new Map<string, unknown>();
+    // Keys forgotten this boot, so a hydration landing after the forget does not bring them back.
+    const forgotten = new Set<string>();
     void file
         .read()
         .then((stored) => {
             for (const [key, tools] of Object.entries(stored.peers)) {
-                hydrated.set(key, tools);
+                if (!forgotten.has(key)) {
+                    hydrated.set(key, tools);
+                }
             }
         })
         .catch((err: unknown) => logger.warn({ err }, "peers: the remembered tool lists could not be read, every peer relists on its next connect"));
     return {
         get: (key) => live.get(key) ?? hydrated.get(key),
         set: (key, tools) => {
+            forgotten.delete(key);
             live.set(key, tools);
             void file
                 .update((current) => ({ peers: { ...current.peers, [key]: tools } }))
                 .catch((err: unknown) => logger.warn({ err, key }, "peers: could not record this peer's tool list for the next boot"));
+        },
+        delete: (key) => {
+            forgotten.add(key);
+            live.delete(key);
+            hydrated.delete(key);
+            void forgetInFile(key);
         },
     };
 };

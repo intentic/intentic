@@ -8,7 +8,7 @@ import { rootsOf, rootsText } from "../policy.js";
 import { shellFor } from "./shell.js";
 import { listDistros, WINDOWS_SIDE, wslEnvironment } from "../../wsl.js";
 import { machineId } from "../../machine-id.js";
-import { deviceFeatures } from "./ic-binary.js";
+import { deviceFeatures, icOutOfDate } from "./ic-binary.js";
 
 // What this device IS: without it an agent guesses (apt-get on Fedora, bash on Windows, paths outside its own
 // boundary) and reports the refusal as a bug. Sent unprompted in the hello frame and on the sandbox's
@@ -79,7 +79,9 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
         deviceFeatures(),
     ]);
     const links = linkFacts(stamped);
-    return {
+    // Read after deviceFeatures, which fetched (or failed to fetch) the current ic first.
+    const stale = icOutOfDate();
+    const facts: DeviceFacts = {
         machineId: machineId(),
         os,
         arch: arch(),
@@ -94,6 +96,11 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
         // What this agent and the ic under it implement, asked of that ic rather than written down here.
         features,
     };
+    // Why that list is short, when the ic under it could not be brought up to date.
+    if (stale !== undefined) {
+        facts.icOutOfDate = stale;
+    }
+    return facts;
 };
 
 // The other environments of this same computer, and how a command crosses into them: the one fact about a Windows
@@ -127,6 +134,7 @@ export const describeText = async (scopes: DeviceScopes): Promise<string> => {
             `Folders you may read and write: ${rootsText(facts.roots)}`,
             ...environmentLines(facts),
             `Permissions: run commands ${scopes.shell}, write files ${scopes.write}, see the screen ${scopes.screen}, manage sandboxes ${scopes.sandboxes}`,
+            ...(facts.icOutOfDate === undefined ? [] : [facts.icOutOfDate]),
             // All a sandbox can use, so a reshape is asked for in numbers this engine has.
             ...(facts.engine === undefined
                 ? []

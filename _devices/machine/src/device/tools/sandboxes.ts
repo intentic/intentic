@@ -274,6 +274,35 @@ export const runnerFlow = async (
     }
 };
 
+// One stream's chunks back into its lines. A pipe hands over whatever it has, so a chunk may end mid-line: the tail is
+// held until its newline arrives (or the stream ends), and a blank line is a line like any other, since a log's
+// spacing is part of what it says. Only the empty remainder after a final newline is not a line. Pure, so the
+// boundaries are asserted without a child.
+export interface LineSplitter {
+    readonly push: (chunk: string) => void;
+    readonly end: () => void;
+}
+export const lineSplitter = (onLine: (line: string) => void): LineSplitter => {
+    let partial = "";
+    return {
+        push: (chunk) => {
+            const parts = (partial + chunk).split(/\r?\n/);
+            partial = parts.pop() ?? "";
+            for (const line of parts) {
+                onLine(line);
+            }
+        },
+        end: () => {
+            // A CR the chunk boundary split from its LF.
+            const last = partial.replace(/\r$/, "");
+            partial = "";
+            if (last !== "") {
+                onLine(last);
+            }
+        },
+    };
+};
+
 // One long child process, narrated as it goes. Every line is handed to `onLine` the moment it arrives, and the same
 // lines are collected into the answer a caller reports at the end. Both streams go to one place: `ic` writes progress
 // to stdout and diagnostics to stderr. `missing` is ENOENT alone — the program isn't there — which the caller answers
@@ -285,28 +314,35 @@ const runStreamed = (
     env: Readonly<Record<string, string>>,
 ): Promise<{ code: number; output: string } | "missing"> => {
     const lines: string[] = [];
-    const emit = (chunk: string): void => {
-        for (const line of chunk.split(/\r?\n/)) {
-            if (line !== "") {
-                lines.push(line);
-                onLine(line);
-            }
-        }
+    const take = (line: string): void => {
+        lines.push(line);
+        onLine(line);
+    };
+    // One splitter per stream: the two interleave, and a partial line belongs to the stream that began it.
+    const out = lineSplitter(take);
+    const err = lineSplitter(take);
+    const flush = (): void => {
+        out.end();
+        err.end();
     };
     return new Promise((resolve) => {
         const child = spawn(binary, [...args], { windowsHide: true, env: { ...process.env, ...env } });
         let missing = false;
-        child.stdout.setEncoding("utf8").on("data", emit);
-        child.stderr.setEncoding("utf8").on("data", emit);
+        child.stdout.setEncoding("utf8").on("data", out.push);
+        child.stderr.setEncoding("utf8").on("data", err.push);
         // Any error other than ENOENT is a real failure and is reported as the run's own.
         child.on("error", (error: NodeJS.ErrnoException) => {
             missing = error.code === "ENOENT";
+            flush();
             if (!missing) {
-                emit(String(error.message));
+                take(String(error.message));
             }
             resolve(missing ? "missing" : { code: 1, output: lines.join("\n") });
         });
-        child.on("close", (code) => resolve(missing ? "missing" : { code: code ?? 1, output: lines.join("\n") }));
+        child.on("close", (code) => {
+            flush();
+            resolve(missing ? "missing" : { code: code ?? 1, output: lines.join("\n") });
+        });
     });
 };
 
@@ -535,7 +571,9 @@ export const sandboxLogs = async (slug: string, lines: number | undefined, scope
 // on that row travels. It changes nothing, and needs no separate route since the stream's shape is already
 // "many lines, then an outcome".
 export const tailSandboxLogs = async (slug: string, scopes: DeviceScopes, onLine: (line: string) => void): Promise<string> => {
-    const lines = (await readLogs(slug, DEFAULT_LOG_LINES, scopes)).split(/\r?\n/).filter((line) => line !== "");
+    // Blank lines kept: they are the log's own spacing (runStreamed keeps them too).
+    const output = await readLogs(slug, DEFAULT_LOG_LINES, scopes);
+    const lines = output === "" ? [] : output.split(/\r?\n/);
     for (const line of lines) {
         onLine(line);
     }

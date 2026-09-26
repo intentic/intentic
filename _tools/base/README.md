@@ -40,9 +40,11 @@ flowchart LR
   downloaded model so a partial one never reads as present. Reading what whisper prints stays in the contract.
 
 - `acme.ts` orders a certificate over DNS-01 and tells the CA to look only once the zone's own nameservers serve the
-  challenge (`authoritative-dns.ts`), since an early look fails the authorization for good. On a host whose network
-  blocks direct DNS, a caller's `confirmChallenge` (the DNS provider reading the record back) plus
-  `PROVIDER_SETTLE_MS` stands in for that, with a warning; without one the wait's deadline fails the order.
+  challenge (`authoritative-dns.ts`), since an early look fails the authorization for good. When that never shows —
+  the host's network blocks direct DNS, or the nameservers answer without the value because something on the network
+  answers in their place (the interception production hit) — a caller's `confirmChallenge` (the DNS provider reading
+  the record back) plus `PROVIDER_SETTLE_MS` stands in for it, with a warning that says which of the two it saw;
+  without one the wait's deadline fails the order.
 
 ## Key files
 

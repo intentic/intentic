@@ -10,7 +10,8 @@ import { DEV_VERSION } from "../state/versions.js";
 // `overlayRuntime` is the environment's locked demand; `hostRuntime` is the owner's addition; `privileged`/`gpu` are
 // docker's enforced truth.
 // A delta against what runs: absent means leave it, `null` on the two caps means back to the default; at least one key
-// must be set. What the old `reshape` op carries (`ic sandbox reshape` flags); `set-shape` carries a whole shape instead.
+// must be set. What the old `reshape` op carries, which the machine agent carries out as `ic sandbox shape --set` (its
+// `olderResizePlan`); `set-shape` carries a whole shape instead.
 export const SandboxResourcesAskFieldsSchema = z.object({
     memoryGib: z.int().positive().nullable().optional(),
     cpus: z.int().positive().nullable().optional(),

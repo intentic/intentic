@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { DEV_VERSION, DEVICE_FEATURE_RESHAPE_LATER, DEVICE_FEATURE_SET_SHAPE, type DeviceFeature, isNewer } from "@intentic/sandbox-contract";
 import { archToken, download, exe, osToken } from "../../release.js";
 import { MACHINE_VERSION } from "../../version.js";
+import { errorMessage } from "@intentic/base/errors";
 
 // WHICH `ic` THIS AGENT RUNS, and keeping it at least as new as the agent. Every sandbox verb here is an `ic` verb, so an
 // agent that learned `ic sandbox list --json` or `ic sandbox shape` in the same release as ic did must not be left
@@ -51,34 +52,68 @@ const installedVersion = async (): Promise<string | undefined> => {
     return undefined;
 };
 
+// What a failed fetch leaves behind: one sentence naming the ic that stays, the one wanted and why it did not arrive.
+// The newer verbs (logs, the contract's shape) are missing from the ic that stays, so the features this device reports
+// shrink with no other explanation; this is that explanation, logged and reported beside them (hostFacts).
+export const icStaleNote = (installed: string | undefined, agent: string, reason: string): string =>
+    `ic is out of date: ${installed === undefined ? "none is installed" : `the installed ic is ${installed}`}, this agent is ${agent}, and fetching ic ${agent} failed (${reason}). Sandbox logs and saving a shape for the next restart need the newer ic; it is fetched again on the next sandbox action.`;
+
+export interface IcFetchIo {
+    readonly download: (url: string, to: string) => Promise<void>;
+    readonly warn: (line: string) => void;
+}
+
+// Put `agent`'s release of ic at `target`. Download beside the target and rename into place, as the shims do:
+// overwriting a running executable fails, and a half-downloaded binary must never be what runs. Answers undefined when
+// the fetch landed, else the stale note, which is also logged: a failure is never silent, since what it costs (the
+// verbs the old ic lacks) shows up far from here.
+export const fetchIc = async (target: string, installed: string | undefined, agent: string, io: IcFetchIo): Promise<string | undefined> => {
+    const part = `${target}.download`;
+    try {
+        await io.download(icAssetUrl(agent), part);
+        if (process.platform !== "win32") {
+            await chmod(part, 0o755);
+        }
+        await rename(part, target);
+        return undefined;
+    } catch (error) {
+        // allow(silent-catch): a partial download that cannot be removed is overwritten by the next fetch; the failure that matters is reported below
+        await rm(part, { force: true }).catch(() => undefined);
+        const note = icStaleNote(installed, agent, errorMessage(error));
+        io.warn(note);
+        return note;
+    }
+};
+
 // One check per process when it succeeds; a failed fetch is tried again on the next call, since the next call is a
 // person pressing a button that needs it.
 let checked: Promise<void> | undefined;
+// The last failed fetch's note, until one lands.
+let staleNote: string | undefined;
 
-// Put this agent's own release of ic in the per-user location when what is installed is older (or missing). Download
-// beside the target and rename into place, as the shims do: overwriting a running executable fails, and a half-downloaded
-// binary must never be what runs. A fetch that fails leaves whatever is installed to answer for itself.
+/** Why the ic this agent drives is older than the agent, when fetching the current one failed; undefined otherwise. */
+export const icOutOfDate = (): string | undefined => staleNote;
+
+const warn = (line: string): void => {
+    process.stderr.write(`warning: ${line}\n`);
+};
+
+// Put this agent's own release of ic in the per-user location when what is installed is older (or missing). A fetch
+// that fails leaves whatever is installed to answer for itself, and says so (icOutOfDate).
 export const ensureCurrentIc = async (): Promise<void> => {
     checked ??= (async () => {
         const target = userIcPath();
-        if (target === undefined || !icNeedsFetch(await installedVersion(), MACHINE_VERSION)) {
+        const installed = await installedVersion();
+        if (target === undefined || !icNeedsFetch(installed, MACHINE_VERSION)) {
+            staleNote = undefined;
             return;
         }
-        const part = `${target}.download`;
-        try {
-            await download(icAssetUrl(MACHINE_VERSION), part);
-            if (process.platform !== "win32") {
-                await chmod(part, 0o755);
-            }
-            await rename(part, target);
-        } catch (error) {
-            await rm(part, { force: true });
+        staleNote = await fetchIc(target, installed, MACHINE_VERSION, { download, warn });
+        if (staleNote !== undefined) {
             checked = undefined;
-            throw error;
         }
     })();
-    // allow(silent-catch): a failed download leaves whatever is installed to answer for itself, and the next call tries again
-    await checked.catch(() => undefined);
+    await checked;
 };
 
 /* WHAT THIS DEVICE CAN BE ASKED TO DO, derived from the `ic` it drives rather than written down beside the code: every
@@ -102,8 +137,10 @@ const helpOf = async (verb: readonly string[]): Promise<string | undefined> => {
 
 // Which optional ops this device implements, from what its `ic`'s own help says it has. Both ride `ic sandbox shape`
 // taking the contract's own shape (`--set`, the contract's `icShapeArgs`): `set-shape` directly, and the old `reshape`
-// op's `later` through the same verb (sandboxes.ts, olderResizePlan). Pure over the help, so the derivation is asserted
-// without an ic.
+// op's `later` through the same verb (sandboxes.ts, olderResizePlan). `reshape-later` is redundant with `set-shape`'s
+// `when` for every current page, and is still advertised only for pages and daemons from before `set-shape` (v1.312.0
+// and older), which check it before sending a later-reshape: REMOVE IN v1.314.0, with the old `reshape` op. Pure over
+// the help, so the derivation is asserted without an ic.
 export const featuresFrom = (shapeHelp: string | undefined): DeviceFeature[] =>
     shapeHelp?.includes("--set") === true ? [DEVICE_FEATURE_RESHAPE_LATER, DEVICE_FEATURE_SET_SHAPE] : [];
 

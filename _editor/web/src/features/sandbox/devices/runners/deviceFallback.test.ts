@@ -47,6 +47,20 @@ describe(`a shape`, () => {
         expect(sandboxFallback(`resources`, `work`, { forget: true })).toBe(`ic sandbox shape work --forget`);
     });
 
+    // The machine this line is printed for is often one whose agent (and so its ic) is behind: an ic older than `--set`
+    // refuses it, so that machine is given the flags it has always taken.
+    test(`on a machine whose ic predates --set, is spelled in ic's older flags`, () => {
+        const older = { takesSet: false };
+        expect(sandboxFallback(`resources`, `work`, { shape: { memoryGib: 12, cpus: null, privileged: true, gpu: false }, when: `now` }, older)).toBe(
+            `ic sandbox reshape work --memory 12g --cpus default --privileged on --gpus off`,
+        );
+        expect(sandboxFallback(`resources`, `work`, { shape: { memoryGib: null, cpus: 4, privileged: false, gpu: true }, when: `nextRestart` }, older)).toBe(
+            `ic sandbox reshape work --memory default --cpus 4 --privileged off --gpus on --later`,
+        );
+        expect(sandboxFallback(`resources`, `work`, { forget: true }, older)).toBe(`ic sandbox reshape work --forget`);
+        expect(sandboxFallback(`resources`, `work`, { forget: true }, older)).not.toContain(`--set`);
+    });
+
     // The form always answers with something; without an answer there is no line that would do what was asked.
     test(`is offered no line at all without the form's answer`, () => {
         expect(sandboxFallback(`resources`, `work`)).toBeUndefined();

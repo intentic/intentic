@@ -27,6 +27,8 @@ flowchart LR
   answers both. Before its first `ic` call the agent makes
   sure the installed `ic` is at least as new as itself, fetching its own release's into `~/.intentic/ic/bin` when it
   is not ([`tools/ic-binary.ts`](src/device/tools/ic-binary.ts)), since a new verb here arrives with a new verb there.
+  A fetch that fails is logged with its reason and reported in the device's facts (`icOutOfDate`, beside `features`),
+  so a stale `ic` explains why logs and saving a shape are missing; the next sandbox action tries again.
 - **sync** (`src/sync/`): `sync setup` enrolls an SSH key and runs Mutagen against the sandbox's sshd, reached
   through a loopback port tunnelled over a WebSocket. It keeps a folder two-way synced, forwards every workspace
   port to the same localhost port, and fast-forwards local git clones from the sandbox.
@@ -35,8 +37,9 @@ flowchart LR
   Windows side hands its own to the agent it starts in each distro, so every OS install of one PC answers with one id;
   a sandbox joins enrollments, sync enrollments and device rows on it, never on a hostname.
 - The features a device advertises (`set-shape`, `reshape-later`) are read off the `ic` under it, from that `ic`'s own
-  help (both need `ic sandbox shape --set`), rather than listed beside the code; the device RPC inputs are strict, so an op or field this agent does not
-  know is refused rather than dropped.
+  help (both need `ic sandbox shape --set`), rather than listed beside the code; the device RPC inputs are strict, so
+  an op or field this agent does not know is refused rather than dropped. `reshape-later` and the old `reshape` op
+  stay only for pages and daemons from before `set-shape` (v1.312.0 and older), and go in v1.314.0.
 - Every path under the user's home goes through `homeDir()` from [local-agent](../local-agent), which follows a `HOME`
   set after startup; a test holds the sources to it.
 - Scopes are enforced here and nowhere else: the sandbox only asks, and a refusal names the switch that is off.

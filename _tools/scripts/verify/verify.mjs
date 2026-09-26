@@ -45,7 +45,9 @@ if (landFrom !== askedFrom) {
     say(`the land's base ${askedFrom.slice(0, 9)} is not on this tree's history; what it added is measured from HEAD ${head.slice(0, 9)}`);
 }
 const afterLand = landFrom !== undefined && landFrom !== "";
-// What the land changed, for the fixers that act only on what changed; undefined (git could not say) widens them.
+// What the land changed, for the fixers that act only on what changed. Undefined (git could not say) widens only
+// rustfmt, to every crate; the baseline tightening, the contract lock and the state shapes then write nothing, since
+// they cannot tell this land's change from any other's.
 const landed = afterLand ? changedSince(root, landFrom) : undefined;
 
 // What a machine decides is written before anything is judged, on the tree the land left: formatting, and each failing

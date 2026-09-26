@@ -9,8 +9,9 @@
 # machines serving production kept the build they were started with; the pipeline went green each time,
 # because pushing an image is what it checked.
 #
-# What that cost: hosted sandboxes moved off tunnels onto `fly-replay` (the daemon on a hosted machine dials
-# nothing, by design — reach-report.ts, ingress-tunnel.ts reachPosture). The edge that carries that decision
+# What that cost: hosted sandboxes had moved off tunnels onto `fly-replay` (at the time the daemon on a hosted
+# machine dialled nothing; it dials the tunnel again now, reach-posture.ts, and the edge serves a held tunnel first
+# and replays only a hosted sandbox holding none). The edge that carried that decision
 # was ten days older than the sandbox image and had no replay in it, so every hosted sandbox answered 502 at
 # its own public name, probed itself for five minutes, and told its owner to start it over — which could
 # never help, because nothing about the sandbox was wrong.

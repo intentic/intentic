@@ -197,6 +197,7 @@ test("a hub built over a memory that already holds a peer lists its tools before
     const live = createPeerHub<Client, { version: string }, Facts, Scopes>(spec, logger, {
         get: (key) => stored.get(key),
         set: (key, tools) => void stored.set(key, tools),
+        delete: (key) => void stored.delete(key),
     });
     expect(live.knownTools("laptop")).toEqual({ tools: [{ name: "run_command" }] });
     live.rememberTools("laptop", { tools: [{ name: "run_command" }, { name: "screenshot" }] });
@@ -248,6 +249,8 @@ test("a rekeyed peer keeps its socket and answers under its new id", async () =>
     expect(live.online("rog")).toBe(false);
     expect(await live.mcp("desk", { jsonrpc: "2.0", id: 1, method: "ping" })).toEqual({ echoed: { jsonrpc: "2.0", id: 1, method: "ping" } });
     expect(live.knownTools("desk")).toEqual({ tools: [{ name: "run_command" }] });
+    // Moved, not copied: the old id holds nothing, so its tools are not listed twice.
+    expect(live.knownTools("rog")).toBeUndefined();
     // Its socket closing later drops it under the id it is held by now, not the one it attached with.
     detach();
     expect(live.online("desk")).toBe(false);

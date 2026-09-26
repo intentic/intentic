@@ -355,7 +355,31 @@ export const adoptWorkspaceRemote = async (
 // owner-gated route, since publishing is outward and deriving stays read-only. What travels is root's exclude list
 // already: nested repos, the reference shelf, .intentic/local and /secrets, .env*, junk dirs.
 
-const created = async (host: GitHost, name: string, owner: string | undefined): Promise<string> => {
+// What a failed lookup logs: the status github answered with, or why nothing came back at all.
+export type LoginLookupWarn = (fields: { readonly status?: number; readonly err?: string }, message: string) => void;
+type Fetcher = (url: string, init: { readonly headers: Record<string, string> }) => Promise<Response>;
+const GithubUserSchema = z.object({ login: z.string() });
+
+// The login the token authenticates as, to tell the owner's own account from an organization. A lookup that fails (a
+// token that cannot read its user, a network error, an answer that is not JSON) is logged with its reason and read as
+// no login: the owner is then taken for an organization, whose endpoint answers for itself, and publishing goes on
+// rather than stopping at a question it did not need answered.
+export const githubLogin = async (host: Pick<GitHost, "apiBase" | "token">, warn: LoginLookupWarn, fetcher: Fetcher = fetch): Promise<string | undefined> => {
+    const unread = "publish: github would not say which account this token is, so the owner is taken for an organization";
+    try {
+        const user = await fetcher(`${host.apiBase}/user`, { headers: githubHeaders(host.token) });
+        if (!user.ok) {
+            warn({ status: user.status }, unread);
+            return undefined;
+        }
+        return GithubUserSchema.safeParse(await user.json()).data?.login;
+    } catch (error) {
+        warn({ err: errorMessage(error) }, unread);
+        return undefined;
+    }
+};
+
+const created = async (host: GitHost, name: string, owner: string | undefined, warn: LoginLookupWarn): Promise<string> => {
     if (host.provider === "gitlab") {
         const response = await fetch(`${host.apiBase}/projects`, {
             method: "POST",
@@ -373,10 +397,9 @@ const created = async (host: GitHost, name: string, owner: string | undefined): 
         }
         return body.http_url_to_repo;
     }
-    // github: an owner other than the authenticated user is an organization, with its own endpoint.
-    // A token that cannot read its own user leaves the owner read as an organization, whose endpoint answers for itself.
-    const user = await fetch(`${host.apiBase}/user`, { headers: githubHeaders(host.token) });
-    const login = user.ok ? ((await user.json()) as { login?: string }).login : undefined;
+    // github: an owner other than the authenticated user is an organization, with its own endpoint. No owner named is
+    // the token's own account, with nothing to look up.
+    const login = owner === undefined ? undefined : await githubLogin(host, warn);
     const path = owner === undefined || owner === login ? "/user/repos" : `/orgs/${encodeURIComponent(owner)}/repos`;
     const response = await fetch(`${host.apiBase}${path}`, {
         method: "POST",
@@ -420,7 +443,7 @@ export const publishWorkspace = async (services: Services, input: WorkspacePubli
                 "no github or gitlab account is connected, so there is nowhere to create the repository; connect one, or paste a URL you made yourself",
             );
         }
-        remote = await created(host, repoNameFrom(input.name ?? services.config.sandbox.name), input.owner);
+        remote = await created(host, repoNameFrom(input.name ?? services.config.sandbox.name), input.owner, (fields, message) => services.logger.warn(fields, message));
     }
     await git(root, ["remote", "add", "origin", remote]).catch((error: unknown) => {
         throw new WorkspaceRemoteError(gitRefusal(error, "could not add the workspace remote"));
