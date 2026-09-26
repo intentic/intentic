@@ -39,6 +39,8 @@ jest.mock(`../../agents/fleet/agentActions`, () => ({ startAgent: (prompt?: stri
 // Container verbs, recorded the same way: which op left for which machine, and for `reshape`, what the form
 // asked for.
 const verbCalls: { hostId: string; slug: string; op: string; resources?: unknown; shape?: unknown; when?: string }[] = [];
+let holdVerb = false;
+let releaseVerb: (() => void) | undefined;
 // Both of the above in one list, in the order they left: which half of a removal goes first is a rule of its own,
 // and two arrays cannot say.
 const flow: string[] = [];
@@ -64,7 +66,12 @@ jest.mock(`./useDevices`, () => {
                 ...(payload?.when === undefined ? {} : { when: payload.when }),
             });
             flow.push(`${op}:${slug}`);
-            return Promise.resolve(`Reshaped sandbox "${slug}".`);
+            const answer = `Reshaped sandbox "${slug}".`;
+            return holdVerb
+                ? new Promise<string>((resolve) => {
+                      releaseVerb = () => resolve(answer);
+                  })
+                : Promise.resolve(answer);
         },
         runDeviceCommand: (hostId: string, command: string, ask?: { sandboxId?: string }) => {
             mirrorCalls.push({ hostId, command, sandboxId: ask?.sandboxId });
@@ -231,6 +238,8 @@ afterEach(() => {
     daemon.value = undefined;
     mirrorCalls.length = 0;
     verbCalls.length = 0;
+    holdVerb = false;
+    releaseVerb = undefined;
     flow.length = 0;
     agentCalls.length = 0;
     agentAnswer = () => Promise.resolve(AGENT_UPDATED);
@@ -1592,6 +1601,22 @@ it(`stops every ticked running sandbox on one press, and says so once`, async ()
     expect(el.textContent ?? ``).toContain(`radarsu-rog: 2 sandboxes stopped.`);
     // The ticks went with the press.
     expect(el.textContent ?? ``).toContain(`Select all`);
+});
+
+it(`shows translated progress while a batch stop is still running`, async () => {
+    granted();
+    const el = mount([busyMachine()]);
+    boxes(el)[0]?.click();
+    await nextTick();
+    holdVerb = true;
+    rowButton(el, `Stop 2`)?.click();
+    await nextTick();
+    expect(el.querySelector(`[role="status"]`)?.textContent).toBe(`Stopping 1 of 2…`);
+
+    holdVerb = false;
+    releaseVerb?.();
+    await settle();
+    expect([...el.querySelectorAll(`[role="status"]`)].map((status) => status.textContent)).not.toContain(`Stopping 1 of 2…`);
 });
 
 // An update takes each sandbox offline while it restarts, so it asks first, naming every row.

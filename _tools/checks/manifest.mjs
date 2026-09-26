@@ -105,6 +105,7 @@ export const CHECKS = [
         needs: "node_modules",
         gate: "tidy",
         scoped: true,
+        ratchet: true,
         about: "no English typed into a template that vue-i18n renders: the words live in a catalog",
     },
     {

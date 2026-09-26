@@ -268,7 +268,7 @@ it(`reloads on the one connected device when nothing claims to run this sandbox`
 // One PC answering through two doors folds to one machine, so the fallback above is offered — but the reload is a
 // `sh` script inside the distro's own filesystem, and the Windows door would hand it to PowerShell.
 it(`reloads through the distro's door, not the Windows side of the same PC`, () => {
-    const facts = { arch: `x64`, roots: [], hostname: `rog` };
+    const facts = { arch: `x64`, roots: [], hostname: `rog`, machineId: `m-rog-0123456789` };
     fleet.value = [
         {
             key: `rog`,

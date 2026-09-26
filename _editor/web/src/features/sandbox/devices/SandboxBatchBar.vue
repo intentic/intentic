@@ -26,16 +26,16 @@ const hint = (action: BatchAction): string | undefined =>
     partial(action) ? t(`sandbox.devicePage.batchPartial`, { count: action.groups.length, total: selection.chosen.value.length }) : undefined;
 
 // Where a run over the list has got: the row it is on, counted from one.
-const WORKING: Record<BatchVerb, string> = {
-    start: `sandbox.devicePage.batchStarting`,
-    stop: `sandbox.devicePage.batchStopping`,
-    restart: `sandbox.devicePage.batchRestarting`,
-    update: `sandbox.devicePage.batchUpdating`,
-    remove: `sandbox.devicePage.batchRemoving`,
+const WORKING: Record<BatchVerb, (at: number, total: number) => string> = {
+    start: (at, total) => t(`sandbox.devicePage.batchStarting`, { at, total }),
+    stop: (at, total) => t(`sandbox.devicePage.batchStopping`, { at, total }),
+    restart: (at, total) => t(`sandbox.devicePage.batchRestarting`, { at, total }),
+    update: (at, total) => t(`sandbox.devicePage.batchUpdating`, { at, total }),
+    remove: (at, total) => t(`sandbox.devicePage.batchRemoving`, { at, total }),
 };
 const progress = computed(() => {
     const run = ops.batchProgress.value;
-    return run === undefined ? undefined : t(WORKING[run.verb], { at: Math.min(run.done + 1, run.total), total: run.total });
+    return run === undefined ? undefined : WORKING[run.verb](Math.min(run.done + 1, run.total), run.total);
 });
 </script>
 
