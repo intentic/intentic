@@ -48,8 +48,11 @@ export const usageWindowLabel = (window: UsageWindow): string =>
             : window.label
         : (WINDOW_NAMES[window.kind] ?? window.kind);
 
-// Display order: soonest window first, then broad weekly, then per-model, then anything unrecognised.
-const WINDOW_ORDER = [`five_hour`, `seven_day`, `seven_day_opus`, `seven_day_sonnet`, `seven_day_oauth_apps`];
+// Display order: the account-wide ceilings outermost-first (monthly, weekly, then the 5-hour throttle nested inside
+// them), then per-model slices, then anything unrecognised. The top line is read as "how much is left"; a
+// half-full 5-hour bar above a spent weekly one read as room that isn't there, while the weekly line is never
+// contradicted by the one below it (a spent 5-hour window reopens within hours).
+const WINDOW_ORDER = [`monthly`, `seven_day`, `five_hour`, `seven_day_opus`, `seven_day_sonnet`, `seven_day_oauth_apps`];
 export const orderedWindows = (usage: AccountUsage): UsageWindow[] =>
     usage.windows.toSorted((left, right) => {
         const rank = (window: UsageWindow): number => {

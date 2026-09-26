@@ -161,8 +161,10 @@ const ambiguousLabels = (rows: readonly PlanLimitRow[]): ReadonlySet<string> => 
     return new Set([...seen].filter(([, count]) => count > 1).map(([label]) => label));
 };
 
-// One lane per pool that gates something, shortest window first, tightest first within a window. No cap: plans publish
-// few enough pools that summarizing one would hide the one about to gate a turn.
+// One lane per pool that gates something, longest window first, tightest first within a window. No cap: plans publish
+// few enough pools that summarizing one would hide the one about to gate a turn. The week leads because the top lane is
+// read as the account's room: a roomy 5-hour lane above a spent week read as capacity that isn't there, while the week
+// is never overruled by the session nested inside it.
 const capacityLanes = (row: PlanLimitRow): readonly CapacityLane[] =>
     row.pools
         .filter((pool) => pool.gates !== `none`)
@@ -178,13 +180,13 @@ const capacityLanes = (row: PlanLimitRow): readonly CapacityLane[] =>
                     percent: pool.percent,
                     resetsAt: pool.resetsAt,
                 },
-                // Unreadable periods sort last, not as zero-length.
-                seconds: period?.seconds ?? Number.POSITIVE_INFINITY,
+                // Unreadable periods sort last, not as the longest.
+                seconds: period?.seconds ?? Number.NEGATIVE_INFINITY,
             };
         })
         .toSorted(
             (left, right) =>
-                left.seconds - right.seconds || right.lane.percent - left.lane.percent || left.lane.label.localeCompare(right.lane.label),
+                right.seconds - left.seconds || right.lane.percent - left.lane.percent || left.lane.label.localeCompare(right.lane.label),
         )
         .map((entry) => entry.lane);
 

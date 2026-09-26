@@ -82,7 +82,7 @@ describe(`usageWindowLabel`, () => {
 });
 
 describe(`orderedWindows`, () => {
-    it(`puts the soonest-biting pool first and the broad weekly one ahead of the per-model ones`, () => {
+    it(`puts the broad weekly ceiling first, the 5-hour throttle inside it next, then the per-model slices`, () => {
         const ordered = orderedWindows(
             usage({
                 windows: [
@@ -93,7 +93,7 @@ describe(`orderedWindows`, () => {
                 ],
             }),
         );
-        expect(ordered.map((entry) => entry.kind)).toEqual([`five_hour`, `seven_day`, `seven_day_opus`, `model:Fable`]);
+        expect(ordered.map((entry) => entry.kind)).toEqual([`seven_day`, `five_hour`, `seven_day_opus`, `model:Fable`]);
     });
 });
 
@@ -340,7 +340,7 @@ describe(`planHeadroom`, () => {
         });
         expect(mixed.percent).toBe(91);
         expect(mixed.binding).toEqual({ kind: `seven_day`, label: `Weekly · all models`, percent: 91, resetsAt: 1_700_000_000, gates: `all` });
-        expect(mixed.pools.map((pool) => pool.label)).toEqual([`5-hour session`, `Weekly · all models`]);
+        expect(mixed.pools.map((pool) => pool.label)).toEqual([`Weekly · all models`, `5-hour session`]);
     });
 });
 

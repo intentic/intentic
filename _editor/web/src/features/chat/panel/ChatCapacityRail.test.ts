@@ -197,10 +197,10 @@ it(`draws both the session and the week, each named by its own window`, () => {
     ]);
 
     // A bar each, at what its own pool has left, rather than one bar at the worse of the two.
-    expect(barWidths(el)).toEqual([`88%`, `13%`]);
-    // Each stands beside its window's length, short enough to need no legend; the 5-hour session comes first.
-    expect(lanes(el)).toEqual([`5h`, `wk`]);
-    expect([...el.querySelectorAll(`[aria-hidden="true"] .tabular-nums`)].map((node) => node.textContent?.trim())).toEqual([`88%`, `13%`]);
+    expect(barWidths(el)).toEqual([`13%`, `88%`]);
+    // Each stands beside its window's length, short enough to need no legend; the week comes first.
+    expect(lanes(el)).toEqual([`wk`, `5h`]);
+    expect([...el.querySelectorAll(`[aria-hidden="true"] .tabular-nums`)].map((node) => node.textContent?.trim())).toEqual([`13%`, `88%`]);
     // Every figure is what is left, said once above them rather than on each lane.
     expect(el.textContent).toContain(`Usage left`);
 });

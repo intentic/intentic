@@ -78,9 +78,9 @@ describe(`what the rail offers`, () => {
         const [entry] = chatCapacity([], NOW).providers;
         expect(entry?.rows[0]?.percent).toBe(73);
         expect(entry?.rows[0]?.lanes.map((lane) => [lane.short, lane.scope, lane.percent])).toEqual([
-            [`5h`, undefined, 58],
             [`wk`, `Fable`, 100],
             [`wk`, undefined, 73],
+            [`5h`, undefined, 58],
         ]);
         expect(chatCapacity([], NOW).out).toEqual([]);
     });
@@ -211,9 +211,9 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
         const [entry] = chatCapacity([], NOW).providers;
         expect(entry?.rows[0]).toMatchObject({ percent: 40 });
         expect(entry?.rows[0]?.lanes.map((lane) => [lane.scope, lane.percent])).toEqual([
-            [undefined, 20],
             [`Fable`, 100],
             [undefined, 40],
+            [undefined, 20],
         ]);
     });
 
@@ -464,7 +464,7 @@ describe(`the allowances behind one account`, () => {
         windows: windows.map((window) => ({ resetsAt: 1_700_003_600, gates: `all` as const, ...window })),
     });
 
-    it(`draws a lane per allowance, shortest window first, and names each by its length`, () => {
+    it(`draws a lane per allowance, longest window first, and names each by its length`, () => {
         providerAccounts.value = {
             claude: [claude({ id: `a`, usage: pools({ kind: `seven_day`, utilization: 87 }, { kind: `five_hour`, utilization: 12 }) })],
         };
@@ -472,8 +472,8 @@ describe(`the allowances behind one account`, () => {
         const [row] = chatCapacity([], NOW).providers[0]?.rows ?? [];
         expect(row?.percent).toBe(87);
         expect(row?.lanes.map((lane) => [lane.short, lane.percent])).toEqual([
-            [`5h`, 12],
             [`wk`, 87],
+            [`5h`, 12],
         ]);
     });
 
@@ -531,7 +531,7 @@ describe(`the allowances behind one account`, () => {
         };
 
         const [row] = chatCapacity([], NOW).providers[0]?.rows ?? [];
-        expect(row?.lanes.map((lane) => lane.short)).toEqual([`5h`, `12h`, `wk`]);
+        expect(row?.lanes.map((lane) => lane.short)).toEqual([`wk`, `12h`, `5h`]);
     });
 });
 
