@@ -388,6 +388,78 @@ instead of a daemon, so you can open anything, but nothing here runs.
 Start a sandbox on your own machine and the same surfaces point at your repos.
 `;
 
+// Each repo's own front page and manifest, so a folder read through one file name (the home's cover) has something to
+// show in every folder: the storefront and the API each say what they are in both.
+const WEB_README = `# web
+
+The storefront: pricing, checkout and the signup flow, built with React and Vite.
+
+## Run it
+
+\`\`\`sh
+pnpm install
+pnpm dev        # http://localhost:5173
+\`\`\`
+
+## Where things are
+
+- \`src/pricing/\`: the pricing page and the checkout panel beside it
+- \`src/lib/checkout.ts\`: talks to the API's \`/checkout\` route
+- \`tests/\`: Playwright specs, one per flow
+
+Checkout needs the API running; point \`VITE_API_URL\` at it.
+`;
+
+const API_README = `# api
+
+The storefront's backend: users, checkout sessions and the Stripe webhook.
+
+| Route | Does |
+| --- | --- |
+| \`POST /checkout\` | Opens a Stripe checkout session for a plan |
+| \`POST /stripe/webhook\` | Marks a session paid when Stripe says so |
+| \`GET /users/:id\` | One user, soft-deleted ones excluded |
+
+Run it with \`pnpm dev\`; it listens on port 8080 and reads \`DATABASE_URL\` and \`STRIPE_SECRET_KEY\`.
+`;
+
+const WEB_PACKAGE = `{
+    "name": "@acme/web",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "vite build",
+        "test": "playwright test"
+    },
+    "dependencies": {
+        "react": "^19.1.0",
+        "react-dom": "^19.1.0"
+    },
+    "devDependencies": {
+        "@playwright/test": "^1.55.0",
+        "vite": "^7.1.0"
+    }
+}
+`;
+
+const API_PACKAGE = `{
+    "name": "@acme/api",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "tsx watch src/server.ts",
+        "build": "tsc -p .",
+        "migrate": "tsx src/db/migrations.ts"
+    },
+    "dependencies": {
+        "hono": "^4.9.0",
+        "postgres": "^3.4.7",
+        "stripe": "^18.4.0"
+    }
+}
+`;
+
 // One flat, root-relative table backing the tree, every read, search and write, so a file only needs adding here once.
 // A string is the real body; a number is a size-only stand-in. A missing path answers 404. Mutable: writes here persist
 // until reload.
@@ -409,7 +481,8 @@ const SOURCES: [string, string | number][] = [
     [`web/tests/checkout.spec.ts`, CHECKOUT_SPEC],
     [`web/tests/signup.spec.ts`, 2_010],
     [`web/.github/workflows/ci.yml`, 1_240],
-    [`web/package.json`, 780],
+    [`web/README.md`, WEB_README],
+    [`web/package.json`, WEB_PACKAGE],
     [`web/pnpm-lock.yaml`, 184_600],
     [`web/vite.config.ts`, 512],
     // Ignored: tree lists it grayed, and expanding it is what /workspace/children answers.
@@ -424,7 +497,8 @@ const SOURCES: [string, string | number][] = [
     [`api/src/server.ts`, 1_640],
     [`api/.github/workflows/api.yml`, 980],
     [`api/Dockerfile`, 640],
-    [`api/package.json`, 690],
+    [`api/README.md`, API_README],
+    [`api/package.json`, API_PACKAGE],
     [`api/pnpm-lock.yaml`, 96_200],
 
     // A dropped archive: listed as the file it is, and entered like a folder (ARCHIVES below answers what is inside).
@@ -568,8 +642,14 @@ export const workspaceChildren = (path: string): WorkspaceChildren => {
 // Unrecorded file says so when opened, rather than an empty buffer (looks broken) or invented content.
 const unrecordedBody = (path: string): string => `// ${path}\n//\n// The demo carries a few files in full; this one is listed but not recorded.\n`;
 
+// A file inside a dropped archive, read through it the way the daemon reads one out of its unpacked copy.
+const archiveMember = (path: string): string | number | undefined => {
+    const archive = archiveAt(path);
+    return archive === undefined || archive.inside === `` ? undefined : archive.members.find(([member]) => member === archive.inside)?.[1];
+};
+
 export const fileBody = (path: string): string | undefined => {
-    const entry = FILES.get(path);
+    const entry = FILES.get(path) ?? archiveMember(path);
     return entry === undefined ? undefined : typeof entry === `number` ? unrecordedBody(path) : entry;
 };
 

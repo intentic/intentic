@@ -33,6 +33,9 @@ export const HOME_SEARCH: InjectionKey<HomeSearch> = Symbol(`home-search`);
 const homeDir = sandboxRef<string>(() => workspaceDir.value);
 // The current entry: what the last click, in the tree or on the home, landed on. Undefined after entering a folder.
 const selected = sandboxRef<string | undefined>(() => undefined);
+// The cover (homeCover.ts): one file name the home shows for every folder in place of its tiles, undefined for the
+// tiles. Held like the folder, never stored: a reload opens on the tiles, where nothing needs explaining.
+const cover = sandboxRef<string | undefined>(() => undefined);
 
 // Re-roots when the scope moves: a folder path means nothing under a different project root.
 watch(workspaceDir, (root) => {
@@ -59,5 +62,5 @@ const pick = (path: string, type: "file" | "dir"): void => {
 };
 
 export function useHome() {
-    return { homeDir, selected, openDir, pick };
+    return { homeDir, selected, cover, openDir, pick };
 }

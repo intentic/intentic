@@ -6,6 +6,7 @@ import type { RowAction } from "../explorer/rowActions";
 import { createFileVerbs } from "../explorer/tree/fileVerbs";
 import { fileVerbSeams } from "../explorer/tree/fileVerbSeams";
 import { useEmptyDirs } from "../explorer/useEmptyDirs";
+import { opensAsFolder } from "../files/archiveEntries";
 import { provisionalAt } from "../files/provisionalEntries";
 
 // The tree's own verbs (explorer/tree) over the home's tiles, every one aimed at the open folder; the clipboard is shared.
@@ -22,6 +23,8 @@ export interface HomeActionsContext {
     readonly open: (entry: WorkspaceTreeEntry) => void;
     // A file just created opens straight into editing.
     readonly openCreated: (path: string) => void;
+    // Reads a file's name in every folder in place of the tiles (homeCover.ts): the file right-clicked is the example.
+    readonly cover: (name: string) => void;
     // A folder's own rows (documents, personas, checks, management), composed by the page.
     readonly dirActions: (dir: string) => readonly RowAction[];
 }
@@ -57,12 +60,17 @@ export function useHomeActions(ctx: HomeActionsContext) {
         rowActions: ctx.dirActions,
         // A folder tile takes a paste itself, but a create lands in the open folder, where its tile can be seen.
         createIn: () => ctx.dir.value,
-        // What a double-click does, for the keyboard and touch.
+        // What a double-click does, for the keyboard and touch; beside a file, reading its name in every folder.
         frame: (target, multi) => ({
             head:
                 target === undefined || multi
                     ? []
-                    : [{ label: t(`ui.action.open`), icon: target.type === `dir` ? `folder-open` : `file`, command: () => ctx.open(target) }],
+                    : [
+                          { label: t(`ui.action.open`), icon: target.type === `dir` ? `folder-open` : `file`, command: () => ctx.open(target) },
+                          ...(target.type === `file` && !opensAsFolder(target)
+                              ? [{ label: t(`workspace.homeCover.showInEveryFolder`, { name: target.name }), icon: `book`, command: () => ctx.cover(target.name) }]
+                              : []),
+                      ],
         }),
     });
     const { selection, select, selectAll, clear } = selecting;

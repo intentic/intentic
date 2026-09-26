@@ -56,6 +56,7 @@ One word per idea on screen and in code. The retired spellings are refused by
 | quick bar | The parked chat's pill that grows into the composer (`ChatQuickBar.vue`); what it unfolds is its transcript |
 | quick look | A card a hover raises: a home tile's preview, a bigger picture, an attached file's first lines |
 | peek | A tab opened as a look, which closes when the reader moves on unless kept (`Conversation.peek`), and nothing else |
+| cover | The one file name the home shows for every folder in place of its tiles (README.md, package.json), read beside the folders it walks (`features/workspace/home/homeCover.ts`); on screen, "Show README.md in every folder" |
 
 The status bar still stores its panel under `ui-board-dock-*` in local storage: renaming a stored key would close
 every reader's open panel.

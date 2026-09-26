@@ -1,10 +1,10 @@
-<!-- The home: the folder being looked at as large tiles, folders first and files by kind, with a quick look on hover. -->
+<!-- The home: the folder being looked at as large tiles, folders first and files by kind, with a quick look on hover; or read through one file name in every folder. -->
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { ContextMenu, useHoverIntent, useLoadingReveal } from "@intentic/ui";
 import { basename, parentDir } from "@intentic/ui/path";
-import { computed, inject, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { variableRows } from "../../../lib/rowWindow";
 import { useRowWindow } from "../../../lib/useRowWindow";
 import { useLayout } from "../../../shell/window/useLayout";
@@ -23,6 +23,8 @@ import { homeGroups, homeOrder, labelsShown } from "./homeOrder";
 import { contentMatches, nameMatches, RESULTS_CAP } from "./homeResults";
 import { HOME_DIR_ACTIONS, HOME_SEARCH, useHome } from "./useHome";
 import { useHomeActions } from "./useHomeActions";
+import HomeCover from "./HomeCover.vue";
+import HomeCoverPicker from "./HomeCoverPicker.vue";
 import HomeQuickLook from "./HomeQuickLook.vue";
 import HomeTile from "./HomeTile.vue";
 import { useT } from "@intentic/ui/i18n";
@@ -33,7 +35,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { homeDir, openDir, selected } = useHome();
+const { homeDir, openDir, selected, cover } = useHome();
 const { tree, entriesByPath, entry: entryAt, listingOf, hiddenIn, keepListed, lazyLoading, isLoading } = useWorkspaceTree();
 const { openFile } = useWorkspaceTabs();
 const layout = useLayout();
@@ -192,6 +194,7 @@ const { selection, select, clear, rules, inline, endEdit, transfer, menu, menuIt
             openFile(path, `keep`);
             layout.setEditMode(true);
         },
+        cover: (name) => void showCover(name),
         dirActions,
     });
 const { pending, noDrops } = rules;
@@ -218,8 +221,10 @@ const go = (dir: string, toward: "forward" | "back"): void => {
     direction.value = toward;
     openDir(dir);
     // The tile that had the keyboard is about to unmount; the home itself keeps it, so the next key still lands here.
+    // Under a cover, the rail's row for wherever the selection lands takes it back once the rows have settled.
     if (home.value?.contains(document.activeElement) === true) {
         home.value.focus({ preventScroll: true });
+        void coverView.value?.focusCurrent();
     }
 };
 // Going up lands on the folder just left, so a wrong turn is one key to undo.
@@ -310,6 +315,38 @@ const onTileEnter = (entry: WorkspaceTreeEntry, el: HTMLElement): void => {
 };
 const onTileLeave = (): void => look.leave();
 
+// --- The cover: one file name read in every folder in place of the tiles (homeCover.ts) --------------------------------
+const covering = computed(() => cover.value !== undefined);
+const coverView = ref<InstanceType<typeof HomeCover>>();
+const showCover = async (name: string): Promise<void> => {
+    closeLook();
+    void endEdit(`cancel`);
+    // A query narrows tiles the cover does not draw; left running, it would only go on narrowing the tree unseen.
+    if (querying.value) {
+        search?.clear();
+    }
+    cover.value = name;
+    // Chosen from a menu or a chooser that has closed: the rail takes the keyboard, whichever cover it was showing.
+    await nextTick();
+    await coverView.value?.focusCurrent();
+};
+// Back on the tiles, the folder the cover had selected is the tile the keyboard lands on.
+const dropCover = async (): Promise<void> => {
+    cover.value = undefined;
+    await nextTick();
+    const at = order.value.findIndex((entry) => entry.path === selected.value);
+    if (at === -1) {
+        home.value?.focus({ preventScroll: true });
+        return;
+    }
+    await focusTile(at);
+};
+// A folder below that holds one, named by a folder that does not: entered at its parent, with it selected.
+const reveal = (folder: string): void => {
+    go(parentDir(folder), `forward`);
+    selected.value = folder;
+};
+
 // --- Keyboard ------------------------------------------------------------------------------------------------------
 // Only the drawn tiles are here to find, which is a screenful rather than the folder; a tile outside the window has no
 // element until `bands.show` has brought its band in.
@@ -367,6 +404,13 @@ const onNavigationKey = (event: KeyboardEvent): boolean => {
 const typesIntoFilter = (event: KeyboardEvent): boolean =>
     event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey && search !== undefined;
 const onKeydown = (event: KeyboardEvent): void => {
+    // Under a cover the keys are its own (flip, go in, go back); none of the tiles' verbs have a tile to act on.
+    if (covering.value) {
+        if (coverView.value?.onKey(event) === true) {
+            event.preventDefault();
+        }
+        return;
+    }
     // The verbs first (Delete, F2, select all); while a name is being typed, every key is the field's.
     if (handleKey(event) || onNavigationKey(event)) {
         return;
@@ -386,6 +430,10 @@ const onTile = (event: Event): boolean => event.target instanceof Element && eve
 // A click on the home itself, not a tile, drops the selection, like clicking a desktop's wallpaper; it also parks
 // focus here, so cut, copy and paste work right after clicking in.
 const onBackgroundClick = (event: MouseEvent): void => {
+    // Under a cover the selection is which folder is being read, so a click on the page must not drop it.
+    if (covering.value) {
+        return;
+    }
     if (!onTile(event)) {
         clear();
         home.value?.focus({ preventScroll: true });
@@ -393,7 +441,7 @@ const onBackgroundClick = (event: MouseEvent): void => {
 };
 // A tile's own right-click reached its handler first; the background's menu is for the folder itself.
 const onBackgroundMenu = (event: MouseEvent): void => {
-    if (!onTile(event)) {
+    if (!onTile(event) && !covering.value) {
         openMenu(event, undefined);
     }
 };
@@ -410,9 +458,9 @@ const onBackgroundMenu = (event: MouseEvent): void => {
         @pointerleave="onTileLeave"
         @click="onBackgroundClick"
         @contextmenu="onBackgroundMenu"
-        @copy="onCopyEvent($event, 'copy')"
-        @cut="onCopyEvent($event, 'cut')"
-        @paste="onPasteEvent"
+        @copy="covering || onCopyEvent($event, 'copy')"
+        @cut="covering || onCopyEvent($event, 'cut')"
+        @paste="covering || onPasteEvent($event)"
         :data-drop-dir="noDrops(homeDir) ? undefined : homeDir"
         @dragenter.stop.prevent
         @dragover="onDragOver($event, homeDir)"
@@ -445,8 +493,9 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                 <Icon name="box" aria-hidden="true" />
                 {{ t(`workspace.words.readOnly`) }}
             </span>
-            <!-- The sidebar's query, here too; the placeholder names the scope the sidebar set, since it may be closed. -->
-            <div v-if="search !== undefined" class="ml-auto flex items-center gap-2 pl-4">
+            <!-- The sidebar's query, here too; the placeholder names the scope the sidebar set, since it may be closed. Under a
+                 cover there are no tiles for it to narrow, and the chip naming the cover stands in its place. -->
+            <div v-if="search !== undefined && !covering" class="ml-auto flex items-center gap-2 pl-4">
                 <span v-if="querying && !searching" class="text-2xs tabular-nums text-subtle"
                     >{{ results.length.toLocaleString() }}{{ results.length >= RESULTS_CAP ? "+" : "" }}</span
                 >
@@ -479,11 +528,15 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                     </button>
                 </div>
             </div>
+            <HomeCoverPicker :cover="cover" :class="search === undefined || covering ? `ml-auto` : `ml-2`" @choose="showCover" @drop="dropCover" />
         </nav>
 
         <!-- The tiles scroll under the breadcrumb rather than with it, so the window measures this element alone. Never
-             sideways: the folder transition slides the tiles past the edge, which would flash a horizontal scrollbar. -->
+             sideways: the folder transition slides the tiles past the edge, which would flash a horizontal scrollbar.
+             Hidden under a cover, never unmounted: the window measures this element once, on mount, and a new one would
+             leave the tiles blind when the cover goes. -->
         <div
+            v-show="!covering"
             ref="scroller"
             class="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
             @scroll.passive="
@@ -620,6 +673,19 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                 </div>
             </Transition>
         </div>
+
+        <!-- The cover, in the tiles' place: the folders down the side, the chosen file of the selected one beside them. -->
+        <HomeCover
+            v-if="cover !== undefined"
+            ref="coverView"
+            :name="cover"
+            :root="workspaceDir"
+            :root-label="rootLabel"
+            @enter="(folder) => go(folder, 'forward')"
+            @up="up"
+            @reveal="reveal"
+            @exit="dropCover"
+        />
 
         <!-- A drop on the home itself lands in the open folder; the pill says so while a drag is over it and no tile has it. -->
         <div

@@ -24,13 +24,14 @@ const homeOver = () => {
     const order = ref<readonly WorkspaceTreeEntry[]>([SUB, A, B]);
     const lead = ref<string | undefined>(undefined);
     const open = jest.fn((entry: WorkspaceTreeEntry) => entry.path);
+    const cover = jest.fn((name: string) => name);
     const el = document.createElement(`div`);
     document.body.append(el);
     const home = effectScope().run(() =>
-        useHomeActions({ dir: ref(`docs`), order, lead, host: ref(el), open, openCreated: jest.fn(), dirActions: () => [] }),
+        useHomeActions({ dir: ref(`docs`), order, lead, host: ref(el), open, openCreated: jest.fn(), cover, dirActions: () => [] }),
     )!;
     const marked = (): string[] => [...home.selection.value];
-    return { home, order, lead, open, store: current.store, marked };
+    return { home, order, lead, open, cover, store: current.store, marked };
 };
 const CTRL = { shiftKey: false, ctrlKey: true, metaKey: false };
 const SHIFT = { shiftKey: true, ctrlKey: false, metaKey: false };
@@ -92,6 +93,22 @@ describe(`the verbs`, () => {
         home.menuItems.value.find((item) => item.label === `New File`)?.command?.({ originalEvent: new Event(`click`), item: {} });
 
         expect([first?.label, open.mock.calls, home.inline.edit.value]).toEqual([`Open`, [[SUB]], { kind: `creating`, dir: `docs`, type: `file` }]);
+    });
+
+    it(`offer a file tile's own name to read in every folder, and no folder tile's`, () => {
+        const { home, cover } = homeOver();
+        home.menu.value = { show: jest.fn() };
+        home.openMenu(new MouseEvent(`contextmenu`), A);
+        const onFile = home.menuItems.value.slice(0, 2).map((item) => item.label);
+        home.menuItems.value[1]?.command?.({ originalEvent: new Event(`click`), item: {} });
+        home.openMenu(new MouseEvent(`contextmenu`), SUB);
+        const onFolder = home.menuItems.value.slice(0, 2).map((item) => item.label);
+
+        expect([onFile, cover.mock.calls, onFolder]).toEqual([
+            [`Open`, `Show a.md in every folder`],
+            [[`a.md`]],
+            [`Open`, undefined],
+        ]);
     });
 
     it(`paste from the keyboard into the open folder, marking what landed, and into a folder tile unmarked`, async () => {
