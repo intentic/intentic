@@ -373,6 +373,10 @@
     {
       "type": "{ brief?: string; briefing?: { omit: (\"map\" | \"context\" | \"skills\" | \"search\" | \"delegation\" | \"checks\" | \"dependencies\" | \"repoSync\" | \"handoff\")[] }; capabilities: string[]; context?: { repos: string[] }; id: string; label?: string; models?: ({ effort?: string; fast?: boolean; harness?: \"native\" | \"claude-code\"; model: string; provider: string; thinking?: boolean })[]; powers?: { browser?: boolean; code?: boolean; connectors?: string[]; delegate?: boolean; devices?: string[]; files?: \"none\" | \"read\" | \"write\"; mcp?: string[]; sandbox?: boolean; shell?: boolean; web?: boolean }; systemPromptMode?: \"intentic\" | \"claude\" | \"custom\"; workspace?: { folders?: string[]; startIn?: string } }",
       "since": "v1.312.0"
+    },
+    {
+      "type": "{ brief?: string; briefing?: { omit: (\"map\" | \"context\" | \"skills\" | \"search\" | \"delegation\" | \"checks\" | \"dependencies\" | \"repoSync\" | \"handoff\")[] }; capabilities: string[]; context?: { repos: string[] }; id: string; label?: string; models?: ({ effort?: string; fast?: boolean; harness?: \"native\" | \"claude-code\"; model: string; provider: string; thinking?: boolean })[]; powers?: { browser?: boolean; code?: boolean; connectors?: string[]; delegate?: boolean; devices?: string[]; extensions?: string[]; files?: \"none\" | \"read\" | \"write\"; mcp?: string[]; sandbox?: boolean; shell?: boolean; web?: boolean }; systemPromptMode?: \"intentic\" | \"claude\" | \"custom\"; workspace?: { folders?: string[]; startIn?: string } }",
+      "since": "unreleased"
     }
   ],
   "workspace:.intentic/config/settings.json": [
