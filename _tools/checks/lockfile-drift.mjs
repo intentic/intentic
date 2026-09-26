@@ -1,15 +1,26 @@
 #!/usr/bin/env node
 // The lockfile still records the manifests: importer specifiers, the catalog snapshot, the pinned pnpm version, and
 // reachability of every locked package, with nothing the manifests no longer reach.
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { idOf, readCatalogs, readLockfile, readPackageManagerPin } from "./lib/lockfile.mjs";
+import { idOf, readCatalogs, readLockfile, readPackageManagerPin, withoutPackageManagerPins } from "./lib/lockfile.mjs";
 import { finish } from "./lib/report.mjs";
 import { packages, root, trackedFiles } from "./lib/repo.mjs";
 
+const rootManifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+const managerPin = /^(.+)@([^@]+)$/.exec(rootManifest.packageManager?.split("+")[0] ?? "");
+const written = [];
+// `--fix` writes before anything reads the lockfile, so every figure below describes the tree as fixed.
+if (process.argv.includes("--fix") && managerPin !== null) {
+    const extra = new Set([...readPackageManagerPin().keys()].filter((name) => name !== managerPin[1]));
+    if (extra.size > 0) {
+        const path = join(root, "pnpm-lock.yaml");
+        writeFileSync(path, withoutPackageManagerPins(readFileSync(path, "utf8"), extra));
+        written.push(`dropped ${[...extra].join(", ")} from pnpm-lock.yaml's packageManagerDependencies`);
+    }
+}
 const { recorded, installed, catalogued, edges } = readLockfile();
 const catalogs = readCatalogs();
-const rootManifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 
 // Flattens a manifest to `name -> { specifier, required }`, compared against the union of the importer's blocks (pnpm
 // decides which block a dependency lands in). A peerDependency is permitted, not required: pnpm installs one only when
@@ -82,18 +93,23 @@ for (const importer of recorded.keys()) {
     }
 }
 
-// The pin in `packageManagerDependencies:` must name and match package.json's `packageManager`: pnpm rewrites this
-// block on every command, not just install, so a wrong entry keeps re-appearing after being fixed.
+// The pin in `packageManagerDependencies:` must name and match package.json's `packageManager`. A pnpm older than
+// 11.20 pins `@pnpm/exe` beside `pnpm` for whatever version it switches to, from any command (`pnpm list` too), and
+// pnpm 12 keeps an extra entry it could install from rather than rewrite it, so one run of an old global pnpm in this
+// tree leaves it there for good. `--fix` drops it; where it keeps coming back, that machine's pnpm needs updating.
 {
-    const pin = /^(.+)@([^@]+)$/.exec(rootManifest.packageManager?.split("+")[0] ?? "");
-    if (pin === null) {
+    if (managerPin === null) {
         drift.push(`package.json has no readable "packageManager" pin, so the lockfile's recorded package manager cannot be checked`);
     } else {
-        const [, manager, version] = pin;
+        const [, manager, version] = managerPin;
         const pinned = readPackageManagerPin();
         for (const [name, recordedVersion] of pinned) {
             if (name !== manager) {
-                drift.push(`pnpm-lock.yaml pins ${name}@${recordedVersion} as a package manager, but package.json names ${manager}@${version} and nothing else`);
+                drift.push(
+                    `pnpm-lock.yaml pins ${name}@${recordedVersion} as a package manager, but package.json names ${manager}@${version} and nothing else: ` +
+                        `a pnpm older than 11.20 wrote it, and pnpm 12 keeps it. Drop it with \`node _tools/checks/lockfile-drift.mjs --fix\`, and update ` +
+                        `the global pnpm of whichever machine ran in this tree (\`pnpm self-update\` outside a project)`,
+                );
             } else if (recordedVersion !== version) {
                 drift.push(`pnpm-lock.yaml pins ${name}@${recordedVersion}, package.json pins ${manager}@${version}`);
             }
@@ -203,6 +219,7 @@ finish(
         ],
     ],
     [
+        ...written,
         `lockfile: ${importers.length} importers record the specifiers their package.json declares, ` +
             `${catalogued.values().reduce((all, entries) => all + entries.size, 0)} catalogued versions are the ones pnpm-workspace.yaml names, ` +
             `and the recorded package manager is ${rootManifest.packageManager}, which is what every environment that pins one installs`,

@@ -158,6 +158,71 @@ export const readPackageManagerPin = () => {
     return pinned;
 };
 
+// The name of the `packageManagerDependencies:` entry a line opens, if it opens one.
+const pinEntry = (line) => {
+    const named = /^ {6}(\S.*?):[ \t]*$/.exec(line);
+    return named === null ? undefined : unquote(named[1]);
+};
+
+// Splits a document's lines into those kept and the `packageManagerDependencies:` entries `drop` names, as
+// `name@version`, taking each dropped entry's own lines out.
+const takePins = (lines, drop) => {
+    const kept = [];
+    const dropped = [];
+    let inside = false;
+    let entry;
+    for (const line of lines) {
+        if (/^ {0,4}\S/.test(line)) {
+            inside = /^ {4}packageManagerDependencies:[ \t]*$/.test(line);
+        }
+        entry = inside ? (pinEntry(line) ?? entry) : undefined;
+        if (entry === undefined || !drop.has(entry) || !/^ {6}/.test(line)) {
+            kept.push(line);
+            continue;
+        }
+        const version = /^ {8}version:[ \t]*(.*?)[ \t]*$/.exec(line);
+        if (version !== null) {
+            dropped.push(`${entry}@${unquote(version[1])}`);
+        }
+    }
+    return { kept, dropped };
+};
+
+// The lines without each record `ids` names: its two-space header, the deeper lines under it, and the blank after.
+const withoutRecords = (lines, ids) => {
+    const out = [];
+    for (let at = 0; at < lines.length; at++) {
+        const header = /^ {2}(\S.*?):[ \t]*(?:\{\})?[ \t]*$/.exec(lines[at]);
+        if (header === null || !ids.has(unquote(header[1]))) {
+            out.push(lines[at]);
+            continue;
+        }
+        while (/^ {3,}\S/.test(lines[at + 1] ?? "")) {
+            at++;
+        }
+        at += lines[at + 1] === "" ? 1 : 0;
+    }
+    return out;
+};
+
+// The lockfile text without the package-manager pins `drop` names, a Set of package names. Only the first `---`
+// document changes, the one pnpm 12 keeps the pin in: each dropped entry leaves `packageManagerDependencies:`, and its
+// `packages:` and `snapshots:` records go too unless a snapshot left in the document still names it as
+// `name: version`. The real lockfile after the next `---` comes back byte for byte.
+export const withoutPackageManagerPins = (text, drop) => {
+    const lines = text.split("\n");
+    const second = lines.indexOf("---", 1);
+    const { kept, dropped } = takePins(second === -1 ? lines : lines.slice(0, second), drop);
+    const named = new Set(
+        kept.flatMap((line) => {
+            const dependency = /^ {6}(\S.*?):[ \t]+(\S.*?)[ \t]*$/.exec(line);
+            return dependency === null ? [] : [`${unquote(dependency[1])}@${unquote(dependency[2])}`];
+        }),
+    );
+    const orphaned = new Set(dropped.filter((id) => !named.has(id)));
+    return [...withoutRecords(kept, orphaned), ...(second === -1 ? [] : lines.slice(second))].join("\n");
+};
+
 // The catalogs pnpm-workspace.yaml declares, catalog name -> { dependency: version }. Same scanner: `catalog:` at
 // column 0 is the default catalog, `catalogs:` is a level of named ones above it.
 export const readCatalogs = () => {

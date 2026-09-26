@@ -23,7 +23,14 @@
 export const CHECKS = [
     { id: "control-chars", file: "control-chars.mjs", needs: "checkout", gate: "code", scoped: true, about: "no literal control bytes in tracked text" },
     { id: "skill-descriptions", file: "skill-descriptions.mjs", needs: "checkout", gate: "tidy", about: "every skill description fits the catalog budget the prompt pays for on every call" },
-    { id: "lockfile", file: "lockfile-drift.mjs", needs: "checkout", gate: "code", about: "pnpm-lock.yaml records the manifests, pins the pnpm package.json names, and carries nothing unreachable" },
+    {
+        id: "lockfile",
+        file: "lockfile-drift.mjs",
+        needs: "checkout",
+        gate: "code",
+        fix: ["--fix"],
+        about: "pnpm-lock.yaml records the manifests, pins the pnpm package.json names, and carries nothing unreachable (--fix drops a package-manager pin package.json does not name)",
+    },
     { id: "peer-deps", file: "peer-deps.mjs", needs: "checkout", gate: "tidy", about: "no unmet, missing or conflicting peer in any importer (read from the lockfile by pnpm, which the runner must have)" },
     {
         id: "licences",
