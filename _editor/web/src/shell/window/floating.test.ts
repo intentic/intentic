@@ -7,7 +7,8 @@ import * as desktopOriginal from "../../app/environments/desktop";
 
 // Pins the note protocol windows exchange to arbitrate a floating panel, not any one window's bookkeeping:
 //
-// 1. `here`: a window claims the panel; every other window collapses its place for it.
+// 1. `here`: a window claims the panel, once it holds the claim's Web Lock; every other window collapses its place for
+//    it and waits on that lock.
 // 2. `gone`: that window handed the panel back on purpose; it lands here at once, and visibly.
 // 3. `unloading`: that window may be reloading, so its place is held for a moment. Otherwise a claim ends when its Web Lock
 //    drops, or, where there are no Web Locks, when its beat goes silent.
@@ -85,8 +86,32 @@ const stubLocks = (held: readonly string[]) => {
             grant();
         }
     };
+    // That window taking its lock again, as one back from bfcache does: a request from here on waits for it.
+    const hold = (name: string): void => {
+        waiting.set(name, waiting.get(name) ?? []);
+    };
     dropAll = () => [...waiting.keys()].forEach(drop);
-    return { drop };
+    return { drop, hold };
+};
+
+// Web Locks as this window's own realm meets them: its request is granted only once the browser gets to it, which can be
+// after anything else this window does, a note to every other window included.
+const deferLocks = () => {
+    const pending: (() => void)[] = [];
+    const request = (_name: string, hold: () => Promise<void>): Promise<void> =>
+        new Promise<void>((resolve) => {
+            pending.push(() => void hold().then(resolve));
+        });
+    Object.defineProperty(navigator, `locks`, { value: { request }, configurable: true });
+    return { grant: () => pending.splice(0).forEach((grant) => grant()) };
+};
+
+// Web Locks present but saying no to every request, as where the site may keep no data.
+const refuseLocks = () => {
+    Object.defineProperty(navigator, `locks`, {
+        value: { request: () => Promise.reject(new DOMException(`refused`, `SecurityError`)) },
+        configurable: true,
+    });
 };
 
 beforeEach(() => {
@@ -271,7 +296,8 @@ describe(`a panel floating in another window`, () => {
     // as a close, or the panel flashes back here between the two realms.
     it(`hears a reload whose lock dropped before it said it was unloading`, async () => {
         const surface = createFloatingSurface(`chat`, size);
-        const locks = stubLocks([`intentic.floating.chat.w-1`]);
+        // The realm the reload boots holds a lock of its own, as every window saying `here` does.
+        const locks = stubLocks([`intentic.floating.chat.w-1`, `intentic.floating.chat.w-2`]);
         receiveFloatingNote(here(`chat`, `w-1`));
 
         locks.drop(`intentic.floating.chat.w-1`);
@@ -283,6 +309,40 @@ describe(`a panel floating in another window`, () => {
         receiveFloatingNote(here(`chat`, `w-2`, 5_000));
         await advanceTimersByTimeAsync(5_000);
         expect([surface.shows.value, floatingOwner(`chat`).value]).toEqual([false, `w-2`]);
+    });
+
+    // Back from bfcache, that window lets its lock go and takes it again before saying `here` once more; the moment
+    // between must not end the claim, nor leave it with nobody waiting on the lock it took again.
+    it(`waits anew on a claim whose window took its lock again`, async () => {
+        const surface = createFloatingSurface(`chat`, size);
+        const locks = stubLocks([`intentic.floating.chat.w-1`]);
+        receiveFloatingNote(here(`chat`, `w-1`));
+
+        locks.drop(`intentic.floating.chat.w-1`);
+        locks.hold(`intentic.floating.chat.w-1`);
+        receiveFloatingNote(here(`chat`, `w-1`));
+        await advanceTimersByTimeAsync(10_000);
+        expect(surface.shows.value).toBe(false);
+
+        // When that window really goes, this window, waiting on the lock again, hears so.
+        locks.drop(`intentic.floating.chat.w-1`);
+        await advanceTimersByTimeAsync(600);
+        expect(surface.shows.value).toBe(true);
+    });
+
+    // Refused the lock, this window cannot see that window's; that window, refused alike, beats instead, and its
+    // silence is then the close.
+    it(`ends a claim on its silence where this window is refused the lock`, async () => {
+        refuseLocks();
+        const surface = createFloatingSurface(`chat`, size);
+        receiveFloatingNote(here(`chat`, `w-1`));
+        await advanceTimersByTimeAsync(2_000);
+        receiveFloatingNote(here(`chat`, `w-1`));
+        await advanceTimersByTimeAsync(2_000);
+        expect(surface.shows.value).toBe(false);
+
+        await advanceTimersByTimeAsync(1_000);
+        expect(surface.shows.value).toBe(true);
     });
 
     it(`raises that window instead of opening a second one`, () => {
@@ -391,6 +451,38 @@ describe(`the floating window itself`, () => {
         await advanceTimersByTimeAsync(1_600);
         expect([withLock, posted.filter((note) => note.kind === `here`).length]).toEqual([1, 3]);
         lockless();
+    });
+
+    // Every other window queues on the claim's lock the moment it hears `here`. Said before this window holds that lock,
+    // a listener's request can reach it first and be granted it, which reads there as this window gone, and the panel
+    // is then drawn in both windows. In Chromium the listener usually got there first.
+    it(`says it is there only once it holds its lock, back from bfcache too`, () => {
+        const locks = deferLocks();
+        const release = claim(`chat`, jest.fn());
+        receiveFloatingNote({ kind: `roll` });
+        expect(posted).toEqual([]);
+
+        locks.grant();
+        const said: FloatingNote[] = [{ kind: `here`, panel: `chat`, id: expect.any(String), since: 1_000 }];
+        expect(posted).toEqual(said);
+
+        // A trip into bfcache may have taken the lock with it, so the window takes it again before saying anything.
+        posted.length = 0;
+        window.dispatchEvent(Object.assign(new Event(`pageshow`), { persisted: true }));
+        expect(posted).toEqual([]);
+
+        locks.grant();
+        expect(posted).toEqual(said);
+        release();
+    });
+
+    it(`keeps saying it is there where the browser refuses it a lock`, async () => {
+        refuseLocks();
+        const release = claim(`chat`, jest.fn());
+        await advanceTimersByTimeAsync(1_600);
+
+        expect(posted.filter((note) => note.kind === `here`)).toHaveLength(3);
+        release();
     });
 
     // The window's close would unload it, which says nothing final; the hand-back has to be heard before that.

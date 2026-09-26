@@ -159,7 +159,7 @@
     "_editor/web/src/shell/notifications/notificationSources.ts": 1,
     "_editor/web/src/shell/presence/usePresence.ts": 1,
     "_editor/web/src/shell/rail/railMemory.ts": 1,
-    "_editor/web/src/shell/window/floating.ts": 3,
+    "_editor/web/src/shell/window/floating.ts": 2,
     "_editor/web/src/shell/window/windowStore.ts": 3,
     "_extensions/discord/src/listener.ts": 1,
     "_extensions/discord/src/voice.ts": 2,

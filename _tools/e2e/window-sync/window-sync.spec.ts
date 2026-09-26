@@ -145,6 +145,24 @@ test(`a holder that reloads never hands the panel back to the board`, async ({ c
     expect(await board.evaluate(() => window.drewChat)).toBe(false);
 });
 
+// A board queues on a claim's lock the moment it hears the claim. Said before the holder held that lock, the board's
+// request usually reached it first and was granted it, the board took the live holder for gone, and both windows drew
+// the chat from then on.
+test(`a board keeps every claim it hears, past the moment an early lock grant would have ended it`, async ({ context }) => {
+    const board = await open(context);
+    for (let round = 0; round < 6; round++) {
+        const holder = await open(context, true);
+        await expect.poll(() => draws(board)).toBe(false);
+        // Twice the grace a board gives a claim whose lock it was granted.
+        await board.waitForTimeout(1_000);
+        expect(await draws(board)).toBe(false);
+
+        await holder.evaluate(() => window.chatWindow.dock());
+        await expect.poll(() => draws(board)).toBe(true);
+        await holder.close();
+    }
+});
+
 test(`a holder that docks hands the panel back at once, and one that closes at its deadline`, async ({ context }) => {
     const holder = await open(context, true);
     const board = await open(context);
