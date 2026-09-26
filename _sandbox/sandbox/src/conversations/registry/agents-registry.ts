@@ -422,6 +422,7 @@ const describedBy = ({ placement, identity, profile, social, sessionId, archived
     ...opt("landRequested", social.landRequested),
     ...opt("reactions", groupedReactions(social.reactions)),
     ...opt("seenAt", social.seenAt),
+    ...opt("unsentAt", social.unsentAt),
     ...opt("archivedAt", archivedAt),
 });
 
@@ -495,6 +496,9 @@ export interface AgentsRegistry {
     readonly setLandedMessageDraft: (id: string, draft: LandedMessageDraft | undefined) => void;
     // Stamps the read marker; leaves `updatedAt` alone, since reading is not activity.
     readonly markSeen: (id: string, now: number) => Promise<AgentSummary | undefined>;
+    // Records (or clears, null) since when a composer holds unsent words for it; leaves `updatedAt` alone, since typing
+    // into a composer is not the conversation doing something.
+    readonly setUnsent: (id: string, at: number | null) => Promise<AgentSummary | undefined>;
     // Set/clear the autoLand override (null inherits the sandbox setting); read at turn completion, so a mid-turn flip
     // holds only this turn's work.
     readonly setAutoLand: (id: string, autoLand: boolean | null) => Promise<AgentSummary | undefined>;
@@ -1068,6 +1072,11 @@ export const createFleet = (
             await persist();
             broadcast();
         },
+        setUnsent: (id, at) =>
+            amend(id, (entry) => {
+                const { unsentAt: _cleared, ...social } = entry.social;
+                return { ...entry, social: at === null ? social : { ...social, unsentAt: at } };
+            }),
         // null strips the override entirely; absent is the inherit state, so the agent keeps following the sandbox toggle.
         setAutoLand: (id, autoLand) =>
             amend(id, (entry) => {

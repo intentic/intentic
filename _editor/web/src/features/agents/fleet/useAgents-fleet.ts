@@ -8,6 +8,7 @@ import type { StoredTab } from "../../chat/tabs/tabSnapshot";
 import { rememberedProviderFor } from "../../chat/run/turnDefaults";
 import { useChat } from "../../chat/run/useChat";
 import { chatStrip } from "../../chat/panel/useChat-strip";
+import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { onScreen } from "../../../shell/window/onScreen";
 import { asStarted, overlaid } from "./useAgents-provisional";
 import { parentOf } from "../board/ownership";
@@ -171,16 +172,21 @@ export const forgetFleet = (): void => {
     stableFleet.value = [];
 };
 
+// Unsent words in this browser: open composers plus chats closed with the message still in them; composers win any race.
+const unsentTabs = computed<ReadonlyMap<string, UnsentTab>>(
+    () =>
+        new Map([
+            ...closedDrafts.value.map((tab): [string, UnsentTab] => [tab.conversationId, { at: tab.draftAt }]),
+            ...chatStrip.value.tabs.filter((tab) => tab.unsent).map((tab): [string, UnsentTab] => [tab.id, { at: tab.draftAt }]),
+        ]),
+);
+
 export const fleet = computed<FleetAgent[]>(() => {
     // Single source for open tabs, titles and unsent state; never this window's own tab list.
     const strip = chatStrip.value;
     const openIds = new Set(strip.tabs.map((tab) => tab.id));
     const carded = new Set(registry.value.map((agent) => agent.id));
-    // Unsent words: open composers plus chats closed with the message still in them; composers win any race.
-    const unsent: ReadonlyMap<string, UnsentTab> = new Map([
-        ...closedDrafts.value.map((tab): [string, UnsentTab] => [tab.conversationId, { at: tab.draftAt }]),
-        ...strip.tabs.filter((tab) => tab.unsent).map((tab): [string, UnsentTab] => [tab.id, { at: tab.draftAt }]),
-    ]);
+    const unsent = unsentTabs.value;
     // Every open tab by conversation, for what only this browser knows about a registered agent: that a turn just went
     // (`sendingNow`).
     const live: ReadonlyMap<string, TabFacts> = new Map(strip.tabs.map((tab) => [tab.id, tab]));
@@ -258,6 +264,41 @@ watch(
             markSeen(id);
         }
     },
+);
+
+// Tells the daemon which registered conversations this browser holds unsent words for, since the words never leave it:
+// without that, the unattended sweep archived a chat whose message was still waiting in a composer (archive.ts). Clears
+// only what this browser watched go, so one device with an empty composer cannot unmark another device's words.
+// allow(module-state): which conversations this browser has seen holding words, as per-sandbox as the ids themselves
+const heldHere = new Set<string>();
+// allow(module-state): what was last asked of the daemon per conversation, so a roster frame landing before its answer
+// does not ask again
+const asked = new Map<string, boolean>();
+watch(
+    [unsentTabs, registry] as const,
+    ([tabs, agents]) => {
+        for (const agent of agents) {
+            const tab = tabs.get(agent.id);
+            const holds = tab !== undefined;
+            if (holds) {
+                heldHere.add(agent.id);
+            }
+            if (holds === (agent.unsentAt !== undefined)) {
+                asked.delete(agent.id);
+                if (!holds) {
+                    heldHere.delete(agent.id);
+                }
+                continue;
+            }
+            if ((!holds && !heldHere.has(agent.id)) || asked.get(agent.id) === holds) {
+                continue;
+            }
+            asked.set(agent.id, holds);
+            // A guest cannot write it; forgetting the ask lets the next change try again.
+            void sandboxRpc.agents.unsent({ id: agent.id, at: holds ? (tab.at ?? Date.now()) : null }).catch(() => asked.delete(agent.id));
+        }
+    },
+    { immediate: true },
 );
 
 // A finished, read chat stays in the rail until it has sat untouched this long (ms); a pinned one stays regardless.

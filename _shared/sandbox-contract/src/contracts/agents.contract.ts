@@ -21,6 +21,7 @@ import {
     AgentsMovedSchema,
     AgentsRemovedSchema,
     AgentSummarySchema,
+    AgentUnsentSchema,
     LandResultSchema,
 } from "../schemas/agents.js";
 import { AgentsListSchema } from "../schemas/automations.js";
@@ -175,6 +176,17 @@ export const agentsContract = {
         })
         .meta({ floor: "collaborator", guest: true })
         .input(AgentIdSchema)
+        .output(AgentSummarySchema),
+    unsent: procedure
+        .route({
+            method: "POST",
+            path: "/agents/{id}/unsent",
+            summary: "Report that a composer holds an unsent message for a conversation",
+            description:
+                "The words stay in the browser; the sandbox only records since when some composer has held them, so a conversation waiting on a message nobody has sent yet is never archived for being idle. Null clears it once the message is sent or deleted. Does not count as activity.",
+        })
+        .meta({ floor: "collaborator" })
+        .input(AgentUnsentSchema)
         .output(AgentSummarySchema),
     // A finer-grained ask (watch this, not that) goes through the chat, not a per-watch id here.
     stopWatching: procedure

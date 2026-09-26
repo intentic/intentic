@@ -83,6 +83,13 @@ describe("archivable", () => {
         // Age never overrides the status guards.
         expect(archivableByAge(card({ status: "error", updatedAt: 0 }), now, 3 * DAY)).toBe(false);
     });
+
+    it("never ages out a conversation a composer still holds an unsent message for", () => {
+        const now = 10 * DAY;
+        expect(archivableByAge(card({ updatedAt: 0, unsentAt: 1 }), now, 3 * DAY)).toBe(false);
+        // The board's own Clear still may: a person pressing it has decided.
+        expect(archivable(card({ updatedAt: 0, unsentAt: 1 }))).toBe(true);
+    });
 });
 
 describe("archiveAgents", () => {

@@ -418,6 +418,13 @@ export const AgentSummarySchema = z.object({
         .describe(
             "When somebody last opened it, in milliseconds. Newer activity than this is what makes it unread. Kept by the sandbox rather than by a browser, so clearing site data or picking up a phone does not resurrect every badge.",
         ),
+    // Browser-side words the daemon cannot read, reported so the unattended archive sweep never files them away.
+    unsentAt: z
+        .number()
+        .optional()
+        .describe(
+            "Since when somebody's composer has held a message for it that they have not sent yet, in milliseconds. While set, the sandbox never archives it on its own for being idle.",
+        ),
     attention: AgentAttentionSchema.describe("Which kinds of waiting-for-you it is doing."),
     // Only the causes that still hold, re-read live (conversations/land/standing.ts), never the stored report's own list: a
     // blocker the user has since cleared is not something to offer them an action about.
@@ -739,6 +746,14 @@ export const AgentAutoLandSchema = z.object({
         .describe(
             "Whether its work merges automatically when a turn finishes. Null clears the override and goes back to following the sandbox-wide setting, so a conversation does not sit holding a frozen copy of a default it has quietly stopped following.",
         ),
+});
+// A composer's unsent words, reported by the editor that holds them: the words themselves stay in the browser.
+export const AgentUnsentSchema = z.object({
+    id: z.string().min(1).describe("Which conversation."),
+    at: z
+        .number()
+        .nullable()
+        .describe("When the composer started holding the unsent message, in milliseconds. Null says it no longer holds one: it was sent or cleared."),
 });
 // Same `null`-clears-the-override shape as autoLand, for this conversation's own answer to one ending's question.
 // One route rather than one per ending: they are the same decision asked about different walls, and three near-identical

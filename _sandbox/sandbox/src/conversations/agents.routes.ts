@@ -347,6 +347,15 @@ export const createAgentsRoutes = (services: Services) => {
             return summary;
         }),
         // Daemon-side read marker: the unread badge survives a browser cache wipe and clears on other devices too.
+        // Not activity and legal mid-turn: a message typed while the agent works is exactly the one waiting to go.
+        unsent: i.unsent.handler(async ({ input, context }) => {
+            entryFor(input.id, context);
+            const summary = await services.agents.setUnsent(input.id, input.at);
+            if (summary === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
+            }
+            return summary;
+        }),
         seen: i.seen.handler(async ({ input, context }) => {
             entryFor(input.id, context);
             const summary = await services.agents.markSeen(input.id, Date.now());

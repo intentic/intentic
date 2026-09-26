@@ -144,6 +144,8 @@ const SocialSchema = z.object({
     landRequested: z.object({ email: z.string(), name: z.string().optional(), at: z.number() }).optional(),
     reactions: z.array(z.object({ emoji: z.string(), email: z.string(), name: z.string().optional(), at: z.number() })),
     seenAt: z.number().optional(),
+    // Since when a browser's composer has held unsent words for it (the words stay there); keeps the idle sweep off it.
+    unsentAt: z.number().optional(),
 });
 export type Social = z.infer<typeof SocialSchema>;
 
