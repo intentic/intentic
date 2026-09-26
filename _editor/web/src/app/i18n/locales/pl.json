@@ -1585,6 +1585,7 @@
         "extensionState": {
             "backendFailed": "backend zawiódł",
             "backendNotInImage": "backendu nie ma w tym obrazie",
+            "declarationRefused": "deklaracja odrzucona",
             "failedToLoad": "nie udało się wczytać",
             "incompatible": "niezgodne",
             "reloadToLoad": "przeładuj, aby wczytać",

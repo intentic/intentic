@@ -3,6 +3,7 @@ import type { Services } from "../composition.js";
 import { outboxKeyOf } from "../webchat/webchat-outbox.js";
 import { extensionProcessKey } from "./extension-processes.js";
 import { enabledExtensions } from "./installed-extensions.js";
+import { listenerOwnership } from "./listener-state.js";
 
 // Daemon's outbound leg of "speak as the agent": delivers to the origin the conversation came from.
 // A Visitor chat is answered in the daemon itself (the visitor's browser polls for it); every other provider goes over
@@ -28,10 +29,12 @@ export const deliverToListenerChannel = async (services: Services, origin: Agent
     return viaGateway(services, origin.provider, origin.channelId, text);
 };
 
-// The extension half: the first enabled extension listening to this provider, asked over its own loopback port.
+// The extension half: the extension that owns this provider's listener (listener-state.ts), asked over its own loopback
+// port. Never another declarer's: the reply is the agent's words to the owner's channel.
 const viaGateway = async (services: Services, provider: string, channelId: string, text: string): Promise<ListenerDeliverOutcome> => {
+    const owner = (await listenerOwnership(services)).owners.get(provider);
     for (const extension of await enabledExtensions(services)) {
-        if (extension.manifest.contributes?.listener?.provider !== provider) {
+        if (extension.manifest.contributes?.listener?.provider !== provider || (owner !== undefined && extension.id !== owner)) {
             continue;
         }
         // First process with a live port is the gateway; no port means nothing running (disabled or a core image).

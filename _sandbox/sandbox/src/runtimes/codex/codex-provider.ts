@@ -82,7 +82,11 @@ export const planCodexTurn = async (
             ? Promise.resolve(input.model)
             : services.codexModels.models().then((catalog) => catalog.default),
         // Plan emulation restarts app-server between review and execution; a fresh process rereads the same manifest.
-        turnToolsOf(services, granted, { conversationId: input.conversationId, anonymousBrowser: persona.powers.browser }),
+        turnToolsOf(services, granted, {
+            conversationId: input.conversationId,
+            anonymousBrowser: persona.powers.browser,
+            extensions: persona.powers.extensions,
+        }),
     ]);
     const request: AgentRequest<CodexCredential> = {
         ...context.base,

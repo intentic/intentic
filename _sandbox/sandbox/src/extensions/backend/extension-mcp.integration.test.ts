@@ -22,8 +22,16 @@ import { createExtensionMcpEndpoint, extensionMcpToolsOf } from "./extension-mcp
 const HOST_TOKEN = "host-token";
 
 // One baked extension on disk: a cli card `acme` serving MCP at `mcp`, and a plain cli card `plain` that serves none.
-const extensionsDir = (): string => {
+const extensionsDir = (ownServers: readonly string[] = []): string => {
     const root = mkdtempSync(join(tmpdir(), "ext-mcp-"));
+    // Extensions serving tools of their own, no card: one server each, named by the extension's `name`.
+    for (const name of ownServers) {
+        mkdirSync(join(root, name), { recursive: true });
+        writeFileSync(
+            join(root, name, "intentic-extension.json"),
+            JSON.stringify({ publisher: "test", name, version: "1.0.0", engines: { intentic: "^2.0.0" }, server: "server.js", contributes: { tools: {} } }),
+        );
+    }
     const dir = join(root, "acme");
     mkdirSync(dir, { recursive: true });
     const card = (id: string, extra: Record<string, unknown>) => ({
@@ -49,12 +57,12 @@ const extensionsDir = (): string => {
     return root;
 };
 
-const hostFor = (capabilities: Capability[]) =>
+const hostFor = (capabilities: Capability[], ownServers: readonly string[] = []) =>
     ({
         workspace: { root: mkdtempSync(join(tmpdir(), "ext-mcp-ws-")) },
         files: { read: readWorkspaceFile },
         capabilities: { list: async () => capabilities },
-        config: { extensionsDir: extensionsDir(), historyRoot: mkdtempSync(join(tmpdir(), "ext-mcp-history-")) },
+        config: { extensionsDir: extensionsDir(ownServers), historyRoot: mkdtempSync(join(tmpdir(), "ext-mcp-history-")) },
     }) satisfies ExtensionHost;
 
 const mountsAt = () => createTurnMounts({ baseUrl: () => "http://127.0.0.1:8787/mcp" });
@@ -67,7 +75,7 @@ const reserved: Capability = { id: "ui", kind: "cli", config: { provider: "acme"
 test("mounts one server per granted card whose extension serves its kind tools, on the turn's lease", async () => {
     const host = hostFor([acme, plain, reserved]);
     const mounts = mountsAt();
-    const tools = await extensionMcpToolsOf(host, [acme, plain, reserved], mounts.lease("conv-a"));
+    const tools = await extensionMcpToolsOf(host, [acme, plain, reserved], mounts.lease("conv-a"), undefined);
     const token = tools[0]?.token ?? "";
     expect(tools).toEqual([{ name: "billing", url: "http://127.0.0.1:8787/mcp/billing", token }]);
     expect(mounts.resolve(token, "billing")).toEqual({
@@ -78,7 +86,22 @@ test("mounts one server per granted card whose extension serves its kind tools, 
     expect(mounts.resolve(token, "other")).toEqual({ refused: "unleased" });
     expect(mounts.resolve(token, "ui")).toEqual({ refused: "unleased" });
     // Nothing granted mounts nothing, and mints no bearer.
-    expect(await extensionMcpToolsOf(host, [], mounts.lease())).toEqual([]);
+    expect(await extensionMcpToolsOf(host, [], mounts.lease(), undefined)).toEqual([]);
+});
+
+// A card is the grant for its server; an extension's own server (no card) is granted by the persona's `extensions`
+// shelf, so a persona that was not given the extension does not get its tools mounted.
+test("an extension's card-less server mounts only into a turn whose persona's extensions shelf grants it", async () => {
+    const host = hostFor([acme], ["ledger", "notes"]);
+    const names = async (shelf: readonly string[] | undefined): Promise<string[]> =>
+        (await extensionMcpToolsOf(host, [acme], mountsAt().lease("conv-a"), shelf)).map((tool) => tool.name).toSorted();
+    // Absent: every enabled extension's own server, beside the granted card's.
+    expect(await names(undefined)).toEqual(["billing", "ledger", "notes"]);
+    // Named: only those. Empty: none of them, while the card still rides the connectors grant.
+    expect(await names(["test.ledger"])).toEqual(["billing", "ledger"]);
+    expect(await names([])).toEqual(["billing"]);
+    // Naming the extension that serves the card grants nothing extra: the card comes from `granted` alone.
+    expect(await names(["test.acme"])).toEqual(["billing"]);
 });
 
 // The backend host stand-in: records what arrived and answers 200.
@@ -137,9 +160,9 @@ test("the door checks the bearer's lease, resolves the card and forwards onto th
         const handed = String(upstream.seen[0]?.headers?.["x-intentic-card"] ?? "");
         expect(JSON.parse(Buffer.from(handed, "base64url").toString("utf8"))).toEqual({ id: "billing", config: { provider: "acme", token: "t" } });
 
-        // Once turn A ends, its bearer stops opening the card it was granted.
+        // Once turn A ends, its bearer is forgotten and opens nothing, the card it was granted included.
         turnA.release();
-        expect((await post("billing", TOKEN)).status).toBe(403);
+        expect((await post("billing", TOKEN)).status).toBe(401);
         expect(upstream.seen).toHaveLength(1);
     } finally {
         upstream.server.close();

@@ -42,6 +42,21 @@ export const PersonaPowersSchema = z.object({
     connectors: z.array(entryId).max(100).optional(),
     devices: z.array(entryId).max(50).optional(),
     mcp: z.array(entryId).max(50).optional(),
+    // By extension id (`publisher.name`, or a git install's card id), the same tri-state. A card an extension serves
+    // rides `connectors`; this is what the extension brings of its own.
+    extensions: z
+        .array(
+            z
+                .string()
+                .min(1)
+                .max(121)
+                .regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/),
+        )
+        .max(100)
+        .optional()
+        .describe(
+            "Which extensions' own agent tools and agent plugin (skills, commands, subagents) it gets, by extension id. Absent means every enabled one; empty means none. The tools an extension serves for a connected card follow the connectors list instead.",
+        ),
 });
 export type PersonaPowers = z.infer<typeof PersonaPowersSchema>;
 // `folders` only refuses file-tool calls outside it; it stops a misread instruction, not a shell. The container is the

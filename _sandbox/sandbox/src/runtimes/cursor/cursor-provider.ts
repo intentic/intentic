@@ -91,7 +91,11 @@ export const planCursorTurn = async (
     }
     // The same remote MCP set every arm mounts, which cursorMcpServers turns into http servers: a browser, a machine, an
     // extension card or an mcp capability the owner granted must reach a Cursor turn like any other.
-    const mounted = await turnToolsOf(services, granted, { conversationId: input.conversationId, anonymousBrowser: persona.powers.browser });
+    const mounted = await turnToolsOf(services, granted, {
+        conversationId: input.conversationId,
+        anonymousBrowser: persona.powers.browser,
+        extensions: persona.powers.extensions,
+    });
     const tools = mounted.tools;
     const request: AgentRequest<CursorCredential> = {
         ...context.base,

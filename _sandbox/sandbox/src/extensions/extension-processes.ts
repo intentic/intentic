@@ -3,7 +3,7 @@ import type { ProcessContribution } from "@intentic/extension-manifest";
 import type { Services } from "../composition.js";
 import { extensionRuntimeAbsent } from "./extension-readiness.js";
 import { enabledExtensions, type ExtensionHost, extensionInventory, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
-import { listenerProcessesDesired, listenerState } from "./listener-state.js";
+import { listenerOwnership, listenerProcessesDesired, listenerState } from "./listener-state.js";
 
 // Service key for a declared extension process (`svc-ext-<id>-<name>`); dots in the id are sanitized.
 // Extension processes run under the service supervisor, never tmux; the prefix marks it apart from a dev panel.
@@ -33,7 +33,16 @@ export const processesDesired = async (services: Services, extension: InstalledE
         return false;
     }
     const listener = extension.manifest.contributes?.listener;
-    return listener === undefined || listenerProcessesDesired(await listenerState(services, listener.provider));
+    if (listener === undefined) {
+        return true;
+    }
+    // A listener another extension owns is refused (listener-state.ts): its gateway would only be turned away. An owner
+    // not known yet (the cache not rebuilt since an install) is left to the routes, which resolve it per request.
+    const owner = (await listenerOwnership(services)).owners.get(listener.provider);
+    if (owner !== undefined && owner !== extension.id) {
+        return false;
+    }
+    return listenerProcessesDesired(await listenerState(services, listener.provider));
 };
 
 // Starts one extension's autoStart processes, called after install and at boot convergence.

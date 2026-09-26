@@ -3,10 +3,12 @@ import { type AgentEvent, rawRoutePath } from "@intentic/sandbox-contract";
 import type { AgentTool } from "./agent-tools.js";
 
 // Every MCP endpoint the daemon hosts for a turn, behind one door (`/mcp/<name>`, turn-mounts.routes.ts): the turn's
-// browser routers, the connected machines and browsers it was granted, and its extension cards' endpoints. A
-// conversation holds one bearer across its turns, because an ACP agent's warm session keeps the MCP config it was opened
-// with; each turn leases that bearer the servers it mounted, by name, and between turns the bearer reaches nothing. A turn
-// with no conversation gets a bearer of its own, gone when it ends.
+// browser routers, the connected machines and browsers it was granted, and its extension cards' endpoints. Each turn
+// holds a bearer of its own, minted with its first mount and forgotten when it ends, and its lease names the servers
+// that bearer reaches: two turns of one conversation running at once never reach each other's mounts.
+// The one exception is a warm session (an ACP agent's), which keeps the MCP config it was opened with across turns: its
+// turns share the conversation's bearer, each leasing it what that turn mounted, and between turns it reaches nothing.
+// Even then a bearer serves one live turn at a time: a turn that starts while another holds it gets its own.
 
 // Where the door answers, up to and excluding the server name.
 export const TURN_MOUNT_BASE = rawRoutePath("ALL /mcp/{mount}").replace("/{mount}", "");
@@ -52,8 +54,8 @@ export interface MountSpec {
     readonly timeoutMs?: number;
 }
 
-// One turn's hold: every server it mounts rides the conversation's bearer, and release ends the turn's reach (and closes
-// what only it held, its browser routers) however the turn ended.
+// One turn's hold: every server it mounts rides the turn's bearer, and release ends the turn's reach (and closes what
+// only it held, its browser routers) however the turn ended.
 export interface TurnLease {
     readonly open: (mount: MountSpec) => AgentTool;
     readonly release: () => void;
@@ -65,8 +67,14 @@ export type MountReach =
     // unknown: no live bearer by that value; unleased: a live bearer whose turn holds no server by that name right now.
     | { readonly refused: "unknown" | "unleased" };
 
+export interface LeaseOptions {
+    // The runtime keeps one session's MCP config across turns (ACP), so the turn takes its conversation's bearer when no
+    // other turn holds it now.
+    readonly warmSession?: boolean;
+}
+
 export interface TurnMounts {
-    readonly lease: (conversationId?: string) => TurnLease;
+    readonly lease: (conversationId?: string, options?: LeaseOptions) => TurnLease;
     readonly resolve: (token: string | undefined, name: string) => MountReach;
     readonly closeAll: () => void;
 }
@@ -146,12 +154,22 @@ export const createTurnMounts = (deps: {
         keyOf.set(digestOf(created.token), key);
         return created;
     };
+    // A warm session's turn takes the conversation's bearer while no other turn holds it; every other turn mints its own.
+    const acquire = (conversationId: string | undefined, options: LeaseOptions): { readonly key: string; readonly mount: Mount } => {
+        if (options.warmSession === true && conversationId !== undefined) {
+            const key = `conversation:${conversationId}`;
+            if ((mounts.get(key)?.leases.size ?? 0) === 0) {
+                return { key, mount: mountFor(key, conversationId) };
+            }
+        }
+        const key = `turn:${randomBytes(12).toString("hex")}`;
+        return { key, mount: mountFor(key, conversationId) };
+    };
     return {
-        lease: (conversationId) => {
+        lease: (conversationId, options = {}) => {
             sweep();
-            const key = conversationId === undefined ? `turn:${randomBytes(12).toString("hex")}` : `conversation:${conversationId}`;
             const leaseId = randomBytes(8).toString("hex");
-            let held: Mount | undefined;
+            let held: { readonly key: string; readonly mount: Mount } | undefined;
             let released = false;
             return {
                 open: ({ name, target, timeoutMs }) => {
@@ -164,40 +182,47 @@ export const createTurnMounts = (deps: {
                     if (released) {
                         // A mount after the turn ended reaches nothing: its target is closed at once, and no bearer minted.
                         closeTarget(target);
-                        return tool(held?.token ?? "");
+                        return tool(held?.mount.token ?? "");
                     }
-                    // Minted on the first mount, so a turn that mounts nothing leaves no bearer behind.
-                    const mount = held ?? mountFor(key, conversationId);
-                    held = mount;
-                    let lease = mount.leases.get(leaseId);
+                    // Minted on the first mount, so a turn that mounts nothing leaves no bearer behind. The lease joins
+                    // the mount in the same tick, so a second turn acquiring after this one sees the bearer held.
+                    if (held === undefined) {
+                        held = acquire(conversationId, options);
+                        held.mount.leases.set(leaseId, { targets: new Map(), openedAt: now() });
+                    }
+                    const lease = held.mount.leases.get(leaseId);
                     if (lease === undefined) {
-                        lease = { targets: new Map(), openedAt: now() };
-                        mount.leases.set(leaseId, lease);
+                        // Swept as abandoned while the turn still ran: it reaches nothing more.
+                        closeTarget(target);
+                        return tool(held.mount.token);
                     }
                     const replaced = lease.targets.get(name);
                     if (replaced !== undefined && replaced !== target) {
                         closeTarget(replaced);
                     }
                     lease.targets.set(name, target);
-                    return tool(mount.token);
+                    return tool(held.mount.token);
                 },
                 release: () => {
                     if (released) {
                         return;
                     }
                     released = true;
-                    const mount = held;
-                    const lease = mount?.leases.get(leaseId);
-                    if (mount === undefined || lease === undefined) {
+                    if (held === undefined) {
                         return;
                     }
-                    closeLease(lease);
-                    mount.leases.delete(leaseId);
+                    const { key, mount } = held;
+                    const lease = mount.leases.get(leaseId);
+                    if (lease !== undefined) {
+                        closeLease(lease);
+                        mount.leases.delete(leaseId);
+                    }
                     if (mount.leases.size > 0) {
                         return;
                     }
                     mount.idleSince = now();
-                    if (conversationId === undefined) {
+                    // A turn's own bearer goes with it; only a warm session's outlives the turn, reaching nothing.
+                    if (key.startsWith("turn:")) {
                         drop(key);
                     }
                 },
@@ -209,7 +234,7 @@ export const createTurnMounts = (deps: {
             if (mount === undefined) {
                 return { refused: "unknown" };
             }
-            // Two turns of one conversation at once each hold their own; the later lease's server answers.
+            // One live turn per bearer (acquire), so this is that turn's lease or none.
             let target: MountTarget | undefined;
             for (const lease of mount.leases.values()) {
                 target = lease.targets.get(name) ?? target;

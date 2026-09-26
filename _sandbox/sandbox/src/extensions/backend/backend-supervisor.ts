@@ -17,6 +17,7 @@ import { invalidateContributions } from "../../capabilities/contributions.js";
 import type { ExtensionGrant } from "../../auth/grants.js";
 import { extensionRuntimeAbsent, RUNTIME_ABSENT_DETAIL } from "../extension-readiness.js";
 import { enabledExtensions, type ExtensionHost, type InstalledExtension } from "../installed-extensions.js";
+import { listenerOwnershipOf } from "../listener-state.js";
 import {
     BACKEND_CONFIG_ENV,
     BACKEND_HOST_HEADER,
@@ -150,11 +151,21 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
     let reach = new Map<string, ExtensionGrant>();
     // Extension id to the MCP endpoint paths its cli contributions declare, as of the last converge.
     let toolPaths = new Map<string, readonly string[]>();
-    const grantOf = (extension: InstalledExtension): ExtensionGrant => ({
-        id: extension.id,
-        permissions: extension.manifest.permissions?.daemon ?? [],
-        ...(extension.manifest.contributes?.listener === undefined ? {} : { listener: extension.manifest.contributes.listener.provider }),
-    });
+    // Listener provider to its owning extension, as of the last converge (listener-state.ts). A declaration another
+    // extension owns is left out of the grant; one the last converge has not seen yet (an install racing its converge) is
+    // granted, and the listener routes resolve the owner again per request.
+    let listenerOwners: ReadonlyMap<string, string> = new Map();
+    const grantOf = (extension: InstalledExtension, owners: ReadonlyMap<string, string> = listenerOwners): ExtensionGrant => {
+        const provider = extension.manifest.contributes?.listener?.provider;
+        const owner = provider === undefined ? undefined : owners.get(provider);
+        return {
+            id: extension.id,
+            permissions: extension.manifest.permissions?.daemon ?? [],
+            ...(provider === undefined || (owner !== undefined && owner !== extension.id) ? {} : { listener: provider }),
+        };
+    };
+    // A refused listener declaration is said once per extension per daemon, at load; the Extensions list says it too.
+    const warnedListener = new Set<string>();
 
     // A plugin's `.mcp.json` is deprecated for `contributes.tools`; said once per extension per daemon, at load.
     const warnedPluginMcp = new Set<string>();
@@ -196,14 +207,23 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         reported: BackendStatus[];
         tokenReach: Map<string, ExtensionGrant>;
         tools: Map<string, readonly string[]>;
+        owners: ReadonlyMap<string, string>;
     }> => {
         const runnable: (BackendHostExtension & { readonly bundle: string })[] = [];
         const reported: BackendStatus[] = [];
         const tokenReach = new Map<string, ExtensionGrant>();
         const tools = new Map<string, readonly string[]>();
-        for (const extension of await enabledExtensions(services())) {
+        const enabled = await enabledExtensions(services());
+        const ownership = await listenerOwnershipOf(services(), enabled);
+        for (const [id, problem] of ownership.refused) {
+            if (!warnedListener.has(id)) {
+                warnedListener.add(id);
+                logger.warn({ extension: id }, problem);
+            }
+        }
+        for (const extension of enabled) {
             // Every enabled extension resolves, not just a backend's: its processes carry the same token.
-            const grant = grantOf(extension);
+            const grant = grantOf(extension, ownership.owners);
             await warnPluginMcp(extension);
             tokenReach.set(tokenFor(extension.id), grant);
             const server = extension.manifest.server;
@@ -233,7 +253,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
                 bundle: await bundleDigest(extension.dir, server),
             });
         }
-        return { runnable, reported, tokenReach, tools };
+        return { runnable, reported, tokenReach, tools, owners: ownership.owners };
     };
 
     // The host's /health answer, or undefined if it died first or never answered in time; the caller treats both misses
@@ -286,6 +306,7 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         // Read at request time, so these land whether or not the host restarts.
         reach = collected.tokenReach;
         toolPaths = collected.tools;
+        listenerOwners = collected.owners;
         const workspaceRoot = services().workspace.root;
         const key = hostKeyOf(workspaceRoot, collected.runnable);
         // The same backends, the same code, the same activation: the running host is already what this converge wants.

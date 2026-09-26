@@ -1,7 +1,7 @@
 import type { Capability, Persona } from "@intentic/sandbox-contract";
 import { pluginDirsOf } from "../../../capabilities/plugin-dirs.js";
 import type { Services } from "../../../composition.js";
-import { type ExtensionHost, extensionAgentDirsOf } from "../../../extensions/installed-extensions.js";
+import { type ExtensionHost, extensionAgentDirsOf, extensionGranted } from "../../../extensions/installed-extensions.js";
 import { personaKitPlugin } from "../../../personas/persona-kit.js";
 
 // One Claude Code plugin dir a turn loads, named the way the Skills list names the skills inside it.
@@ -24,6 +24,9 @@ export interface MountChoice {
     readonly capabilities: readonly Capability[];
     // Whose kit mounts, when its manifest exists: the persona a turn wears, or every persona for the list.
     readonly personas: readonly Persona[];
+    // Which extensions' agent plugins mount: the `extensions` shelf of the persona a turn wears, or undefined (every
+    // enabled one) for the list. Required, so no caller loads them all by forgetting to say.
+    readonly extensions: readonly string[] | undefined;
 }
 
 const baked = (id: string, owner: string, pluginDir: string): AgentMount => ({ origin: "builtin", id, owner, pluginDir });
@@ -39,7 +42,9 @@ export const agentMounts = async (host: MountHost, choice: MountChoice): Promise
         ...(choice.iqLoaded && host.config.iqPluginDir !== "" ? [baked("iq", "Code search", host.config.iqPluginDir)] : []),
         ...(host.config.webqPluginDir !== "" ? [baked("webq", "Web pages", host.config.webqPluginDir)] : []),
         ...pluginDirsOf(choice.capabilities, root).map(({ id, dir }): AgentMount => ({ origin: "plugin", id, owner: id, pluginDir: dir })),
-        ...extensions.map(({ id, name, dir }): AgentMount => ({ origin: "extension", id, owner: name, pluginDir: dir })),
+        ...extensions.flatMap(({ id, name, dir }): AgentMount[] =>
+            extensionGranted(choice.extensions, id) ? [{ origin: "extension", id, owner: name, pluginDir: dir }] : [],
+        ),
         ...kits.flatMap(({ persona, dir }): AgentMount[] =>
             dir === undefined ? [] : [{ origin: "persona", id: persona.id, owner: persona.label ?? persona.id, pluginDir: dir }],
         ),

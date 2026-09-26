@@ -83,11 +83,23 @@ export function useExtensionList() {
                         : extension.health?.state === `unhealthy`
                           ? extension.health.detail
                           : undefined;
+                // A declaration the sandbox refused at load (a listener another extension owns): the rest runs, so it
+                // outranks a fine-reading row but not a failure of either half.
+                const problems = extension.problems ?? [];
+                const refused: ExtensionState | undefined =
+                    problems.length > 0 && !uiState.attention && backend?.attention !== true
+                        ? { label: t(`extensions.extensionState.declarationRefused`), variant: `warning`, badge: true, attention: true }
+                        : undefined;
                 return {
                     extension,
                     facets,
-                    state: registryState ?? (escalated ? backend : uiState),
-                    detail: registryDetail ?? (escalated ? extension.backend?.detail : undefined) ?? status?.detail ?? extension.backend?.detail,
+                    state: registryState ?? refused ?? (escalated ? backend : uiState),
+                    detail:
+                        registryDetail ??
+                        (refused === undefined ? undefined : problems.join(` `)) ??
+                        (escalated ? extension.backend?.detail : undefined) ??
+                        status?.detail ??
+                        extension.backend?.detail,
                     // Every contributed kind, not just cli: a browser account or an enrolled machine added from one of
                     // this extension's cards depends on it exactly as much, and loses more when it goes.
                     dependents: capabilities.value.filter((capability) => contributedEntryOf(contributions, capability) !== undefined),

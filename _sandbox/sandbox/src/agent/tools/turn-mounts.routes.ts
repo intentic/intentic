@@ -3,8 +3,8 @@ import type { AppEnv } from "../../app-env.js";
 import { bearerFrom } from "../../auth/auth.js";
 import type { MountTarget, RpcMessage, TurnMounts } from "./turn-mounts.js";
 
-// The one door every daemon-hosted MCP server is reached through, `ALL /mcp/<name>`: the bearer names the conversation,
-// its current lease maps the name to a target, and the target's endpoint answers. Streamable HTTP, answered as plain
+// The one door every daemon-hosted MCP server is reached through, `ALL /mcp/<name>`: the bearer names one live turn (and
+// its conversation), that turn's lease maps the name to a target, and the target's endpoint answers. Streamable HTTP, answered as plain
 // JSON: nothing a daemon-hosted server says is server-initiated, so there is no stream to open. An extension endpoint that
 // speaks the transport itself (a backend path, a process's port) is the exception, forwarded whole.
 

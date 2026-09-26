@@ -8,8 +8,7 @@ import { peerToolsOf } from "../../peers/peer-tools.js";
 import type { AgentTool } from "./agent-tools.js";
 
 // A turn's remote MCP servers, the browser stack's facts the prompt and the session observer read, and the release its
-// loop calls when the turn ends: the conversation's bearer stops reaching this turn's mounts then, and its browser
-// routers close.
+// loop calls when the turn ends: the turn's bearer stops reaching its mounts then, and its browser routers close.
 export interface TurnRemoteTools {
     readonly tools: AgentTool[];
     readonly browser: BrowserTurnTools;
@@ -30,12 +29,18 @@ export const turnToolsOf = async (
         readonly conversationId?: string | undefined;
         // Whether the persona may drive a browser at all (its `browser` power); signed-in accounts ride their cards.
         readonly anonymousBrowser: boolean;
+        // The persona's `extensions` shelf: which extensions' card-less tool servers mount. Undefined means every one;
+        // required, so no arm mounts them all by forgetting to say.
+        readonly extensions: readonly string[] | undefined;
+        // The runtime keeps its session's MCP config across turns (ACP): the turn rides the conversation's bearer while
+        // no other turn holds it (turn-mounts.ts).
+        readonly warmSession?: boolean;
     },
 ): Promise<TurnRemoteTools> => {
-    const lease = services.turnMounts.lease(turn.conversationId);
+    const lease = services.turnMounts.lease(turn.conversationId, { warmSession: turn.warmSession === true });
     try {
         const [extension, browser] = await Promise.all([
-            extensionMcpToolsOf(services, granted, lease),
+            extensionMcpToolsOf(services, granted, lease, turn.extensions),
             browserServersOf(granted, services.workspace.root, { routers: services.browserRouters, lease }, turn.anonymousBrowser, turn.conversationId),
         ]);
         return {

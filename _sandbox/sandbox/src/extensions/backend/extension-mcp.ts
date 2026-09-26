@@ -8,12 +8,12 @@ import type { AppEnv } from "../../app-env.js";
 import { cachedEnabledExtensions, contributionFor, contributionRegistry } from "../../capabilities/contributions.js";
 import type { Services } from "../../composition.js";
 import { extensionProcessKey } from "../extension-processes.js";
-import type { ExtensionHost, InstalledExtension } from "../installed-extensions.js";
+import { type ExtensionHost, extensionGranted, type InstalledExtension } from "../installed-extensions.js";
 import { BACKEND_CARD_HEADER, BACKEND_HOST_HEADER } from "./backend-host-config.js";
 import { forwardToBackend } from "./backend-proxy.routes.js";
 
 // An extension's tools (`contributes.tools`, or a cli card's `mcp`, its alias for one release), mounted into every turn
-// at the daemon's one MCP door on the turn's lease, like peer bridges: the door checks the conversation's bearer against
+// granted them at the daemon's one MCP door on the turn's lease, like peer bridges: the door checks the turn's bearer against
 // what that turn mounted and strips it before anything reaches the extension. Served once, for every session and every
 // runtime, where a stdio server in a plugin's `.mcp.json` was spawned per Claude Code session and reached nothing else.
 
@@ -51,9 +51,15 @@ const cardServerOf = async (
 };
 
 // One server per granted card whose kind serves tools, named by the card's id like mcp-kind cards and peers, and one per
-// enabled extension serving tools of its own, named by the extension's `name`. A server named after a daemon server is
-// skipped rather than allowed to shadow it.
-export const extensionMcpToolsOf = async (services: ExtensionHost, granted: readonly Capability[], lease: Pick<TurnLease, "open">): Promise<AgentTool[]> => {
+// enabled extension serving tools of its own that the persona's `extensions` shelf grants (absent: every one), named by
+// the extension's `name`. The card is the grant for the first, the extension for the second, so neither mounts into a
+// turn whose persona was not given it. A server named after a daemon server is skipped rather than allowed to shadow it.
+export const extensionMcpToolsOf = async (
+    services: ExtensionHost,
+    granted: readonly Capability[],
+    lease: Pick<TurnLease, "open">,
+    extensions: readonly string[] | undefined,
+): Promise<AgentTool[]> => {
     const tools: AgentTool[] = [];
     for (const capability of granted) {
         if (capability.kind !== "cli" || RESERVED_MCP_SERVER_NAMES.has(capability.id)) {
@@ -65,6 +71,9 @@ export const extensionMcpToolsOf = async (services: ExtensionHost, granted: read
         }
     }
     for (const extension of await cachedEnabledExtensions(services)) {
+        if (!extensionGranted(extensions, extension.id)) {
+            continue;
+        }
         const name = extension.manifest.name;
         for (const server of toolServersOf(extension.manifest)) {
             if (server.perCard === undefined && servable(extension, server) && !RESERVED_MCP_SERVER_NAMES.has(name)) {

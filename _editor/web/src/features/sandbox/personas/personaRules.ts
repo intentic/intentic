@@ -32,6 +32,9 @@ export interface PersonaPowersDraft {
     connectors: string[] | undefined;
     devices: string[] | undefined;
     mcp: string[] | undefined;
+    // Extension ids whose own tools and agent plugin the persona gets. Not drawn by the form yet; carried so a save
+    // keeps a bound set through the API rather than widening it back to every extension.
+    extensions: string[] | undefined;
 }
 
 // Default draft when a persona has no `powers`: every shelf on.
@@ -46,6 +49,7 @@ export const FULL_POWERS: PersonaPowersDraft = {
     connectors: undefined,
     devices: undefined,
     mcp: undefined,
+    extensions: undefined,
 };
 
 // The id is derived from the name once, at creation, then frozen: automations pin to it, and renaming the label
@@ -69,6 +73,7 @@ export const powersDraftOf = (persona: Persona): PersonaPowersDraft => ({
     connectors: persona.powers?.connectors === undefined ? undefined : [...persona.powers.connectors],
     devices: persona.powers?.devices === undefined ? undefined : [...persona.powers.devices],
     mcp: persona.powers?.mcp === undefined ? undefined : [...persona.powers.mcp],
+    extensions: persona.powers?.extensions === undefined ? undefined : [...persona.powers.extensions],
 });
 
 // Which preamble notes a persona drops, as a list the form can splice; empty covers both "drops none" and a persona written
@@ -87,7 +92,8 @@ export const storedPowers = (draft: PersonaPowersDraft): PersonaPowers | undefin
         !draft.sandbox ||
         draft.connectors !== undefined ||
         draft.devices !== undefined ||
-        draft.mcp !== undefined;
+        draft.mcp !== undefined ||
+        draft.extensions !== undefined;
     if (!bounded) {
         return undefined;
     }
@@ -102,6 +108,7 @@ export const storedPowers = (draft: PersonaPowersDraft): PersonaPowers | undefin
         ...(draft.connectors !== undefined ? { connectors: draft.connectors } : {}),
         ...(draft.devices !== undefined ? { devices: draft.devices } : {}),
         ...(draft.mcp !== undefined ? { mcp: draft.mcp } : {}),
+        ...(draft.extensions !== undefined ? { extensions: draft.extensions } : {}),
     };
 };
 

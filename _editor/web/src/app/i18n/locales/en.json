@@ -1723,6 +1723,7 @@
             "backend": "backend {state}",
             "backendFailed": "backend failed",
             "backendNotInImage": "backend not in this image",
+            "declarationRefused": "declaration refused",
             "failedToLoad": "failed to load",
             "incompatible": "incompatible",
             "reloadToLoad": "reload to load",

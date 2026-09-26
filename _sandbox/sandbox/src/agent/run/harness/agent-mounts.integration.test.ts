@@ -88,3 +88,22 @@ test("the Skills list names exactly the skills under the plugin dirs a turn moun
         "extension:ext-1:knowledge",
     ]);
 });
+
+// An extension's agent plugin loads into a turn only when the persona it wears is granted that extension: its
+// `extensions` shelf, absent meaning every one, naming the extension, or empty meaning none.
+test("a turn loads an extension's agent plugin only when its persona's extensions shelf grants that extension", async () => {
+    const { root, services, plugin, iqPluginDir, webqPluginDir, checkout } = await workspaceWithEveryMount();
+    const pluginsWearing = async (extensions: readonly string[]): Promise<readonly string[]> => {
+        const persona: Persona = { id: "narrow", label: "Narrow", capabilities: [], powers: { ...turnPersona({ personas: [], actsAs: undefined, unattended: false }).powers, extensions: [...extensions] } };
+        const wearing = turnPersona({ personas: [persona], actsAs: "narrow", unattended: false });
+        const plan = await planHarnessTurn(services, turn(), { ...context, persona: wearing }, [plugin]);
+        return (plan as { request: AgentRequest }).request.tools.plugins ?? [];
+    };
+    expect(await pluginsWearing([])).toEqual([iqPluginDir, webqPluginDir, pluginDir(root, "my-pack")]);
+    expect(await pluginsWearing(["someone.else"])).toEqual([iqPluginDir, webqPluginDir, pluginDir(root, "my-pack")]);
+    expect(await pluginsWearing(["ext-1"])).toEqual([iqPluginDir, webqPluginDir, pluginDir(root, "my-pack"), join(checkout, "plugin")]);
+    // A persona named but missing gets nothing at all, this included.
+    const missing = turnPersona({ personas: [], actsAs: "gone", unattended: false });
+    const refused = await planHarnessTurn(services, turn(), { ...context, persona: missing }, []);
+    expect((refused as { request: AgentRequest }).request.tools.plugins ?? []).not.toContain(join(checkout, "plugin"));
+});

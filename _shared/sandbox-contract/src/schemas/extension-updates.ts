@@ -177,6 +177,12 @@ export const ExtensionSummarySchema = z.object({
         })
         .optional()
         .describe("Present only for an extension that ships a server half."),
+    problems: z
+        .array(z.string())
+        .optional()
+        .describe(
+            "Declarations in its manifest the sandbox refused at load, each a sentence saying what and why, such as a listener for a provider another extension already owns. The rest of it still loads. Absent when nothing was refused.",
+        ),
     // Update lifecycle, present only for a git-installed extension (absent for builtin/workspace):
     // update: the badge.
     // advisory: the alarm.

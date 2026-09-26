@@ -168,6 +168,10 @@ export const installedExtensions = async (services: ExtensionHost): Promise<Inst
 export const enabledExtensions = async (services: ExtensionHost): Promise<InstalledExtension[]> =>
     (await installedExtensions(services)).filter((extension) => extension.enabled);
 
+// Whether a turn gets what an extension brings of its own (its card-less tool servers, its agent plugin): the persona's
+// `extensions` shelf, absent meaning every one. One predicate for the MCP mounts and the plugin dirs alike.
+export const extensionGranted = (shelf: readonly string[] | undefined, extensionId: string): boolean => shelf === undefined || shelf.includes(extensionId);
+
 // An enabled extension's agent plugin: the extension's id, its manifest name, and the plugin's dir.
 export interface ExtensionAgentDir {
     readonly id: string;

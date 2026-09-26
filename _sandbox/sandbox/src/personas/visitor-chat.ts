@@ -26,6 +26,7 @@ const VISITOR_CHAT_CARD: Persona = {
         connectors: [],
         devices: [],
         mcp: [],
+        extensions: [],
     },
     // No `systemPromptMode`: runs on the sandbox's base prompt; an owner can still add one, like any other persona.
 };

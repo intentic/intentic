@@ -18,9 +18,9 @@ export interface CursorGuard {
     readonly taint: TurnTaint;
 }
 
-// Turn tools on Cursor's runtime, three seams: remote MCP tools become http servers, the browser stack (already stdio
-// process specs) becomes stdio servers, and the daemon's own in-process tools become customTools. The third seam is
-// unique here: a tool whose handler runs in the daemon can park on a person, unlike one inside a vendor's own loop.
+// Turn tools on Cursor's runtime, two seams: every remote MCP mount (the browser stack included, now routers behind the
+// daemon's one MCP door) becomes an http server, and the daemon's own in-process tools become customTools. The second
+// seam is unique here: a tool whose handler runs in the daemon can park on a person, unlike one inside a vendor's own loop.
 
 // Cursor's own askQuestion can self-answer in a headless run (a fabricated "skipped by user"), so it's withheld
 // (TOOLS_WITHHELD). This handler runs here and settles only on a real person or abort, same schema as the Claude path's

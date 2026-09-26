@@ -59,10 +59,19 @@ const harnessReads = (deps: HarnessPlanDeps, input: RoutedAgentTurn, context: Tu
 const harnessMounts = (deps: HarnessPlanDeps, input: RoutedAgentTurn, granted: readonly Capability[], persona: TurnPersona, iqLoaded: boolean) =>
     Promise.all([
         deps.perf.track("turn.plan.extensions", {}, () =>
-            agentMounts(deps, { iqLoaded, capabilities: granted, personas: persona.persona === undefined ? [] : [persona.persona] }),
+            agentMounts(deps, {
+                iqLoaded,
+                capabilities: granted,
+                personas: persona.persona === undefined ? [] : [persona.persona],
+                extensions: persona.powers.extensions,
+            }),
         ),
         deps.perf.track("turn.plan.mounts", {}, () =>
-            turnToolsOf(deps, granted, { conversationId: input.conversationId, anonymousBrowser: persona.powers.browser }),
+            turnToolsOf(deps, granted, {
+                conversationId: input.conversationId,
+                anonymousBrowser: persona.powers.browser,
+                extensions: persona.powers.extensions,
+            }),
         ),
     ]);
 

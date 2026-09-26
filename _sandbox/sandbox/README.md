@@ -32,11 +32,17 @@ flowchart LR
   thread whose conversation was archived opens a fresh one instead.
 - Extension code never runs in the daemon process; it runs in a supervised backend host and in declared processes.
   Both reach the daemon on one token per extension, held to its manifest's `permissions.daemon` (`auth/grants.ts`).
-  The panel token that repo operator panels hold reaches no route that returns a stored secret.
+  The panel token that repo operator panels hold reaches no route that returns a stored secret. A listener provider
+  belongs to one extension (`extensions/listener-state.ts`: the declarer owning the provider's card, else the first
+  installed); a second declaration is refused at load and named on its Extensions row, and the listener routes answer
+  the owner alone.
 - Every MCP server the daemon hosts for a turn (its browser routers, the machines and browsers it was granted, its
-  extension cards' endpoints) is a mount at one door, `ALL /mcp/<name>` (`agent/tools/turn-mounts.ts`). A
-  conversation holds one bearer; each turn leases it the names it mounted, and the door refuses any name the current
-  lease does not hold, so between turns the bearer reaches nothing. `agent/tools/turn-tools.ts` composes these mounts
+  extension cards' endpoints) is a mount at one door, `ALL /mcp/<name>` (`agent/tools/turn-mounts.ts`). Each
+  turn holds a bearer of its own, leased the names it mounted and forgotten when the turn ends, and the door refuses
+  any name that turn's lease does not hold, so two turns of one conversation running at once never reach each other's
+  mounts. An ACP agent's warm session keeps the MCP config it was opened with, so its turns share the conversation's
+  bearer, one live turn at a time, and between turns it reaches nothing. An extension's card-less tool server and its
+  agent plugin reach a turn only when the persona's `extensions` list grants that extension (absent: every one). `agent/tools/turn-tools.ts` composes these mounts
   with the mcp-kind cards into one `remote` list, which every runtime projects the same way. An extension's tools are
   answered by the backend host from `api.tools.serve` on a route of its own (`extensions/backend/backend-tools.ts`),
   handed the card's settings by the door; `/x/*` refuses a backend's own MCP path, so tools are reached only through

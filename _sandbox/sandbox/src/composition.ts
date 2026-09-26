@@ -284,8 +284,8 @@ export interface Services
     readonly reach: ReachReporter;
     // Makes a turn's browser router, which the turn then mounts.
     readonly browserRouters: BrowserRouterFactory;
-    // Every live turn's MCP mounts (its browser routers, peers and extension cards), reached at /mcp/<name> with its
-    // conversation's bearer, which opens only what the running turn mounted.
+    // Every live turn's MCP mounts (its browser routers, peers and extension cards), reached at /mcp/<name> with the
+    // turn's own bearer, which opens only what that turn mounted.
     readonly turnMounts: TurnMounts;
     // This sandbox's identity for the Connections card; undefined means /info returns {} (loopback/test).
     readonly info:

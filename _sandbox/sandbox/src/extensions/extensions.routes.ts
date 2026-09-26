@@ -29,6 +29,7 @@ import {
 } from "./extension-updates.js";
 import { readExtensionUsage, recordExtensionUsage } from "./extension-usage.js";
 import { ESSENTIAL_EXTENSIONS, extensionInventory, type InstalledExtension, installedExtensions, type PendingExtension } from "./installed-extensions.js";
+import { listenerOwnership } from "./listener-state.js";
 import { writeWorkspaceExtension } from "./workspace-extension-scaffold.js";
 import { publicAddressOf } from "../env.config.js";
 
@@ -105,6 +106,8 @@ export const createExtensionsRoutes = (services: Services) => {
             const usage = await readExtensionUsage(root);
             const updates = await readExtensionUpdateState(root);
             const policies = await readUpdatePolicies(root);
+            // What each enabled extension declared that was refused at load: a listener another extension owns.
+            const { refused } = await listenerOwnership(services);
             const extensions: ExtensionSummary[] = [];
             for (const extension of inventory.extensions) {
                 // A git-installed extension alone has a pinned HEAD; others use their source as a sentinel.
@@ -125,6 +128,7 @@ export const createExtensionsRoutes = (services: Services) => {
                     // Absent, not empty, when unobserved: the row must tell never-exercised from exercised-but-unused.
                     ...(observed !== undefined && Object.keys(observed).length > 0 ? { usage: observed } : {}),
                     ...backendStateOf(extension),
+                    ...(extension.enabled && refused.has(extension.id) ? { problems: [refused.get(extension.id) ?? ""] } : {}),
                     ...(record?.update !== undefined ? { update: record.update } : {}),
                     ...(record?.advisory !== undefined ? { advisory: record.advisory } : {}),
                     ...(record?.health !== undefined ? { health: record.health } : {}),

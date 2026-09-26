@@ -36,9 +36,12 @@ export const planAcpTurn = async (
     }
     const acpConfig = capability.config;
     // Resolved by planTurn; without one the turn is the open, attended default, which may drive the credential-free browser.
+    // A warm session keeps the MCP config it was opened with, so its turns share the conversation's bearer.
     const mounted = await turnToolsOf(services, granted, {
         conversationId: input.conversationId,
         anonymousBrowser: context.persona?.powers.browser ?? true,
+        extensions: context.persona?.powers.extensions,
+        warmSession: true,
     });
     const tools = mounted.tools;
     return armPlan(

@@ -278,7 +278,7 @@ test("an extension's tools reach a turn through the MCP door, served by the host
     await backend.start();
     expect(backend.statusOf("acme.tooled")).toEqual({ id: "acme.tooled", state: "running" });
 
-    const [tool] = await extensionMcpToolsOf(svc, [books], svc.turnMounts.lease("conv-1"));
+    const [tool] = await extensionMcpToolsOf(svc, [books], svc.turnMounts.lease("conv-1"), undefined);
     expect(tool).toEqual({ name: "books", url: `http://127.0.0.1:${testConfig.sandbox.port}/mcp/books`, token: tool?.token });
     const app = createApp(svc);
     const rpc = async (body: unknown): Promise<unknown> =>

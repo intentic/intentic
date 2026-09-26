@@ -68,6 +68,7 @@ const NONE_POWERS: PersonaPowers = {
     connectors: [],
     devices: [],
     mcp: [],
+    extensions: [],
 };
 
 // Per-kind verdicts, not one blanket one: an unpinned wake denies accounts only, keeping the rest.

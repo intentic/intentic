@@ -14,6 +14,7 @@ import { automationConfig } from "../harness/route-stores.testing.js";
 import type { Services } from "../composition.js";
 import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { unstubbed } from "@intentic/testing";
+import { listenerStateOf } from "./listener-state.js";
 import { listenerStatus } from "./listener-status.js";
 import { createListenerRoutes } from "./listener.routes.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
@@ -163,15 +164,16 @@ test("status ingests the gateway snapshot for the activity probe to read, and re
 });
 
 // /state hands back stored credentials and the other three fire or mark a provider's automations, so each answers only
-// the extension that declares this provider as its listener: no token, another provider's gateway, or an extension
-// with no listener at all (whatever its globs say) is refused before anything is read or written.
+// the extension that owns this provider's listener: no token, another provider's gateway, an extension with no listener
+// at all (whatever its globs say), or an impostor declaring discord's listener while the shipped discord extension owns
+// it, is refused before anything is read or written.
 test("every listener route refuses a caller that is not this provider's own extension", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-route-")));
     await services.automations.upsert(listenerAutomation("rf-live"));
     await services.capabilities.upsert({ id: "discord", kind: "cli", config: { provider: "discord", botToken: "SECRET" } });
     const prompts: string[] = [];
     const app = appFor(services, fakeWake(prompts));
-    for (const token of [undefined, "slack-token", "plain-token", "intruder"]) {
+    for (const token of [undefined, "slack-token", "plain-token", "impostor-token", "intruder"]) {
         const state = await getState(app, "discord", token);
         expect(state.status).toBe(403);
         expect(await state.text()).not.toContain("SECRET");
@@ -187,17 +189,14 @@ test("every listener route refuses a caller that is not this provider's own exte
     expect((await services.automations.list()).find((automation) => automation.id === "rf-live")?.runs).toEqual([]);
 });
 
-// Naming a provider as one's listener is not owning its cards: the connectors /state returns are the ones whose cli
-// contribution the calling extension itself declares.
+// Owning a provider's listener is not owning its cards either: the connectors /state returns are the ones whose cli
+// contribution the calling extension itself declares, so a declarer that is not the card's extension is handed none.
 test("state hands an extension only the connectors of cards it contributes", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-route-")));
     await services.automations.upsert(listenerAutomation("own-live"));
     await services.capabilities.upsert({ id: "discord", kind: "cli", config: { provider: "discord", botToken: "SECRET" } });
-    const app = appFor(services, fakeWake([]));
-    const impostor = await getState(app, "discord", "impostor-token");
-    expect(impostor.status).toBe(200);
-    expect(((await impostor.json()) as { connectors: unknown[] }).connectors).toEqual([]);
-    const own = await getState(app, "discord", "discord-token");
+    expect((await listenerStateOf(services, "discord", "evil.discord-lookalike")).connectors).toEqual([]);
+    const own = await getState(appFor(services, fakeWake([])), "discord", "discord-token");
     expect(((await own.json()) as { connectors: unknown[] }).connectors).toEqual([
         { id: "discord", config: { provider: "discord", botToken: "SECRET" } },
     ]);

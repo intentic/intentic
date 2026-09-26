@@ -51,6 +51,17 @@ describe(`powersDraftOf`, () => {
         };
         expect(storedPowers(powersDraftOf(persona))).toEqual(persona.powers);
     });
+
+    // The form draws no extensions list yet, so a save must carry the bound one through rather than widen it to all.
+    it(`keeps an extensions bound it does not draw`, () => {
+        const persona: Persona = {
+            id: `narrow`,
+            capabilities: [],
+            powers: { files: `write`, shell: true, code: true, web: true, browser: true, delegate: true, sandbox: true, extensions: [`acme.notes`] },
+        };
+        expect(storedPowers(powersDraftOf(persona))).toEqual(persona.powers);
+        expect(storedPowers({ ...FULL_POWERS, extensions: [] })).toMatchObject({ extensions: [] });
+    });
 });
 
 describe(`personasStartingIn`, () => {

@@ -32,7 +32,7 @@ const capabilityFor = (capabilities: readonly Capability[], name: string): Capab
 
 // What a turn wearing any card may mount, from the call the turn itself makes; the list and the reader resolve ids by it.
 const listedMounts = (services: Services, settings: SandboxSettings, capabilities: readonly Capability[], personas: readonly Persona[]) =>
-    agentMounts(services, { iqLoaded: settings.iqSearch, capabilities, personas });
+    agentMounts(services, { iqLoaded: settings.iqSearch, capabilities, personas, extensions: undefined });
 
 // Where the SDK's loader finds a mounted plugin's skills.
 const skillsDirOf = (mount: AgentMount): string => join(mount.pluginDir, "skills");

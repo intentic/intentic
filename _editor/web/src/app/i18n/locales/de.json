@@ -1577,6 +1577,7 @@
             "backend": "Backend {state}",
             "backendFailed": "Backend fehlgeschlagen",
             "backendNotInImage": "Backend nicht in diesem Image",
+            "declarationRefused": "Deklaration abgelehnt",
             "failedToLoad": "Laden fehlgeschlagen",
             "incompatible": "inkompatibel",
             "reloadToLoad": "zum Laden neu laden",

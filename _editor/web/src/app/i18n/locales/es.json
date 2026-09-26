@@ -1586,6 +1586,7 @@
         "extensionState": {
             "backendFailed": "el backend falló",
             "backendNotInImage": "backend no incluido en esta imagen",
+            "declarationRefused": "declaración rechazada",
             "failedToLoad": "no se pudo cargar",
             "reloadToLoad": "recarga para cargarla",
             "versionDrift": "desfase de versión"
