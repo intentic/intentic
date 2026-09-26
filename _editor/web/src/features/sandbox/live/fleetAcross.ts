@@ -1,6 +1,6 @@
 import type { AgentSummary, AutomationApproval } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { blocked, turnInFlight } from "../../agents/fleet/agentStatus";
+import { laneOf } from "../../agents/fleet/agentStatus";
 import { queryClient } from "../../../lib/queryPersistence";
 import { rpcKeyAt } from "../../../lib/queryKeys";
 import { sandboxRpc } from "../client/sandboxRpc";
@@ -50,14 +50,13 @@ export const otherBoxes = store.entries;
 // Boxes unreachable on their last attempt; named once so surfaces can't derive it separately and disagree.
 export const silentBoxes = computed<readonly BoxFleet[]>(() => otherBoxes.value.filter((box) => box.state === `unreachable`));
 
-// How many agents in one other box want the user: blocked, unread, or a held automation wake. Undefined means
+// How many agents in one other box are in Attention, plus held automation wakes. Undefined means
 // never-answered; rendering that as `0` would falsely claim nothing is waiting, so surfaces draw a dash.
 export const boxAttention = (box: BoxFleet): number | undefined => {
     if (box.readAt === undefined) {
         return undefined;
     }
-    const unread = (agent: AgentSummary): boolean => !turnInFlight(agent) && agent.updatedAt > (agent.seenAt ?? 0);
-    return box.agents.filter((agent) => blocked(agent) || unread(agent)).length + box.held.length;
+    return box.agents.filter((agent) => laneOf(agent) === `attention`).length + box.held.length;
 };
 
 // `useAgents.markSeen` only writes the roster this browser streams, so it's a no-op for an agent elsewhere; this

@@ -358,6 +358,36 @@ describe("roster frames the board can skip", () => {
     });
 });
 
+describe("the Agents rail count", () => {
+    const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
+    const summary = (id: string, extra: Partial<AgentSummary> = {}): AgentSummary => ({
+        id,
+        status: `landed`,
+        provider: `claude`,
+        harness: `native`,
+        updatedAt: 500,
+        seenAt: 100,
+        attention: none,
+        ...extra,
+    });
+
+    beforeEach(() => resetSandboxScope());
+
+    it("matches the Attention lane when finished work has unread updates", () => {
+        const finished = [summary(`a1`), summary(`a2`)];
+        setAgents(finished, 1);
+
+        expect(useAgents().lanes.value.attention).toHaveLength(0);
+        expect(useAgents().unread.value).toBe(2);
+        expect(useAgents().attention.value).toBe(0);
+
+        // A bare awaiting status belongs in Attention even without a raised attention flag.
+        setAgents([...finished, summary(`a3`, { status: `awaiting`, seenAt: 600 })], 2);
+        expect(useAgents().lanes.value.attention.map((agent) => agent.id)).toEqual([`a3`]);
+        expect(useAgents().attention.value).toBe(1);
+    });
+});
+
 // The beat's audit: a roster frame that never applied leaves the board silently frozen until reload. The
 // heartbeat states its revision, sent only when the queue is empty, so a mismatch is proof, not a race.
 describe("the beat's audit of the roster", () => {

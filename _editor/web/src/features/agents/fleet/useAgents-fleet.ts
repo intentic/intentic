@@ -246,8 +246,9 @@ export const withKeptWords = (agent: FleetAgent): FleetAgent =>
 // Two headline counts, kept apart since the header renders both: blocked-on-user vs. merely unread.
 export const blocking = computed(() => fleet.value.filter(blocked).length);
 export const unread = computed(() => fleet.value.filter((agent) => agent.unread).length);
-// Badge total: blocked-or-unread agents, plus held wakes, which have no conversation yet but need attention.
-export const attention = computed(() => fleet.value.filter((agent) => blocked(agent) || agent.unread).length + heldWakes.value.length);
+// The rail badge names the Attention lane. Unread updates in Active or Finished keep their card chip, but do not
+// claim the reader is needed; a held wake has no agent card yet and leads that lane on its own.
+export const attention = computed(() => lanes.value.attention.length + heldWakes.value.length);
 
 // Marks the focused conversation seen the moment it updates, but only while this window is on screen and watching
 // it; otherwise it stays unread for the badge.

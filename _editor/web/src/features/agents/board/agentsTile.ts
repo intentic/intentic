@@ -4,10 +4,10 @@ import { subscribe as watchOtherBoxes, silentBoxes } from "../../sandbox/live/fl
 import { acrossAttention, listNames, readingAcross, watchRemoteSeen } from "../fleet/fleetScope";
 import { useAgents } from "../fleet/useAgents";
 
-// What the agents tile shows, wherever it is drawn (rail tile, phone tab): the attention count follows the board's
-// scope, and the cross-sandbox sum exists only while the reader has opted into it, clearing itself as the work is done.
+// What the agents tile shows, wherever it is drawn (rail tile, phone tab): the Attention lane's count follows the
+// board's sandbox scope, and the cross-sandbox sum exists only while the reader has opted into it.
 
-// Blocked, unread, and automation wakes held at the door, everywhere the board is currently reading.
+// Attention cards and automation wakes held at the door, everywhere the board is currently reading.
 export const agentsAttention = computed<number>(() => useAgents().attention.value + (readingAcross.value ? acrossAttention.value : 0));
 
 // Whether the count spans every sandbox, and whether some didn't answer, said in words since the badge is one digit.

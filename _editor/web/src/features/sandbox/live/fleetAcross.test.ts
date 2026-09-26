@@ -42,9 +42,9 @@ describe("what one other box is holding for its owner", () => {
         expect(boxAttention(box({ agents: [agent({ attention: { ...none, permission: true } })] }))).toBe(1);
     });
 
-    // The daemon holds the read marker (seenAt), meaning the same thing at a distance as up close.
-    it("counts an agent that has worked since it was last opened", () => {
-        expect(boxAttention(box({ agents: [agent({ updatedAt: 500, seenAt: 100 })] }))).toBe(1);
+    // An unread update wears its card chip in Finished, but does not claim someone is waiting in Attention.
+    it("does not count an unread finished update", () => {
+        expect(boxAttention(box({ agents: [agent({ updatedAt: 500, seenAt: 100 })] }))).toBe(0);
     });
 
     // A running agent's ticking updatedAt must not light the count; the reading is "finished, unread."
@@ -55,6 +55,10 @@ describe("what one other box is holding for its owner", () => {
     // One agent that is both blocked and unread badges once, same as the local reading.
     it("counts an agent once when it is both blocked and unread", () => {
         expect(boxAttention(box({ agents: [agent({ attention: { ...none, plan: true }, updatedAt: 500, seenAt: 100 })] }))).toBe(1);
+    });
+
+    it("counts a bare awaiting status because the board puts it in Attention", () => {
+        expect(boxAttention(box({ agents: [agent({ status: `awaiting`, seenAt: 500 })] }))).toBe(1);
     });
 
     // A held wake needs the owner as much as a parked agent does; nothing else here can see one in another box.
@@ -84,13 +88,14 @@ describe("marking an agent in another box as read", () => {
         seen.mockResolvedValue(roster().agents[0]);
         const release = subscribe();
         await waitFor(() => expect(otherBoxes.value[0]?.state).toBe(`ready`));
-        expect(boxAttention(otherBoxes.value[0]!)).toBe(1);
+        expect(otherBoxes.value[0]?.agents[0]?.seenAt).toBe(100);
         // Read from that box itself, and quietly: nobody is waiting on this poll, so it must never raise a sign-in.
         expect(list).toHaveBeenCalledWith(undefined, { context: { at: `sbx-other`, background: true } });
 
         markSeenAcross(`sbx-other`, `a1`);
 
-        // The next poll is up to 45 seconds out; a count still lit that long looks indistinguishable from stuck.
+        // The next poll is up to 45 seconds out; the read marker must update in this browser at once.
+        expect(otherBoxes.value[0]?.agents[0]?.seenAt).toBeGreaterThan(100);
         expect(boxAttention(otherBoxes.value[0]!)).toBe(0);
         expect(seen).toHaveBeenCalledWith({ id: `a1` }, { context: { at: `sbx-other`, background: true } });
         release();
