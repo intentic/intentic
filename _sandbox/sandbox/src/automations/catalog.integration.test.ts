@@ -9,7 +9,7 @@ import { createApp } from "../app.js";
 import type { Services } from "../composition.js";
 import { postJson } from "../harness/route-client.testing.js";
 import { services as routeServices } from "../harness/route-services.testing.js";
-import { memoryAutomationsStore } from "../harness/route-stores.testing.js";
+import { memoryAutomationsStore } from "./automations-slice.testing.js";
 import { testConfig } from "../testing.js";
 import { readWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { automationCatalog, CORE_TRIGGER_SOURCES, triggerSourceEvents } from "./catalog.js";

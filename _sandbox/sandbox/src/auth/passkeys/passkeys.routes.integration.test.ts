@@ -2,9 +2,9 @@ import type { Hono } from "hono";
 import { createApp } from "../../app.js";
 import type { AppEnv } from "../../app-env.js";
 import { softwareAuthenticator } from "../../harness/passkey-authenticator.testing.js";
-import { proven, rejectAuth, rejectForbidden } from "../../harness/route-client.testing.js";
+import { proven, rejectForbidden } from "../../harness/route-client.testing.js";
+import { memoryPasskeyStore, rejectAuth } from "../auth-slice.testing.js";
 import { services } from "../../harness/route-services.testing.js";
-import { memoryPasskeyStore } from "../../harness/route-stores.testing.js";
 import { ForbiddenError, type Proof, type ProvenCaller } from "../auth.js";
 import type { PasskeyStore } from "./passkey-store.js";
 

@@ -11,7 +11,7 @@ import { createApp } from "../app.js";
 
 import { clientFor, errorCode, proven, rejectForbidden } from "../harness/route-client.testing.js";
 import { services } from "../harness/route-services.testing.js";
-import { memoryCapabilitiesStore } from "../harness/route-stores.testing.js";
+import { memoryCapabilitiesStore } from "../capabilities/capabilities-slice.testing.js";
 
 // Drives the secrets routes over the daemon's HTTP surface the way the browser does; fakes and the client are shared
 // from route-services.testing.ts and its siblings.

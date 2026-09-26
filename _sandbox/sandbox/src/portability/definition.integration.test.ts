@@ -6,9 +6,9 @@ import { type Capability, SandboxSettingsSchema } from "@intentic/sandbox-contra
 import { defaultGit, gitClone } from "@intentic/scaffold";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { Services } from "../composition.js";
-import { fakeFiles } from "../harness/route-fakes.testing.js";
+import { fakeFiles } from "../workspace/workspace-slice.testing.js";
 import { services } from "../harness/route-services.testing.js";
-import { memoryCapabilitiesStore } from "../harness/route-stores.testing.js";
+import { memoryCapabilitiesStore } from "../capabilities/capabilities-slice.testing.js";
 import { testConfig } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { applyDefinitionItems } from "./apply-definition.js";

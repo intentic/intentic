@@ -29,7 +29,8 @@ import { sha256Text, statWorkspaceFileSize } from "./files/workspace-files.js";
 import { createWorkspaceTrash } from "./files/trash/workspace-trash.js";
 
 import { clientFor, errorCode, proven } from "../harness/route-client.testing.js";
-import { fakeFiles, fakeHistory, tempWorkspace } from "../harness/route-fakes.testing.js";
+import { fakeHistory, tempWorkspace } from "../harness/route-fakes.testing.js";
+import { fakeFiles } from "./workspace-slice.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { testConfig } from "../testing.js";
 

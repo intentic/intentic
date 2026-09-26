@@ -114,6 +114,8 @@ Main groups under `src/`:
 | Plumbing | `bootstrap/` `store/` `seams/` `system/` `http/` `logs/` `invariants/` `workload/` |
 | Test support | `harness/` `fences/` `e2e/` |
 
+A slice's test fake sits beside its slice as `<slice>.testing.ts` (for example `auth/auth-slice.testing.ts`), along with the in-memory stores it holds. `harness/route-services.testing.ts` spreads those fakes into one `Services`, so a new service gets its fake in the slice it joins.
+
 ## Commands
 
 ```sh

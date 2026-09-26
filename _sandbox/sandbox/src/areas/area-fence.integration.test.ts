@@ -6,7 +6,8 @@ import { unstubbed } from "@intentic/testing";
 import { createApp } from "../app.js";
 import type { Services } from "../composition.js";
 import { clientFor, errorCode, proven, rejectForbidden } from "../harness/route-client.testing.js";
-import { fakeFiles, fakeHistory, tempWorkspace } from "../harness/route-fakes.testing.js";
+import { fakeHistory, tempWorkspace } from "../harness/route-fakes.testing.js";
+import { fakeFiles } from "../workspace/workspace-slice.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { memoryAreasStore } from "../harness/route-stores.testing.js";
 

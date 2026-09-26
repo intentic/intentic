@@ -2,7 +2,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { softwareAuthenticator } from "../../harness/passkey-authenticator.testing.js";
-import { memoryPasskeyStore } from "../../harness/route-stores.testing.js";
+import { memoryPasskeyStore } from "../auth-slice.testing.js";
 import {
     createPasskeyCeremonies,
     filePasskeys,

@@ -1,7 +1,8 @@
 import type { BrowserConfig, Capability } from "@intentic/sandbox-contract";
-import { fakeFiles, tempWorkspace } from "../harness/route-fakes.testing.js";
+import { tempWorkspace } from "../harness/route-fakes.testing.js";
+import { fakeFiles } from "../workspace/workspace-slice.testing.js";
 import { services } from "../harness/route-services.testing.js";
-import { memoryCapabilitiesStore } from "../harness/route-stores.testing.js";
+import { memoryCapabilitiesStore } from "./capabilities-slice.testing.js";
 import { loadedSkillFile } from "../store/loaded-skills.js";
 import { openBrowserAccount } from "./open-account.js";
 

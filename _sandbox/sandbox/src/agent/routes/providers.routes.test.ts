@@ -8,7 +8,7 @@ import {
 } from "@intentic/sandbox-contract";
 import type { ProvidersRoutesDeps } from "./providers.routes.js";
 import { routesClient } from "../../harness/route-client.testing.js";
-import { memoryCapabilitiesStore } from "../../harness/route-stores.testing.js";
+import { memoryCapabilitiesStore } from "../../capabilities/capabilities-slice.testing.js";
 import { createProvidersRoutes } from "./providers.routes.js";
 
 /* What a chat may be addressed to here, from the tier that drives turns but may not read /capabilities. */

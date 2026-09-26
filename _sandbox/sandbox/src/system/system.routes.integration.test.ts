@@ -14,8 +14,10 @@ import { createBootTracker } from "./boot/boot.js";
 
 import { beginTurn, testConfig } from "../testing.js";
 
-import { clientFor, proven, rejectAuth, rejectForbidden } from "../harness/route-client.testing.js";
-import { fakeFiles, fakeProcesses } from "../harness/route-fakes.testing.js";
+import { clientFor, proven, rejectForbidden } from "../harness/route-client.testing.js";
+import { rejectAuth } from "../auth/auth-slice.testing.js";
+import { fakeFiles } from "../workspace/workspace-slice.testing.js";
+import { fakeProcesses } from "../processes/processes-slice.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { HOST_PEER } from "../hosts/host-peer.js";
 import { filePeerStore } from "../peers/peer-store.js";

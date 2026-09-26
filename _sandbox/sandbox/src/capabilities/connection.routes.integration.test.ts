@@ -1,6 +1,6 @@
 import { createApp } from "../app.js";
 import { services } from "../harness/route-services.testing.js";
-import { memoryCapabilitiesStore } from "../harness/route-stores.testing.js";
+import { memoryCapabilitiesStore } from "./capabilities-slice.testing.js";
 import { proven } from "../harness/route-client.testing.js";
 
 /* The connection route: the extension BACKENDS' credential read. */

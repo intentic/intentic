@@ -35,11 +35,6 @@ export const clientFor = (app: Hono<AppEnv>, options?: { readonly bearer?: strin
 // Nothing restores a stubbed var on its own, so one would outlive the test that set it.
 afterEach(() => unstubAllEnvs());
 
-// Auth stub refusing every bearer as an AUTHENTICATION failure (401), for testing a route's gate.
-export const rejectAuth = async (): Promise<never> => {
-    throw new Error("no bearer");
-};
-
 // Auth stub for a verified-but-unauthorized caller (403): bearer valid, identity just not allowed.
 export const rejectForbidden = async (): Promise<never> => {
     throw new ForbiddenError("not the sandbox owner");

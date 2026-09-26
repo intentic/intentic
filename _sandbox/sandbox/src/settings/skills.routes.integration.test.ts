@@ -6,9 +6,10 @@ import { unstubbed } from "@intentic/testing";
 import { createApp } from "../app.js";
 import type { Services } from "../composition.js";
 import { clientFor, errorCode } from "../harness/route-client.testing.js";
-import { fakeFiles, tempWorkspace } from "../harness/route-fakes.testing.js";
+import { tempWorkspace } from "../harness/route-fakes.testing.js";
+import { fakeFiles } from "../workspace/workspace-slice.testing.js";
 import { services } from "../harness/route-services.testing.js";
-import { memoryCapabilitiesStore } from "../harness/route-stores.testing.js";
+import { memoryCapabilitiesStore } from "../capabilities/capabilities-slice.testing.js";
 
 // Drives the skills routes over the real HTTP surface, with real files and a real settings store, since the point is
 // that one save call leaves the text and the loaded folder in agreement, and the settings list to the baked tools.

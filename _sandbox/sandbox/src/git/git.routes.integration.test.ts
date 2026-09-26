@@ -4,7 +4,8 @@ import { createApp } from "../app.js";
 import { markCheckRunning } from "../workspace/deps/checks-in-flight.js";
 
 import { clientFor, errorCode } from "../harness/route-client.testing.js";
-import { fakeFiles, fakeHistory, tempWorkspace } from "../harness/route-fakes.testing.js";
+import { fakeHistory, tempWorkspace } from "../harness/route-fakes.testing.js";
+import { fakeFiles } from "../workspace/workspace-slice.testing.js";
 import { services } from "../harness/route-services.testing.js";
 
 // The git routes, driven over the daemon's HTTP surface exactly as the browser drives them; fakes and client are shared

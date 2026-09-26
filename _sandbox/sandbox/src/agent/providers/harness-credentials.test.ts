@@ -12,7 +12,7 @@ import type { Services } from "../../composition.js";
 import type { SeatRefusal } from "../../runtimes/claude/claude-seats.js";
 import { services, withTranslator } from "../../harness/route-services.testing.js";
 import { testConfig } from "../../testing.js";
-import { memoryCapabilitiesStore } from "../../harness/route-stores.testing.js";
+import { memoryCapabilitiesStore } from "../../capabilities/capabilities-slice.testing.js";
 import type { HarnessCredential } from "./agent-request.js";
 import { harnessCredentialOf, harnessEnv, resolveHarnessCredentials } from "./harness-credentials.js";
 

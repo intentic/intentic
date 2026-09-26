@@ -19,7 +19,8 @@ import { toolChildrenOf, transcriptPageOf } from "../sessions/agent-transcript.j
 import { fileWebchatOutbox } from "../webchat/webchat-outbox.js";
 
 import { clientFor, collect, errorCode } from "../harness/route-client.testing.js";
-import { fakeHistory, fakeServiceProcesses } from "../harness/route-fakes.testing.js";
+import { fakeHistory } from "../harness/route-fakes.testing.js";
+import { fakeServiceProcesses } from "../processes/processes-slice.testing.js";
 import { codexConnectedProxy, services, withTranslator } from "../harness/route-services.testing.js";
 import { runAgentTurn } from "../harness/route-turns.testing.js";
 

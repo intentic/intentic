@@ -9,9 +9,11 @@ import { createApp } from "../app.js";
 import { hasSession, markConnected, sessionDir } from "../browser/sessions/session-store.js";
 
 import { clientFor, collect, errorCode } from "../harness/route-client.testing.js";
-import { fakeFiles, tempWorkspace } from "../harness/route-fakes.testing.js";
+import { tempWorkspace } from "../harness/route-fakes.testing.js";
+import { fakeFiles } from "../workspace/workspace-slice.testing.js";
 import { services } from "../harness/route-services.testing.js";
-import { memoryCapabilitiesStore, memoryDismissalsStore, memoryPersonasStore } from "../harness/route-stores.testing.js";
+import { memoryPersonasStore } from "../harness/route-stores.testing.js";
+import { memoryCapabilitiesStore, memoryDismissalsStore } from "./capabilities-slice.testing.js";
 
 // Capabilities routes, driven over the HTTP surface exactly as the browser does; split from app.integration.test.ts.
 // Fakes and the client are shared (route-services.testing.ts and its siblings); what lives here is what these routes

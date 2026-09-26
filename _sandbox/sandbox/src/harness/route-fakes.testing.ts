@@ -10,8 +10,6 @@ import { type Logger, pino } from "pino";
 import type { AgentWorktrees } from "../conversations/worktrees/worktrees.js";
 import type { Services } from "../composition.js";
 import { claudeStoreOf } from "../sessions/session-store.js";
-import type { ManagedProcesses } from "../processes/managed-processes.js";
-import type { ServiceProcesses, ServiceStatus } from "../processes/service-processes.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { landingChecksNote } from "../workspace/deps/mainline-note.js";
 
@@ -21,60 +19,6 @@ import { landingChecksNote } from "../workspace/deps/mainline-note.js";
 // What a conversation's opening turn discloses before its runtime says anything: the note telling it what runs after its
 // work lands (workspace/deps/mainline-note.ts), as the harness's empty verify store reads it, the main tree never red.
 export const OPENING_CHECKS_PREAMBLE: AgentEvent = { kind: "preamble", notes: [landingChecksNote([], false)] };
-
-// Same recording shape as fakeProcesses; seeded keys read as running services on the seeded port.
-export const fakeServiceProcesses = (
-    ports: Record<string, number> = {},
-): ServiceProcesses & { started: { key: string; cwd: string }[]; stopped: string[] } => {
-    const started: { key: string; cwd: string }[] = [];
-    const stopped: string[] = [];
-    const statusOf = (key: string): ServiceStatus | undefined =>
-        key in ports ? { key, state: "running", port: ports[key] ?? 0, restarts: 0, since: 0 } : undefined;
-    return Object.assign(
-        unstubbed<ServiceProcesses>("serviceProcesses", {
-            start: async (key, spec) => {
-                started.push({ key, cwd: spec.cwd });
-            },
-            stop: (key) => {
-                stopped.push(key);
-            },
-            running: (key) => key in ports,
-            portOf: (key) => ports[key],
-            statusOf,
-            list: () => Object.keys(ports).flatMap((key) => statusOf(key) ?? []),
-            logPathOf: () => undefined,
-            stopAll: () => {},
-        }),
-        { started, stopped },
-    );
-};
-
-// Records starts/stops; `portOf` returns the seeded port so a repo reads as running (the list route derives
-// running/healthy from portOf, not running()).
-export const fakeProcesses = (
-    ports: Record<string, number> = {},
-): ManagedProcesses & { started: { repo: string; cwd: string }[]; stopped: string[] } => {
-    const started: { repo: string; cwd: string }[] = [];
-    const stopped: string[] = [];
-    return Object.assign(
-        unstubbed<ManagedProcesses>("processes", {
-            start: async (repo, spec) => {
-                started.push({ repo, cwd: spec.cwd });
-            },
-            stop: (repo) => {
-                stopped.push(repo);
-            },
-            running: (repo) => repo in ports,
-            portOf: (repo) => ports[repo],
-            // A stubbed panel is never mid-start; routes drop the field, which is also the common case.
-            launchOf: () => undefined,
-            // Nor is it a one-shot run: a test that wants a finished install or check says so by replacing this.
-            runOf: () => undefined,
-            stopAll: () => {},
-        }),
-        { started, stopped },
-    );
-};
 
 // A temp workspace on disk for repo discovery: each entry is a repo dir with a `.git`, optionally an operator/ panel
 // (package.json with a dev script).
@@ -102,29 +46,6 @@ export const fakeHistory = (overrides: Partial<Services["history"]> = {}): Servi
         diff: async () => undefined,
         fileDiff: async () => undefined,
         restore: async () => false,
-        ...overrides,
-    });
-
-// The files seam with every method a no-op by default; a test overrides just the ones it asserts on.
-export const fakeFiles = (overrides: Partial<Services["files"]> = {}): Services["files"] =>
-    unstubbed("files", {
-        read: async () => undefined,
-        readWindow: async () => undefined,
-        write: async () => {},
-        writeStream: async () => {},
-        open: async () => undefined,
-        size: async () => undefined,
-        mkdir: async () => {},
-        remove: async () => {},
-        trash: {
-            put: async () => undefined,
-            restore: async () => {
-                throw new Error("fakeFiles: nothing in the trash");
-            },
-            sweep: async () => {},
-        },
-        move: async () => {},
-        copy: async () => {},
         ...overrides,
     });
 

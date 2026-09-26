@@ -7,7 +7,7 @@ import type { Capability } from "@intentic/sandbox-contract";
 import { createApp } from "../../app.js";
 import type { Services } from "../../composition.js";
 import { services } from "../../harness/route-services.testing.js";
-import { memoryCapabilitiesStore } from "../../harness/route-stores.testing.js";
+import { memoryCapabilitiesStore } from "../../capabilities/capabilities-slice.testing.js";
 import { testConfig } from "../../testing.js";
 import { workspaceExtensionsRoot } from "../../capabilities/extension-dirs.js";
 import { workspacePaths } from "../../workspace/workspace.js";

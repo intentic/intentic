@@ -6,9 +6,10 @@ import { type Capability, hostEntryOf } from "@intentic/sandbox-contract";
 import { stubEnv } from "@intentic/testing/bun";
 import { createApp } from "../app.js";
 import type { Services } from "../composition.js";
-import { fakeFiles, tempWorkspace } from "../harness/route-fakes.testing.js";
+import { tempWorkspace } from "../harness/route-fakes.testing.js";
+import { fakeFiles } from "../workspace/workspace-slice.testing.js";
 import { services } from "../harness/route-services.testing.js";
-import { memoryCapabilitiesStore } from "../harness/route-stores.testing.js";
+import { memoryCapabilitiesStore } from "../capabilities/capabilities-slice.testing.js";
 
 // One machine can hold two doors and only one of them is ever drawn: the ssh key desktop sync rides, and a device
 // enrollment, which no screen lists once its capability card is gone. Revoking a machine's access has to end both, or

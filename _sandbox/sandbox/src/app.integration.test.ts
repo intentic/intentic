@@ -23,10 +23,14 @@ import type { AgentRequest } from "./agent/providers/agent-request.js";
 
 import { testConfig } from "./testing.js";
 
-import { clientFor, collect, errorCode, postJson, proven, rejectAuth, rejectForbidden } from "./harness/route-client.testing.js";
-import { fakeFiles, fakeHistory } from "./harness/route-fakes.testing.js";
+import { clientFor, collect, errorCode, postJson, proven, rejectForbidden } from "./harness/route-client.testing.js";
+import { rejectAuth } from "./auth/auth-slice.testing.js";
+import { fakeHistory } from "./harness/route-fakes.testing.js";
+import { fakeFiles } from "./workspace/workspace-slice.testing.js";
 import { codexConnectedProxy, services, withTranslator } from "./harness/route-services.testing.js";
-import { automationRecord, memoryAutomationsStore, memoryCapabilitiesStore } from "./harness/route-stores.testing.js";
+import { automationRecord } from "./harness/route-stores.testing.js";
+import { memoryAutomationsStore } from "./automations/automations-slice.testing.js";
+import { memoryCapabilitiesStore } from "./capabilities/capabilities-slice.testing.js";
 import { runAgentTurn, startedRun } from "./harness/route-turns.testing.js";
 import { toolChildrenOf, transcriptPageOf } from "./sessions/agent-transcript.js";
 

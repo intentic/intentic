@@ -23,7 +23,7 @@ import { resumeInterruptedFires } from "../../../automations/fire-resume.js";
 import type { Services } from "../../../composition.js";
 import { unstubbed } from "@intentic/testing";
 import type { TranscriptAgent } from "../../../sessions/agent-transcript.js";
-import { testMintedSlices } from "../../../harness/route-services.testing.js";
+import { testMintedSlices } from "../../../runtimes/minted/minted-provider.testing.js";
 import { beginTurn, conversationEntry, drivenBy, fleetStoreOver, memoryFleet, notedFleet } from "../../../testing.js";
 import { automationConfig } from "../../../harness/route-stores.testing.js";
 import { fileTranscriptRecord } from "../../../sessions/transcript-record.js";

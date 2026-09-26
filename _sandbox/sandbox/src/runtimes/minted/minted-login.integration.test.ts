@@ -1,6 +1,6 @@
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createLogger } from "../../logger.js";
-import { memoryMintedStore } from "../../harness/route-stores.testing.js";
+import { memoryMintedStore } from "./minted-provider.testing.js";
 import { metaLoginDriver } from "./meta-login.js";
 import { cancelAllMintedLogins, cancelMintedLogin, completeMintedLogin, startMintedLogin } from "./minted-login.js";
 import { zaiLoginDriver } from "./zai-login.js";

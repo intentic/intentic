@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { fakeFiles } from "../harness/route-fakes.testing.js";
+import { fakeFiles } from "../workspace/workspace-slice.testing.js";
 import { clearManifestProblems, recordedProblems } from "../store/manifest-problems.js";
 import { type IdentitySeams, workspaceIdentity, workspaceIdentityDocument } from "./workspace-identity.js";
 
