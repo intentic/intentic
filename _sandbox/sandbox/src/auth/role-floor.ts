@@ -1,13 +1,9 @@
 import type { MemberRole } from "@intentic/sandbox-contract";
-import { isAttachmentPath, roleAtLeast, sandboxRouteFor } from "@intentic/sandbox-contract";
+import { defaultFloor, isAttachmentPath, roleAtLeast, sandboxRouteFor } from "@intentic/sandbox-contract";
 
 // Role floors: the minimum trust tier each route demands, read from the route's own RouteMeta (sandbox-contract
 // route-meta.ts) by the bearer middleware right after the caller's role resolves. A floor, not the whole answer:
 // operating routes still keep their own in-route maintainer gates; membership stays owner-only.
-
-// An undeclared floor: a read floors at viewer and anything else at maintainer, so a route nobody classified can
-// under-serve, never over-grant.
-const methodFloor = (method: string): MemberRole => (method === "GET" || method === "HEAD" ? "viewer" : "maintainer");
 
 // `target` is the upload's `?path=`, written by the caller: isAttachmentPath folds `..` first, so a traversal out of
 // the attachments dir never buys an attachment's floor.
@@ -42,5 +38,5 @@ export const routeFloor = (method: string, path: string, target?: string): Membe
     if (meta?.attachmentFloor !== undefined && attachment(target)) {
         return meta.attachmentFloor;
     }
-    return meta?.floor ?? methodFloor(method);
+    return meta?.floor ?? defaultFloor(method);
 };

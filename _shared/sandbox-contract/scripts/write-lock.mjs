@@ -6,4 +6,4 @@ import { currentLock, serializeLock } from "../dist/state/contract-lock.js";
 
 const lock = currentLock();
 writeFileSync(new URL("../contract.lock.json", import.meta.url), serializeLock(lock));
-console.log(`contract.lock.json: ${Object.keys(lock).length} exported schemas`);
+console.log(`contract.lock.json: ${Object.keys(lock).length} entries (schemas, wire manifests and route access)`);

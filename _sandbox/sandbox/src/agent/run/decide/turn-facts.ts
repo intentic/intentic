@@ -183,6 +183,7 @@ export type TurnFactsDeps = ServiceabilityDeps &
     Services,
     | "agents"
     | "agentWorktrees"
+    | "claudeSeatCheck"
     | "areas"
     | "capabilities"
     | "config"

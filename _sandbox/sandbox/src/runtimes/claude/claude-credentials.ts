@@ -15,6 +15,9 @@ const AUTHORIZE_URL = "https://claude.ai/oauth/authorize";
 const TOKEN_URL = "https://console.anthropic.com/v1/oauth/token";
 const REDIRECT_URI = "https://console.anthropic.com/oauth/code/callback";
 const SCOPES = "org:create_api_key user:profile user:inference";
+// Who the sandbox says it is when it asks Anthropic directly as Claude Code does: the limit-reset reads
+// (usage/claude-limit-reset.ts) and the seat probe (claude-seat-check.ts).
+export const CLAUDE_CLI_USER_AGENT = "claude-cli/2.1.257 (external, cli)";
 
 // A replayed refresh token revokes the whole family; a refresh runs at most once per rotation.
 

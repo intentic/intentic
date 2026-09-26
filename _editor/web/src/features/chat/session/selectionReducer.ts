@@ -15,6 +15,10 @@ export interface Selection {
     // Undefined is auto: never a seeded guess, so a fresh chat's first turn is placed by the daemon's serviceability
     // pick. A pick on a conversation the daemon holds moves it there (`switchAccount`), never by riding a later turn.
     readonly account: string | undefined;
+    // The person picked `account` by hand since the last turn took its settings: the next turn names it even where the
+    // daemon already runs the conversation there (accountIntent), so picking a refused account again tries it. Describes
+    // ONE turn, spent when that turn takes its settings.
+    readonly accountPicked: boolean;
     readonly model: string;
     // Provider/model the app moved this chat FROM when it couldn't run there; cleared by restoreProvider or a pick.
     readonly movedFrom: TurnPick | undefined;
@@ -44,7 +48,7 @@ export interface Selection {
 }
 
 // The picks a caller may set outright; the two divider facts move only with the turns that decide them.
-export type Picks = Omit<Selection, "sentModel" | "switchedMidTurn">;
+export type Picks = Omit<Selection, "sentModel" | "switchedMidTurn" | "accountPicked">;
 
 // What an untouched chat is seeded from: this browser's defaults for the next new chat.
 export interface SeedDefaults {
@@ -138,6 +142,7 @@ export const UNPICKED: Selection = {
     provider: `claude`,
     harness: `native`,
     account: undefined,
+    accountPicked: false,
     model: ``,
     movedFrom: undefined,
     displacedModel: undefined,
@@ -167,6 +172,7 @@ const pointAt = (selection: Selection, next: AgentProvider, world: PickWorld): S
         // Switching back to the session's own runtime shows its account again, the one the daemon runs it on. A pick
         // made on the provider being left names none of the next one's accounts: another provider starts on auto.
         account: next === world.session?.provider ? world.session.account : undefined,
+        accountPicked: false,
         model: world.rememberedModel(next),
         displacedModel: undefined,
         sentModel: undefined,
@@ -199,6 +205,7 @@ const REDUCERS: Reducers = {
                 harness: defaults.harness,
                 // Auto: the daemon places the first turn by serviceability.
                 account: undefined,
+                accountPicked: false,
                 model: world.rememberedModel(provider),
                 effortPick: defaults.effort,
                 thinking: defaults.thinking,
@@ -300,12 +307,12 @@ const REDUCERS: Reducers = {
         world.generating
             ? unchanged(selection)
             : {
-                  selection: { ...selection, account, switchedMidTurn: selection.switchedMidTurn || world.streaming },
+                  selection: { ...selection, account, accountPicked: true, switchedMidTurn: selection.switchedMidTurn || world.streaming },
                   effects: { kept: true, switchAccount: account, divider: `refresh` },
               },
     // The daemon moved the conversation itself, at this window's press (a held turn continued elsewhere): the selection
     // follows, with the divider a switch owes, and nothing asked of the daemon again.
-    accountMoved: (selection, { account }) => ({ selection: { ...selection, account }, effects: { divider: `refresh` } }),
+    accountMoved: (selection, { account }) => ({ selection: { ...selection, account, accountPicked: false }, effects: { divider: `refresh` } }),
     // Meaningful for codex/grok only. A retired session takes its prompt cache with it, as a provider switch does.
     selectHarness: (selection, { harness }, world) =>
         world.streaming || harness === selection.harness
@@ -320,7 +327,7 @@ const REDUCERS: Reducers = {
     // never taken, and a session naming no account says nothing about one.
     bindSession: (selection, { session }, world) =>
         world.local && session.provider === selection.provider && session.account !== undefined && session.account !== selection.account
-            ? { selection: { ...selection, account: session.account }, effects: { session, divider: `refresh` } }
+            ? { selection: { ...selection, account: session.account, accountPicked: false }, effects: { session, divider: `refresh` } }
             : { selection, effects: { session } },
     // The PICKS, not what they currently clamp to: a fork inherits the user's choice, not one model's ceiling.
     adopt: (selection, { from }) => ({
@@ -329,6 +336,7 @@ const REDUCERS: Reducers = {
             provider: from.provider,
             harness: from.harness,
             account: from.account,
+            accountPicked: false,
             model: from.model,
             effortPick: from.effortPick,
             thinking: from.thinking,
@@ -346,6 +354,7 @@ const REDUCERS: Reducers = {
             provider: `claude`,
             harness: `native`,
             account: undefined,
+            accountPicked: false,
             model: world.rememberedModel(`claude`),
             // A restored conversation is a fresh identity in this tab; it inherits no catalog's debt.
             displacedModel: undefined,
@@ -359,7 +368,9 @@ const REDUCERS: Reducers = {
     sent: (selection) => ({ selection: { ...selection, sentModel: selection.model }, effects: { divider: `freeze` } }),
     rerun: (selection) => ({ selection, effects: { divider: `freeze` } }),
     settled: (selection) => ({ selection: { ...selection, switchedMidTurn: false }, effects: { divider: { settle: selection.switchedMidTurn } } }),
-    settingsTaken: (selection) => (selection.autoPicked ? { selection: { ...selection, autoPicked: false }, effects: {} } : unchanged(selection)),
+    // Spends both one-turn marks: Auto's reading and the hand pick of an account.
+    settingsTaken: (selection) =>
+        selection.autoPicked || selection.accountPicked ? { selection: { ...selection, autoPicked: false, accountPicked: false }, effects: {} } : unchanged(selection),
 };
 
 // The table is keyed by the action's own kind, so the entry read always takes the action it is handed.

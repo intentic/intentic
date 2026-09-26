@@ -245,7 +245,7 @@ const infoOf = (config: Config): Services["info"] =>
 
 // The provider areas, each built by its own directory, and what they share: the translator, OpenCode, and the headroom
 // every account's allowance is read through.
-const createProviderAreas = (config: Config, logger: Logger, authRoot: string) => {
+const createProviderAreas = (config: Config, logger: Logger, authRoot: string, whole: () => Services) => {
     // Hoisted: the turn stream and the translator client both read and record into this same file.
     const accountUsage = fileAccountUsageStore(join(config.historyRoot, accountUsageDocument.path));
     const cliProxy = createCliProxyClient({
@@ -274,7 +274,7 @@ const createProviderAreas = (config: Config, logger: Logger, authRoot: string) =
               }),
     });
     gemini = createGeminiSlice({ config, authRoot, geminiAgent: createOpenCodeAgent(createOpenCodeRunner(openCode), OPENCODE_GEMINI_PROVIDER) });
-    const claude = createClaudeSlice({ config, logger, authRoot, workspaceRoot: config.workspaceRoot });
+    const claude = createClaudeSlice({ config, logger, authRoot, workspaceRoot: config.workspaceRoot, providerRefusals: () => whole().providerRefusals });
     const cursor = createCursorSlice({ authRoot, logger });
     // What this sandbox has been refused, for the plans that publish no allowance to read; Cursor's only reading.
     const observedLimits = fileObservedLimitStore(join(config.historyRoot, observedLimitsDocument.path));
@@ -452,7 +452,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const { workspace } = workspaceSlice;
     // AI-provider credential root; AGENT_AUTH_DIR shares it across dev sandboxes so subscription OAuth survives.
     const authRoot = config.agentAuthDir !== "" ? config.agentAuthDir : statePath(workspace.root, ".intentic/secrets/auth/");
-    const providers = createProviderAreas(config, logger, authRoot);
+    const providers = createProviderAreas(config, logger, authRoot, whole);
     // Who may call this daemon, and how: the roster, passkeys, sessions and every per-boot and per-extension token.
     const authSlice = createAuthSlice(config, workspace.root);
     // Hoisted: worktree ops and the Changes scan must file into the same tracker the summary line reads.

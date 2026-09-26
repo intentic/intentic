@@ -1,7 +1,7 @@
 import type { AccountUsage, AgentProvider, LimitResetClaim, LimitResetStatus } from "@intentic/sandbox-contract";
 import { claudeUsageWindows, rateLimitParkMs } from "./claude-usage.js";
 import { asRecord, asString, resetFromIso } from "./payload.js";
-import { type ClaudeStore, ensureFreshToken } from "../runtimes/claude/claude-credentials.js";
+import { CLAUDE_CLI_USER_AGENT, type ClaudeStore, ensureFreshToken } from "../runtimes/claude/claude-credentials.js";
 
 /* Anthropic's once-a-week session reset. */
 
@@ -23,7 +23,6 @@ const USAGE_ENDPOINT = "https://api.anthropic.com/api/oauth/usage?at_wall=1&skip
 const PROFILE_ENDPOINT = "https://api.anthropic.com/api/oauth/profile";
 const ORGANIZATIONS_ENDPOINT = "https://api.anthropic.com/api/organizations";
 const PROGRAM = "juniper_tide";
-const CLAUDE_CLI_USER_AGENT = "claude-cli/2.1.257 (external, cli)";
 
 const headers = (token: string): Record<string, string> => ({
     Authorization: `Bearer ${token}`,

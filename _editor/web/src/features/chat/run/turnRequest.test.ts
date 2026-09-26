@@ -106,6 +106,18 @@ describe(`turnRequestBody`, () => {
             });
         });
 
+        // The daemon holds a conversation off an account its organisation turned off, and a turn naming none is held
+        // there again. Picking that account by hand is the person trying it: named, so it runs, and its answer lifts
+        // the mark. THE FAILURE THIS PREVENTS: the pick equalled the recorded account, so it was dropped and held again.
+        it(`is named when the person picked it by hand for this turn, even the one the daemon already records`, () => {
+            expect(wire(turnRequestBody({ ...base, registered: true, settings: { ...onA, accountPicked: true }, session }))).toMatchObject({
+                account: `acct-a`,
+            });
+            expect(wire(turnRequestBody({ ...base, registered: true, settings: { ...onA, accountPicked: true }, session, box: `sbx-there` }))).not.toHaveProperty(
+                `account`,
+            );
+        });
+
         it(`is named where there is no record to follow: a first turn, another provider, a window holding no session`, () => {
             expect(wire(turnRequestBody({ ...base, registered: false, settings: onA, session }))).toMatchObject({ account: `acct-a` });
             expect(wire(turnRequestBody({ ...base, registered: true, settings: { ...onA, agent: `codex` }, session }))).toMatchObject({ account: `acct-a` });

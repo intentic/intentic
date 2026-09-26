@@ -17,13 +17,23 @@ const withUsage = (account: OauthAccount, usage: AccountUsage | undefined): Oaut
 const withSeat = (account: OauthAccount, seat: SeatRefusal | undefined): OauthAccount =>
     seat === undefined ? account : { ...account, seatRefusal: seat.reason };
 
-export type ClaudeAccountDeps = Pick<Services, "accountUsage" | "claudeSeats" | "claudeStore" | "headroom" | "observedLimits" | "providerRefusals">;
+export type ClaudeAccountDeps = Pick<
+    Services,
+    "accountUsage" | "claudeSeatCheck" | "claudeSeats" | "claudeStore" | "headroom" | "observedLimits" | "providerRefusals"
+>;
 
 // How long list waits for a fresh plan-limit reading before falling back to what's on file.
 const USAGE_WAIT_MS = 1_500;
 
 // How long a forced read waits (longer: the caller is watching a spinner); bounded by READ_TIMEOUT_MS (8s).
 const FORCED_USAGE_WAIT_MS = 9_000;
+
+// Waits for `work` no longer than `ms`; what is still running after that lands on a later read.
+const within = async (work: Promise<unknown>, ms: number): Promise<void> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([work, new Promise((resolve) => (timer = setTimeout(resolve, ms)))]);
+    clearTimeout(timer);
+};
 
 // How long a started attempt stays answerable; only bounds how long a forgotten attempt's verifier is kept.
 const LOGIN_WINDOW_MS = 15 * 60_000;
@@ -72,13 +82,20 @@ export const claudeAccountDoor = (services: ClaudeAccountDeps): AccountDoor => {
         // this sandbox. Usage is absent only when no reading has ever been obtained; the UI reads that as unknown, not
         // empty.
         list: async (force) => {
-            await services.headroom.refresh({
-                scope: { providers: ["claude"] },
-                // Forced is a person pressing re-measure and watching the age, the one caller allowed past the
-                // endpoint's own read budget.
-                ...(force ? { maxAgeMs: 0, watched: true } : {}),
-                withinMs: force ? FORCED_USAGE_WAIT_MS : USAGE_WAIT_MS,
-            });
+            const withinMs = force ? FORCED_USAGE_WAIT_MS : USAGE_WAIT_MS;
+            // A seat-marked account is re-tested too (claude-seat-check.ts), on its schedule, or at once when forced, so
+            // the row shows access that came back without a turn having to run there.
+            const marked = Object.keys(await services.claudeSeats.read());
+            await Promise.all([
+                services.headroom.refresh({
+                    scope: { providers: ["claude"] },
+                    // Forced is a person pressing re-measure and watching the age, the one caller allowed past the
+                    // endpoint's own read budget.
+                    ...(force ? { maxAgeMs: 0, watched: true } : {}),
+                    withinMs,
+                }),
+                within(Promise.all(marked.map((id) => services.claudeSeatCheck.recheck(id, { force }))), withinMs),
+            ]);
             // A duplicate left from before reconnects landed in place is the boot merge's (account-identity.ts), which
             // moves its pins to the survivor first; reading a list never deletes anything.
             const [accounts, usage, seats] = await Promise.all([services.claudeStore.list(), services.accountUsage.read(), services.claudeSeats.read()]);

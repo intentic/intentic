@@ -23,6 +23,9 @@ export const claudeSliceFake = ({ claudeStore }: ClaudeFakeOverrides) =>
         }),
         // Every seat is live: the picker skips only an account no org will serve; an answered turn clears its hold.
         claudeSeats: { read: async () => ({}), refuse: async () => {}, clear: async () => {} },
+        // Never re-asks the provider: a mark a suite sets stands until a turn answers on its account (claude-seat-check.testing.ts
+        // stands up the real schedule for a suite about the way back).
+        claudeSeatCheck: { recheck: async () => false },
         // Per-provider catalog the provider module reads directly; mirrors testProviderCatalogs row for row, so
         // overriding one without the other misses the seam.
         claudeModels: { models: async () => ({ models: [{ id: "opus", label: "Opus" }], default: "opus" }) },

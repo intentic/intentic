@@ -181,7 +181,7 @@ describe(`the settings`, () => {
 
     it(`takes an account while a card waits, owing the divider to the settle, and asks the daemon to move there`, () => {
         expect(reduceSelection(SEEDED, { kind: `selectAccount`, account: `second` }, PARKED)).toEqual({
-            selection: { ...SEEDED, account: `second`, switchedMidTurn: true },
+            selection: { ...SEEDED, account: `second`, accountPicked: true, switchedMidTurn: true },
             effects: { kept: true, switchAccount: `second`, divider: `refresh` },
         });
     });
@@ -249,7 +249,7 @@ describe(`the session`, () => {
         const picked = reduceSelection(SEEDED, { kind: `selectAccount`, account: `second` }, WORLD).selection;
 
         expect(reduceSelection(picked, { kind: `bindSession`, session: CLAUDE_SESSION }, WORLD)).toEqual({
-            selection: { ...picked, account: `claude-account` },
+            selection: { ...picked, account: `claude-account`, accountPicked: false },
             effects: { session: CLAUDE_SESSION, divider: `refresh` },
         });
         const settled = { ...CLAUDE_SESSION, account: `second` };
@@ -338,5 +338,16 @@ describe(`a turn's own moments`, () => {
     it(`spends Auto's mark on the one turn that takes its settings`, () => {
         expect(reduceSelection({ ...SEEDED, autoPicked: true }, { kind: `settingsTaken` }, WORLD).selection).toEqual(SEEDED);
         expect(reduceSelection(SEEDED, { kind: `settingsTaken` }, WORLD).selection).toBe(SEEDED);
+    });
+
+    // Picking the account the conversation already runs on changes nothing the selection shows, but the next turn names
+    // it (accountIntent): that is how a person tries an account the daemon holds turns off, and only that one turn.
+    it(`marks an account picked by hand, even the one already shown, for the one turn that takes its settings`, () => {
+        const onIt = { ...SEEDED, account: `second` };
+        const picked = reduceSelection(onIt, { kind: `selectAccount`, account: `second` }, WORLD).selection;
+
+        expect(picked).toEqual({ ...onIt, accountPicked: true });
+        expect(reduceSelection(picked, { kind: `settingsTaken` }, WORLD).selection).toEqual(onIt);
+        expect(reduceSelection(picked, { kind: `selectProvider`, provider: `codex` }, WORLD).selection.accountPicked).toBe(false);
     });
 });

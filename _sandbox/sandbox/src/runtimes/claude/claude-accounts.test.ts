@@ -19,10 +19,18 @@ const door = (
     sweeps: { withinMs: number | undefined; maxAgeMs: number | undefined; watched: boolean | undefined }[] = [],
     // Real state like accountUsage: tracks the org's turn-away row, and disconnect forgets it with the credential.
     seats = new Map<string, SeatRefusal>(),
+    // Every re-test of a marked account the door asked for; the provider is never re-asked here (claude-seat-check.test.ts).
+    rechecks: [string, { readonly force?: boolean } | undefined][] = [],
 ) =>
     claudeAccountDoor(
         unstubbed<ClaudeAccountDeps>("claude deps", {
             claudeStore,
+            claudeSeatCheck: {
+                recheck: async (id, options) => {
+                    rechecks.push([id, options]);
+                    return false;
+                },
+            },
             accountUsage: { read: async () => ({}), record: async () => {}, markUnread: async () => undefined, clear: async () => {} },
             claudeSeats: {
                 read: async () => Object.fromEntries(seats),
@@ -135,6 +143,24 @@ test("Claude: an account its organization turned away says so without asking for
     // Forgetting clears the seat entry with the credential, so nothing is left to orphan.
     await claude.forget("a");
     expect(seats.has("a")).toBe(false);
+});
+
+// The row is where a person looks for access coming back, and no turn runs on a marked account to find it.
+test("Claude: the list re-tests each marked account, at once when a person presses re-measure", async () => {
+    const accounts = new Map<string, StoredAccount>([
+        ["a", { id: "a", label: "Work", connectedAt: 1, accessToken: "tok" }],
+        ["b", { id: "b", label: "Home", connectedAt: 2, accessToken: "tok2" }],
+    ]);
+    const rechecks: [string, { readonly force?: boolean } | undefined][] = [];
+    const claude = door(memoryStore(accounts), [], new Map([["a", { at: 1, reason: "Your organization has disabled Claude Code." }]]), rechecks);
+
+    await claude.list(false);
+    await claude.list(true);
+
+    expect(rechecks).toEqual([
+        ["a", { force: false }],
+        ["a", { force: true }],
+    ]);
 });
 
 test("Claude: rename writes the label through, blank restores the derived name, and a gone account is undefined", async () => {

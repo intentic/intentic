@@ -5,7 +5,8 @@ import { jsonFile } from "../../store/json-file.js";
 
 // Accounts an org has turned Claude Code off for, kept apart from the account record: that record is a credential
 // rewritten whole on every rotation, so no other writer may touch this mark. A refused account still shows full
-// headroom and passes every pre-turn check, so it must be excluded from selection entirely.
+// headroom and passes every pre-turn check, so it must be excluded from selection entirely. With turns kept off it,
+// the way back is claude-seat-check.ts: a rationed probe that clears the mark once the provider answers again.
 
 const SeatRefusalSchema = z.object({
     // Epoch ms of the first refusal, kept across later ones; the only record of how long a seat has been off.
@@ -23,7 +24,8 @@ export interface ClaudeSeatStore {
     // Every account whose organization has refused it, keyed by account id.
     readonly read: () => Promise<Record<string, SeatRefusal>>;
     readonly refuse: (id: string, reason: string) => Promise<void>;
-    // Two callers: a turn answered on the account, or it was disconnected; else a leftover entry orphans.
+    // Three callers: a turn answered on the account, a seat probe got an answer (claude-seat-check.ts), or the account
+    // was disconnected; else a leftover entry orphans.
     readonly clear: (id: string) => Promise<void>;
 }
 

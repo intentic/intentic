@@ -9,6 +9,8 @@ import { type ClaudeStore, fileClaudeStore, startClaudeRefresh } from "./claude-
 import { claudeOneShot } from "./claude-one-shot.js";
 import { type ClaudeCatalog, createClaudeCatalog } from "./claude-models.js";
 import { type ClaudeSeatStore, fileClaudeSeatStore } from "./claude-seats.js";
+import { type ClaudeSeatCheck, claudeSeatProbe, createClaudeSeatCheck } from "./claude-seat-check.js";
+import type { ProviderRefusalStore } from "../../usage/provider-refusals.js";
 import { type ClaudeAccountDeps, claudeAccountDoor } from "./claude-accounts.js";
 import { claudeWarm, type ClaudeWarmDeps } from "./claude-warm.js";
 
@@ -20,6 +22,8 @@ export interface ClaudeSlice {
     readonly claudeStore: ClaudeStore;
     // Accounts an org switched Claude Code off for (claude/seats.json); apart, since the record rewrites whole.
     readonly claudeSeats: ClaudeSeatStore;
+    // The way back for a seat mark: a rationed probe of a marked account, which lifts the mark once access is back.
+    readonly claudeSeatCheck: ClaudeSeatCheck;
     // Claude's model catalog, held directly too so this module's row and the account routes share one instance.
     readonly claudeModels: ClaudeCatalog;
 }
@@ -29,11 +33,15 @@ export const createClaudeSlice = (input: {
     readonly authRoot: string;
     readonly workspaceRoot: string;
     readonly logger: Logger;
+    // Composed in the providers slice, after this one: read per call.
+    readonly providerRefusals: () => ProviderRefusalStore;
 }): ClaudeSlice => {
     const claudeStore = fileClaudeStore(join(input.authRoot, "claude"), input.logger);
+    const claudeSeats = fileClaudeSeatStore(join(input.authRoot, "claude", "seats.json"), input.logger);
     return {
         claudeStore,
-        claudeSeats: fileClaudeSeatStore(join(input.authRoot, "claude", "seats.json"), input.logger),
+        claudeSeats,
+        claudeSeatCheck: createClaudeSeatCheck({ seats: claudeSeats, refusals: input.providerRefusals, probe: claudeSeatProbe(claudeStore), logger: input.logger }),
         claudeModels: createClaudeCatalog(claudeStore, input.config, input.workspaceRoot, join(input.authRoot, "claude", "models.json"), undefined, undefined, input.logger),
     };
 };

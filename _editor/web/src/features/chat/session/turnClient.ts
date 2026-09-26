@@ -59,8 +59,8 @@ const repeatsNudge = (message: { readonly text: string; readonly attachments: re
 };
 
 // What a press re-runs a held turn on: the runtime and model the composer holds, the account only as a pick the daemon
-// has not taken (the same rule a send names it by, accountIntent); naming none leaves it to the daemon's record, which
-// also moves the turn off an account that can no longer serve. An empty pick means the daemon keeps the held model.
+// has not taken or one made by hand for this turn (the same rule a send names it by, accountIntent); naming none leaves
+// it to the daemon's record, which also moves the turn off an account that can no longer serve. An empty pick means the daemon keeps the held model.
 // `carry` keeps the provider session across an account change, only when asked; moving to another account is
 // switchAccount's (continueOn).
 const heldRouting = (settings: TurnSettings, session: SessionRef | undefined, options: { readonly carry?: boolean }): ResumeRouting => {

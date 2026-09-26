@@ -11,6 +11,8 @@ import { clientFor, collect, errorCode } from "../../harness/route-client.testin
 import { gitOut, realCheckout } from "../../harness/route-fakes.testing.js";
 import { codexConnectedProxy, services, withTranslator } from "../../harness/route-services.testing.js";
 import { attachedRows, runAgentTurn, startedRun } from "../../harness/route-turns.testing.js";
+import { FIRST_RECHECK_MS, type SeatProbe } from "../../runtimes/claude/claude-seat-check.js";
+import { BACK_ON, memorySeats, scriptedSeatCheck, STILL_OFF } from "../../runtimes/claude/claude-seat-check.testing.js";
 
 // Exercises the agent routes over the daemon's HTTP surface, as the browser does. Shared fakes and client live in
 // route-services.testing.ts and its siblings.
@@ -487,14 +489,21 @@ test("a person's turn goes on in the session the daemon holds, not one the clien
 // read the mark, so every later turn of the conversation was sent back to the refused seat and refused again.
 describe("a conversation on an account its organisation turned off", () => {
     const roomy = { measuredAt: Date.now(), windows: [{ kind: "five_hour" as const, utilization: 20, gates: "all" as const }] };
-    const fleet = (seats: Record<string, { at: number; reason: string }>, ready: readonly string[]) => {
+    // The seats are the test's record (a turn that answers clears its account's), and so is what the provider says when
+    // a marked account is re-tested, on the clock the test moves.
+    const fleet = (
+        seats: Record<string, { at: number; reason: string }>,
+        ready: readonly string[],
+        probe: { answer: SeatProbe; now: number } = { answer: STILL_OFF, now: Date.now() },
+    ) => {
         const tokens: string[] = [];
         const daemon = services({
             claudeStore: {
                 read: async (id) => ({ id, label: id, connectedAt: 0, accessToken: `tok-${id}` }),
                 list: async () => ["acct-a", "acct-b", "acct-c"].map((id) => ({ id, label: id, connectedAt: 0 })),
             },
-            claudeSeats: { read: async () => seats, refuse: async () => {}, clear: async () => {} },
+            claudeSeats: memorySeats(seats),
+            claudeSeatCheck: scriptedSeatCheck({ seats: memorySeats(seats), answer: () => probe.answer, now: () => probe.now }).check,
             accountUsage: {
                 read: async () => Object.fromEntries(ready.map((id) => [id, roomy])),
                 record: async () => {},
@@ -503,6 +512,7 @@ describe("a conversation on an account its organisation turned off", () => {
             },
             async *agent(request) {
                 tokens.push(request.credential?.kind === "claude-oauth" ? request.credential.token : (request.credential?.kind ?? "none"));
+                yield { kind: "delta", text: "on it" };
                 yield { kind: "done" };
             },
         });
@@ -528,6 +538,40 @@ describe("a conversation on an account its organisation turned off", () => {
         await runAgentTurn(client, { prompt: "on this one, please", conversationId: "conv-named", account: "acct-a" });
 
         expect(tokens).toEqual(["tok-acct-a"]);
+    });
+
+    // An explicit pick is an attempt, not a hold: the editor names the account for the turn (turnRequest.ts
+    // accountIntent), and the answer lifts the mark.
+    it("runs a turn that names a marked account, and its answer lifts the mark", async () => {
+        const seats: Record<string, { at: number; reason: string }> = {};
+        const { tokens, client } = fleet(seats, []);
+        await runAgentTurn(client, { prompt: "start", conversationId: "conv-pick", account: "acct-a" });
+        seats["acct-a"] = SEAT_OFF;
+
+        await runAgentTurn(client, { prompt: "try it again", conversationId: "conv-pick", account: "acct-a" });
+
+        expect(tokens).toEqual(["tok-acct-a", "tok-acct-a"]);
+        await waitFor(() => expect(seats).toEqual({}), SETTLES);
+    });
+
+    // THE FAILURE THIS PREVENTS: turns were kept off the marked account, so none ran there to lift the mark, and a user
+    // with one account stayed held after their admin turned access back on.
+    it("sends the held words on the account once a re-test finds its access back", async () => {
+        const seats: Record<string, { at: number; reason: string }> = {};
+        const probe = { answer: STILL_OFF, now: Date.now() };
+        const { daemon, tokens, client } = fleet(seats, [], probe);
+        await runAgentTurn(client, { prompt: "start", conversationId: "conv-back", account: "acct-a" });
+        seats["acct-a"] = SEAT_OFF;
+        await runAgentTurn(client, { prompt: "carry on", conversationId: "conv-back", messageId: "m-back" });
+        await waitFor(async () => expect(await queueOf(client, "conv-back")).toMatchObject({ items: [{ id: "m-back" }], paused: "refused" }), SETTLES);
+
+        probe.answer = BACK_ON;
+        probe.now += 2 * FIRST_RECHECK_MS;
+        await client.agent.queueResume({ conversationId: "conv-back" });
+
+        await waitFor(() => expect(tokens).toEqual(["tok-acct-a", "tok-acct-a"]), SETTLES);
+        expect(seats).toEqual({});
+        expect(daemon.agents.entry("conv-back")?.profile.account).toBe("acct-a");
     });
 
     it("holds the words for a press when no account can serve, spawning nothing", async () => {

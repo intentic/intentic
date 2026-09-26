@@ -40,5 +40,39 @@ export interface RouteMeta {
     readonly front?: true;
 }
 
+// The floor a route gets when it declares none: a read (GET, HEAD) floors at viewer, anything else (`ALL` included) at
+// maintainer, so a route nobody classified can under-serve, never over-grant.
+export const defaultFloor = (method: string): MemberRole => (method === "GET" || method === "HEAD" ? "viewer" : "maintainer");
+
+// The fields that say how a request travels, not who may send it; every other RouteMeta field decides reach.
+type TransportField = "lane" | "front";
+
+// Every field that decides who reaches a route, with its default resolved, so an absent field and a declared one read
+// alike and loosening either is a changed value: what contract.lock.json records per route (`access:METHOD /path`),
+// where the lock check and the push gate see it. Keyed by the interface: a RouteMeta field added above fails this
+// package's typecheck until it is read here or named a TransportField.
+const ACCESS = {
+    auth: (meta) => meta.auth ?? "session",
+    embedded: (meta) => meta.embedded === true,
+    beforeBoot: (meta) => meta.beforeBoot === true,
+    stream: (meta) => meta.stream === true,
+    floor: (meta, method) => meta.floor ?? defaultFloor(method),
+    guest: (meta) => meta.guest === true,
+    attachmentFloor: (meta) => meta.attachmentFloor ?? "none",
+    enrolment: (meta) => meta.enrolment === true,
+    agent: (meta) => meta.agent === true,
+    sync: (meta) => meta.sync ?? "none",
+    panel: (meta) => meta.panel !== false,
+    // `floor`: no reach of its own, the control rungs read the route's floor alone.
+    control: (meta) => meta.control ?? "floor",
+} as const satisfies { readonly [K in Exclude<keyof RouteMeta, TransportField>]-?: (meta: RouteMeta, method: string) => string | boolean };
+
+export type RouteAccess = { readonly [K in keyof typeof ACCESS]: ReturnType<(typeof ACCESS)[K]> };
+
+// One route's reach as its declaration states it, every default filled in.
+export const routeAccess = (method: string, meta: RouteMeta): RouteAccess =>
+    // SAFETY: every entry is one of ACCESS's own keys paired with what its reader returned, which RouteAccess spells.
+    Object.fromEntries(Object.entries(ACCESS).map(([field, read]) => [field, read(meta, method)])) as RouteAccess;
+
 // The builder every sandbox procedure starts from, so each carries a RouteMeta and whatever it leaves out defaults.
 export const procedure = oc.$meta<RouteMeta>({});

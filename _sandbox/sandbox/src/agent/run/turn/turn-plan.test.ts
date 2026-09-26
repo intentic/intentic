@@ -6,6 +6,8 @@ import { type Persona, type SandboxSettings, PersonaPowersSchema, SandboxSetting
 import type { Services } from "../../../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { conversationAfter, testConfig } from "../../../testing.js";
+import { FIRST_RECHECK_MS } from "../../../runtimes/claude/claude-seat-check.js";
+import { BACK_ON, memorySeats, scriptedSeatCheck, STILL_OFF } from "../../../runtimes/claude/claude-seat-check.testing.js";
 import { UNATTENDED_ACCOUNTS_TITLE } from "../../../personas/personas.js";
 import { LANDING_CHECKS_NOTE_HEADER, landingChecksNote } from "../../../workspace/deps/mainline-note.js";
 import type { AgentRequest, TurnPolicy, TurnSpec } from "../../providers/agent-request.js";
@@ -473,7 +475,9 @@ test("an account the turn names outranks the conversation's latched one", async 
 describe("a conversation whose account can no longer serve it", () => {
     const moves: [string, string][] = [];
     const roomy = { measuredAt: Date.now(), windows: [{ kind: "five_hour" as const, utilization: 20, gates: "all" as const }] };
-    const fleet = (ready: boolean): Services =>
+    // The seat mark and what the provider says when the account is re-tested, both the test's to change.
+    const SEAT_OFF = { at: 0, reason: "Your organization has disabled Claude Code." };
+    const fleet = (ready: boolean, seat: ReturnType<typeof marked> = marked()): Services =>
         harnessServices({
             agents: unstubbed<Services["agents"]>("agents", {
                 entry: () => conversationAfter(3, { profile: { provider: "claude", harness: "native", account: "seatless" } }),
@@ -488,15 +492,20 @@ describe("a conversation whose account can no longer serve it", () => {
                     { id: "spare", label: "spare", connectedAt: 1 },
                 ],
             }),
-            claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", {
-                read: async () => ({ seatless: { at: 0, reason: "Your organization has disabled Claude Code." } }),
-            }),
+            claudeSeats: memorySeats(seat.marks),
+            claudeSeatCheck: scriptedSeatCheck({ seats: memorySeats(seat.marks), answer: () => seat.probe.answer, now: () => seat.now }).check,
             // The refused seat reads emptiest, as a seat nothing ran on does; the spare is ready only when it has a reading.
             accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", {
                 read: async () => (ready ? { seatless: { ...roomy, windows: [] }, spare: roomy } : { seatless: { ...roomy, windows: [] } }),
             }),
             providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { read: async () => ({}) }),
         });
+
+    const marked = () => ({
+        marks: { seatless: SEAT_OFF },
+        probe: { answer: STILL_OFF },
+        now: Date.now(),
+    });
 
     beforeEach(() => {
         moves.length = 0;
@@ -528,6 +537,21 @@ describe("a conversation whose account can no longer serve it", () => {
 
         expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "seatless" }));
         expect(moves).toEqual([]);
+    });
+
+    // THE FAILURE THIS PREVENTS: turns kept off the marked account meant none ran there to lift the mark, so a user
+    // with one account stayed held after their admin turned access back on.
+    test("runs the turn on the account again once a re-test finds its access back", async () => {
+        const seat = marked();
+        const services = fleet(false, seat);
+        expect(await planTurn(services, turn({ conversationId: "conv-seat" }), context)).toMatchObject({ ok: false, code: "claude-not-entitled" });
+
+        seat.probe.answer = BACK_ON;
+        seat.now += 2 * FIRST_RECHECK_MS;
+        await planTurn(services, turn({ conversationId: "conv-seat" }), context);
+
+        expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "seatless" }));
+        expect([Object.keys(seat.marks), moves]).toEqual([[], []]);
     });
 });
 

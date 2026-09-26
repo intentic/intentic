@@ -16,6 +16,9 @@ export interface TurnSettings {
     // The account the person picked, or the daemon's own record of where the conversation runs; undefined is auto (the
     // daemon picks by serviceability). Sent only as intent (accountIntent).
     readonly account: string | undefined;
+    // The person picked `account` by hand for this turn, so the turn names it even where the daemon's record already
+    // does (accountIntent). Absent on every other turn.
+    readonly accountPicked?: boolean;
     // Persona id the turn acts as; undefined means an ordinary chat with every connected account reachable.
     readonly actsAs: string | undefined;
     // The folder the conversation opens in (the project it belongs to); undefined means the workspace root. The daemon
@@ -70,17 +73,23 @@ export const readsAsContinuing = (
 export const fallbackSessionId = (session: SessionRef | undefined, settings: Pick<TurnSettings, "agent" | "account" | "harness">): string | undefined =>
     readsAsContinuing(session, settings) ? session?.id : undefined;
 
-// The account a request names: a pick the daemon has not taken yet, and only that. Where a conversation runs is the
-// daemon's record (routingFor), moved by `switchAccount` and reported back on each session frame (`session`), so a turn
-// naming none runs there, and is moved off it by the daemon when that account can no longer serve. Named, and so run
-// whatever the account's state, only where the selection holds something that record does not: a chat's first turn
-// (undefined there too is auto), a turn onto another provider than the conversation's, or an account other than the
-// one the daemon last reported (a pick a daemon too old for `switchAccount`, or busy with a turn, has not taken).
+// The account a request names: a pick the daemon has not taken yet, or a pick made by hand for this turn. Where a
+// conversation runs is the daemon's record (routingFor), moved by `switchAccount` and reported back on each session
+// frame (`session`), so a turn naming none runs there, and is moved off it by the daemon when that account can no
+// longer serve (blocked-account.ts), or held when no other can. Named, and so run whatever the account's state, only
+// where the selection holds something that record does not: a chat's first turn (undefined there too is auto), a turn
+// onto another provider than the conversation's, an account other than the one the daemon last reported (a pick a
+// daemon too old for `switchAccount`, or busy with a turn, has not taken), or the account the person just picked by
+// hand (`accountPicked`), even the recorded one: picking an account the daemon holds turns off for is an attempt on
+// it, not another hold, and its answer lifts the daemon's mark.
 export const accountIntent = (
-    settings: Pick<TurnSettings, "agent" | "account">,
+    settings: Pick<TurnSettings, "agent" | "account" | "accountPicked">,
     facts: { readonly registered: boolean; readonly session: SessionRef | undefined },
 ): string | undefined => {
     const { session } = facts;
+    if (settings.accountPicked === true) {
+        return settings.account;
+    }
     const recorded = facts.registered && session !== undefined && session.provider === settings.agent;
     return recorded && (settings.account === undefined || settings.account === session.account) ? undefined : settings.account;
 };

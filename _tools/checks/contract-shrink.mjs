@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Diffs the committed contract.lock.json against merge-base; a shrunk surface must be declared in the range (a type!:
-// subject or Breaking-Note: trailer). Gates the push and stands down on main itself, and in a linked worktree too,
+// subject or Breaking-Note: trailer). A route's recorded access (`access:` entries) counts: any change to one is a shrink. Gates the push and stands down on main itself, and in a linked worktree too,
 // since landing carries work as patches and the declaration is the landing draft's job.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -30,6 +30,11 @@ if (!conversation && existsSync(join(root, LOCK_FILE))) {
                 ...gone.slice(0, 10).map((path) => `${LOCK_FILE}: ${path}`),
                 ...(gone.length > 10 ? [`…and ${gone.length - 10} more`] : []),
                 `something users could rely on was removed or changed: declare it, or make the change compatible`,
+                // An `access:METHOD /path.field` entry is a route's reach (sandbox-contract route-meta.ts `routeAccess`):
+                // a lower floor or a new grant lets someone reach what they could not, so the note says who, and what.
+                ...(gone.some((path) => path.startsWith("access:"))
+                    ? [`an access: entry is who may reach that route: say in the note who can now reach it, or who no longer can`]
+                    : []),
                 `to declare it, run this ON THIS CHECKOUT (fill in the sentence) and re-run the push:`,
                 `    git commit --allow-empty -m 'feat!: declare the wire-contract removals in this range' ` +
                     `-m 'Breaking-Note: <what stops working and what to do instead, one plain sentence>'`,

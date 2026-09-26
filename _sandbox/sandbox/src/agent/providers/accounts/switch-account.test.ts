@@ -65,10 +65,28 @@ test("a held turn runs again at once on the account named, carried when asked", 
                 return { id: "run-2" } as never;
             },
         }),
+        claudeSeatCheck: unstubbed<Services["claudeSeatCheck"]>("claudeSeatCheck", { recheck: async () => true }),
     };
     expect(await switchAccount(deps, { conversationId: ID, account: "acct-b", carry: true })).toEqual({ kind: "moved", run: "run-2" });
     expect(pressed).toEqual([{ routing: { agent: "claude", harness: "native", account: "acct-b", carry: true } }]);
     // A person's press reopens a conversation archived since the turn was held, at this door: the engine refuses every
     // archived one.
     expect(reopened).toEqual([ID]);
+});
+
+// Picking an account is an attempt on it: a seat-marked one is re-tested at once, not on the rationed schedule, so access
+// an admin turned back on is found without waiting (claude-seat-check.ts).
+test("a pick re-tests the account's seat at once", async () => {
+    const asked: [string, { readonly force?: boolean } | undefined][] = [];
+    const deps = services({
+        claudeSeatCheck: {
+            recheck: async (id, options) => {
+                asked.push([id, options]);
+                return true;
+            },
+        },
+    });
+    await ranOnce(deps);
+    await switchAccount(deps, { conversationId: ID, account: "acct-a" });
+    expect(asked).toEqual([["acct-a", { force: true }]]);
 });

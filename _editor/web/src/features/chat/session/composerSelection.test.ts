@@ -202,8 +202,18 @@ describe(`ComposerSelection`, () => {
             thinking: true,
             fast: selection.fastOffered.value,
             autoPicked: true,
+            accountPicked: false,
         });
         expect(selection.turnSettings().autoPicked).toBeUndefined();
+    });
+
+    // A hand pick of the account the conversation already shows changes nothing on screen, but the one turn after it
+    // names that account (accountIntent), which is how a refused account is tried again.
+    it(`names an account picked by hand on the one turn that takes its settings`, () => {
+        const { selection } = selectionOf();
+        selection.apply({ kind: `selectAccount`, account: `acct-a` });
+
+        expect([selection.turnSettings().accountPicked, selection.turnSettings().accountPicked]).toEqual([true, false]);
     });
 
     it(`drops the last speed answer when the fast pick changes`, () => {

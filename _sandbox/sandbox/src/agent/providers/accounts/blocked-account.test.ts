@@ -1,9 +1,10 @@
 import type { AccountUsage, OauthAccount, ProviderRefusal } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
+import { FIRST_RECHECK_MS, type SeatProbe } from "../../../runtimes/claude/claude-seat-check.js";
+import { BACK_ON, memoryRefusals, memorySeats, scriptedSeatCheck, STILL_OFF } from "../../../runtimes/claude/claude-seat-check.testing.js";
 import type { SeatRefusal } from "../../../runtimes/claude/claude-seats.js";
-import type { ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
-import { offBlockedAccount } from "./blocked-account.js";
+import { type BlockedAccountDeps, offBlockedAccount } from "./blocked-account.js";
 
 // Which turns are moved off the account their conversation remembers, and which are left where routing points. The
 // planning side (the move recorded, the refusal held) is turn-plan.test.ts's; the whole path is agent.routes'.
@@ -15,9 +16,16 @@ const deps = (params: {
     readonly usage?: Record<string, AccountUsage>;
     readonly seats?: Record<string, SeatRefusal>;
     readonly refusal?: ProviderRefusal;
-}): ServiceabilityDeps => ({
+    // What the provider says when the marked account is re-tested; the seat is still off unless a test says otherwise.
+    readonly probe?: SeatProbe;
+}): BlockedAccountDeps => ({
     claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", { list: async () => [...params.accounts] }),
     claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => params.seats ?? {} }),
+    claudeSeatCheck: scriptedSeatCheck({
+        seats: memorySeats({ ...params.seats }),
+        refusals: memoryRefusals(params.refusal === undefined ? {} : { claude: params.refusal }),
+        answer: () => params.probe ?? STILL_OFF,
+    }).check,
     accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => params.usage ?? {} }),
     providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", {
         read: async () => (params.refusal === undefined ? {} : { claude: params.refusal }),
@@ -70,4 +78,32 @@ test("a spent account, a revoked sign-in and a routed provider are not this rule
     const revoked = [{ id: "home", label: "home", needsReauth: true }, TWO[1]] as OauthAccount[];
     expect(await offBlockedAccount(deps({ accounts: revoked, usage: { spare: reading(30) } }), remembered)).toEqual({ kind: "keep" });
     expect(await offBlockedAccount(deps({ accounts: TWO, seats: SEAT_OFF }), { ...remembered, provider: "codex" })).toEqual({ kind: "keep" });
+});
+
+// Turns are kept off a marked account, so no turn runs there to lift the mark: a single-account user stayed held after
+// their admin turned access back on. THE FAILURE THIS PREVENTS: the mark had no way back but a turn on the account.
+test("a held account whose access came back is re-tested, its mark lifted, and the turn kept on it", async () => {
+    const seats = { ...SEAT_OFF };
+    const probe = { answer: STILL_OFF };
+    let now = Date.now();
+    const { check, probes } = scriptedSeatCheck({ seats: memorySeats(seats), answer: () => probe.answer, now: () => now });
+    const alone = { ...deps({ accounts: TWO }), claudeSeats: memorySeats(seats), claudeSeatCheck: check };
+
+    expect(await offBlockedAccount(alone, remembered)).toMatchObject({ kind: "held", account: "home" });
+    // Not due again yet: held without asking.
+    expect(await offBlockedAccount(alone, remembered)).toMatchObject({ kind: "held", account: "home" });
+
+    // The admin turns access back on; the next due re-test finds it.
+    probe.answer = BACK_ON;
+    now += 2 * FIRST_RECHECK_MS;
+    expect(await offBlockedAccount(alone, remembered)).toEqual({ kind: "keep" });
+    expect([probes, Object.keys(seats)]).toEqual([["home", "home"], []]);
+});
+
+test("the re-test is made only for an account the rule would move a turn off", async () => {
+    const { check, probes } = scriptedSeatCheck({ seats: memorySeats({ ...SEAT_OFF }), answer: () => BACK_ON });
+    const seatless = { ...deps({ accounts: TWO, seats: SEAT_OFF, usage: { spare: reading(30) } }), claudeSeatCheck: check };
+    await offBlockedAccount(seatless, { ...remembered, named: "home" });
+    await offBlockedAccount(deps({ accounts: TWO, usage: { home: reading(10) } }), remembered);
+    expect(probes).toEqual([]);
 });

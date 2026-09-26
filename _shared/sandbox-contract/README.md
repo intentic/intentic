@@ -44,7 +44,11 @@ flowchart LR
   `src/front/front-wire.ts` are the entries to them, and `wire-manifests.test.ts` holds every value TypeScript restates
   to those manifests.
 - `contract.lock.json` is every exported schema as canonical JSON Schema, plus those three manifests under `wire:`
-  names, so a changed tunnel header or a gone control message is a shrink like any other. Rewrite it by hand with
+  names, so a changed tunnel header or a gone control message is a shrink like any other, plus who reaches each route
+  under `access:METHOD /path`: every reach field of its `RouteMeta` with the default filled in (`routeAccess`). A
+  field is recorded even when a route leaves it out, so a lowered floor or a new `guest`, `agent` or `panel` grant is a
+  changed value, which counts as a shrink, never as growth that passes. The lock test names the route and the field
+  that moved. Rewrite it by hand with
   `pnpm --filter @intentic/sandbox-contract lock`. After a land that changed the contract, the land check's
   `pnpm verify` rewrites it in the main tree, where it waits as an uncommitted change. `src/state/contract-lock.test.ts`
   fails while the lock and the schemas disagree. `_tools/checks/contract-shrink.mjs` reports a push that shrinks it

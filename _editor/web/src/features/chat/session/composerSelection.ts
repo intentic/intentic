@@ -131,7 +131,8 @@ export class ComposerSelection {
     }
 
     // Turn settings a message sends under: this selection as it stands at delivery, not at typing time, which spends the
-    // one-turn Auto mark: it belongs to the turn the judge decided, and the next one on the same model is the user's.
+    // one-turn Auto mark (it belongs to the turn the judge decided, and the next one on the same model is the user's) and
+    // the hand pick of an account (the turn it names is the attempt; the next one follows the daemon's record again).
     turnSettings(): TurnSettings {
         const { state } = this;
         const settings: TurnSettings = {
@@ -146,6 +147,7 @@ export class ComposerSelection {
             // The pick AND the offer: a toggle left on must not ride to a model that doesn't publish fast mode.
             fast: state.value.fast && this.fastOffered.value,
             ...(state.value.autoPicked ? { autoPicked: true } : {}),
+            accountPicked: state.value.accountPicked,
         };
         this.apply({ kind: `settingsTaken` });
         return settings;

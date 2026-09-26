@@ -5,6 +5,9 @@ import type { Services } from "../../../composition.js";
 // a spent allowance or a stop is holding runs again at once on the account named, which is how "continue on another
 // account" is pressed; otherwise the conversation's profile is re-pointed, and without `carry` its session retired, so the
 // next turn opens fresh on the new account instead of replaying a session another account minted.
+//
+// A person's pick is also the one moment a seat-marked Claude account is re-tested at once (claude-seat-check.ts), off
+// this command's clock: the pick is an attempt on the account, and the editor names it on the next turn as well.
 
 export type AccountSwitch =
     | { readonly kind: "moved"; readonly run?: string }
@@ -14,11 +17,17 @@ export type AccountSwitch =
     // the old account back over the new one, and retiring the session would pull it out from under the turn.
     | { readonly kind: "busy" };
 
-export const switchAccount = async (services: Pick<Services, "agents" | "conversations" | "turns">, input: SwitchAccount): Promise<AccountSwitch> => {
+export const switchAccount = async (
+    services: Pick<Services, "agents" | "claudeSeatCheck" | "conversations" | "turns">,
+    input: SwitchAccount,
+): Promise<AccountSwitch> => {
     const { conversationId, account, carry } = input;
     const entry = services.agents.entry(conversationId);
     if (entry === undefined) {
         return { kind: "unknown" };
+    }
+    if (entry.profile.provider === "claude") {
+        void services.claudeSeatCheck.recheck(account, { force: true });
     }
     const state = services.conversations.state(conversationId);
     const held = state?.resume.held;

@@ -6,6 +6,7 @@ import {
     RAW_ROUTE_LIST,
     type RouteMeta,
     roleAtLeast,
+    routeAccess,
     SANDBOX_ROUTES,
     sandboxRouteFor,
 } from "@intentic/sandbox-contract";
@@ -47,9 +48,12 @@ const FIELDS = {
     front: "transport",
 } as const satisfies Record<keyof RouteMeta, "reach" | "transport">;
 
-// The reading itself, pinned on one route per rule it applies: a default floor for a read and for a write, a declared
-// floor on a read, each credential column, each control reach, a stream, a door, the upload's attachment row, and `ALL`
-// read as a write. A row here changes only when that route's declaration does.
+// Every route's declaration itself is pinned in the contract's lock (contract.lock.json `access:` entries, read by
+// route-meta.ts `routeAccess`), so lowering any route's floor or granting it a credential fails that lock check and
+// needs a declared break; this file proves the gates honour what is declared. The reading itself is pinned here on one
+// route per rule it applies: a default floor for a read and for a write, a declared floor on a read, each credential
+// column, each control reach, a stream, a door, the upload's attachment row, and `ALL` read as a write. A row here
+// changes only when that route's declaration does.
 const PINNED = {
     "GET /health": "door early timed viewer panel read drive land",
     "POST /agent": "bearer waits timed collaborator guest panel editor drive land",
@@ -195,6 +199,14 @@ test("every route declares its policy only in fields the reading knows", () => {
             .map((field) => `${route.method} ${route.path}: ${field}`),
     );
     expect(unread).toEqual([]);
+});
+
+// The lock records exactly the fields this file reads as reach, so a reach field the lock left out cannot move unseen.
+test("the contract lock records every field that decides reach, and nothing else", () => {
+    const reach = Object.entries(FIELDS)
+        .filter(([, kind]) => kind === "reach")
+        .map(([field]) => field);
+    expect(Object.keys(routeAccess("GET", {})).toSorted()).toEqual(reach.toSorted());
 });
 
 test("every route is held to exactly the policy its own declaration states", async () => {
