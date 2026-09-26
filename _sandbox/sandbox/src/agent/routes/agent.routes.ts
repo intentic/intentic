@@ -103,7 +103,7 @@ export const createAgentRoutes = (services: Services) => {
             }
             return { run: run.id };
         }),
-        // The one command that moves who pays (agent/providers/accounts/switch-account.ts); a held turn re-runs there at once.
+        // The one command that moves who pays (agent/providers/accounts/switch-account.ts); asked to `run`, a held turn re-runs there at once.
         switchAccount: i.switchAccount.handler(async ({ input, context }) => {
             own(context, input.conversationId);
             const outcome = await switchAccount(services, input);

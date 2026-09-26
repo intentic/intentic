@@ -400,6 +400,12 @@ export const SwitchAccountSchema = z.object({
         .describe(
             "Keep the provider session across the move (the model keeps everything, and re-reads all of it once on the other account) rather than opening a fresh one seeded from the record.",
         ),
+    run: z
+        .boolean()
+        .optional()
+        .describe(
+            "Also run a turn that a spent allowance, a stop or a refusal is holding, at once on the new account. Leave it out to only move the conversation: a held turn stays held until something asks for it.",
+        ),
 });
 export type SwitchAccount = z.infer<typeof SwitchAccountSchema>;
 export const AccountSwitchedSchema = z.object({

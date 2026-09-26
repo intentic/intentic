@@ -136,7 +136,7 @@ export const agentContract = {
             path: "/agent/account",
             summary: "Move a conversation to another account",
             description:
-                "Points the conversation at another connected account of the provider it runs on, for every turn from now on. A turn held by a spent allowance or a stop runs again at once on that account, which is how a refused turn continues elsewhere. Without `carry` the next turn opens a fresh session seeded from the record.",
+                "Points the conversation at another connected account of the provider it runs on, for every turn from now on. It starts nothing by itself: with `run`, a turn held by a spent allowance or a stop runs again at once on that account, which is how a refused turn continues elsewhere. Without `carry` the next turn opens a fresh session seeded from the record.",
         })
         .meta({ floor: "collaborator", guest: true })
         .input(SwitchAccountSchema)

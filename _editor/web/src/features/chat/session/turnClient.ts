@@ -655,8 +655,9 @@ export class TurnClient {
     }
 
     // Asks the daemon to move this conversation to `account` (switchAccount), the one way a conversation it holds changes
-    // who pays. A chat it does not hold yet, another box, or a daemon too old for the route leaves the pick to ride the next
-    // turn instead (accountIntent), and so does a turn running now (409): the pick stays on the selection either way.
+    // who pays. It only moves: without `run` a turn the daemon holds stays held, since a pick in the picker is a choice,
+    // never a press. A chat it does not hold yet, another box, or a daemon too old for the route leaves the pick to ride
+    // the next turn instead (accountIntent), and so does a turn running now (409): the pick stays on the selection either way.
     moveAccount(account: string): void {
         const { host } = this;
         if (!host.registered.value || host.box.value !== undefined || !supportsRoute(`agent.switchAccount`)) {
@@ -669,7 +670,7 @@ export class TurnClient {
     }
 
     // Continues a held turn on another account: one command, the daemon moving the conversation and re-running the turn
-    // there (switchAccount). `carry` keeps the provider session (re-reads once, cold); fresh reseeds from the record.
+    // there (switchAccount with `run`). `carry` keeps the provider session (re-reads once, cold); fresh reseeds from the record.
     // False, having done nothing, where that command cannot answer (nothing held, another box, a daemon too old for the
     // route): the caller then takes the two steps an older daemon understood, the pick and the press naming it.
     async continueOn(account: string, carry: boolean): Promise<boolean> {
@@ -688,7 +689,7 @@ export class TurnClient {
         host.selection.apply({ kind: `rerun` });
         try {
             const moved = await orRefusal(
-                sandboxRpc.agent.switchAccount({ conversationId: host.conversationId, account, ...(carry ? { carry } : {}) }, { context: { at: host.box.value } }),
+                sandboxRpc.agent.switchAccount({ conversationId: host.conversationId, account, run: true, ...(carry ? { carry } : {}) }, { context: { at: host.box.value } }),
             );
             if (moved instanceof SandboxHttpError) {
                 host.error.value = moved.message;

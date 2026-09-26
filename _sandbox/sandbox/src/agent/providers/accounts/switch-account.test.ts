@@ -48,7 +48,7 @@ test("refuses a conversation it does not know, and one whose turn is running", a
     expect(deps.agents.entry(ID)?.profile.account).toBe("acct-a");
 });
 
-test("a held turn runs again at once on the account named, carried when asked", async () => {
+test("asked to run, a held turn runs again at once on the account named, carried when asked", async () => {
     const pressed: unknown[] = [];
     const reopened: string[] = [];
     const deps = {
@@ -67,11 +67,45 @@ test("a held turn runs again at once on the account named, carried when asked", 
         }),
         claudeSeatCheck: unstubbed<Services["claudeSeatCheck"]>("claudeSeatCheck", { recheck: async () => true }),
     };
-    expect(await switchAccount(deps, { conversationId: ID, account: "acct-b", carry: true })).toEqual({ kind: "moved", run: "run-2" });
+    expect(await switchAccount(deps, { conversationId: ID, account: "acct-b", carry: true, run: true })).toEqual({ kind: "moved", run: "run-2" });
     expect(pressed).toEqual([{ routing: { agent: "claude", harness: "native", account: "acct-b", carry: true } }]);
     // A person's press reopens a conversation archived since the turn was held, at this door: the engine refuses every
     // archived one.
     expect(reopened).toEqual([ID]);
+});
+
+// A pick in the model picker moves the conversation and nothing else: a turn held by a limit, a stop or a memory
+// refusal stays held until a press asks for it, never started by the pick itself.
+test("without run, a held turn stays held and only the account moves", async () => {
+    const pressed: unknown[] = [];
+    const moved: string[] = [];
+    const deps = {
+        agents: unstubbed<Services["agents"]>("agents", {
+            entry: () => conversationEntry({ id: ID }),
+            switchAccount: async (_id, account) => {
+                moved.push(account);
+                return undefined;
+            },
+        }),
+        conversations: unstubbed<Services["conversations"]>("conversations", {
+            state: () =>
+                ({
+                    phase: { kind: "idle" },
+                    resume: { held: { input: { conversationId: ID, prompt: "go", agent: "claude", harness: "native", account: "acct-a" }, reason: "limit", ran: false } },
+                }) as never,
+            send: () => ({ settled: Promise.resolve() }) as never,
+        }),
+        turns: unstubbed<Services["turns"]>("turns", {
+            resume: async (_id, routing) => {
+                pressed.push(routing);
+                return { id: "run-2" } as never;
+            },
+        }),
+        claudeSeatCheck: unstubbed<Services["claudeSeatCheck"]>("claudeSeatCheck", { recheck: async () => true }),
+    };
+    expect(await switchAccount(deps, { conversationId: ID, account: "acct-b" })).toEqual({ kind: "moved" });
+    expect(pressed).toEqual([]);
+    expect(moved).toEqual(["acct-b"]);
 });
 
 // Picking an account is an attempt on it: a seat-marked one is re-tested at once, not on the rationed schedule, so access
