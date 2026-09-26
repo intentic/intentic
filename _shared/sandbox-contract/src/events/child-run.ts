@@ -1,4 +1,4 @@
-import type { ChildAgentAsk, ChildRun } from "../events/requests.js";
+import type { ChildAgentAsk, ChildRun } from "./requests.js";
 import type { AgentReply } from "../schemas/providers/plan-limits.js";
 
 // How a child agent's run is compared and replaced, stated once: the card deciding whether the owner changed anything,
@@ -47,7 +47,16 @@ export const repointedChild = (ask: ChildAgentAsk, run: ChildRun): ChildAgentAsk
     if (sameChildRun(ask, run)) {
         return ask;
     }
-    const { provider: _provider, model: _model, harness: _harness, account: _account, effort: _effort, thinking: _thinking, fast: _fast, ...about } = ask;
+    const {
+        provider: _provider,
+        model: _model,
+        harness: _harness,
+        account: _account,
+        effort: _effort,
+        thinking: _thinking,
+        fast: _fast,
+        ...about
+    } = ask;
     return { ...about, ...childRunOf(run), proposed: childRunOf(ask) };
 };
 
