@@ -7,9 +7,10 @@ import { uuid } from "../../lib/uuid";
 // derives `floats`/`here`/`shows` from the claims it hears. A claim is alive while its window holds the claim's Web Lock:
 // the window says `here` only once it holds that lock, every window that hears it queues on it, and the browser drops
 // it with the realm (a close, a crash, a kill, a reload), granting it to them at that moment, so nothing polls. A
-// hand-back (`gone`) ends a claim at once; a reload says `unloading` first and keeps the panel's place for a moment, so
-// the panel does not flash back between two realms. Duplicates resolve oldest-claim-wins. Where Web Locks are
-// unavailable (a plain-http origin) or refused, the claim beats instead and a silent one expires.
+// hand-back (`gone`) ends a claim at once. A close and a reload both say `unloading`; a reload's successor also says
+// `booting` from index.html's first script, and only then is the panel's place held, so the panel does not flash back
+// between two realms while a closed window's panel comes home in a moment. Duplicates resolve oldest-claim-wins. Where
+// Web Locks are unavailable (a plain-http origin) or refused, the claim beats instead and a silent one expires.
 
 export type FloatingPanel = `chat` | `terminal` | `preview`;
 
@@ -18,6 +19,10 @@ const floatingPath = (panel: FloatingPanel): string => `${import.meta.env.BASE_U
 
 // How long a reloading window's place is held for its successor to claim it.
 const RELOAD_HOLD_MS = 3000;
+// How long an unloading window's place is held for a successor to say it is `booting`. A reload's successor says so
+// within milliseconds of the old realm's pagehide, with the response already in and nothing of the app loaded yet; a
+// close has none, so this is how long a closed window's panel takes to come home.
+const RETURN_WAIT_MS = 500;
 // How long after its lock drops a claim is kept, so an `unloading` sent in the same breath is still heard as a reload.
 const LOCK_GRACE_MS = 500;
 // Only without Web Locks, or refused them: how often a claim says it is still there, and how long its silence is taken
@@ -28,12 +33,15 @@ const STALE_MS = 2500;
 // Frames smaller than this are treated as a bad reading (closing/minimized window), not a real size.
 const MIN_FRAME = 240;
 
-// Notes exchanged between floating windows over BroadcastChannel; `here`, `unloading` and `gone` carry state, the rest
-// are requests. `roll` lets a newly loaded window learn current state without waiting for anything.
+// Notes exchanged between floating windows over BroadcastChannel; `here`, `unloading`, `booting` and `gone` carry state,
+// the rest are requests. `roll` lets a newly loaded window learn current state without waiting for anything.
 export type FloatingNote =
     | { readonly kind: `here`; readonly panel: FloatingPanel; readonly id: string; readonly since: number }
-    // A reload unloads exactly like a close, so this holds the panel's place rather than handing it back.
+    // A reload unloads exactly like a close, so this holds the panel's place a moment rather than handing it back.
     | { readonly kind: `unloading`; readonly panel: FloatingPanel; readonly id: string }
+    // A window starting to load at the panel's address, said by index.html's first script, before the app (and so this
+    // module) exists there: most often a reload's successor, for which an unloading claim's place is held.
+    | { readonly kind: `booting`; readonly panel: FloatingPanel }
     // Handed back on purpose (a Dock press, the window's ×, a lost race), while that window was still running.
     | { readonly kind: `gone`; readonly panel: FloatingPanel; readonly id: string }
     | { readonly kind: `dock`; readonly panel: FloatingPanel }
@@ -65,6 +73,9 @@ interface Sighting {
     readonly unloading: boolean;
     // There is no lock here to wait on (none at all, or refused), so the claim's beats keep it and their silence ends it.
     readonly beats: boolean;
+    // When a window said it was `booting` at this panel's address while the claim was still live: the next page can say
+    // so a moment before the one it replaces says it is unloading, and that is still a reload.
+    readonly successor: number | undefined;
     // Stops waiting on its lock, once the claim ends by some other route; none once that wait is over, and the claim's
     // next `here` (its window back from bfcache with the lock taken again) waits anew.
     readonly unwatch: (() => void) | undefined;
@@ -452,6 +463,31 @@ const endFloat = (panel: FloatingPanel, id: string | undefined): void => {
 };
 
 /**
+ * A window booting at a panel's address: a claim on that panel already unloading is the page it replaces, held for it
+ * to claim; a live one is marked, in case it is about to say it is unloading.
+ */
+const heardBooting = (panel: FloatingPanel): void => {
+    const now = Date.now();
+    for (const sighting of [...sightings.values()].filter((seen) => seen.panel === panel)) {
+        if (sighting.unloading) {
+            setDeadline(sighting.id, Math.max(sighting.until ?? now, now + RELOAD_HOLD_MS));
+        } else {
+            sightings.set(sighting.id, { ...sighting, successor: now });
+        }
+    }
+};
+
+/** A window saying it is unloading: a reload if a successor has said, or says within a moment, that it is booting. */
+const heardUnloading = (id: string, panel: FloatingPanel): void => {
+    const sighting = sightings.get(id);
+    if (sighting?.panel !== panel) {
+        return;
+    }
+    const reload = sighting.successor !== undefined && Date.now() - sighting.successor < RETURN_WAIT_MS;
+    setDeadline(id, Date.now() + (reload ? RELOAD_HOLD_MS : RETURN_WAIT_MS), { unloading: true });
+};
+
+/**
  * The single entry point for an incoming note, shared by the BroadcastChannel listener and tests. Updates presence for
  * every window, then forwards the note to this window's own claim, if any.
  */
@@ -467,6 +503,7 @@ export const receiveFloatingNote = (note: FloatingNote): void => {
             until: beats ? Date.now() + STALE_MS : undefined,
             unloading: false,
             beats,
+            successor: known?.successor,
             unwatch: known?.unwatch,
         });
         // A claim still waited on goes on being waited on; one whose wait is over is waited on anew, since its window says
@@ -476,9 +513,9 @@ export const receiveFloatingNote = (note: FloatingNote): void => {
         }
         expire();
     } else if (note.kind === `unloading`) {
-        if (sightings.get(note.id)?.panel === note.panel) {
-            setDeadline(note.id, Date.now() + RELOAD_HOLD_MS, { unloading: true });
-        }
+        heardUnloading(note.id, note.panel);
+    } else if (note.kind === `booting`) {
+        heardBooting(note.panel);
     } else if (note.kind === `gone`) {
         endFloat(note.panel, note.id);
     } else if (note.kind === `dock`) {

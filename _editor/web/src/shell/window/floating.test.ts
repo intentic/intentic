@@ -1,4 +1,6 @@
 import "@intentic/testing/dom";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { effectScope } from "vue";
 import { stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { raiseOwnWindow, widenOwnWindow } from "../../app/environments/desktop";
@@ -10,8 +12,9 @@ import * as desktopOriginal from "../../app/environments/desktop";
 // 1. `here`: a window claims the panel, once it holds the claim's Web Lock; every other window collapses its place for
 //    it and waits on that lock.
 // 2. `gone`: that window handed the panel back on purpose; it lands here at once, and visibly.
-// 3. `unloading`: that window may be reloading, so its place is held for a moment. Otherwise a claim ends when its Web Lock
-//    drops, or, where there are no Web Locks, when its beat goes silent.
+// 3. `unloading`: that window is closing or reloading. A reload's successor says `booting` from index.html's first
+//    script, and only then is the place held for it to claim; a close's panel comes back in a moment. A claim that says
+//    nothing ends when its Web Lock drops, or, where there are no Web Locks, when its beat goes silent.
 // 4. Two `here` claims for the same panel: the older one wins.
 
 // What the floating window does to ITSELF goes through one seam (browser: the DOM; desktop app: a link, desktop.test.ts);
@@ -26,10 +29,13 @@ jest.mock(`../../app/environments/desktop`, () => ({
 // What this window says to the others; the channel never delivers a window's own notes back to it.
 const posted: FloatingNote[] = [];
 
+// The channel every window's floating notes travel on; index.html's first script has to post on it too.
+const FLOATING_CHANNEL = `intentic.floating`;
+
 class FakeChannel {
     constructor(private readonly name: string) {}
     postMessage(note: FloatingNote): void {
-        if (this.name === `intentic.floating`) {
+        if (this.name === FLOATING_CHANNEL) {
             posted.push(note);
         }
     }
@@ -49,6 +55,9 @@ const here = (panel: `chat` | `terminal` | `preview`, id: string, since = 1_000)
 
 // What a floating window's pagehide says, for a reload and a close alike.
 const unloading = (panel: `chat` | `terminal` | `preview`, id: string) => ({ kind: `unloading` as const, panel, id });
+
+// What a reload's successor says from index.html's first script, before any of the app has loaded; a close has none.
+const booting = (panel: `chat` | `terminal` | `preview`) => ({ kind: `booting` as const, panel });
 
 // A surface's dock reactions, held in a scope the way PoppablePanels holds them.
 const watchDocks = (surface: ReturnType<typeof createFloatingSurface>) => {
@@ -169,7 +178,8 @@ describe(`a panel floating in another window`, () => {
         expect(surface.shows.value).toBe(true);
     });
 
-    // A reload out there says `unloading`, spends a page load booting, then claims again as a new realm.
+    // A reload out there says `unloading`, its successor says `booting` at once, spends a page load booting, then claims
+    // again as a new realm.
     it(`rides out a reload out there without handing the panel back`, () => {
         const surface = createFloatingSurface(`chat`, size);
         const owner = floatingOwner(`chat`);
@@ -177,6 +187,7 @@ describe(`a panel floating in another window`, () => {
         receiveFloatingNote(here(`chat`, `w-1`));
         jest.advanceTimersByTime(700);
         receiveFloatingNote(unloading(`chat`, `w-1`));
+        receiveFloatingNote(booting(`chat`));
 
         jest.advanceTimersByTime(2_000);
         expect(surface.shows.value).toBe(false);
@@ -196,12 +207,47 @@ describe(`a panel floating in another window`, () => {
         stop();
     });
 
-    it(`takes the panel back quietly, once its hold has passed, when that window never comes back`, () => {
+    // A close says `unloading` exactly as a reload does, and then nothing boots at its address: no reason to wait out a
+    // reload's hold, which is what kept a closed window's panel away for seconds.
+    it(`takes the panel back quietly, within a moment, when that window closed`, () => {
+        const surface = createFloatingSurface(`chat`, size);
+        const { docked, stop } = watchDocks(surface);
+        receiveFloatingNote(here(`chat`, `w-1`));
+        receiveFloatingNote(unloading(`chat`, `w-1`));
+
+        // The moment a reload's successor takes to say it is booting.
+        jest.advanceTimersByTime(400);
+        expect(surface.shows.value).toBe(false);
+
+        jest.advanceTimersByTime(200);
+
+        expect(surface.shows.value).toBe(true);
+        // A close is not a dock: the panel is back, and nothing moves the reader to it.
+        expect(docked).not.toHaveBeenCalled();
+        stop();
+    });
+
+    // The next page can say it is booting a moment before the one it replaces says it is unloading.
+    it(`holds the place for a successor that said it was booting before its predecessor unloaded`, () => {
+        const surface = createFloatingSurface(`chat`, size);
+        receiveFloatingNote(here(`chat`, `w-1`));
+        receiveFloatingNote(booting(`chat`));
+        receiveFloatingNote(unloading(`chat`, `w-1`));
+
+        jest.advanceTimersByTime(2_000);
+        expect(surface.shows.value).toBe(false);
+
+        receiveFloatingNote(here(`chat`, `w-2`, 5_000));
+        expect(floatingOwner(`chat`).value).toBe(`w-2`);
+    });
+
+    it(`takes the panel back quietly, once its hold has passed, when the window booting there never claims it`, () => {
         const surface = createFloatingSurface(`chat`, size);
         const { docked, stop } = watchDocks(surface);
         receiveFloatingNote(here(`chat`, `w-1`));
         jest.advanceTimersByTime(740);
         receiveFloatingNote(unloading(`chat`, `w-1`));
+        receiveFloatingNote(booting(`chat`));
 
         // Past the deadline w-1's last beat would have set; the hold, taken at the unload, still runs.
         jest.advanceTimersByTime(2_900);
@@ -210,7 +256,6 @@ describe(`a panel floating in another window`, () => {
         jest.advanceTimersByTime(200);
 
         expect(surface.shows.value).toBe(true);
-        // A close is not a dock: the panel is back, and nothing moves the reader to it.
         expect(docked).not.toHaveBeenCalled();
         stop();
     });
@@ -303,6 +348,7 @@ describe(`a panel floating in another window`, () => {
         locks.drop(`intentic.floating.chat.w-1`);
         await advanceTimersByTimeAsync(100);
         receiveFloatingNote(unloading(`chat`, `w-1`));
+        receiveFloatingNote(booting(`chat`));
         await advanceTimersByTimeAsync(2_000);
         expect(surface.shows.value).toBe(false);
 
@@ -648,5 +694,51 @@ describe(`where the window comes back`, () => {
         surface.open();
 
         expect(open.mock.calls[0]?.[2]).toContain(`width=800`);
+    });
+});
+
+// index.html's first script says a popped-out window is booting before any module has loaded, so it cannot import the
+// note it speaks. This runs that very script at the addresses a window can boot at, and hands what it says to this
+// module the way the channel would.
+describe(`the first script of a window booting at a panel's address`, () => {
+    const html = readFileSync(join(import.meta.dirname, `../../../index.html`), `utf8`);
+    const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/gu)].map((found) => found[1] ?? ``).find((body) => body.includes(`booting`));
+
+    // What the script posts, and on which channel, run by a window at `pathname`.
+    const boot = (pathname: string) => {
+        if (script === undefined) {
+            throw new Error(`index.html has no script saying a floating window is booting`);
+        }
+        const said: { channel: string; note: FloatingNote }[] = [];
+        class Channel {
+            constructor(private readonly name: string) {}
+            postMessage(note: FloatingNote): void {
+                said.push({ channel: this.name, note });
+            }
+        }
+        // oxlint-disable-next-line no-new-func -- running our own checked-in script, not input
+        new Function(`location`, `BroadcastChannel`, script)({ pathname }, Channel);
+        return said;
+    };
+
+    it(`says so on the channel every window listens on, at each panel's address and nowhere else`, () => {
+        expect(boot(`/floating/chat`)).toEqual([{ channel: FLOATING_CHANNEL, note: booting(`chat`) }]);
+        // Served under a path prefix, and with the trailing slash the router also takes.
+        expect(boot(`/app/floating/terminal/`)).toEqual([{ channel: FLOATING_CHANNEL, note: booting(`terminal`) }]);
+        expect(boot(`/floating/preview`)).toEqual([{ channel: FLOATING_CHANNEL, note: booting(`preview`) }]);
+        expect([boot(`/`), boot(`/agents`), boot(`/floating/files`), boot(`/floating/chat/more`)]).toEqual([[], [], [], []]);
+    });
+
+    it(`is heard as a reload, so the page it replaces keeps the panel's place for it`, () => {
+        const surface = createFloatingSurface(`chat`, size);
+        receiveFloatingNote(here(`chat`, `w-1`));
+        receiveFloatingNote(unloading(`chat`, `w-1`));
+        for (const { note } of boot(`/floating/chat`)) {
+            receiveFloatingNote(note);
+        }
+
+        jest.advanceTimersByTime(2_000);
+
+        expect(surface.shows.value).toBe(false);
     });
 });

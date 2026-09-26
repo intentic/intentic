@@ -5,11 +5,19 @@ import { EMPTY_STRIP } from "../../../_editor/web/src/features/chat/tabs/tabFact
 
 activeSandboxId.value = `sb1`;
 const owner = floatingOwner(`chat`);
-const holder = new URL(location.href).searchParams.has(`holder`);
+const params = new URL(location.href).searchParams;
+const holder = params.has(`holder`);
+// How long a holder takes to claim once loaded, standing in for the app's own boot (sign-in, the sandbox, the route).
+const claimAfter = Number(params.get(`claimAfter`) ?? 0);
 let handBack;
-if (holder) {
+const claim = () => {
     publishStrip(JSON.parse(sessionStorage.getItem(`fixture-strip`) ?? JSON.stringify(EMPTY_STRIP)), `sb1`);
     handBack = claimFloating(`chat`, () => location.assign(`about:blank`));
+};
+if (holder && claimAfter > 0) {
+    setTimeout(claim, claimAfter);
+} else if (holder) {
+    claim();
 }
 
 window.chatWindow = {

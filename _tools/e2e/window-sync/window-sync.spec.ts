@@ -15,10 +15,12 @@ declare global {
     }
 }
 
-const fixture = `/`;
-const open = async (context: BrowserContext, holder = false): Promise<Page> => {
+// A holder loads at the chat's own floating address, where the app's first script says it is booting; `claimAfter`
+// stands in for the app's boot between that and the claim.
+const holderAt = (claimAfter = 0): string => `/floating/chat?holder&claimAfter=${claimAfter}`;
+const open = async (context: BrowserContext, holder = false, claimAfter = 0): Promise<Page> => {
     const page = await context.newPage();
-    await page.goto(`${fixture}${holder ? `?holder` : ``}`);
+    await page.goto(holder ? holderAt(claimAfter) : `/`);
     await page.waitForFunction(() => window.chatWindow !== undefined);
     return page;
 };
@@ -109,7 +111,7 @@ test(`a competing floating window cannot retire the surviving owner's claim`, as
     await holder.evaluate(() => window.chatWindow.publish(`winner`));
     await expect.poll(() => selected(board)).toBe(`winner`);
     const loser = await context.newPage();
-    await loser.goto(`${fixture}?holder`);
+    await loser.goto(holderAt());
     await expect(loser).toHaveURL(`about:blank`);
     await holder.evaluate(() => window.chatWindow.publish(`still-winner`));
     await expect.poll(() => selected(board)).toBe(`still-winner`);
@@ -129,8 +131,10 @@ test(`a sandbox switch never republishes the previous sandbox's cached strip`, a
     await expect.poll(() => selected(board)).toBe(`sb2-only`);
 });
 
+// The reloaded holder takes as long to claim as the app's own boot might; only the `booting` its first script says holds
+// the place that long, since an unloading window nobody is booting after is taken for closed within a moment.
 test(`a holder that reloads never hands the panel back to the board`, async ({ context }) => {
-    const holder = await open(context, true);
+    const holder = await open(context, true, 1_500);
     const board = await open(context);
     await expect.poll(() => draws(board)).toBe(false);
     const oldOwner = await board.evaluate(() => window.chatWindow.owner());
@@ -163,7 +167,7 @@ test(`a board keeps every claim it hears, past the moment an early lock grant wo
     }
 });
 
-test(`a holder that docks hands the panel back at once, and one that closes at its deadline`, async ({ context }) => {
+test(`a holder that docks hands the panel back at once, and one that closes within a moment`, async ({ context }) => {
     const holder = await open(context, true);
     const board = await open(context);
     await expect.poll(() => draws(board)).toBe(false);
@@ -175,5 +179,6 @@ test(`a holder that docks hands the panel back at once, and one that closes at i
     const second = await open(context, true);
     await expect.poll(() => draws(board)).toBe(false);
     await second.close();
-    await expect.poll(() => draws(board)).toBe(true);
+    // Well inside a reload's 3s hold: nothing boots after a closed window, so there is nothing to hold its place for.
+    await expect.poll(() => draws(board), { timeout: 2_000 }).toBe(true);
 });
