@@ -47,6 +47,7 @@ const sourceOf = (tree: readonly WorkspaceTreeEntry[], over: Partial<Omit<RowSou
         chainOf: (path) => ({ names: [nameOf(path)], tail: path }),
         entryAt: (path) => index.get(path),
         listing: (at, listed) => listed,
+        foldersOnly: false,
         ...over,
     };
 };
@@ -89,6 +90,15 @@ describe(`the rows of a listing`, () => {
         expect(drawn(flattenRows(sourceOf(TREE, { filter: ` ROUTES ` })))).toEqual([`src/`, `  src/api/`, `    src/api/routes.ts`]);
         expect(drawn(flattenRows(sourceOf(TREE, { filter: `api` })))).toEqual([`src/`, `  src/api/`]);
         expect(drawn(flattenRows(sourceOf(TREE, { filter: `nothing` })))).toEqual([]);
+    });
+
+    it(`lists folders alone while a cover is read beside the tree, archives among them, and filters their names`, () => {
+        const mixed = [...TREE, file(`drop/kit.zip`), file(`notes.md`)];
+        const covered = sourceOf(mixed, { foldersOnly: true, expanded: new Set([`src`, `src/api`]) });
+
+        expect(drawn(flattenRows(covered))).toEqual([`src/`, `  src/api/`, `drop/kit.zip`]);
+        expect(drawn(flattenRows({ ...covered, filter: `api` }))).toEqual([`src/`, `  src/api/`]);
+        expect(drawn(flattenRows({ ...covered, filter: `routes` }))).toEqual([]);
     });
 
     it(`applies the toolbar's switches at every level`, () => {

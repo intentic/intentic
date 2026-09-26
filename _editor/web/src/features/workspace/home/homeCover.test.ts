@@ -1,5 +1,5 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { coverChoices, coverIn, coverIndex, coverRank, coversBelow, coverSteps, typeaheadIndex } from "./homeCover";
+import { coverChoices, coverIn, coverIndex, coverRank, coversBelow } from "./homeCover";
 
 const file = (path: string, extra: Partial<WorkspaceTreeEntry> = {}): WorkspaceTreeEntry => ({
     name: path.slice(path.lastIndexOf(`/`) + 1),
@@ -14,7 +14,6 @@ const dir = (path: string, extra: Partial<WorkspaceTreeEntry> = {}): WorkspaceTr
     children: [],
     ...extra,
 });
-const everything = (): boolean => true;
 
 describe(`which file answers for a cover name`, () => {
     it(`ranks the exact spelling over another capitalisation`, () => {
@@ -131,43 +130,5 @@ describe(`where the loaded tree knows of covers`, () => {
     it(`does not read a sibling that shares a prefix as below`, () => {
         const near = coverIndex([file(`app/README.md`), file(`apple/README.md`)], `README.md`);
         expect(coversBelow(near, `app`, 6)).toEqual([]);
-    });
-});
-
-describe(`the folders a reader steps into`, () => {
-    it(`keeps folders and archives, in natural order, and drops dead links and what the switches hide`, () => {
-        const listing = [
-            dir(`w/img10`),
-            file(`w/README.md`),
-            dir(`w/img2`),
-            file(`w/bundle.zip`),
-            dir(`w/gone`, { link: { to: `../nowhere`, state: `broken` } }),
-            dir(`w/node_modules`, { ignored: true }),
-        ];
-        const steps = coverSteps(listing, (entry) => entry.ignored !== true);
-        expect(steps.map((entry) => entry.name)).toEqual([`bundle.zip`, `img2`, `img10`]);
-        expect(coverSteps(listing, everything).map((entry) => entry.name)).toEqual([`bundle.zip`, `img2`, `img10`, `node_modules`]);
-    });
-});
-
-describe(`typing to find a folder`, () => {
-    const names = [`api`, `apps`, `docs`, `drop`, `web`];
-
-    it(`moves to the next name starting with a key pressed again`, () => {
-        expect(typeaheadIndex(names, `d`, 0)).toBe(2);
-        expect(typeaheadIndex(names, `d`, 2)).toBe(3);
-        expect(typeaheadIndex(names, `dd`, 3)).toBe(2);
-    });
-
-    it(`narrows to a name starting with every key typed, staying where it already fits`, () => {
-        expect(typeaheadIndex(names, `app`, 0)).toBe(1);
-        expect(typeaheadIndex(names, `ap`, 1)).toBe(1);
-        expect(typeaheadIndex(names, `WE`, 0)).toBe(4);
-    });
-
-    it(`answers -1 when nothing starts that way`, () => {
-        expect(typeaheadIndex(names, `z`, 0)).toBe(-1);
-        expect(typeaheadIndex(names, ``, 0)).toBe(-1);
-        expect(typeaheadIndex([], `a`, 0)).toBe(-1);
     });
 });

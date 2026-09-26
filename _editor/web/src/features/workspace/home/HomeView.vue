@@ -194,7 +194,8 @@ const { selection, select, clear, rules, inline, endEdit, transfer, menu, menuIt
             openFile(path, `keep`);
             layout.setEditMode(true);
         },
-        cover: (name) => void showCover(name),
+        // A closure, like `open`: declared with the cover's other verbs below.
+        cover: (name) => showCover(name),
         dirActions,
     });
 const { pending, noDrops } = rules;
@@ -221,10 +222,8 @@ const go = (dir: string, toward: "forward" | "back"): void => {
     direction.value = toward;
     openDir(dir);
     // The tile that had the keyboard is about to unmount; the home itself keeps it, so the next key still lands here.
-    // Under a cover, the rail's row for wherever the selection lands takes it back once the rows have settled.
     if (home.value?.contains(document.activeElement) === true) {
         home.value.focus({ preventScroll: true });
-        void coverView.value?.focusCurrent();
     }
 };
 // Going up lands on the folder just left, so a wrong turn is one key to undo.
@@ -316,20 +315,18 @@ const onTileEnter = (entry: WorkspaceTreeEntry, el: HTMLElement): void => {
 const onTileLeave = (): void => look.leave();
 
 // --- The cover: one file name read in every folder in place of the tiles (homeCover.ts) --------------------------------
+// The explorer tree is its navigator (it lists folders alone while one is chosen); this pane is the page.
 const covering = computed(() => cover.value !== undefined);
-const coverView = ref<InstanceType<typeof HomeCover>>();
-const showCover = async (name: string): Promise<void> => {
-    closeLook();
-    void endEdit(`cancel`);
-    // A query narrows tiles the cover does not draw; left running, it would only go on narrowing the tree unseen.
-    if (querying.value) {
-        search?.clear();
-    }
+const showCover = (name: string): void => {
     cover.value = name;
-    // Chosen from a menu or a chooser that has closed: the rail takes the keyboard, whichever cover it was showing.
-    await nextTick();
-    await coverView.value?.focusCurrent();
 };
+// Chosen here or in the tree's toolbar alike: a look or a name being typed belongs to the tiles going out of sight.
+watch(covering, (on) => {
+    if (on) {
+        closeLook();
+        void endEdit(`cancel`);
+    }
+});
 // Back on the tiles, the folder the cover had selected is the tile the keyboard lands on.
 const dropCover = async (): Promise<void> => {
     cover.value = undefined;
@@ -341,11 +338,8 @@ const dropCover = async (): Promise<void> => {
     }
     await focusTile(at);
 };
-// A folder below that holds one, named by a folder that does not: entered at its parent, with it selected.
-const reveal = (folder: string): void => {
-    go(parentDir(folder), `forward`);
-    selected.value = folder;
-};
+// A folder below that holds one, named by a folder that does not: entered, so its page shows and the tree reveals it.
+const reveal = (folder: string): void => go(folder, `forward`);
 
 // --- Keyboard ------------------------------------------------------------------------------------------------------
 // Only the drawn tiles are here to find, which is a screenful rather than the folder; a tile outside the window has no
@@ -404,10 +398,12 @@ const onNavigationKey = (event: KeyboardEvent): boolean => {
 const typesIntoFilter = (event: KeyboardEvent): boolean =>
     event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey && search !== undefined;
 const onKeydown = (event: KeyboardEvent): void => {
-    // Under a cover the keys are its own (flip, go in, go back); none of the tiles' verbs have a tile to act on.
+    // Under a cover the page is a document: the keys scroll it, Escape puts the tiles back, and the tiles' verbs have no
+    // tile to act on. Moving between folders is the tree's.
     if (covering.value) {
-        if (coverView.value?.onKey(event) === true) {
+        if (event.key === `Escape`) {
             event.preventDefault();
+            void dropCover();
         }
         return;
     }
@@ -568,6 +564,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                 @after-leave="bands.toTop()"
             >
                 <div
+                    v-if="!covering"
                     :key="homeDir"
                     class="px-4 pb-6"
                     role="listbox"
@@ -674,18 +671,8 @@ const onBackgroundMenu = (event: MouseEvent): void => {
             </Transition>
         </div>
 
-        <!-- The cover, in the tiles' place: the folders down the side, the chosen file of the selected one beside them. -->
-        <HomeCover
-            v-if="cover !== undefined"
-            ref="coverView"
-            :name="cover"
-            :root="workspaceDir"
-            :root-label="rootLabel"
-            @enter="(folder) => go(folder, 'forward')"
-            @up="up"
-            @reveal="reveal"
-            @exit="dropCover"
-        />
+        <!-- The cover, in the tiles' place: the current folder's copy of the chosen file. -->
+        <HomeCover v-if="cover !== undefined" :name="cover" :root-label="rootLabel" @reveal="reveal" @exit="dropCover" />
 
         <!-- A drop on the home itself lands in the open folder; the pill says so while a drag is over it and no tile has it. -->
         <div

@@ -1,4 +1,4 @@
-<!-- The home's cover control: a button offering a file name to read in every folder, or, once one is chosen, a chip naming it. -->
+<!-- The cover control: a button offering a file name to read in every folder, or, once one is chosen, a chip naming it (on the home), or the same button lit (in the explorer's toolbar). -->
 <script setup lang="ts">
 import { type IconName, iconForEntry, ResponsiveOverlay, ui, useListNavigation } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
@@ -14,7 +14,11 @@ import { coverChoices } from "./homeCover";
 
 const t = useT();
 
-const { cover } = defineProps<{ cover: string | undefined }>();
+const { cover, compact = false } = defineProps<{
+    cover: string | undefined;
+    // The explorer toolbar's form: one glyph among its switches, lit while a cover is chosen, where a chip has no room.
+    compact?: boolean;
+}>();
 const emit = defineEmits<{ choose: [name: string]; drop: [] }>();
 
 const { entriesByPath } = useWorkspaceTree();
@@ -59,6 +63,14 @@ const { activeIndex, activeRow, move, setRowEl } = useListNavigation(rows, keyOf
 
 const iconOf = (row: Row): IconName => (row.kind === `all` ? `th-large` : iconForEntry(row.name, `file`));
 const labelOf = (row: Row): string => (row.kind === `all` ? t(`workspace.homeCover.allFiles`) : row.name);
+
+// What the trigger says it does, on its tooltip and to a screen reader alike.
+const label = computed(() => (cover === undefined ? t(`workspace.homeCover.choose`) : t(`workspace.homeCover.showing`, { name: cover })));
+// The toolbar's switches' own look (the funnel beside it), so a lit book reads as a filter that is on.
+const compactClass = computed(() => [
+    `flex shrink-0 items-center rounded-md px-1.5 py-0.5 transition-colors`,
+    cover !== undefined || open.value ? `bg-primary-600/15 text-link` : `text-muted hover:text-content`,
+]);
 
 const pick = (row: Row | undefined): void => {
     if (row === undefined) {
@@ -110,17 +122,18 @@ const onFieldKey = (event: KeyboardEvent): void => {
     <!-- Keys and clicks stay here: the home reads both, and a chip's Enter is not a folder being entered. -->
     <div class="flex shrink-0 items-center" @click.stop @keydown.stop @contextmenu.stop>
         <button
-            v-if="cover === undefined"
+            v-if="compact || cover === undefined"
             ref="anchor"
             type="button"
-            :class="ui.iconButton(open ? `bg-overlay text-content` : ``)"
+            :class="compact ? compactClass : ui.iconButton(open ? `bg-overlay text-content` : ``)"
             aria-haspopup="dialog"
             :aria-expanded="open"
-            :aria-label="t(`workspace.homeCover.choose`)"
-            v-tooltip.bottom="t(`workspace.homeCover.choose`)"
+            :aria-pressed="compact ? cover !== undefined : undefined"
+            :aria-label="label"
+            v-tooltip.bottom="label"
             @click="toggle"
         >
-            <Icon name="book" />
+            <Icon name="book" :class="compact ? `text-xs` : ``" />
         </button>
         <!-- The chosen name, lit, as the one state the home is in that its tiles would not explain; × goes back to them. -->
         <span v-else class="ui-chip ui-chip-on h-6 cursor-default gap-0 p-0" v-tooltip.bottom="t(`workspace.homeCover.showing`, { name: cover })">

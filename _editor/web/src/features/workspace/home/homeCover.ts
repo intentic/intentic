@@ -3,9 +3,10 @@ import { parentDir } from "@intentic/ui/path";
 import { opensAsFolder } from "../files/archiveEntries";
 import { byNaturalName } from "./homeOrder";
 
-// The cover: one file name the home shows for every folder in place of its tiles (README.md, package.json), so a reader
-// walks the tree reading that file at each stop. This decides which file in a folder answers for the name, which names
-// are worth offering, and where below a folder the loaded tree knows of one. Pure, no framework code.
+// The cover: one file name read in every folder (README.md, package.json). The explorer tree lists folders alone and
+// marks the ones holding it, and the home shows the current folder's copy in place of its tiles, so a reader walks the
+// tree reading that file at each stop. This decides which file in a folder answers for the name, which names are worth
+// offering, and where below a folder the loaded tree knows of one. Pure, no framework code.
 
 // What a document is written in, best first; "" is a bare name. README.md, README.rst and a bare README say the same
 // thing in different notations, so a document's name matches its stem in any of these.
@@ -123,6 +124,9 @@ export interface CoverIndex {
     readonly below: ReadonlyMap<string, number>;
 }
 
+// No cover chosen, or nothing loaded yet: no folder holds one.
+export const NO_COVERS: CoverIndex = { held: new Set(), below: new Map() };
+
 /**
  * Where covers are, over everything loaded: it knows only what the eager walk and the lazy listings have seen, so every
  * answer is a lower bound.
@@ -156,39 +160,4 @@ export const coversBelow = (index: CoverIndex, dir: string, limit: number): read
         .filter((folder) => folder !== dir && folder.startsWith(prefix))
         .toSorted((left, right) => depthOf(left) - depthOf(right) || left.localeCompare(right))
         .slice(0, limit);
-};
-
-// The folders a reader can step into from `listing`, as the home would enter them: folders, and archives, which open
-// like one. A dead link goes nowhere, so it is not a step.
-export const coverSteps = (listing: readonly WorkspaceTreeEntry[], shows: (entry: WorkspaceTreeEntry) => boolean): readonly WorkspaceTreeEntry[] =>
-    listing
-        .filter((entry) => shows(entry) && entry.link?.state === undefined && (entry.type === `dir` || opensAsFolder(entry)))
-        .toSorted(byNaturalName);
-
-/**
- * Where typing lands in a list of names, the way a file browser's list answers keys: one key again moves to the next
- * name starting with it, several keys narrow to the first name starting with all of them.
- *
- * @param names The rows' names in order.
- * @param typed What has been typed since the last pause.
- * @param from The row the selection is on.
- * @returns The row to select, or -1 when nothing starts that way.
- */
-export const typeaheadIndex = (names: readonly string[], typed: string, from: number): number => {
-    const needle = typed.toLowerCase();
-    if (needle === `` || names.length === 0) {
-        return -1;
-    }
-    // "aaa" is the reader cycling through the a's, not looking for a name that starts with three of them.
-    const cycling = [...needle].every((char) => char === needle[0]);
-    const prefix = cycling ? needle[0]! : needle;
-    // Cycling starts past the current row; narrowing may stay on it, since it can still match what was typed.
-    const start = cycling ? from + 1 : Math.max(from, 0);
-    for (let step = 0; step < names.length; step++) {
-        const at = (start + step) % names.length;
-        if (names[at]!.toLowerCase().startsWith(prefix)) {
-            return at;
-        }
-    }
-    return -1;
 };

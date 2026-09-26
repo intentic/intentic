@@ -3,14 +3,17 @@ import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import {
     ContextMenu,
+    explorerColorClass,
     type ExplorerTreatment,
     explorerTreatment,
     type IconName,
+    iconForEntry,
     useExplorerStyle,
     vAction,
 } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { nextTick, ref, watch } from "vue";
+import { mapPool } from "@intentic/base/async";
+import { computed, nextTick, ref, watch } from "vue";
 import { useVocabulary } from "../../../core-views/vocabulary";
 import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
 import { viewersOfPath } from "../../../shell/presence/usePresence";
@@ -18,11 +21,13 @@ import { useLayout } from "../../../shell/window/useLayout";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { isRecentlyChanged } from "../changes/live/useWorkspaceLive";
 import { lensRefuses } from "../directory-ui/personaReach";
+import { opensAsFolder } from "../files/archiveEntries";
+import { type CoverMark, useCover } from "../home/useCover";
 import type { OpenMode } from "../tabs/workspaceTabs";
 import { ancestorDirs } from "./revealPath";
 import type { RowAction } from "./rowActions";
 import { specialChip } from "./specialPaths";
-import { deadLink, dropDirOf, linkTooltip, provisionalTooltip, type Row } from "./tree/treeRows";
+import { deadLink, dropDirOf, holdsRows, linkTooltip, provisionalTooltip, type Row } from "./tree/treeRows";
 import { focusInput } from "@intentic/ui/inline-rename";
 import { createFileVerbs } from "./tree/fileVerbs";
 import { fileVerbSeams } from "./tree/fileVerbSeams";
@@ -48,6 +53,7 @@ const {
     selectedPath,
     manageableDirs = new Set<string>(),
     rowActions,
+    cover,
 } = defineProps<{
     tree: readonly WorkspaceTreeEntry[];
     // The folder `tree` is the contents of, "" for the workspace root: where a create or a drop with no target lands.
@@ -62,9 +68,19 @@ const {
     manageableDirs?: ReadonlySet<string>;
     // Per-directory actions from extensions; a function, not a map, since rows load lazily and can't be enumerated.
     rowActions?: (dir: string) => readonly RowAction[];
+    // A file name read in every folder (home/homeCover.ts): the tree lists folders alone, marks the ones holding it, and
+    // picks whatever row an arrow lands on, since the page beside it reads that folder's copy.
+    cover?: string;
 }>();
 // `openFile`'s `mode` is the gesture (a click previews, a double-click keeps); `pick` is the click or Enter itself.
-const emit = defineEmits<{ openFile: [path: string, mode: OpenMode]; openDirectory: [path: string]; pick: [entry: WorkspaceTreeEntry]; clear: [] }>();
+// `cover` asks for a file's name to be read in every folder, from its row's menu.
+const emit = defineEmits<{
+    openFile: [path: string, mode: OpenMode];
+    openDirectory: [path: string];
+    pick: [entry: WorkspaceTreeEntry];
+    clear: [];
+    cover: [name: string];
+}>();
 
 const seams = fileVerbSeams();
 const { store } = seams;
@@ -83,6 +99,7 @@ const { byPath, childrenOf, visibleRows, orderedPaths, technicalCount, targetDir
         filter: () => filter,
         filters: layout.explorerFilters,
         nesting: fileNesting,
+        foldersOnly: () => cover !== undefined,
         store,
         emptyDirs,
     });
@@ -108,7 +125,12 @@ const { rules, selecting, inline, edits, deleting, transfer, menu: entryMenu } =
         layout.setEditMode(true);
     },
     rowActions: actionsFor,
-    frame: () => ({
+    frame: (target, multi) => ({
+        // A file is the example of the name to read in every folder, as on the home's tiles.
+        head:
+            target?.type === `file` && !multi && !opensAsFolder(target)
+                ? [{ label: t(`workspace.homeCover.showInEveryFolder`, { name: target.name }), icon: `book`, command: () => emit(`cover`, target.name) }]
+                : [],
         tail:
             store.expanded.value.size > 0
                 ? [{ label: t(`workspace.workspaceTree.collapseFolders`), icon: `collapse-all`, command: store.collapseAll }]
@@ -166,8 +188,39 @@ const { onRowClick, onRowDblClick, onChevronClick, onBackgroundClick, onKeydown 
     openDirectory: (path) => emit(`openDirectory`, path),
     pick: (entry) => emit(`pick`, entry),
     cleared: () => emit(`clear`),
+    follows: () => cover !== undefined,
 });
 const { menu, menuItems, openMenu, runAction } = entryMenu;
+
+// --- The cover: which folders hold the file read beside the tree ------------------------------------------------------
+const { mark } = useCover(() => cover);
+// The folder rows drawn now: what a cover marks, and what it lists ahead.
+const paintedFolders = computed(() => painted.value.flatMap(({ row }) => (`more` in row || !holdsRows(row.entry) ? [] : [row.entry])));
+// Each drawn folder's mark, once per paint rather than once per binding.
+const marks = computed<ReadonlyMap<string, CoverMark>>(() =>
+    cover === undefined ? new Map() : new Map(paintedFolders.value.map((folder) => [folder.path, mark(folder.path)])),
+);
+// How many folders below a drawn folder hold the file, 0 while no cover is chosen.
+const insideOf = (path: string): number => marks.value.get(path)?.inside ?? 0;
+const coverIcon = computed(() => (cover === undefined ? `file` : iconForEntry(cover, `file`)));
+const coverColor = computed(() => (cover === undefined ? `` : explorerColorClass(`colorful`, cover, `file`, false)));
+// A closed folder says whether it holds the file only once its listing is known, so the ones in view are listed ahead,
+// a few at a time. Bounded by the screen: a folder of a thousand folders asks for what is drawn, not for all of them.
+// Only plain folders: listing an archive unpacks it, and an ignored one (node_modules) can hold tens of thousands.
+const LIST_AT_ONCE = 4;
+watch(
+    () => (cover === undefined ? [] : paintedFolders.value),
+    (folders) => {
+        const unlisted = folders.filter(
+            (folder) =>
+                folder.type === `dir` && folder.ignored !== true && !isLockedWorkspacePath(folder.path) && store.listingOf(folder.path) === undefined,
+        );
+        void mapPool(unlisted, LIST_AT_ONCE, (folder) => store.loadChildren(folder.path));
+    },
+);
+// The spinner means a folder being opened; one listed ahead to be marked is not being opened, and a screenful of them
+// turning at once would read as the tree reloading.
+const loadingShown = (row: Row): boolean => lazyLoading.value.has(row.entry.path) && (cover === undefined || row.isExpanded);
 
 // The active file-tree setup (minimal/colorful/vivid): size, colour and folder emphasis for every row.
 const { explorerStyle } = useExplorerStyle();
@@ -186,6 +239,15 @@ const treat = (row: Row): ExplorerTreatment => {
 // Icon resting opacity: hidden for an action, dimmed for evidence there's a page, full for the selected row.
 const restingClass = (action: RowAction, path: string): string =>
     selection.value.has(path) ? `opacity-100` : action.standing ? `opacity-40` : `pointer-events-none opacity-0`;
+// The workspace page moves the keyboard here when a cover is chosen, since the tree is where its reader moves between
+// folders: onto the lead's row, or the tree itself when nothing is selected yet, so the first arrow lands on a row.
+const focusTree = async (): Promise<void> => {
+    await focusLead();
+    if (treeEl.value?.contains(document.activeElement) !== true) {
+        treeEl.value?.focus({ preventScroll: true });
+    }
+};
+defineExpose({ focusTree });
 </script>
 
 <template>
@@ -325,7 +387,8 @@ const restingClass = (action: RowAction, path: string): string =>
                                     row.barren ||
                                     isLockedWorkspacePath(row.entry.path) ||
                                     deadLink(row.entry) ||
-                                    pending(row.entry.path)
+                                    pending(row.entry.path) ||
+                                    marks.get(row.entry.path)?.holds === false
                                         ? 'text-subtle'
                                         : 'text-content/90',
                                     // Out of the persona being read as: dimmed FURTHER, and only while a lens is on.
@@ -354,9 +417,25 @@ const restingClass = (action: RowAction, path: string): string =>
                                 v-tooltip.right="specialChip(row.entry.path, words)?.tooltip"
                                 >{{ specialChip(row.entry.path, words)?.label }}</span
                             >
+                            <!-- Under a cover: the file's own glyph on a folder holding it, and on a closed one without it how many
+                                 folders below do, which is the reason to open it. -->
+                            <Icon
+                                v-if="marks.get(row.entry.path)?.holds === true"
+                                :name="coverIcon"
+                                class="shrink-0 text-2xs"
+                                :class="coverColor"
+                                :aria-label="t(`workspace.homeCover.holds`, { name: cover })"
+                                v-tooltip.right="t(`workspace.homeCover.holds`, { name: cover })"
+                            />
+                            <span
+                                v-else-if="!row.isExpanded && insideOf(row.entry.path) > 0"
+                                class="shrink-0 text-2xs tabular-nums text-subtle"
+                                v-tooltip.right="t(`workspace.homeCover.insideTitle`, { count: insideOf(row.entry.path), name: cover }, insideOf(row.entry.path))"
+                                >{{ t(`workspace.homeCover.inside`, { count: insideOf(row.entry.path) }) }}</span
+                            >
                             <!-- A dir fetching its children lazily on expand (ignored, or below the walk's budget). -->
                             <Icon
-                                v-if="row.entry.type === 'dir' && lazyLoading.has(row.entry.path)"
+                                v-if="row.entry.type === 'dir' && loadingShown(row)"
                                 name="spinner"
                                 :spin="true"
                                 aria-hidden="true"
@@ -444,9 +523,10 @@ const restingClass = (action: RowAction, path: string): string =>
             <p v-if="visibleRows.length === 0 && edit.kind !== 'creating'" class="px-3 py-3 text-center text-2xs text-subtle">
                 {{ filter.trim() ? t(`workspace.workspaceTree.noMatchingFiles`) : t(`workspace.workspaceTree.emptyWorkspace`) }}
             </p>
-            <!-- The technical switch's own receipt: a press here is the way back, so the hidden files are never a mystery. -->
+            <!-- The technical switch's own receipt: a press here is the way back, so the hidden files are never a mystery. Not
+                 under a cover, which lists no file at all, so the switch it offers would change nothing in sight. -->
             <button
-                v-if="technicalCount > 0 && filter.trim() === ''"
+                v-if="technicalCount > 0 && filter.trim() === '' && cover === undefined"
                 type="button"
                 class="flex w-full items-center gap-1.5 px-2 py-1 text-left text-2xs italic text-subtle transition-colors hover:text-content"
                 v-tooltip.top="t(`workspace.workspaceTree.lockfilesConfigurationDotFiles`)"

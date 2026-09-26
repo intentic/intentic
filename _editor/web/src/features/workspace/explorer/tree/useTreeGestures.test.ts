@@ -30,7 +30,8 @@ const ROWS: readonly (Row | MoreRow)[] = [
 ];
 const rowOf = (target: WorkspaceTreeEntry): Row => ROWS.find((row): row is Row => !(`more` in row) && row.entry === target) as Row;
 
-const gesturesOver = () => {
+// `follows`: a cover is read beside the tree, so an arrow's move picks the row it lands on.
+const gesturesOver = (follows = false) => {
     const rows = shallowRef(ROWS);
     const order = computed(() => rows.value.flatMap((row) => (`more` in row ? [] : [row.entry.path])));
     const done: string[] = [];
@@ -53,6 +54,7 @@ const gesturesOver = () => {
         openDirectory: jest.fn((path: string) => done.push(`manage ${path}`)),
         pick: jest.fn((picked: WorkspaceTreeEntry) => done.push(`pick ${picked.path}`)),
         cleared: jest.fn(() => done.push(`cleared`)),
+        follows: () => follows,
     };
     const { selecting, gestures } = effectScope().run(() => {
         const selection = useMultiSelect(order);
@@ -171,6 +173,16 @@ describe(`the keyboard`, () => {
         expect(state()).toEqual({ selected: [`src/main.ts`, `package.json`], anchor: `package.json`, lead: `package.json` });
         gestures.onKeydown(key(`End`, { shiftKey: true }));
         expect(state().selected).toEqual([`package.json`, `bundle.zip`, `.intentic/secrets/auth`, `notes.md`, `README.md`]);
+    });
+
+    it(`picks the row a bare arrow lands on while a cover is read beside the tree, and no row a widening lands on`, () => {
+        const { gestures, selecting, done } = gesturesOver(true);
+        selecting.selectSingle(`src`);
+
+        gestures.onKeydown(key(`ArrowDown`));
+        gestures.onKeydown(key(`ArrowDown`, { shiftKey: true }));
+        gestures.onKeydown(key(`Home`));
+        expect(done).toEqual([`pick src/main.ts`, `focus lead`, `focus lead`, `pick src`, `focus lead`]);
     });
 
     it(`activates the lead on Enter as a click would, and also opens a managed folder's panel`, () => {

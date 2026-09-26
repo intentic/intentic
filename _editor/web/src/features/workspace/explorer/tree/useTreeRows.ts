@@ -22,6 +22,8 @@ export interface TreeRowsHost {
     // The toolbar's three switches (useLayout's), read by every level's filter and by the chip counting what one hid.
     readonly filters: Readonly<Ref<ExplorerFilters>>;
     readonly nesting: Readonly<Ref<boolean>>;
+    // Folders alone, while a cover is read beside the tree (treeRows.ts).
+    readonly foldersOnly: () => boolean;
     readonly store: Pick<ReturnType<typeof useWorkspaceTree>, "expanded" | "lazyChildren" | "lazyHidden">;
     readonly emptyDirs: Pick<ReturnType<typeof useEmptyDirs>, "isBarren" | "chainOf">;
 }
@@ -43,6 +45,7 @@ export const useTreeRows = (host: TreeRowsHost) => {
             expanded: expanded.value,
             nesting: host.nesting.value,
             filters: filters.value,
+            foldersOnly: host.foldersOnly(),
             childrenOf,
             hiddenIn: (dir) => lazyHidden.value.get(dir) ?? 0,
             isBarren: host.emptyDirs.isBarren,

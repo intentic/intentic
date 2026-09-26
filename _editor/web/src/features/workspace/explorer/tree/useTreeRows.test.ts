@@ -36,6 +36,7 @@ const rowsOver = (tree: readonly WorkspaceTreeEntry[], rootDir = ``, barren: rea
             filter: () => filter.value,
             filters,
             nesting: ref(false),
+            foldersOnly: () => false,
             store,
             emptyDirs: { isBarren: (path) => barren.includes(path), chainOf: (path) => barrenChainOf(path, barrenChildren(barren)) },
         }),

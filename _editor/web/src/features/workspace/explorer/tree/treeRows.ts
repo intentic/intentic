@@ -64,6 +64,9 @@ export interface RowSource {
     readonly expanded: ReadonlySet<string>;
     readonly nesting: boolean;
     readonly filters: ExplorerFilters;
+    // Folders (and the archives that open like one) and nothing else: while a cover is chosen (home/homeCover.ts) the tree
+    // is its table of contents, and a folder's file is read beside it rather than listed under it.
+    readonly foldersOnly: boolean;
     readonly childrenOf: (entry: WorkspaceTreeEntry) => readonly WorkspaceTreeEntry[];
     // How many of an open folder's own entries the daemon's entry budget cut.
     readonly hiddenIn: (dir: string) => number;
@@ -85,7 +88,9 @@ const matches = (walk: Walk, entry: WorkspaceTreeEntry): boolean => entry.name.t
 // Filters apply once here, covering the root, lazy subtrees, and name matches that feed the selection/keyboard axis.
 // Nesting only applies unfiltered, since a filter flattens every level to match folded names.
 const levelOf = (walk: Walk, nodes: readonly WorkspaceTreeEntry[], dir: string): readonly NestedEntry[] => {
-    const shown = walk.source.listing(dir, nodes).filter((entry) => explorerShows(entry, walk.source.filters));
+    const shown = walk.source
+        .listing(dir, nodes)
+        .filter((entry) => explorerShows(entry, walk.source.filters) && (!walk.source.foldersOnly || holdsRows(entry)));
     return walk.source.nesting && walk.needle === `` ? nestSiblings(shown) : shown.map((entry) => ({ entry }));
 };
 

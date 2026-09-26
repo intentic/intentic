@@ -173,6 +173,7 @@ export const treeSurface = (
             filter: () => ``,
             filters: ref({ showIgnored: true, hideTests: false, hideTechnical: false }),
             nesting: ref(nesting),
+            foldersOnly: () => false,
             store,
             emptyDirs,
         });

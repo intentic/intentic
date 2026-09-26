@@ -32,6 +32,9 @@ export interface TreeGesturesHost {
     readonly openDirectory: (path: string) => void;
     // The plain click or Enter itself, whatever it opens: the home follows it, so both views mark one entry.
     readonly pick: (entry: WorkspaceTreeEntry) => void;
+    // Whether an arrow's move is a pick too: while a cover is read beside the tree, the page follows whatever row the
+    // keyboard lands on, so a reader flips through folders with the arrows alone.
+    readonly follows?: () => boolean;
     // The selection was dropped, so the home drops its own mark too.
     readonly cleared: () => void;
 }
@@ -105,6 +108,10 @@ export const useTreeGestures = (host: TreeGesturesHost) => {
     const ACTS: { readonly [K in KeyIntent["kind"]]: (intent: Extract<KeyIntent, { kind: K }>) => void } = {
         select: ({ path }) => {
             selectSingle(path);
+            const entry = host.follows?.() === true ? host.byPath.value.get(path) : undefined;
+            if (entry !== undefined) {
+                host.pick(entry);
+            }
             void host.focusLead();
         },
         extend: ({ path }) => {

@@ -21,16 +21,14 @@ const t = useT();
 
 const {
     folder,
-    where,
     here,
     name,
     entry,
     listed,
     below,
 } = defineProps<{
-    // The folder this is the cover of, and how the header and the empty state name it.
+    // The folder this is the cover of, and what the empty state calls it; the breadcrumb above says where it is.
     folder: string;
-    where: string;
     here: string;
     // The cover name, for saying what is missing.
     name: string;
@@ -184,33 +182,27 @@ const open = (): void => {
     }
 };
 
-// --- Scrolling, for the keys the home hands over ---------------------------------------------------------------------
-const scroller = ref<HTMLElement>();
-// A page is most of the view, so the line a reader was on stays in sight after the jump.
-const PAGE = 0.85;
-const scrollPage = (direction: 1 | -1): void => {
-    const el = scroller.value;
-    el?.scrollBy({ top: direction * el.clientHeight * PAGE, behavior: `smooth` });
-};
 // Every folder's file starts at its top; one a reader scrolled down in and left is not where the next begins.
+const scroller = ref<HTMLElement>();
 watch([() => folder, () => entry?.path], () => scroller.value?.scrollTo({ top: 0 }));
-defineExpose({ scrollPage, open });
 </script>
 
 <template>
     <section class="flex min-h-0 min-w-0 flex-1 flex-col" :aria-label="t(`workspace.homeCover.document`, { name: entry?.name ?? name, here })">
-        <!-- The file's own line: what it is, where it sits, and the way into its tab. Absent with no file to name. -->
+        <!-- The file's own line: which file answered (README.rst, where README.md was asked for), its size, and the way into
+             its tab. Absent with no file to name. -->
         <div v-if="entry !== undefined" class="flex h-9 shrink-0 items-center gap-2 border-b border-line px-5">
             <Icon :name="icon" class="shrink-0 text-sm" :class="color" aria-hidden="true" />
-            <span class="shrink-0 text-xs font-medium text-content">{{ entry.name }}</span>
-            <span class="min-w-0 truncate text-2xs text-subtle" :title="where">{{ where }}</span>
+            <span class="min-w-0 truncate text-xs font-medium text-content">{{ entry.name }}</span>
             <span class="ml-auto shrink-0 pl-2 text-2xs tabular-nums text-subtle">{{ size }}</span>
             <button type="button" :class="ui.textAction(`shrink-0 text-2xs`)" @click="open">
                 {{ t(`ui.action.open`) }}
             </button>
         </div>
 
-        <div ref="scroller" class="ui-softscroll min-h-0 flex-1 overflow-auto">
+        <!-- Takes focus on a click but is no tab stop, so the arrows and Space then scroll the page, as in any document; the
+             tree beside it is where the keys move between folders. -->
+        <div ref="scroller" class="ui-softscroll min-h-0 flex-1 overflow-auto focus:outline-none" tabindex="-1">
             <!-- A wait long enough to show: line-shaped placeholders, still, in a document's measure. -->
             <div v-if="revealed" class="mx-auto flex max-w-3xl flex-col gap-2.5 px-8 py-7" aria-hidden="true">
                 <div class="skeleton h-4 w-1/3"></div>

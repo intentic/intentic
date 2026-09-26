@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, type IconName, ResizeSeam, SegmentedControl, useNarrow } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
@@ -57,6 +58,7 @@ import WorkspaceDirChip from "../explorer/WorkspaceDirChip.vue";
 import WorkspaceScopeChip from "../explorer/WorkspaceScopeChip.vue";
 import WorkspaceSearchResults from "../search/WorkspaceSearchResults.vue";
 import WorkspaceTree from "../explorer/WorkspaceTree.vue";
+import HomeCoverPicker from "../home/HomeCoverPicker.vue";
 import { type RowAction, rowActionsFor } from "../explorer/rowActions";
 import { paneOf } from "../tabs/workspaceTabs";
 import { HOISTED_CONTEXT } from "../files/viewerChrome";
@@ -170,7 +172,7 @@ useWorkspaceRoute();
 const emptyWorkspace = computed(() => !isLoading.value && tree.value.length === 0);
 // The home (features/workspace/home): what is under the tabs. Showing it unsets the main pane's active tab and closes
 // nothing, so the strip is a click away from where it was.
-const { selected, pick } = useHome();
+const { selected, pick, cover } = useHome();
 const homeCovered = computed(() => !emptyWorkspace.value && strip.value.main.active !== null);
 const showHome = (): void => deselect(`main`);
 
@@ -310,6 +312,38 @@ watch(
     },
     { immediate: true },
 );
+// A row picked in the tree becomes the current entry. Under a cover (home/homeCover.ts) a folder picked there, by a click
+// or by an arrow, is a page to read: the home comes forward over any open tab, which stays where it was.
+const treeView = ref<InstanceType<typeof WorkspaceTree>>();
+const pickRow = (entry: WorkspaceTreeEntry): void => {
+    const type = opensAsFolder(entry) ? `dir` : entry.type;
+    pick(entry.path, type);
+    if (cover.value !== undefined && type === `dir`) {
+        showHome();
+    }
+};
+// Choosing a cover brings its page forward, whichever name replaces whichever. The first one also makes the tree its
+// navigator: the explorer shows its folders (the tree, not a search's matches), and the tree takes the keyboard so the
+// arrows turn the pages. A drawer is left shut, since it would cover the page it opened for.
+watch(cover, async (name, was) => {
+    if (name === undefined) {
+        return;
+    }
+    showHome();
+    if (was !== undefined) {
+        return;
+    }
+    if (contentMode.value) {
+        searchScope.value = `name`;
+    }
+    layout.setSidebarPanel(`files`);
+    if (!narrowBody.value) {
+        layout.setSidebarCollapsed(false);
+        autoHidden.value = false;
+    }
+    await nextTick();
+    await treeView.value?.focusTree();
+});
 // The home's search is the sidebar's: one query, each view answering it in its own scope (HomeView).
 provide(HOME_SEARCH, { filter, scope: searchScope, contentMode, groups: searchGroups, searching, clear: clearFilter });
 // Presence: announces the open file; component-scoped since it stops existing when this view unmounts.
@@ -976,6 +1010,14 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                         >
                             <Icon name="filter" class="text-xs" />
                         </button>
+                        <!-- One file read in every folder: the tree then lists folders alone, and the page beside it reads them. -->
+                        <HomeCoverPicker
+                            v-if="!contentMode"
+                            compact
+                            :cover="cover"
+                            @choose="(name) => (cover = name)"
+                            @drop="cover = undefined"
+                        />
                         <!-- Root's own codebase health: root is a repo (ensureRootRepo) with no tree row, so this lives on the toolbar. -->
                         <button
                             type="button"
@@ -1021,6 +1063,7 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                 <!-- Padding belongs to the tree, not this wrapper: it owns the scrollport, and the window measures against it. -->
                 <div v-else-if="layout.sidebarPanel.value === 'files'" class="min-h-0 flex-1">
                     <WorkspaceTree
+                        ref="treeView"
                         :tree="scopedTree"
                         :root-dir="workspaceDir"
                         :root-hidden="scopedRootHidden"
@@ -1031,8 +1074,10 @@ const homeTooltip = computed(() => tooltipWithChord(`Show home · your tabs stay
                         :row-actions="rowActions"
                         @open-file="openFile"
                         @open-directory="openDirectory"
-                        @pick="(entry) => pick(entry.path, opensAsFolder(entry) ? `dir` : entry.type)"
+                        :cover="cover"
+                        @pick="pickRow"
                         @clear="selected = undefined"
+                        @cover="(name) => (cover = name)"
                     />
                 </div>
                 <!-- Root drop hint over the whole panel; files mode only, since review/history aren't drop targets. -->
