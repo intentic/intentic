@@ -483,7 +483,8 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                 <span class="shrink-0 font-medium text-link">{{ view.beyond ? t(`agents.agentsView.hide`) : t(`agents.agentsView.show`) }}</span>
                 <Icon :name="view.beyond ? 'chevron-up' : 'chevron-down'" class="shrink-0 text-2xs" />
             </button>
-            <div v-if="view.beyond" class="mt-2 flex min-h-0 flex-col gap-3 overflow-auto">
+            <!-- Padded by the found card's halo (a 2px outline 2px out), which the scroll box would otherwise clip. -->
+            <div v-if="view.beyond" class="-mx-1 mt-2 flex min-h-0 flex-col gap-3 overflow-auto px-1 pb-1">
                 <section v-if="archivedHits.length > 0" class="flex min-w-0 flex-col gap-2.5">
                     <LaneHeader :label="t(`agents.agentsView.inArchive`)" icon="box" :count="archivedHits.length" class="px-1" />
                     <!-- Archived agents retain the branch, diff, and transcript actions. -->
