@@ -22,7 +22,7 @@ const version = (id: string, over: Partial<Rule> = {}): Rule =>
 const servicesWith = (
     rules: readonly Rule[],
     landedSubject?: string,
-    landed: { testNote?: string; said?: string; title?: string; origins?: Record<string, string[]> } = {},
+    landed: { testNote?: string; breaking?: string; said?: string; title?: string; origins?: Record<string, string[]> } = {},
 ): Services =>
     unstubbed<Services>("services", {
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => ({ rules }) as never }),
@@ -33,7 +33,13 @@ const servicesWith = (
                     landing:
                         landedSubject === undefined
                             ? {}
-                            : { message: { subject: landedSubject, ...(landed.testNote === undefined ? {} : { testNote: landed.testNote }) } },
+                            : {
+                                  message: {
+                                      subject: landedSubject,
+                                      ...(landed.testNote === undefined ? {} : { testNote: landed.testNote }),
+                                      ...(landed.breaking === undefined ? {} : { breaking: landed.breaking }),
+                                  },
+                              },
                 }),
         }),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", {
@@ -98,6 +104,12 @@ describe(`settling a landing`, () => {
     test(`a narrated subject is never committed: the claim goes in under one built from the change, trailers kept`, async () => {
         await settleLanding(servicesWith([version(`auto-version`)], NARRATED, { testNote: `rows became a table`, origins: claim }), `c1`);
         expect(commitOnly).toHaveBeenCalledWith(WORKSPACE_ROOT, Object.keys(claim), `chore(sandbox): update 3 files\n\nTest-Note: rows became a table`);
+    });
+
+    // Release tooling majors on the `!`: a replaced subject must not drop the marker its Breaking-Note asks for.
+    test(`a narrated subject replaced on a breaking land keeps the breaking marker`, async () => {
+        await settleLanding(servicesWith([version(`auto-version`)], NARRATED, { breaking: `The wire drops rows.`, origins: claim }), `c1`);
+        expect(commitOnly).toHaveBeenCalledWith(WORKSPACE_ROOT, Object.keys(claim), `chore(sandbox)!: update 3 files\n\nBreaking-Note: The wire drops rows.`);
     });
 
     test(`an undrafted land whose title narrates is committed under a subject built from the change, not the title`, async () => {

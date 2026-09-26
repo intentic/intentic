@@ -1,7 +1,7 @@
 import { landedCommitMessage, type Rule } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { commitOnly } from "../../git/changes/changes-index.js";
-import { committableSubject, commitSubjectFlaw } from "../../git/ops/commit-message.js";
+import { committableSubject, commitSubjectFlaw, markSubjectBreaking } from "../../git/ops/commit-message.js";
 import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import { standing } from "../../rules/rules.js";
@@ -71,7 +71,9 @@ const commitClaim = async (services: Services, id: string): Promise<string[]> =>
     const title = entry.social.title?.text;
     // The title stands in only when it could head a commit itself; the prefix would hide a narrated one from the check.
     const written = landed?.subject ?? (title === undefined || commitSubjectFlaw(title) === undefined ? fallbackSubject(title, id) : ``);
-    const subject = committableSubject(written, claims.flatMap((claim) => claim.paths));
+    const built = committableSubject(written, claims.flatMap((claim) => claim.paths));
+    // A replaced subject still carries the `!` its Breaking-Note trailer needs: release tooling majors on the marker.
+    const subject = built !== written && landed?.breaking !== undefined ? markSubjectBreaking(built) : built;
     if (subject !== written) {
         services.logger.warn({ agent: id, refused: written, subject }, "landed: its subject could not head a commit, committed under one built from the change");
     }
