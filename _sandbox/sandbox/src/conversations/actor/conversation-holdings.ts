@@ -211,6 +211,22 @@ export interface LiveRun {
 // Held by its conversation under the conversation's own id: one run at a time, the newest replacing the last.
 export const RUNS: Holding<LiveRun> = { name: "turn runs" };
 
+// Who hears that words were said into a conversation's live turn: a parked `wait` in that turn, which hands the turn back
+// since a runtime reads steered words only between tool calls. Held by the conversation, under an id of the listener's.
+export const STEER_HEARD: Holding<() => void> = { name: "steer listeners" };
+
+let steerListeners = 0;
+
+/** Calls `heard` each time words are said into this conversation's live turn, until the stop it answers is called. */
+export const whenSteered = (actors: Pick<HoldingsIndex, "holdings">, conversationId: string, heard: () => void): (() => void) => {
+    steerListeners += 1;
+    const id = `steer-${steerListeners}`;
+    actors.holdings(STEER_HEARD).hold(conversationId, id, heard);
+    return () => {
+        actors.holdings(STEER_HEARD).drop(id);
+    };
+};
+
 // Every run held, less the ones past retention, which are dropped as they are found.
 const retained = (actors: Pick<HoldingsIndex, "holdings">): readonly (readonly [string, LiveRun])[] => {
     const runs = actors.holdings(RUNS);

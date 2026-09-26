@@ -136,7 +136,7 @@ const spawnTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool 
             ...(description !== undefined ? { description } : {}),
             ...(effort !== undefined ? { effort } : {}),
         });
-        return JSON.stringify(result.ok ? { ok: true, child: result.id, note: spawnedNote(result.id, result.note) } : result);
+        return JSON.stringify(result.ok ? { ok: true, child: result.id, note: spawnedNote(result.id, result.note, result.held === true) } : result);
     },
 });
 
@@ -214,7 +214,7 @@ const waitTool = (request: AgentRequest, children: NonNullable<TurnHooks["childr
         "Wait until an agent you started needs you. Blocks until the target is blocked on input or finishes, " +
         'whichever comes first, then returns its status and last report. Target a spawned child by its id, or "any" ' +
         "for whichever of this conversation's children moves first (each is reported once). On timeout it returns the current state: call " +
-        "it again to keep waiting.",
+        "it again to keep waiting. It returns early, with outcome `message`, when something is said into your turn while it waits.",
     inputSchema: {
         type: "object",
         properties: {

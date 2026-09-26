@@ -1,6 +1,7 @@
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
+import { SteeringQueue } from "../checkpoints/agent-steering.js";
 import { type BackgroundJob, noteJobShell, openBackgroundJob } from "../tools/jobs/background-jobs.js";
 import { openSpawnedChild, resetSubagents, settleSpawnedChild } from "./subagents.js";
 import { waitForWork } from "./work-wait.js";
@@ -77,6 +78,40 @@ describe("waitForWork", () => {
         expect(await waitForWork(actors, "conv-w5", { target: "bsh-w5", until: ["finished"], timeoutMs: 5_000 })).toMatchObject({
             outcome: "unknown-target",
         });
+    });
+
+    // A runtime reads steered words only between tool calls, so a wait parked for half an hour would sit on the owner's
+    // message, a watch that fired or a land for that long.
+    it("words said into the waiting turn hand it back with outcome `message`, leaving the child it waited on unreported", async () => {
+        const unregister = actors.registerTurn("conv-w7", { abort: () => {}, steering: new SteeringQueue() });
+        openSpawnedChild(
+            { conversationId: "conv-w7", conversations: actors, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
+            { id: "sub-w7", description: "port it" },
+        );
+        try {
+            const wait = waitForWork(actors, "conv-w7", { until: ["finished"], timeoutMs: 10_000 });
+            expect(actors.steer("conv-w7", "Stop after this phase, I need to review it.")).toBe(true);
+            expect(await wait).toEqual({ outcome: "message" });
+            settleSpawnedChild(actors, "sub-w7", { status: "completed", report: "ported" });
+            expect(await waitForWork(actors, "conv-w7", { until: ["finished"], timeoutMs: 5_000 })).toMatchObject({ outcome: "finished", agent: { id: "sub-w7" } });
+        } finally {
+            unregister();
+        }
+    });
+
+    it("words said into another conversation's turn leave the wait parked", async () => {
+        const unregister = actors.registerTurn("conv-w8-other", { abort: () => {}, steering: new SteeringQueue() });
+        openSpawnedChild(
+            { conversationId: "conv-w8", conversations: actors, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
+            { id: "sub-w8", description: "port it" },
+        );
+        try {
+            const wait = waitForWork(actors, "conv-w8", { until: ["finished"], timeoutMs: 2_500 });
+            expect(actors.steer("conv-w8-other", "Not for you.")).toBe(true);
+            expect(await wait).toMatchObject({ outcome: "timeout" });
+        } finally {
+            unregister();
+        }
     });
 
     it("the turn's abort settles a wait on a command", async () => {

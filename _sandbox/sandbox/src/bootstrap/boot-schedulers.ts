@@ -1,6 +1,7 @@
 import { startRuntimeHealth } from "../agent/providers/adapter-health.js";
+import { reportChildLanded } from "../agent/subagents/child-lands.js";
 import { type ChildReportDeps, reportChildTurn } from "../agent/subagents/child-report.js";
-import { childKillNote } from "../agent/subagents/children.js";
+import { adoptChildTurn, childKillNote } from "../agent/subagents/children.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
 import { startWatchers } from "../agent/verification/watchers.js";
 import { approvalsExecutorFor } from "../approvals/approvals-executor.js";
@@ -39,6 +40,10 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
         killNote: (childId, failure) => childKillNote(services, childId, failure),
     };
     shutdown.push(services.events.subscribe("run.settled", (settled) => reportChildTurn(childReports, settled)));
+    // So is its work reaching the main tree, while the parent still supervises (child-lands.ts), and a turn that starts on
+    // it without the parent, which the parent supervises like its own (children.ts adoptChildTurn).
+    shutdown.push(services.events.subscribe("workspace", (event) => reportChildLanded(services, event)));
+    shutdown.push(services.events.subscribe("run.started", (started) => adoptChildTurn(services, started)));
 
     // A settled turn a person asked for arms a hold on its prompt cache where the setting says so; each hold sets its
     // own deadline, so there is nothing to start, only timers to clear.

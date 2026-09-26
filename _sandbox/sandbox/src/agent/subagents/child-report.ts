@@ -2,8 +2,9 @@ import { childReportPrompt, type TurnProfile } from "@intentic/sandbox-contract"
 import type { Logger } from "pino";
 import { parentOfActor } from "../../auth/principal.js";
 import { deliverWake, type WakeDoors } from "../run/turn/wake-delivery.js";
+import { bookedRerunWords } from "./child-lands.js";
 import { childVerification } from "./child-verification.js";
-import { subagentEndingReported } from "./subagents.js";
+import { markSubagentEndingReported, subagentEndingReported } from "./subagents.js";
 import type { DomainEventMap } from "../../seams/domain-events.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 
@@ -30,7 +31,9 @@ const reportText = (settled: DomainEventMap["run.settled"], killed: string | und
     const answer =
         settled.closing.length <= REPORT_CHARS ? settled.closing : `${settled.closing.slice(0, REPORT_CHARS)}… (the rest is in its own chat)`;
     const ending = killed ?? (settled.failure === undefined ? undefined : `The turn failed: ${settled.failure}`);
-    return [answer, ...(ending === undefined ? [] : [ending])].filter((part) => part !== "").join("\n\n");
+    // A re-run the sandbox booked for itself is said with the failure, or the parent sends the task again or hands it on.
+    const rerun = settled.rerun === undefined ? undefined : bookedRerunWords(settled.rerun);
+    return [answer, ...(ending === undefined ? [] : [ending]), ...(rerun === undefined ? [] : [rerun])].filter((part) => part !== "").join("\n\n");
 };
 
 // Nobody when a person started the turn in the child's own chat, a wait already took it, or the parent is gone.
@@ -76,6 +79,11 @@ export const reportChildTurn = async (deps: ChildReportDeps, settled: DomainEven
         if ("why" in receipt) {
             deps.logger.info({ child: settled.conversationId, parent: target.parent, why: receipt.why }, "child report: its parent took nothing, it stays in the child's own chat");
             return;
+        }
+        // Said into its turn, or a turn of its own: the parent has it, and `wait` must not hand it over again. One still
+        // queued behind a turn that takes no words is not read yet, so a wait meanwhile may still return it.
+        if (receipt.delivered !== "queued") {
+            markSubagentEndingReported(deps.conversations, settled.conversationId);
         }
         deps.logger.info({ child: settled.conversationId, parent: target.parent, delivered: receipt.delivered }, "child report: delivered");
     } catch (error) {

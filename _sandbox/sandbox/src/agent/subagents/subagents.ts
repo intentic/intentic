@@ -628,12 +628,13 @@ export interface SpawnedChildBirth {
 
 /**
  * Opens a roster record for a child the service just started, and announces it into the parent's live stream. A settled
- * record under the same id is replaced whole, a follow-up `send`; a live one is left alone.
+ * record under the same id is replaced whole, a follow-up `send`; a live one is left alone unless `replacing`, a start
+ * the owner just allowed taking over the row that waited for them.
  */
-export const openSpawnedChild = (turn: SubagentTurn, birth: SpawnedChildBirth): void => {
+export const openSpawnedChild = (turn: SubagentTurn, birth: SpawnedChildBirth, replacing = false): void => {
     const roster = turn.conversations.holdings(ROSTER);
     const existing = roster.get(birth.id);
-    if (existing !== undefined && subagentRunning(existing)) {
+    if (existing !== undefined && subagentRunning(existing) && !replacing) {
         return;
     }
     roster.drop(birth.id);
@@ -789,6 +790,17 @@ export const waitForSubagent = (actors: Actors, conversationId: string, options:
 export const subagentEndingReported = (actors: Actors, id: string): boolean => {
     const reported = actors.holdings(ROSTER).get(id)?.reported;
     return reported !== undefined && !LIVE.has(reported);
+};
+
+/**
+ * Files a settled child's ending as handed over by the other door, a report said into the parent's turn, so a later
+ * `wait` on "any" does not hand the same ending over a second time. A live record has no ending to file.
+ */
+export const markSubagentEndingReported = (actors: Actors, id: string): void => {
+    const record = actors.holdings(ROSTER).get(id);
+    if (record !== undefined && !subagentRunning(record)) {
+        record.reported = record.status;
+    }
 };
 
 /**

@@ -1,4 +1,4 @@
-import type { ParkKind, TurnSpeaker, WorkspaceEvent } from "@intentic/sandbox-contract";
+import type { ParkKind, ResumeReason, TurnErrand, TurnSpeaker, WorkspaceEvent } from "@intentic/sandbox-contract";
 
 // What a turn and the fleet announce, delivered in-process to whatever reacts to it: a publisher names only the event,
 // and each reacting subsystem is subscribed in composition, so neither imports the other.
@@ -19,6 +19,19 @@ export interface DomainEventMap {
         readonly failure: string | undefined;
         // Its last top-level prose; empty when it said nothing.
         readonly closing: string;
+        // Present when its failure booked a re-run of this same turn, which the sandbox fires by itself: `at`, in epoch
+        // seconds, where the moment is known.
+        readonly rerun?: { readonly at?: number | undefined };
+    };
+    // A detached run began through the port's `start`: a person's message, a wake, a queued message, or a re-run the
+    // sandbox fired by itself. A spawned child's own turns from its parent start through `run` and are not announced.
+    readonly "run.started": {
+        readonly conversationId: string;
+        readonly speaker: TurnSpeaker | undefined;
+        // Which re-run this is, when the sandbox sent the turn again by itself.
+        readonly resume: ResumeReason | undefined;
+        // What composed words are for, when the sandbox composed them.
+        readonly errand: TurnErrand | undefined;
     };
     // A turn begun through the port's `start` parked on its person; may happen several times a turn.
     readonly "turn.awaiting": { readonly conversationId: string; readonly awaiting: ParkKind };
@@ -49,6 +62,7 @@ export const createDomainEvents = (failed: (name: DomainEventName, error: unknow
     const subscribers: Subscribers = {
         workspace: new Set(),
         "run.settled": new Set(),
+        "run.started": new Set(),
         "turn.awaiting": new Set(),
         "turn.finished": new Set(),
         "tree.changed": new Set(),

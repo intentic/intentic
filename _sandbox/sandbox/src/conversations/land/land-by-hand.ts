@@ -1,5 +1,6 @@
 import type { AgentSpan, LandMode, LandResult } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
+import { reportChildConflict } from "../../agent/subagents/child-lands.js";
 import { opt } from "../../opt.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import { landAgent, reportLockfileFailures } from "./land.js";
@@ -10,7 +11,7 @@ import { settleLandingInBackground, versionCommitsSettled } from "./version-land
 // A land a person pressed: the same pre-land rebase an automatic land takes, then the whole repository's check queued
 // behind it. Runs inside the conversation's land lease, which the route holds.
 
-export type LandByHandDeps = Pick<Services, "agentWorktrees" | "agents" | "conversations" | "events" | "history" | "logger" | "perf"> &
+export type LandByHandDeps = Pick<Services, "agentWorktrees" | "agents" | "conversations" | "events" | "history" | "logger" | "perf" | "turns"> &
     Parameters<typeof verifyLandedTree>[0] &
     Parameters<typeof settleLandingInBackground>[0];
 
@@ -65,6 +66,14 @@ export const landByHand = async (services: LandByHandDeps, entry: IsolatedAgent,
     reportLockfileFailures(services.logger, entry.id, result);
     // Stores the tips and conflict report, re-derives standing, and clears the prior ending without a turn.
     await services.agents.recordLanded(entry.id, result);
+    // A spawned child's parent, still supervising, is told its press met a conflict and nothing reached the tree.
+    if (!result.landed && result.held !== true && (result.conflicts?.length ?? 0) > 0) {
+        void reportChildConflict(
+            services,
+            entry.id,
+            (result.conflicts ?? []).flatMap(({ repo, paths }) => paths.map(({ path }) => (repo === "root" ? path : `${repo}/${path}`))),
+        );
+    }
     // Only on a resting agent: a running turn would have its mutex freed and its ending overwritten.
     if (!services.conversations.running(entry.id)) {
         await services.conversations.send(entry.id, { kind: "settle" }).settled;

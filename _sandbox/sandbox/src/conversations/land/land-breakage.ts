@@ -3,6 +3,7 @@ import { type AgentSummary, fixAttemptOf, landBreakagePrompt, landFixConversatio
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Services } from "../../composition.js";
 import { deliverWake } from "../../agent/run/turn/wake-delivery.js";
+import { reportChildrenRed } from "../../agent/subagents/child-lands.js";
 import { conversationProfile, isIsolated, type PersistedAgent, reposOf } from "../registry/agents-store.js";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
 import type { LandBreakage } from "../../workspace/deps/verify-deps.js";
@@ -436,6 +437,7 @@ const decide = async (services: Services, owed: Owed, git: GitRunner, now: numbe
     if (busy.length > 0) {
         const routing = await hold(services, owed, busy, [...packages]);
         await fileRouting(services, breakage.project, breakage.redSince, owed.runs, routing);
+        tellParents(services, breakage, suspects, routing);
         return routing;
     }
     clearHoldTimer(breakage.project);
@@ -449,7 +451,19 @@ const decide = async (services: Services, owed: Owed, git: GitRunner, now: numbe
             ? sendBack(services, breakage, single.land, entry, sends)
             : await freshFixUp(services, breakage, suspects, named, passedOver);
     await fileRouting(services, breakage.project, breakage.redSince, owed.runs, routing);
+    tellParents(services, breakage, suspects, routing);
     return routing;
+};
+
+// A parent still supervising a child among the suspects hears where the failures went, so it neither relays them to the
+// child the router already sent them to nor starts a second fixer of its own.
+const tellParents = (services: Services, breakage: LandBreakage, suspects: readonly LandSuspect[], routing: MainlineRouting): void => {
+    void reportChildrenRed(
+        services,
+        breakage,
+        suspects.map(({ land }) => land.agentId),
+        routing,
+    );
 };
 
 // A hold ends: its conversations stopped, or it ran out of time. Routed now unless a land it waited for is being checked,
@@ -512,6 +526,7 @@ export const routeLandBreakage = async (services: Services, breakage: LandBreaka
         await carry(services, project, breakage.redSince, undefined);
         const routing: MainlineRouting = { kind: "reported", at: now, detail: "Repairs after landing are switched off." };
         await fileRouting(services, project, breakage.redSince, owed.runs, routing);
+        tellParents(services, owed.breakage, laid.suspects, routing);
         return routing;
     }
     if (breakage.queuedBehind && owed.waits < WAITS_PER_STREAK) {

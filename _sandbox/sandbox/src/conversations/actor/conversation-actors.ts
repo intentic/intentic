@@ -4,7 +4,7 @@ import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
 import { recordConversationPrompt, recordPrompt } from "../../sessions/transcript-search.js";
 import type { PersistedAgent } from "../registry/agents-store.js";
 import { type BeginTurn, type ConversationEffect, type ConversationEvent, decide, refusesArchived, type ReplyOf, type SettleFlush } from "./conversation-decide.js";
-import { createHoldingsIndex, type Holding, type Holdings, type Share } from "./conversation-holdings.js";
+import { createHoldingsIndex, type Holding, type Holdings, type Share, STEER_HEARD } from "./conversation-holdings.js";
 import { NO_QUEUE, type TurnQueue } from "./conversation-queue.js";
 import { type ConversationState, type HeldRecord, idleConversation, writing } from "./conversation-state.js";
 
@@ -252,7 +252,16 @@ export const createConversationActors = (books: ConversationBooks): Conversation
                 }
             };
         },
-        steer: (id, text) => actors.get(id)?.activeTurn?.steering?.push(text) ?? false,
+        steer: (id, text) => {
+            const taken = actors.get(id)?.activeTurn?.steering?.push(text) ?? false;
+            if (taken) {
+                // A wait parked in this turn hands it back, so the words are read now and not when the wait runs out.
+                for (const heard of holdings.holdings(STEER_HEARD).of(id)) {
+                    heard();
+                }
+            }
+            return taken;
+        },
         abort: (id) => {
             const turn = actors.get(id)?.activeTurn;
             turn?.abort();

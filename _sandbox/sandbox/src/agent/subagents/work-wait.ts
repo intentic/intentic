@@ -4,11 +4,15 @@ import { whenFileAppears } from "../tools/file-appears.js";
 import { type BackgroundJob, backgroundJobOf, jobFinished, type JobReport, jobReport, jobStatusPath, runningJobsOf } from "../tools/jobs/background-jobs.js";
 import { type SubagentWaitOptions, type SubagentWaitUntil, waitForSubagent } from "./subagents.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
+import { whenSteered } from "../../conversations/actor/conversation-holdings.js";
+import { opt } from "../../opt.js";
 
 // The one park for work a conversation started here: a child agent, or a background command.
 
 export interface WorkWaitOutcome {
-    readonly outcome: SubagentWaitUntil | "timeout" | "aborted" | "unknown-target";
+    // `message`: words were said into the waiting turn (a person, a watch, a child's report, the sandbox), which its
+    // runtime reads only once this tool call returns.
+    readonly outcome: SubagentWaitUntil | "timeout" | "aborted" | "unknown-target" | "message";
     // The child that moved, or the target's snapshot on a timeout.
     readonly agent?: SubagentSession;
     // The command that finished, or the target's snapshot on a timeout.
@@ -92,8 +96,53 @@ const fromSubagent = async (actors: Actors, conversationId: string, options: Sub
 // Never settles: a race partner with nothing to wait for leaves the answer to the other.
 const NEVER = new Promise<WorkWaitOutcome>(() => {});
 
-/** Parks until the named child or command (by the id its Bash call returned) moves, or for "any" whichever moves first. */
+// How long a wait lets words said into its turn travel to the runtime before it hands the turn back, so they arrive with
+// its answer rather than after the next tool call.
+const HEARD_GRACE_MS = 1_500;
+
+// Settles `message` once words are said into the waiting conversation's live turn; never, until then. The signal ends the
+// listening with the wait.
+const wordsSaid = (actors: Actors, conversationId: string, signal: AbortSignal): Promise<WorkWaitOutcome> =>
+    new Promise((resolve) => {
+        let grace: ReturnType<typeof setTimeout> | undefined;
+        const stop = whenSteered(actors, conversationId, () => {
+            if (grace !== undefined) {
+                return;
+            }
+            grace = setTimeout(() => resolve({ outcome: "message" }), HEARD_GRACE_MS);
+            grace.unref();
+        });
+        signal.addEventListener(
+            "abort",
+            () => {
+                stop();
+                clearTimeout(grace);
+            },
+            { once: true },
+        );
+    });
+
+/**
+ * Parks until the named child or command (by the id its Bash call returned) moves, or for "any" whichever moves first;
+ * words said into the waiting turn meanwhile hand it back at once, with outcome `message`.
+ */
 export const waitForWork = async (actors: Actors, conversationId: string, options: SubagentWaitOptions): Promise<WorkWaitOutcome> => {
+    if (options.signal?.aborted === true) {
+        return { outcome: "aborted" };
+    }
+    const heard = new AbortController();
+    const abort = (): void => heard.abort();
+    options.signal?.addEventListener("abort", abort, { once: true });
+    try {
+        return await Promise.race([parkOnWork(actors, conversationId, { ...options, signal: heard.signal }), wordsSaid(actors, conversationId, heard.signal)]);
+    } finally {
+        options.signal?.removeEventListener("abort", abort);
+        heard.abort();
+    }
+};
+
+// The park itself: the named command, else the children, raced against every command still running for "any".
+const parkOnWork = async (actors: Actors, conversationId: string, options: SubagentWaitOptions): Promise<WorkWaitOutcome> => {
     // A command only ever finishes, so it answers a named wait whatever `until` asks for.
     const named = options.target === undefined ? undefined : backgroundJobOf(actors, conversationId, options.target);
     if (named !== undefined) {
@@ -118,6 +167,10 @@ export const waitForWork = async (actors: Actors, conversationId: string, option
     }
 };
 
+// What a wait handed back for words said into its turn tells the model, since the words themselves come after it.
+const WORDS_SAID =
+    "Something was said into your turn while you waited (the owner, a watch that fired, a child's report or the sandbox): it follows this result. Read it, then wait again if you still need to; nothing you were waiting on has moved.";
+
 /** The answer every wait door gives, a blocked child's whole question included so the caller can answer it. */
 export const workWaitAnswer = (
     result: WorkWaitOutcome,
@@ -129,5 +182,6 @@ export const workWaitAnswer = (
         ...(result.agent === undefined ? {} : { agent: result.agent }),
         ...(result.job === undefined ? {} : { job: result.job }),
         ...(question === undefined ? {} : { question }),
+        ...opt("note", result.outcome === "message" ? WORDS_SAID : undefined),
     };
 };

@@ -446,13 +446,18 @@ const spawn = async (argv) => {
     if (status !== 200) {
         return die(`agents: ${refusalOf(text)}`);
     }
-    const { id, note } = JSON.parse(text);
+    const { id, note, held } = JSON.parse(text);
     process.stdout.write(`${id}\n`);
-    // What the owner changed on the card before allowing it, so the model that ran is the one the caller reports.
+    // What the owner changed on the card before allowing it, so the model that ran is the one the caller reports; or,
+    // held, that the owner is still being asked.
     if (typeof note === "string" && note !== "") {
         process.stderr.write(`${note}\n`);
     }
-    process.stderr.write(`Started; on a box short of memory it waits as pending until there is room. Follow it with: agents wait ${id}\n`);
+    process.stderr.write(
+        held === true
+            ? `Follow it with: agents wait ${id}\n`
+            : `Started; on a box short of memory it waits as pending until there is room. Follow it with: agents wait ${id}\n`,
+    );
 };
 
 const wait = async (argv) => {
@@ -471,6 +476,8 @@ const wait = async (argv) => {
     const { outcome, agent, question } = JSON.parse(text);
     if (outcome === "timeout") {
         process.stderr.write("Still working. Call `agents wait` again to keep following it.\n");
+    } else if (outcome === "message") {
+        process.stderr.write("Something was said into your turn while you waited: read it, then call `agents wait` again if you still need to.\n");
     } else if (question !== undefined) {
         process.stderr.write(`blocked on a question — answer with \`agents answer ${agent?.id ?? "<id>"} '<text>'\`\n`);
     } else if (agent?.summary !== undefined) {

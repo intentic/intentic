@@ -269,6 +269,10 @@ export const startConversationTurn = async (
     if (run === "archived") {
         services.logger.info({ conversationId, resume: turn.resume }, "turn not started: the conversation is archived, and only a person reopens it");
     }
+    if (run !== "archived" && run !== "busy") {
+        // Whoever supervises this conversation hears that it is busy, and why (a spawned child's parent, children.ts).
+        services.events.publish("run.started", { conversationId, speaker: turn.speaker, resume: turn.resume, errand: turn.errand });
+    }
     return run;
 };
 

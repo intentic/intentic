@@ -2,6 +2,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { agentWordsOf } from "@intentic/sandbox-contract";
 import { pino } from "pino";
 import { childActor } from "../../auth/principal.js";
+import { opt } from "../../opt.js";
 import type { DomainEventMap } from "../../seams/domain-events.js";
 import { type FakeTurns, fakeTurns, memoryFleet } from "../../testing.js";
 import { type ChildReportDeps, reportChildTurn } from "./child-report.js";
@@ -21,6 +22,7 @@ interface Doors extends FakeTurns {
 const doorsOf = (
     over: {
         live?: boolean;
+        busy?: number;
         parentArchived?: boolean;
         entries?: Record<string, { startedBy?: string; title?: string }>;
         killNote?: ChildReportDeps["killNote"];
@@ -32,7 +34,7 @@ const doorsOf = (
         ...over.entries,
     };
     // The parent filed away is the admission's to turn the report from, as it turns every word nobody sent.
-    const turns = fakeTurns({ live: over.live === true, archived: over.parentArchived === true });
+    const turns = fakeTurns({ live: over.live === true, archived: over.parentArchived === true, ...opt("busy", over.busy) });
     return Object.assign(turns, {
         deps: {
             doors: { turns: turns.turns, sessionIdOf: () => "parent-session" },
@@ -97,6 +99,18 @@ describe("a spawned child's report", () => {
         expect(prompt).toContain("The turn failed: usage limit reached");
     });
 
+    // Told only "failed", a parent hands the task to another agent while the sandbox re-runs it: the same work twice.
+    it("says with a failure that the sandbox runs the same turn again by itself, and when", async () => {
+        const doors = doorsOf();
+        await reportChildTurn(
+            doors.deps,
+            settledOf({ failure: "You've hit your usage limit.", closing: "Halfway through.", rerun: { at: Date.UTC(2026, 8, 26, 15, 38) / 1000 } }),
+        );
+        expect(doors.started[0]?.prompt).toContain(
+            "The turn failed: You've hit your usage limit.\n\nThe sandbox runs this same turn again by itself at 15:38 UTC, and its report reaches you when that ends: do not send it the task again or give the task to another agent meanwhile.",
+        );
+    });
+
     it("carries the head of a long answer and says where the rest is", async () => {
         const doors = doorsOf();
         await reportChildTurn(doors.deps, settledOf({ closing: `${"a".repeat(4_000)}TAIL` }));
@@ -116,6 +130,37 @@ describe("a spawned child's report", () => {
         const doors = doorsOf();
         await reportChildTurn(doors.deps, settledOf());
         expect(doors.started).toEqual([]);
+    });
+
+    // The other direction of the rule above: a report the parent already read is not handed over again by its next wait.
+    it("a report said into the parent's turn is not returned again by the parent's next wait", async () => {
+        openSpawnedChild(
+            { conversationId: "parent-1", conversations: actors, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
+            { id: "sub-1", description: "port" },
+        );
+        settleSpawnedChild(actors, "sub-1", { status: "completed", report: "done" });
+        const doors = doorsOf({ live: true });
+        await reportChildTurn(doors.deps, settledOf());
+        expect(doors.steers).toHaveLength(1);
+        await expect(waitForSubagent(actors, "parent-1", { until: ["finished"], timeoutMs: 1_000 })).resolves.toEqual({
+            outcome: "unknown-target",
+            matched: expect.objectContaining({ id: "sub-1", status: "completed" }),
+        });
+    });
+
+    it("a report still queued behind a turn that takes no words is left to the parent's wait, which has not read it", async () => {
+        openSpawnedChild(
+            { conversationId: "parent-1", conversations: actors, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
+            { id: "sub-1", description: "port" },
+        );
+        settleSpawnedChild(actors, "sub-1", { status: "completed", report: "done" });
+        const doors = doorsOf({ busy: 1 });
+        await reportChildTurn(doors.deps, settledOf());
+        expect(doors.queued).toHaveLength(1);
+        await expect(waitForSubagent(actors, "parent-1", { until: ["finished"], timeoutMs: 1_000 })).resolves.toEqual({
+            outcome: "finished",
+            matched: expect.objectContaining({ id: "sub-1", status: "completed" }),
+        });
     });
 
     it("stays quiet for a turn a person started in the child's own chat", async () => {

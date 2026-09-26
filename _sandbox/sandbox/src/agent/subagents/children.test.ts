@@ -5,7 +5,9 @@ import type { Services } from "../../composition.js";
 import { spawnServices } from "../../harness/spawn-services.testing.js";
 import { startTurnRun } from "../run/turn/turn-runs.js";
 import { clearTurnTaint, conversationTaintSource, createTurnTaint, publishTurnTaint } from "../../guard/turn-taint.js";
+import { unstubbed } from "@intentic/testing";
 import {
+    adoptChildTurn,
     answerChild,
     armSupervisor,
     pendingQuestionOf,
@@ -19,7 +21,7 @@ import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { createDomainEvents } from "../../seams/domain-events.js";
 import type { TurnStarter } from "../../seams/turn-starter.js";
-import { drivenBy, memoryFleet } from "../../testing.js";
+import { conversationEntry, drivenBy, memoryFleet } from "../../testing.js";
 
 // One fleet's actors for every spawn here, and the cards parked in them: what a parent's own wait and answer read.
 const actors = memoryFleet().conversations;
@@ -433,6 +435,81 @@ describe("the escalation ladder", () => {
     });
 });
 
+// A child's conversation is not only its parent's: the owner can write in its chat, send it a land conflict, or the land
+// check can send a red back to it. A follow-up that meets one of those turns must still arrive, and say where it is.
+describe("a follow-up that meets a turn somebody else started", () => {
+    // Polls the roster until the child reads `status`, so an assertion never races the detached start.
+    const rowReading = async (id: string, status: string): Promise<SubagentSession | undefined> => {
+        for (let attempt = 0; attempt < 400; attempt += 1) {
+            const row = listSubagentSessions(actors).find((session) => session.id === id);
+            if (row?.status === status) {
+                return row;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        return listSubagentSessions(actors).find((session) => session.id === id);
+    };
+
+    it("waits for that turn to end and then runs, named by the child's task, instead of being dropped", async () => {
+        const turns: AgentTurn[] = [];
+        const conflictResolved = Promise.withResolvers<void>();
+        // Every turn ends at once but the owner's, which holds until the test lets it go.
+        const body = async function* (input: AgentTurn): AsyncGenerator<AgentEvent> {
+            turns.push(input);
+            if (input.prompt === "Resolve the land conflict") {
+                await conflictResolved.promise;
+            }
+            yield { kind: "done" };
+        };
+        const services = drivenBy(spawnServices({}, [], actors), body);
+        const result = await spawnChild(services, parent, { prompt: "port it", description: "Port the parser", provider: "cursor", model: "composer-2.5" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await settled(result.id);
+        expect(services.turns.run({ conversationId: result.id, prompt: "Resolve the land conflict" })).not.toBe("busy");
+
+        const sent = await sendToChild(services, parent, result.id, "Now the lexer too.");
+
+        expect(sent).toEqual({
+            ok: true,
+            note: "Sent, to run next: it is busy with a turn it did not get from you (a person, a land conflict or a red check sent back to it), and your message runs as its own follow-up once that ends. Supervise it with wait.",
+        });
+        expect(await rowReading(result.id, "pending")).toMatchObject({
+            status: "pending",
+            summary: "Waiting for the turn already running on it to end; your message runs right after.",
+            description: "Port the parser",
+        });
+        // One message waits at a time: a second is refused, saying why, rather than steered into the owner's turn.
+        expect(await sendToChild(services, parent, result.id, "And the docs.")).toEqual({
+            ok: false,
+            message: "Your last message is still waiting for the turn already running on it to end: wait for it, then send again.",
+        });
+        conflictResolved.resolve();
+        await settled(result.id);
+        expect(turns.map((turn) => turn.prompt)).toEqual(["port it", "Resolve the land conflict", "Now the lexer too."]);
+        expect(listSubagentSessions(actors).find((session) => session.id === result.id)).toMatchObject({
+            status: "completed",
+            description: "Port the parser",
+        });
+    });
+
+    it("keeps the row named by the child's task across a follow-up to a settled child", async () => {
+        const services = drivenBy(spawnServices({}, [], actors), fakeTurn([]));
+        const result = await spawnChild(services, parent, { prompt: "port it", description: "Port the parser", provider: "cursor", model: "composer-2.5" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await settled(result.id);
+        expect(await sendToChild(services, parent, result.id, "Phase 2 is landed. Rebase onto main first, then the lexer.")).toEqual({
+            ok: true,
+            note: "Sent: the child runs a follow-up turn, once there is memory for it. Supervise it with wait.",
+        });
+        await settled(result.id);
+        expect(listSubagentSessions(actors).find((session) => session.id === result.id)?.description).toBe("Port the parser");
+    });
+});
+
 // children.routes.ts' gate: the persona decision is recorded at plan time as the supervisor itself, so a conversation
 // no qualifying turn planned has nothing armed.
 describe("the shell door's arming", () => {
@@ -685,7 +762,8 @@ describe("placing a child on the fleet", () => {
 });
 
 // Same floor fires either way; what differs is whether a live turn exists to draw a card on. Every other test here has
-// none, which is the detached `agents` shell case and is still the correct refusal.
+// none, which is the detached `agents` shell case and is still the correct refusal. Nothing waits on the card: the move
+// comes back at once, held, and what the owner answers decides it later.
 describe("a held supervisor call asks the owner where there is one to ask", () => {
     // Keeps a parent turn open for the test via the real pump, not a stand-in, so `turnRunOf` finds a live stream a
     // card can actually be raised into.
@@ -705,11 +783,12 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
         return { release };
     };
 
-    // The card's requestId, off the parent's own frame log, exactly what a client would answer with.
+    // The newest card on the parent's own frame log that has not settled, exactly what a client would answer.
     const cardOn = async (): Promise<string> => {
-        const run = turnRunOf(actors, parent.conversationId);
         for (let attempt = 0; attempt < 200; attempt += 1) {
-            const card = run?.rows.find((row) => row.permission !== undefined)?.permission;
+            const card = turnRunOf(actors, parent.conversationId)
+                ?.rows.map((row) => row.permission)
+                .findLast((permission) => permission !== undefined && permission.status === "pending");
             if (card !== undefined) {
                 return card.requestId;
             }
@@ -717,49 +796,120 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
         }
         throw new Error("no permission card was raised on the parent's turn");
     };
+    const cardOf = (requestId: string) =>
+        turnRunOf(actors, parent.conversationId)
+            ?.rows.map((row) => row.permission)
+            .find((permission) => permission?.requestId === requestId);
 
-    it("raises a card on the parent's turn and runs the spawn once it is allowed", async () => {
+    // What the sandbox said into the parent's turn, as a parent mid-turn hears it.
+    let told: string[] = [];
+    beforeEach(() => {
+        told = [];
+    });
+    // The owner's rules and the stream a child runs on, with the parent mid-turn: the parent reads as running and has a
+    // record, and what is said into its turn is kept above.
+    const heldServices = (rules: Record<string, "allow" | "hold" | "deny">, stream: TurnStarter["stream"]): Services => {
+        const driven = drivenBy(spawnServices({ actionRules: rules }, [], actors), stream);
+        return unstubbed<Services>("services", {
+            ...driven,
+            conversations: { ...driven.conversations, running: (id: string) => id === parent.conversationId || driven.conversations.running(id) },
+            agents: unstubbed<Services["agents"]>("agents", { entry: (id: string) => (id === parent.conversationId ? conversationEntry({ id }) : undefined) }),
+            turns: {
+                ...driven.turns,
+                say: async (said) => {
+                    told.push(said.turn.prompt);
+                    return { delivered: "steered", run: "run-parent" };
+                },
+            },
+        });
+    };
+    const HOLD = { "agents.spawn": "hold" } as const;
+
+    // Polls until `ready` holds, so an assertion never races a detached start.
+    const until = async (ready: () => boolean): Promise<void> => {
+        for (let attempt = 0; attempt < 400 && !ready(); attempt += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+    };
+
+    it("comes back at once with the child waiting on the owner, and starts it once they allow it", async () => {
         const live = liveParent();
         try {
-            const spawning = spawnChild(drivenBy(spawnServices({ actionRules: { "agents.spawn": "hold" } }, [], actors), fakeTurn([])), parent, {
-                prompt: "go",
-                provider: "claude",
-                model: "claude-sonnet-4-6",
-            });
-            const requestId = await cardOn();
-            // Names the move and provider, so answering it isn't a guess about what it does.
-            const card = turnRunOf(actors, parent.conversationId)?.rows.find((row) => row.permission !== undefined)?.permission;
-            expect(card).toMatchObject({ toolName: "agents.spawn", title: "Start a child agent on Claude Code?", displayName: "Start it" });
-            // No always-allow offered: nothing here would remember one.
-            expect(card).not.toHaveProperty("alwaysLabel");
-
-            expect(cards.resolve({ kind: "permission", requestId, decision: "once" })).toBe("settled");
-            const result = await spawning;
-            expect(result.ok).toBe(true);
-            if (result.ok) {
-                await settled(result.id);
+            const turns: AgentTurn[] = [];
+            const result = await spawnChild(heldServices(HOLD, fakeTurn(turns)), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+            if (!result.ok) {
+                throw new Error(result.message);
             }
+            expect(result).toEqual({
+                ok: true,
+                id: result.id,
+                held: true,
+                note: "Held for the owner's approval: a card in your chat asks them, and you carry on meanwhile. It starts once they allow it; wait on it like any child. If they decline, or nobody answers before your turn ends, it ends as failed without having run.",
+            });
+            // Filed as a child already, so the parent's wait parks on it like any other.
+            expect(listSubagentSessions(actors).find((session) => session.id === result.id)).toMatchObject({
+                status: "pending",
+                summary: "Waiting for the owner to allow its start, on the card in your chat.",
+            });
+            expect(turns).toEqual([]);
+            const requestId = await cardOn();
+            // Names the move and provider, so answering it isn't a guess about what it does; offers the turn-long allow.
+            expect(cardOf(requestId)).toMatchObject({
+                toolName: "agents.spawn",
+                title: "Start a child agent on Claude Code?",
+                displayName: "Start it",
+                alwaysLabel: "Allow for the rest of this turn",
+            });
+            expect(cards.resolve({ kind: "permission", requestId, decision: "once" })).toBe("settled");
+            await settled(result.id);
+            expect(turns.map((turn) => turn.conversationId)).toEqual([result.id]);
             // Settles on the parent's run, so a client stops drawing the card as live.
-            expect(turnRunOf(actors, parent.conversationId)?.rows.find((row) => row.permission !== undefined)?.permission?.status).toBe("allowed");
+            expect(cardOf(requestId)?.status).toBe("allowed");
+            // Nothing the parent could not see for itself: its wait shows the start.
+            expect(told).toEqual([]);
         } finally {
             live.release();
         }
     });
 
-    it("a denial refuses the spawn and tells the model not to retry", async () => {
+    it("a denial ends the waiting child as failed, never run, and tells the model not to retry", async () => {
         const live = liveParent();
         try {
-            const spawning = spawnChild(drivenBy(spawnServices({ actionRules: { "agents.spawn": "hold" } }, [], actors), fakeTurn([])), parent, {
-                prompt: "go",
-                provider: "claude",
-                model: "claude-sonnet-4-6",
+            const turns: AgentTurn[] = [];
+            const services = heldServices(HOLD, fakeTurn(turns));
+            const result = await spawnChild(services, parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+            if (!result.ok) {
+                throw new Error(result.message);
+            }
+            cards.resolve({ kind: "permission", requestId: await cardOn(), decision: "deny" });
+            const ended = await waitForSubagent(actors, parent.conversationId, { target: result.id, until: ["finished"], timeoutMs: 5_000 });
+            expect(ended.matched).toMatchObject({
+                status: "failed",
+                error: "The owner declined this. Do not retry: carry on with what you can do without it, and say plainly what you left undone.",
             });
-            const requestId = await cardOn();
-            cards.resolve({ kind: "permission", requestId, decision: "deny" });
-            const result = await spawning;
-            const message = result.ok === false ? result.message : "";
-            expect(message).toContain("declined");
-            expect(message).toContain("Do not retry");
+            expect(turns).toEqual([]);
+            // Its wait took the ending, so nothing is said twice; and nothing can be sent under an id that never ran.
+            expect(told).toEqual([]);
+            expect(await sendToChild(services, parent, result.id, "more")).toMatchObject({ ok: false, message: expect.stringContaining("No such child") });
+        } finally {
+            live.release();
+        }
+    });
+
+    it("a parent not waiting when the owner declines hears it in its turn, once", async () => {
+        const live = liveParent();
+        try {
+            const result = await spawnChild(heldServices(HOLD, fakeTurn([])), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+            if (!result.ok) {
+                throw new Error(result.message);
+            }
+            cards.resolve({ kind: "permission", requestId: await cardOn(), decision: "deny" });
+            await until(() => told.length > 0);
+            expect(told).toEqual([
+                `Your child agent \`${result.id}\` did not start: The owner declined this. Do not retry: carry on with what you can do without it, and say plainly what you left undone.`,
+            ]);
+            // Said into its turn, so its next wait does not hand the same ending over again.
+            expect(await waitForSubagent(actors, parent.conversationId, { until: ["finished"], timeoutMs: 1_000 })).toMatchObject({ outcome: "unknown-target" });
         } finally {
             live.release();
         }
@@ -769,7 +919,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
     it("shows the child it would start: task, model, effort, account and machine", async () => {
         const live = liveParent();
         try {
-            const spawning = spawnChild(drivenBy(spawnServices({ actionRules: { "agents.spawn": "hold" } }, [], actors), fakeTurn([])), parent, {
+            const result = await spawnChild(heldServices(HOLD, fakeTurn([])), parent, {
                 prompt: "Port the parser to zig",
                 description: "Port the parser",
                 provider: "claude",
@@ -779,8 +929,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
                 on: "here",
             });
             const requestId = await cardOn();
-            const card = turnRunOf(actors, parent.conversationId)?.rows.find((row) => row.permission !== undefined)?.permission;
-            expect(card?.child).toEqual({
+            expect(cardOf(requestId)?.child).toEqual({
                 move: "spawn",
                 task: "Port the parser",
                 provider: "claude",
@@ -790,7 +939,9 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
                 on: "here",
             });
             cards.resolve({ kind: "permission", requestId, decision: "deny" });
-            await spawning;
+            if (result.ok) {
+                await settled(result.id);
+            }
         } finally {
             live.release();
         }
@@ -801,29 +952,29 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
         const live = liveParent();
         try {
             const turns: AgentTurn[] = [];
-            const spawning = spawnChild(drivenBy(spawnServices({ actionRules: { "agents.spawn": "hold" } }, [], actors), fakeTurn(turns)), parent, {
+            const result = await spawnChild(heldServices(HOLD, fakeTurn(turns)), parent, {
                 prompt: "go",
                 provider: "claude",
                 model: "claude-opus-4-6",
                 effort: "max",
                 account: "work",
             });
-            const requestId = await cardOn();
-            cards.resolve({ kind: "permission", requestId, decision: "once", child: { provider: "claude", model: "claude-haiku-4-5", fast: true } });
-            const result = await spawning;
             if (!result.ok) {
                 throw new Error(result.message);
             }
+            const requestId = await cardOn();
+            cards.resolve({ kind: "permission", requestId, decision: "once", child: { provider: "claude", model: "claude-haiku-4-5", fast: true } });
             await settled(result.id);
             expect(turns[0]).toMatchObject({ agent: "claude", model: "claude-haiku-4-5", fast: true });
             expect(turns[0]).not.toHaveProperty("effort");
             expect(turns[0]).not.toHaveProperty("account");
             expect(listSubagentSessions(actors).find((session) => session.id === result.id)?.model).toBe("claude-haiku-4-5");
-            expect(result.note).toContain("The owner changed what it runs on");
-            expect(result.note).toContain("claude-haiku-4-5");
+            await until(() => told.length > 0);
+            expect(told).toEqual([
+                `The owner allowed your child agent \`${result.id}\` to start. The owner changed what it runs on before allowing it: it runs on claude/claude-haiku-4-5, fast speed, not on claude/claude-opus-4-6, max effort, account work as you asked.`,
+            ]);
             // The settled card reads what started, keeping what the agent asked for beside it.
-            const card = turnRunOf(actors, parent.conversationId)?.rows.find((row) => row.permission !== undefined)?.permission;
-            expect(card?.child).toMatchObject({ model: "claude-haiku-4-5", proposed: { model: "claude-opus-4-6", effort: "max" } });
+            expect(cardOf(requestId)?.child).toMatchObject({ model: "claude-haiku-4-5", proposed: { model: "claude-opus-4-6", effort: "max" } });
         } finally {
             live.release();
         }
@@ -832,19 +983,20 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
     it("an allow that picks what the agent asked for anyway changes nothing and says nothing", async () => {
         const live = liveParent();
         try {
-            const spawning = spawnChild(drivenBy(spawnServices({ actionRules: { "agents.spawn": "hold" } }, [], actors), fakeTurn([])), parent, {
-                prompt: "go",
-                provider: "claude",
-                model: "claude-sonnet-4-6",
-            });
-            const requestId = await cardOn();
-            cards.resolve({ kind: "permission", requestId, decision: "once", child: { provider: "claude", model: "claude-sonnet-4-6", harness: "native" } });
-            const result = await spawning;
-            expect(result).toMatchObject({ ok: true });
-            expect(result).not.toHaveProperty("note");
-            if (result.ok) {
-                await settled(result.id);
+            const turns: AgentTurn[] = [];
+            const result = await spawnChild(heldServices(HOLD, fakeTurn(turns)), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+            if (!result.ok) {
+                throw new Error(result.message);
             }
+            cards.resolve({
+                kind: "permission",
+                requestId: await cardOn(),
+                decision: "once",
+                child: { provider: "claude", model: "claude-sonnet-4-6", harness: "native" },
+            });
+            await settled(result.id);
+            expect(turns).toHaveLength(1);
+            expect(told).toEqual([]);
         } finally {
             live.release();
         }
@@ -855,27 +1007,63 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
         const live = liveParent();
         try {
             const turns: AgentTurn[] = [];
-            const rules = { "agents.spawn": "hold", "agents.spawn.cursor": "deny" } as const;
-            const spawning = spawnChild(drivenBy(spawnServices({ actionRules: rules }, [], actors), fakeTurn(turns)), parent, {
+            const result = await spawnChild(heldServices({ "agents.spawn": "hold", "agents.spawn.cursor": "deny" }, fakeTurn(turns)), parent, {
                 prompt: "go",
                 provider: "claude",
                 model: "claude-sonnet-4-6",
             });
-            const requestId = await cardOn();
-            cards.resolve({ kind: "permission", requestId, decision: "once", child: { provider: "cursor", model: "composer-2.5" } });
-            const result = await spawning;
-            expect(result.ok === false ? result.message : "").toContain("refused by the action rules");
+            if (!result.ok) {
+                throw new Error(result.message);
+            }
+            cards.resolve({ kind: "permission", requestId: await cardOn(), decision: "once", child: { provider: "cursor", model: "composer-2.5" } });
+            const ended = await waitForSubagent(actors, parent.conversationId, { target: result.id, until: ["finished"], timeoutMs: 5_000 });
+            expect(ended.matched).toMatchObject({ status: "failed", error: expect.stringContaining("refused by the action rules") });
             expect(turns).toEqual([]);
         } finally {
             live.release();
         }
     });
 
-    // A child already running keeps the run it was started on: a send's card shows it, and an allow cannot move it.
-    it("a send's card names the child, its run and the words, and keeps its run", async () => {
-        const services = spawnServices({}, [], actors);
+    // "For the rest of this turn" is one provider's, and one turn's: the next turn, or another provider, asks again.
+    it("the owner's turn-long allow lets later moves on that provider through, and lapses with the turn", async () => {
         const turns: AgentTurn[] = [];
-        const first = await spawnChild(drivenBy(services, fakeTurn(turns)), parent, {
+        const first = liveParent();
+        try {
+            const services = heldServices(HOLD, fakeTurn(turns));
+            const asked = await spawnChild(services, parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6" });
+            const requestId = await cardOn();
+            cards.resolve({ kind: "permission", requestId, decision: "always" });
+            if (asked.ok) {
+                await settled(asked.id);
+            }
+            expect(cardOf(requestId)?.status).toBe("always");
+            const again = await spawnChild(services, parent, { prompt: "two", provider: "claude", model: "claude-sonnet-4-6" });
+            expect(again).toEqual({ ok: true, id: again.ok ? again.id : "" });
+            if (again.ok) {
+                await settled(again.id);
+            }
+            const other = await spawnChild(services, parent, { prompt: "three", provider: "cursor", model: "composer-2.5" });
+            expect(other).toMatchObject({ ok: true, held: true });
+            cards.resolve({ kind: "permission", requestId: await cardOn(), decision: "deny" });
+        } finally {
+            first.release();
+        }
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const second = liveParent();
+        try {
+            const next = await spawnChild(heldServices(HOLD, fakeTurn(turns)), parent, { prompt: "four", provider: "claude", model: "claude-sonnet-4-6" });
+            expect(next).toMatchObject({ ok: true, held: true });
+            cards.resolve({ kind: "permission", requestId: await cardOn(), decision: "deny" });
+        } finally {
+            second.release();
+        }
+        expect(turns.map((turn) => turn.prompt)).toEqual(["one", "two"]);
+    });
+
+    // A child already running keeps the run it was started on: a send's card shows it, and an allow cannot move it.
+    it("a send's card names the child, its run and the words; the message goes once allowed, keeping its run", async () => {
+        const turns: AgentTurn[] = [];
+        const first = await spawnChild(drivenBy(spawnServices({}, [], actors), fakeTurn(turns)), parent, {
             prompt: "Port the parser",
             provider: "claude",
             model: "claude-sonnet-4-6",
@@ -887,12 +1075,19 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
         await settled(first.id);
         const live = liveParent();
         try {
-            const held = drivenBy(spawnServices({ actionRules: { "agents.spawn": "hold" } }, [], actors), fakeTurn(turns));
-            const sending = sendToChild(held, parent, first.id, "Now the lexer too.");
+            const services = heldServices(HOLD, fakeTurn(turns));
+            expect(await sendToChild(services, parent, first.id, "Now the lexer too.")).toEqual({
+                ok: true,
+                note: "Held for the owner's approval: a card in your chat asks them, and you carry on meanwhile. It goes to the child once they allow it, and you are told if it does not.",
+            });
+            // One message waits on the owner at a time.
+            expect(await sendToChild(services, parent, first.id, "And the docs.")).toEqual({
+                ok: false,
+                message: "Your last message to it still waits for the owner's approval: wait for that, then send again.",
+            });
             const requestId = await cardOn();
-            const card = turnRunOf(actors, parent.conversationId)?.rows.find((row) => row.permission !== undefined)?.permission;
-            expect(card?.title).toBe("Send this to a child agent on Claude Code?");
-            expect(card?.child).toMatchObject({
+            expect(cardOf(requestId)?.title).toBe("Send this to a child agent on Claude Code?");
+            expect(cardOf(requestId)?.child).toMatchObject({
                 move: "send",
                 child: first.id,
                 task: "Port the parser",
@@ -902,9 +1097,30 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
                 effort: "high",
             });
             cards.resolve({ kind: "permission", requestId, decision: "once", child: { provider: "cursor", model: "composer-2.5" } });
-            expect(await sending).toMatchObject({ ok: true });
+            await until(() => turns.length === 2);
             await settled(first.id);
             expect(turns[1]).toMatchObject({ prompt: "Now the lexer too.", agent: "claude", model: "claude-sonnet-4-6", effort: "high" });
+        } finally {
+            live.release();
+        }
+    });
+
+    it("a declined message is told to the parent, and the child hears nothing", async () => {
+        const turns: AgentTurn[] = [];
+        const first = await spawnChild(drivenBy(spawnServices({}, [], actors), fakeTurn(turns)), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+        if (!first.ok) {
+            throw new Error(first.message);
+        }
+        await settled(first.id);
+        const live = liveParent();
+        try {
+            await sendToChild(heldServices(HOLD, fakeTurn(turns)), parent, first.id, "Now the lexer too.");
+            cards.resolve({ kind: "permission", requestId: await cardOn(), decision: "deny" });
+            await until(() => told.length > 0);
+            expect(told).toEqual([
+                `Your message to child agent \`${first.id}\` did not go: The owner declined this. Do not retry: carry on with what you can do without it, and say plainly what you left undone.`,
+            ]);
+            expect(turns).toHaveLength(1);
         } finally {
             live.release();
         }
@@ -913,7 +1129,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
     // With no live turn to draw a card on (a backgrounded shell, an ended turn), it still refuses and names which case
     // it is.
     it("with no live turn there is nowhere to ask, and it says so", async () => {
-        const held = await spawnChild(drivenBy(spawnServices({ actionRules: { "agents.spawn": "hold" } }, [], actors), fakeTurn([])), parent, {
+        const held = await spawnChild(drivenBy(spawnServices({ actionRules: HOLD }, [], actors), fakeTurn([])), parent, {
             prompt: "go",
             provider: "claude",
             model: "claude-sonnet-4-6",
@@ -921,6 +1137,102 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
         const message = held.ok === false ? held.message : "";
         expect(message).toContain("outside a live turn");
         expect(message).toContain("agents.spawn");
+    });
+});
+
+// A turn that starts on a child without its parent (the sandbox's own re-run, a watch it left, another conversation's
+// message) is still the parent's to supervise; a person's own turn in the child's chat stays theirs.
+describe("a turn the child did not get from its parent", () => {
+    const told: string[] = [];
+    beforeEach(() => {
+        told.length = 0;
+    });
+    const parentHears = (stream: TurnStarter["stream"]): Services => {
+        const driven = drivenBy(spawnServices({}, [], actors), stream);
+        return unstubbed<Services>("services", {
+            ...driven,
+            conversations: { ...driven.conversations, running: (id: string) => id === parent.conversationId || driven.conversations.running(id) },
+            agents: unstubbed<Services["agents"]>("agents", { entry: (id: string) => (id === parent.conversationId ? conversationEntry({ id }) : undefined) }),
+            turns: {
+                ...driven.turns,
+                say: async (said) => {
+                    told.push(said.turn.prompt);
+                    return { delivered: "steered", run: "run-parent" };
+                },
+            },
+        });
+    };
+
+    it("a re-run the sandbox fires by itself reopens the child's row, reports its ending, and tells the parent it is working", async () => {
+        const gate = Promise.withResolvers<void>();
+        const body = async function* (input: AgentTurn): AsyncGenerator<AgentEvent> {
+            if (input.prompt === "Port the parser (sent again)") {
+                await gate.promise;
+                yield { kind: "delta", text: "Ported, on the second try." };
+                yield { kind: "text_end" };
+            }
+            yield { kind: "done" };
+        };
+        const services = parentHears(body);
+        const result = await spawnChild(services, parent, { prompt: "Port the parser", description: "Port the parser", provider: "cursor", model: "composer-2.5" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await settled(result.id);
+        expect(services.turns.run({ conversationId: result.id, prompt: "Port the parser (sent again)" })).not.toBe("busy");
+
+        adoptChildTurn(services, { conversationId: result.id, speaker: { kind: "sandbox" }, resume: "limit", errand: undefined });
+
+        expect(listSubagentSessions(actors).find((session) => session.id === result.id)).toMatchObject({ status: "running", description: "Port the parser" });
+        expect(told).toEqual([
+            `Your child agent \`${result.id}\` ("Port the parser") is working: the sandbox sent its turn again by itself because its allowance reopened. Its report reaches you when it ends, like any turn of its: do not send it the task again or give the task to another agent meanwhile.`,
+        ]);
+        // It is the child's live turn now, as far as its parent can reach it: words steer into it, not a second turn.
+        expect(await sendToChild(services, parent, result.id, "also the lexer")).toMatchObject({ ok: false, message: expect.stringContaining("mid-turn") });
+        gate.resolve();
+        expect(await waitForSubagent(actors, parent.conversationId, { until: ["finished"], timeoutMs: 5_000 })).toMatchObject({
+            outcome: "finished",
+            matched: { id: result.id, status: "completed", summary: "Ported, on the second try." },
+        });
+    });
+
+    it("leaves a person's own turn in the child's chat to them", async () => {
+        const gate = Promise.withResolvers<void>();
+        const body = async function* (input: AgentTurn): AsyncGenerator<AgentEvent> {
+            if (input.prompt === "Let me look at this myself") {
+                await gate.promise;
+            }
+            yield { kind: "done" };
+        };
+        const services = parentHears(body);
+        const result = await spawnChild(services, parent, { prompt: "go", provider: "cursor", model: "composer-2.5" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await settled(result.id);
+        services.turns.run({ conversationId: result.id, prompt: "Let me look at this myself" });
+
+        adoptChildTurn(services, { conversationId: result.id, speaker: { kind: "person", email: "owner@example.com" }, resume: undefined, errand: undefined });
+
+        expect(listSubagentSessions(actors).find((session) => session.id === result.id)?.status).toBe("completed");
+        expect(told).toEqual([]);
+        gate.resolve();
+    });
+
+    it("says with a failure that the sandbox runs the same turn again by itself, and when", async () => {
+        const body = async function* (): AsyncGenerator<AgentEvent> {
+            yield { kind: "error", message: "You've hit your usage limit.", autoResume: "scheduled", nextAt: Date.UTC(2026, 8, 26, 15, 38) / 1000 };
+            yield { kind: "done" };
+        };
+        const result = await spawnChild(drivenBy(spawnServices({}, [], actors), body), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await settled(result.id);
+        expect(listSubagentSessions(actors).find((session) => session.id === result.id)).toMatchObject({
+            status: "failed",
+            error: "You've hit your usage limit. The sandbox runs this same turn again by itself at 15:38 UTC, and its report reaches you when that ends: do not send it the task again or give the task to another agent meanwhile.",
+        });
     });
 });
 

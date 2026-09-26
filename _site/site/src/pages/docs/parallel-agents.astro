@@ -121,8 +121,15 @@ const lanes = [
     <DocsCodeBlock code={childCli} lang="bash" title="One service, available from every harness" />
     <p>
         A child sees none of the parent's chat, so its task must carry the paths, requirements and constraints it needs. Spawn returns as soon
-        as the child is running. Wait sleeps until a child needs input or finishes instead of making the parent poll; Send steers a live child
-        or starts a follow-up turn on a settled one, continuing that child's session.
+        as the child is running. Wait sleeps until a child needs input or finishes instead of making the parent poll, and hands the turn back
+        early when something is said into it, so a message from you does not sit behind a half-hour wait. Send steers a live child or starts a
+        follow-up turn on a settled one, continuing that child's session; a follow-up that meets a turn somebody else started on the child (you
+        writing in its chat, a land conflict, a failed check sent back to it) runs once that turn ends.
+    </p>
+    <p>
+        While its turn is live, a parent also hears what becomes of its children's work: a land, a land that hit a conflict, and a check after
+        landing that went red, with where those failures were sent. It sequences its next step on that instead of polling, and does not relay
+        failures the sandbox already routed.
     </p>
     <p>
         <strong>A spawn names its provider and its model.</strong> Neither is optional and nothing is chosen for you: a child is a whole agent
@@ -145,6 +152,17 @@ const lanes = [
         A held start shows you the child before you answer: its task, model, effort, account and machine. The model line opens the same
         picker as Fix with agent, so you can move the child to another model, account or effort, and it starts on your pick. The parent is
         told what you changed.
+    </p>
+    <p>
+        A held move does not stop the parent. It comes back at once as held, and the parent carries on: a held start waits on its card as a
+        child, and a held message goes once you allow it. <strong>Allow for the rest of this turn</strong> lets every later move on that
+        provider through without asking again, until the parent's turn ends. If you decline, or the turn ends before you answer, the move never
+        runs, and a parent still in its turn is told.
+    </p>
+    <p>
+        When the sandbox re-runs a child's failed turn by itself, after its allowance reopened or when it stopped short, the parent is told
+        so with the failure, and again when the re-run starts if its turn is live, so it does not hand the same task to another agent in the
+        meantime.
     </p>
     <p>
         Full children can also run on <a href="/docs/remote-runners/">remote runners</a>. When no machine is named, the fleet scheduler spreads

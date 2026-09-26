@@ -16,6 +16,7 @@ import type { BeginRefusal } from "../../../conversations/actor/conversation-dec
 import type { DomainEvents } from "../../../seams/domain-events.js";
 import type { RoutedTurn, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
 import type { JournalledTurn } from "./turn-journal.js";
+import { opt } from "../../../opt.js";
 import { recordCommands } from "../../providers/agent-commands.js";
 import { type FrameBacklog, frameBacklog } from "../../../seams/frame-backlog.js";
 
@@ -317,6 +318,14 @@ export interface RunDeps {
     readonly events: Pick<DomainEvents, "publish">;
 }
 
+// What an error frame says of a re-run of this same turn the sandbox booked for itself: when it fires, where known.
+const bookedRerun = (event: Extract<AgentEvent, { kind: "error" }>): { readonly at?: number } | undefined => {
+    if (event.autoResume !== "scheduled") {
+        return undefined;
+    }
+    return event.nextAt === undefined ? {} : { at: event.nextAt };
+};
+
 // Starts a detached run for the conversation's turn, or names why not: one is live, or it is archived, which leaves no
 // run behind. A thrown turn folds into the transcript as an error, so followers see it settle.
 export function startTurnRun(
@@ -383,6 +392,8 @@ export function startTurnRun(
     void (async () => {
         // Set by the error frame below (or a provider emitting one mid-stream), read once at settle.
         let failure: string | undefined;
+        // What that frame says of a re-run of this same turn the sandbox booked for itself, read with it at settle.
+        let rerun: { readonly at?: number } | undefined;
         let stopped = false;
         try {
             await before;
@@ -417,6 +428,7 @@ export function startTurnRun(
                 }
                 if (event.kind === "error") {
                     failure = event.message;
+                    rerun = bookedRerun(event);
                 }
                 run.push(event);
             }
@@ -457,6 +469,7 @@ export function startTurnRun(
                 speaker: input.speaker,
                 failure,
                 closing: closingOf(run.rows),
+                ...opt("rerun", rerun),
             });
         }
     })();
