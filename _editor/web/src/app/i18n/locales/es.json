@@ -12,6 +12,7 @@
             "archiveBranchDiffConversation": "Archivar; la rama, el diff y la conversación se conservan",
             "archiveConversationKept": "Archivar; la conversación se conserva",
             "archived": "Archivado {archivedAt}",
+            "archiveWithChildren": "Archivar, junto con {count} agente terminado que inició; las ramas, los diffs y las conversaciones se conservan | Archivar, junto con los {count} agentes terminados que inició; las ramas, los diffs y las conversaciones se conservan",
             "asking": "Preguntando…",
             "back": "vuelve {limitBackAt}",
             "closeAgent": "Cerrar el agente",
@@ -22,6 +23,7 @@
             "putAgentBackOn": "Devolver este agente al tablero",
             "renameAgent": "Renombrar el agente",
             "restoreAgent": "Restaurar el agente",
+            "restoreWithChildren": "Devolver este agente al tablero, junto con {count} agente que inició | Devolver este agente al tablero, junto con los {count} agentes que inició",
             "runsOn": "Se ejecuta en {runner}",
             "sendTurnAgainSame": "Envía este turno otra vez. Es la misma petición que antes, no un mensaje nuevo.",
             "stillWorking": "{running} de {total} siguen trabajando",
@@ -273,6 +275,11 @@
             "runNowExactlyWhat": "Ejecútalo ahora, con exactamente lo que se disparó: la sesión aparece en este tablero",
             "waiting": "te espera"
         },
+        "childRows": {
+            "finished": "Terminados: {count}",
+            "startedBy": "Agentes que inició «{title}»",
+            "watching": "Vigilando"
+        },
         "liveMetrics": {
             "coresValue": "{cores} núcleo | {cores} núcleos",
             "cpu": "{percent} de CPU",
@@ -313,9 +320,11 @@
         },
         "ownerMark": {
             "ownedBy": "Pertenece a {name}",
-            "spawnedBy": "Iniciada por la conversación {parent}; la abre",
             "startedByControlToken": "Iniciada por el token de control {tokenLabel}",
             "startedByProgramHolding": "Iniciada por un programa que tiene el token de control «{tokenLabel}»; nadie la ha reclamado"
+        },
+        "parentMark": {
+            "startedBy": "Iniciada por «{title}»; la abre"
         },
         "promptCache": {
             "promptCacheGoesCold": "Su caché de indicaciones se enfría en {countdown}. Responde antes y {read} se sirve desde la caché del proveedor; después, todo se envía y se paga otra vez.",

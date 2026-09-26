@@ -100,6 +100,13 @@ describe(`what the project chip says it hid`, () => {
         expect(hiddenByProject(board)).toBe(4);
         expect(hiddenByProject({ ...board, project: undefined })).toBe(0);
     });
+
+    it(`counts a hidden parent and the children riding under it once, as the board would draw them`, () => {
+        const parent = card(`lead`, { startIn: `docs` });
+        const children = [`c1`, `c2`, `c3`].map((id) => card(id, { startIn: `docs`, startedBy: `agent:lead` }));
+        const board = { project: `shop`, fleet: [inShop, parent, ...children], kept: [inShop], ledger: new Set<string>(), runs: [], keptRuns: [], held: [], keptHeld: [] };
+        expect(hiddenByProject(board)).toBe(1);
+    });
 });
 
 describe(`the owner segments`, () => {
@@ -138,6 +145,15 @@ describe(`the board's scope`, () => {
 
         expect(scope.boardLanes.value).toEqual({ attention: [], active: [], finished: [inShop] });
         expect(scope.projectHidden.value).toBe(1);
+    });
+
+    it(`hangs a child under the card that started it, off the lanes and into that card's tray`, () => {
+        const lead = card(`lead`, { status: `running`, startedAt: 1 });
+        const helper = card(`helper`, { startedBy: `agent:lead` });
+        const { scope } = scopeOf([lead, helper, elsewhere]);
+        expect(scope.boardLanes.value).toEqual({ attention: [], active: [lead], finished: [elsewhere] });
+        expect(scope.boardChildren.value.get(`lead`)).toEqual([helper]);
+        expect(scope.boardHosts.value.get(`helper`)).toBe(lead);
     });
 
     it(`narrows held wakes and live runs by the project's evidence, and leaves the archive the sandbox's`, () => {

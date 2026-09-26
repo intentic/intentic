@@ -14,6 +14,7 @@ import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { useAuth } from "../../auth/useAuth";
 import { useSandboxSharedAccess } from "../../sandbox/access/useSandboxSharedAccess";
 import { useAgents } from "../fleet/useAgents";
+import { laneOf } from "../fleet/agentStatus";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
 import { pendingOn } from "../fleet/useAgents-provisional";
 import { fleetScope, scopeOffered } from "../fleet/fleetScope";
@@ -26,6 +27,8 @@ import { chatStrip } from "../../chat/panel/useChat-strip";
 import LaneHeader from "../../../components/LaneHeader.vue";
 import MatchLine from "../../../components/MatchLine.vue";
 import AgentCard from "./cards/AgentCard.vue";
+import ChildRows from "./cards/ChildRows.vue";
+import { CHILD_ROWS } from "./cards/childRows";
 import BoardStatusBar from "../status-bar/BoardStatusBar.vue";
 import { LIVE_METRICS_KEY, useLiveMetrics } from "../metrics/liveMetrics";
 import { provideMainline } from "../mainline/useMainline";
@@ -79,6 +82,7 @@ const ring = useCardRing({ mobile, strip: chatStrip, wide: chatWide, runs: workf
 const { highlightId, inPane, peeked } = ring;
 const lanes = useBoardLanes({ view, scope, filter, drag, agents, selected: highlightId });
 const { cardsFor, runsFor, needingYou, archivedCards, archiveSize, archiveHidden, hiddenFinished, archivedHits, laneDropClass } = lanes;
+const { childrenOf, familyOf, familyIds } = lanes;
 const { beyondVisible, beyondLabel, matchTally, noMatches, clearable, screen } = lanes;
 const { setCardEl, isMovingLane, revealCard } = useLaneMotion({ lanes: scope.boardLanes, filtering, drag });
 const focus = useCardFocus({
@@ -96,7 +100,32 @@ const focus = useCardFocus({
     summon: summonChat,
 });
 const { focusAgent, reviewAgent, keepAgent, closeAgent, openSession } = focus;
-const { cardMenu, cardMenuItems, openCardMenu } = useCardMenu({ mobile, peeked, focus, agents });
+// A card's archive and restore take the children riding under it (boardTrays.familyOf), from the card and its menu alike.
+const withFamilies = (ids: readonly string[]): string[] => lanes.withFamilies(ids, agents.agentById);
+const { cardMenu, cardMenuItems, openCardMenu } = useCardMenu({
+    mobile,
+    peeked,
+    focus,
+    agents: {
+        stopWatching: agents.stopWatching,
+        // No ids is the lane's Clear, which already names every finished card there is.
+        archive: (ids) => archive(ids === undefined ? undefined : withFamilies(ids)),
+        restore: (ids) => restore(withFamilies(ids)),
+    },
+});
+// The trays under the cards (ChildRows), which follow their children, fold and ring on their own clock (childRows.ts).
+provide(CHILD_ROWS, {
+    childrenOf,
+    stateOf: lanes.trayState,
+    toggle: lanes.toggleTray,
+    selected: (id) => id === highlightId.value || inPane(id),
+    needle,
+    matchCase,
+    open: (child, event) => focusAgent(child, event),
+    review: reviewAgent,
+    menu: openCardMenu,
+    setRowEl: setCardEl,
+});
 const { announcement, pendingPurge, purging, pulsing, toggleArchive, confirmPurge } = useArchiveDoor({ view, move, agents });
 const { stoppingRuns, stopRun, archiveRun, restoreRun, openRunGraph, releaseWake, synthesize } = useBoardPresses({ workflows, agents, router });
 useBoardCommands({ agents, filterField });
@@ -340,6 +369,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                                 agent,
                                 narrow,
                                 draggedId === agent.id && dragging,
+                                familyOf(agent).length,
                                 pendingFor(agent),
                                 agent.id === highlightId || inPane(agent.id),
                                 snippetOf(agent),
@@ -350,30 +380,39 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                             :name="isMovingLane(agent.id) ? undefined : 'lane'"
                             :css="!isMovingLane(agent.id)"
                         >
-                            <AgentCard
-                                :ref="(el) => setCardEl(agent.id, el)"
-                                :agent="agent"
-                                :dense="narrow"
-                                :dragging="draggedId === agent.id && dragging"
-                                :pending="pendingFor(agent)"
-                                :selected="agent.id === highlightId || inPane(agent.id)"
-                                :peek="peeked(agent.id)"
-                                :match="snippetOf(agent)"
-                                :query="needle"
-                                :match-case="matchCase"
-                                @open="(event) => focusAgent(agent, event)"
-                                @keep="keepAgent(agent)"
-                                @review="reviewAgent(agent)"
-                                @resolve="resolveNow(agent.id, agent.sandboxId)"
-                                @land="landNow(agent.id, agent.sandboxId)"
-                                @reland="relandNow(agent.id, agent.sandboxId)"
-                                @unwatch="unwatchNow(agent.id, agent.sandboxId)"
-                                @archive="archive([agent.id])"
-                                @restore="restore([agent.id])"
-                                @close="closeAgent(agent)"
-                                @grab="(event, card) => grabCard(event, agent, card)"
-                                @contextmenu.prevent.stop="openCardMenu(agent, $event)"
-                            />
+                            <!-- A card and the children riding under it (ChildRows), one unit to the lane: they arrive, leave and space as one. -->
+                            <div class="flex flex-col">
+                                <AgentCard
+                                    :ref="(el) => setCardEl(agent.id, el)"
+                                    :agent="agent"
+                                    :dense="narrow"
+                                    :dragging="draggedId === agent.id && dragging"
+                                    :pending="pendingFor(agent)"
+                                    :selected="agent.id === highlightId || inPane(agent.id)"
+                                    :peek="peeked(agent.id)"
+                                    :match="snippetOf(agent)"
+                                    :query="needle"
+                                    :match-case="matchCase"
+                                    :family="familyOf(agent).length"
+                                    @open="(event) => focusAgent(agent, event)"
+                                    @keep="keepAgent(agent)"
+                                    @review="reviewAgent(agent)"
+                                    @resolve="resolveNow(agent.id, agent.sandboxId)"
+                                    @land="landNow(agent.id, agent.sandboxId)"
+                                    @reland="relandNow(agent.id, agent.sandboxId)"
+                                    @unwatch="unwatchNow(agent.id, agent.sandboxId)"
+                                    @archive="archive(familyIds(agent))"
+                                    @restore="restore(familyIds(agent))"
+                                    @close="closeAgent(agent)"
+                                    @grab="(event, card) => grabCard(event, agent, card)"
+                                    @contextmenu.prevent.stop="openCardMenu(agent, $event)"
+                                />
+                                <ChildRows
+                                    :agent="agent"
+                                    :live="!narrow && laneOf(agent) !== `finished`"
+                                    :class="draggedId === agent.id && dragging ? `opacity-40` : ``"
+                                />
+                            </div>
                         </Transition>
                     </div>
                     <!-- The lane's tail, not a pager: the count is the point, and the row keeps them one press away instead of gone; hidden while filtering. -->

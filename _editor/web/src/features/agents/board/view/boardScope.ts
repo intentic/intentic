@@ -12,6 +12,7 @@ import { insideRun, runIdsInLedger } from "../../fleet/useWorkflowRuns";
 import { followOtherBoxes } from "../agentsTile";
 import { boardOwners, type OwnerLook, ownedBy, ownerFilter, sameAddress } from "../ownership";
 import { agentInProject, heldWakeInProject, runInProject } from "../projectMembership";
+import { type ChildFold, foldChildren, steadyFold } from "./childFold";
 
 // Which of the fleet the board covers: the open project, whose work it is, and whether every other sandbox's roster
 // joins this one's. Lanes group by one rule (laneGroups) either way, so no scope orders a column differently; a sandbox
@@ -47,7 +48,8 @@ export const withoutSteps = (lanes: Record<FleetLane, FleetAgent[]>, ledger: Rea
 };
 
 // What the project put out of sight, said on its chip so a quiet board is never mistaken for an empty fleet. Rows, not
-// conversations: a hidden run's steps hide with it and count once, as the run does on the wide board.
+// conversations: a hidden run's steps hide with it and count once, as the run does on the wide board, and a hidden
+// parent's children count with it, riding under its card as they would (childFold).
 export const hiddenByProject = (board: {
     readonly project: string | undefined;
     // Every card the board could show, and the ones the scope kept.
@@ -64,7 +66,8 @@ export const hiddenByProject = (board: {
         return 0;
     }
     const shown = new Set(board.kept.map((agent) => agent.id));
-    const agents = board.fleet.filter((agent) => !shown.has(agent.id) && !insideRun(agent, board.ledger)).length;
+    const hidden = foldChildren(laneGroups(board.fleet.filter((agent) => !shown.has(agent.id) && !insideRun(agent, board.ledger)))).lanes;
+    const agents = hidden.attention.length + hidden.active.length + hidden.finished.length;
     const runs = board.runs.filter((run) => run.archivedAt === undefined).length - board.keptRuns.length;
     return agents + runs + board.held.length - board.keptHeld.length;
 };
@@ -141,7 +144,11 @@ export const useBoardScope = (host: ScopeHost) => {
             ? laneGroups(scopedFleet.value)
             : agents.lanes.value,
     );
-    const boardLanes = computed(() => withoutSteps(scopedLanes.value, ledgerRunIds.value));
+    // The cards, less every run step and every child riding under its parent's card; the children the fold took, by card.
+    const folded = computed<ChildFold>((previous) => steadyFold(previous, foldChildren(withoutSteps(scopedLanes.value, ledgerRunIds.value))));
+    const boardLanes = computed(() => folded.value.lanes);
+    const boardChildren = computed(() => folded.value.children);
+    const boardHosts = computed(() => folded.value.hosts);
     watch(host.sharedAccess, (shared) => {
         if (!shared) {
             ownerFilter.value = undefined;
@@ -161,7 +168,19 @@ export const useBoardScope = (host: ScopeHost) => {
         { label: t(`shared.thisSandbox`), value: `box` as const },
         { label: t(`agents.agentsView.allSandboxes`), value: `all` as const },
     ]);
-    return { scopedHeld, boardRunRows, archivedRunRows, ledgerRunIds, projectHidden, boardLanes, ownerOptions, ownerScope, scopeOptions };
+    return {
+        scopedHeld,
+        boardRunRows,
+        archivedRunRows,
+        ledgerRunIds,
+        projectHidden,
+        boardLanes,
+        boardChildren,
+        boardHosts,
+        ownerOptions,
+        ownerScope,
+        scopeOptions,
+    };
 };
 
 // While the board reads across sandboxes: keeps the others live, and says in the Attention lane when some have not

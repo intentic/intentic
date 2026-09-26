@@ -98,6 +98,8 @@ export interface FocusHost {
     readonly lanes: {
         readonly paneOrder: Readonly<Ref<readonly FleetAgent[]>>;
         readonly finishedWindow: Readonly<Ref<{ readonly shown: readonly FleetAgent[] }>>;
+        // The card a child rides under (childFold), which is what the window holds; a card answers for itself.
+        readonly cardOf: (agent: FleetAgent) => FleetAgent;
     };
     readonly filter: {
         readonly active: Readonly<Ref<boolean>>;
@@ -254,7 +256,7 @@ export const useCardFocus = (host: FocusHost) => {
             }
             if (agent.archivedAt !== undefined) {
                 host.move({ kind: `uncover`, into: `archive` });
-            } else if (mobile.value && !host.lanes.finishedWindow.value.shown.some((candidate) => candidate.id === agent.id)) {
+            } else if (mobile.value && !host.lanes.finishedWindow.value.shown.some((candidate) => candidate.id === host.lanes.cardOf(agent).id)) {
                 host.move({ kind: `uncover`, into: `lane` });
             }
             agents.open(agent);

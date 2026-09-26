@@ -47,6 +47,7 @@ One word per idea on screen and in code. The retired spellings are refused by
 | slot | An empty element a mounted surface publishes for a panel to teleport into (`shell/window/panelSlots.ts`) |
 | docked | A panel living in the main window, as opposed to floating in a window of its own (`floating.ts`) |
 | status bar | The board's foot: segments that each open one panel above the bar (`features/agents/status-bar/`) |
+| tray | The rows hung under a board card for the child agents it spawned, settled ones folded behind a count (`features/agents/board/view/childFold.ts`) |
 | quick bar | The parked chat's pill that grows into the composer (`ChatQuickBar.vue`); what it unfolds is its transcript |
 | quick look | A card a hover raises: a home tile's preview, a bigger picture, an attached file's first lines |
 | peek | A tab opened as a look, which closes when the reader moves on unless kept (`Conversation.peek`), and nothing else |

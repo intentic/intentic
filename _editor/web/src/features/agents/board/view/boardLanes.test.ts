@@ -7,6 +7,7 @@ import { type FleetAgent, laneGroups } from "../../fleet/useAgents-fleet";
 import type { DropTarget } from "../laneDrop";
 import { dropClass, laneHeads, useBoardLanes } from "./boardLanes";
 import { ARCHIVE_PAGE, type BoardView, VIEW_START } from "./boardView";
+import { foldChildren } from "./childFold";
 
 // Pins what each lane draws and what the board says about it: Finished's window and the card it pins, the archive's page
 // in Finished's place, runs above their lane and capped with it, a filter lifting the window but not the archive's page,
@@ -46,16 +47,20 @@ afterEach(() => {
     }
 });
 
-// A board over plain refs: the scope's output, a filter matching titles, a drag, the store's archive and the ring.
+// A board over plain refs: the scope's output (its children folded under their cards, as boardScope folds them), a
+// filter matching titles, a drag, the store's archive and the ring.
 const boardOf = (
     fleet: FleetAgent[],
     over: { runs?: WorkflowRun[]; archivedRuns?: WorkflowRun[]; archived?: FleetAgent[]; held?: AutomationApproval[] } = {},
 ) => {
     const view = shallowRef<BoardView>(VIEW_START);
-    const boardLanes = shallowRef(laneGroups(fleet));
+    const folded = foldChildren(laneGroups(fleet));
+    const boardLanes = shallowRef(folded.lanes);
     const runs = [...(over.runs ?? []), ...(over.archivedRuns ?? [])];
     const scope = {
         boardLanes,
+        boardChildren: shallowRef(folded.children),
+        boardHosts: shallowRef(folded.hosts),
         boardRunRows: shallowRef(over.runs ?? []),
         archivedRunRows: shallowRef(over.archivedRuns ?? []),
         ledgerRunIds: shallowRef<ReadonlySet<string>>(new Set(runIds(runs))),
@@ -225,6 +230,67 @@ describe(`what the board says it holds`, () => {
         const { lanes } = boardOf(board);
         expect(lanes.clearable.value).toBe(2);
         expect(ids(lanes.paneOrder.value)).toEqual([`waits`, `works`, `f0`, `f1`]);
+    });
+});
+
+describe(`children riding under their parent`, () => {
+    const parent = card(`p`, { status: `running`, startedAt: 1, title: `orchestrate the release` });
+    const helper = (id: string, over: Partial<FleetAgent> = {}): FleetAgent => card(id, { startedBy: `agent:p`, title: `helper ${id}`, ...over });
+
+    it(`draws them under their parent's card rather than as cards of their own, and counts the family as one row`, () => {
+        const { lanes } = boardOf([parent, helper(`h1`, { status: `running`, startedAt: 2 }), helper(`h2`), helper(`h3`)]);
+        expect(ids(lanes.cardsFor(`active`))).toEqual([`p`]);
+        expect(lanes.cardsFor(`finished`)).toEqual([]);
+        expect(ids(lanes.childrenOf(parent))).toEqual([`h1`, `h2`, `h3`]);
+        expect(lanes.cardOf(helper(`h2`)).id).toBe(`p`);
+        expect(lanes.matchTally.value).toBe(`1 of 1`);
+    });
+
+    it(`keeps a parent under a query one of its children answered, with that child alone in its tray`, () => {
+        const { lanes, filterBy } = boardOf([parent, helper(`h1`, { title: `port the parser` }), helper(`h2`), card(`else`)]);
+        filterBy(`parser`);
+        expect(ids(lanes.cardsFor(`active`))).toEqual([`p`]);
+        expect(ids(lanes.cardsFor(`finished`))).toEqual([]);
+        expect(ids(lanes.trayFor(parent)?.lead ?? [])).toEqual([`h1`]);
+    });
+
+    it(`keeps the card a ringed child rides under in Finished's window`, () => {
+        const done = card(`p`, { updatedAt: 1 });
+        const { lanes, selected } = boardOf([...finished(6), done, helper(`h1`)]);
+        expect(ids(lanes.cardsFor(`finished`))).not.toContain(`p`);
+        selected.value = `h1`;
+        expect(ids(lanes.cardsFor(`finished`))).toContain(`p`);
+        expect(ids(lanes.trayFor(done)?.tail ?? [])).toEqual([`h1`]);
+    });
+
+    it(`walks a Shift+click range through the rows a tray draws, and not through the ones it folds`, () => {
+        const { lanes } = boardOf([parent, helper(`h1`, { status: `running`, startedAt: 2 }), helper(`h2`), card(`after`)]);
+        expect(ids(lanes.paneOrder.value)).toEqual([`p`, `h1`, `after`]);
+        lanes.toggleTray(parent);
+        expect(ids(lanes.paneOrder.value)).toEqual([`p`, `h1`, `h2`, `after`]);
+    });
+
+    it(`files and brings back a card with its settled children, never one still working`, () => {
+        const busy = helper(`h1`, { status: `running`, startedAt: 2 });
+        const { lanes } = boardOf([parent, busy, helper(`h2`)]);
+        expect(lanes.familyIds(parent)).toEqual([`p`, `h2`]);
+        expect(lanes.familyIds(busy)).toEqual([`h1`]);
+        expect(lanes.withFamilies([`p`, `h2`], (id) => [parent, busy].find((agent) => agent.id === id))).toEqual([`p`, `h2`]);
+    });
+
+    it(`leaves a working parent's settled children out of Clear, and clears a finished parent's with it`, () => {
+        const done = card(`done`);
+        const { lanes } = boardOf([parent, helper(`h1`), done, card(`d1`, { startedBy: `agent:done` })]);
+        expect(lanes.clearable.value).toBe(2);
+    });
+
+    it(`hangs filed children under their filed parent in the archive, one row for the family`, () => {
+        const filed = [card(`p`, { archivedAt: 9 }), helper(`h1`, { archivedAt: 8, status: `ready` }), helper(`h2`, { archivedAt: 7 })];
+        const { lanes, view } = boardOf([], { archived: filed });
+        view.value = { ...VIEW_START, archive: true };
+        expect(ids(lanes.cardsFor(`finished`))).toEqual([`p`]);
+        expect(lanes.archiveSize.value).toBe(1);
+        expect(lanes.familyIds(filed[0]!)).toEqual([`p`, `h1`, `h2`]);
     });
 });
 

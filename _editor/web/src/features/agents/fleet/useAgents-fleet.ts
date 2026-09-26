@@ -10,6 +10,7 @@ import { useChat } from "../../chat/run/useChat";
 import { chatStrip } from "../../chat/panel/useChat-strip";
 import { onScreen } from "../../../shell/window/onScreen";
 import { asStarted, overlaid } from "./useAgents-provisional";
+import { parentOf } from "../board/ownership";
 import { archived, heldWakes, markSeen, registry, sameEntries, snapshotFingerprint } from "./useAgents-registry";
 
 // Fleet view: registry (authoritative status/branch/cost) merged with open tabs by conversationId (live state),
@@ -294,6 +295,17 @@ watch(
 // - error/conflict/stopped/landed/idle: yes
 export const canArchive = (agent: Pick<FleetAgent, "status" | "attention" | "archivedAt">): boolean =>
     agent.archivedAt === undefined && !unregistered(agent.status) && !turnInFlight(agent) && !awaitingUser(agent);
+
+// What Clear on the Finished lane files away: every card there the board may archive, less a child whose parent is still
+// at work. That child rides in its parent's tray as the parent's history (board/view/childFold.ts), and filing it alone
+// would strip the tray and leave the child loose in the archive; the family goes together once the parent is done.
+export const clearableOf = (grouped: Record<FleetLane, readonly FleetAgent[]>): FleetAgent[] => {
+    const live = new Set([...grouped.attention, ...grouped.active].map((agent) => agent.id));
+    return grouped.finished.filter((agent) => {
+        const parent = parentOf(agent.startedBy);
+        return canArchive(agent) && (parent === undefined || !live.has(parent));
+    });
+};
 
 // Final tiebreaker for every lane's sort: without one, cards with equal `updatedAt` (common after a batch resume)
 // swap places every tick. The id itself is arbitrary, chosen only to stay the same next frame.

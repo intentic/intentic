@@ -2,10 +2,12 @@ import type { AutomationApproval, WorkflowRun } from "@intentic/sandbox-contract
 import { t } from "@intentic/ui/i18n";
 import { computed, type Ref } from "vue";
 import type { FleetLane } from "../../fleet/agentStatus";
-import { canArchive, FINISHED_WINDOW, type FleetAgent, windowFinished, withKeptWords } from "../../fleet/useAgents-fleet";
+import { clearableOf, FINISHED_WINDOW, type FleetAgent, windowFinished } from "../../fleet/useAgents-fleet";
 import { insideRun, runMatches, runsInLane, runsNeedingYou } from "../../fleet/useWorkflowRuns";
 import type { DropTarget } from "../laneDrop";
 import { type BoardView, windowedIn } from "./boardView";
+import { useBoardTrays } from "./boardTrays";
+import { trayRows } from "./childFold";
 import { boardScreen } from "./firstScreen";
 
 // What each lane draws and what the board says about it: runs above their lane's cards, Finished capped at its window
@@ -43,9 +45,11 @@ export const dropClass = (
 
 export interface LanesHost {
     readonly view: Readonly<Ref<BoardView>>;
-    // What the scope left on the board (boardScope).
+    // What the scope left on the board (boardScope): the cards, and the children riding under them.
     readonly scope: {
         readonly boardLanes: Readonly<Ref<Record<FleetLane, FleetAgent[]>>>;
+        readonly boardChildren: Readonly<Ref<ReadonlyMap<string, readonly FleetAgent[]>>>;
+        readonly boardHosts: Readonly<Ref<ReadonlyMap<string, FleetAgent>>>;
         readonly boardRunRows: Readonly<Ref<readonly WorkflowRun[]>>;
         readonly archivedRunRows: Readonly<Ref<readonly WorkflowRun[]>>;
         readonly ledgerRunIds: Readonly<Ref<ReadonlySet<string>>>;
@@ -92,17 +96,16 @@ export const useBoardLanes = (host: LanesHost) => {
         }
         return runsInLane(liveRuns.value, lane, windowed.value ? FINISHED_WINDOW : Number.POSITIVE_INFINITY, needingYou.value);
     };
-    // A run's steps are filed away with the run, or the archive would show one run row plus its five conversations.
-    const archivedCards = computed(() =>
-        agents.archived.value.filter((agent) => !insideRun(agent, scope.ledgerRunIds.value)).map(withKeptWords),
-    );
+    // The children riding under the cards, and the archive with its own filed children under their filed parents.
+    const trays = useBoardTrays({ scope, archived: agents.archived, filter, selected: host.selected });
+    const { archivedCards, answers } = trays;
     // How many rows the archive would draw: a run with four steps counts as one row there, not five.
     const archiveSize = computed(() => archivedCards.value.length + scope.archivedRunRows.value.length);
     // Filters the whole pile first, then pages the result, never the reverse, or a match nine hundred rows down reads as none.
-    const archiveRows = computed(() => (filter.active.value ? archivedCards.value.filter(filter.matches) : archivedCards.value));
+    const archiveRows = computed(() => (filter.active.value ? archivedCards.value.filter(answers) : archivedCards.value));
     const archiveHidden = computed(() => Math.max(0, archiveRows.value.length - view.value.shown));
     const finishedWindow = computed(() =>
-        windowFinished(scope.boardLanes.value.finished, windowed.value ? host.selected.value : undefined, (agent) => agent.id),
+        windowFinished(scope.boardLanes.value.finished, windowed.value ? trays.selectedCard.value : undefined, (agent) => agent.id),
     );
     // Finished draws its window or the archive's page, the other lanes everything; a filter lifts the window first, since a
     // result set must not hide some of its own matches, while the archive keeps its page, its pile being unbounded.
@@ -112,7 +115,7 @@ export const useBoardLanes = (host: LanesHost) => {
         }
         const source =
             lane !== `finished` ? scope.boardLanes.value[lane] : windowed.value ? finishedWindow.value.shown : scope.boardLanes.value.finished;
-        return filter.active.value ? source.filter(filter.matches) : source;
+        return filter.active.value ? source.filter(answers) : source;
     };
     // Rows the filter kept, not rows drawn: the archive draws only a page of its matches, and the pager is not the answer.
     const keptIn = (lane: FleetLane): number =>
@@ -163,13 +166,22 @@ export const useBoardLanes = (host: LanesHost) => {
         () => filter.active.value && !filter.partial.value && !view.value.archive && kept.value === 0 && beyondCount.value === 0,
     );
     // Counted off the very ids Clear sends, so the button never offers a sweep that would move nothing.
-    const clearable = computed(() => agents.lanes.value.finished.filter(canArchive).length);
+    const clearable = computed(() => clearableOf(agents.lanes.value).length);
     const screen = computed(() => boardScreen(started.value, total.value, view.value.archive));
-    const paneOrder = computed(() => LANE_ORDER.flatMap((lane) => cardsFor(lane)));
+    // In drawing order, each card followed by the rows its tray draws, so a range can start or end on a child.
+    const paneOrder = computed(() => LANE_ORDER.flatMap((lane) => cardsFor(lane).flatMap((card) => [card, ...trayRows(trays.trayFor(card))])));
     const laneDropClass = (lane: FleetLane): string =>
         drag.dragging.value ? dropClass(lane, { accepts: drag.accepts(lane), archive: view.value.archive, over: drag.over.value }) : ``;
     return {
         cardsFor,
+        childrenOf: trays.childrenOf,
+        cardOf: trays.cardOf,
+        trayFor: trays.trayFor,
+        trayState: trays.trayState,
+        toggleTray: trays.toggleTray,
+        familyOf: trays.familyOf,
+        familyIds: trays.familyIds,
+        withFamilies: trays.withFamilies,
         runsFor,
         needingYou,
         finishedWindow,

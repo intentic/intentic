@@ -160,7 +160,7 @@ describe(`a press on a card`, () => {
                 markSeen: jest.fn((_id: string) => undefined),
                 agentById: (id: string) => cards.value.find((agent) => agent.id === id),
             },
-            lanes: { paneOrder: shallowRef(roster), finishedWindow: shallowRef({ shown: roster.slice(0, 2) }) },
+            lanes: { paneOrder: shallowRef(roster), finishedWindow: shallowRef({ shown: roster.slice(0, 2) }), cardOf: (agent: FleetAgent) => agent },
             drag: { consumeSuppressedOpen: () => suppressed.next },
         };
         const ring = inScope(() => useCardRing({ mobile: host.mobile, strip: host.strip, wide: ref(false), runs: shallowRef([]) }));
@@ -284,7 +284,7 @@ describe(`a link to a card`, () => {
         inScope(() =>
             useCardFocus({
                 ring,
-                lanes: { paneOrder: shallowRef([]), finishedWindow: shallowRef({ shown: roster.slice(0, 1) }) },
+                lanes: { paneOrder: shallowRef([]), finishedWindow: shallowRef({ shown: roster.slice(0, 1) }), cardOf: (agent: FleetAgent) => agent },
                 filter: { active: ref(over.filtering ?? false), matches: () => false, query, sessionMatches: shallowRef([]) },
                 agents: { open, markSeen: () => undefined, agentById: (id: string) => cards.value.find((agent) => agent.id === id) },
                 drag: { consumeSuppressedOpen: () => false },

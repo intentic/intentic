@@ -12,6 +12,7 @@
             "archiveBranchDiffConversation": "Zarchiwizuj — gałąź, diff i rozmowa zostają",
             "archiveConversationKept": "Zarchiwizuj — rozmowa zostaje",
             "archived": "Zarchiwizowano {archivedAt}",
+            "archiveWithChildren": "Zarchiwizuj razem z {count} skończonym agentem, którego uruchomił — gałęzie, diffy i rozmowy zostają | Zarchiwizuj razem z {count} skończonymi agentami, które uruchomił — gałęzie, diffy i rozmowy zostają | Zarchiwizuj razem z {count} skończonymi agentami, które uruchomił — gałęzie, diffy i rozmowy zostają",
             "asking": "Pyta…",
             "back": "wraca {limitBackAt}",
             "closeAgent": "Zamknij agenta",
@@ -22,6 +23,7 @@
             "putAgentBackOn": "Odłóż tego agenta z powrotem na tablicę",
             "renameAgent": "Zmień nazwę agenta",
             "restoreAgent": "Przywróć agenta",
+            "restoreWithChildren": "Odłóż tego agenta z powrotem na tablicę razem z {count} agentem, którego uruchomił | Odłóż tego agenta z powrotem na tablicę razem z {count} agentami, które uruchomił | Odłóż tego agenta z powrotem na tablicę razem z {count} agentami, które uruchomił",
             "runsOn": "Działa na {runner}",
             "sendTurnAgainSame": "Wyślij tę turę jeszcze raz. To ta sama prośba co wcześniej, nie nowa wiadomość.",
             "stillWorking": "{running} z {total} wciąż pracuje",
@@ -274,6 +276,11 @@
             "runNowExactlyWhat": "Uruchom teraz, dokładnie z tym, co zadziałało: sesja ląduje na tej tablicy",
             "waiting": "czeka na Ciebie"
         },
+        "childRows": {
+            "finished": "Skończone: {count}",
+            "startedBy": "Agenty uruchomione przez „{title}”",
+            "watching": "Wypatruje"
+        },
         "liveMetrics": {
             "coresValue": "{cores} rdzeń | {cores} rdzenie | {cores} rdzeni",
             "cpuHint": "CPU zużyte przez cały sandbox w ostatnich sekundach, względem wszystkich rdzeni, których może używać.",
@@ -314,9 +321,11 @@
         },
         "ownerMark": {
             "ownedBy": "Należy do: {name}",
-            "spawnedBy": "Uruchomiona przez rozmowę {parent}; otwiera ją",
             "startedByControlToken": "Uruchomiona przez token sterujący {tokenLabel}",
             "startedByProgramHolding": "Uruchomiona przez program z tokenem sterującym „{tokenLabel}”; nikt jej nie przejął"
+        },
+        "parentMark": {
+            "startedBy": "Uruchomiona przez „{title}”; otwiera ją"
         },
         "promptCache": {
             "promptCacheGoesCold": "Jego pamięć podręczna promptu wystygnie za {countdown}. Odpowiedz wcześniej, a {read} zostanie podane z pamięci dostawcy; później całość idzie i jest płacona jeszcze raz.",

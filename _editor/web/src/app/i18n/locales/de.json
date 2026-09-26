@@ -12,6 +12,7 @@
             "archiveBranchDiffConversation": "Archivieren — Branch, Diff und Unterhaltung bleiben erhalten",
             "archiveConversationKept": "Archivieren — die Unterhaltung bleibt erhalten",
             "archived": "Archiviert {archivedAt}",
+            "archiveWithChildren": "Archivieren, samt {count} fertigem Agenten, den er gestartet hat — Branches, Diffs und Unterhaltungen bleiben erhalten | Archivieren, samt den {count} fertigen Agenten, die er gestartet hat — Branches, Diffs und Unterhaltungen bleiben erhalten",
             "asking": "Fragt…",
             "back": "zurück {limitBackAt}",
             "closeAgent": "Agent schließen",
@@ -22,6 +23,7 @@
             "putAgentBackOn": "Diesen Agenten zurück aufs Board legen",
             "renameAgent": "Agent umbenennen",
             "restoreAgent": "Agent wiederherstellen",
+            "restoreWithChildren": "Diesen Agenten zurück aufs Board legen, samt {count} Agenten, den er gestartet hat | Diesen Agenten zurück aufs Board legen, samt den {count} Agenten, die er gestartet hat",
             "runsOn": "Läuft auf {runner}",
             "sendTurnAgainSame": "Diesen Zug erneut senden. Es ist dieselbe Anfrage wie zuvor, keine neue Nachricht.",
             "stillWorking": "{running} von {total} arbeiten noch",
@@ -270,6 +272,11 @@
             "runNowExactlyWhat": "Jetzt ausführen, mit genau dem, was ausgelöst hat: die Session landet auf diesem Board",
             "waiting": "wartet auf Sie"
         },
+        "childRows": {
+            "finished": "{count} fertig",
+            "startedBy": "Von „{title}“ gestartete Agenten",
+            "watching": "Beobachtet"
+        },
         "liveMetrics": {
             "coresValue": "{cores} Kern | {cores} Kerne",
             "cpuHint": "CPU, die die ganze Sandbox in den letzten Sekunden genutzt hat, gemessen an allen Kernen, die sie nutzen darf.",
@@ -310,9 +317,11 @@
         },
         "ownerMark": {
             "ownedBy": "Gehört {name}",
-            "spawnedBy": "Gestartet von Konversation {parent}; öffnet sie",
             "startedByControlToken": "Gestartet vom Steuer-Token {tokenLabel}",
             "startedByProgramHolding": "Gestartet von einem Programm mit dem Steuer-Token „{tokenLabel}“; niemand hat es übernommen"
+        },
+        "parentMark": {
+            "startedBy": "Gestartet von „{title}“; öffnet sie"
         },
         "promptCache": {
             "promptCacheGoesCold": "Sein Prompt-Cache wird in {countdown} kalt. Antworten Sie vorher, dann wird {read} aus dem Cache des Anbieters bedient; danach wird alles erneut gesendet und bezahlt.",

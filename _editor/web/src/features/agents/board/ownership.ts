@@ -56,10 +56,17 @@ export const starterLook = (startedBy: string | undefined): StarterLook | undefi
     return undefined;
 };
 
+// The conversation that spawned this one, when one did. A fact apart from whose it is: a child inherits its parent's
+// owner, so on the reader's own work an ownership mark would never get to say it.
+export const parentOf = (startedBy: string | undefined): string | undefined => {
+    const look = starterLook(startedBy);
+    return look?.kind === `child` ? look.parent : undefined;
+};
+
 // What a card says about whose it is, decided in one place so the mark and the line it rides agree on whether there
-// is anything to draw. The reader's own says nothing at all; somebody else's is a person; an unowned one is whatever
-// program or parent started it.
-export type SessionMark = { readonly kind: "person"; readonly look: OwnerLook } | StarterLook;
+// is anything to draw. The reader's own says nothing at all; somebody else's is a person; an unowned one is the program
+// that started it. A parent is not whose it is: the card draws that on a line of its own (ParentMark).
+export type SessionMark = { readonly kind: "person"; readonly look: OwnerLook } | Extract<StarterLook, { readonly kind: "token" }>;
 
 export const sessionMark = (
     agent: { readonly owner?: SessionOwner | undefined; readonly startedBy?: string | undefined },
@@ -70,7 +77,8 @@ export const sessionMark = (
         const look = ownerLook(agent.owner, me, roster);
         return look.mine ? undefined : { kind: `person`, look };
     }
-    return starterLook(agent.startedBy);
+    const starter = starterLook(agent.startedBy);
+    return starter?.kind === `token` ? starter : undefined;
 };
 
 export const ownedBy = (agent: { readonly owner?: SessionOwner | undefined }, email: string | undefined): boolean =>

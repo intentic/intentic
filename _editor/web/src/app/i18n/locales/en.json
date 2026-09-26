@@ -12,6 +12,7 @@
             "archiveBranchDiffConversation": "Archive, the branch, diff and conversation are kept",
             "archiveConversationKept": "Archive, the conversation is kept",
             "archived": "Archived {archivedAt}",
+            "archiveWithChildren": "Archive, with the {count} finished agent it started; branches, diffs and conversations are kept | Archive, with the {count} finished agents it started; branches, diffs and conversations are kept",
             "asking": "Asking…",
             "back": "back {limitBackAt}",
             "closeAgent": "Close agent",
@@ -22,6 +23,7 @@
             "putAgentBackOn": "Put this agent back on the board",
             "renameAgent": "Rename agent",
             "restoreAgent": "Restore agent",
+            "restoreWithChildren": "Put this agent back on the board, with the {count} agent it started | Put this agent back on the board, with the {count} agents it started",
             "runsOn": "Runs on {runner}",
             "sendTurnAgainSame": "Send this turn again. It is the same request as before, not a new message.",
             "stillWorking": "{running} of {total} still working",
@@ -322,11 +324,18 @@
             "runNowExactlyWhat": "Run it now, with exactly what fired: the session lands on this board",
             "waiting": "waiting for you"
         },
+        "childRows": {
+            "finished": "{count} finished",
+            "startedBy": "Agents {title} started",
+            "watching": "Watching"
+        },
         "ownerMark": {
             "ownedBy": "Owned by {name}",
-            "spawnedBy": "Spawned by conversation {parent}; opens it",
             "startedByControlToken": "Started by the control token {tokenLabel}",
             "startedByProgramHolding": "Started by a program holding the control token “{tokenLabel}”; nobody has claimed it"
+        },
+        "parentMark": {
+            "startedBy": "Started by “{title}”; opens it"
         },
         "promptCache": {
             "promptCacheGoesCold": "Its prompt cache goes cold in {countdown}. Answer before then and {read} is served from the provider's cache; after, all of it is sent and paid for again.",

@@ -12,6 +12,7 @@
             "archiveBranchDiffConversation": "Archiver ; la branche, le diff et la conversation sont conservés",
             "archiveConversationKept": "Archiver ; la conversation est conservée",
             "archived": "Archivé {archivedAt}",
+            "archiveWithChildren": "Archiver, avec {count} agent terminé qu’il a lancé ; les branches, les diffs et les conversations sont conservés | Archiver, avec les {count} agents terminés qu’il a lancés ; les branches, les diffs et les conversations sont conservés",
             "asking": "Demande…",
             "back": "de retour {limitBackAt}",
             "closeAgent": "Fermer l'agent",
@@ -22,6 +23,7 @@
             "putAgentBackOn": "Remettre cet agent sur le tableau",
             "renameAgent": "Renommer l'agent",
             "restoreAgent": "Restaurer l'agent",
+            "restoreWithChildren": "Remettre cet agent sur le tableau, avec {count} agent qu’il a lancé | Remettre cet agent sur le tableau, avec les {count} agents qu’il a lancés",
             "runsOn": "Tourne sur {runner}",
             "sendTurnAgainSame": "Renvoyer ce tour. C'est la même demande qu'avant, pas un nouveau message.",
             "stillWorking": "{running} sur {total} travaillent encore",
@@ -269,6 +271,11 @@
             "runNowExactlyWhat": "Le lancer maintenant, avec exactement ce qui s'est déclenché : la session atterrit sur ce tableau",
             "waiting": "vous attend"
         },
+        "childRows": {
+            "finished": "Terminés : {count}",
+            "startedBy": "Agents lancés par « {title} »",
+            "watching": "Guette"
+        },
         "liveMetrics": {
             "coresValue": "{cores} cœur | {cores} cœurs",
             "cpu": "{percent} de CPU",
@@ -309,9 +316,11 @@
         },
         "ownerMark": {
             "ownedBy": "Appartient à {name}",
-            "spawnedBy": "Lancée par la conversation {parent} ; l’ouvre",
             "startedByControlToken": "Lancée par le jeton de contrôle {tokenLabel}",
             "startedByProgramHolding": "Lancée par un programme détenant le jeton de contrôle « {tokenLabel} » ; personne ne l’a prise en charge"
+        },
+        "parentMark": {
+            "startedBy": "Lancée par « {title} » ; l’ouvre"
         },
         "promptCache": {
             "promptCacheGoesCold": "Son cache de consignes refroidit dans {countdown}. Répondez avant et {read} est servi depuis le cache du fournisseur ; après, tout est renvoyé et repayé.",

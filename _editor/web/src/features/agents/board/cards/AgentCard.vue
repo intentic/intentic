@@ -13,7 +13,8 @@ import OriginMark from "../../../../components/OriginMark.vue";
 import AgentCardClock from "./AgentCardClock.vue";
 import AgentReactions from "./AgentReactions.vue";
 import OwnerMark from "../session/OwnerMark.vue";
-import { sessionMark } from "../ownership";
+import ParentMark from "../session/ParentMark.vue";
+import { parentOf, sessionMark } from "../ownership";
 import { useAuth } from "../../../auth/useAuth";
 import { presenceOthers } from "../../../../shell/presence/usePresence";
 import UnsentMark from "../../../../components/UnsentMark.vue";
@@ -85,6 +86,8 @@ const props = defineProps<{
     query?: string;
     // Filter's case-sensitivity switch, so marks are struck under the rule search actually used.
     matchCase?: boolean;
+    // Children riding under this card that its archive or restore takes along (childFold), so the press says so.
+    family?: number;
 }>();
 const emit = defineEmits<{
     // The click that opened it, if any; a modified click asks for a pane instead of focus.
@@ -109,6 +112,10 @@ const { user } = useAuth();
 // Whose it is, decided here rather than inside the mark, since the line the mark rides must know whether it has
 // anything at all to draw: a card of the reader's own says nothing about ownership and spends no row on it.
 const provenance = computed(() => sessionMark(props.agent, user.value?.email, presenceOthers.value));
+// The conversation that spawned this one; a card only a child standing apart from its parent wears (ParentMark).
+const parent = computed(() => parentOf(props.agent.startedBy));
+// Whether this card's archive or restore moves its children with it, as a run's takes its steps.
+const takesFamily = computed(() => (props.family ?? 0) > 0);
 const meta = computed(() => agentStatusMeta(props.agent.status));
 // Identity tile's category, undefined for an unreadable title; read here too since the tooltip is this card's.
 const category = computed(() => sessionCategory(props.agent.title, props.agent.titleAction));
@@ -518,9 +525,11 @@ const grab = (event: PointerEvent): void => {
                     type="button"
                     :aria-label="t(`agents.agentCard.archiveAgent`)"
                     v-tooltip.top="
-                        agent.branch === undefined
-                            ? t(`agents.agentCard.archiveConversationKept`)
-                            : t(`agents.agentCard.archiveBranchDiffConversation`)
+                        takesFamily
+                            ? t(`agents.agentCard.archiveWithChildren`, { count: family }, family ?? 0)
+                            : agent.branch === undefined
+                              ? t(`agents.agentCard.archiveConversationKept`)
+                              : t(`agents.agentCard.archiveBranchDiffConversation`)
                     "
                     :disabled="busy"
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
@@ -543,7 +552,9 @@ const grab = (event: PointerEvent): void => {
                     v-if="agent.archivedAt !== undefined"
                     type="button"
                     :aria-label="t(`agents.agentCard.restoreAgent`)"
-                    v-tooltip.top="t(`agents.agentCard.putAgentBackOn`)"
+                    v-tooltip.top="
+                        takesFamily ? t(`agents.agentCard.restoreWithChildren`, { count: family }, family ?? 0) : t(`agents.agentCard.putAgentBackOn`)
+                    "
                     :disabled="busy"
                     :class="[HOVER_ACTION, mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100']"
                     @click.stop="emit(`restore`)"
@@ -618,6 +629,7 @@ const grab = (event: PointerEvent): void => {
             <!-- Provenance, ahead of the model/branch line: for an agent the user didn't start, whose it is outranks what it runs on. -->
             <OriginMark :origin="agent.origin" />
             <WorkflowMark :workflow="agent.workflow" />
+            <ParentMark v-if="parent !== undefined" :parent="parent" :sandbox-id="agent.sandboxId" />
 
             <!-- WRAPS, which is what lets the unsent mark ride this line instead of taking one of its own. -->
             <div

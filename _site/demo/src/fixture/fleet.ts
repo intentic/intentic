@@ -2,7 +2,8 @@ import { type AgentSummary, nextDayStartIn, UTC } from "@intentic/sandbox-contra
 
 // One afternoon across two repos, with a card in every lane `laneOf` distinguishes: attention (awaiting a parked
 // question, conflict from a land overlap), active (running, one delegating to subagents), finished (ready, landed,
-// idle). Times are relative to page load.
+// idle). Times are relative to page load. Two of them have spawned child agents (spawnedChildren), which the board
+// hangs under their cards unless one asks something of the reader or works on after its parent finished.
 
 // Conversation id shared by the roster, transcript route and attach stream (turn.ts supplies the script).
 export const FEATURED_AGENT_ID = `cnv_checkout_stripe`;
@@ -47,6 +48,97 @@ export const SOFT_DELETES_JOBS = (now: number) =>
 
 const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false } as const;
 
+// A child another conversation spawned: its own branch and worktree like any agent, `startedBy` naming its parent, and
+// the parent's owner and account inherited.
+const spawned = (parent: string, id: string, over: Omit<Partial<AgentSummary>, `id`> & Pick<AgentSummary, `title` | `status` | `updatedAt`>): AgentSummary => ({
+    id,
+    startedBy: `agent:${parent}`,
+    startIn: `web`,
+    sessionId: `ses_${id}`,
+    provider: `claude`,
+    harness: `claude-code`,
+    model: `claude-sonnet-5`,
+    account: `acc_claude_demo`,
+    branch: `agent/${id}`,
+    base: `4f1c8ab`,
+    attention: NO_ATTENTION,
+    turns: 1,
+    ...over,
+});
+
+// The checkout agent's helpers, one of each standing: two at work (one on another provider), two settled, and one parked
+// on a permission, which keeps a card of its own in Attention. Then the release notes' helpers: settled ones ride under
+// its finished card, and the one still translating stands in Active, since Finished is no place for work in flight.
+const spawnedChildren = (now: number): AgentSummary[] => [
+    spawned(FEATURED_AGENT_ID, `sub-brisk-otter-4k2m`, {
+        title: `Write the webhook handler tests`,
+        status: `running`,
+        provider: `codex`,
+        harness: `native`,
+        model: `gpt-5.2-codex`,
+        activity: { tool: `Bash`, target: `pnpm -C api test src/webhooks`, todo: `Cover the signature check` },
+        startedAt: now - minutes(2),
+        updatedAt: now - 1_200,
+        costUsd: 0.05,
+    }),
+    spawned(FEATURED_AGENT_ID, `sub-calm-heron-8p1d`, {
+        title: `Port the pricing copy to the new plans`,
+        status: `running`,
+        activity: { tool: `Edit`, target: `web/src/pricing/plans.ts`, todo: `Rename the Team tier` },
+        startedAt: now - 42_000,
+        updatedAt: now - 800,
+        costUsd: 0.02,
+    }),
+    spawned(FEATURED_AGENT_ID, `sub-quiet-fern-2x7c`, {
+        title: `Map the existing billing tables`,
+        status: `idle`,
+        updatedAt: now - minutes(3),
+        seenAt: now - minutes(3),
+        costUsd: 0.03,
+    }),
+    spawned(FEATURED_AGENT_ID, `sub-swift-lark-9q3e`, {
+        title: `Add the Stripe SDK to web`,
+        status: `landed`,
+        updatedAt: now - minutes(6),
+        seenAt: now - minutes(6),
+        costUsd: 0.04,
+        diff: { files: 2, insertions: 18, deletions: 2 },
+    }),
+    spawned(FEATURED_AGENT_ID, `sub-keen-moth-5r8t`, {
+        title: `Rotate the Stripe test keys`,
+        status: `awaiting`,
+        attention: { ...NO_ATTENTION, permission: true },
+        updatedAt: now - 20_000,
+        seenAt: now - minutes(1),
+        costUsd: 0.01,
+    }),
+    spawned(`cnv_release_notes`, `sub-soft-pine-1a2b`, {
+        title: `Collect the merged PRs since 2.3`,
+        status: `idle`,
+        model: `claude-haiku-4-5-20251001`,
+        updatedAt: now - minutes(41),
+        seenAt: now - minutes(40),
+    }),
+    spawned(`cnv_release_notes`, `sub-bold-reef-3c4d`, {
+        title: `Summarise the breaking changes`,
+        status: `landed`,
+        model: `claude-haiku-4-5-20251001`,
+        updatedAt: now - minutes(37),
+        seenAt: now - minutes(36),
+        diff: { files: 1, insertions: 9, deletions: 0 },
+    }),
+    spawned(`cnv_release_notes`, `sub-warm-dune-6e7f`, {
+        title: `Translate the release notes into German`,
+        status: `running`,
+        provider: `codex`,
+        harness: `native`,
+        model: `gpt-5.2-codex`,
+        activity: { tool: `Edit`, target: `docs/releases/2.4.de.md`, todo: `Translate the upgrade steps` },
+        startedAt: now - minutes(5),
+        updatedAt: now - 2_100,
+    }),
+];
+
 // The two people on this demo sandbox, the same pair the presence roster draws (daemon.ts): the reader is Ada, so a
 // chip carrying her reads as one of her own and a chip carrying only Grace is one to press.
 const ADA = { email: `ada@acme.dev`, name: `Ada Lovelace` };
@@ -79,7 +171,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         attention: NO_ATTENTION,
         turns: 6,
         toolUses: 74,
-        subagents: { running: 2, total: 3 },
+        subagents: { running: 3, total: 5 },
         diff: { files: 3, insertions: 64, deletions: 12 },
         // Both people, one of them the reader: the chip is lit and its hover reads "Grace Hopper, you".
         reactions: [
@@ -346,4 +438,5 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         toolUses: 17,
         diff: { files: 1, insertions: 6, deletions: 4 },
     },
+    ...spawnedChildren(now),
 ];

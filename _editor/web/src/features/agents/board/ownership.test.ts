@@ -1,5 +1,5 @@
 import { identityHue } from "../../../lib/identityHue";
-import { boardOwners, mayAssign, ownedBy, ownerLook, sessionMark, starterLook } from "./ownership";
+import { boardOwners, mayAssign, ownedBy, ownerLook, parentOf, sessionMark, starterLook } from "./ownership";
 
 describe("ownership on the board", () => {
     const owner = { email: `Ania@Example.com`, since: 1 };
@@ -52,6 +52,15 @@ describe("ownership on the board", () => {
         expect(sessionMark({ startedBy: `token:nightly CI` }, `ania@example.com`, [])).toEqual({ kind: `token`, label: `nightly CI` });
         expect(sessionMark({ startedBy: `bob@example.com` }, `ania@example.com`, [])).toBeUndefined();
         expect(sessionMark({}, `ania@example.com`, [])).toBeUndefined();
+        // A parent is not whose it is: the card says that on a line of its own, owner or none.
+        expect(sessionMark({ startedBy: `agent:fair-sage-ey2r` }, `ania@example.com`, [])).toBeUndefined();
+    });
+
+    it("names the conversation that spawned one, and nothing for any other starter", () => {
+        expect(parentOf(`agent:fair-sage-ey2r`)).toBe(`fair-sage-ey2r`);
+        expect(parentOf(`token:nightly CI`)).toBeUndefined();
+        expect(parentOf(`ania@example.com`)).toBeUndefined();
+        expect(parentOf(undefined)).toBeUndefined();
     });
 
     it("offers a chip per other owner holding something, once each and in name order", () => {

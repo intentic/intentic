@@ -7,7 +7,7 @@ import { useChat } from "../../chat/run/useChat";
 import { commandShortcut } from "../../../shell/commands/useCommands";
 import { useNotifications } from "../../../shell/notifications/notifications";
 import { type ProcedureOutput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
-import { canArchive, type FleetAgent, lanes } from "./useAgents-fleet";
+import { clearableOf, type FleetAgent, lanes } from "./useAgents-fleet";
 import { archived, holdPending, moveAhead } from "./useAgents-registry";
 
 // The board's exit: archiving takes an agent off the lanes and reclaims its worktree checkout, keeping the branch,
@@ -139,8 +139,8 @@ const settleArchive = (
     }
 };
 
-// What Clear on the Finished lane archives: every card there the board may archive.
-const clearableIds = (): string[] => lanes.value.finished.filter(canArchive).map((agent) => agent.id);
+// What Clear on the Finished lane archives: every card there the board may archive (clearableOf).
+const clearableIds = (): string[] => clearableOf(lanes.value).map((agent) => agent.id);
 
 // Archives the named agents, or with no ids every Finished card the board may archive (the lane header's "Clear"). The
 // daemon answers with what actually moved, since "everything finished" can't be re-derived once the lane is empty.
