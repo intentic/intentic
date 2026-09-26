@@ -3,7 +3,7 @@ import { ui } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
 import { type CapacityLane, type CapacityProvider, type CapacityRow, type CapacityUnread, chatCapacity, heldReadings } from "./chatCapacity";
 import { accountsLoaded } from "../accounts/providerAccounts";
-import { formatAge, formatRemaining, formatReset, meterFill, meterTrack, usageTone } from "../session/usageStatus";
+import { formatAge, formatRemaining, formatReset, meterFill, meterTrack, remainingFigure, usageTone } from "../session/usageStatus";
 import { heldAccounts, refreshConnections } from "../accounts/useChat-accounts";
 import ProviderLogo from "../accounts/ProviderLogo.vue";
 import { useT } from "@intentic/ui/i18n";
@@ -114,8 +114,13 @@ const unreadLine = (entry: CapacityUnread): { readonly subject: string; readonly
     <!-- No surface of its own: whitespace and the heading mark it as a region, not a panel with a border or fill. -->
     <!-- Placed and sized by ChatSideRail, which owns the strip this shares with the chat's checklist. -->
     <section class="flex min-h-0 flex-1 flex-col" :aria-label="t(`chat.chatCapacityRail.planHeadroom`)">
-        <!-- The refresh control stays at the edge because the rail has no heading text. -->
+        <!-- The refresh control stays at the edge; the heading beside it names what the figures are. -->
         <div class="flex shrink-0 items-center justify-end gap-2 px-3 py-2">
+            <!-- Says once what every figure below is, in the row the refresh control already takes, so it costs no height:
+                 the lanes then carry bare figures, and a word repeated on every lane was width taken from the bars. -->
+            <span v-if="measuredProviders.length > 0" class="mr-auto min-w-0 truncate text-2xs font-medium uppercase tracking-wide text-subtle">{{
+                t(`chat.chatCapacityRail.allowanceLeft`)
+            }}</span>
             <button
                 type="button"
                 :class="ui.textAction(`gap-1 text-2xs text-subtle`)"
@@ -154,7 +159,7 @@ const unreadLine = (entry: CapacityUnread): { readonly subject: string; readonly
                 <p v-if="capacity.providers.length === 0" class="text-2xs text-muted">{{ t(`chat.chatCapacityRail.nothingRoomRightNow`) }}</p>
 
                 <!-- One block per provider: the provider is the reader's actual choice here (accounts within it balance automatically). -->
-                <div v-for="entry in measuredProviders" :key="entry.provider" class="flex flex-col gap-3.5">
+                <div v-for="entry in measuredProviders" :key="entry.provider" class="flex flex-col gap-2.5">
                     <div class="flex items-center gap-1.5">
                         <ProviderLogo :provider="entry.provider" class="shrink-0 text-2xs text-muted" />
                         <span class="min-w-0 flex-1 truncate text-2xs font-medium text-content">{{ entry.label }}</span>
@@ -166,44 +171,35 @@ const unreadLine = (entry: CapacityUnread): { readonly subject: string; readonly
 
                     <!-- One lane per allowance (the 5-hour session and the week run out separately; one tightest-of-two bar couldn't say which). -->
                     <!-- Drawn row is decoration, the sentence below is the content (same split as UsageRing): a bar means nothing to a screen reader. -->
-                    <div v-for="row in entry.rows" :key="row.id">
-                        <!-- The account's name sits closer to its own lanes than the lanes sit to each other, so it heads them. -->
-                        <div class="flex flex-col gap-1.5" aria-hidden="true">
-                            <span v-if="row.label !== undefined" class="min-w-0 truncate text-2xs text-muted">
+                    <div v-for="row in entry.rows" :key="row.id" class="flex flex-col gap-1">
+                        <div class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1" aria-hidden="true">
+                            <span v-if="row.label !== undefined" class="col-span-3 min-w-0 truncate text-2xs text-muted">
                                 {{ row.label }}
                             </span>
 
-                            <!-- What is left, above a bar that drains as turns spend it: the figure and its reset read as one
-                                 sentence ("72% left · resets in 3h"), and the bar gets the column's whole width instead of a
-                                 third of it, which is what makes a drain legible at a glance in a column this narrow. -->
-                            <div v-if="row.lanes.length > 0" class="flex flex-col gap-2">
-                                <div v-for="lane in row.lanes" :key="lane.kind" class="flex flex-col gap-1">
-                                    <div class="flex items-baseline gap-2">
-                                        <!-- The little chart's axis, not another name: smaller than the account above it. -->
-                                        <span class="min-w-0 truncate text-3xs text-subtle">
-                                            {{ lane.short }}<span v-if="lane.scope !== undefined">&nbsp;·&nbsp;{{ lane.scope }}</span>
-                                        </span>
-                                        <span class="ml-auto shrink-0 whitespace-nowrap text-right">
-                                            <span class="text-2xs font-medium tabular-nums" :class="usageTone(lane.percent)">{{
-                                                formatRemaining(lane.percent, row.stale)
-                                            }}</span>
-                                            <span v-if="laneReset(lane)" class="text-3xs text-subtle">
-                                                · {{ t(`common.usageRing.resets`, { resetsAt: laneReset(lane) }) }}</span
-                                            >
-                                        </span>
-                                    </div>
-                                    <!-- A spent pool draws no fill and tints its track instead: an empty neutral track reads as "no reading". -->
-                                    <span class="block h-1 overflow-hidden rounded-full" :class="meterTrack(lane.percent)">
-                                        <span
-                                            class="ui-meter-fill block h-full rounded-full"
-                                            :class="usageTone(lane.percent)"
-                                            :style="{ width: `${meterFill(lane.percent)}%` }"
-                                        />
+                            <template v-for="lane in row.lanes" :key="lane.kind">
+                                <!-- Below the account name, not beside it at the same size: this is the little chart's axis, not another name. -->
+                                <span class="max-w-18 truncate text-3xs text-subtle">
+                                    {{ lane.short }}<span v-if="lane.scope !== undefined">&nbsp;·&nbsp;{{ lane.scope }}</span>
+                                </span>
+                                <!-- Drains as turns spend it: the fill is what is left. A spent pool draws no fill and tints its
+                                     track instead, since an empty neutral track reads as "no reading". -->
+                                <span class="block h-1 overflow-hidden rounded-full" :class="meterTrack(lane.percent)">
+                                    <span
+                                        class="ui-meter-fill block h-full rounded-full"
+                                        :class="usageTone(lane.percent)"
+                                        :style="{ width: `${meterFill(lane.percent)}%` }"
+                                    />
+                                </span>
+                                <div class="flex items-baseline justify-end gap-1 whitespace-nowrap text-right">
+                                    <span class="text-2xs font-medium tabular-nums" :class="usageTone(lane.percent)">
+                                        {{ remainingFigure(lane.percent, row.stale) }}
                                     </span>
+                                    <span v-if="laneReset(lane)" class="text-3xs text-subtle">·&nbsp;{{ laneReset(lane) }}</span>
                                 </div>
-                            </div>
+                            </template>
 
-                            <span v-if="row.lanes.length === 0" class="text-2xs text-subtle">
+                            <span v-if="row.lanes.length === 0" class="col-span-3 text-2xs text-subtle">
                                 {{ row.note }}
                             </span>
                         </div>

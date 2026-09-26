@@ -930,6 +930,7 @@
             "spent": "wyczerpany"
         },
         "chatCapacityRail": {
+            "allowanceLeft": "Pozostały limit",
             "cantServe": "{count} nie może obsłużyć",
             "moreRoom": "+{hidden} więcej z miejscem",
             "nothingRoomRightNow": "W tej chwili nigdzie nie ma miejsca.",

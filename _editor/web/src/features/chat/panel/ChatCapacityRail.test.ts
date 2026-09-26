@@ -176,7 +176,7 @@ it(`spells out for a screen reader what the bar says by its width`, () => {
     // Every part the column shortens or drops is spoken here or nowhere; a bar is decoration to a screen reader.
     expect(spoken(el)).toContain(`Weekly · all models 59% left (resets ${formatReset(1_700_090_000)})`);
     // Spoken once: the drawn row is hidden from the tree, or a reader would hear both the truncated and full line.
-    expect(el.querySelector(`[aria-hidden="true"] .tabular-nums`)?.textContent?.trim()).toBe(`59% left`);
+    expect(el.querySelector(`[aria-hidden="true"] .tabular-nums`)?.textContent?.trim()).toBe(`59%`);
 });
 
 // Both of an account's allowances are drawn, each beside its own window's length: one bar at the tighter of the
@@ -200,7 +200,9 @@ it(`draws both the session and the week, each named by its own window`, () => {
     expect(barWidths(el)).toEqual([`88%`, `13%`]);
     // Each stands beside its window's length, short enough to need no legend; the 5-hour session comes first.
     expect(lanes(el)).toEqual([`5h`, `wk`]);
-    expect([...el.querySelectorAll(`[aria-hidden="true"] .tabular-nums`)].map((node) => node.textContent?.trim())).toEqual([`88% left`, `13% left`]);
+    expect([...el.querySelectorAll(`[aria-hidden="true"] .tabular-nums`)].map((node) => node.textContent?.trim())).toEqual([`88%`, `13%`]);
+    // Every figure is what is left, said once above them rather than on each lane.
+    expect(el.textContent).toContain(`Allowance left`);
 });
 
 it(`displays remaining minutes on 5h window and remaining time on weekly window when not exhausted`, () => {
@@ -219,8 +221,9 @@ it(`displays remaining minutes on 5h window and remaining time on weekly window 
         },
     ]);
 
-    expect(el.textContent).toContain(`13% left · resets in 45m`);
-    expect(el.textContent).toContain(`39% left · resets in 3d`);
+    // The flex gap spaces figure and reset, so the text runs them together; only the words matter here.
+    expect(drawn(el).replace(/\s+/gu, ` `)).toContain(`13%· in 45m`);
+    expect(drawn(el).replace(/\s+/gu, ` `)).toContain(`39%· in 3d`);
 });
 
 it(`collapses unmeasured providers to title row and groups them together`, () => {
