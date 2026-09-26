@@ -3,7 +3,8 @@ import { EnvironmentSchema } from "@intentic/api-contract";
 import { Button, Code, Notice, type NoticeModel, RowGroup, RowNote, SegmentedControl, StatusBadge, ui } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { useQueryClient } from "@tanstack/vue-query";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
+import { ENVIRONMENT_CONTENTS } from "../../../lib/queryKeys";
 import { sandboxJson } from "../client/sandboxClient";
 import { jsonBody } from "../client/jsonBody";
 import { ENVIRONMENT_KEY, useEnvironment } from "./useEnvironment";
@@ -57,6 +58,17 @@ const VIEWS = computed(
 
 // Runs only while Contents is selected (probing versions spawns processes), not gated on what ends up shown.
 const { groups, loading, error: contentsError, unsupported, refresh: reprobe } = useEnvironmentContents(() => view.value === `contents`);
+
+// Each item's state (awaiting approval, arrives after rebuild) derives from the recipe, so a decision made here, or a
+// proposal an agent drafts, must re-read contents; otherwise it shows stale until the tab is toggled off and on.
+watch(
+    () => [state.value?.proposal?.hash, state.value?.approved?.hash, state.value?.appliedHash, state.value?.custom?.hash].join(`|`),
+    (next, previous) => {
+        if (previous !== undefined && next !== previous) {
+            void queryClient.invalidateQueries({ queryKey: ENVIRONMENT_CONTENTS.of() });
+        }
+    },
+);
 
 // Falls back to recipe when the daemon can't answer for contents; hides that tab entirely.
 const shown = computed(() => (unsupported.value ? `recipe` : view.value));
