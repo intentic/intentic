@@ -217,7 +217,7 @@ describe(`meterFill / meterTrack`, () => {
     });
 });
 
-// Sentence a screen reader hears instead of the card (UsageRing.vue draws the sighted list of meters). Pins
+// Sentence a screen reader hears instead of the card (UsageMeter.vue draws the sighted list of meters). Pins
 // that the spoken version still carries every fact the card shows.
 describe(`usageDetail`, () => {
     it(`lists EVERY pool, because which one is binding is what a single number can't say`, () => {

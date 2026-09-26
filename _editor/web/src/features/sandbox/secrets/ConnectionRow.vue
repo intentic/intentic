@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { InlineRename, Row } from "@intentic/ui";
-import UsageRing from "../../../components/UsageRing.vue";
+import UsageMeter from "../../../components/UsageMeter.vue";
 import type { PlanHeadroom } from "../../chat/session/usageStatus";
 import { useT } from "@intentic/ui/i18n";
 
@@ -61,8 +61,8 @@ const DOT_TONE: Record<string, string> = {
             <span class="flex min-w-0 flex-wrap items-center gap-x-2.5" :class="state === `add` ? `text-muted` : ``">
                 <span class="flex w-[1.125rem] shrink-0 justify-center">
                     <Icon v-if="state === `add`" name="plus" class="text-2xs" />
-                    <!-- Ring replaces the dot when headroom is known, using the same green/yellow/red system. -->
-                    <UsageRing v-else-if="headroom" :headroom="headroom" :activity="activity" flank="left" />
+                    <!-- Meter replaces the dot when headroom is known, using the same green/yellow/red system. -->
+                    <UsageMeter v-else-if="headroom" :headroom="headroom" :activity="activity" flank="left" />
                     <span v-else class="h-1.5 w-1.5 rounded-full" :class="DOT_TONE[state]" />
                 </span>
                 <!-- The name is the field: the row's own rename, in the same box the title sits in. -->

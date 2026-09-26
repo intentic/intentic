@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { placeAnchored, type Placement, ProgressRing, type Side, useHoverIntent } from "@intentic/ui";
+import { placeAnchored, type Placement, type Side, useHoverIntent } from "@intentic/ui";
 import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref } from "vue";
-import { SPENT_UTILIZATION } from "@intentic/sandbox-contract";
 import {
     formatAge,
     formatRemaining,
@@ -10,15 +9,18 @@ import {
     meterTint,
     meterTrack,
     type PlanHeadroom,
-    remainingPercent,
+    type PlanLimitPool,
     usageDetail,
     usageTone,
 } from "../features/chat/session/usageStatus";
 import { useT } from "@intentic/ui/i18n";
 
-// Usage ring and breakdown panel, shared by the composer chip, model picker and Agent tab rows. A small table
-// (line and meter per pool), not a tooltip; opens beside the ring, never over the row column, falling back
-// above only when neither flank fits. Teleported into the anchor's own window; sr-only text beside the arc
+// Usage meter and breakdown panel, shared by the composer chip, model picker and Agent tab rows. Plan usage is
+// always a draining bar, the same one the capacity rail and this card draw; a ring means context, never an
+// allowance. The inline meter stacks one hairline per account-wide pool (weekly first, then the 5-hour session),
+// plus the binding pool when that is a per-model slice, so a roomy session can't hide a spent week. The card is a
+// small table (line and meter per pool), not a tooltip; opens beside the meter, never over the row column, falling
+// back above only when neither flank fits. Teleported into the anchor's own window; sr-only text beside the bars
 // repeats it for screen readers.
 
 const t = useT();
@@ -31,9 +33,19 @@ const { headroom, flank = `right` } = defineProps<{
     flank?: Side;
 }>();
 
-const GAP = 8; // px between the ring and the card: the arrow's height
+// Account-wide pools in display order, then the binding one if it is a slice; a measured reading with every pool
+// reset draws one full bar, since no bars at all is what unmeasured looks like.
+const bars = computed<readonly number[]>(() => {
+    const shown: PlanLimitPool[] = headroom.pools.filter((pool) => pool.gates === `all`);
+    if (headroom.binding !== undefined && !shown.some((pool) => pool.kind === headroom.binding?.kind)) {
+        shown.push(headroom.binding);
+    }
+    return shown.length === 0 ? [headroom.percent] : shown.map((pool) => pool.percent);
+});
+
+const GAP = 8; // px between the meter and the card: the arrow's height
 const EDGE = 8; // px of the window kept clear on every side
-// Long enough to skip a pass-by sweep across a column of rings, short enough a deliberate hover feels instant.
+// Long enough to skip a pass-by sweep across a column of meters, short enough a deliberate hover feels instant.
 const hover = useHoverIntent({ open: 120 });
 
 const anchor = ref<HTMLElement>();
@@ -106,17 +118,20 @@ onBeforeUnmount(hide);
 </script>
 
 <template>
-    <!-- The anchor includes whatever rides beside the ring (the chip's percentage), so hovering it opens the card. -->
+    <!-- The anchor includes whatever rides beside the meter (the chip's percentage), so hovering it opens the card. -->
     <span ref="anchor" class="inline-flex items-center gap-1" @mouseenter="show" @mouseleave="hide" @pointerdown="hide">
-        <!-- Drains like every allowance meter: the arc is what is left, and a spent pool keeps a tinted empty ring. -->
-        <ProgressRing
-            :value="remainingPercent(headroom.percent)"
-            :class="headroom.tone"
-            :style="meterTint(headroom.percent)"
-            :tint-track="headroom.percent >= SPENT_UTILIZATION"
-        />
+        <!-- Drains like every allowance meter: the fill is what is left, and a spent pool tints its empty track. -->
+        <span class="inline-flex w-4 shrink-0 flex-col gap-0.5" aria-hidden="true">
+            <span v-for="(percent, index) in bars" :key="index" class="block h-[3px] overflow-hidden rounded-full" :class="meterTrack(percent)">
+                <span
+                    class="ui-meter-fill block h-full rounded-full"
+                    :class="usageTone(percent)"
+                    :style="{ width: `${meterFill(percent)}%`, ...meterTint(percent) }"
+                />
+            </span>
+        </span>
         <slot />
-        <!-- The arc is aria-hidden and a pointer-only card never reaches a screen reader, so it's spoken here instead. -->
+        <!-- The bars are aria-hidden and a pointer-only card never reaches a screen reader, so it's spoken here instead. -->
         <span class="sr-only">{{ activity ? `${usageDetail(headroom)} ${activity}.` : usageDetail(headroom) }}</span>
 
         <Teleport v-if="open && anchor !== undefined" :to="anchor.ownerDocument.body">
@@ -166,7 +181,7 @@ onBeforeUnmount(hide);
                         <span class="text-xs leading-relaxed text-muted">{{ activity }}</span>
                     </div>
 
-                    <!-- Measured, with every pool since reset; distinct from unmeasured, which draws no ring at all. -->
+                    <!-- Measured, with every pool since reset; distinct from unmeasured, which draws no meter at all. -->
                     <p v-if="headroom.pools.length === 0" class="text-xs text-muted">{{ t(`common.usageRing.everyPoolResetFull`) }}</p>
 
                     <!-- The ≤ mark is explained only when one is shown; a card of spent pools has none to explain. -->

@@ -1,14 +1,14 @@
-// Tests the usage ring and its card: the breakdown renders as a per-pool line and meter with its own reset, not
-// one run-on label, and the card opens beside the ring rather than over the column of rows being compared.
+// Tests the usage meter and its card: the breakdown renders as a per-pool line and meter with its own reset, not
+// one run-on label, and the card opens beside the meter rather than over the column of rows being compared.
 import "@intentic/testing/dom";
 import { createApp, h, nextTick } from "vue";
 import { formatReset, type PlanHeadroom } from "../features/chat/session/usageStatus";
-import UsageRing from "./UsageRing.vue";
+import UsageMeter from "./UsageMeter.vue";
 
 // The @intentic/ui barrel calls window.matchMedia at import time (via useDevice), which jsdom doesn't provide.
 
 const CARD = { width: 240, height: 180 };
-// jsdom lays out nothing; rects are supplied manually: the ring where the test puts it, the card at its size.
+// jsdom lays out nothing; rects are supplied manually: the meter where the test puts it, the card at its size.
 let ring = { left: 40, top: 100, width: 14, height: 14 };
 const originalMeasure = Element.prototype.getBoundingClientRect;
 
@@ -34,7 +34,7 @@ const headroom = (over: Partial<PlanHeadroom> = {}): PlanHeadroom => ({
 const mount = async (over: Partial<PlanHeadroom> = {}, flank?: `left` | `right`): Promise<HTMLElement> => {
     const host = document.createElement(`div`);
     document.body.append(host);
-    createApp({ render: () => h(UsageRing, { headroom: headroom(over), flank }) }).mount(host);
+    createApp({ render: () => h(UsageMeter, { headroom: headroom(over), flank }) }).mount(host);
     await nextTick();
     return host.querySelector(`span`) as HTMLElement;
 };
@@ -63,6 +63,29 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
+// Plan usage is a bar everywhere; a ring is context. One hairline per account-wide pool, weekly first as the card
+// orders them, so a roomy 5-hour session can't stand in for a spent week.
+it(`draws a bar per account-wide pool, not a ring`, async () => {
+    const anchor = await mount({
+        pools: [
+            { kind: `seven_day`, label: `Weekly · all models`, percent: 91, resetsAt: undefined, gates: `all` },
+            { kind: `five_hour`, label: `5-hour session`, percent: 56, resetsAt: RESETS_AT, gates: `all` },
+            { kind: `model:Fable`, label: `Weekly · Fable`, percent: 30, resetsAt: undefined, gates: { models: [`Fable`] } },
+        ],
+    });
+    expect(anchor.querySelector(`svg`)).toBeNull();
+    expect([...anchor.querySelectorAll<HTMLElement>(`.ui-meter-fill`)].map((fill) => fill.style.width)).toEqual([`9%`, `44%`]);
+});
+
+it(`adds the binding pool when it is a per-model slice, and draws one full bar when every pool has reset`, async () => {
+    const fable = { kind: `model:Fable`, label: `Weekly · Fable`, percent: 100, resetsAt: undefined, gates: { models: [`Fable`] } } as const;
+    const sliced = await mount({ pools: [headroom().pools[1]!, fable], binding: fable });
+    expect(sliced.querySelectorAll(`.ui-meter-fill`)).toHaveLength(2);
+    document.body.innerHTML = ``;
+    const reset = await mount({ percent: 0, pools: [], binding: undefined });
+    expect([...reset.querySelectorAll<HTMLElement>(`.ui-meter-fill`)].map((fill) => fill.style.width)).toEqual([`100%`]);
+});
+
 it(`lists every pool with its own figure and reset, and says how old the reading is`, async () => {
     const pools = headroom().pools;
     const panel = await card();
@@ -80,7 +103,7 @@ it(`lists every pool with its own figure and reset, and says how old the reading
     );
 });
 
-it(`speaks the whole breakdown beside the arc, since a card raised by a pointer never reaches a screen reader`, async () => {
+it(`speaks the whole breakdown beside the bars, since a card raised by a pointer never reaches a screen reader`, async () => {
     const anchor = await mount();
     const spoken = anchor.querySelector(`.sr-only`)?.textContent ?? ``;
     const pools = headroom().pools;
@@ -91,34 +114,34 @@ it(`speaks the whole breakdown beside the arc, since a card raised by a pointer 
     expect(spoken).toContain(formatReset(RESETS_AT));
 });
 
-it(`opens on the ring's right flank, clear of the rows it is being compared against`, async () => {
+it(`opens on the meter's right flank, clear of the rows it is being compared against`, async () => {
     const panel = await card();
     expect(panel.className).toContain(`ui-anchored-right`);
-    expect(panel.style.left).toBe(`62px`); // the ring's right edge (54) + the 8px gap
+    expect(panel.style.left).toBe(`62px`); // the meter's right edge (54) + the 8px gap
 });
 
-it(`spills left when the ring OPENS its row, so the card misses the row's own name and buttons`, async () => {
-    // Agent tab connection rows: the ring stands in for the status dot at the row's edge, gutter on its left.
+it(`spills left when the meter OPENS its row, so the card misses the row's own name and buttons`, async () => {
+    // Agent tab connection rows: the meter stands in for the status dot at the row's edge, gutter on its left.
     ring = { left: 400, top: 100, width: 14, height: 14 };
     const panel = (await hover(await mount({}, `left`))) as HTMLElement;
     expect(panel.className).toContain(`ui-anchored-left`);
-    expect(panel.style.left).toBe(`152px`); // the ring's left edge (400) − the gap − the card's width
+    expect(panel.style.left).toBe(`152px`); // the meter's left edge (400) − the gap − the card's width
 });
 
-it(`mirrors to the left flank for a ring against the window's right edge`, async () => {
+it(`mirrors to the left flank for a meter against the window's right edge`, async () => {
     ring = { left: 990, top: 100, width: 14, height: 14 };
     const panel = await card();
     expect(panel.className).toContain(`ui-anchored-left`);
-    expect(panel.style.left).toBe(`742px`); // the ring's left edge (990) − the gap − the card's width
+    expect(panel.style.left).toBe(`742px`); // the meter's left edge (990) − the gap − the card's width
 });
 
-it(`falls back to above the ring only when neither flank can hold the card`, async () => {
+it(`falls back to above the meter only when neither flank can hold the card`, async () => {
     // Pop-out narrower than the card plus its gaps: the one case sideways placement is impossible.
     Object.defineProperty(window, `innerWidth`, { value: 300, configurable: true });
     ring = { left: 100, top: 400, width: 14, height: 14 };
     const panel = await card();
     expect(panel.className).toContain(`ui-anchored-top`);
-    expect(panel.style.top).toBe(`212px`); // the ring's top edge (400) − the gap − the card's height
+    expect(panel.style.top).toBe(`212px`); // the meter's top edge (400) − the gap − the card's height
     Object.defineProperty(window, `innerWidth`, { value: 1024, configurable: true });
 });
 

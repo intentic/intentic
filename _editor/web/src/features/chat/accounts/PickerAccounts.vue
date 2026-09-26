@@ -2,7 +2,7 @@
 import { SearchBar, useDevice, vAction, ui } from "@intentic/ui";
 import { computed, nextTick, type Ref, ref, toRef } from "vue";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
-import UsageRing from "../../../components/UsageRing.vue";
+import UsageMeter from "../../../components/UsageMeter.vue";
 import { ACCOUNT_LIST_LIMIT, matchAccounts, usePickerAccounts } from "./pickerAccounts";
 import { providerDisplayLabel } from "./providerCatalog";
 import { formatAge } from "../session/usageStatus";
@@ -221,7 +221,7 @@ const pickAccount = (id: string): void => {
                     <span v-else-if="a.subtitle" class="max-w-full truncate text-2xs text-subtle">{{ a.subtitle }}</span>
                 </span>
                 <!-- Spend against this account's tightest limit; absent means unmeasured or unavailable, distinct from a measured zero. -->
-                <UsageRing v-if="a.headroom" :headroom="a.headroom" class="ml-auto" />
+                <UsageMeter v-if="a.headroom" :headroom="a.headroom" class="ml-auto" />
                 <Icon
                     v-if="a.needsReauth"
                     name="exclamation-triangle"
@@ -279,7 +279,7 @@ const pickAccount = (id: string): void => {
         >
             <div v-for="a in routedShown" :key="a.name" class="flex min-h-8 min-w-0 items-center gap-2 px-3 py-1.5 text-xs">
                 <span class="min-w-0 truncate text-content">{{ a.label }}</span>
-                <UsageRing v-if="a.headroom" :headroom="a.headroom" class="ml-auto" />
+                <UsageMeter v-if="a.headroom" :headroom="a.headroom" class="ml-auto" />
             </div>
             <p v-if="routedOpen && routedShown.length === 0" class="px-3 py-1.5 text-2xs text-subtle" aria-live="polite">
                 {{ t(`chat.pickerAccounts.noAccountsMatch`) }}

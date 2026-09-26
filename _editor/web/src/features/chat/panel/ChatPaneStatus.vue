@@ -17,7 +17,7 @@ import { useRole } from "../../sandbox/secrets/useRole";
 import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
 import ChatToolCallsToggle from "../tools/ChatToolCallsToggle.vue";
 import ChatJobsReadout from "./jobs/ChatJobsReadout.vue";
-import UsageRing from "../../../components/UsageRing.vue";
+import UsageMeter from "../../../components/UsageMeter.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // The pane's status bar: readouts under the composer, the one part of the footer outside the scroller — about the
@@ -159,8 +159,8 @@ const usageChip = computed(() => {
                 to="/sandbox/usage"
                 class="touch-target inline-flex cursor-pointer items-center transition-colors hover:text-content"
             >
-                <UsageRing :headroom="usageChip.headroom"
-                    ><span class="@max-xs:hidden">{{ usageChip.label }}</span></UsageRing
+                <UsageMeter :headroom="usageChip.headroom"
+                    ><span class="@max-xs:hidden">{{ usageChip.label }}</span></UsageMeter
                 >
             </RouterLink>
             <!-- Every chip here names a page, so each is a link: hover shows the address, Ctrl/Cmd-click opens it without leaving the chat. -->

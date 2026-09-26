@@ -179,7 +179,7 @@ const blockedDetail = (entry: CapacityBlocked): string =>
                     </div>
 
                     <!-- One lane per allowance (the 5-hour session and the week run out separately; one tightest-of-two bar couldn't say which). -->
-                    <!-- Drawn row is decoration, the sentence below is the content (same split as UsageRing): a bar means nothing to a screen reader. -->
+                    <!-- Drawn row is decoration, the sentence below is the content (same split as UsageMeter): a bar means nothing to a screen reader. -->
                     <div v-for="row in entry.rows" :key="row.id" class="flex flex-col gap-1">
                         <div class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1" aria-hidden="true">
                             <span v-if="row.label !== undefined" class="col-span-3 min-w-0 truncate text-2xs text-muted">
