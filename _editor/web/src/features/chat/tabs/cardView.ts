@@ -5,6 +5,7 @@ import {
     activityIcon,
     activityLine,
     agentStatusMeta,
+    endingByHand,
     type StandingChip,
     standingChip,
     type TileRim,
@@ -76,6 +77,11 @@ const modelOf = (entry: OpenChat): string | undefined => {
 // so a working card stays findable even when the fleet join is cold.
 const liveOf = (entry: OpenChat): CardView[`live`] => {
     const { agent, conversation } = entry;
+    // Ended by a person and only unwinding: the corner's glyph already says how, and a working line under a clock still
+    // counting would say the Stop had not taken.
+    if ((agent !== undefined && endingByHand(agent)) || conversation.turn.ending.value !== undefined) {
+        return undefined;
+    }
     if (agent !== undefined && turnInFlight(agent)) {
         return {
             icon: (agent.subagents?.running ?? 0) > 0 ? `users` : activityIcon(agent.activity?.tool),

@@ -8,6 +8,7 @@ import type {
     QueuedMessage,
 } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, inject, type InjectionKey } from "vue";
+import type { AgentStanding } from "../../agents/fleet/agentStatus";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { Conversation } from "../session/conversation";
 import { seedFork } from "../session/forkSeed";
@@ -17,17 +18,30 @@ import type { TurnPick } from "../run/turnDefaults";
 import type { ForkLink } from "../run/turnRequest";
 import { providerReadyOn } from "../session/access";
 import { type ChatAttachment, type ChatMessage, continuationFor } from "../transcript/transcript";
+import { endingOfTab } from "../tabs/tabFacts";
 import { conversations, setConversations } from "../tabs/useChat-tabs";
 import { loadProviderModels } from "../models/useChat-catalog";
 import { accountsOf } from "../accounts/useChat-accounts";
 import { track } from "../../../app/analytics";
 
+// The board's card for a conversation (useAgents.agentById), handed to a view by its pane so the facade stays clear of
+// the fleet store; a view handed none reads only what its own window saw.
+type CardOf = (conversationId: string) => AgentStanding | undefined;
+
+// A person ended the live turn and it is only unwinding (`stopping`, `dismissing`), read off the same card the board
+// draws (endingOfTab), so the live line, the Stop button and the composer change in the press's own frame and say what
+// the board says, wherever the press was made. Undefined outside a live turn and for one nobody ended.
+const endingView = (conversation: ComputedRef<Conversation>, cardOf: CardOf | undefined) => ({
+    ending: computed(() => endingOfTab(conversation.value, cardOf?.(conversation.value.conversationId))),
+});
+
 // One conversation, as a panel binds it: the facade every chat surface renders through. Built per pane rather than over
 // `active`, since the floating window shows several conversations at once.
-export const conversationView = (conversation: ComputedRef<Conversation>) => ({
+export const conversationView = (conversation: ComputedRef<Conversation>, cardOf?: CardOf) => ({
     conversation,
     messages: computed(() => conversation.value.transcript.messages.value),
     streaming: computed(() => conversation.value.turn.streaming.value),
+    ...endingView(conversation, cardOf),
     // This chat's slash commands: its own turns' list if any, else the provider's last known list.
     availableCommands: computed<readonly AgentCommand[]>(() => {
         const own = conversation.value.availableCommands.value;

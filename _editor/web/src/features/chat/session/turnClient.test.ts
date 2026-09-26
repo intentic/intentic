@@ -3,7 +3,7 @@ import { type AttachFrame, type ConversationQueue, deriveTitle, LAND_CONFLICT_OP
 import { userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { unstubbed } from "@intentic/testing";
 import { AsyncIteratorClass } from "@orpc/client";
-import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
+import { stubGlobal, unstubAllGlobals, waitFor } from "@intentic/testing/bun";
 import { computed, ref, shallowRef, watch } from "vue";
 import type { AgentStanding } from "../../agents/fleet/agentStatus";
 import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
@@ -58,6 +58,22 @@ const attached = (runId: string, startedAt: number, prompt: string): AsyncIterat
         async () => {
             const frame = frames.shift();
             return frame === undefined ? { done: true, value: undefined } : { done: false, value: frame };
+        },
+        async () => undefined,
+    );
+};
+
+// The same stream held open after its head until `closed` resolves: a turn still unwinding after a Stop.
+const unwinding = (runId: string, startedAt: number, prompt: string, closed: Promise<void>): AsyncIteratorClass<AttachFrame, unknown, void> => {
+    const rows: TranscriptRow[] = [{ ...userRow(prompt, startedAt, []), run: runId }];
+    const frames: (() => Promise<AttachFrame>)[] = [async () => ({ kind: `attached`, run: runId, startedAt, seq: 0, rows }), async () => {
+        await closed;
+        return { kind: `end` };
+    }];
+    return new AsyncIteratorClass<AttachFrame, unknown, void>(
+        async () => {
+            const frame = frames.shift();
+            return frame === undefined ? { done: true, value: undefined } : { done: false, value: await frame() };
         },
         async () => undefined,
     );
@@ -208,7 +224,8 @@ describe(`a run's lifecycle`, () => {
         client.stop();
 
         expect(await started).toBe(false);
-        expect(phases).toEqual([`composing`, `idle`]);
+        // The second write is the press marking it ended, in the same frame, before the abort settles it.
+        expect(phases).toEqual([`composing`, `composing`, `idle`]);
         expect(run).not.toHaveBeenCalled();
         expect(stop).not.toHaveBeenCalled();
         expect(host.transcript.messages.value).toEqual([]);
@@ -284,6 +301,51 @@ describe(`a run's lifecycle`, () => {
         expect(stop.mock.calls[0]?.[0]).toEqual({ conversationId: `c1`, run: `r4` });
     });
 
+    // Stopping a parked turn takes its card with it, as the daemon records it: nothing may still offer an answer to it.
+    it(`freezes the card a stopped turn was parked on at the press`, () => {
+        const { client, host } = parked();
+        stop.mockImplementation(async () => ({ stopped: true }));
+
+        client.stop();
+
+        expect(host.transcript.awaitingDecision.value).toBe(false);
+        expect(host.transcript.messages.value[1]?.permission?.status).not.toBe(`pending`);
+    });
+
+    // The press is the ending, for everyone looking: the turn reads as ended in the frame it was pressed, long before
+    // the daemon has unwound it and its stream closes. Words typed meanwhile are the next turn's, never said into the
+    // one ending (the daemon would hold them behind the stop), so they wait for it to close and go as a turn of their own.
+    it(`reads a stopped turn as ended from the press, and sends words typed after it as the next turn once it closes`, async () => {
+        const { client, phases } = clientOf();
+        let close: () => void = () => undefined;
+        const closed = new Promise<void>((settle) => (close = settle));
+        answers({ delivered: `started`, run: `r1` }, { delivered: `started`, run: `r2` });
+        attach.mockImplementationOnce(async () => unwinding(`r1`, 4_000, `clean the sandbox`, closed));
+        attach.mockImplementation(async () => attached(`r2`, 5_000, `try again`));
+        stop.mockImplementation(async () => ({ stopped: true }));
+        const first = client.send(`clean the sandbox`, SETTINGS);
+        await waitFor(() => expect(client.phase.value.kind).toBe(`running`));
+
+        client.stop();
+        expect(client.ending.value).toBe(`stop`);
+        expect(client.streaming.value).toBe(true);
+        expect(client.generating.value).toBe(false);
+        // Pressed again while it unwinds, it asks the daemon nothing more.
+        client.stop();
+        expect(stop).toHaveBeenCalledTimes(1);
+
+        const next = client.say(`try again`);
+        await new Promise((settle) => setTimeout(settle, 0));
+        expect(run).toHaveBeenCalledTimes(1);
+
+        close();
+        await first;
+        await next;
+        expect(run.mock.calls.map(([body]) => body.prompt)).toEqual([`clean the sandbox`, `try again`]);
+        expect(phases).toEqual([`sending`, `running`, `running`, `idle`, `sending`, `running`, `idle`]);
+        expect(client.ending.value).toBeUndefined();
+    });
+
     // A send not yet answered has no run to name, only its message; one the daemon has not made a turn of yet is
     // stopped once the ack names its run, and never by a stop that could land on a turn another window started.
     it(`names the message of a send not yet answered, and its run once the ack brings one`, async () => {
@@ -314,7 +376,7 @@ describe(`a run's lifecycle`, () => {
         client.stop();
         expect(host.pickUp.value).toBeUndefined();
 
-        client.endedByReader();
+        client.endedByReader(`dismiss`);
         expect(host.pickUp.value).toBeUndefined();
     });
 

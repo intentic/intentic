@@ -121,7 +121,7 @@ export class CardReplies {
         }
         const next = afterReply(answer);
         if (next === `end`) {
-            this.host.turn.endedByReader();
+            this.host.turn.endedByReader(`dismiss`);
         } else if (next === `stop`) {
             this.host.turn.stop();
         }

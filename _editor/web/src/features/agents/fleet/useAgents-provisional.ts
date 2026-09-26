@@ -1,8 +1,9 @@
 import { sandboxShallowRef } from "@intentic/extension-api";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { otherBoxes } from "../../sandbox/live/fleetAcross";
+import type { TabFacts } from "../../chat/tabs/tabFacts";
 import type { PendingAction } from "../board/laneDrop";
-import { awaitingUser, NO_ATTENTION, turnInFlight } from "./agentStatus";
+import { awaitingUser, type EndingByHand, NO_ATTENTION, turnInFlight } from "./agentStatus";
 import type { FleetAgent } from "./useAgents-fleet";
 import { registry } from "./useAgents-registry";
 
@@ -13,10 +14,12 @@ import { registry } from "./useAgents-registry";
 // What the board can have a card doing before the daemon says so.
 export type ClaimKind = `turn` | `stop` | `land` | `discard`;
 
-// The two fields every word the daemon says about a card's standing moves (agents-registry summaryOf).
+// The two fields every word the daemon says about a card's standing moves (agents-registry summaryOf), and the turn it
+// was on, which a Stop is measured against instead (see `moved`).
 interface Baseline {
     readonly status: AgentSummary[`status`];
     readonly updatedAt: number;
+    readonly startedAt?: number;
 }
 
 // One press's layer; its identity is the press, so a settle or timer only ever lifts its own.
@@ -82,8 +85,16 @@ const rosterEntry = (id: string, at: string | undefined): AgentSummary | undefin
         ? registry.value.find((agent) => agent.id === id)
         : otherBoxes.value.find((box) => box.sandbox.id === at)?.agents.find((agent) => agent.id === id);
 
-const moved = (entry: AgentSummary | undefined, baseline: Baseline): boolean =>
-    entry === undefined || entry.status !== baseline.status || entry.updatedAt !== baseline.updatedAt;
+// Whether the daemon has said something newer than the press knows. A Stop is answered only by the status moving (its
+// own `stopping`, or the turn ending some other way) or by another turn: a running turn moves `updatedAt` with every step
+// it takes, none of which says anything about the press, and yielding to one drew the card back into Active between
+// the press and the daemon's `stopping`.
+const moved = (entry: AgentSummary | undefined, kind: ClaimKind, baseline: Baseline): boolean => {
+    if (entry === undefined || entry.status !== baseline.status) {
+        return true;
+    }
+    return kind === `stop` ? entry.startedAt !== baseline.startedAt : entry.updatedAt !== baseline.updatedAt;
+};
 
 // One press's hold on its card.
 export interface Press {
@@ -102,7 +113,9 @@ export const claim = (id: string, at: string | undefined, kind: ClaimKind): Pres
     if (entry === undefined) {
         return UNCLAIMED;
     }
-    const layer: Layer = { claim: { kind, at: Date.now(), baseline: { status: entry.status, updatedAt: entry.updatedAt } } };
+    const layer: Layer = {
+        claim: { kind, at: Date.now(), baseline: { status: entry.status, updatedAt: entry.updatedAt, startedAt: entry.startedAt } },
+    };
     const lift = hold(id, at, layer);
     const ceiling = setTimeout(lift, CEILING_MS);
     let settled = false;
@@ -168,8 +181,22 @@ export const asStarted = <T extends FleetAgent>(card: T, startedAt: number): T =
     unread: false,
 });
 
-// A Stop the daemon hasn't reported yet: `stopping`, which a chosen ending outranks every park with (liveStatus).
-const asStopping = <T extends FleetAgent>(card: T): T => ({ ...card, status: `stopping`, unread: false });
+// A turn a person has ended that the daemon hasn't reported yet, as it will report it (liveStatus): the chosen ending,
+// which outranks every park, and nothing parked any more, since ending the turn takes every card it waited on with it.
+// Drawn for a board press (a claim) and for one made in a chat (TabFacts.ending) alike.
+export const asEnded = <T extends FleetAgent>(card: T, ending: EndingByHand): T => ({
+    ...card,
+    status: ending,
+    attention: NO_ATTENTION,
+    unread: false,
+});
+
+// A turn a person ended in this browser's chat (TabFacts.ending), drawn as ending from the press, over whatever the
+// roster last said, until that chat's stream closes: the other half of useAgents-fleet's `sendingNow`. The chat draws
+// its live line from this same card, so the board and the chat cannot disagree about one Stop, and neither waits on the
+// daemon to agree.
+export const endedHere = <T extends FleetAgent>(card: T, tab: TabFacts | undefined): T =>
+    tab?.ending === undefined ? card : asEnded(card, tab.ending);
 
 // A land between turns: the conflict and failure a settled status carried go with it; only a running turn hides
 // `unfinished`, so it stays.
@@ -194,7 +221,7 @@ const STOPPABLE: ReadonlySet<FleetAgent[`status`]> = new Set([`running`, `awaiti
 // `landing` over a live turn (a turn's own land reads `running`), no `stopping` over a turn that already ended.
 const drawn = <T extends FleetAgent>(card: T, kind: ClaimKind, at: number): T | undefined => {
     if (kind === `stop`) {
-        return STOPPABLE.has(card.status) ? asStopping(card) : card;
+        return STOPPABLE.has(card.status) ? asEnded(card, `stopping`) : card;
     }
     if (turnInFlight(card) || awaitingUser(card)) {
         return card;
@@ -211,5 +238,5 @@ export const overlaid = <T extends FleetAgent>(card: T, entry: AgentSummary, at:
     }
     const patched: T = Object.assign({}, card, ...held.map((layer) => layer.patch));
     const standing = held.find((layer) => layer.claim !== undefined)?.claim;
-    return standing === undefined || moved(entry, standing.baseline) ? patched : drawn(patched, standing.kind, standing.at);
+    return standing === undefined || moved(entry, standing.kind, standing.baseline) ? patched : drawn(patched, standing.kind, standing.at);
 };

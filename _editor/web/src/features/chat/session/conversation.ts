@@ -9,6 +9,7 @@ import { CardReplies } from "./cardReplies";
 import { ComposerSelection } from "./composerSelection";
 import { TranscriptView } from "./transcriptView";
 import { TurnClient } from "./turnClient";
+import { endingStanding } from "./runPhase";
 import { applyTurnEntry } from "./turnFacts";
 
 // One chat conversation, self-contained so several run at once: what it is (identity, placement, the tab's own facts)
@@ -17,7 +18,7 @@ import { applyTurnEntry } from "./turnFacts";
 // It is their composition and nothing else: every behaviour is one unit's, reached through it.
 
 // What a conversation is doing right now, surfaced as the tab's status icon.
-export type ConversationStatus = "idle" | "streaming" | "awaiting" | "error";
+export type ConversationStatus = "idle" | "streaming" | "stopping" | "dismissing" | "awaiting" | "error";
 
 export class Conversation {
     // The red line: this needs the user. Per-turn chat errors land here; account errors live with the accounts.
@@ -121,6 +122,11 @@ export class Conversation {
     readonly status = computed<ConversationStatus>(() => {
         if (this.error.value !== null) {
             return `error`;
+        }
+        // Ended by a person and only unwinding: ahead of a card it was parked on, which the ending takes with it.
+        const ending = this.turn.ending.value;
+        if (ending !== undefined) {
+            return endingStanding(ending);
         }
         if (this.transcript.awaitingDecision.value) {
             return `awaiting`;

@@ -5,6 +5,7 @@ import { computed, provide, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { loopDesignLine } from "@intentic/sandbox-contract";
 import type { Conversation } from "../session/conversation";
+import { useAgents } from "../../agents/fleet/useAgents";
 import { useChat } from "../run/useChat";
 import { conversationView, PANE_VIEW } from "./useChat-view";
 import { useChatRoute } from "../routing/chatRoute";
@@ -72,9 +73,10 @@ const emit = defineEmits<{ focus: []; close: [] }>();
 
 // The prop as a ref, for the view and composables that follow this pane from one chat to the next.
 const chat = computed(() => props.conversation);
-const paneView = conversationView(chat);
+// The board's card for this chat is what its live turn is drawn from (ConversationView.ending), so the two agree.
+const paneView = conversationView(chat, (id) => useAgents().agentById(id));
 provide(PANE_VIEW, paneView);
-const { messages, streaming, mode, provider, model, draft, attachments, staged, connected, editing } = paneView;
+const { messages, streaming, ending, mode, provider, model, draft, attachments, staged, connected, editing } = paneView;
 const { reachable, connection } = useSandbox();
 // The daemon refused this account outright, unlike "not connected yet": waiting won't fix it.
 const denied = computed(() => connection.value.failure?.kind === `forbidden`);
@@ -579,9 +581,9 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                         />
                                     </button>
 
-                                    <!-- Stop covers the entire live turn, including parked cards. -->
+                                    <!-- Stop covers the entire live turn, including parked cards; once pressed (or the turn ended any other way) the turn reads as over, and Send takes the slot back. -->
                                     <button
-                                        v-if="streaming"
+                                        v-if="streaming && !ending"
                                         type="button"
                                         class="composer-send composer-stop shrink-0 max-md:h-11 max-md:w-11"
                                         :disabled="!reachable"

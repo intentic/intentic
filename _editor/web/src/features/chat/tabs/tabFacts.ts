@@ -1,5 +1,6 @@
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
-import type { ClientAgentStatus } from "../../agents/fleet/agentStatus";
+import { type AgentStanding, type ClientAgentStatus, type EndingByHand, endingOf } from "../../agents/fleet/agentStatus";
+import { endingStanding } from "../session/runPhase";
 import type { Conversation } from "../session/conversation";
 import type { ChatRunView } from "../run/chatRun";
 
@@ -36,6 +37,10 @@ export interface TabFacts {
     readonly leftAt?: number;
     // What this browser knows about an unfiled turn; present only while `starting`.
     readonly turn?: TurnFacts;
+    // A person ended this chat's live turn (TurnClient.ending), as the standing the board draws it with; present from
+    // the press until the turn's stream closes. The daemon's own `stopping` is a round trip behind the press, and the
+    // stream a few seconds behind that: this is what every card and this chat read in the press's own frame.
+    readonly ending?: EndingByHand;
 }
 
 // A sent turn the registry hasn't filed yet, replaced by the registry's own version once it lands. Zero
@@ -76,6 +81,25 @@ export const standingOf = (conversation: Conversation): ClientAgentStatus => {
     return conversation.transcript.messages.value.length > 0 || conversation.session.value !== undefined ? `resumed` : `draft`;
 };
 
+// How this window's own live turn is ending, if a person ended it here.
+const endedHere = (conversation: Conversation): EndingByHand | undefined => {
+    const ending = conversation.turn.ending.value;
+    return ending === undefined ? undefined : endingStanding(ending);
+};
+
+// How a chat's live turn is ending, if a person ended it, read off the board's card for it whenever there is one:
+// that card folds every press into one reading (this chat's own through TabFacts.ending, another window's or device's
+// through the roster, a board press through its claim), so the chat and the board cannot say different things about
+// one Stop. With no card to read (another box's conversation, or a surface handed no fleet) it is what this window saw
+// for itself. Undefined outside a live turn, so a card still wearing an earlier turn's ending never draws it over the
+// next one.
+export const endingOfTab = (conversation: Conversation, card: AgentStanding | undefined): EndingByHand | undefined => {
+    if (!conversation.turn.streaming.value) {
+        return undefined;
+    }
+    return card === undefined ? endedHere(conversation) : endingOf(card);
+};
+
 const turnFacts = (conversation: Conversation): TurnFacts => ({
     effort: conversation.selection.effort.value,
     thinking: conversation.selection.thinking.value,
@@ -105,6 +129,7 @@ export const tabFacts = (conversation: Conversation): TabFacts => {
         draftAt: conversation.draftAt.value,
         leftAt: conversation.leftAt.value,
         turn: standing === `starting` ? turnFacts(conversation) : undefined,
+        ending: endedHere(conversation),
     };
 };
 

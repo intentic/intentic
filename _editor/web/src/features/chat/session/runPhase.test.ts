@@ -1,4 +1,4 @@
-import { accepted, advance, IDLE, type RunPhase } from "./runPhase";
+import { accepted, advance, IDLE, phaseEnding, type RunPhase } from "./runPhase";
 
 // Pins every move one run can make in this window, and every event a phase refuses, as values: a send opens it, the
 // daemon's ack takes it, an attach adopts a run already taken, and settling says whether the daemon ever had it.
@@ -6,7 +6,7 @@ import { accepted, advance, IDLE, type RunPhase } from "./runPhase";
 const controller = new AbortController();
 const live = (kind: `composing` | `sending`): RunPhase => ({ kind, controller, startedAt: 4_000 });
 // Taken by the daemon, under the name its ack gave it.
-const running = (run = `r1`): RunPhase => ({ kind: `running`, controller, startedAt: 4_000, run });
+const running = (run = `r1`): Extract<RunPhase, { kind: `running` }> => ({ kind: `running`, controller, startedAt: 4_000, run });
 
 describe(`a run's phase`, () => {
     it(`opens idle into sending, or into composing for an errand whose words are not written yet`, () => {
@@ -39,6 +39,18 @@ describe(`a run's phase`, () => {
         expect(advance(live(`composing`), { kind: `settled` })).toEqual({ kind: `idle`, accepted: false });
         const settled: RunPhase = { kind: `idle`, accepted: true };
         expect(advance(settled, { kind: `settled` })).toBe(settled);
+    });
+
+    // A person ending the run marks it and nothing else: it stays live, its stream still to close, and the first ending
+    // is the one it keeps through the ack; settling forgets it, and an idle window has nothing to end.
+    it(`marks a live run ended by the first press, keeps the mark until it settles, and ends nothing idle`, () => {
+        const stopped = advance(running(), { kind: `ended`, by: `stop` });
+        expect(stopped).toEqual({ ...running(), ending: `stop` });
+        expect(advance(stopped, { kind: `ended`, by: `dismiss` })).toBe(stopped);
+        const sent = advance(live(`sending`), { kind: `ended`, by: `stop` });
+        expect(advance(sent, { kind: `accepted`, run: `r1` })).toEqual({ ...running(), ending: `stop` });
+        expect([stopped, sent, running(), IDLE, advance(stopped, { kind: `settled` })].map(phaseEnding)).toEqual([`stop`, `stop`, undefined, undefined, undefined]);
+        expect(advance(IDLE, { kind: `ended`, by: `stop` })).toBe(IDLE);
     });
 
     it(`opens nothing beside a live run, and a late ack after settling changes nothing`, () => {

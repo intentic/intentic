@@ -24,7 +24,7 @@ import { type AttachHead, followRun, type SentMessage, type TurnContext } from "
 import { invalidateAgentTranscript } from "../transcript/agentTranscript";
 import { type ChatAttachment, continuationFor, isNudgeText } from "../transcript/transcript";
 import type { Conversation } from "./conversation";
-import { accepted, advance, IDLE, type RunEvent, type RunPhase } from "./runPhase";
+import { accepted, advance, IDLE, phaseEnding, type RunEvent, type RunPhase, type TurnEnding } from "./runPhase";
 
 // One conversation's runs, as this window drives them: a message is sent (opened, then taken at the daemon's ack),
 // followed while it streams or waits on a card, and settled, stopped or abandoned; a turn this window never opened is
@@ -48,6 +48,10 @@ const SEND_RETRY_MS = 500;
 // it once the ended turn's record is written, a moment after the stream closes.
 const FOLLOW_ATTEMPTS = 3;
 const FOLLOW_MS = 400;
+
+// How long a message sent after a Stop waits for the ended turn's stream to close, once the daemon has let the
+// conversation go. It closes a moment after; the bound only keeps a stream that never does from swallowing the words.
+const ENDING_CLOSE_MS = 5_000;
 
 // A nudge (e.g. "Continue") behind a waiting nudge with no files says nothing new, so it is not sent at all. Never
 // collapses against real words or files.
@@ -126,8 +130,16 @@ export class TurnClient {
     // Harness retrying inside the live turn; nothing has failed. Cleared once the turn produces anything or settles.
     readonly providerRetry = ref<Extract<TurnFact, { kind: `provider_retry` }> | undefined>();
 
-    // Whether the model is actually generating, narrower than `streaming`: a parked card is streaming but not this.
-    readonly generating = computed(() => this.streaming.value && !this.host.transcript.awaitingDecision.value);
+    // A person ended the live turn (Stop, or a card waved away) and it is unwinding: set in the press's own frame, long
+    // before the stream closes, and published with the tab (TabFacts.ending) so the board's card and this chat say the
+    // same thing from that frame on. Undefined for a turn nobody ended, and once the turn has settled.
+    readonly ending = computed<TurnEnding | undefined>(() => phaseEnding(this.phase.value));
+
+    // Whether the model is actually generating, narrower than `streaming`: a parked card is streaming but not this, and
+    // neither is a turn somebody ended that is only unwinding.
+    readonly generating = computed(
+        () => this.streaming.value && this.ending.value === undefined && !this.host.transcript.awaitingDecision.value,
+    );
 
     // Resolves once the daemon's detached run has settled after a Stop; else the next send could race its cleanup.
     private stopping: Promise<void> | undefined;
@@ -138,6 +150,9 @@ export class TurnClient {
 
     // A Stop the daemon could not act on yet, the message not yet a turn there: carried out at the ack, which names it.
     private stopOnAck = false;
+
+    // Whoever waits for the live turn to settle (afterEnding), told by endTurn.
+    private settleWaiters: (() => void)[] = [];
 
     // Words handed back to the composer after a send nobody answered, with the id they went out under: sent again
     // unchanged they keep it, so a daemon that took them after all answers the resend rather than delivering it twice.
@@ -166,9 +181,9 @@ export class TurnClient {
         if (text.length === 0 && attachments.length === 0) {
             return false;
         }
-        // Stop makes the local stream idle before the daemon finishes unwinding; a direct send joins that boundary too.
-        if (this.stopping !== undefined) {
-            await this.stopping;
+        // Stop makes the turn read as over before the daemon finishes unwinding; a direct send joins that boundary too.
+        if (this.unwinding) {
+            await this.afterEnding();
         }
         if (this.streaming.value) {
             return false;
@@ -198,8 +213,10 @@ export class TurnClient {
             }
             return;
         }
-        if (this.stopping !== undefined) {
-            await this.stopping;
+        // Words typed after a Stop are the next turn's, not the ended one's: said into it, the daemon would queue them
+        // behind the stop, which holds its queue.
+        if (this.unwinding) {
+            await this.afterEnding();
         }
         if (this.streaming.value) {
             await this.sayInto(trimmed, attachments, editorContext);
@@ -213,8 +230,8 @@ export class TurnClient {
     // `compose` fills it in (undefined: no turn after all). Resolves with whether the daemon took it, not at its end.
     async startErrand(opening: string, compose: (signal: AbortSignal) => Promise<string | undefined>): Promise<boolean> {
         this.host.peek.value = false;
-        if (this.stopping !== undefined) {
-            await this.stopping;
+        if (this.unwinding) {
+            await this.afterEnding();
         }
         // A turn already live here can't have a second opened beside it: the words go the way any message would.
         if (this.streaming.value) {
@@ -521,6 +538,11 @@ export class TurnClient {
         const phase = this.phase.value;
         host.transcript.settle();
         this.move({ kind: `settled` });
+        const waiters = this.settleWaiters;
+        this.settleWaiters = [];
+        for (const settled of waiters) {
+            settled();
+        }
         const queue = host.queue.value;
         if (phase.kind === `running` && (queue?.items.length ?? 0) > 0 && queue?.paused === undefined) {
             void this.followQueued(phase.run);
@@ -708,13 +730,17 @@ export class TurnClient {
         await this.reattach();
     }
 
-    // User-initiated Stop: hard-cancel the turn daemon-side and let its stream draw the rest, the same way everywhere.
+    // User-initiated Stop: hard-cancel the turn daemon-side and let its stream draw the rest, the same way everywhere. The
+    // turn reads as ended from this frame (`ending`); a second press on a turn already ending asks nothing more.
     stop(): void {
-        if (!this.streaming.value) {
+        if (!this.streaming.value || this.ending.value !== undefined) {
             return;
         }
         this.host.peek.value = false;
-        this.endedByReader();
+        this.endedByReader(`stop`);
+        // A card the turn was parked on goes with it, as the daemon will record it: frozen at the press, so nothing still
+        // offers an answer to a turn that is over.
+        this.host.transcript.cancelPendingCards();
         // Nothing has left for the daemon to cancel: aborting the composing read ends the turn (startErrand).
         if (this.phase.value.kind === `composing`) {
             this.abort();
@@ -732,6 +758,24 @@ export class TurnClient {
             return;
         }
         this.stopRun({ messageId: this.message });
+    }
+
+    // A Stop is still unwinding: its answer outstanding, or the turn it ended still streaming. Asked before waiting, so a
+    // press with nothing to wait for opens its turn in its own frame, as it always did.
+    private get unwinding(): boolean {
+        return this.stopping !== undefined || this.ending.value !== undefined;
+    }
+
+    // What anything opened after a Stop waits for: the daemon letting the conversation go (the Stop's own answer), then
+    // this window's stream of the ended turn closing, bounded so a stream that never closes cannot hold the words.
+    private async afterEnding(): Promise<void> {
+        if (this.stopping !== undefined) {
+            await this.stopping;
+        }
+        if (this.ending.value === undefined) {
+            return;
+        }
+        await Promise.race([new Promise<void>((settled) => this.settleWaiters.push(settled)), sleep(ENDING_CLOSE_MS)]);
     }
 
     // Asks the daemon to cancel this turn. The request is retained as a barrier: its response means the run has released
@@ -767,9 +811,11 @@ export class TurnClient {
         this.stopOnAck = phase.kind === `sending`;
     }
 
-    // This side of a turn ending on the reader's say-so: arm the way back. Shared by Stop and by a dismissed question,
-    // which ends the turn daemon-side with no request of its own here; the daemon holds its queue for both.
-    endedByReader(): void {
+    // This side of a turn ending on the reader's say-so: mark it ended and arm the way back. Shared by Stop and by a
+    // dismissed question, which ends the turn daemon-side with no request of its own here; the daemon holds its queue
+    // for both.
+    endedByReader(by: TurnEnding): void {
+        this.move({ kind: `ended`, by });
         // Armed here, not in abort(): only a turn the daemon accepted gets a way back, else there's nothing to pick up.
         // Nothing to disarm either: a turn the user stopped is never held by the daemon.
         this.host.pickUp.value = accepted(this.phase.value) ? { reason: `stopped` } : undefined;

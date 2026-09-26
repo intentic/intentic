@@ -184,7 +184,7 @@ describe(`reply`, () => {
         const asked = parkedOn({ kind: `question`, requestId: `r1`, questions: QUESTIONS });
         await asked.replies.reply(`r1`, { kind: `question`, cancelled: true });
         expect(asked.cardOf(`question`, `r1`)).toMatchObject({ status: `cancelled` });
-        expect(asked.turn.endedByReader).toHaveBeenCalledTimes(1);
+        expect(asked.turn.endedByReader).toHaveBeenCalledWith(`dismiss`);
         expect(asked.turn.stop).not.toHaveBeenCalled();
 
         const denied = parkedOn({ kind: `permission`, requestId: `r1`, toolName: `Bash` });

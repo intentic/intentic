@@ -159,14 +159,24 @@ export const turnInFlight = (agent: AgentStanding): boolean =>
     agent.status === `resuming` ||
     agent.status === `landing`;
 
+// The two standings a person's ending unwinds as, from the press until the turn has let go: Stop, or waving away the
+// question it was parked on. Both differ only in the lane they settle in (see laneOf).
+export type EndingByHand = Extract<AgentStatus, `stopping` | `dismissing`>;
+
+// How a person ended this turn, while it unwinds; undefined for a turn nobody ended. The one reading both the board's
+// card and the chat's live line are drawn from, so the two say the same word about the same press.
+export const endingOf = (agent: AgentStanding): EndingByHand | undefined =>
+    agent.status === `stopping` || agent.status === `dismissing` ? agent.status : undefined;
+
+// A person already ended this turn and it's unwinding. Narrower than `turnInFlight`, which also covers turns nobody
+// ended.
+export const endingByHand = (agent: AgentStanding): boolean => endingOf(agent) !== undefined;
+
 // A turn actually producing something, as a card's readouts mean it: `landing` is in flight for the hands-off guards
 // but spends no model, and its `startedAt` belongs to the turn before it, so an elapsed clock would be someone else's.
-export const turnWorking = (agent: AgentStanding): boolean => turnInFlight(agent) && agent.status !== `landing`;
-
-// A person already ended this turn and it's unwinding, whether by Stop or by waving away the question it was
-// parked on; both differ only in the lane they settle in (see laneOf). Narrower than `turnInFlight`, which also
-// covers turns nobody ended.
-export const endingByHand = (agent: AgentStanding): boolean => agent.status === `stopping` || agent.status === `dismissing`;
+// A turn a person already ended produces nothing more either: its readout is the ending itself (the card's chip, the
+// chat's line), not the step it was on under a clock still counting, which reads as a Stop that did not take.
+export const turnWorking = (agent: AgentStanding): boolean => turnInFlight(agent) && agent.status !== `landing` && !endingByHand(agent);
 
 // The browser's copy of the daemon's `writing` guard (agents-registry.ts); exists for Land, where typing vs.
 // parked matters (everything else treats them alike). `stopping` and `resuming` are excluded because the provider

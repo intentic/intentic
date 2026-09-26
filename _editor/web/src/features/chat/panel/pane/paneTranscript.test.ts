@@ -27,6 +27,7 @@ const paneOf = (rows: readonly ChatMessage[] = ROWS) => {
     const state = {
         messages: ref<readonly ChatMessage[]>(rows),
         streaming: ref(false),
+        ending: ref<string | undefined>(),
         awaitingDecision: ref(false),
         showToolCalls: ref(false),
         loading: ref(false),
@@ -56,6 +57,17 @@ describe(`the live turn`, () => {
         state.awaitingDecision.value = false;
         state.messages.value = ROWS;
         expect(pane.showTurnStatus.value).toBe(false);
+    });
+
+    // A person ending the turn is said on that line, parked or not: a Stop on a card-parked turn otherwise drew nothing
+    // new until the stream closed, seconds later.
+    it(`draws the working line over a parked card once a person has ended the turn`, () => {
+        const { state, pane } = paneOf(ROWS.slice(0, 3));
+        state.streaming.value = true;
+        state.awaitingDecision.value = true;
+
+        state.ending.value = `stopping`;
+        expect(pane.showTurnStatus.value).toBe(true);
     });
 });
 

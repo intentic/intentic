@@ -19,7 +19,7 @@ import { errandOf, errands, errandPrompt } from "../run/errands";
 import { changedNothing, type ChatMessage } from "./transcript";
 import { IconStub } from "@intentic/ui/testing";
 import { shownText } from "../../../testing/shownText";
-import { CLOCK_FROM_MS, formatElapsed } from "../../agents/fleet/agentStatus";
+import { agentStatusMeta, CLOCK_FROM_MS, type EndingByHand, formatElapsed } from "../../agents/fleet/agentStatus";
 
 const clock = { turnStartedAt: undefined as number | undefined };
 const roster = {
@@ -34,6 +34,8 @@ const stopWatching = jest.fn(async () => undefined);
 // the held queue are what a notice's send press reads to decide whether it still has anything to send.
 const pane = {
     streaming: true,
+    // A person ended the live turn (ConversationView.ending), as the board's card for it reads.
+    ending: undefined as EndingByHand | undefined,
     editing: undefined as ChatMessage | undefined,
     messages: [] as ChatMessage[],
     queued: [] as { readonly id: string; readonly text: string }[],
@@ -142,6 +144,7 @@ jest.mock("@intentic/ui/markdown", () => ({
 jest.mock("../drafts/attachmentPreviews", () => ({ attachmentPreview: () => undefined }));
 // formatElapsed stays real, since the loader's readout is exactly that format.
 jest.mock("../../agents/fleet/agentStatus", () => ({
+    agentStatusMeta,
     CLOCK_FROM_MS,
     effectiveAutoLand: () => false,
     effectiveOutageResume: () => false,
@@ -182,6 +185,7 @@ jest.mock("../panel/useChat-view", () => {
         usePaneView: () => ({
             conversation,
             streaming: computed(() => pane.streaming),
+            ending: computed(() => pane.ending),
             awaitingDecision: ref(false),
             editing: computed(() => pane.editing),
             messages: computed(() => pane.messages),
@@ -258,6 +262,7 @@ beforeEach(() => {
     stopWatching.mockClear();
     markdown.parts = [];
     pane.streaming = true;
+    pane.ending = undefined;
     pane.editing = undefined;
     pane.messages = [];
     pane.queued = [];
@@ -309,6 +314,19 @@ describe(`ChatMessageView loader`, () => {
 
         const reopened = mount();
         expect(reopened.textContent).toContain(`(47s)`);
+    });
+
+    // The press is the ending: the line says so in the board's own word the moment the card does, and stops counting,
+    // however long the step the agent was on takes to let go behind it.
+    it(`says a turn a person stopped is stopping, with no clock and nothing claimed about its step`, () => {
+        roster.activity = { tool: `Edit`, target: `web/src/pricing/CheckoutPanel.tsx` };
+        pane.ending = `stopping`;
+
+        const text = mount().textContent ?? ``;
+
+        expect(text).toContain(`Stopping…`);
+        expect(text).not.toContain(`(35s)`);
+        expect(text).not.toContain(`CheckoutPanel`);
     });
 
     it(`reads long turns in minutes and hours rather than a growing second count`, () => {
@@ -1005,6 +1023,7 @@ describe(`ChatMessageView pinned band`, () => {
     // The row's flow position starts below it (8px down the scroller), which is a prompt that has not pinned yet.
     const box = { rowTop: 8, scrollerTop: 0 };
 
+    // SAFETY: every field a DOMRect reads is set here; the row only ever asks for `top` and `bottom`.
     const rectAt = (top: number): DOMRect =>
         ({ top, bottom: top, left: 0, right: 0, width: 0, height: 0, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
 

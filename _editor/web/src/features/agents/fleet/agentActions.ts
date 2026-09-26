@@ -282,21 +282,23 @@ const shownRun = (id: string, at: AgentReach): string | undefined =>
     (at === undefined ? useAgents().agentById(id) : otherBoxes.value.find((box) => box.sandbox.id === at)?.agents.find((agent) => agent.id === id))
         ?.run;
 
-// True cancel for an in-flight turn, the card reading `stopping` from the press: an open streaming tab runs its own
-// stop(), else the daemon is told; another box's card never takes the tab branch, since an id repeats across boxes. The
-// press names the run its card shows, so it cannot cancel a turn that started after it; `live` is for a caller setting
-// the conversation aside whichever turn it is on.
-export const stopAgent = (id: string, at: AgentReach = undefined, options: { readonly live?: true } = {}): Promise<void> =>
-    underClaim(id, at, `stop`, async () => {
-        const { conversations } = useChat();
-        const conversation = at === undefined ? conversations.value.find((candidate) => candidate.conversationId === id) : undefined;
-        if (conversation !== undefined && conversation.turn.streaming.value && options.live === undefined) {
-            conversation.turn.stop();
-            return;
-        }
+// True cancel for an in-flight turn, the card reading `stopping` from the press. A conversation streaming in a tab here
+// is stopped by that tab (TurnClient.stop), which is what every Stop in a chat does too: its ending reaches the card
+// through the strip (TabFacts.ending), so the board and the chat are drawn from one press whichever was pressed. The tab
+// is matched on (id, box), since an id repeats across boxes. Otherwise the daemon is told, under a claim: the press names
+// the run its card shows, so it cannot cancel a turn that started after it; `live` is for a caller setting the
+// conversation aside whichever turn it is on.
+export const stopAgent = (id: string, at: AgentReach = undefined, options: { readonly live?: true } = {}): Promise<void> => {
+    const tab = useChat().conversations.value.find((candidate) => candidate.conversationId === id && candidate.box.value === at);
+    if (tab !== undefined && tab.turn.streaming.value && options.live === undefined) {
+        tab.turn.stop();
+        return Promise.resolve();
+    }
+    return underClaim(id, at, `stop`, async () => {
         const run = options.live === undefined ? shownRun(id, at) : undefined;
         await sandboxRpc.agent.stop(run === undefined ? { conversationId: id, live: true } : { conversationId: id, run }, { context: { at } });
     });
+};
 
 // After a land or discard, invalidate the agent's review plus the workspace-wide changes and snapshot history so every
 // surface converges. The two workspace reads go by prefix, every box's, since a land in another box changes that box's

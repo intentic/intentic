@@ -54,9 +54,19 @@ export interface SendHost {
     readonly openModels: () => void;
 }
 
+// The turn as the composer treats it: a turn a person already ended is over here from the press, whatever is still
+// unwinding behind it, so what is typed next is the next turn's (TurnClient.say waits the unwind out), never words for
+// the ended one or an answer to a card it took with it.
+const composerTurn = ({ streaming, ending, awaitingDecision, pendingPlanMessage }: ConversationView) => ({
+    live: computed(() => streaming.value && ending.value === undefined),
+    parked: computed(() => awaitingDecision.value && ending.value === undefined),
+    planMessage: computed(() => (ending.value === undefined ? pendingPlanMessage.value : undefined)),
+});
+
 export const useComposerSend = (host: SendHost) => {
     const { view, voiceAgent, history, editorContext } = host;
-    const { draft, attachments, editing, pendingPlanMessage, streaming, awaitingDecision, pickUp, queued, connected, staged } = view;
+    const { draft, attachments, editing, awaitingDecision, pickUp, queued, connected, staged } = view;
+    const { live, parked, planMessage } = composerTurn(view);
     const t = useT();
     // Running only while a pick-up counts down to a named instant (an allowance reset); nothing else here is timed.
     const paneNow = useNow(() => pickUp.value?.readyAt !== undefined);
@@ -68,9 +78,9 @@ export const useComposerSend = (host: SendHost) => {
         uploadFailed: attachments.value.some((entry) => entry.status === `failed`),
         voiceAgent: voiceAgent.value,
         editing: editing.value !== undefined,
-        pendingPlan: pendingPlanMessage.value !== undefined,
-        streaming: streaming.value,
-        awaitingDecision: awaitingDecision.value,
+        pendingPlan: planMessage.value !== undefined,
+        streaming: live.value,
+        awaitingDecision: parked.value,
         steerable: view.steerable.value,
         // Read against the clock here: the pure ladder (PickUpSituation) must not ask what time it is.
         pickUp: pickUp.value === undefined ? undefined : { ready: pickUpReady(pickUp.value, paneNow.value) },
@@ -135,9 +145,9 @@ export const useComposerSend = (host: SendHost) => {
     // revision feedback instead. The chips go with the message, which owns their thumbnails from here.
     const sendDraft = (): void => {
         const text = draft.value.trim();
-        const pendingPlan = pendingPlanMessage.value?.plan;
-        if (pendingPlan !== undefined) {
-            void view.conversation.value.requests.reply(pendingPlan.requestId, {
+        const plan = planMessage.value?.plan;
+        if (plan !== undefined) {
+            void view.conversation.value.requests.reply(plan.requestId, {
                 kind: `plan`,
                 approve: false,
                 feedback: planFeedback(text, host.staging.snapshot()),
@@ -176,7 +186,7 @@ export const useComposerSend = (host: SendHost) => {
         continueStrip: computed(() => continueVisible(situation.value)),
         // Typed text always has somewhere to go mid-turn, but an empty box has none, so Stop takes the slot until the
         // first keystroke; gated on `staged`, so a refused send keeps its greyed button and tooltip.
-        sendShown: computed(() => !streaming.value || staged.value),
+        sendShown: computed(() => !live.value || staged.value),
         composerPlaceholder: computed(() => {
             if (!host.canDrive.value) {
                 return viewerPlaceholder();

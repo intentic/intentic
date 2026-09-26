@@ -1,6 +1,7 @@
 import type { IconName } from "@intentic/ui";
 import { formatDate } from "@intentic/ui/format";
 import { type AgentCapabilities, type ModelBadge, modesFor, type PermissionMode } from "@intentic/sandbox-contract";
+import { agentStatusMeta } from "../../agents/fleet/agentStatus";
 import type { ConversationStatus } from "../session/conversation";
 import { t } from "@intentic/ui/i18n";
 
@@ -31,7 +32,19 @@ export const modeOptions = (capabilities: AgentCapabilities): { value: Permissio
     });
 
 // The status icon classes for a conversation tab (live spinner / needs-input / error / idle dot).
-export const statusIcon = (status: ConversationStatus): { name: IconName; spin?: boolean; class: string } => {
+// A tab's status glyph, bound straight onto an Icon.
+export interface StatusGlyph {
+    readonly name: IconName;
+    readonly spin?: boolean;
+    readonly class: string;
+}
+
+export const statusIcon = (status: ConversationStatus): StatusGlyph => {
+    // An ending wears the board card's own glyph for it, so the tab and the card cannot draw one Stop two ways.
+    if (status === `stopping` || status === `dismissing`) {
+        const meta = agentStatusMeta(status);
+        return { name: meta.icon, class: `text-2xs ${meta.class}` };
+    }
     if (status === `streaming`) {
         return { name: `spinner`, spin: true, class: `text-2xs text-link` };
     }
@@ -46,6 +59,9 @@ export const statusIcon = (status: ConversationStatus): { name: IconName; spin?:
 
 // What statusIcon's glyph means, for the screen readers that can't see it.
 export const statusLabel = (status: ConversationStatus): string => {
+    if (status === `stopping` || status === `dismissing`) {
+        return agentStatusMeta(status).label;
+    }
     if (status === `streaming`) {
         return `Working`;
     }

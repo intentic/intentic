@@ -10,7 +10,7 @@ import { useChat } from "../../chat/run/useChat";
 import { chatStrip } from "../../chat/panel/useChat-strip";
 import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { onScreen } from "../../../shell/window/onScreen";
-import { asStarted, overlaid } from "./useAgents-provisional";
+import { asStarted, endedHere, overlaid } from "./useAgents-provisional";
 import { parentOf } from "../board/ownership";
 import { archived, heldWakes, markSeen, registry, sameEntries, snapshotFingerprint } from "./useAgents-registry";
 
@@ -188,13 +188,13 @@ export const fleet = computed<FleetAgent[]>(() => {
     const carded = new Set(registry.value.map((agent) => agent.id));
     const unsent = unsentTabs.value;
     // Every open tab by conversation, for what only this browser knows about a registered agent: that a turn just went
-    // (`sendingNow`).
+    // (`sendingNow`), or that a person just ended one (`endedHere`).
     const live: ReadonlyMap<string, TabFacts> = new Map(strip.tabs.map((tab) => [tab.id, tab]));
     // Draft = unregistered tab; `carded` stops an id the registry already rendered from rendering twice.
     // Excludes an empty placeholder tab (`unasked`); it joins the board itself once anything happens in it.
     const drafts = strip.tabs
         .filter((tab) => !tab.registered && !carded.has(tab.id) && !unasked(tab))
-        .map((tab): FleetAgent => draftCard(tab, unsent.get(tab.id)));
+        .map((tab): FleetAgent => endedHere(draftCard(tab, unsent.get(tab.id)), tab));
     // An archived agent stays off the board whatever its composer held; the words wait with it (withKeptWords).
     const archivedIds = new Set(archived.value.map((agent) => agent.id));
     // Chats closed with nothing but their unsent message: no roster row, archive entry, or open tab draws them
@@ -215,9 +215,10 @@ export const fleet = computed<FleetAgent[]>(() => {
             // `running`, not the client-only `starting`: this agent IS registered, and `starting` would seed its next
             // tab as unregistered. The turn's own start rides with it, or the card's elapsed clock would count from
             // the previous turn.
-            const startedAt = sendingNow(agent, live.get(agent.id));
+            const open = live.get(agent.id);
+            const startedAt = sendingNow(agent, open);
             const shown = overlaid(startedAt === undefined ? card : asStarted(card, startedAt), agent, undefined);
-            return shown === undefined ? [] : [shown];
+            return shown === undefined ? [] : [endedHere(shown, open)];
         }),
         ...drafts,
         ...setAside,

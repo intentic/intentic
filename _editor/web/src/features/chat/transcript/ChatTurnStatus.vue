@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { Icon } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
 import { formatWhen } from "@intentic/ui/format";
-import { CLOCK_FROM_MS, currentAction, formatElapsed } from "../../agents/fleet/agentStatus";
+import { agentStatusMeta, CLOCK_FROM_MS, currentAction, formatElapsed } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { usePaneView } from "../panel/useChat-view";
 import ThinkingRosette from "./ThinkingRosette.vue";
@@ -14,11 +15,15 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { conversation, streaming } = usePaneView();
+const { conversation, streaming, ending } = usePaneView();
 const { agentById } = useAgents();
 
-// Ticking clock behind elapsed/retry countdown, armed only while a turn is live.
-const now = useNow(() => streaming.value);
+// A turn a person ended reads as over from the press: the board card's own glyph and word for the ending, still, with no
+// clock and nothing claimed about what it is doing, however long the last step takes to let go behind it.
+const endingMeta = computed(() => (ending.value === undefined ? undefined : agentStatusMeta(ending.value)));
+
+// Ticking clock behind elapsed/retry countdown, armed only while a turn is live and nobody has ended it.
+const now = useNow(() => streaming.value && ending.value === undefined);
 
 // Start instant comes from the conversation, so a view mounted mid-turn starts its counter midway too. The readout is
 // the shared elapsed format, so a turn that runs long reads "9m 12s" rather than "552s".
@@ -63,14 +68,20 @@ const retryReason = computed(() =>
 <template>
     <!-- Status line, not a message: sits at the meta tier, sharing the assistant bubble's left padding. -->
     <div class="flex max-w-full items-center gap-2 self-start rounded-lg bg-overlay px-3 py-2 text-2xs text-muted">
-        <ThinkingRosette class="shrink-0 text-2xs text-link" />
-        <span v-if="providerRetry"
-            >{{ t(`chat.chatTurnStatus.modelProvider`) }} {{ retryReason }}: {{ retryWait }}
-            <span class="text-subtle">{{ t(`chat.chatTurnStatus.attemptNothingLost`, { attempt: providerRetry.attempt }) }}</span></span
-        >
+        <template v-if="endingMeta">
+            <Icon :name="endingMeta.icon" class="shrink-0 text-2xs" :class="endingMeta.class" />
+            <span class="min-w-0 truncate">{{ endingMeta.label }}</span>
+        </template>
         <template v-else>
-            <span class="min-w-0 truncate">{{ loaderWord }}…</span>
-            <span v-if="loaderElapsed" class="shrink-0 text-subtle">({{ loaderElapsed }})</span>
+            <ThinkingRosette class="shrink-0 text-2xs text-link" />
+            <span v-if="providerRetry"
+                >{{ t(`chat.chatTurnStatus.modelProvider`) }} {{ retryReason }}: {{ retryWait }}
+                <span class="text-subtle">{{ t(`chat.chatTurnStatus.attemptNothingLost`, { attempt: providerRetry.attempt }) }}</span></span
+            >
+            <template v-else>
+                <span class="min-w-0 truncate">{{ loaderWord }}…</span>
+                <span v-if="loaderElapsed" class="shrink-0 text-subtle">({{ loaderElapsed }})</span>
+            </template>
         </template>
     </div>
 </template>

@@ -974,6 +974,58 @@ describe("draft cards", () => {
         expect(useAgents().lanes.value.attention.map((card) => ({ id: card.id, status: card.status }))).toEqual([{ id: `a1`, status: `awaiting` }]);
     });
 
+    // A person ending the turn in the chat moves the card in the press's own frame: the daemon's `stopping` is a round
+    // trip away and the turn's stream seconds behind that. This is also the card the chat draws its live line from, so
+    // the two cannot disagree about one Stop, and the draw lasts exactly as long as the chat's stream of that turn.
+    it("files a turn stopped in the chat under Attention from the press, until the chat's stream of it closes", () => {
+        const running = registered(`a1`);
+        setAgents([{ ...running, status: `running`, startedAt: 4_000, updatedAt: 4_000 }], 0);
+        const conversation = new Conversation(`a1`);
+        conversation.registered.value = true;
+        runningTurn(conversation.turn, 4_000);
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+        expect(activeIds()).toEqual([`a1`]);
+
+        conversation.turn.endedByReader(`stop`);
+
+        expect(activeIds()).toEqual([]);
+        expect(useAgents().lanes.value.attention.map((card) => ({ id: card.id, status: card.status }))).toEqual([{ id: `a1`, status: `stopping` }]);
+
+        // The daemon settles the turn first, its stream still closing here: the card keeps the one word until it has.
+        setAgents([{ ...running, status: `stopped`, updatedAt: 5_000 }], 1);
+        expect(useAgents().agentById(`a1`)?.status).toBe(`stopping`);
+        conversation.turn.phase.value = IDLE;
+        expect(useAgents().agentById(`a1`)?.status).toBe(`stopped`);
+    });
+
+    // Waving a parked card away ends the turn too, but owes nothing after: Finished from the press, the question gone
+    // with the turn that asked it, as the daemon will say it.
+    it("files a turn whose question was waved away in the chat under Finished, its question gone", () => {
+        const parked = registered(`a1`);
+        setAgents([{ ...parked, status: `awaiting`, startedAt: 4_000, attention: { ...parked.attention, question: true } }], 0);
+        const conversation = new Conversation(`a1`);
+        conversation.registered.value = true;
+        runningTurn(conversation.turn, 4_000);
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+
+        conversation.turn.endedByReader(`dismiss`);
+
+        expect(useAgents().lanes.value.finished.map((card) => ({ id: card.id, status: card.status, question: card.attention.question }))).toEqual([
+            { id: `a1`, status: `dismissing`, question: false },
+        ]);
+    });
+
+    // A first turn stopped before the daemon has filed it has no roster entry to draw over, only the tab's own card.
+    it("draws a first turn stopped before the daemon filed it as stopping too", () => {
+        const conversation = new Conversation(`sent`);
+        runningTurn(conversation.turn, 4_000);
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+
+        conversation.turn.endedByReader(`stop`);
+
+        expect(useAgents().lanes.value.attention.map((card) => ({ id: card.id, status: card.status }))).toEqual([{ id: `sent`, status: `stopping` }]);
+    });
+
     // Opening a `starting` card latches it as registered, which used to make the drafts half skip it while the
     // registry had no entry yet, vanishing the agent from every lane.
     it("keeps a starting card on the board when it is opened, and leaves its placement alone", () => {

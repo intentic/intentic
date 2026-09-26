@@ -20,12 +20,13 @@ import { usePaneView } from "../useChat-view";
 
 const t = useT();
 
-const { conversation, messages, streaming, awaitingDecision } = usePaneView();
+const { conversation, messages, streaming, ending, awaitingDecision } = usePaneView();
 const { showToolCalls } = useToolCalls();
 const { turns, turnShots, repeatedChecklists, isStreaming, showTurnStatus, stripOf, checklistViews, dayMarks, forkCuts, cutsAbove, skeleton } =
     usePaneTranscript({
         messages,
         streaming,
+        ending,
         awaitingDecision,
         showToolCalls,
         loading: computed(() => conversation.value.transcript.loading.value),

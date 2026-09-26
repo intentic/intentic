@@ -59,7 +59,7 @@ const showsTodos = computed(
     () => (props.message.todos?.length ?? 0) > 0 && !(props.checklistView !== undefined && changedNothing(props.checklistView)),
 );
 
-const { conversation, awaitingDecision, editing, streaming: conversationStreaming } = usePaneView();
+const { conversation, awaitingDecision, editing, streaming: conversationStreaming, ending } = usePaneView();
 
 // The card this row holds, if any: every button on it answers through the chat's one reply (CardReplies).
 const requestId = computed(() => requestIdOf(props.message));
@@ -118,8 +118,14 @@ const onMarkdownClick = (event: MouseEvent): void => {
 };
 
 // Status line shows for the whole live turn, not just before the first token, since the model can go quiet
-// mid-tool-call. Reads the conversation's streaming flag, not this message's.
-const showTyping = computed(() => props.streaming && !awaitingDecision.value);
+// mid-tool-call. Reads the conversation's streaming flag, not this message's. A turn a person ended shows it too, parked
+// or not: that line is where the ending is said.
+const showTyping = computed(() => props.streaming && (!awaitingDecision.value || ending.value !== undefined));
+
+// Still being written into: live, and nobody has ended the turn. A Stop takes every spinner in the bubble down at the
+// press (a tool still letting go reads unfinished, as it will once settled); whatever the stream's tail still brings is
+// drawn all the same.
+const live = computed(() => props.streaming && ending.value === undefined);
 
 // Wait shown by this notice while running (ChatMessage.noticeWait); undefined once it ends. Each kind is asked of
 // whoever owns that wait, since none of them is a field on the row.
@@ -559,9 +565,9 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         <template v-else>
             <!-- Shared with the Subagents area: a delegated agent's reasoning and run read as this turn's own do. -->
             <!-- Live marks the bubble currently receiving streamed text. -->
-            <ChatTurnAsides :thinking="message.thinking" :tools="message.tools" :live="streaming" />
+            <ChatTurnAsides :thinking="message.thinking" :tools="message.tools" :live="live" />
 
-            <ChatTodoList v-if="showsTodos" :todos="message.todos!" :live="streaming" :view="checklistView" />
+            <ChatTodoList v-if="showsTodos" :todos="message.todos!" :live="live" :view="checklistView" />
 
             <!-- Markdown parts preserve settled DOM while the live tail updates. -->
             <div v-if="message.text" class="md-prose chat-markdown chat-surface-assistant w-full rounded-lg px-3.5 py-2.5">

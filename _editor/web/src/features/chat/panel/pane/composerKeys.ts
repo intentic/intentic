@@ -100,7 +100,7 @@ export const useComposerKeys = (host: KeysHost) => {
 
     // Escape, after the lists and recall had their claim: voice catches a counting-down send and quits hands-free; an
     // armed edit is abandoned (free: nothing changed); only then does it stop a turn that is generating, since a
-    // card-parked turn spends nothing and Stop is the way out of it instead.
+    // card-parked turn spends nothing and Stop is the way out of it instead, and one already ending has nothing to stop.
     const escapeKeydown = (): boolean => {
         if (host.voice.live.value) {
             host.voice.quit();
@@ -110,7 +110,7 @@ export const useComposerKeys = (host: KeysHost) => {
             view.conversation.value.transcript.cancelEdit();
             return true;
         }
-        if (!streaming.value || awaitingDecision.value || !host.reachable.value) {
+        if (!streaming.value || view.ending.value !== undefined || awaitingDecision.value || !host.reachable.value) {
             return false;
         }
         view.conversation.value.turn.stop();
@@ -165,8 +165,9 @@ export const useComposerKeys = (host: KeysHost) => {
             if (spoken !== undefined) {
                 return spoken;
             }
-            // While generating, the way out is the shortcut worth the slot: the only place Escape's meaning is learned.
-            if (streaming.value && !awaitingDecision.value) {
+            // While generating, the way out is the shortcut worth the slot: the only place Escape's meaning is learned. A
+            // turn already ending has nothing left to stop.
+            if (streaming.value && view.ending.value === undefined && !awaitingDecision.value) {
                 return t(`chat.chatPane.escToStop`);
             }
             // A draft that runs as a command sends nothing to the model, so say so before Enter, not after.

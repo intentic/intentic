@@ -160,6 +160,20 @@ describe("how a claim retires", () => {
         expect(shown(`a1`)?.status).toBe(`landed`);
     });
 
+    // A running turn moves `updatedAt` with every step it takes; none of those is the daemon's word on a Stop, so none
+    // may draw the card back into Active between the press and the `stopping` that is. A different turn is.
+    it("keeps a Stop drawn through the running turn's own steps, until the status moves or another turn starts", () => {
+        roster(card(`a1`, { status: `running`, startedAt: 500 }));
+        claim(`a1`, undefined, `stop`).settle(true);
+
+        roster(card(`a1`, { status: `running`, startedAt: 500, updatedAt: 2_000 }));
+        expect(shown(`a1`)?.status).toBe(`stopping`);
+        expect(laneOf(`a1`)).toBe(`attention`);
+
+        roster(card(`a1`, { status: `running`, startedAt: 3_000, updatedAt: 3_000 }));
+        expect(shown(`a1`)?.status).toBe(`running`);
+    });
+
     // A frame lost on the way (a dropped stream, a reconnect) must not strand the card on a guess.
     it("gives a taken press the roster never answers for back its real standing once the grace is out", async () => {
         jest.useFakeTimers();

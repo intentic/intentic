@@ -19,6 +19,8 @@ import {
 export interface PaneTranscriptHost {
     readonly messages: Readonly<Ref<readonly ChatMessage[]>>;
     readonly streaming: Readonly<Ref<boolean>>;
+    // A person ended the live turn (ConversationView.ending): nothing is being written any more, whatever still unwinds.
+    readonly ending: Readonly<Ref<string | undefined>>;
     readonly awaitingDecision: Readonly<Ref<boolean>>;
     // Runs drawn unfolded, which already show every picture their cards hold.
     readonly showToolCalls: Readonly<Ref<boolean>>;
@@ -29,7 +31,7 @@ export interface PaneTranscriptHost {
 }
 
 export const usePaneTranscript = (pane: PaneTranscriptHost) => {
-    const { messages, streaming, awaitingDecision } = pane;
+    const { messages, streaming, ending, awaitingDecision } = pane;
     // The bubble this turn writes into, if any (liveBubbleOf); recomputed per frame, scanning only the tail.
     const liveBubble = computed(() => liveBubbleOf(messages.value));
     const turns = computed(() => turnsOf(messages.value));
@@ -37,7 +39,7 @@ export const usePaneTranscript = (pane: PaneTranscriptHost) => {
     const attached = computed(() => attachedPaths(messages.value));
     const turnShots = computed<ReadonlyMap<number, readonly ChatShot[]>>((previous) => shotsByTurn(turns.value, attached.value, previous));
     // The turn still being written, if any; a card it parked on is the reader's move, so that turn's pictures show.
-    const writingTurn = computed(() => (streaming.value && !awaitingDecision.value ? turns.value.at(-1)?.id : undefined));
+    const writingTurn = computed(() => (streaming.value && ending.value === undefined && !awaitingDecision.value ? turns.value.at(-1)?.id : undefined));
     const repeatedChecklists = computed(() => repeatedChecklistIds(messages.value));
 
     return {
@@ -46,8 +48,11 @@ export const usePaneTranscript = (pane: PaneTranscriptHost) => {
         repeatedChecklists,
         // True for the assistant bubble currently being streamed into.
         isStreaming: (message: ChatMessage): boolean => streaming.value && liveBubble.value?.id === message.id,
-        // A sent turn before its first frame, drawn at the column's foot; a parked card is the prompt, not idle work.
-        showTurnStatus: computed(() => streaming.value && !awaitingDecision.value && liveBubble.value === undefined),
+        // A sent turn before its first frame, drawn at the column's foot; a parked card is the prompt, not idle work, unless
+        // a person ended the turn, which the line then says.
+        showTurnStatus: computed(
+            () => streaming.value && (!awaitingDecision.value || ending.value !== undefined) && liveBubble.value === undefined,
+        ),
         // A turn's strip, once it has stopped writing and only while runs are folded: unfolded cards draw every picture.
         stripOf: (turn: ChatTurn): readonly ChatShot[] | undefined => {
             const shots = turnShots.value.get(turn.id);
