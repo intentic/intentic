@@ -2,10 +2,10 @@
 # Bun, backed by Postgres via Prisma. Bun executes the TypeScript source directly — the api is never compiled.
 #
 # Deliberately a pure COPY wrapper: the tree is built and pruned OUTSIDE Docker by the `docker:release` turbo
-# task (dependsOn build → workspace deps' dist exist, warm cache; then `pnpm deploy --prod ./deploy` flattens
-# the api + its deps — see _tools/scripts/platform/docker-release.sh). The pruned tree IS the build context, so there
-# is no .dockerignore and nothing else can leak in:
-#   pnpm --filter=@intentic/api deploy --prod ./deploy && docker build -f Dockerfile -t …/api ./deploy
+# task (dependsOn build → workspace deps' dist exist, warm cache; then `pnpm deploy --prod` flattens the api + its
+# deps into a temporary directory outside the repository — see _tools/scripts/platform/docker-release.sh). The pruned
+# tree IS the build context, so there is no .dockerignore and nothing else can leak in:
+#   pnpm --filter=@intentic/api deploy --prod "$tree" && docker build -f Dockerfile -t …/api "$tree"
 #
 # Runtime config (see src/config.ts) is injected by the deployment, never baked: DATABASE_URL,
 # BETTER_AUTH_SECRET, SECRETS_KEY, WEB_ORIGIN, API_URL, GOOGLE_CLIENT_*, INTENTIC_CLOUDFLARE_*, STRIPE_*, …

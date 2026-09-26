@@ -345,8 +345,11 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         const woken = await wake();
         expect(woken.status).toBe(200);
         expect(woken.body).toEqual({ ok: true });
-        // One call, and it is the start: the wake flips power and nothing else.
+        /* The read, then the start: the wake reads the machine's config to heal a missing or stale tunnel grant
+         * (wakeHosted), and this machine's config is current (the tier move above just wrote it), so no update runs
+         * and the wake flips power and nothing else. */
         expect(fly.calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+            expect.stringMatching(/^GET \/v1\/apps\/e2e-[0-9a-f]+\/machines\/m-[0-9a-f]+$/u),
             expect.stringMatching(/^POST \/v1\/apps\/e2e-[0-9a-f]+\/machines\/m-[0-9a-f]+\/start$/u),
         ]);
         expect((await state(alice)).body.hosted?.machines).toEqual([

@@ -14,6 +14,7 @@ flowchart LR
 ```
 
 - `suites` runs two `bun test` passes because the two kinds need different budgets: unit files get a short hang-detector timeout, `*.integration.test.*` and `*.e2e.test.*` files get room for real work. Positional arguments filter by path; `SUITES_JUNIT_DIR` adds JUnit reports, from which the verify scripts read each failing test.
+- No run discovers a test under build output: `node_modules`, `dist`, `deploy`, `.cache`, `.turbo`, `out-tsc`, the package bunfig's own `pathIgnorePatterns`, and every directory git ignores under the package. `suites` passes the whole list on every run, because a `--path-ignore-patterns` on bun's command line replaces bunfig's list instead of adding to it.
 - Every bun process a `suites` run starts is held under a memory ceiling, 6 GiB unless `TEST_MEMORY_CEILING_MB` says otherwise (`_tools/scripts/lib/memory-ceiling.mjs`). A process past it is a suite keeping memory it never releases: the run is killed there and says so, instead of swapping a shared machine to a halt. Stopping `suites` stops its bun workers too, though they sit in process groups of their own.
 - Each package's `bunfig.toml` preloads `src/bun-preload.ts`, so a file run with plain `bun test` gets the same budget.
 - `unstubbed` stands in for a wide interface: any member the test did not provide throws when called, naming its full path.

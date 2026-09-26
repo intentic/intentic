@@ -48,6 +48,28 @@ runs:
         # remaining content is a live mount is left alone (that is an agent worktree, not a runner).
         node _tools/checks/layout.mjs --prune
 
+    - name: Drop stale pruned deploy trees
+      shell: bash
+      run: |
+        # A `deploy/` DIRECTORY IN THE CHECKOUT IS ALWAYS LEFTOVER. docker-release.sh --prune used to run
+        # `pnpm deploy --prod ./deploy` inside the api, and the copy (gitignored by `**/deploy`) outlived the job
+        # that made it. The next job on that runner ran the api's tests, discovered the copy's test files, and
+        # verify-platform failed on dozens of `Cannot find module` in code nobody had changed (run 36239755823),
+        # which skipped images-platform and held the platform deploy. The script now prunes into a temporary
+        # directory outside the checkout, and `suites` never discovers under `deploy/`, but neither removes the
+        # trees already sitting on the fleet. prepare-workspace's `git clean -ffdx` would (its allowlist does not
+        # keep `deploy`), yet most jobs never run it, so the repair lives here, in the step every job shares.
+        #
+        # Only UNTRACKED, IGNORED directories named exactly `deploy` go, at any depth (`_deploy` is another
+        # name). `--directory` names a wholly ignored directory once and does not descend into it, so nothing
+        # inside node_modules is ever listed, let alone removed.
+        git ls-files -z --others --ignored --exclude-standard --directory |
+          while IFS= read -r -d '' dir; do
+            case "/$dir" in
+              */deploy/) echo "removing stale $dir"; rm -rf -- "$dir" ;;
+            esac
+          done
+
     - name: Install
       shell: bash
       run: |

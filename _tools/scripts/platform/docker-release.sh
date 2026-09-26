@@ -9,8 +9,9 @@
 #
 #   docker-release.sh <image> [--prune] [--build-context name=dir ...]
 #
-# --prune runs `pnpm deploy --prod ./deploy` first (the api: a flat, symlink-free prod tree the Dockerfile
-# COPYs). The web skips it — nginx serves the vite dist, no node_modules at runtime.
+# --prune runs `pnpm deploy --prod` first, into a temporary directory OUTSIDE the repository (the api: a flat,
+# symlink-free prod tree the Dockerfile COPYs), removed when the script exits. The web skips it — nginx serves the
+# vite dist, no node_modules at runtime.
 #
 # Content-addressed skip: TURBO_HASH (set by turbo per task) covers the app's files, its workspace dependency
 # hashes, and the pruned lockfile — identical content always maps to the same `turbo-<hash>` tag. When that
@@ -46,7 +47,9 @@ IMAGE="${REGISTRIES%% *}/$APP"
 
 # `latest` tracks main; CI adds the commit tag. TAGS overrides both for hand runs (space-separated).
 # GITHUB_SHA is the full 40 chars, cut to 8 so `sha-` tags stay short and stable.
-SHORT_SHA="${GITHUB_SHA:0:8}"
+# `${GITHUB_SHA:-}` first: under `set -u` a hand run, which has no GITHUB_SHA, would stop here.
+SHORT_SHA="${GITHUB_SHA:-}"
+SHORT_SHA="${SHORT_SHA:0:8}"
 TAGS="${TAGS:-latest${SHORT_SHA:+ sha-$SHORT_SHA}}"
 
 if [ -n "${TURBO_HASH:-}" ]; then
@@ -64,14 +67,22 @@ if [ -n "${TURBO_HASH:-}" ]; then
     fi
 fi
 
-# The context is the prepared tree: the pruned ./deploy when --prune (the whole tree enters the image, so no
+# The context is the prepared tree: the pruned copy when --prune (the whole tree enters the image, so no
 # .dockerignore exists to drift), the app dir otherwise (its .dockerignore keeps only the served artifacts).
+#
+# THE PRUNED COPY NEVER LIVES IN THE CHECKOUT. It used to be ./deploy, gitignored and left behind, and CI runners
+# keep their workspace between jobs: the api's next `suites` run discovered the copy's test files, whose imports
+# a --prod tree cannot resolve, and verify-platform failed on dozens of missing modules in code nobody had changed.
+# A temporary directory under the runner's temp root is out of reach of every test runner, and the trap removes
+# it however the script ends.
 CONTEXT="."
 if [ -n "$PRUNE" ]; then
-    rm -rf ./deploy
+    PRUNE_ROOT="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/docker-release-$APP.XXXXXX")"
+    trap 'rm -rf "$PRUNE_ROOT"' EXIT
     name="$(node -p "require('./package.json').name")"
-    pnpm --filter="$name" deploy --prod ./deploy
-    CONTEXT="./deploy"
+    # A path that does not exist yet, so `pnpm deploy` never meets a directory it has to judge empty.
+    CONTEXT="$PRUNE_ROOT/tree"
+    pnpm --filter="$name" deploy --prod "$CONTEXT"
 fi
 
 tag_args=()
@@ -94,7 +105,8 @@ if grep -q '^ARG BUILD_ID' Dockerfile; then
     build_args+=(--build-arg "BUILD_ID=${BUILD_ID:-unreleased}")
 fi
 # --provenance=false keeps a plain manifest (not an attestation-bearing OCI index) so the hash-tag alias
-# above stays a straight retag. -f is explicit because a pruned context carries its own copy of the Dockerfile.
+# above stays a straight retag. -f is explicit because the context may be the pruned copy elsewhere on disk, and
+# the Dockerfile read is the app's own, resolved from this directory.
 docker build --provenance=false -f Dockerfile "${build_args[@]}" "${context_args[@]}" "${tag_args[@]}" "$CONTEXT"
 
 for registry in $REGISTRIES; do

@@ -109,7 +109,7 @@
         "docker:release": {
             "dependsOn": ["build"],
             "cache": false,
-            "passThroughEnv": ["REGISTRIES", "TAGS", "GITHUB_SHA", "DOCKER_HOST", "DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH"]
+            "passThroughEnv": ["REGISTRIES", "TAGS", "GITHUB_SHA", "RUNNER_TEMP", "DOCKER_HOST", "DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH"]
         },
         "watch": {
             "cache": false,

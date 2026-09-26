@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
-import { rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { errorMessage } from "@intentic/base/errors";
@@ -52,11 +53,17 @@ export const buildImages = async (): Promise<void> => {
         `building the platform's api and web bundles`,
     );
 
-    // Api's context is a pruned, flat production install; `-f Dockerfile` since that tree carries its own copy.
+    // Api's context is a pruned, flat production install, kept outside the checkout as docker-release.sh keeps it:
+    // a copy under the api's own directory is test files the api's `suites` run would discover.
     const apiDir = join(root, `_platform/api`);
-    await rm(join(apiDir, `deploy`), { recursive: true, force: true });
-    await exec(`pnpm`, [`--filter=@intentic/api`, `deploy`, `--prod`, `./deploy`], apiDir, `pruning the api's production tree`);
-    await exec(`docker`, [`build`, `--provenance=false`, `-f`, `Dockerfile`, `-t`, IMAGES.api, `./deploy`], apiDir, `building the api image`);
+    const pruneRoot = await mkdtemp(join(tmpdir(), `onboarding-api-`));
+    const tree = join(pruneRoot, `tree`);
+    try {
+        await exec(`pnpm`, [`--filter=@intentic/api`, `deploy`, `--prod`, tree], apiDir, `pruning the api's production tree`);
+        await exec(`docker`, [`build`, `--provenance=false`, `-f`, `Dockerfile`, `-t`, IMAGES.api, tree], apiDir, `building the api image`);
+    } finally {
+        await rm(pruneRoot, { recursive: true, force: true });
+    }
 
     // The web's context is its own app dir; .dockerignore keeps only dist, the nginx template and the entrypoint.
     await exec(`docker`, [`build`, `--provenance=false`, `-t`, IMAGES.web, `.`], join(root, `_editor/web`), `building the web image`);
