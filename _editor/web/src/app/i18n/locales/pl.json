@@ -324,14 +324,10 @@
             "coolingHint": "{hint} Kliknij, aby utrzymać ją ciepłą dłużej.",
             "ended": {
                 "elapsed": "Utrzymywana ciepła tak długo, jak proszono.",
-                "allowance": "Zatrzymano, by zostawić rezerwę konta na prawdziwą pracę",
-                "limited": "Dostawca odrzucił odświeżenie: konto osiągnęło limit",
+                "allowance": "Zatrzymano na limicie konta lub by zostawić jego rezerwę na prawdziwą pracę",
                 "changed": "To, co wyśle następna tura, nie pasuje już do pamięci podręcznej",
-                "rewrote": "Odświeżenie zastało pamięć podręczną już wygasłą",
-                "cold": "Wystygła, zanim odświeżenie zdążyło się wykonać",
-                "failed": "Odświeżenie nie powiodło się",
-                "midnight": "O północy zmieniła się data w prompcie, co zaczyna nową pamięć podręczną",
-                "moved": "Rozmowa przeszła na inną sesję lub konto"
+                "cold": "Pamięć podręczna wystygła",
+                "failed": "Odświeżenie nie powiodło się"
             }
         },
         "reviewGroupCheck": {
@@ -375,7 +371,7 @@
             "explain": "Utrzymuje {tokens} tokenów w pamięci podręcznej, odczytując je mniej więcej co {minutes} min po cenie pamięci podręcznej, około jednej dziesiątej ceny ponownego wysłania. Do rozmowy nic nie jest dodawane.",
             "turnRunning": "Trwa tura, a jej własne zapytania utrzymują pamięć podręczną ciepłą.",
             "noCache": "Nie ma jeszcze zmierzonej pamięci podręcznej do utrzymania.",
-            "notReplayable": "Ciepłą można utrzymać tylko turę z subskrypcji Claude, którą ta piaskownica potrafi odtworzyć, i musi to być ostatnia tura tutaj od startu piaskownicy.",
+            "notKeepable": "Ciepłą można utrzymać tylko turę z subskrypcji Claude, którą ta piaskownica potrafi odtworzyć, i musi to być ostatnia tura tutaj od startu piaskownicy.",
             "dateChanged": "Data w prompcie zmieniła się od ostatniej tury, więc następna i tak zacznie nową pamięć podręczną.",
             "alreadyCold": "Pamięć podręczna już wystygła: utrzymywanie jej teraz oznaczałoby zapłatę za cały ponowny odczyt z góry.",
             "title": "Utrzymaj pamięć podręczną tego czatu ciepłą",

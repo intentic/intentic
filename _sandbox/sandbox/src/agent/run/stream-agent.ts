@@ -38,7 +38,7 @@ import { opt } from "../../opt.js";
 import { SteeringQueue } from "../checkpoints/agent-steering.js";
 import { recordProviderFailure } from "../providers/provider-health.js";
 import { breakPolicyFor, type HeldTurn, stopResumeAt } from "./turn/turn-resume.js";
-import { noteReplay, replayOf } from "./turn/cache-keepwarm.js";
+import { keepableOf, noteKeepable } from "./turn/cache-keepwarm.js";
 import { dispatchRemoteTurn } from "../../runners/runner-dispatch.js";
 import { editorContextNote } from "./turn/turn-interactions.js";
 import { withRuntimeHistory } from "../providers/runtime-history.js";
@@ -734,11 +734,7 @@ async function* runTurn(
         release();
         const spawned = input.conversationId !== undefined && isSpawnedChild(services.conversations, input.conversationId);
         if (input.conversationId !== undefined) {
-            noteReplay(
-                services.conversations,
-                input.conversationId,
-                replayOf({ input, request, account, sessionId: frames.readings().sessionId, fingerprint, spawned }),
-            );
+            noteKeepable(services, input.conversationId, keepableOf(services, { input, request, account, sessionId: frames.readings().sessionId, fingerprint, spawned }));
         }
         const settlement = settleTurn({
             ...state,

@@ -10,6 +10,7 @@ import { claudeOneShot } from "./claude-one-shot.js";
 import { type ClaudeCatalog, createClaudeCatalog } from "./claude-models.js";
 import { type ClaudeSeatStore, fileClaudeSeatStore } from "./claude-seats.js";
 import { type ClaudeAccountDeps, claudeAccountDoor } from "./claude-accounts.js";
+import { claudeWarm, type ClaudeWarmDeps } from "./claude-warm.js";
 
 // Everything Claude contributes to the daemon (listed in runtimes/runtime-table.ts). Claude is the anchor module:
 // its adapter is the Claude Code loop, which also serves Kimi and the routed providers under the claude-code harness.
@@ -60,7 +61,7 @@ const CLAUDE_CODE_ADAPTER: AgentAdapter<"claude-code", ClaudeCodeDeps> = {
 };
 
 // What the Claude module reads beyond its adapter: the catalog it serves and the account door's stores.
-export type ClaudeProviderDeps = ClaudeCodeDeps & ClaudeAccountDeps & Pick<Services, "claudeModels">;
+export type ClaudeProviderDeps = ClaudeCodeDeps & ClaudeAccountDeps & ClaudeWarmDeps & Pick<Services, "claudeModels">;
 
 export const claudeProvider: ProviderModule<ClaudeProviderDeps> = {
     id: "claude",
@@ -77,6 +78,8 @@ export const claudeProvider: ProviderModule<ClaudeProviderDeps> = {
             startClaudeRefresh(services.claudeStore);
         }
     },
+    // The one provider whose cache a subscription turn can keep warm (claude-warm.ts).
+    warm: claudeWarm,
     secretEntries: async (services) =>
         (await services.claudeStore.list()).map((account) =>
             providerAccountEntry("claude", "Claude", account.id, account.label, authStateRelPath("claude", `${account.id}.json`)),

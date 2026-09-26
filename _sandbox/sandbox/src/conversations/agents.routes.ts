@@ -266,7 +266,7 @@ export const createAgentsRoutes = (services: Services) => {
             if (input.until === null) {
                 dropKeepWarm(services, entry.id);
             } else {
-                const answer = armKeepWarm(services, entry.id, input.until, false);
+                const answer = armKeepWarm(services, entry.id, input.until);
                 if ("refused" in answer) {
                     throw new ORPCError("CONFLICT", { message: answer.refused });
                 }

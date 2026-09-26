@@ -5,7 +5,6 @@ import {
     type DeviceFlowLine,
     type Info,
     isTurnBreakPolicy,
-    keepWarmCap,
     type ConversationPrompt,
     type Persona,
     type Area,
@@ -359,10 +358,10 @@ const keepWarmAgent = ({ id, until }: SandboxHandlerInput<`agents`, `keepWarm`>)
     }
     const now = Date.now();
     const cache = roster.agents.find((agent) => agent.id === id)?.promptCache;
-    if (cache?.keepable !== true || cache.at + cache.ttlMs <= now) {
+    if (cache?.keepableUntil === undefined || cache.at + cache.ttlMs <= now) {
         return refuse(`The cache is already cold: keeping it warm now would pay the whole re-read up front.`, 409);
     }
-    return agentAnswer(patchAgent(id, { keepWarm: { since: now, until: Math.min(until, keepWarmCap(cache, cache.rollsAt)), refreshes: 0 } }));
+    return agentAnswer(patchAgent(id, { keepWarm: { since: now, until: Math.min(until, cache.keepableUntil), refreshes: 0 } }));
 };
 
 // The demo's own reader is Ada (the session this daemon mints), so a press here joins or leaves her from the chip,

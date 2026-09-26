@@ -101,7 +101,7 @@ const warmable = computed(() => {
     const agent = agentById(agentId);
     return agent !== undefined && warmOffer(agent, Date.now());
 });
-const warmHours = computed(() => sandboxSettings.value?.keepWarmHours ?? 4);
+const warmHours = computed(() => sandboxSettings.value?.keepWarm.hours ?? 4);
 const toggleWarm = async (): Promise<void> => {
     emit(`selected`);
     await setKeepWarm(agentId, warmHold.value === undefined ? Date.now() + warmHours.value * 3_600_000 : null).catch(() => undefined);

@@ -192,6 +192,40 @@ export type SkillSwitch = z.infer<typeof SkillSwitchSchema>;
 // picks rather than failing whole. A setting removed or reshaped here gets its conversion in settings-history.ts, which
 // also names every retired setting, none of whose names may come back.
 
+// keep-warm's knobs, one object since each only means anything beside the others (cache-keepwarm.ts).
+export const KeepWarmSettingsSchema = z.object({
+    auto: z
+        .boolean()
+        .default(false)
+        .describe(
+            "Keep a Claude conversation's prompt cache warm after each turn a person asked for. Each refresh re-reads the cached context at the cache price and adds nothing to the conversation.",
+        ),
+    hours: z
+        .number()
+        .min(1)
+        .max(8)
+        .default(4)
+        .describe(
+            "How long an idle conversation is kept warm after its last turn, in hours, and what a press on one offers first. Shortened where refreshing would cost more than the cold resume it saves, and at midnight where the agent runs, when the date in its prompt changes.",
+        ),
+    minTokens: z
+        .number()
+        .int()
+        .min(0)
+        .default(100_000)
+        .describe("Only conversations at least this large, in tokens, are kept warm by `auto`: a small one is cheap to re-read anyway."),
+    reserve: z
+        .number()
+        .int()
+        .min(0)
+        .max(90)
+        .default(15)
+        .describe(
+            "How much of an account's usage limit, in percent, keeping conversations warm must leave untouched for real work. Refreshing stops once any limit that account's model spends is fuller than that.",
+        ),
+});
+export type KeepWarmSettings = z.infer<typeof KeepWarmSettingsSchema>;
+
 export const SandboxSettingsSchema = z.object({
     // The zone every WALL-CLOCK RULE in this sandbox is meant in — an automation's cron, and anything else that says
     // "at 09:00" instead of naming an instant. It is not a display preference: nothing formats through it, and an
@@ -395,36 +429,11 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "When a spent usage limit moves a turn to another account, carry the provider session (the model keeps everything, and re-reads all of it once on the other account) while the conversation's context is under this many tokens; at or above it, start a fresh session with the sandbox's measured brief instead. Zero always starts fresh.",
         ),
-    // Off by default: every refresh spends the account's own allowance on a conversation nobody is using yet.
-    keepWarm: z
-        .boolean()
-        .default(false)
-        .describe(
-            "Keep a Claude conversation's prompt cache warm after each turn a person asked for, so coming back to it hours later costs a cache read instead of re-sending everything. Each refresh re-reads the cached context at the cache price and adds nothing to the conversation. Any one conversation can be kept warm or let cool by hand either way.",
-        ),
-    keepWarmHours: z
-        .number()
-        .min(1)
-        .max(8)
-        .default(4)
-        .describe(
-            "How long an idle conversation is kept warm after its last turn, in hours. Shortened where refreshing would cost more than the cold resume it saves, and at midnight where the agent runs, when the date in its prompt changes.",
-        ),
-    keepWarmMinTokens: z
-        .number()
-        .int()
-        .min(0)
-        .default(100_000)
-        .describe("Only conversations at least this large, in tokens, are kept warm by themselves: a small one is cheap to re-read anyway."),
-    keepWarmReserve: z
-        .number()
-        .int()
-        .min(0)
-        .max(90)
-        .default(15)
-        .describe(
-            "How much of an account's usage limit, in percent, keeping conversations warm must leave untouched for real work. Refreshing stops once any limit that account's model spends is fuller than that.",
-        ),
+    // Off by default: every refresh spends the account's own allowance on a conversation nobody is using yet. Before
+    // 2026-09-26 these were four top-level settings (settings-history.ts folds them).
+    keepWarm: KeepWarmSettingsSchema.prefault({}).describe(
+        "Keeping an idle conversation's prompt cache warm, so coming back to it hours later costs a cache read instead of re-sending everything. Any one conversation can be kept warm or let cool by hand whatever `auto` says.",
+    ),
     // Worth it since the container is recreated on every update or environment approval — otherwise approving a
     // Dockerfile change costs the run that asked for it.
     // What happens to breakage found after the work that caused it has left the turn. A land that turns the main tree's own

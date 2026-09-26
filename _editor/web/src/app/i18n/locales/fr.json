@@ -319,14 +319,10 @@
             "coolingHint": "{hint} Cliquez pour le garder chaud plus longtemps.",
             "ended": {
                 "elapsed": "Gardé chaud aussi longtemps que demandé.",
-                "allowance": "Arrêté pour laisser la réserve du compte au vrai travail",
-                "limited": "Le fournisseur a refusé un rafraîchissement : le compte est à sa limite",
+                "allowance": "Arrêté à la limite du compte, ou pour laisser sa réserve au vrai travail",
                 "changed": "Ce que le prochain tour enverrait ne correspond plus au cache",
-                "rewrote": "Un rafraîchissement a trouvé le cache déjà disparu",
-                "cold": "Il a refroidi avant qu'un rafraîchissement puisse partir",
-                "failed": "Un rafraîchissement a échoué",
-                "midnight": "La date dans la consigne a changé à minuit, ce qui commence un nouveau cache",
-                "moved": "La conversation est passée à une autre session ou à un autre compte"
+                "cold": "Le cache a refroidi",
+                "failed": "Un rafraîchissement a échoué"
             }
         },
         "reviewGroupCheck": {
@@ -371,7 +367,7 @@
             "explain": "Garde {tokens} jetons en cache en les relisant environ toutes les {minutes} min au prix du cache, soit environ un dixième d'un nouvel envoi. Rien n'est ajouté à la conversation.",
             "turnRunning": "Un tour est en cours, et ses propres requêtes gardent le cache chaud.",
             "noCache": "Il n'y a pas encore de cache mesuré à garder.",
-            "notReplayable": "Seul un tour d'abonnement Claude que ce bac à sable peut rejouer peut être gardé chaud, et ce doit être le dernier tour ici depuis le démarrage du bac à sable.",
+            "notKeepable": "Seul un tour d'abonnement Claude que ce bac à sable peut rejouer peut être gardé chaud, et ce doit être le dernier tour ici depuis le démarrage du bac à sable.",
             "dateChanged": "La date dans la consigne a changé depuis le dernier tour, donc le prochain commencera de toute façon un nouveau cache.",
             "alreadyCold": "Le cache est déjà froid : le garder chaud maintenant paierait toute la relecture d'avance.",
             "title": "Garder chaud le cache de ce chat",

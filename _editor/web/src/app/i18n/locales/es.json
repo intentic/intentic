@@ -323,14 +323,10 @@
             "coolingHint": "{hint} Haz clic para mantenerla caliente más tiempo.",
             "ended": {
                 "elapsed": "Mantenida caliente todo el tiempo pedido.",
-                "allowance": "Detenida para dejar la reserva de la cuenta al trabajo real",
-                "limited": "El proveedor rechazó una actualización: la cuenta está en su límite",
+                "allowance": "Detenida en el límite de la cuenta o para dejar su reserva al trabajo real",
                 "changed": "Lo que enviaría el siguiente turno ya no coincide con la caché",
-                "rewrote": "Una actualización encontró la caché ya perdida",
-                "cold": "Se enfrió antes de que pudiera ejecutarse una actualización",
-                "failed": "Falló una actualización",
-                "midnight": "La fecha de la indicación cambió a medianoche, lo que empieza una caché nueva",
-                "moved": "La conversación pasó a otra sesión o cuenta"
+                "cold": "La caché se enfrió",
+                "failed": "Falló una actualización"
             }
         },
         "reviewGroupCheck": {
@@ -375,7 +371,7 @@
             "explain": "Mantiene {tokens} tokens en caché releyéndolos cada {minutes} min aproximadamente, al precio de la caché, cerca de una décima parte de enviarlos de nuevo. No se añade nada a la conversación.",
             "turnRunning": "Hay un turno en curso, y sus propias solicitudes mantienen la caché caliente.",
             "noCache": "Todavía no hay una caché medida que mantener.",
-            "notReplayable": "Solo se puede mantener caliente un turno de suscripción de Claude que este sandbox pueda repetir, y tiene que ser el último turno aquí desde que arrancó el sandbox.",
+            "notKeepable": "Solo se puede mantener caliente un turno de suscripción de Claude que este sandbox pueda repetir, y tiene que ser el último turno aquí desde que arrancó el sandbox.",
             "dateChanged": "La fecha de la indicación ha cambiado desde el último turno, así que el siguiente empezará una caché nueva de todos modos.",
             "alreadyCold": "La caché ya está fría: mantenerla ahora pagaría por adelantado toda la relectura.",
             "title": "Mantener caliente la caché de este chat",

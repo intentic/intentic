@@ -113,7 +113,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         contextTokens: 16_800,
         contextWindow: 200_000,
         // Parked on its question for most of an hour: its cache is in the last fifth of its life, so the card offers to keep it.
-        promptCache: { at: now - minutes(50), ttlMs: minutes(60), rollsAt: midnightAfter(now), keepable: true },
+        promptCache: { at: now - minutes(50), ttlMs: minutes(60), rollsAt: midnightAfter(now), keepableUntil: Math.min(midnightAfter(now), now + minutes(10 + 9 * 50)) },
         updatedAt: now - minutes(2),
         seenAt: now - minutes(9),
         attention: { ...NO_ATTENTION, question: true },
@@ -251,7 +251,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         contextTokens: 40_000,
         contextWindow: 200_000,
         // Held for review and kept warm meanwhile: refreshed twice, so picking it up reads the cache instead of re-sending.
-        promptCache: { at: now - minutes(6), ttlMs: minutes(60), rollsAt: midnightAfter(now), keepable: true },
+        promptCache: { at: now - minutes(6), ttlMs: minutes(60), rollsAt: midnightAfter(now), keepableUntil: Math.min(midnightAfter(now), now + minutes(54 + 7 * 50)) },
         keepWarm: { since: now - minutes(106), until: now + minutes(134), refreshes: 2, readTokens: 39_400 },
         updatedAt: now - minutes(18),
         seenAt: now - minutes(18),

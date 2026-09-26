@@ -1,5 +1,6 @@
 import type {
     AgentCapabilities,
+    AgentEvent,
     EngineId,
     LoginStart,
     Model,
@@ -13,8 +14,10 @@ import type { Logger } from "pino";
 import { engineReady } from "../../engines/engine-resolve.js";
 import type { Config } from "../../env.config.js";
 import { stateRelPath } from "../../state-paths.js";
+import type { IsolationAnchor, IsolationPlan } from "../../conversations/worktrees/isolation.js";
 import type { TurnLimit } from "../../usage/serviceability/fleet-limit.js";
 import type { AgentAdapter } from "./adapter.js";
+import type { AgentRequest } from "./agent-request.js";
 
 // What a native provider owes the daemon, so shared surfaces (adapters, catalogs, readiness, boot, packs, secrets)
 // iterate providers instead of each keeping its own list; each provider directory exports one module,
@@ -66,6 +69,32 @@ export interface AccountDoor {
     readonly forget: (id: string) => Promise<void>;
 }
 
+// What keep-warm hands a provider of a turn that just settled (agent/run/turn/cache-keepwarm.ts): the request it sent,
+// the account that served it, the session it ended on, which a refresh forks, and the daemon's own way to open a mount
+// namespace for a refresh of an isolated turn, handed in so the provider reaches no further into the daemon.
+export interface WarmTurn {
+    readonly request: AgentRequest;
+    readonly account: string;
+    readonly sessionId: string;
+    readonly anchor: (plan: IsolationPlan) => Promise<IsolationAnchor>;
+}
+
+// One settled turn's refresh, ready to send: built by the provider from what it needs of the turn, never a captured
+// request with its side effects stripped. `send` yields the refresh's frames, a failure to start as an `error` frame.
+export interface WarmReplay {
+    readonly model: string | undefined;
+    readonly send: (signal: AbortSignal) => AsyncIterable<AgentEvent>;
+}
+
+// How a provider keeps an idle conversation's prompt cache warm, for a runtime whose capabilities say `warm`. The
+// shared code owns the hold (when, how long, why it ends); this owns the request and the prices.
+export interface ProviderWarm<D> {
+    // Undefined when this turn cannot be replayed (a credential the refresh cannot spend).
+    readonly keepable: (deps: D, turn: WarmTurn) => WarmReplay | undefined;
+    // Refreshes one hold may spend on an entry of this lifetime before re-reading costs more than the cold resume it saves.
+    readonly budget: (ttlMs: number) => number;
+}
+
 // `D` is what the module and its adapters read of the daemon, named by the provider; the caller hands in more.
 export interface ProviderModule<D> {
     readonly id: NativeProvider;
@@ -88,6 +117,8 @@ export interface ProviderModule<D> {
     // What this provider's own records say of one model's allowance across its accounts, for a provider that keeps its
     // own reading; absent means the role walk reads the pool the provider shares (agent/models/role-model-quota.ts).
     readonly turnLimit?: (deps: D, model: string) => Promise<TurnLimit | undefined>;
+    // Keeping an idle conversation's prompt cache warm; absent means no conversation of this provider's can be kept.
+    readonly warm?: ProviderWarm<D>;
 }
 
 // One connected account's row in the secrets inventory, in the shape that page renders.

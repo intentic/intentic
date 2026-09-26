@@ -32,6 +32,8 @@ const LEDGER: Record<keyof AgentCapabilities, Backing> = {
     // - refuse-only: a hold refuses instead of parking
     // - other values: park on a card
     rulebook: "enforced",
+    // agent/run/turn/cache-keepwarm.ts files nothing to keep warm for a turn whose runtime lacks it.
+    warm: "enforced",
 
     // Descriptive: true of the runtime but nothing consults these; wiring one up moves it to enforced.
     questions: "descriptive",

@@ -24,9 +24,9 @@ const cache = computed(() => props.agent.promptCache);
 const kept = computed(() => keptWarm(props.agent));
 const ended = computed(() => props.agent.keepWarm?.ended);
 const offered = computed(() => warmOffer(props.agent, now.value));
-const choices = computed(() => (cache.value === undefined || !offered.value ? [] : warmChoices(cache.value, now.value, kept.value?.refreshes ?? 0)));
+const choices = computed(() => (cache.value === undefined || !offered.value ? [] : warmChoices(cache.value, now.value)));
 const tokens = computed(() => (props.agent.contextTokens === undefined ? t(`agents.keepWarm.everything`) : formatTokens(props.agent.contextTokens)));
-const reserve = computed(() => 100 - (settings.value?.keepWarmReserve ?? 15));
+const reserve = computed(() => 100 - (settings.value?.keepWarm.reserve ?? 15));
 
 // What a hold does, priced in the unit the reader can check on the usage page: how often, and at what rate.
 const explain = computed(() =>
@@ -45,8 +45,8 @@ const unavailable = computed((): string | undefined => {
     if (current === undefined) {
         return t(`agents.keepWarm.noCache`);
     }
-    if (current.keepable !== true) {
-        return t(`agents.keepWarm.notReplayable`);
+    if (current.keepableUntil === undefined) {
+        return t(`agents.keepWarm.notKeepable`);
     }
     if (current.rollsAt !== undefined && current.rollsAt <= now.value) {
         return t(`agents.keepWarm.dateChanged`);

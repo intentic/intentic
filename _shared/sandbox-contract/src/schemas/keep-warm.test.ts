@@ -5,7 +5,6 @@ import {
     keepWarmDueAt,
     keepWarmHorizon,
     keepWarmLeadMs,
-    keepWarmMaxRefreshes,
     keepWarmRefreshes,
     keptWarmLine,
 } from "./keep-warm.js";
@@ -13,18 +12,11 @@ import {
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 
-// The arithmetic both the daemon and every press read, so the price shown before a press is the price the daemon keeps.
+// The clock both the daemon and every press read, so the refreshes shown before a press are the ones the daemon sends.
 describe("keep-warm economics", () => {
     test("refreshes a fifth of an entry's life early, never under a minute or over ten", () => {
         expect(keepWarmLeadMs(HOUR)).toBe(10 * MINUTE);
         expect(keepWarmLeadMs(5 * MINUTE)).toBe(MINUTE);
-    });
-
-    test("spends at most half of what a cold resume would rewrite", () => {
-        // A 1h rewrite costs 2x base input and a read 0.1x: nineteen reads break even, so nine.
-        expect(keepWarmMaxRefreshes(HOUR)).toBe(9);
-        // A 5m rewrite costs 1.25x: eleven reads break even, so five.
-        expect(keepWarmMaxRefreshes(5 * MINUTE)).toBe(5);
     });
 
     test("counts the refreshes that keep an entry alive through the deadline", () => {
@@ -34,11 +26,12 @@ describe("keep-warm economics", () => {
         expect(keepWarmDueAt(cache)).toBe(50 * MINUTE);
     });
 
-    test("reaches no further than the horizon, or the date change when that comes first", () => {
+    test("reaches no further than the refreshes left carry it, or the date change when that comes first", () => {
         const cache = { at: 0, ttlMs: HOUR };
-        expect(keepWarmHorizon(cache)).toBe(HOUR + 9 * 50 * MINUTE);
-        expect(keepWarmCap(cache, 3 * HOUR)).toBe(3 * HOUR);
-        expect(keepWarmCap({ at: 0, ttlMs: 5 * MINUTE }, undefined)).toBe(5 * MINUTE + 5 * 4 * MINUTE);
+        expect(keepWarmHorizon(cache, 9)).toBe(HOUR + 9 * 50 * MINUTE);
+        expect(keepWarmHorizon(cache, -2)).toBe(HOUR);
+        expect(keepWarmCap(cache, 3 * HOUR, 9)).toBe(3 * HOUR);
+        expect(keepWarmCap({ at: 0, ttlMs: 5 * MINUTE }, undefined, 5)).toBe(5 * MINUTE + 5 * 4 * MINUTE);
     });
 
     test("names the parts two fingerprints disagree on", () => {

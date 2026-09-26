@@ -320,14 +320,10 @@
             "coolingHint": "{hint} Klicken, um ihn länger warm zu halten.",
             "ended": {
                 "elapsed": "So lange warm gehalten wie gewünscht.",
-                "allowance": "Beendet, um die Reserve des Kontos für echte Arbeit freizuhalten",
-                "limited": "Der Anbieter hat eine Auffrischung abgelehnt: Das Konto ist an seinem Limit",
+                "allowance": "Beendet am Limit des Kontos oder um seine Reserve für echte Arbeit freizuhalten",
                 "changed": "Was der nächste Zug senden würde, passt nicht mehr zum Cache",
-                "rewrote": "Eine Auffrischung fand den Cache bereits leer",
-                "cold": "Er wurde kalt, bevor eine Auffrischung laufen konnte",
-                "failed": "Eine Auffrischung ist fehlgeschlagen",
-                "midnight": "Um Mitternacht hat sich das Datum im Prompt geändert, was einen neuen Cache beginnt",
-                "moved": "Die Unterhaltung ist in eine andere Sitzung oder ein anderes Konto gewechselt"
+                "cold": "Der Cache wurde kalt",
+                "failed": "Eine Auffrischung ist fehlgeschlagen"
             }
         },
         "reviewGroupCheck": {
@@ -370,7 +366,7 @@
             "explain": "Hält {tokens} Tokens im Cache, indem es sie etwa alle {minutes} Min. zum Cache-Preis erneut liest, rund ein Zehntel des erneuten Sendens. Der Unterhaltung wird nichts hinzugefügt.",
             "turnRunning": "Ein Zug läuft, und seine eigenen Anfragen halten den Cache warm.",
             "noCache": "Es gibt noch keinen gemessenen Cache zum Warmhalten.",
-            "notReplayable": "Warm halten lässt sich nur ein Zug über ein Claude-Abonnement, den diese Sandbox wiederholen kann, und es muss der letzte Zug hier seit dem Start der Sandbox sein.",
+            "notKeepable": "Warm halten lässt sich nur ein Zug über ein Claude-Abonnement, den diese Sandbox wiederholen kann, und es muss der letzte Zug hier seit dem Start der Sandbox sein.",
             "dateChanged": "Das Datum im Prompt hat sich seit dem letzten Zug geändert, der nächste beginnt also ohnehin einen neuen Cache.",
             "alreadyCold": "Der Cache ist bereits kalt: Ihn jetzt warm zu halten, würde das ganze erneute Lesen vorab bezahlen.",
             "title": "Cache dieses Chats warm halten",

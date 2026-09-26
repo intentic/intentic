@@ -1,6 +1,6 @@
-import type { z } from "zod";
-import { dropAll, isJsonObject, mapValue, retype } from "../documents/conversions.js";
-import type { RuleSchema } from "./settings.js";
+import { z } from "zod";
+import { dropAll, fold, isJsonObject, mapValue, retype } from "../documents/conversions.js";
+import type { KeepWarmSettings, RuleSchema } from "./settings.js";
 
 // The conversions the settings shape has had, oldest first: what brings any earlier release's settings to
 // SandboxSettingsSchema. Two documents carry this shape, the daemon's settings.json and a sandbox.toml's [settings]
@@ -31,6 +31,37 @@ const isInertRule = (rule: unknown): boolean =>
     (rule["moment"] === "turn.ending" || (isJsonObject(rule["action"]) && rule["action"]["kind"] === "builtin" && rule["action"]["name"] === "verify-ui-edits"));
 
 const holdsInertRule = (value: unknown): value is readonly unknown[] => Array.isArray(value) && value.some(isInertRule);
+
+// keep-warm's four top-level settings (2026-09-26), folded into the one `keepWarm` object; a value of the wrong type is
+// left out, for the schema's own default to fill.
+const KEEP_WARM_FLAT = ["keepWarm", "keepWarmHours", "keepWarmMinTokens", "keepWarmReserve"] as const;
+const FlatSwitch = z.boolean();
+const FlatNumber = z.number();
+const keepWarmObject = fold("folds keepWarm, keepWarmHours, keepWarmMinTokens and keepWarmReserve into one keepWarm object", {
+    from: KEEP_WARM_FLAT,
+    into: "keepWarm",
+    applies: (settings) => FlatSwitch.safeParse(settings["keepWarm"]).success || KEEP_WARM_FLAT.slice(1).some((key) => Object.hasOwn(settings, key)),
+    convert: ({ keepWarm, keepWarmHours, keepWarmMinTokens, keepWarmReserve }): Partial<KeepWarmSettings> => {
+        const folded: Partial<KeepWarmSettings> = {};
+        const auto = FlatSwitch.safeParse(keepWarm);
+        const hours = FlatNumber.safeParse(keepWarmHours);
+        const minTokens = FlatNumber.safeParse(keepWarmMinTokens);
+        const reserve = FlatNumber.safeParse(keepWarmReserve);
+        if (auto.success) {
+            folded.auto = auto.data;
+        }
+        if (hours.success) {
+            folded.hours = hours.data;
+        }
+        if (minTokens.success) {
+            folded.minTokens = minTokens.data;
+        }
+        if (reserve.success) {
+            folded.reserve = reserve.data;
+        }
+        return folded;
+    },
+});
 
 export const SETTINGS_HISTORY = [
     // Every setting a release since 2026-08-10 had and this one does not (read off the contract lock's history):
@@ -73,4 +104,5 @@ export const SETTINGS_HISTORY = [
         (rules) => rules.filter((rule) => !isInertRule(rule)) as z.input<typeof RuleSchema>[],
         "drops rules at the retired turn.ending moment (and the verify-ui-edits built-in), which run nothing",
     ),
+    keepWarmObject,
 ] as const;

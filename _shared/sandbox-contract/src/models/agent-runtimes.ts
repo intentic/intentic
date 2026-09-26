@@ -36,6 +36,9 @@ export interface AgentCapabilities {
     readonly terminals: boolean;
     // Fails with the coded frames auto-resume keys off, so a turn the provider killed is re-run once it's back.
     readonly recovery: boolean;
+    // Can hold an idle conversation's prompt cache warm: its provider replays the last turn's prefix as one forked,
+    // unsaved request with every tool refused (keep-warm). Only where the provider module also implements `warm`.
+    readonly warm: boolean;
     // How much of the owner's instructions this runtime takes: replace the base, append to it, or no seam at all.
     readonly instructions: "replace" | "append" | "none";
     // How the runtime discovers loaded skills: scans its own filesystem, or the daemon names them in the opener.
@@ -66,6 +69,7 @@ export const CLAUDE_CODE: AgentCapabilities = {
     commands: true,
     terminals: true,
     recovery: true,
+    warm: true,
     instructions: "replace",
     skillDiscovery: "native",
     // The only runtime with its own pre-execution hook, so the only one where a hold can park instead of refusing.
@@ -89,6 +93,7 @@ export const CODEX: AgentCapabilities = {
     commands: true,
     terminals: false,
     recovery: false,
+    warm: false,
     // Both ride the per-thread config: one replaces Codex's base prompt, the other adds a developer message.
     instructions: "replace",
     skillDiscovery: "native",
@@ -112,6 +117,7 @@ export const OPENCODE: AgentCapabilities = {
     commands: false,
     terminals: false,
     recovery: false,
+    warm: false,
     // `system` on the prompt body, per message; adds to OpenCode's own prompt, with no seam to replace it.
     instructions: "append",
     skillDiscovery: "prompt",
@@ -142,6 +148,7 @@ export const ACP: AgentCapabilities = {
     commands: true,
     terminals: true,
     recovery: false,
+    warm: false,
     // ACP's calls carry no system field: the agent owns its instructions, the persona note rides the message.
     instructions: "none",
     skillDiscovery: "prompt",
@@ -165,6 +172,7 @@ export const PI: AgentCapabilities = {
     commands: true,
     terminals: false,
     recovery: false,
+    warm: false,
     // Pi's RPC sets no standing instructions; like ACP, it hears the persona note through the user message.
     instructions: "none",
     skillDiscovery: "prompt",
@@ -199,6 +207,7 @@ export const CURSOR: AgentCapabilities = {
     terminals: false,
     // The SDK throws typed errors instead of dissolving a refusal into prose, so the adapter files coded frames.
     recovery: true,
+    warm: false,
     // append, reached differently: `beforeSubmitPrompt`'s reply folds the daemon's text onto Cursor's base. The SDK can
     // replace that base outright, but only for an entitled account, so the seam every turn can reach is this one.
     instructions: "append",

@@ -368,10 +368,12 @@ export const AgentSummarySchema = z.object({
                 .describe(
                     "When the date written into the agent's prompt next changes, in milliseconds (midnight where the agent runs). Past it the next turn sends a different prompt, so nothing kept before it is read again.",
                 ),
-            keepable: z
-                .boolean()
+            keepableUntil: z
+                .number()
                 .optional()
-                .describe("Whether this sandbox can keep this cache warm: it holds the last turn's exact request to replay, on a Claude subscription account."),
+                .describe(
+                    "Present when this sandbox can keep this cache warm (its provider can replay the last turn's prefix): the furthest instant a hold can reach, in milliseconds, where refreshing would cost more than the cold resume it saves or the date in the prompt changes, whichever comes first.",
+                ),
         })
         .optional()
         .describe(

@@ -1,4 +1,4 @@
-import { type CacheClock, type KeepWarm, keepWarmCap, keepWarmLeadMs, keepWarmRefreshes } from "@intentic/sandbox-contract";
+import { type CacheClock, type KeepWarm, keepWarmLeadMs, keepWarmRefreshes } from "@intentic/sandbox-contract";
 import { formatClock, formatTokens } from "@intentic/ui/format";
 import { type AgentStanding, formatElapsed, laneOf, turnInFlight } from "./agentStatus";
 import { t } from "@intentic/ui/i18n";
@@ -13,7 +13,7 @@ export const COOLING_FRACTION = 0.2;
 
 // Everything the reading takes: a standing to place the card by, plus the two facts the daemon measured.
 export interface CacheStanding extends AgentStanding {
-    readonly promptCache?: { readonly at: number; readonly ttlMs: number; readonly rollsAt?: number; readonly keepable?: boolean };
+    readonly promptCache?: { readonly at: number; readonly ttlMs: number; readonly rollsAt?: number; readonly keepableUntil?: number };
     readonly contextTokens?: number;
     readonly keepWarm?: KeepWarm;
 }
@@ -44,9 +44,9 @@ export const keptWarm = (agent: CacheStanding): KeepWarm | undefined => (agent.k
 export const cacheAlive = (agent: CacheStanding, now: number): boolean =>
     agent.promptCache !== undefined && agent.promptCache.at + agent.promptCache.ttlMs > now && !turnInFlight(agent);
 
-/** Whether a hold can be offered: a cache the daemon can replay, still alive, between turns, before the date rolls. */
+/** Whether a hold can be offered: a cache the daemon can keep, still alive, between turns, with somewhere left to reach. */
 export const warmOffer = (agent: CacheStanding, now: number): boolean =>
-    agent.promptCache?.keepable === true && cacheAlive(agent, now) && (agent.promptCache.rollsAt === undefined || agent.promptCache.rollsAt > now);
+    agent.promptCache?.keepableUntil !== undefined && agent.promptCache.keepableUntil > now && cacheAlive(agent, now);
 
 export interface WarmChoice {
     readonly hours: number;
@@ -56,14 +56,10 @@ export interface WarmChoice {
     readonly capped: boolean;
 }
 
-// Presets a press offers, each cut at what can honestly be kept; two presets the cut makes equal collapse into the first.
-export const warmChoices = (
-    cache: CacheClock & { readonly rollsAt?: number },
-    now: number,
-    spent = 0,
-    hours: readonly number[] = [1, 2, 4, 8],
-): WarmChoice[] => {
-    const cap = keepWarmCap(cache, cache.rollsAt, spent);
+// Presets a press offers, each cut at what the daemon says can honestly be kept (its provider's prices, the date change,
+// what a live hold already spent); two presets the cut makes equal collapse into the first.
+export const warmChoices = (cache: CacheClock & { readonly keepableUntil?: number }, now: number, hours: readonly number[] = [1, 2, 4, 8]): WarmChoice[] => {
+    const cap = cache.keepableUntil ?? now;
     const seen = new Set<number>();
     return hours.flatMap((count) => {
         const asked = now + count * 3_600_000;

@@ -6,7 +6,7 @@ import { startWatchers } from "../agent/verification/watchers.js";
 import { approvalsExecutorFor } from "../approvals/approvals-executor.js";
 import { createAutomationsScheduler } from "../automations/scheduler.js";
 import { createCiPoller } from "../ci/poller.js";
-import { autoKeepWarm, createKeepWarmScheduler } from "../agent/run/turn/cache-keepwarm.js";
+import { autoKeepWarm, stopKeepWarm } from "../agent/run/turn/cache-keepwarm.js";
 import type { BootPhase } from "./boot-phase.js";
 import { subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
 import { subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
@@ -40,11 +40,10 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     };
     shutdown.push(services.events.subscribe("run.settled", (settled) => reportChildTurn(childReports, settled)));
 
-    // Refreshes idle conversations' prompt caches; a settled turn a person asked for arms one where the setting says so.
-    const keepWarm = createKeepWarmScheduler(services);
-    shutdown.push(() => keepWarm.stop());
+    // A settled turn a person asked for arms a hold on its prompt cache where the setting says so; each hold sets its
+    // own deadline, so there is nothing to start, only timers to clear.
+    shutdown.push(() => stopKeepWarm(services));
     if (role.container) {
-        keepWarm.start();
         shutdown.push(services.events.subscribe("run.settled", (settled) => autoKeepWarm(services, settled)));
     }
 

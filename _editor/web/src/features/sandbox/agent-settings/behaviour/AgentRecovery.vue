@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { LimitPolicy, RetryPolicy, TurnBreak, TurnBreakPolicy } from "@intentic/sandbox-contract";
+import { type KeepWarmSettings, KeepWarmSettingsSchema, type LimitPolicy, type RetryPolicy, type TurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract";
 import { Row, RowGroup, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
@@ -48,19 +48,23 @@ const setLimitMoveCarryUnder = (event: Event): void => {
     patch({ limitMoveCarryUnder });
 };
 
+// keep-warm's knobs travel as one object, so every row writes the whole of it back.
+const keepWarm = computed((): KeepWarmSettings => settings.value?.keepWarm ?? KeepWarmSettingsSchema.parse({}));
+const patchKeepWarm = (change: Partial<KeepWarmSettings>): void => patch({ keepWarm: { ...keepWarm.value, ...change } });
+
 // One clamp for the three numeric keep-warm rows: an emptied field takes the bound, and the input shows what was kept.
-const setBounded = (key: `keepWarmHours` | `keepWarmMinTokens` | `keepWarmReserve`, min: number, max: number) => (event: Event): void => {
+const setBounded = (key: `hours` | `minTokens` | `reserve`, min: number, max: number) => (event: Event): void => {
     const input = event.target;
     if (!(input instanceof HTMLInputElement)) {
         return;
     }
     const value = Math.min(max, Math.max(min, Math.round(Number(input.value) || 0)));
     input.value = String(value);
-    patch({ [key]: value });
+    patchKeepWarm({ [key]: value });
 };
-const setKeepWarmHours = setBounded(`keepWarmHours`, 1, 8);
-const setKeepWarmMinTokens = setBounded(`keepWarmMinTokens`, 0, 10_000_000);
-const setKeepWarmReserve = setBounded(`keepWarmReserve`, 0, 90);
+const setKeepWarmHours = setBounded(`hours`, 1, 8);
+const setKeepWarmMinTokens = setBounded(`minTokens`, 0, 10_000_000);
+const setKeepWarmReserve = setBounded(`reserve`, 0, 90);
 
 const setAutomationFailureLimit = (event: Event): void => {
     const input = event.target;
@@ -152,13 +156,13 @@ const setAutomationFailureLimit = (event: Event): void => {
         <Row icon="sun" :title="t(`sandbox.agentRecovery.keepWarm`)" :description="t(`sandbox.agentRecovery.keepWarmNote`)">
             <template #control>
                 <ToggleSwitch
-                    :model-value="settings?.keepWarm ?? false"
+                    :model-value="keepWarm.auto"
                     :disabled="settings === undefined"
-                    @update:model-value="(value: boolean) => patch({ keepWarm: value })"
+                    @update:model-value="(value: boolean) => patchKeepWarm({ auto: value })"
                 />
             </template>
         </Row>
-        <template v-if="settings?.keepWarm === true">
+        <template v-if="keepWarm.auto">
             <Row icon="clock" :title="t(`sandbox.agentRecovery.keepWarmHours`)" :description="t(`sandbox.agentRecovery.keepWarmHoursNote`)">
                 <template #control>
                     <input
@@ -167,7 +171,7 @@ const setAutomationFailureLimit = (event: Event): void => {
                         max="8"
                         :aria-label="t(`sandbox.agentRecovery.keepWarmHoursLabel`)"
                         class="ui-field-box ui-field-sm w-16 text-right"
-                        :value="settings.keepWarmHours"
+                        :value="keepWarm.hours"
                         @change="setKeepWarmHours"
                     />
                 </template>
@@ -180,7 +184,7 @@ const setAutomationFailureLimit = (event: Event): void => {
                         step="10000"
                         :aria-label="t(`sandbox.agentRecovery.keepWarmMinTokensLabel`)"
                         class="ui-field-box ui-field-sm w-24 text-right"
-                        :value="settings.keepWarmMinTokens"
+                        :value="keepWarm.minTokens"
                         @change="setKeepWarmMinTokens"
                     />
                 </template>
@@ -194,7 +198,7 @@ const setAutomationFailureLimit = (event: Event): void => {
                     max="90"
                     :aria-label="t(`sandbox.agentRecovery.keepWarmReserveLabel`)"
                     class="ui-field-box ui-field-sm w-16 text-right"
-                    :value="settings?.keepWarmReserve ?? 15"
+                    :value="keepWarm.reserve"
                     :disabled="settings === undefined"
                     @change="setKeepWarmReserve"
                 />

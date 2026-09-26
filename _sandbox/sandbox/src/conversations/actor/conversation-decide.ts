@@ -166,14 +166,14 @@ export type ConversationEvent =
     | { readonly kind: "queue-edited"; readonly id: string; readonly revision: number; readonly text: string }
     // A held queue is let go, what a person waits with pointed at who the press names to serve it.
     | { readonly kind: "queue-released"; readonly routing?: ResumeRouting }
-    // Whether the daemon now holds the settled turn's request to replay as a cache refresh.
-    | { readonly kind: "replay-noted"; readonly replayable: boolean }
+    // Whether the daemon can keep the settled turn's cache warm, and on how many refreshes.
+    | { readonly kind: "keepable-noted"; readonly keepable: { readonly budget: number } | undefined }
     // The prompt cache is to be kept warm until `until`; a second arming moves the deadline and keeps the count.
-    | { readonly kind: "keep-warm-armed"; readonly until: number; readonly auto: boolean }
-    | { readonly kind: "keep-warm-dropped" }
+    | { readonly kind: "keep-warm-armed"; readonly until: number }
     // A refresh landed: the cache's clock restarts at `at`, and `readTokens` is what it found still cached.
     | { readonly kind: "keep-warm-refreshed"; readonly at: number; readonly ttlMs: number; readonly readTokens: number }
-    | { readonly kind: "keep-warm-ended"; readonly reason: KeepWarmEnd; readonly detail?: string };
+    // The hold stopped, and why; with no reason a person stopped it, and the card keeps no ending.
+    | { readonly kind: "keep-warm-ended"; readonly reason?: KeepWarmEnd; readonly detail?: string };
 
 export type ConversationEffect =
     // Publishes the whole roster; readers take the state as it is by then.
@@ -581,10 +581,10 @@ const onGrantTaken = (state: ConversationState, tool: string, now: number): Deci
 };
 
 // A live hold keeps its start and its count when re-armed; an ended one starts over.
-const onKeepWarmArmed = (state: ConversationState, until: number, auto: boolean, now: number): Decision<undefined> => {
+const onKeepWarmArmed = (state: ConversationState, until: number, now: number): Decision<undefined> => {
     const live = state.keepWarm?.ended === undefined ? state.keepWarm : undefined;
     return {
-        state: { ...state, keepWarm: { since: live?.since ?? now, until, refreshes: live?.refreshes ?? 0, ...opt("readTokens", live?.readTokens), ...(auto ? { auto } : {}) } },
+        state: { ...state, keepWarm: { since: live?.since ?? now, until, refreshes: live?.refreshes ?? 0, ...opt("readTokens", live?.readTokens) } },
         effects: BROADCAST,
         reply: undefined,
     };
@@ -609,6 +609,9 @@ const onKeepWarmRefreshed = (state: ConversationState, event: Extract<Conversati
 
 const onKeepWarmEnded = (state: ConversationState, event: Extract<ConversationEvent, { kind: "keep-warm-ended" }>, now: number): Decision<undefined> => {
     const kept = state.keepWarm;
+    if (event.reason === undefined) {
+        return kept === undefined ? unchanged(state, undefined) : { state: { ...state, keepWarm: undefined }, effects: BROADCAST, reply: undefined };
+    }
     if (kept === undefined || kept.ended !== undefined) {
         return unchanged(state, undefined);
     }
@@ -687,12 +690,11 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
     },
     "queue-released": (state, event) =>
         withQueue(state, released(event.routing === undefined ? state.queue : rerouted(state.queue, event.routing)), undefined),
-    "replay-noted": (state, event) =>
-        state.turn.replayable === event.replayable
+    "keepable-noted": (state, event) =>
+        state.turn.keepable?.budget === event.keepable?.budget
             ? unchanged(state, undefined)
-            : { state: { ...state, turn: { ...state.turn, replayable: event.replayable } }, effects: BROADCAST, reply: undefined },
-    "keep-warm-armed": (state, event, now) => onKeepWarmArmed(state, event.until, event.auto, now),
-    "keep-warm-dropped": (state) => (state.keepWarm === undefined ? unchanged(state, undefined) : { state: { ...state, keepWarm: undefined }, effects: BROADCAST, reply: undefined }),
+            : { state: { ...state, turn: { ...state.turn, keepable: event.keepable } }, effects: BROADCAST, reply: undefined },
+    "keep-warm-armed": (state, event, now) => onKeepWarmArmed(state, event.until, now),
     "keep-warm-refreshed": (state, event) => onKeepWarmRefreshed(state, event),
     "keep-warm-ended": (state, event, now) => onKeepWarmEnded(state, event, now),
 };

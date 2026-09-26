@@ -55,8 +55,9 @@ export interface TurnRuntime {
     readonly contextWindow: number | undefined;
     // Outlives the turn that set it: the cache entry goes on expiring whether or not this conversation runs.
     readonly promptCache: { readonly at: number; readonly ttlMs: number } | undefined;
-    // Whether the daemon holds this conversation's last request to replay as a cache refresh (cache-keepwarm.ts).
-    readonly replayable: boolean;
+    // Present when the daemon can keep this conversation's cache warm (cache-keepwarm.ts): how many refreshes a hold
+    // may spend on it by its provider's prices.
+    readonly keepable: { readonly budget: number } | undefined;
     // How long the cache was kept warm for the turn now running, stamped onto its first cache reading.
     readonly keptWarm: { readonly forMs: number; readonly refreshes: number } | undefined;
     // The agent's own checklist, whole, as of the last `todos` frame. `undefined` is a turn that has not seen the list,
@@ -158,7 +159,7 @@ export const freshRuntime = (): TurnRuntime => ({
     contextTokens: undefined,
     contextWindow: undefined,
     promptCache: undefined,
-    replayable: false,
+    keepable: undefined,
     keptWarm: undefined,
     checklist: undefined,
     promptToFile: undefined,

@@ -334,14 +334,10 @@
             "coolingHint": "{hint} Click to keep it warm longer.",
             "ended": {
                 "elapsed": "Kept warm for as long as asked.",
-                "allowance": "Stopped to leave the account's reserve for real work",
-                "limited": "The provider refused a refresh: the account is at its limit",
+                "allowance": "Stopped at the account's limit, or to leave its reserve for real work",
                 "changed": "What the next turn would send no longer matches the cache",
-                "rewrote": "A refresh found the cache already gone",
-                "cold": "It went cold before a refresh could run",
-                "failed": "A refresh failed",
-                "midnight": "The date in the prompt changed at midnight, which starts a new cache",
-                "moved": "The conversation moved to another session or account"
+                "cold": "The cache went cold",
+                "failed": "A refresh failed"
             }
         },
         "reviewGroupCheck": {
@@ -386,7 +382,7 @@
             "explain": "Keeps {tokens} tokens cached by re-reading them about every {minutes} min, at the cache's price, roughly a tenth of sending them again. Nothing is added to the conversation.",
             "turnRunning": "A turn is running, and its own requests keep the cache warm.",
             "noCache": "There is no measured cache to keep yet.",
-            "notReplayable": "Only a Claude subscription turn this sandbox can replay can be kept warm, and it has to be the last turn here since the sandbox started.",
+            "notKeepable": "Only a Claude subscription turn this sandbox can replay can be kept warm, and it has to be the last turn here since the sandbox started.",
             "dateChanged": "The date in the prompt has changed since the last turn, so the next one starts a new cache anyway.",
             "alreadyCold": "The cache is already cold: keeping it warm now would pay the whole re-read up front.",
             "title": "Keep this chat's cache warm",

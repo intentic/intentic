@@ -1,12 +1,7 @@
-// keep-warm: holding an idle conversation's prompt cache open by re-reading it shortly before it expires.
+// keep-warm: holding an idle conversation's prompt cache open by re-reading it shortly before it expires. Only the
+// clock lives here; how many refreshes a hold may spend is priced by the provider that serves it (runtimes/claude).
 
 import { z } from "zod";
-
-const HOUR_MS = 3_600_000;
-
-// Anthropic's price multipliers on base input: a read costs 0.1x, a write 2x under the 1h TTL and 1.25x under 5m.
-const READ_COST = 0.1;
-const writeCost = (ttlMs: number): number => (ttlMs >= HOUR_MS ? 2 : 1.25);
 
 // A cache clock as the daemon publishes it: the last request that touched the entry, and the entry's lifetime.
 export interface CacheClock {
@@ -17,28 +12,26 @@ export interface CacheClock {
 /** How long before expiry a refresh starts: a fifth of the entry's life, never under a minute or over ten. */
 export const keepWarmLeadMs = (ttlMs: number): number => Math.min(10 * 60_000, Math.max(60_000, Math.round(ttlMs / 5)));
 
-/** Refreshes one hold may spend: half of what a cold resume rewrites, the other half left for each refresh's own tail. */
-export const keepWarmMaxRefreshes = (ttlMs: number): number => Math.floor((writeCost(ttlMs) - READ_COST) / READ_COST / 2);
-
 /** How many refreshes keep an entry alive through `until`. */
 export const keepWarmRefreshes = (cache: CacheClock, until: number): number => {
     const beyond = until - (cache.at + cache.ttlMs);
     return beyond <= 0 ? 0 : Math.ceil(beyond / (cache.ttlMs - keepWarmLeadMs(cache.ttlMs)));
 };
 
-/** The latest instant a hold may reach, given the refreshes it already spent: past it, refreshing costs more than the cold resume it saves. */
-export const keepWarmHorizon = (cache: CacheClock, spent = 0): number =>
-    cache.at + cache.ttlMs + Math.max(0, keepWarmMaxRefreshes(cache.ttlMs) - spent) * (cache.ttlMs - keepWarmLeadMs(cache.ttlMs));
+/** The latest instant `left` more refreshes can carry an entry to: past it, refreshing costs more than the cold resume it saves. */
+export const keepWarmHorizon = (cache: CacheClock, left: number): number =>
+    cache.at + cache.ttlMs + Math.max(0, left) * (cache.ttlMs - keepWarmLeadMs(cache.ttlMs));
 
 /** When the next refresh is due for an entry last touched at `cache.at`. */
 export const keepWarmDueAt = (cache: CacheClock): number => cache.at + cache.ttlMs - keepWarmLeadMs(cache.ttlMs);
 
 /** The furthest `until` a hold can honestly promise: the economic horizon, or the date change, whichever comes first. */
-export const keepWarmCap = (cache: CacheClock, rollsAt: number | undefined, spent = 0): number =>
-    rollsAt === undefined ? keepWarmHorizon(cache, spent) : Math.min(keepWarmHorizon(cache, spent), rollsAt);
+export const keepWarmCap = (cache: CacheClock, rollsAt: number | undefined, left: number): number =>
+    rollsAt === undefined ? keepWarmHorizon(cache, left) : Math.min(keepWarmHorizon(cache, left), rollsAt);
 
-// Why a hold ended before anyone picked the conversation up. `elapsed` is the one ending that is not a problem.
-export const KeepWarmEndSchema = z.enum(["elapsed", "allowance", "limited", "changed", "rewrote", "cold", "failed", "midnight", "moved"]);
+// Why a hold ended before anyone picked the conversation up, one per thing a person would do about it; `detail` carries
+// the specifics. `elapsed` is the one ending that is not a problem.
+export const KeepWarmEndSchema = z.enum(["elapsed", "allowance", "changed", "cold", "failed"]);
 export type KeepWarmEnd = z.infer<typeof KeepWarmEndSchema>;
 
 export const KeepWarmSchema = z.object({
@@ -48,7 +41,6 @@ export const KeepWarmSchema = z.object({
         .describe(
             "When it stops by itself, in milliseconds: the time asked for, shortened to what the sandbox can honestly keep, which is never past the point where refreshing costs more than re-reading, nor past the date change that rewrites the prompt.",
         ),
-    auto: z.boolean().optional().describe("Started by the sandbox-wide setting after a turn, rather than by a press on this conversation."),
     refreshes: z.number().int().min(0).describe("Refreshes sent so far."),
     readTokens: z
         .number()
@@ -58,9 +50,12 @@ export const KeepWarmSchema = z.object({
         .object({
             at: z.number().describe("When it stopped, in milliseconds."),
             reason: KeepWarmEndSchema.describe(
-                "Why: `elapsed` the time asked for ran out; `allowance` the account reached the reserve kept for real work; `limited` the provider refused a refresh; `changed` what the next turn would send no longer matches the cache; `rewrote` a refresh found the cache already gone; `cold` it expired before a refresh could run; `failed` a refresh failed; `midnight` the date in the prompt changed; `moved` the conversation's session or account changed.",
+                "Why: `elapsed` the time asked for ran out; `allowance` the account reached the reserve kept for real work, or the provider refused a refresh for its limit; `changed` what the next turn would send no longer matches the cache (a part of the prompt, the date in it, or the conversation's session or account); `cold` the cache was gone, expired before a refresh could run or found missing by one; `failed` a refresh failed.",
             ),
-            detail: z.string().optional().describe("The specifics, when there are any: which parts of the prompt changed, or the failure's own words."),
+            detail: z
+                .string()
+                .optional()
+                .describe("The specifics, when there are any: which parts of the prompt changed, how full the account was, or the failure's own words."),
         })
         .optional()
         .describe("Why keeping it warm stopped before anyone picked the conversation up. Absent while it is still being kept."),

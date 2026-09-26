@@ -5,6 +5,7 @@ import {
     type AgentSummary,
     deriveTitle,
     isTurnBreakPolicy,
+    keepWarmCap,
     type LandConflictReason,
     type LandedMessageDraft,
     planParts,
@@ -97,16 +98,24 @@ const sanitizeSubject = (subject: string): string | undefined => sanitizeLine(su
 
 // Live context readings: how full the window is, how large it is, and how long what is already cached stays cheap to
 // re-send. One clause on the summary, since no reader wants one without the others.
-const contextFill = (state: ConversationState | undefined): Pick<AgentSummary, "contextTokens" | "contextWindow" | "promptCache" | "keepWarm"> => {
+const contextFill = (state: ConversationState | undefined): Pick<AgentSummary, "contextTokens" | "contextWindow" | "promptCache" | "keepWarm"> => ({
+    ...opt("contextTokens", state?.turn.contextTokens),
+    ...opt("contextWindow", state?.turn.contextWindow),
+    ...opt("promptCache", cacheClock(state)),
+    ...opt("keepWarm", state?.keepWarm),
+});
+
+// The cache's deadline, the date change, and how far a hold could reach where the daemon can keep it: its provider's
+// refresh budget, less what a live hold already spent (the same cap arming applies, cache-keepwarm.ts).
+const cacheClock = (state: ConversationState | undefined): AgentSummary["promptCache"] => {
     const cache = state?.turn.promptCache;
-    return {
-        ...opt("contextTokens", state?.turn.contextTokens),
-        ...opt("contextWindow", state?.turn.contextWindow),
-        ...(cache === undefined
-            ? {}
-            : { promptCache: { ...cache, rollsAt: nextPromptDayAt(cache.at), ...(state?.turn.replayable === true ? { keepable: true } : {}) } }),
-        ...opt("keepWarm", state?.keepWarm),
-    };
+    if (state === undefined || cache === undefined) {
+        return undefined;
+    }
+    const rollsAt = nextPromptDayAt(cache.at);
+    const budget = state.turn.keepable?.budget;
+    const spent = state.keepWarm?.ended === undefined ? (state.keepWarm?.refreshes ?? 0) : 0;
+    return { ...cache, rollsAt, ...opt("keepableUntil", budget === undefined ? undefined : keepWarmCap(cache, rollsAt, budget - spent)) };
 };
 
 // What a turn left open, read at finish from only what it measured, no model asked, nothing self-reported: a missing

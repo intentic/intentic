@@ -86,3 +86,27 @@ describe(`the retired turn.ending moment`, () => {
         ]);
     });
 });
+
+// keep-warm's four top-level settings became one object on 2026-09-26; a stored file keeps what its owner picked.
+describe(`the folded keep-warm settings`, () => {
+    test(`fold into one object, keeping each value and the key's place`, () => {
+        const stored = { timezone: `Europe/Warsaw`, keepWarm: true, keepWarmHours: 6, keepWarmMinTokens: 50_000, keepWarmReserve: 20, iqSearch: true };
+        const converted = convertDocument(SETTINGS_HISTORY, `object`, stored, true);
+        expect(converted.value).toEqual({ timezone: `Europe/Warsaw`, keepWarm: { auto: true, hours: 6, minTokens: 50_000, reserve: 20 }, iqSearch: true });
+        expect(JSON.stringify(converted.value)).toBe(
+            `{"timezone":"Europe/Warsaw","keepWarm":{"auto":true,"hours":6,"minTokens":50000,"reserve":20},"iqSearch":true}`,
+        );
+        expect(SandboxSettingsSchema.parse(converted.value).keepWarm).toEqual({ auto: true, hours: 6, minTokens: 50_000, reserve: 20 });
+    });
+
+    test(`fold a file that set only some, leaving the rest to the defaults`, () => {
+        const converted = convertDocument(SETTINGS_HISTORY, `object`, { keepWarmReserve: 30 }, true);
+        expect(converted.value).toEqual({ keepWarm: { reserve: 30 } });
+        expect(SandboxSettingsSchema.parse(converted.value).keepWarm).toEqual({ auto: false, hours: 4, minTokens: 100_000, reserve: 30 });
+    });
+
+    test(`leave a file already in the new shape alone`, () => {
+        const current = { keepWarm: { auto: true, hours: 2 } };
+        expect(convertDocument(SETTINGS_HISTORY, `object`, current, true).changes).toEqual([]);
+    });
+});

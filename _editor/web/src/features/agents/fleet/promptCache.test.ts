@@ -90,24 +90,25 @@ describe("cacheWarm", () => {
     });
 });
 
-// A press is only offered where the daemon said it can replay the conversation, and only while there is a cache to keep.
+// A press is only offered where the daemon said it can keep the conversation, and only while there is a cache to keep.
 describe("warmOffer", () => {
-    it("needs a replayable cache that is still alive and has not rolled over", () => {
-        const keepable = { at: NOW - 5 * MINUTE, ttlMs: HOUR, keepable: true, rollsAt: NOW + 10 * HOUR };
+    it("needs a keepable cache that is still alive, with somewhere left to reach", () => {
+        const keepable = { at: NOW - 5 * MINUTE, ttlMs: HOUR, rollsAt: NOW + 10 * HOUR, keepableUntil: NOW + 8 * HOUR };
         expect(warmOffer(agent({ promptCache: keepable }), NOW)).toBe(true);
         expect(warmOffer(agent(), NOW)).toBe(false);
+        expect(warmOffer(agent({ promptCache: { at: NOW - 5 * MINUTE, ttlMs: HOUR } }), NOW)).toBe(false);
         expect(warmOffer(agent({ promptCache: { ...keepable, at: NOW - HOUR } }), NOW)).toBe(false);
-        expect(warmOffer(agent({ promptCache: { ...keepable, rollsAt: NOW - MINUTE } }), NOW)).toBe(false);
+        expect(warmOffer(agent({ promptCache: { ...keepable, keepableUntil: NOW - MINUTE } }), NOW)).toBe(false);
         // A finished card is not nudged, but a person who asks may still keep it; a running one needs no help.
         expect(warmOffer(agent({ status: `landed`, attention: none, promptCache: keepable }), NOW)).toBe(true);
         expect(warmOffer(agent({ status: `running`, attention: none, promptCache: keepable }), NOW)).toBe(false);
     });
 });
 
-// The presets are priced before the press and cut where the daemon would cut them, so the button says what happens.
+// The presets are priced before the press and cut where the daemon says it would cut them, so the button says what happens.
 describe("warmChoices", () => {
     it("prices each preset in refreshes, and collapses the ones the horizon makes equal", () => {
-        const cache = { at: NOW, ttlMs: HOUR, rollsAt: NOW + 24 * HOUR };
+        const cache = { at: NOW, ttlMs: HOUR, keepableUntil: NOW + HOUR + 9 * 50 * MINUTE };
         const choices = warmChoices(cache, NOW);
         expect(choices.map((choice) => [choice.hours, choice.refreshes, choice.capped])).toEqual([
             [1, 0, false],
@@ -117,8 +118,8 @@ describe("warmChoices", () => {
         ]);
     });
 
-    it("stops at midnight, where the date in the prompt changes", () => {
-        const cache = { at: NOW, ttlMs: HOUR, rollsAt: NOW + 90 * MINUTE };
+    it("stops where the daemon's reach does, at midnight here, where the date in the prompt changes", () => {
+        const cache = { at: NOW, ttlMs: HOUR, keepableUntil: NOW + 90 * MINUTE };
         const choices = warmChoices(cache, NOW);
         expect(choices.map((choice) => [choice.hours, choice.until, choice.capped])).toEqual([
             [1, NOW + HOUR, false],
