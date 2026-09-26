@@ -89,9 +89,4 @@ export const NAVIGATION_GLYPHS = {
         outline: `M9 5h12 M9 12h12 M9 19h12`,
         solid: `m4 3 2 2-2 2-2-2Z m0 7 2 2-2 2-2-2Z m0 7 2 2-2 2-2-2Z`,
     },
-    "exclamation-triangle": {
-        // A solid warning sign keeps its punctuation readable at 11–12px; both cutouts wind against the triangle.
-        outline: ``,
-        solid: `M12 2 23 22H1Z M10.5 8v6h3V8Z M10.5 17v3h3v-3Z`,
-    },
 } satisfies Record<string, Glyph>;

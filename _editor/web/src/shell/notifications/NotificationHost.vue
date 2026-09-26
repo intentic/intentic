@@ -46,8 +46,8 @@ const GLYPH: Record<NotificationTone, IconName> = {
     done: `check`,
     problem: `exclamation-circle`,
     info: `info-circle`,
-    warning: `exclamation-triangle`,
-    danger: `exclamation-triangle`,
+    warning: `exclamation-circle`,
+    danger: `exclamation-circle`,
 };
 const TINT: Record<NotificationTone, string> = {
     done: `text-success`,

@@ -2,9 +2,28 @@ import "@intentic/testing/dom";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import Icon from "@intentic/ui/icon";
+import ViewBadgeChip from "../core-views/ViewBadgeChip.vue";
+import { glyphBody } from "../../../ui/src/icons/glyph.js";
 import { sectionIcon, ICONS, isIconName, type IconName } from "../../../ui/src/icons/iconSets.js";
 
 let app: App | undefined;
+
+it.each([`exclamation-circle`, `exclamation-triangle`, `exclamation`] as const)(`renders %s as the same circular attention in icons, badges and diagrams`, async (name) => {
+    const host = document.createElement(`div`);
+    document.body.append(host);
+    app = createApp({
+        render: () => h(`div`, [h(Icon, { name }), h(ViewBadgeChip, { badge: { mark: name, tone: `warning` } })]),
+    });
+    app.mount(host);
+    await nextTick();
+    const paths = [...host.querySelectorAll(`svg path`)];
+    expect(paths.map((path) => path.getAttribute(`d`))).toEqual([ICONS[`exclamation-circle`].solid, ICONS[`exclamation-circle`].solid]);
+    expect(glyphBody(ICONS[name])).toBe(glyphBody(ICONS[`exclamation-circle`]));
+    const badge = host.querySelector(`.ui-badge`)!;
+    expect(badge.classList.contains(`text-warning`)).toBe(true);
+    expect([...badge.classList].filter((name) => name.startsWith(`bg-`))).toEqual([`bg-[color:var(--ui-tile-ground)]`]);
+    expect(badge.querySelector(`svg`)!.classList.contains(`text-[1.8em]`)).toBe(true);
+});
 // Props are cast through `as never` since the accessibility tests below pass raw fallthrough attrs (`aria-label`,
 // `title`) that the component doesn't declare, that lack of a typed prop is exactly the mechanism under test.
 // `name`/`spin` are the real, typed props.

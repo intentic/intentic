@@ -30,7 +30,7 @@ export const NOTICE_BOX: Record<NoticeTone, string> = {
 };
 
 export const NOTICE_ICON: Record<NoticeTone, IconName> = {
-    danger: `exclamation-triangle`,
+    danger: `exclamation-circle`,
     warning: `exclamation-circle`,
     info: `info-circle`,
 };

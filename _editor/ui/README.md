@@ -22,6 +22,9 @@ flowchart LR
   Class recipes live in `ui` (`src/lib/ui.ts`) and merge through `tailwind-merge`, so the caller's classes win.
 - **Icons.** Every glyph is a native SVG drawing in `src/icons/`. The [patches](patches) route PrimeVue, Mermaid and
   Monaco icons to them, and a suite in web keeps third-party icon packages out of the lockfile.
+  Attention and warnings use `exclamation-circle`; legacy `exclamation-triangle` and `exclamation` names resolve
+  to that same drawing. Attention badges use the glyph itself as their circular plate. Use `check` for a completed
+  action or selection, `check-circle` for a completed status, and `times` for closing or dismissing, not for errors.
 - **Markdown.** `renderMarkdown` turns untrusted markdown into sanitized HTML with Shiki-coloured code blocks. Each
   surface adds its own pass through the `decorate` hook, such as the editor's file links. `src/markdown/` also holds
   the editing half (blocks, edits, undo history) every markdown-writing surface shares. The `./markdown` export

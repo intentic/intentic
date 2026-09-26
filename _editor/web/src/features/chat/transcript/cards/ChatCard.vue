@@ -40,10 +40,12 @@ const {
             <span v-else class="chat-card-title min-w-0 truncate text-sm font-medium text-content" v-tooltip.left.overflow="title">{{ title }}</span>
             <span
                 v-if="status"
-                class="shrink-0 text-2xs font-medium"
+                class="inline-flex shrink-0 items-center gap-1 text-2xs font-medium"
                 :class="[status.tone === `done` ? `text-success` : `text-muted`, { 'mt-0.5': prose }]"
-                >{{ status.tone === `done` ? `✓` : `✕` }} {{ status.label }}</span
             >
+                <Icon :name="status.tone === `done` ? `check` : `times`" />
+                {{ status.label }}
+            </span>
         </div>
 
         <slot />

@@ -122,7 +122,7 @@ const STATUS: Record<SubagentSession["status"], { name: IconName; spin?: boolean
     blocked: { name: `question-circle`, class: `text-xs text-warning`, "aria-label": `Needs input` },
     paused: { name: `clock`, class: `text-xs text-warning`, "aria-label": `Paused` },
     completed: { name: `check`, class: `text-xs text-success`, "aria-label": `Completed` },
-    failed: { name: `times`, class: `text-xs text-danger`, "aria-label": `Failed` },
+    failed: { name: `exclamation-circle`, class: `text-xs text-danger`, "aria-label": `Failed` },
     killed: { name: `stop`, class: `text-xs text-subtle`, "aria-label": `Killed` },
 };
 

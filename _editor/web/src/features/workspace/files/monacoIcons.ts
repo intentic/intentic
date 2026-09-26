@@ -24,7 +24,7 @@ export const EDITOR_ICONS = {
     copy: `copy`,
     dash: `minus`,
     discard: `undo`,
-    error: `times-circle`,
+    error: `exclamation-circle`,
     "expand-all": `expand-all`,
     file: `file`,
     fold: `collapse-all`,
@@ -106,7 +106,7 @@ export const EDITOR_ICONS = {
     "tree-item-expanded": `chevron-down`,
     "tree-item-loading": `spinner`,
     unfold: `expand-all`,
-    warning: `exclamation-triangle`,
+    warning: `exclamation-circle`,
     "whole-word": `whole-word`,
     wrench: `wrench`,
 } as const satisfies Record<string, IconName>;
