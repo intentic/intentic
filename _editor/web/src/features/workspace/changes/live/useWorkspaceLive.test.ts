@@ -1,6 +1,6 @@
 import { rpcKeyAt } from "../../../../lib/queryKeys";
 import { queryClient, UNPERSISTED } from "../../../../lib/queryPersistence";
-import { changeEpochOf, isRecentlyChanged, markWorkspaceChanged } from "./useWorkspaceLive";
+import { changeEpochOf, isRecentlyChanged, markWorkspaceChanged, workspaceChangedSince, workspaceChangeMark } from "./useWorkspaceLive";
 
 // Regression guard: the live-refresh invalidation must work with NO component mounted. It used to ride a
 // component-scoped watch behind an install-once flag: the /setup round-trip unmounted the installing shell,
@@ -57,5 +57,17 @@ describe(`markWorkspaceChanged`, () => {
         expect(isRecentlyChanged(`b.txt`)).toBe(true);
         jest.advanceTimersByTime(2001);
         expect(isRecentlyChanged(`b.txt`)).toBe(false);
+    });
+
+    // A verdict held about the tree (the push flow's refused push) is demoted by the next batch whatever the clock
+    // reads: with the clock frozen, a write reported in the verdict's own millisecond still counts as after it. Two
+    // millisecond stamps compared with `>` said false here, which is what failed the push flow's test on a fast runner.
+    it(`counts a batch in the same millisecond as the verdict as a write since it`, () => {
+        jest.setSystemTime(1_000_000);
+        markWorkspaceChanged([`c.txt`]);
+        const mark = workspaceChangeMark();
+        expect(workspaceChangedSince(mark)).toBe(false);
+        markWorkspaceChanged([`c.txt`]);
+        expect(workspaceChangedSince(mark)).toBe(true);
     });
 });

@@ -160,9 +160,9 @@ const repoSlug = (repo: string): string =>
         .replace(/^-+|-+$/g, "") || "repo";
 export const ciFixConversationId = (repo: string, runId: number): string => `${CI_FIX_PREFIX}${repoSlug(repo)}-${runId}`;
 
-// Keyed by the oldest push in a project still holding an open finding (pushFindingsFixBase, `left:<head>`), not a run id
-// (a push has none): a refused push is one of those too (push-checks-store.ts). Hashed rather than spelled into the
-// branch name; the fix agent's first message names what it is for.
+// Keyed by when the project's push red began (pushFixBase, `red:<since>`), not a run id (a push has none): a refused push
+// is owed by that red too (push-checks-store.ts). Hashed rather than spelled into the branch name; the fix agent's first
+// message names what it is for.
 export const PUSH_FIX_PREFIX = "push-fix-";
 
 // FNV-1a, not a cryptographic hash: nothing here is secret, the only requirement is the same failure yields the same

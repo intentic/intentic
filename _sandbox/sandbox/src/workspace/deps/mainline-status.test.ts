@@ -2,7 +2,7 @@ import type { MainlineRun } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { knownReds, mainlineStatus } from "./mainline-status.js";
-import type { StoredPush } from "./push-checks-store.js";
+import type { PushChecksState, StoredPush } from "./push-checks-store.js";
 import type { CurrentRun } from "./verify-deps.js";
 import type { QueuedLand, Streak, VerifyOutcome } from "./verify-store.js";
 
@@ -12,7 +12,7 @@ import type { QueuedLand, Streak, VerifyOutcome } from "./verify-store.js";
 const storeOf = (
     projects: Record<string, VerifyOutcome>,
     runs: readonly MainlineRun[],
-    pushes: readonly StoredPush[] = [],
+    pushed: Pick<PushChecksState, "pushes" | "reds"> = { pushes: [], reds: {} },
     waiting: { readonly current?: CurrentRun; readonly lands?: Record<string, readonly QueuedLand[]>; readonly streaks?: Record<string, Streak> } = {},
 ): Pick<Services, "verifyStore" | "pushChecks" | "landCheck"> => ({
     verifyStore: unstubbed<Services["verifyStore"]>("verifyStore", { read: async () => ({ projects, runs }),
@@ -20,7 +20,7 @@ const storeOf = (
         streaks: async () => waiting.streaks ?? {},
     }),
     pushChecks: unstubbed<Services["pushChecks"]>("pushChecks", {
-        store: unstubbed<Services["pushChecks"]["store"]>("pushChecks.store", { read: async () => ({ pushes: [...pushes], seen: [] }) }),
+        store: unstubbed<Services["pushChecks"]["store"]>("pushChecks.store", { read: async () => ({ ...pushed, ended: {}, seen: [] }) }),
     }),
     landCheck: unstubbed<Services["landCheck"]>("landCheck", { current: () => waiting.current }),
 });
@@ -47,7 +47,7 @@ const run = (over: Partial<MainlineRun> & Pick<MainlineRun, "project" | "at">): 
 
 describe("the main line's status", () => {
     test("is empty before anything was checked or queued", async () => {
-        expect(await mainlineStatus(storeOf({}, []))).toEqual({ projects: [], recent: [], pushes: [] });
+        expect(await mainlineStatus(storeOf({}, []))).toEqual({ projects: [], recent: [], pushed: [], reds: [] });
     });
 
     test("joins what the store remembers to what runs and waits now, one row per project in folder order", async () => {
@@ -66,7 +66,7 @@ describe("the main line's status", () => {
         };
 
         const appRedServed = { ...appRed, units: [{ name: "x" }] };
-        expect(await mainlineStatus(storeOf(projects, [appRed, libGreen, appEarlier], [], waiting))).toEqual({
+        expect(await mainlineStatus(storeOf(projects, [appRed, libGreen, appEarlier], undefined, waiting))).toEqual({
             projects: [
                 {
                     project: "app",
@@ -85,12 +85,14 @@ describe("the main line's status", () => {
                 },
             ],
             recent: [appRedServed, libGreen, appEarlier],
-            pushes: [],
+            pushed: [],
+            reds: [],
         });
     });
 
     // The key a later measurement names a finding by is the store's own; the editor reads the finding without it.
-    test("serves what each push check let through, newest first, without the keys the store files findings by", async () => {
+    test("serves what each push check found, newest first, and each project's push red, without the keys the store files findings by", async () => {
+        const finding = (id: string) => ({ id: `paths:${id}`, source: "paths", recheckable: true, gate: "code" as const, text: `a.ts: ${id}`, key: `a.ts:${id}` });
         const push = (id: string, at: number): StoredPush => ({
             project: "app",
             id,
@@ -100,35 +102,35 @@ describe("the main line's status", () => {
             base: "b0",
             head: `h${at}`,
             commits: 1,
-            findings: [
-                { id: `check:paths:${id}`, kind: "check", check: "paths", gate: "code", text: `a.ts: ${id}`, state: "open", key: `a.ts:${id}` },
-            ],
+            findings: [finding(id)],
         });
+        const dismissed = { kind: "dismissed" as const, at: 15, findings: ["paths:r1"] };
 
-        const status = await mainlineStatus(storeOf({}, [], [push("r2", 20), push("r1", 10)]));
+        const status = await mainlineStatus(
+            storeOf({}, [], { pushes: [push("r2", 20), push("r1", 10)], reds: { app: { since: 10, findings: [finding("r2")], suspects: [], named: false, decisions: [dismissed] } } }),
+        );
 
-        expect(status.pushes).toEqual([
+        const served = (id: string, at: number) => ({
+            project: "app",
+            id,
+            at,
+            remote: "origin",
+            branch: "main",
+            base: "b0",
+            head: `h${at}`,
+            commits: 1,
+            findings: [{ id: `paths:${id}`, source: "paths", recheckable: true, gate: "code" as const, text: `a.ts: ${id}` }],
+        });
+        expect(status.pushed).toEqual([served("r2", 20), served("r1", 10)]);
+        expect(status.reds).toEqual([
             {
-                project: "app",
-                id: "r2",
-                at: 20,
-                remote: "origin",
-                branch: "main",
-                base: "b0",
-                head: "h20",
-                commits: 1,
-                findings: [{ id: "check:paths:r2", kind: "check", check: "paths", gate: "code", text: "a.ts: r2", state: "open" }],
-            },
-            {
-                project: "app",
-                id: "r1",
-                at: 10,
-                remote: "origin",
-                branch: "main",
-                base: "b0",
-                head: "h10",
-                commits: 1,
-                findings: [{ id: "check:paths:r1", kind: "check", check: "paths", gate: "code", text: "a.ts: r1", state: "open" }],
+                source: "push",
+                scope: "app",
+                since: 10,
+                findings: [{ id: "paths:r2", source: "paths", recheckable: true, gate: "code", text: "a.ts: r2" }],
+                suspects: [],
+                named: false,
+                decisions: [dismissed],
             },
         ]);
     });
@@ -160,9 +162,19 @@ describe("the main line's status", () => {
         const runs = [run({ project: "app", at: 30, lands: [{ conversationId: "c-2", title: "Fix the lexer", at: 29 }], suspects: ["c-1"], named: true })];
         const red: Streak = { since: 30, findings: [], suspects: ["c-2"], named: false, decisions: [{ kind: "waiting", at: 31 }, sent], told: [] };
 
-        const status = await mainlineStatus(storeOf({ app: { status: "red", attempt: 1, at: 30, since: 30 } }, runs, [], { streaks: { app: red } }));
+        const status = await mainlineStatus(storeOf({ app: { status: "red", attempt: 1, at: 30, since: 30 } }, runs, undefined, { streaks: { app: red } }));
 
         expect(status.projects[0]?.red).toEqual({ since: 30, cause: [{ conversationId: "c-2", title: "Fix the lexer" }], named: false, fixer: sent });
+        // The same record in the one list of reds, as a land check's, without what only the router carries.
+        expect(status.reds).toEqual([{ source: "land", scope: "app", since: 30, findings: [], suspects: ["c-2"], named: false, decisions: [{ kind: "waiting", at: 31 }, sent] }]);
+    });
+
+    test("lists no land check's Red for a streak the project has since left", async () => {
+        const red: Streak = { since: 30, findings: [], suspects: [], named: false, decisions: [], told: [] };
+
+        const status = await mainlineStatus(storeOf({ app: { status: "green", attempt: 0, at: 50 } }, [], undefined, { streaks: { app: red } }));
+
+        expect(status.reds).toEqual([]);
     });
 
     test("names every land a run covered as the cause, unnarrowed, when blame could not tell them apart", async () => {

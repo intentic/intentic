@@ -28,6 +28,6 @@ export const mainlineSliceFake = () =>
         landCheck: unstubbed<MainlineSlice["landCheck"]>("landCheck", { enqueue: () => {}, current: () => undefined, ahead: async () => false }),
         // Nothing pushed yet: GET /workspace/mainline serves the pushes beside the verdicts.
         pushChecks: unstubbed<MainlineSlice["pushChecks"]>("pushChecks", {
-            store: unstubbed<MainlineSlice["pushChecks"]["store"]>("pushChecks.store", { read: async () => ({ pushes: [], seen: [] }) }),
+            store: unstubbed<MainlineSlice["pushChecks"]["store"]>("pushChecks.store", { read: async () => ({ pushes: [], reds: {}, ended: {}, seen: [] }) }),
         }),
     }) satisfies Partial<MainlineSlice>;

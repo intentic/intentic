@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type MainlinePush, pushFindingsFixBase, type PushFinding } from "@intentic/sandbox-contract";
+import { type Finding, pushFixBase } from "@intentic/sandbox-contract";
 import { AgentRunButton, type AgentRunAttempt, fixStanceLook, ui, useAgentRunPick } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
@@ -7,21 +7,20 @@ import { computed, ref } from "vue";
 import { useNotifications } from "../../../shell/notifications/notifications";
 import { shellModelPicking } from "../../chat/models/shellModelPicking";
 import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
-import { findingGist, findingSource, type PushDebt, projectName, recheckable, shortSha, sinceWhen } from "./mainlineView";
+import { findingGist, type PushDebt, projectName, shortSha, sinceWhen } from "./mainlineView";
 import { openLandConversation } from "./openLanded";
 import { dismissPushFindings, handPushFindings, recheckPushFindings, usePushFixAttempt } from "./useMainline";
 
-// WHAT ONE PROJECT'S PUSHES LEFT BEHIND, as a column of the Main line panel. The hook never refused them, so none of
-// this is a failure of anyone's: it waits, in amber, until a later measurement no longer prints it or the owner
-// dismisses it, and the owner picks it up when they choose. Nothing here raises a card or calls for attention; the only
+// WHAT ONE PROJECT'S PUSHES LEFT BEHIND, as a column of the Main line panel: what its push Red owes. The hook never
+// refused them, so none of this is a failure of anyone's: it waits, in amber, until a later measurement no longer prints
+// it or the owner dismisses it, and the owner picks it up when they choose. Nothing here raises a card or calls for attention; the only
 // words it puts up of its own are the receipts of the owner's own presses.
 
 const t = useT();
 
 const props = defineProps<{
+    // The project's push red, which the hand-over's id is derived from (contract, pushFixBase), and what brought it.
     debt: PushDebt;
-    // Every push the daemon lists, which the hand-over's id is derived from (contract, pushFindingsFixBase).
-    pushes: readonly MainlinePush[];
     // The minute the panel reads, so every column dates itself on the same tick.
     minute: number;
 }>();
@@ -47,6 +46,9 @@ const hidden = computed(() => standing.value.length - SHOWN);
 // feature branch leaving something is a different story from main leaving it.
 const pushLine = computed(() => {
     const push = props.debt.newest;
+    if (push === undefined) {
+        return undefined;
+    }
     return [
         shortSha(push.head),
         sinceWhen(push.at, props.minute),
@@ -54,20 +56,20 @@ const pushLine = computed(() => {
         t(`agents.mainline.push.commits`, { count: push.commits }, push.commits),
     ].join(SEP);
 });
-const earlier = computed(() => props.debt.pushes.length - 1);
+const earlier = computed(() => Math.max(0, props.debt.pushes.length - 1));
 
 // The check's own tone, never red: a `code` gate fails the tree whoever caused it, so it wears the column's amber; a
 // `tidy` line is only something the push added, and reads as the quietest thing here.
-const sourceTone = (finding: PushFinding): string => (finding.gate === `code` ? `text-warning` : finding.gate === `tidy` ? `text-subtle` : `text-muted`);
+const sourceTone = (finding: Finding): string => (finding.gate === `code` ? `text-warning` : finding.gate === `tidy` ? `text-subtle` : `text-muted`);
 
 // Everything the row cuts: the whole finding, the commit that brought it, how to see it again, and, for the three
 // that no measurement can see gone, how it ends. The tooltip is one paragraph, so the parts are joined like the lines.
-const findingHint = (finding: PushFinding): string =>
+const findingHint = (finding: Finding): string =>
     [
         finding.text,
         ...(finding.commit === undefined ? [] : [t(`agents.mainline.push.from`, { sha: shortSha(finding.commit.sha), subject: finding.commit.subject })]),
         ...(finding.command === undefined ? [] : [finding.command]),
-        ...(recheckable(finding) ? [] : [t(`agents.mainline.push.endsWhenDismissed`)]),
+        ...(finding.recheckable ? [] : [t(`agents.mainline.push.endsWhenDismissed`)]),
     ].join(SEP);
 
 const openNamed = (conversationId: string): void => {
@@ -114,7 +116,7 @@ const dismiss = async (ids: readonly string[]): Promise<void> => {
 
 // THE HAND-OVER, after the CI rows' (PipelineRunRow.vue): no attempt yet, an attempt still in play (its chip and the
 // way to it, no second press), or one that ended (its chip, and the press continues it).
-const base = computed(() => pushFindingsFixBase(props.pushes, project.value));
+const base = computed(() => pushFixBase(props.debt.red));
 const attempt = usePushFixAttempt(() => base.value);
 const look = computed(() => (attempt.value === undefined ? undefined : fixStanceLook(attempt.value.stance.kind)));
 const inPlay = computed(() => attempt.value?.stance.ongoing === true);
@@ -179,19 +181,19 @@ const handOver = async (): Promise<void> => {
                 <Icon name="refresh" :spin="rechecking" class="text-2xs" />
             </button>
         </div>
-        <p class="truncate pl-4 text-subtle">
+        <p v-if="pushLine !== undefined" class="truncate pl-4 text-subtle">
             <span class="font-mono">{{ pushLine }}</span>
             <template v-if="earlier > 0">{{ SEP }}{{ t(`agents.mainline.push.earlier`, { count: earlier }, earlier) }}</template>
         </p>
         <ul class="flex min-w-0 flex-col pt-1 pl-4">
             <li v-for="finding in shown" :key="finding.id" data-finding class="group -mr-1 flex min-w-0 items-center gap-2 rounded-md pr-1 hover:bg-overlay">
-                <span class="max-w-[45%] shrink-0 truncate font-mono" :class="sourceTone(finding)">{{ findingSource(finding) }}</span>
+                <span class="max-w-[45%] shrink-0 truncate font-mono" :class="sourceTone(finding)">{{ finding.source }}</span>
                 <span class="min-w-0 flex-1 truncate font-mono text-muted" v-tooltip.bottom="findingHint(finding)">{{ findingGist(finding.text) }}</span>
                 <button
                     type="button"
                     :class="ui.iconButton(`h-4 w-4 opacity-0 group-hover:opacity-100 hover:bg-content/10 focus-visible:opacity-100`)"
                     v-tooltip.top="t(`agents.mainline.push.dismissHint`)"
-                    :aria-label="t(`agents.mainline.push.dismissOne`, { source: findingSource(finding) })"
+                    :aria-label="t(`agents.mainline.push.dismissOne`, { source: finding.source })"
                     @click="dismiss([finding.id])"
                 >
                     <Icon name="times" class="text-2xs" />

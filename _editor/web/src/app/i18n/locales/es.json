@@ -426,11 +426,13 @@
             "routingReported": "Nadie lo está arreglando",
             "routingSpent": "Sin más intentos de arreglo",
             "routingResolved": "Arreglado en la siguiente comprobación",
+            "routingDismissed": "Apartado por ti",
             "routingDeciding": "Decidiendo quién lo arregla",
             "shortFixing": "arreglando",
             "shortOnHold": "en pausa",
             "shortNeedsYou": "te necesita",
             "shortFixed": "arreglado",
+            "shortDismissed": "apartado",
             "push": {
                 "title": "Pendiente del push",
                 "explain": "El push se hizo; su comprobación dejó pasar esto. Cada hallazgo espera aquí hasta que una medición posterior ya no lo encuentre o lo descartes. Nadie se pone con ellos a menos que los entregues.",

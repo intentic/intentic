@@ -1,5 +1,5 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import { type AgentSummary, type MainlinePush, type MainlineStatus, type PushRun, pushFindingsFixBase } from "@intentic/sandbox-contract";
+import { type AgentSummary, type MainlinePush, type MainlineStatus, type PushRun, pushFixBase, type Red } from "@intentic/sandbox-contract";
 import { computed, ref, shallowRef } from "vue";
 import { freshImport, mocked } from "@intentic/testing/bun";
 import { refusalSummary } from "../health/fixProposal";
@@ -11,14 +11,16 @@ import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 // every case opens on a clean flow and clean seams. Nothing above imports the flow: a mock that ADDS a name the
 // real module does not export only reaches a graph the mocks were registered before.
 
-/* The watcher's stamp, which decides whether a verdict is still about the tree in front of the user. */
+/* The watcher's count of change batches, which decides whether a verdict is still about the tree in front of the user.
+   A count, not a clock: a write in the same millisecond as the verdict is still a write since it. */
 jest.mock(`../changes/live/useWorkspaceLive`, () => {
-    let lastAt = 1;
+    let changes = 1;
     return {
-        workspaceChangedSince: (at: number) => lastAt === 0 || lastAt > at,
+        workspaceChangeMark: () => changes,
+        workspaceChangedSince: (mark: number) => changes === 0 || changes > mark,
         // A file landing in the tree, as the daemon's watcher would report it.
-        writeToTree: (): void => void (lastAt = Date.now()),
-        quietTree: (): void => void (lastAt = 1),
+        writeToTree: (): void => void (changes += 1),
+        quietTree: (): void => void (changes = 1),
     };
 });
 
@@ -139,19 +141,13 @@ const refusedBy = (by: PushRun["refusedBy"], over: Partial<PushRun> = {}): PushR
 type Loaded = Awaited<ReturnType<typeof load>>;
 
 // The refusal as the daemon filed it before the run read as settled (push-checks-store.ts, fileRefusal): a push whose
-// one finding is what the hook said, which names the attempt at it (pushFindingsFixBase).
-const REFUSED: MainlinePush = {
-    project: `intentic`,
-    id: `refused-x`,
-    at: 5_000,
-    head: `h1`,
-    commits: 0,
-    refused: true,
-    findings: [{ id: `check:pre-push:z`, kind: `check`, check: `pre-push`, source: `pre-push`, recheckable: false, text: `typecheck failed`, state: `open` }],
-};
+// one finding is what the hook said, owed by the project's push red, which names the attempt at it (pushFixBase).
+const REFUSAL = { id: `pre-push:z`, source: `pre-push`, recheckable: false, text: `typecheck failed` };
+const REFUSED: MainlinePush = { project: `intentic`, id: `refused-x`, at: 5_000, head: `h1`, commits: 0, refused: true, findings: [REFUSAL] };
+const REFUSED_RED: Red = { source: `push`, scope: `intentic`, since: 5_000, findings: [REFUSAL], suspects: [], named: false, decisions: [] };
 const filed = (loaded: Loaded): string => {
-    loaded.mainline.value = { projects: [], recent: [], pushes: [REFUSED] };
-    return pushFindingsFixBase([REFUSED], `intentic`)!;
+    loaded.mainline.value = { projects: [], recent: [], pushed: [REFUSED], reds: [REFUSED_RED] };
+    return pushFixBase(REFUSED_RED)!;
 };
 
 // Files the run against its repo the way useChanges does after a refused push, then presses Push and lets it settle.

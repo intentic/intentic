@@ -421,11 +421,13 @@
             "routingReported": "Niemand behebt es",
             "routingSpent": "Keine Reparaturversuche mehr",
             "routingResolved": "Bei der nächsten Prüfung behoben",
+            "routingDismissed": "Von dir zurückgestellt",
             "routingDeciding": "Es wird entschieden, wer es behebt",
             "shortFixing": "wird behoben",
             "shortOnHold": "angehalten",
             "shortNeedsYou": "braucht Sie",
             "shortFixed": "behoben",
+            "shortDismissed": "zurückgestellt",
             "push": {
                 "title": "Vom Push übrig",
                 "explain": "Der Push ist durch; seine Prüfung hat diese Befunde durchgelassen. Jeder wartet hier, bis eine spätere Messung ihn nicht mehr findet oder du ihn verwirfst. Niemand wird darauf angesetzt, außer du übergibst sie.",

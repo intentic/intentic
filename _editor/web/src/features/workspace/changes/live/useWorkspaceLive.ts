@@ -70,18 +70,27 @@ let epoch = 0;
 // Evidence that a ref move also rewrote the tree (checkout/reset/rebase do both; a plain commit only moves
 // the ref). Window is generous: a stale editor after a checkout is worse than a needless buffer drop after a commit.
 const WORKTREE_MOVE_WINDOW_MS = 3000;
-// A ref rather than a plain stamp: the push panel keeps a computed over it (whether its verdict has been written
-// over), and a value the watcher mutates behind Vue's back would leave that answer frozen at whatever it first read.
 // A stale one would drop buffers on the next sandbox's first commit.
 const lastWorkspaceChangeAt = sandboxRef(() => 0);
 export const worktreeMovedRecently = (): boolean =>
     lastWorkspaceChangeAt.value !== 0 && Date.now() - lastWorkspaceChangeAt.value < WORKTREE_MOVE_WINDOW_MS;
 
-/* WHETHER THE TREE HAS MOVED SINCE A MOMENT, for anything holding a verdict about the files as they were. */
-export const workspaceChangedSince = (at: number): boolean => lastWorkspaceChangeAt.value === 0 || lastWorkspaceChangeAt.value > at;
+// How many change batches the watcher has reported in this sandbox: a count, not a clock, since a batch arriving in the
+// same millisecond as a verdict is still after it, and two millisecond stamps cannot say which came first. A ref: the
+// push panel keeps a computed over it (whether its verdict has been written over), and a value the watcher mutated
+// behind Vue's back would leave that answer frozen at whatever it first read.
+const workspaceChanges = sandboxRef(() => 0);
+
+/* WHERE THE TREE STANDS NOW, for anything about to hold a verdict about the files as they are. */
+export const workspaceChangeMark = (): number => workspaceChanges.value;
+
+/* WHETHER THE TREE HAS MOVED SINCE A MARK. True as well while no change was ever heard, since then nothing says the
+   files are the ones the verdict was about. */
+export const workspaceChangedSince = (mark: number): boolean => workspaceChanges.value === 0 || workspaceChanges.value > mark;
 
 export const markWorkspaceChanged = (paths: readonly string[]): void => {
     lastWorkspaceChangeAt.value = Date.now();
+    workspaceChanges.value += 1;
     for (const path of paths) {
         epochs.value.set(path, ++epoch);
         recentlyChanged.value.add(path);

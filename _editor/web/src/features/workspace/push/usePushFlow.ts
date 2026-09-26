@@ -7,7 +7,8 @@ import {
     latestFixAttempt,
     type MainlineStatus,
     type PushRun,
-    pushFindingsFixBase,
+    pushFixBase,
+    pushRedOf,
 } from "@intentic/sandbox-contract";
 import type { AgentRunAttempt, AgentRunChoice } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
@@ -20,7 +21,7 @@ import { handPushFindings, useMainline } from "../../agents/mainline/useMainline
 import { modelLabelFor } from "../../chat/accounts/providerCatalog";
 import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 import { type SyncTarget, useChanges } from "../changes/useChanges";
-import { workspaceChangedSince } from "../changes/live/useWorkspaceLive";
+import { workspaceChangedSince, workspaceChangeMark } from "../changes/live/useWorkspaceLive";
 import { usePushRun } from "./usePushRun";
 import { t } from "@intentic/ui/i18n";
 
@@ -37,7 +38,7 @@ import { t } from "@intentic/ui/i18n";
 // - closing the card is "off my screen", not "that never happened": the verdict stands (`standing`), the panel says
 //   so, and the same card comes back on a press. What retires it is the world changing, never a timer.
 // - a failure has ATTEMPTS, and at most one live one: the card shows what became of the latest, and a press asks the
-//   daemon, which files the hook's refusal with what pushes left (push-checks) and plans, continues or starts the
+//   daemon, which files the hook's refusal on the project's push red (push-checks) and plans, continues or starts the
 //   attempt there (conversations/fix/push-fix.ts), the same hand-over the Main line's "Hand to an agent" makes.
 
 // What's about to leave, named the way the control that asked for it was labelled, so the flow echoes the
@@ -87,8 +88,11 @@ export interface StandingVerdict {
     readonly question: PushQuestion;
     readonly fix?: FixProposal;
     readonly runs: readonly PushRun[];
-    // When it settled. What the panel counts from, and what a write to the tree is compared against.
+    // When it settled, on the reader's clock: what the panel dates it by.
     readonly at: number;
+    // Where the tree stood when it settled (workspaceChangeMark): what a write since is counted against. A count rather
+    // than `at`, since a write reported in the same millisecond would read as no write at all.
+    readonly mark: number;
 }
 
 const proposedFix = sandboxShallowRef<FixProposal | undefined>(() => undefined);
@@ -133,7 +137,7 @@ const raise = (push: PendingPush, asked: PushQuestion, filed: Pick<StandingVerdi
     question.value = asked;
     proposedFix.value = filed.fix;
     refusedRuns.value = filed.runs;
-    standing.value = { push, question: asked, ...filed };
+    standing.value = { push, question: asked, ...filed, mark: workspaceChangeMark() };
     fromMemory.value = false;
 };
 
@@ -262,8 +266,9 @@ const dismiss = (): void => {
 // offers a fresh press rather than a chip about work already in the tree.
 const attemptOf = (): FixAttemptState | undefined => {
     const fix = proposedFix.value;
-    // Named by the daemon's own rule (contract, pushFindingsFixBase), off what it filed; nothing while it is unread.
-    const base = fix === undefined ? undefined : pushFindingsFixBase(mainline?.value?.pushes ?? [], fix.project);
+    // Named by the daemon's own rule (contract, pushFixBase), off the push red it filed the refusal under; nothing while
+    // it is unread.
+    const base = fix === undefined ? undefined : pushFixBase(pushRedOf(mainline?.value?.reds, fix.project));
     const latest = base === undefined ? undefined : latestFixAttempt(base, registry.value);
     if (latest === undefined) {
         return undefined;
@@ -362,7 +367,7 @@ export function usePushFlow() {
         /* The verdict is hidden while the card itself explains it. */
         held: computed(() => (question.value === undefined && !sending.value ? standing.value : undefined)),
         // Whether the tree has been written to since the verdict settled, so the hook may no longer say the same.
-        heldStale: computed(() => (standing.value === undefined ? false : workspaceChangedSince(standing.value.at))),
+        heldStale: computed(() => (standing.value === undefined ? false : workspaceChangedSince(standing.value.mark))),
         // Whether the card on screen is being reprinted rather than reporting a run that just ended.
         fromMemory: computed(() => fromMemory.value),
         // When the standing verdict settled, for a surface that dates it; the clock is the reader's, not this module's.

@@ -44,8 +44,8 @@ const workspace = async (): Promise<{ readonly root: string; readonly app: strin
 const writeReport = async (app: string, entries: readonly unknown[]): Promise<void> =>
     writeFile(join(await gitOut(app, "rev-parse", "--path-format=absolute", "--git-common-dir"), PUSH_REPORT_FILE), JSON.stringify(entries));
 
-const CATCH = { kind: "check", check: "silent-catch", gate: "code", text: "src/a.ts:1 empty catch block", key: "src/a.ts:1" } as const;
-const RATCHET = { kind: "ratchet", text: "a.test.ts: toEqual became toMatchObject", key: "a.test.ts" } as const;
+const CATCH = { source: "silent-catch", recheckable: true, gate: "code", text: "src/a.ts:1 empty catch block", key: "src/a.ts:1" } as const;
+const RATCHET = { source: "ratchet", recheckable: false, text: "a.test.ts: toEqual became toMatchObject", key: "a.test.ts" } as const;
 const RECHECK = ["node", "tools/recheck.mjs", "--recheck"];
 
 const pushEntry = (id: string, at: number, push: { readonly head: string; readonly base: string }, over: Record<string, unknown> = {}) => ({
@@ -60,8 +60,8 @@ const pushEntry = (id: string, at: number, push: { readonly head: string; readon
     ...over,
 });
 
-const statesOf = (state: PushChecksState): Record<string, string[]> =>
-    Object.fromEntries(state.pushes.map((push) => [push.id, push.findings.map((finding) => `${finding.kind}=${finding.state}`)]));
+// What the project still owes, by what measured each.
+const owedOf = (state: PushChecksState, project: string): string[] => (state.reds[project]?.findings ?? []).map((finding) => finding.source);
 
 test("files a push only once its head is on the remote-tracking ref it moved, and only once", async () => {
     const { root, app, base, head } = await workspace();
@@ -72,37 +72,21 @@ test("files a push only once its head is on the remote-tracking ref it moved, an
 
     // The hook has written its report and the push has not landed: nothing yet, and it is looked at again.
     expect(await checks.ingest("app")).toEqual({ changed: false, rechecks: 0, resolved: 0 });
-    expect(await store.read()).toEqual({ pushes: [], seen: [] });
+    expect(await store.read()).toEqual({ pushes: [], reds: {}, ended: {}, seen: [] });
 
     await gitOut(app, ...HOOKLESS, "push", "-q", "origin", "main");
 
     expect(await checks.ingest("app")).toEqual({ changed: true, rechecks: 0, resolved: 0 });
-    expect((await store.read()).pushes).toEqual([
-        {
-            project: "app",
-            id: "p1",
-            at,
-            remote: "origin",
-            branch: "main",
-            base,
-            head,
-            commits: 1,
-            findings: [
-                {
-                    id: pushFindingId(CATCH),
-                    kind: "check",
-                    check: "silent-catch",
-                    source: "silent-catch",
-                    recheckable: true,
-                    gate: "code",
-                    text: CATCH.text,
-                    state: "open",
-                    key: CATCH.key,
-                },
-                { id: pushFindingId(RATCHET), kind: "ratchet", source: "ratchet", recheckable: false, text: RATCHET.text, state: "open", key: RATCHET.key },
-            ],
-        },
-    ]);
+    const findings = [
+        { id: pushFindingId(CATCH), ...CATCH },
+        { id: pushFindingId(RATCHET), ...RATCHET },
+    ];
+    expect(await store.read()).toEqual({
+        pushes: [{ project: "app", id: "p1", at, remote: "origin", branch: "main", base, head, commits: 1, findings }],
+        reds: { app: { since: at, findings, suspects: [], named: false, decisions: [] } },
+        ended: {},
+        seen: ["p1"],
+    });
     expect(await checks.ingest("app")).toEqual({ changed: false, rechecks: 0, resolved: 0 });
 });
 
@@ -118,7 +102,8 @@ test("sets a push the remote never took aside after an hour, and still counts wh
 
     expect(await late.ingest("app")).toEqual({ changed: true, rechecks: 0, resolved: 1 });
     const state = await store.read();
-    expect(statesOf(state)).toEqual({ p0: ["check=resolved", "ratchet=open"] });
+    expect(owedOf(state, "app")).toEqual(["ratchet"]);
+    expect(state.pushes.map((push) => push.id)).toEqual(["p0"]);
     expect(state.seen).toEqual(["p1", "p0"]);
 });
 
@@ -144,7 +129,7 @@ test("a recheck runs the newest report's own command in the repository and resol
     await writeReport(app, [pushEntry("p0", Date.now(), { head: base, base }, { recheck: [...RECHECK, report] })]);
 
     expect(await checks.recheck("app")).toEqual({ measured: true, resolved: 1, open: 1 });
-    expect(statesOf(await store.read())).toEqual({ p0: ["check=resolved", "ratchet=open"] });
+    expect(owedOf(await store.read(), "app")).toEqual(["ratchet"]);
 });
 
 test("a recheck runs nothing but a node script inside the repository", async () => {

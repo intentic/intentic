@@ -44,6 +44,8 @@ export const MainlineRoutingKindSchema = z.enum([
     "resolved",
     // The sends and fresh attempts a red streak allows are used up; it waits for a person.
     "spent",
+    // A person set findings aside as not to be fixed (`findings` names which); what a push left is the owner's to dismiss.
+    "dismissed",
 ]);
 export type MainlineRoutingKind = z.infer<typeof MainlineRoutingKindSchema>;
 
@@ -55,6 +57,10 @@ export const MainlineRoutingSchema = z.object({
         .describe("The conversation working on them (the original or a fresh one), or the one still working that the repair waits for."),
     at: z.number().describe("When that was decided, in milliseconds."),
     detail: z.string().optional().describe("One sentence on why, in the sandbox's words."),
+    findings: z
+        .array(z.string())
+        .optional()
+        .describe("The findings it was about, by id, when it was about some of a red's findings rather than the whole red."),
 });
 export type MainlineRouting = z.infer<typeof MainlineRoutingSchema>;
 
@@ -124,8 +130,9 @@ export type MainlineProject = z.infer<typeof MainlineProjectSchema>;
 
 // WHAT A PUSH LEFT BEHIND. The pre-push hook never refuses (verify-push.mjs, `--advisory`): it measures, reports, and the
 // push goes. What it found used to vanish with the terminal it printed to. It now leaves a report in the repository's
-// git dir, the daemon files it here once the push has actually reached the remote, and each finding waits until a later
-// measurement no longer prints it or somebody dismisses it. Nobody is sent after one: acting on it is the owner's call.
+// git dir, the daemon files it once the push has actually reached the remote, and what it found is owed, as the
+// project's push Red, until a later measurement no longer prints it or somebody dismisses it. Nobody is sent after it:
+// acting on it is the owner's call (RED_POLICY).
 
 // ONE FINDING, whatever measured it: a check run's line as the repository's own tooling printed it, named by what
 // printed it (`source`, the repository's word: a check's id, `lint`, a hook), with the command that shows it again and
@@ -140,6 +147,14 @@ export const FindingSchema = z.object({
     recheckable: z
         .boolean()
         .describe("Whether a later measurement can find it gone. False for one about commits already made, which ends only when dismissed."),
+    gate: z
+        .enum(["code", "tidy"])
+        .optional()
+        .describe("For a check's finding: `code` means the tree fails the check whoever caused it; `tidy` means the change measured added this line."),
+    commit: z
+        .object({ sha: z.string(), subject: z.string() })
+        .optional()
+        .describe("The newest commit of the change measured that touched the path it names, when it names one."),
 });
 export type Finding = z.infer<typeof FindingSchema>;
 
@@ -149,9 +164,9 @@ export type Finding = z.infer<typeof FindingSchema>;
 export const RedSourceSchema = z.enum(["land", "push", "ci"]);
 export type RedSource = z.infer<typeof RedSourceSchema>;
 
-// Who answers a red: `route` sends it itself (the land check's router, agents/land/land-breakage.ts), `owner` waits for a
-// person's press (what a push left, agents/fix/push-fix.ts), `fix-agent` starts the source's own fix agent once the red
-// is main's standing word (CI, ci/repair-gate.ts).
+// Who answers a red: `route` sends it itself (the land check's router, conversations/land/land-breakage.ts), `owner`
+// waits for a person's press (what a push left, conversations/fix/push-fix.ts), `fix-agent` starts the source's own fix
+// agent once the red is main's standing word (CI, ci/repair-gate.ts).
 export const RED_POLICY = { land: "route", push: "owner", ci: "fix-agent" } as const satisfies Record<RedSource, "route" | "owner" | "fix-agent">;
 
 export const RedSchema = z.object({
@@ -165,62 +180,8 @@ export const RedSchema = z.object({
 });
 export type Red = z.infer<typeof RedSchema>;
 
-// What measured a push finding, as the first push reports named it: one of the repository's checks (by id), the linter,
-// the assertion ratchet, the manifest/lockfile lockstep, or rustfmt. Read, and still written for editors that read no
-// `source`; what measured a finding is its free `source` now, which any repository's tooling may name.
-export const PushFindingKindSchema = z.enum(["check", "lint", "ratchet", "lockstep", "rustfmt"]);
-export type PushFindingKind = z.infer<typeof PushFindingKindSchema>;
-
-// The kinds a push finding could name before `source`; any other source is a check of that name.
-const LEGACY_SOURCES: ReadonlySet<string> = new Set(["lint", "ratchet", "lockstep", "rustfmt"]);
-// Before `recheckable`, only a check's and the linter's findings could be measured again.
-const LEGACY_RECHECKABLE: ReadonlySet<PushFindingKind> = new Set(["check", "lint"]);
-
-// The kind and check an editor that reads no `source` names a finding by.
-export const legacyKindOf = (source: string): { readonly kind: PushFindingKind; readonly check?: string } =>
-    // SAFETY: LEGACY_SOURCES holds only PushFindingKind values, so a source it has is one.
-    LEGACY_SOURCES.has(source) ? { kind: source as PushFindingKind } : { kind: "check", check: source };
-
-// What measured a push finding, from any daemon: its `source`, else the kind and check it was filed under.
-export const pushFindingSource = (finding: Pick<PushFinding, "source" | "kind" | "check">): string =>
-    finding.source ?? (finding.kind === "check" ? (finding.check ?? "check") : finding.kind);
-
-// Whether a later measurement can find a push finding gone, from any daemon.
-export const pushFindingRecheckable = (finding: Pick<PushFinding, "recheckable" | "kind">): boolean =>
-    finding.recheckable ?? LEGACY_RECHECKABLE.has(finding.kind);
-
-export const PushFindingStateSchema = z.enum([
-    // Still printed at the last measurement, and nobody has dismissed it.
-    "open",
-    // A later push, recheck or land check measured it and it was gone.
-    "resolved",
-    // Somebody decided it will not be fixed.
-    "dismissed",
-]);
-export type PushFindingState = z.infer<typeof PushFindingStateSchema>;
-
-export const PushFindingSchema = z.object({
-    id: z.string().describe("Stable across pushes: the same problem found again is the same id."),
-    kind: PushFindingKindSchema.describe("What measured it."),
-    check: z.string().optional().describe("The check's own id, for a check's finding."),
-    gate: z
-        .enum(["code", "tidy"])
-        .optional()
-        .describe("For a check's finding: `code` means the tree fails the check whoever caused it; `tidy` means the push added this line."),
-    text: z.string().describe("The finding as the check printed it."),
-    command: z.string().optional().describe("The command that shows it again."),
-    commit: z
-        .object({ sha: z.string(), subject: z.string() })
-        .optional()
-        .describe("The newest pushed commit that touched the path the finding names, when it names one."),
-    state: PushFindingStateSchema,
-    settledAt: z.number().optional().describe("When it was resolved or dismissed, in milliseconds."),
-    source: z.string().optional().describe("What measured it, in the repository's own words. Absent from a daemon that files only `kind`."),
-    recheckable: z.boolean().optional().describe("Whether a later measurement can find it gone. Absent from a daemon that files only `kind`."),
-    path: z.string().optional().describe("The repository path it is about, when it names one."),
-});
-export type PushFinding = z.infer<typeof PushFindingSchema>;
-
+// ONE PUSH THE HOOK MEASURED, as the record lists it: where it went and what it found that it brought in. What of that is
+// still owed is the project's push Red's to say (`findings`), never the push's.
 export const MainlinePushSchema = z.object({
     project: z.string().describe("Which project, by folder relative to the workspace. Empty is the workspace root."),
     id: z.string().describe("The report's own id."),
@@ -230,22 +191,29 @@ export const MainlinePushSchema = z.object({
     base: z.string().optional().describe("The commit the pushed range starts from; absent when the remote had nothing to compare with."),
     head: z.string().describe("The commit that was pushed."),
     commits: z.number().describe("How many commits the push carried."),
-    findings: z.array(PushFindingSchema).describe("What it found that this push brought in, open or not. Empty for a clean push."),
-    measuredAt: z.number().optional().describe("When its findings were last measured again, in milliseconds."),
+    findings: z
+        .array(FindingSchema)
+        .describe("What it found that this push brought in, less what an earlier push had already left open. Empty for a clean push."),
     refused: z
         .boolean()
         .optional()
-        .describe("True when the repository's own pre-push hook refused it, so nothing reached the remote and its findings are why."),
+        .describe("True when the repository's own pre-push hook refused it, so nothing reached the remote and its one finding is what the hook said."),
 });
 export type MainlinePush = z.infer<typeof MainlinePushSchema>;
 
 export const MainlineStatusSchema = z.object({
     projects: z.array(MainlineProjectSchema).describe("Every project a land has been checked in, or is waiting to be."),
     recent: z.array(MainlineRunSchema).describe("The latest settled checks across every project, newest first."),
-    pushes: z
+    pushed: z
         .array(MainlinePushSchema)
         .optional()
-        .describe("The latest push checks across every project, newest first, with what each left behind. Absent from a daemon that records none."),
+        .describe("The latest pushes the hook measured across every project, newest first, with what each brought in. Absent from a daemon that records none."),
+    reds: z
+        .array(RedSchema)
+        .optional()
+        .describe(
+            "Every red the main line holds, one record whatever went red: each red project's land check and what pushes left in each project, with what each owes and every decision about it. Absent from a daemon that keeps none.",
+        ),
 });
 export type MainlineStatus = z.infer<typeof MainlineStatusSchema>;
 
@@ -289,15 +257,12 @@ export const MainlinePushFixResultSchema = z.object({
     conversationId: z.string().describe("The conversation holding the findings. Open it to watch."),
 });
 
-// The oldest push in `project` that still has an open finding: what a hand-over is keyed by, so pressing again while
-// any of its findings stand continues the same attempt, and a backlog that starts after everything was handled starts
-// a fresh one.
-export const oldestOpenPush = (pushes: readonly MainlinePush[], project: string): MainlinePush | undefined =>
-    pushes.findLast((push) => push.project === project && push.findings.some((finding) => finding.state === "open"));
+// What pushes left in `project`, as the reds name it; undefined while nothing is owed.
+export const pushRedOf = (reds: readonly Red[] | undefined, project: string): Red | undefined =>
+    reds?.find((red) => red.source === "push" && red.scope === project);
 
-// The conversation id a hand-over of `project`'s open push findings wears (attempt 1), derived so the editor and the
-// daemon agree on whether an agent is already on them; undefined when nothing is open.
-export const pushFindingsFixBase = (pushes: readonly MainlinePush[], project: string): string | undefined => {
-    const oldest = oldestOpenPush(pushes, project);
-    return oldest === undefined ? undefined : pushFixConversationId(project === "" ? "workspace" : project, `left:${oldest.head}`);
-};
+// The conversation id a hand-over of a push red wears (attempt 1), derived from when the red began, so the editor and the
+// daemon agree on whether an agent is already on it: pressing again while anything is owed continues the same attempt,
+// and a red that begins after everything was handled starts a fresh one. Undefined when nothing is owed.
+export const pushFixBase = (red: Pick<Red, "scope" | "since"> | undefined): string | undefined =>
+    red === undefined ? undefined : pushFixConversationId(red.scope === "" ? "workspace" : red.scope, `red:${red.since}`);

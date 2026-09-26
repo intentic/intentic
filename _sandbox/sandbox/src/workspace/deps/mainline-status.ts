@@ -1,7 +1,7 @@
-import type { MainlineLandRef, MainlineProject, MainlineRun, MainlineStatus } from "@intentic/sandbox-contract";
+import type { MainlineLandRef, MainlineProject, MainlineRun, MainlineStatus, Red } from "@intentic/sandbox-contract";
 import { panelSession } from "@intentic/sandbox-contract/session-names";
 import type { Services } from "../../composition.js";
-import { publicPushes } from "./push-checks-store.js";
+import { publicPushes, publicPushReds } from "./push-checks-store.js";
 import type { QueuedLand, Streak } from "./verify-store.js";
 import { opt } from "../../opt.js";
 import { failureOf } from "./failure-units.js";
@@ -10,7 +10,7 @@ import { mainlineLandOf, verifyPanelKey } from "./verify-deps.js";
 // The main-line check as the editor reads it (GET /workspace/mainline): what runs now, from the land check; what waits,
 // the last run and the red streak per project, and the latest runs with what became of each red one, from the verify
 // store. The only verification the sandbox runs on work, so it is shown rather than hidden in a terminal. Beside it, what
-// each push check let through and what became of it, from the push-checks store.
+// each push check found, from the push-checks store; and every red either store keeps, as one list of Reds (`reds`).
 
 // A run with its failures split the way a reader scans them.
 const withUnits = (run: MainlineRun): MainlineRun => (run.failures.length === 0 ? run : { ...run, units: run.failures.map(failureOf) });
@@ -48,7 +48,7 @@ const redOfRuns = (
 };
 
 export const mainlineStatus = async (deps: Pick<Services, "verifyStore" | "pushChecks" | "landCheck">): Promise<MainlineStatus> => {
-    const [{ projects, runs }, lands, streaks, { pushes }] = await Promise.all([
+    const [{ projects, runs }, lands, streaks, { pushes, reds: pushReds }] = await Promise.all([
         deps.verifyStore.read(),
         deps.verifyStore.lands(),
         deps.verifyStore.streaks(),
@@ -83,7 +83,21 @@ export const mainlineStatus = async (deps: Pick<Services, "verifyStore" | "pushC
             ...(outcome?.status === "red" ? { redSince: outcome.since ?? outcome.at, red: redOf(runs, streaks[dir], dir, outcome.since ?? outcome.at) } : {}),
         };
     };
-    return { projects: [...dirs].toSorted().map(projectOf), recent: runs.map(withUnits), pushes: publicPushes(pushes) };
+    // A land check's Red, for each project red now whose streak the router has filed one for.
+    const landReds = Object.entries(streaks).flatMap(([project, streak]): Red[] => {
+        const outcome = projects[project];
+        if (outcome?.status !== "red" || streak.since !== (outcome.since ?? outcome.at)) {
+            return [];
+        }
+        const { carried: _carried, told: _told, ...red } = streak;
+        return [{ source: "land", scope: project, ...red }];
+    });
+    return {
+        projects: [...dirs].toSorted().map(projectOf),
+        recent: runs.map(withUnits),
+        pushed: publicPushes(pushes),
+        reds: [...landReds.toSorted((left, right) => (left.scope < right.scope ? -1 : 1)), ...publicPushReds(pushReds)],
+    };
 };
 
 // The projects red right now with what they fail on, for the note a turn is told (mainline-note.ts): the failures of

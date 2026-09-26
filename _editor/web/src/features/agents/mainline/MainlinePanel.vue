@@ -55,9 +55,8 @@ const queued = computed(() => queuedLands(props.status));
 // The record holds pushes beside lands' checks, newest first, since both are how the main tree was last measured.
 const recent = computed(() => timelineOf(props.status, RECENT_SHOWN));
 const debts = computed(() => pushDebtOf(props.status));
-const pushes = computed(() => props.status.pushes ?? []);
 // A row's project is worth naming only when there is more than one it could be, counting the ones only pushes came from.
-const manyProjects = computed(() => new Set([...props.status.projects, ...(props.status.pushes ?? [])].map(({ project }) => project)).size > 1);
+const manyProjects = computed(() => new Set([...props.status.projects, ...(props.status.pushed ?? [])].map(({ project }) => project)).size > 1);
 
 // Each project's standing, a red one with the work it is laid at and the one line on who has it.
 const results = computed(() =>
@@ -283,7 +282,6 @@ const eventKey = (event: MainlineEvent): string => (event.kind === `land` ? `lan
                         v-for="debt in debts"
                         :key="`push-${debt.project}`"
                         :debt="debt"
-                        :pushes="pushes"
                         :minute="minute"
                     />
                 </div>

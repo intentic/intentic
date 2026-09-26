@@ -1,4 +1,5 @@
 import {
+    type Finding,
     headStreak,
     type MainlineLand,
     type MainlineLandRef,
@@ -7,9 +8,7 @@ import {
     type MainlineRoutingKind,
     type MainlineRun,
     type MainlineStatus,
-    type PushFinding,
-    pushFindingRecheckable,
-    pushFindingSource,
+    type Red,
 } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 import { formatClock, formatDate, formatDayMonthTime } from "@intentic/ui/format";
@@ -74,27 +73,35 @@ export interface MainlineRunning {
     readonly on?: string;
 }
 
-// WHAT A PUSH LEFT BEHIND, per project: every finding still open, once each, and the pushes that brought them. The
-// pre-push hook never refuses, so this is the only place what it let through is still said after its terminal is gone.
-// Nobody is sent after any of it; it waits for the owner, which is why nothing here is ever drawn as failing.
+// WHAT A PUSH LEFT BEHIND, per project: what its push Red owes, and the pushes that brought it in. The pre-push hook
+// never refuses, so this is the only place what it let through is still said after its terminal is gone. Nobody is sent
+// after any of it (RED_POLICY: a push red waits for the owner), which is why nothing here is ever drawn as failing.
 export interface PushDebt {
     readonly project: string;
+    // The project's push red: what it owes, since when, and every decision about it.
+    readonly red: Red;
     // The tree's own breakage first (a `code` gate fails whoever caused it), then by what measured it, in the daemon's
     // order within each.
-    readonly open: readonly PushFinding[];
-    // Newest first, only those still holding an open finding.
+    readonly open: readonly Finding[];
+    // Newest first, only those that brought in something still owed.
     readonly pushes: readonly MainlinePush[];
-    readonly newest: MainlinePush;
+    // Absent only when every push that brought it in has aged out of the record.
+    readonly newest: MainlinePush | undefined;
 }
 
-const isOpen = (finding: PushFinding): boolean => finding.state === `open`;
-
 // Absent from a daemon that records no pushes, which reads the same as one that recorded none.
-const pushesOf = (status: MainlineStatus | undefined): readonly MainlinePush[] => status?.pushes ?? [];
+const pushesOf = (status: MainlineStatus | undefined): readonly MainlinePush[] => status?.pushed ?? [];
 
-// What measured it, in the repository's own words (contract, pushFindingSource: its `source`, else the kind and check an
-// older daemon filed it under).
-export const findingSource = (finding: PushFinding): string => pushFindingSource(finding);
+// Every project's push red, from the one list of reds.
+const pushRedsOf = (status: MainlineStatus | undefined): readonly Red[] => (status?.reds ?? []).filter((red) => red.source === `push`);
+
+// What each project owes, by finding id.
+const owedByProject = (status: MainlineStatus | undefined): ReadonlyMap<string, ReadonlySet<string>> =>
+    new Map(pushRedsOf(status).map((red) => [red.scope, new Set(red.findings.map((finding) => finding.id))]));
+
+// How much of what a push brought in its project still owes.
+const stillOwed = (push: MainlinePush, owed: ReadonlyMap<string, ReadonlySet<string>>): number =>
+    push.findings.filter((finding) => owed.get(push.project)?.has(finding.id) === true).length;
 
 // A finding as a dock row can hold it. Checks print the path a finding is about whole from the repository root, and in a
 // column sixteen rem wide that prefix is all a reader would see, the same five folders on every row. The row keeps the
@@ -112,33 +119,18 @@ export const findingGist = (line: string): string => {
     return `${kept}${text.slice(path.length)}`;
 };
 
-// Whether a later measurement can find it gone, as the daemon filed it (contract, pushFindingRecheckable); one about
-// the pushed commits themselves ends only when somebody dismisses it.
-export const recheckable = (finding: PushFinding): boolean => pushFindingRecheckable(finding);
+const findingOrder = (left: Finding, right: Finding): number =>
+    Number(left.gate !== `code`) - Number(right.gate !== `code`) || left.source.localeCompare(right.source);
 
-const findingOrder = (left: PushFinding, right: PushFinding): number =>
-    Number(left.gate !== `code`) - Number(right.gate !== `code`) || findingSource(left).localeCompare(findingSource(right));
-
-// Most left behind first. The same problem found by two pushes is one finding (its id is stable across pushes), and
-// the newer push's copy speaks for it, since that is the measurement that last printed it.
+// Most owed first.
 export const pushDebtOf = (status: MainlineStatus | undefined): PushDebt[] => {
-    const byProject = new Map<string, { open: Map<string, PushFinding>; pushes: MainlinePush[] }>();
-    for (const push of pushesOf(status)) {
-        const standing = push.findings.filter(isOpen);
-        if (standing.length === 0) {
-            continue;
-        }
-        const entry = byProject.get(push.project) ?? { open: new Map<string, PushFinding>(), pushes: [] };
-        byProject.set(push.project, entry);
-        entry.pushes.push(push);
-        for (const finding of standing) {
-            if (!entry.open.has(finding.id)) {
-                entry.open.set(finding.id, finding);
-            }
-        }
-    }
-    return [...byProject]
-        .map(([project, { open, pushes }]) => ({ project, open: [...open.values()].toSorted(findingOrder), pushes, newest: pushes[0]! }))
+    const owed = owedByProject(status);
+    return pushRedsOf(status)
+        .filter((red) => red.findings.length > 0)
+        .map((red) => {
+            const pushes = pushesOf(status).filter((push) => push.project === red.scope && stillOwed(push, owed) > 0);
+            return { project: red.scope, red, open: red.findings.toSorted(findingOrder), pushes, newest: pushes[0] };
+        })
         .toSorted((left, right) => right.open.length - left.open.length);
 };
 
@@ -154,7 +146,7 @@ export interface MainlineSummary {
     readonly queued: number;
     // Some project has a settled check, so "passing" is said about something that was measured.
     readonly checked: boolean;
-    // Open push findings across every project, each once (pushDebtOf).
+    // What the push reds owe across every project (pushDebtOf).
     readonly leftAtPush: number;
 }
 
@@ -175,30 +167,34 @@ export const mainlineSummary = (status: MainlineStatus | undefined): MainlineSum
 };
 
 // THE RECORD, lands' checks and pushes' measurements in one list, newest first. A push reads as what it left: how many
-// findings still stand, or that every one it had was since resolved or dismissed (`handled`), or clean.
+// of its findings its project still owes, or that every one it had was since resolved or dismissed (`handled`), or clean.
 export type MainlineEvent =
     | { readonly kind: `land`; readonly run: MainlineRun }
     | { readonly kind: `push`; readonly push: MainlinePush; readonly open: number; readonly handled: boolean };
 
 const eventAt = (event: MainlineEvent): number => (event.kind === `land` ? event.run.at : event.push.at);
 
-export const timelineOf = (status: MainlineStatus, limit: number): MainlineEvent[] =>
-    [
+export const timelineOf = (status: MainlineStatus, limit: number): MainlineEvent[] => {
+    const owed = owedByProject(status);
+    return [
         ...status.recent.map((run): MainlineEvent => ({ kind: `land`, run })),
         ...pushesOf(status).map((push): MainlineEvent => {
-            const open = push.findings.filter(isOpen).length;
+            const open = stillOwed(push, owed);
             return { kind: `push`, push, open, handled: open === 0 && push.findings.length > 0 };
         }),
     ]
         .toSorted((left, right) => eventAt(right) - eventAt(left))
         .slice(0, limit);
+};
 
-// What the pushes measured since `since` left open: the review's "Pushed" note reads it for the push it just made. By
+// What the pushes measured since `since` left owed: the review's "Pushed" note reads it for the push it just made. By
 // time rather than by repository, since the daemon files a push under its project and the note is about one moment.
-export const leftSince = (status: MainlineStatus | undefined, since: number): number =>
-    pushesOf(status)
+export const leftSince = (status: MainlineStatus | undefined, since: number): number => {
+    const owed = owedByProject(status);
+    return pushesOf(status)
         .filter((push) => push.at >= since)
-        .reduce((total, push) => total + push.findings.filter(isOpen).length, 0);
+        .reduce((total, push) => total + stillOwed(push, owed), 0);
+};
 
 // A pushed commit as git abbreviates it.
 export const shortSha = (sha: string): string => sha.slice(0, 7);
@@ -320,6 +316,14 @@ const routingTable = () => {
             lead: undefined,
         },
         spent: { state: `needs-you`, icon: `exclamation-triangle`, words: t(`agents.mainline.routingSpent`), short: needsYou, lead: undefined },
+        // Only a push red's findings are dismissed, by the owner, so it is settled rather than fixed.
+        dismissed: {
+            state: `fixed`,
+            icon: `eye-slash`,
+            words: t(`agents.mainline.routingDismissed`),
+            short: t(`agents.mainline.shortDismissed`),
+            lead: undefined,
+        },
     } as const satisfies Record<MainlineRoutingKind, RoutingMeta>;
 };
 

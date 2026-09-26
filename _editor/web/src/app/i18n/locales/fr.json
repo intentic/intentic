@@ -422,11 +422,13 @@
             "routingReported": "Personne ne le corrige",
             "routingSpent": "Plus de tentatives de correction",
             "routingResolved": "Corrigé à la vérification suivante",
+            "routingDismissed": "Mis de côté par vous",
             "routingDeciding": "Choix en cours de qui le répare",
             "shortFixing": "en correction",
             "shortOnHold": "en pause",
             "shortNeedsYou": "vous attend",
             "shortFixed": "corrigé",
+            "shortDismissed": "mis de côté",
             "push": {
                 "title": "Laissé au push",
                 "explain": "Le push est parti ; sa vérification a laissé passer ceci. Chaque constat attend ici jusqu'à ce qu'une mesure ultérieure ne le trouve plus ou que vous l'écartiez. Personne ne s'en occupe à moins que vous ne le confiiez.",

@@ -372,7 +372,9 @@ export const createWorkspaceRoutes = (services: Services) => {
             return {
                 projects: status.projects.filter((project) => inFence(project.project)),
                 recent: status.recent.filter((run) => inFence(run.project)),
-                pushes: (status.pushes ?? []).filter((push) => inFence(push.project)),
+                pushed: (status.pushed ?? []).filter((push) => inFence(push.project)),
+                // A land check's and a push's red are both scoped to a project's folder.
+                reds: (status.reds ?? []).filter((red) => inFence(red.scope)),
             };
         }),
         // What a push check let through waits until measured gone or set aside; a fenced caller acts on its own projects.

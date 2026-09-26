@@ -1,4 +1,4 @@
-import type { MainlinePush, MainlinePushRecheckResult, MainlineRun, MainlineStatus, PushFinding } from "@intentic/sandbox-contract";
+import type { Finding, MainlinePush, MainlinePushRecheckResult, MainlineRun, MainlineStatus, Red } from "@intentic/sandbox-contract";
 import { FEATURED_AGENT_ID, LAND_FIX_AGENT_ID } from "./fleet";
 
 // The main tree's own check after work lands (GET /workspace/mainline), one state per recording. The whole fleet carries
@@ -130,57 +130,52 @@ const PUSH_HEAD = `725e054fb6a1d3c8e0f94b27d5a6c1e8f3b2d094`;
 const PUSH_BASE = `6c6a13a392d7e5b1f08c4a69e2d3b7f150a8c6e1`;
 const PUSH_COMMIT = { sha: PUSH_HEAD, subject: `fix(workspace): trash keeps what it moved until restored` };
 
-const finding = (id: string, over: Omit<PushFinding, "id" | "state" | "kind"> & Partial<Pick<PushFinding, "kind">>): PushFinding => ({
-    id,
-    kind: `check`,
-    state: `open`,
-    ...over,
-});
+const finding = (id: string, over: Omit<Finding, "id" | "recheckable">): Finding => ({ id, recheckable: true, ...over });
 
-const PUSH_FINDINGS: readonly PushFinding[] = [
+const PUSH_FINDINGS: readonly Finding[] = [
     finding(`daemon-boundaries:portability-settings`, {
-        check: `daemon-boundaries`,
+        source: `daemon-boundaries`,
         gate: `code`,
         text: `- portability -> settings closes portability -> settings -> agent -> runners -> portability: imported at portability/definition.ts:18; the way back is settings -> agent (settings/field-notes-status.ts:4), agent -> runners (agent/routes/agent.routes.ts:53), runners -> portability (runners/runner-link.ts:6)`,
         command: `node _tools/checks/run.mjs --only daemon-boundaries`,
         commit: PUSH_COMMIT,
     }),
     finding(`paths:workspace-trash.integration.test.ts:8`, {
-        check: `paths`,
+        source: `paths`,
         gate: `tidy`,
         text: `_sandbox/sandbox/src/workspace/files/workspace-trash.integration.test.ts:8  spells the state dir, import STATE_DIR from @intentic/constants (or use the daemon's statePath())`,
         command: `node _tools/checks/run.mjs --only paths`,
         commit: PUSH_COMMIT,
     }),
     finding(`silent-catch:workspace-trash.ts:127`, {
-        check: `silent-catch`,
+        source: `silent-catch`,
         gate: `tidy`,
         text: `- _sandbox/sandbox/src/workspace/files/workspace-trash.ts:127  .catch discards the error`,
         command: `node _tools/checks/run.mjs --only silent-catch`,
         commit: PUSH_COMMIT,
     }),
     finding(`silent-catch:workspace-trash.ts`, {
-        check: `silent-catch`,
+        source: `silent-catch`,
         gate: `tidy`,
         text: `- _sandbox/sandbox/src/workspace/files/workspace-trash.ts: 3 silent catch(es), the baseline allows 0`,
         command: `node _tools/checks/run.mjs --only silent-catch`,
         commit: PUSH_COMMIT,
     }),
     finding(`layout:features/workspace/explorer`, {
-        check: `layout`,
+        source: `layout`,
         gate: `tidy`,
         text: `- _editor/web/src/features/workspace/explorer: 36 files, the baseline allows 33`,
         command: `node _tools/checks/run.mjs --only layout`,
     }),
     finding(`layout:workspace/files`, {
-        check: `layout`,
+        source: `layout`,
         gate: `tidy`,
         text: `- _sandbox/sandbox/src/workspace/files: 32 files`,
         command: `node _tools/checks/run.mjs --only layout`,
         commit: PUSH_COMMIT,
     }),
     finding(`buttons:SandboxMetricsDetails.vue:29`, {
-        check: `buttons`,
+        source: `buttons`,
         gate: `tidy`,
         text: `_editor/web/src/features/agents/metrics/SandboxMetricsDetails.vue:29  a bare <button> with text size and padding: use <Button size="small">, ui.linkButton() or ui.textAction()`,
         command: `node _tools/checks/run.mjs --only buttons`,
@@ -200,7 +195,7 @@ const pushesOf = (now: number): MainlinePush[] => [
         base: PUSH_BASE,
         head: PUSH_HEAD,
         commits: 2,
-        findings: PUSH_FINDINGS.map((each) => (dismissedPush.has(each.id) ? { ...each, state: `dismissed`, settledAt: now } : each)),
+        findings: [...PUSH_FINDINGS],
     },
     {
         project: `intentic`,
@@ -213,6 +208,14 @@ const pushesOf = (now: number): MainlinePush[] => [
         findings: [],
     },
 ];
+
+// What the project owes of it, as the daemon files it: the push's findings, less what was dismissed on this page, each
+// dismissal a decision on the red.
+const pushRedsOf = (now: number): Red[] => {
+    const owed = PUSH_FINDINGS.filter((each) => !dismissedPush.has(each.id));
+    const decisions = dismissedPush.size === 0 ? [] : [{ kind: `dismissed` as const, at: now, findings: [...dismissedPush] }];
+    return owed.length === 0 ? [] : [{ source: `push`, scope: `intentic`, since: now - minutes(47), findings: owed, suspects: [], named: false, decisions }];
+};
 
 // The two hands on it, as the daemon's routes answer them (workspace.mainlinePushDismiss / mainlinePushRecheck).
 export const demoPushDismiss = ({ ids, restore }: { readonly ids?: readonly string[] | undefined; readonly restore?: boolean | undefined }): { changed: number } => {
@@ -247,5 +250,5 @@ export const demoMainline = (now: number, story: DemoMainline): MainlineStatus =
     if (story === `green`) {
         return greenLine(now);
     }
-    return { ...(story === `red` ? redLine(now) : checkingLine(now)), pushes: pushesOf(now) };
+    return { ...(story === `red` ? redLine(now) : checkingLine(now)), pushed: pushesOf(now), reds: pushRedsOf(now) };
 };

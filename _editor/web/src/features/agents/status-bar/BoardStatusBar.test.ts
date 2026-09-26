@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import { type MainlinePush, type MainlineRun, type MainlineStatus, type PushFinding, pushFindingsFixBase, type SandboxMetrics } from "@intentic/sandbox-contract";
+import { type Finding, type MainlinePush, type MainlineRun, type MainlineStatus, pushFixBase, type Red, type SandboxMetrics } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import type { PushFixAttempt } from "../mainline/useMainline";
@@ -171,17 +171,16 @@ const metrics = (): SandboxMetrics => ({
 });
 
 // What the real case left: two commits pushed to main, seven findings, the tree's own breakage among them.
-const leftFinding = (id: string, check: string, gate: `code` | `tidy`, text: string): PushFinding => ({
+const leftFinding = (id: string, check: string, gate: `code` | `tidy`, text: string): Finding => ({
     id,
-    kind: `check`,
-    check,
+    source: check,
+    recheckable: true,
     gate,
     text,
     command: `node _tools/checks/run.mjs --only ${check}`,
-    state: `open`,
 });
 
-const LEFT: PushFinding[] = [
+const LEFT: Finding[] = [
     leftFinding(`paths-1`, `paths`, `tidy`, `_sandbox/sandbox/src/workspace/files/workspace-trash.integration.test.ts:8  spells the state dir`),
     leftFinding(`silent-1`, `silent-catch`, `tidy`, `_sandbox/sandbox/src/workspace/files/workspace-trash.ts:127  .catch discards the error`),
     leftFinding(`silent-2`, `silent-catch`, `code`, `_sandbox/sandbox/src/workspace/files/workspace-trash.ts: 3 silent catch(es), the baseline allows 0`),
@@ -205,10 +204,14 @@ const PUSHED: MainlinePush = {
 
 const CLEAN_PUSH: MainlinePush = { ...PUSHED, id: `push-6c6a13a`, at: NOW - 300 * MINUTE, head: `6c6a13a392`, commits: 1, findings: [] };
 
+// What the project owes of it: everything the push found.
+const LEFT_RED: Red = { source: `push`, scope: `intentic`, since: PUSHED.at, findings: LEFT, suspects: [], named: false, decisions: [] };
+
 const pushedStatus = (): MainlineStatus => ({
     projects: [{ project: `web`, queued: [], last: green() }],
     recent: [green()],
-    pushes: [PUSHED, CLEAN_PUSH],
+    pushed: [PUSHED, CLEAN_PUSH],
+    reds: [LEFT_RED],
 });
 
 beforeEach(() => {
@@ -549,7 +552,7 @@ describe(`the main line's panel`, () => {
         await Promise.resolve();
         await Promise.resolve();
         // Not in this roster yet, so it opens by the id every attempt 1 at these findings wears.
-        expect(opened).toHaveBeenCalledWith(pushFindingsFixBase([PUSHED, CLEAN_PUSH], `intentic`));
+        expect(opened).toHaveBeenCalledWith(pushFixBase(LEFT_RED));
         expect(useNotifications().receipt.value).toBeUndefined();
     });
 
@@ -579,7 +582,7 @@ describe(`the main line's panel`, () => {
 
     it(`keeps pushes in the record beside the lands' checks, by what each left`, () => {
         const status = pushedStatus();
-        const { element } = mount({ ...status, pushes: [PUSHED, { ...CLEAN_PUSH, branch: `docs/verify-push` }] }, { open: `mainline` });
+        const { element } = mount({ ...status, pushed: [PUSHED, { ...CLEAN_PUSH, branch: `docs/verify-push` }] }, { open: `mainline` });
         const events = [...panel(element)!.querySelectorAll<HTMLElement>(`[data-section="history"] [data-event]`)];
         // Aged from the minute the panel reads, 40s before NOW: 12m reads as 11, 20m as 19, 300m as 4h. Two projects
         // between the lands and the pushes, so every row names its own. A push row says "push" to a screen reader and

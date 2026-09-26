@@ -9,6 +9,7 @@ const HELD: StandingVerdict = {
     question: QUESTION,
     runs: [{ status: `failed`, repo: `intentic`, command: `git push origin main`, output: `2 tests failed`, exitCode: 1, refusedBy: `hook` }],
     at: 61_000,
+    mark: 3,
 };
 
 test(`a push in flight is a glyph, and the count it outranks is not drawn`, () => {

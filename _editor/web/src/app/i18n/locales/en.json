@@ -437,11 +437,13 @@
             "routingReported": "Nobody is fixing it",
             "routingSpent": "Out of fix attempts",
             "routingResolved": "Fixed by the next check",
+            "routingDismissed": "Set aside by you",
             "routingDeciding": "Deciding who fixes it",
             "shortFixing": "fixing",
             "shortOnHold": "on hold",
             "shortNeedsYou": "needs you",
             "shortFixed": "fixed",
+            "shortDismissed": "set aside",
             "push": {
                 "title": "Left at push",
                 "explain": "The push went; its check let these through. Each waits here until a later measurement no longer finds it or you dismiss it. Nobody is sent after them unless you hand them over.",

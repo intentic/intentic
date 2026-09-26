@@ -426,11 +426,13 @@
             "routingReported": "Nikt tego nie naprawia",
             "routingSpent": "Wyczerpane próby naprawy",
             "routingResolved": "Naprawione przy następnym sprawdzeniu",
+            "routingDismissed": "Odłożone przez ciebie",
             "routingDeciding": "Trwa decyzja, kto to naprawi",
             "shortFixing": "w naprawie",
             "shortOnHold": "wstrzymane",
             "shortNeedsYou": "czeka na ciebie",
             "shortFixed": "naprawione",
+            "shortDismissed": "odłożone",
             "push": {
                 "title": "Zostało po pushu",
                 "explain": "Push poszedł; jego sprawdzenie przepuściło to, co tu widać. Każde znalezisko czeka tu, aż późniejszy pomiar go nie znajdzie albo je odrzucisz. Nikt się tym nie zajmie, dopóki go nie przekażesz.",

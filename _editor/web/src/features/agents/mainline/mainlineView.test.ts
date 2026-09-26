@@ -1,12 +1,4 @@
-import type {
-    MainlineLand,
-    MainlineProject,
-    MainlinePush,
-    MainlineRoutingKind,
-    MainlineRun,
-    MainlineStatus,
-    PushFinding,
-} from "@intentic/sandbox-contract";
+import type { Finding, MainlineLand, MainlineProject, MainlinePush, MainlineRoutingKind, MainlineRun, MainlineStatus, Red } from "@intentic/sandbox-contract";
 import {
     checkSession,
     failuresOf,
@@ -15,7 +7,6 @@ import {
     leftSince,
     mainlineSummary,
     pushDebtOf,
-    recheckable,
     redsOf,
     resultsOf,
     routingMeta,
@@ -213,13 +204,16 @@ describe(`routingMeta`, () => {
         expect(said(`reported`)).toEqual([`needs-you`, `needs you`, `Nobody is fixing it`, undefined, `text-warning`]);
         expect(said(`spent`)).toEqual([`needs-you`, `needs you`, `Out of fix attempts`, undefined, `text-warning`]);
         expect(said(`resolved`)).toEqual([`fixed`, `fixed`, `Fixed by the next check`, undefined, `text-success`]);
+        // Only what a push left is dismissed, by the owner: settled, in its own words.
+        expect(said(`dismissed`)).toEqual([`fixed`, `set aside`, `Set aside by you`, undefined, `text-success`]);
     });
 });
 
-// WHAT A PUSH LEFT BEHIND: the same projection, over the pushes the daemon files beside the lands' checks.
-const finding = (id: string, over: Partial<PushFinding> = {}): PushFinding => ({ id, kind: `check`, check: id, text: `${id} says so`, state: `open`, ...over });
+// WHAT A PUSH LEFT BEHIND: the same projection, over the pushes the daemon files beside the lands' checks and the push
+// reds that say what of it is still owed.
+const finding = (id: string, over: Partial<Finding> = {}): Finding => ({ id, source: id, recheckable: true, text: `${id} says so`, ...over });
 
-const push = (id: string, at: number, findings: PushFinding[], over: Partial<MainlinePush> = {}): MainlinePush => ({
+const push = (id: string, at: number, findings: Finding[], over: Partial<MainlinePush> = {}): MainlinePush => ({
     project: `intentic`,
     id,
     at,
@@ -230,52 +224,85 @@ const push = (id: string, at: number, findings: PushFinding[], over: Partial<Mai
     ...over,
 });
 
-// A status for what pushes left: the pushes, the lands' record, and one project checked at `lastAt` when given.
-const pushStatus = (pushes: MainlinePush[] | undefined, recent: MainlineRun[] = [], lastAt?: number): MainlineStatus => ({
+const pushRed = (scope: string, findings: Finding[], over: Partial<Red> = {}): Red => ({
+    source: `push`,
+    scope,
+    since: NOW - 30 * MINUTE,
+    findings,
+    suspects: [],
+    named: false,
+    decisions: [],
+    ...over,
+});
+
+// Each project's push red as the daemon would file it from `pushes`: everything they found, oldest push first and each
+// once, less what was since `settled` (resolved or dismissed).
+const owing = (pushes: readonly MainlinePush[], settled: readonly string[] = []): Red[] => {
+    const byProject = new Map<string, Finding[]>();
+    for (const each of pushes.toReversed()) {
+        const owed = byProject.get(each.project) ?? [];
+        byProject.set(each.project, owed);
+        owed.push(...each.findings.filter((found) => !settled.includes(found.id) && !owed.some((known) => known.id === found.id)));
+    }
+    return [...byProject].filter(([, owed]) => owed.length > 0).map(([scope, owed]) => pushRed(scope, owed));
+};
+
+// A status for what pushes left: the pushes, what is owed of them, the lands' record, and one project checked at `lastAt`
+// when given. `pushes` undefined is a daemon that records none.
+const pushStatus = (
+    pushes: MainlinePush[] | undefined,
+    { settled = [], recent = [], lastAt, reds }: { settled?: string[]; recent?: MainlineRun[]; lastAt?: number; reds?: Red[] } = {},
+): MainlineStatus => ({
     projects: lastAt === undefined ? [] : [{ project: `web`, queued: [], last: run({ at: lastAt }) }],
     recent,
-    ...(pushes === undefined ? {} : { pushes }),
+    ...(pushes === undefined ? {} : { pushed: pushes, reds: reds ?? owing(pushes, settled) }),
 });
 
 describe(`pushDebtOf`, () => {
-    it(`reads nothing from a daemon that records no pushes, or pushes that left nothing open`, () => {
+    it(`reads nothing from a daemon that records no pushes, or pushes that left nothing owed`, () => {
         expect(pushDebtOf(undefined)).toEqual([]);
         expect(pushDebtOf(pushStatus(undefined))).toEqual([]);
-        expect(pushDebtOf(pushStatus([push(`a`, NOW, []), push(`b`, NOW - MINUTE, [finding(`paths`, { state: `resolved`, settledAt: NOW })])]))).toEqual([]);
+        expect(pushDebtOf(pushStatus([push(`a`, NOW, []), push(`b`, NOW - MINUTE, [finding(`paths`)])], { settled: [`paths`] }))).toEqual([]);
+    });
+
+    it(`reads a land check's red as none of its business`, () => {
+        const landRed: Red = { ...pushRed(`intentic`, [finding(`paths`)]), source: `land` };
+        expect(pushDebtOf(pushStatus([push(`a`, NOW, [finding(`paths`)])], { reds: [landRed] }))).toEqual([]);
     });
 
     it(`puts the tree's own breakage first, then orders by what measured it, keeping the daemon's order within one check`, () => {
         const [debt] = pushDebtOf(
             pushStatus([
                 push(`a`, NOW, [
-                    finding(`paths-1`, { check: `paths`, gate: `tidy` }),
-                    finding(`silent-2`, { check: `silent-catch`, gate: `tidy` }),
-                    finding(`layout-1`, { check: `layout`, gate: `code` }),
-                    finding(`lint-1`, { kind: `lint`, check: undefined }),
-                    finding(`silent-1`, { check: `silent-catch`, gate: `code` }),
-                    finding(`daemon-1`, { check: `daemon-boundaries`, gate: `code` }),
-                    finding(`layout-2`, { check: `layout`, gate: `code` }),
+                    finding(`paths-1`, { source: `paths`, gate: `tidy` }),
+                    finding(`silent-2`, { source: `silent-catch`, gate: `tidy` }),
+                    finding(`layout-1`, { source: `layout`, gate: `code` }),
+                    finding(`lint-1`, { source: `lint` }),
+                    finding(`silent-1`, { source: `silent-catch`, gate: `code` }),
+                    finding(`daemon-1`, { source: `daemon-boundaries`, gate: `code` }),
+                    finding(`layout-2`, { source: `layout`, gate: `code` }),
                 ]),
             ]),
         );
         expect(debt!.open.map((each) => each.id)).toEqual([`daemon-1`, `layout-1`, `layout-2`, `silent-1`, `lint-1`, `paths-1`, `silent-2`]);
     });
 
-    it(`counts a problem two pushes found once, as the newer push printed it, and keeps only the pushes still holding one`, () => {
-        const newer = push(`b`, NOW, [finding(`paths`, { text: `newer words` }), finding(`gone`, { state: `dismissed`, settledAt: NOW })]);
+    it(`is what the red owes, with the pushes that brought any of it in, newest first`, () => {
+        const newer = push(`b`, NOW, [finding(`paths`, { text: `newer words` }), finding(`gone`)]);
         const clean = push(`c`, NOW - MINUTE, []);
-        const older = push(`a`, NOW - 2 * MINUTE, [finding(`paths`, { text: `older words` }), finding(`layout`)]);
-        expect(pushDebtOf(pushStatus([newer, clean, older]))).toEqual([
-            {
-                project: `intentic`,
-                open: [finding(`layout`), finding(`paths`, { text: `newer words` })],
-                pushes: [newer, older],
-                newest: newer,
-            },
+        const older = push(`a`, NOW - 2 * MINUTE, [finding(`layout`)]);
+        const owed = pushRed(`intentic`, [finding(`layout`), finding(`paths`, { text: `newer words` })]);
+        expect(pushDebtOf(pushStatus([newer, clean, older], { reds: [owed] }))).toEqual([
+            { project: `intentic`, red: owed, open: [finding(`layout`), finding(`paths`, { text: `newer words` })], pushes: [newer, older], newest: newer },
         ]);
     });
 
-    it(`orders projects by how much each left, most first`, () => {
+    it(`still says what is owed when every push that brought it has aged out of the record`, () => {
+        const owed = pushRed(`intentic`, [finding(`paths`)]);
+        expect(pushDebtOf(pushStatus([], { reds: [owed] }))).toEqual([{ project: `intentic`, red: owed, open: [finding(`paths`)], pushes: [], newest: undefined }]);
+    });
+
+    it(`orders projects by how much each left, most first, and a tie in the order the daemon lists the reds`, () => {
         const debts = pushDebtOf(
             pushStatus([
                 push(`w`, NOW, [finding(`paths`)], { project: `web` }),
@@ -285,8 +312,8 @@ describe(`pushDebtOf`, () => {
         );
         expect(debts.map((debt) => [debt.project, debt.open.length])).toEqual([
             [`intentic`, 2],
-            [`web`, 1],
             [``, 1],
+            [`web`, 1],
         ]);
     });
 });
@@ -319,45 +346,30 @@ describe(`findingGist`, () => {
     });
 });
 
-describe(`recheckable`, () => {
-    it(`is a check's or the linter's finding, never one about the pushed commits themselves`, () => {
-        expect(
-            ([`check`, `lint`, `ratchet`, `lockstep`, `rustfmt`] as const).map((kind) => [kind, recheckable(finding(`x`, { kind }))]),
-        ).toEqual([
-            [`check`, true],
-            [`lint`, true],
-            [`ratchet`, false],
-            [`lockstep`, false],
-            [`rustfmt`, false],
-        ]);
-    });
-});
-
 describe(`mainlineSummary with pushes`, () => {
-    it(`counts every open finding across projects, each once`, () => {
+    it(`counts everything the push reds owe across projects, each once`, () => {
         const summary = mainlineSummary(
             pushStatus(
                 [
-                    push(`b`, NOW, [finding(`paths`), finding(`layout`, { state: `resolved`, settledAt: NOW })]),
+                    push(`b`, NOW, [finding(`paths`), finding(`layout`)]),
                     push(`a`, NOW - MINUTE, [finding(`paths`), finding(`lint`)]),
                     push(`w`, NOW - 2 * MINUTE, [finding(`paths`)], { project: `web` }),
                 ],
-                [],
-                NOW - 5 * MINUTE,
+                { settled: [`layout`], lastAt: NOW - 5 * MINUTE },
             ),
         );
         expect(summary).toEqual({ running: undefined, reds: [], queued: 0, checked: true, leftAtPush: 3 });
     });
 
     it(`keeps main passing on the bar when what pushes left is the only other news`, () => {
-        expect(mainlineSummary(pushStatus([push(`a`, NOW, [finding(`paths`)])], [], NOW - MINUTE))).toEqual({
+        expect(mainlineSummary(pushStatus([push(`a`, NOW, [finding(`paths`)])], { lastAt: NOW - MINUTE }))).toEqual({
             running: undefined,
             reds: [],
             queued: 0,
             checked: true,
             leftAtPush: 1,
         });
-        expect(mainlineSummary(pushStatus([], [], NOW - MINUTE))).toEqual({ running: undefined, reds: [], queued: 0, checked: true, leftAtPush: 0 });
+        expect(mainlineSummary(pushStatus([], { lastAt: NOW - MINUTE }))).toEqual({ running: undefined, reds: [], queued: 0, checked: true, leftAtPush: 0 });
     });
 
     it(`stands for a sandbox that pushed with findings but never landed, and not for one whose pushes left nothing`, () => {
@@ -377,10 +389,10 @@ describe(`timelineOf`, () => {
     it(`merges lands' checks and pushes newest first, and cuts at the limit`, () => {
         const landNew = run({ at: NOW - MINUTE });
         const landOld = run({ at: NOW - 10 * MINUTE, status: `red` });
-        const left = push(`left`, NOW - 2 * MINUTE, [finding(`paths`), finding(`lint`, { state: `dismissed`, settledAt: NOW })]);
-        const handled = push(`handled`, NOW - 5 * MINUTE, [finding(`paths`, { state: `resolved`, settledAt: NOW })]);
+        const left = push(`left`, NOW - 2 * MINUTE, [finding(`paths`), finding(`lint`)]);
+        const handled = push(`handled`, NOW - 5 * MINUTE, [finding(`layout`)]);
         const clean = push(`clean`, NOW - 20 * MINUTE, []);
-        const merged = pushStatus([left, handled, clean], [landNew, landOld]);
+        const merged = pushStatus([left, handled, clean], { settled: [`lint`, `layout`], recent: [landNew, landOld] });
 
         expect(timelineOf(merged, 8)).toEqual([
             { kind: `land`, run: landNew },
@@ -394,17 +406,20 @@ describe(`timelineOf`, () => {
 
     it(`is the lands' record alone for a daemon that records no pushes`, () => {
         const checked = run();
-        expect(timelineOf(pushStatus(undefined, [checked]), 8)).toEqual([{ kind: `land`, run: checked }]);
+        expect(timelineOf(pushStatus(undefined, { recent: [checked] }), 8)).toEqual([{ kind: `land`, run: checked }]);
     });
 });
 
 describe(`leftSince`, () => {
-    it(`counts what the pushes measured from the moment on left open, and nothing from before it`, () => {
-        const pushed = pushStatus([
-            push(`b`, NOW, [finding(`paths`), finding(`lint`, { state: `dismissed`, settledAt: NOW })]),
-            push(`w`, NOW - 1, [finding(`layout`), finding(`buttons`)], { project: `web` }),
-            push(`a`, NOW - MINUTE, [finding(`silent-catch`)]),
-        ]);
+    it(`counts what the pushes measured from the moment on left owed, and nothing from before it`, () => {
+        const pushed = pushStatus(
+            [
+                push(`b`, NOW, [finding(`paths`), finding(`lint`)]),
+                push(`w`, NOW - 1, [finding(`layout`), finding(`buttons`)], { project: `web` }),
+                push(`a`, NOW - MINUTE, [finding(`silent-catch`)]),
+            ],
+            { settled: [`lint`] },
+        );
         expect([leftSince(pushed, NOW - 1), leftSince(pushed, NOW), leftSince(pushed, NOW + 1), leftSince(undefined, 0)]).toEqual([3, 1, 0, 0]);
     });
 });

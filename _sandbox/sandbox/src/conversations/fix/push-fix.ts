@@ -1,13 +1,14 @@
-import { type MainlinePush, type PushFinding, pushFindingRecheckable, pushFindingSource, pushFindingsFixBase } from "@intentic/sandbox-contract";
+import { type Finding, type MainlinePush, pushFixBase, pushRedOf, type Red } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
+import { publicPushReds } from "../../workspace/deps/push-checks-store.js";
 import type { TurnInput } from "../../seams/turn-starter.js";
 import { daemonFixAttemptDeps, type FixAttemptOutcome, startFixAttempt } from "./fix-attempts.js";
 
 // A conversation on what a push check let through, or on the push the repository's own hook refused, opened only when
 // somebody presses for it (the Main line's "Hand to an agent", or the refused push's own card): the sandbox never starts
-// one by itself. Both read the push-checks store, so there is one flow for either. Every open finding in
-// the project goes into one conversation; the oldest push still holding one names it (pushFindingsFixBase), so a second
-// press while any stands continues the same attempt (fix-attempts.ts), exactly as a CI fix does.
+// one by itself (RED_POLICY: a push red waits for the owner). Both read the project's push Red, so there is one flow for
+// either. Everything it owes goes into one conversation, named by when the red began (pushFixBase), so a second press
+// while anything is owed continues the same attempt (fix-attempts.ts), exactly as a CI fix does.
 
 // The registry's own cap on a title.
 const TITLE_MAX = 80;
@@ -29,9 +30,9 @@ const short = (sha: string): string => sha.slice(0, 7);
 // Which group a finding reads under, by what measured it (the repository's own name for it), in the order the brief
 // lists them: what the tree fails whoever caused it, then the lines the push added, then anything else a measurement can
 // clear, then what is about the pushed commits themselves.
-const groupOf = (finding: PushFinding): { readonly rank: number; readonly heading: string } => {
-    const source = `\`${pushFindingSource(finding)}\``;
-    if (!pushFindingRecheckable(finding)) {
+const groupOf = (finding: Finding): { readonly rank: number; readonly heading: string } => {
+    const source = `\`${finding.source}\``;
+    if (!finding.recheckable) {
         return { rank: 3, heading: `${source}, about the pushed commits themselves:` };
     }
     return finding.gate === "code"
@@ -42,12 +43,12 @@ const groupOf = (finding: PushFinding): { readonly rank: number; readonly headin
 };
 
 // A finding's own words as a list item: some checks print theirs as one already, and "- - x" helps nobody.
-const itemOf = (finding: PushFinding): string => `- ${finding.text.replace(/^[-*]\s+/, "")}`;
+const itemOf = (finding: Finding): string => `- ${finding.text.replace(/^[-*]\s+/, "")}`;
 
-const findingLines = (finding: PushFinding): string[] => [itemOf(finding), ...(finding.command === undefined ? [] : [`  \`${finding.command}\``])];
+const findingLines = (finding: Finding): string[] => [itemOf(finding), ...(finding.command === undefined ? [] : [`  \`${finding.command}\``])];
 
 // The findings grouped by what printed them, code-gate checks first; within a group, in the order they were found.
-const groupedFindings = (findings: readonly PushFinding[]): string => {
+const groupedFindings = (findings: readonly Finding[]): string => {
     const groups = new Map<string, { readonly rank: number; readonly lines: string[] }>();
     for (const finding of findings.slice(0, FINDINGS_LISTED)) {
         const { rank, heading } = groupOf(finding);
@@ -65,7 +66,7 @@ const groupedFindings = (findings: readonly PushFinding[]): string => {
 };
 
 // A refused push's one finding is the hook's own output, quoted whole rather than listed as a line.
-const refusalLines = (push: MainlinePush, open: readonly PushFinding[]): string =>
+const refusalLines = (push: MainlinePush, open: readonly Finding[]): string =>
     [
         `The push of \`${short(push.head)}\`${push.branch === undefined ? "" : ` to ${push.remote === undefined ? push.branch : `${push.remote}/${push.branch}`}`} was refused by the repository's own pre-push hook, so nothing reached the remote. What it said (the end of it):`,
         ...open.map((finding) => `\`\`\`\n${finding.text}\n\`\`\``),
@@ -73,7 +74,7 @@ const refusalLines = (push: MainlinePush, open: readonly PushFinding[]): string 
     ].join("\n\n");
 
 // One pushed range as the brief names it, with the commits its open findings came with.
-const pushLines = (push: MainlinePush, open: readonly PushFinding[]): string => {
+const pushLines = (push: MainlinePush, open: readonly Finding[]): string => {
     const range =
         push.base === undefined
             ? `\`${short(push.head)}\` (the remote had nothing to compare it with)`
@@ -86,28 +87,30 @@ const pushLines = (push: MainlinePush, open: readonly PushFinding[]): string => 
     ].join("\n");
 };
 
-const openOf = (push: MainlinePush): PushFinding[] => push.findings.filter((finding) => finding.state === "open");
-
-// The opening prompt, the nudge a continued attempt gets, and the id attempt 1 wears; undefined when nothing is open.
-export const pushFixBrief = (pushes: readonly MainlinePush[], project: string): PushFixBrief | undefined => {
-    const base = pushFindingsFixBase(pushes, project);
-    // Oldest push first, so the ranges read in the order they were pushed.
-    const holding = pushes.filter((push) => push.project === project && openOf(push).length > 0).toReversed();
-    if (base === undefined || holding.length === 0) {
+// The opening prompt, the nudge a continued attempt gets, and the id attempt 1 wears; undefined when nothing is owed.
+export const pushFixBrief = (pushes: readonly MainlinePush[], red: Red | undefined): PushFixBrief | undefined => {
+    const base = pushFixBase(red);
+    if (red === undefined || base === undefined || red.findings.length === 0) {
         return undefined;
     }
+    const project = red.scope;
+    const owed = new Set(red.findings.map((finding) => finding.id));
+    const openOf = (push: MainlinePush): Finding[] => push.findings.filter((finding) => owed.has(finding.id));
+    // Oldest push first, so the ranges read in the order they were pushed.
+    const holding = pushes.filter((push) => push.project === project && openOf(push).length > 0).toReversed();
     const refused = holding.filter((push) => push.refused === true);
+    const refusals = new Set(refused.flatMap(openOf).map((finding) => finding.id));
     const left = holding.filter((push) => push.refused !== true);
-    const open = holding.flatMap(openOf);
-    const leftOpen = left.flatMap(openOf);
-    const pushedCommits = leftOpen.some((finding) => !pushFindingRecheckable(finding));
+    const open = red.findings;
+    const leftOpen = open.filter((finding) => !refusals.has(finding.id));
+    const pushedCommits = leftOpen.some((finding) => !finding.recheckable);
     const prompt = [
         ...refused.map((push) => refusalLines(push, openOf(push))),
-        ...(left.length === 0
+        ...(leftOpen.length === 0
             ? []
             : [
                   `The push check in ${where(project)} let the findings below through. It only reports, so nothing blocked the push, and they still stand.`,
-                  `What was pushed:\n${left.map((push) => pushLines(push, openOf(push))).join("\n")}`,
+                  ...(left.length === 0 ? [] : [`What was pushed:\n${left.map((push) => pushLines(push, openOf(push))).join("\n")}`]),
                   `What it found, by what measured it:\n\n${groupedFindings(leftOpen)}`,
                   `Fix them in the code, and confirm each one by re-running the command next to it. The owner's Main line clears a finding once a measurement no longer prints it.`,
               ]),
@@ -134,13 +137,15 @@ export interface PushFixRequest {
     readonly resume?: Parameters<typeof startFixAttempt>[1]["resume"];
 }
 
-// Starts, continues or declines the attempt at the project's open push findings; undefined when none is open.
+// Starts, continues or declines the attempt at what the project's push red owes; undefined when nothing is owed. A start
+// is filed on the red as its decision, so the record says who has it.
 export const startPushFix = async (services: Services, request: PushFixRequest): Promise<FixAttemptOutcome | undefined> => {
-    const brief = pushFixBrief((await services.pushChecks.store.read()).pushes, request.project);
+    const state = await services.pushChecks.store.read();
+    const brief = pushFixBrief(state.pushes, pushRedOf(publicPushReds(state.reds), request.project));
     if (brief === undefined) {
         return undefined;
     }
-    return startFixAttempt(daemonFixAttemptDeps(services, { pressed: true, picked: request.picked }), {
+    const outcome = await startFixAttempt(daemonFixAttemptDeps(services, { pressed: true, picked: request.picked }), {
         ...brief,
         errands: { prompt: "push-fix", nudge: "push-fix-nudge" },
         // `runRole` alone pins the model (turn-resume.ts) when nobody picked one: the pre-push fix's own list, which the
@@ -148,4 +153,8 @@ export const startPushFix = async (services: Services, request: PushFixRequest):
         turn: { isolated: true, runRole: "pre-push-fix", ...request.turn },
         resume: request.resume,
     });
+    if (outcome.kind === "started") {
+        await services.pushChecks.handed(request.project, outcome.conversationId);
+    }
+    return outcome;
 };

@@ -1,4 +1,4 @@
-import { type MainlinePush, pushFindingsFixBase, pushFixConversationId } from "@intentic/sandbox-contract";
+import { type Finding, type MainlinePush, pushFixBase, pushFixConversationId, type Red } from "@intentic/sandbox-contract";
 import { pushFixBrief } from "./push-fix.js";
 
 // What an agent handed a project's push findings opens on: it knows nothing else, so the words are the subject here.
@@ -15,10 +15,10 @@ const PUSHES: readonly MainlinePush[] = [
         head: "2222222aaaa",
         commits: 1,
         findings: [
-            { id: "lint::x", kind: "lint", text: "- src/b.ts:4 no-unused-vars", command: "node _tools/oxlint/lint-edit.mjs src/b.ts", state: "open" },
+            { id: "lint:x", source: "lint", recheckable: true, text: "- src/b.ts:4 no-unused-vars", command: "node _tools/oxlint/lint-edit.mjs src/b.ts" },
         ],
     },
-    { project: "lib", id: "q1", at: 15, head: "9999999", commits: 1, findings: [{ id: "lint::y", kind: "lint", text: "elsewhere", state: "open" }] },
+    { project: "lib", id: "q1", at: 15, head: "9999999", commits: 1, findings: [{ id: "lint:y", source: "lint", recheckable: true, text: "elsewhere" }] },
     {
         project: "app",
         id: "r1",
@@ -30,39 +30,54 @@ const PUSHES: readonly MainlinePush[] = [
         commits: 2,
         findings: [
             {
-                id: "check:silent-catch:a",
-                kind: "check",
-                check: "silent-catch",
+                id: "silent-catch:a",
+                source: "silent-catch",
+                recheckable: true,
                 gate: "tidy",
                 text: "src/a.ts:1 empty catch block",
                 command: "node _tools/checks/run.mjs --only silent-catch",
                 commit: { sha: "1111111cccc", subject: "feat: read the report" },
-                state: "open",
             },
             {
-                id: "check:paths:b",
-                kind: "check",
-                check: "paths",
+                id: "paths:b",
+                source: "paths",
+                recheckable: true,
                 gate: "code",
                 text: "docs/x.md links a missing file",
                 command: "node _tools/checks/run.mjs --only paths",
-                state: "open",
             },
             {
-                id: "ratchet::c",
-                kind: "ratchet",
+                id: "ratchet:c",
+                source: "ratchet",
+                recheckable: false,
                 text: "src/a.test.ts: toEqual became toMatchObject",
                 commit: { sha: "0aaaaaa1234", subject: "test: loosen the fixture" },
-                state: "open",
             },
-            { id: "check:paths:d", kind: "check", check: "paths", gate: "code", text: "gone already", state: "resolved", settledAt: 12 },
+            { id: "paths:d", source: "paths", recheckable: true, gate: "code", text: "gone already" },
         ],
     },
 ];
 
+// A project's push red as the store keeps it: what its pushes found and still owe, in the order they were filed.
+const redOf = (pushes: readonly MainlinePush[], project: string, since: number, settled: readonly string[] = []): Red => ({
+    source: "push",
+    scope: project,
+    since,
+    findings: pushes
+        .filter((push) => push.project === project)
+        .toReversed()
+        .flatMap((push): Finding[] => push.findings)
+        .filter((finding) => !settled.includes(finding.id)),
+    suspects: [],
+    named: false,
+    decisions: [],
+});
+// `app` owes all but what a measurement found gone.
+const APP = redOf(PUSHES, "app", 10, ["paths:d"]);
+
 describe("the brief a push-fix conversation opens on", () => {
     test("names the pushed ranges oldest first, then every open finding grouped by what printed it, code-gate checks first", () => {
-        expect(pushFixBrief(PUSHES, "app")?.prompt).toBe(
+        expect(pushFixBrief(PUSHES, APP)?.prompt).toBe(
             [
                 "The push check in `app` let the findings below through. It only reports, so nothing blocked the push, and they still stand.",
                 "What was pushed:\n- `0000000..1111111` to origin/main, 2 commits\n  - 1111111 feat: read the report\n  - 0aaaaaa test: loosen the fixture\n- `2222222` (the remote had nothing to compare it with) to origin/main, 1 commit",
@@ -88,12 +103,12 @@ describe("the brief a push-fix conversation opens on", () => {
             head: "3333333dddd",
             commits: 1,
             findings: [
-                { id: "check:mypy:a", kind: "check", check: "mypy", source: "mypy", recheckable: true, text: "svc/a.py:3 error", command: "make typecheck", state: "open" },
-                { id: "check:signoff:b", kind: "check", check: "signoff", source: "signoff", recheckable: false, text: "commit 3333333 is not signed off", state: "open" },
+                { id: "mypy:a", source: "mypy", recheckable: true, text: "svc/a.py:3 error", command: "make typecheck" },
+                { id: "signoff:b", source: "signoff", recheckable: false, text: "commit 3333333 is not signed off" },
             ],
         };
 
-        const prompt = pushFixBrief([generic], "svc")?.prompt ?? "";
+        const prompt = pushFixBrief([generic], redOf([generic], "svc", 30))?.prompt ?? "";
 
         expect(prompt).toContain("`mypy`:\n- svc/a.py:3 error\n  `make typecheck`\n\n`signoff`, about the pushed commits themselves:\n- commit 3333333 is not signed off");
         expect(prompt).toContain("Findings about the pushed commits themselves concern commits that are already pushed, so their fix is a follow-up commit.");
@@ -111,10 +126,10 @@ describe("the brief a push-fix conversation opens on", () => {
             head: "4444444eeee",
             commits: 0,
             refused: true,
-            findings: [{ id: "check:pre-push:z", kind: "check", check: "pre-push", source: "pre-push", recheckable: false, text: "typecheck failed", command: "git push --dry-run", state: "open" }],
+            findings: [{ id: "pre-push:z", source: "pre-push", recheckable: false, text: "typecheck failed", command: "git push --dry-run" }],
         };
 
-        const brief = pushFixBrief([refused], "app");
+        const brief = pushFixBrief([refused], redOf([refused], "app", 40));
 
         expect(brief?.prompt).toBe(
             [
@@ -124,17 +139,15 @@ describe("the brief a push-fix conversation opens on", () => {
                 "You are in an isolated worktree: commit your fix and it goes through review.",
             ].join("\n\n"),
         );
-        expect(brief?.base).toBe(pushFixConversationId("app", "left:4444444eeee"));
+        expect(brief?.base).toBe(pushFixConversationId("app", "red:40"));
     });
 
     test("says nothing of already-pushed commits when every open finding can be measured again", () => {
-        const measurable = PUSHES.map((push) => ({ ...push, findings: push.findings.filter((finding) => finding.kind !== "ratchet") }));
-
-        expect(pushFixBrief(measurable, "app")?.prompt.includes("follow-up commit")).toBe(false);
+        expect(pushFixBrief(PUSHES, redOf(PUSHES, "app", 10, ["paths:d", "ratchet:c"]))?.prompt.includes("follow-up commit")).toBe(false);
     });
 
-    test("nudges a continued attempt with what is still open, and is keyed by the oldest push still holding a finding", () => {
-        const brief = pushFixBrief(PUSHES, "app");
+    test("nudges a continued attempt with what is still open, and is keyed by when the red began", () => {
+        const brief = pushFixBrief(PUSHES, APP);
 
         expect(brief?.nudge).toBe(
             [
@@ -144,21 +157,18 @@ describe("the brief a push-fix conversation opens on", () => {
             ].join("\n\n"),
         );
         expect(brief?.title).toBe("Fix what the push left: app");
-        expect(brief?.base).toBe(pushFixConversationId("app", "left:1111111cccc"));
-        expect(brief?.base).toBe(pushFindingsFixBase(PUSHES, "app"));
+        expect(brief?.base).toBe(pushFixConversationId("app", "red:10"));
+        expect(brief?.base).toBe(pushFixBase(APP));
     });
 
     test("names the workspace root by what it is, and has nothing to hand over where nothing is open", () => {
         const root = PUSHES.map((push) => ({ ...push, project: push.project === "lib" ? "" : push.project }));
 
-        expect(pushFixBrief(root, "")?.title).toBe("Fix what the push left: workspace");
-        expect(pushFixBrief(root, "")?.prompt.startsWith("The push check in the workspace root let the findings below through.")).toBe(true);
-        expect(pushFixBrief(PUSHES, "web")).toBeUndefined();
-        expect(
-            pushFixBrief(
-                PUSHES.map((push) => ({ ...push, findings: push.findings.map((finding) => ({ ...finding, state: "dismissed" as const })) })),
-                "app",
-            ),
-        ).toBeUndefined();
+        const rootRed = redOf(root, "", 15);
+
+        expect(pushFixBrief(root, rootRed)?.title).toBe("Fix what the push left: workspace");
+        expect(pushFixBrief(root, rootRed)?.prompt.startsWith("The push check in the workspace root let the findings below through.")).toBe(true);
+        expect(pushFixBrief(PUSHES, undefined)).toBeUndefined();
+        expect(pushFixBrief(PUSHES, { ...APP, findings: [] })).toBeUndefined();
     });
 });

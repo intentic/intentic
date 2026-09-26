@@ -2,12 +2,12 @@ import { execFile } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import { type MainlinePushRecheckResult, pushFindingRecheckable, pushFindingSource } from "@intentic/sandbox-contract";
+import type { MainlinePushRecheckResult } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Logger } from "pino";
 import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 import { isValidRepoId } from "../layout/repo-discovery.js";
-import { openCount, parsePushReport, type PushChecksStore, type PushRefusal, type PushReportEntry } from "./push-checks-store.js";
+import { openCount, owedIn, parsePushReport, type PushChecksStore, type PushRefusal, type PushReportEntry } from "./push-checks-store.js";
 
 // Files what the pre-push hook leaves in a repository's git common dir (`intentic-push-report.json`, newest first, at most
 // ten entries) into the push-checks store, and measures a project again on request. A push is filed only once its head
@@ -56,6 +56,9 @@ export interface PushChecks {
     // finding is what the hook said, and one that went answers every refusal before it.
     readonly refused: (project: string, refusal: PushRefusal) => Promise<void>;
     readonly pushed: (project: string, at: number) => Promise<void>;
+    // The owner handed what the project's push red owes to a conversation (conversations/fix/push-fix.ts): filed on the
+    // red as its decision, once per conversation.
+    readonly handed: (project: string, conversationId: string) => Promise<void>;
 }
 
 // The project a ref-feed repo id names: "root" is the workspace root, whose project folder is empty.
@@ -191,7 +194,7 @@ export const createPushChecks = (deps: PushChecksDeps): PushChecks => {
         return next;
     };
 
-    const openIn = async (project: string): Promise<number> => openCount((await deps.store.read()).pushes, project);
+    const openIn = async (project: string): Promise<number> => openCount(await deps.store.read(), project);
 
     const recheckNow = async (project: string): Promise<MainlinePushRecheckResult> => {
         const report = await reportOf(project);
@@ -232,12 +235,9 @@ export const createPushChecks = (deps: PushChecksDeps): PushChecks => {
         recheckIfOpen: async (project) => ((await openIn(project)) === 0 ? undefined : recheck(project)),
         afterLandCheck: async (project) => {
             const filed = await ingest(project);
-            const open = (await deps.store.read()).pushes
-                .filter((push) => push.project === project)
-                .flatMap((push) => push.findings)
-                .filter((finding) => finding.state === "open" && pushFindingRecheckable(finding));
-            // Measured already: the check left a measurement of every check, and nothing open waits on the linter.
-            if (open.length === 0 || (filed.rechecks > 0 && open.every((finding) => pushFindingSource(finding) !== "lint"))) {
+            const open = owedIn(await deps.store.read(), project).filter((finding) => finding.recheckable);
+            // Measured already: the check left a measurement of every check, and nothing owed waits on the linter.
+            if (open.length === 0 || (filed.rechecks > 0 && open.every((finding) => finding.source !== "lint"))) {
                 return filed;
             }
             return recheck(project);
@@ -248,6 +248,14 @@ export const createPushChecks = (deps: PushChecksDeps): PushChecks => {
         },
         pushed: async (project, at) => {
             await deps.store.pushed(project, at);
+            publishRuntimeChange("mainline");
+        },
+        handed: async (project, conversationId) => {
+            const red = (await deps.store.read()).reds[project];
+            if (red === undefined || red.decisions.findLast((decision) => decision.kind === "fix-up")?.conversationId === conversationId) {
+                return;
+            }
+            await deps.store.decide(project, { kind: "fix-up", conversationId, at: now() });
             publishRuntimeChange("mainline");
         },
         dismiss: async (project, ids, restore) => {
