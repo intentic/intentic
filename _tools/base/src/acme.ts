@@ -1,7 +1,7 @@
 import { createHash, type KeyObject, sign } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { pollUntil } from "./async.js";
-import { resolveTxtAuthoritatively } from "./authoritative-dns.js";
+import { resolveTxtAuthoritatively, type TxtLookup } from "./authoritative-dns.js";
 import { base64Url, buildCsr } from "./csr.js";
 
 // ACME client (RFC 8555), DNS-01 only, which is what a wildcard or a name resolving to 127.0.0.1 leaves: the challenge
@@ -15,6 +15,10 @@ const POLL_INTERVAL_MS = 3_000;
 // Generous: an early look invalidates the authorization for good and negative-caches the miss.
 const PUBLICATION_TIMEOUT_MS = 90_000;
 const PUBLICATION_INTERVAL_MS = 2_000;
+
+// When DNS never showed the record but the provider confirms it holds the value, how long to let the provider's own
+// nameservers catch up before the CA looks. Cloudflare serves a new record within about 10 s; this is generous.
+export const PROVIDER_SETTLE_MS = 30_000;
 
 // Retries for a request that never reached the CA; a slow connection is reliably followed by a fast one.
 const TRANSPORT_ATTEMPTS = 3;
@@ -40,7 +44,13 @@ export interface AcmeOptions {
     readonly publishChallenge: (recordName: string, value: string) => Promise<void>;
     readonly removeChallenge: (recordName: string) => Promise<void>;
     // Confirms the challenge is live before the CA looks; authoritative by default, injected for tests.
-    readonly resolveTxt?: (recordName: string) => Promise<string[]>;
+    readonly resolveTxt?: (recordName: string) => Promise<TxtLookup>;
+    // The DNS provider's own word that `recordName` holds `value` (a read back through its API), for a host whose
+    // network cannot see the zone's nameservers. Asked only once DNS has shown nothing by the deadline; without it,
+    // or when it says no, that deadline fails the order as before.
+    readonly confirmChallenge?: (recordName: string, value: string) => Promise<boolean>;
+    // Where a degraded path (the provider's word standing in for DNS) is reported; silent when absent.
+    readonly warn?: (message: string) => void;
     readonly fetchImpl?: typeof fetch;
     readonly wait?: (ms: number) => Promise<void>;
     // Epoch ms, injected so the validation deadline is testable without a real clock.
@@ -173,16 +183,8 @@ export const obtainCertificate = async (options: AcmeOptions): Promise<{ certifi
             // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
             await options.publishChallenge(recordName, digest);
             published.push(recordName);
-            // Waits for the zone's own nameservers to actually serve the record: a zone API returning success is not
-            // the same as being visible, and an early look invalidates the authorization for good.
             // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
-            await awaitOrThrow(async () => (await resolveTxt(recordName)).includes(digest), {
-                wait,
-                now,
-                what: `publication of ${recordName}`,
-                timeoutMs: PUBLICATION_TIMEOUT_MS,
-                intervalMs: PUBLICATION_INTERVAL_MS,
-            });
+            await awaitPublication(recordName, digest, { ...options, resolveTxt, wait, now });
             // `{}`, not POST-as-GET, means "ready to be checked" on a challenge.
             // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
             const accepted = await signedPost(dns01["url"], {});
@@ -238,6 +240,53 @@ export const obtainCertificate = async (options: AcmeOptions): Promise<{ certifi
             });
         }
     }
+};
+
+// Waits for the zone's own nameservers to actually serve the record: a zone API returning success is not the same as
+// being visible, and an early look invalidates the authorization for good. When they never show it, the provider's
+// confirmation plus PROVIDER_SETTLE_MS is the only other proof accepted; the CA is told after one or the other.
+const awaitPublication = async (
+    recordName: string,
+    digest: string,
+    context: Pick<AcmeOptions, "confirmChallenge" | "warn"> & {
+        resolveTxt: (recordName: string) => Promise<TxtLookup>;
+        wait: (ms: number) => Promise<void>;
+        now: () => number;
+    },
+): Promise<void> => {
+    let last: TxtLookup = { values: [], reached: "none" };
+    const visible = await pollUntil(
+        async () => {
+            last = await context.resolveTxt(recordName);
+            return last.values.includes(digest);
+        },
+        { wait: context.wait, now: context.now, timeoutMs: PUBLICATION_TIMEOUT_MS, intervalMs: PUBLICATION_INTERVAL_MS },
+    );
+    if (visible) {
+        return;
+    }
+    const timedOut = `timed out waiting for publication of ${recordName}`;
+    if (context.confirmChallenge === undefined) {
+        throw new Error(timedOut);
+    }
+    let confirmed: boolean;
+    try {
+        confirmed = await context.confirmChallenge(recordName, digest);
+    } catch (error) {
+        throw new Error(timedOut, { cause: error });
+    }
+    if (!confirmed) {
+        throw new Error(timedOut);
+    }
+    const seen = {
+        none: "none of the zone's nameservers answered this host, so its network likely blocks or intercepts direct DNS",
+        some: "only some of the zone's nameservers answered this host",
+        all: "the zone's nameservers answered this host without the value, so something on its network may be answering in their place",
+    }[last.reached];
+    context.warn?.(
+        `${recordName} never showed the challenge in DNS: ${seen}. The DNS provider confirms the record holds it, so the CA is told after ${PROVIDER_SETTLE_MS / 1000} s more.`,
+    );
+    await context.wait(PROVIDER_SETTLE_MS);
 };
 
 // Polls until true, or throws naming what was waited for. The injected clock lets tests compress a real wait instantly;

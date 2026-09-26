@@ -1,5 +1,5 @@
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
-import { CloudflareTokenError, listZoneNames, reapOrphanDnsRecords } from "./cloudflare.js";
+import { acmeChallengeHolds, CloudflareTokenError, listZoneNames, reapOrphanDnsRecords } from "./cloudflare.js";
 
 // The two things this platform still asks Cloudflare for: the zone list, and the DNS behind the loopback cert.
 
@@ -48,6 +48,34 @@ describe(`listZoneNames`, () => {
             },
         ]);
         await expect(listZoneNames(`token`)).rejects.toThrow(`9109 nope`);
+    });
+});
+
+describe(`acmeChallengeHolds`, () => {
+    const NAME = `_acme-challenge.sbx.example.com`;
+    const stubTxt = (records: { content: string }[]) =>
+        stubFetch([
+            { match: (_, url) => url.includes(`/zones?name=`), respond: () => ok([{ id: `zone-1` }]) },
+            { match: (method, url) => method === `GET` && url.includes(`/zones/zone-1/dns_records?type=TXT`), respond: () => ok(records) },
+        ]);
+
+    it(`confirms a record whose content is the challenge value, quoted or not, and asks for it by name`, async () => {
+        const calls = stubTxt([{ content: `other` }, { content: `digest` }]);
+        await expect(acmeChallengeHolds(`token`, `example.com`, NAME, `digest`)).resolves.toBe(true);
+        expect(calls.at(-1)?.url).toContain(`name=${encodeURIComponent(NAME)}`);
+
+        unstubAllGlobals();
+        stubTxt([{ content: `"digest"` }]);
+        await expect(acmeChallengeHolds(`token`, `example.com`, NAME, `digest`)).resolves.toBe(true);
+    });
+
+    it(`does not confirm a stale value, nor a record that is not there`, async () => {
+        stubTxt([{ content: `previous-order` }]);
+        await expect(acmeChallengeHolds(`token`, `example.com`, NAME, `digest`)).resolves.toBe(false);
+
+        unstubAllGlobals();
+        stubTxt([]);
+        await expect(acmeChallengeHolds(`token`, `example.com`, NAME, `digest`)).resolves.toBe(false);
     });
 });
 

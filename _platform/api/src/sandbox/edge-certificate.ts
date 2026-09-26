@@ -6,7 +6,7 @@ import type { Config } from "../config.js";
 import { decryptSecret, encryptSecret } from "../crypto.js";
 import { DAY_MS, HOUR_MS } from "../durations.js";
 import { JOB_EDGE_CERTIFICATE, runExclusive } from "../jobs-lock.js";
-import { setAcmeChallenge } from "./cloudflare.js";
+import { acmeChallengeHolds, setAcmeChallenge } from "./cloudflare.js";
 
 // The edge's certificate: the ingress zone and every name under it, ordered over DNS-01 through intentic's own Cloudflare
 // zone, kept here with its keys encrypted, and handed to any edge machine presenting the platform token. One order
@@ -48,6 +48,9 @@ export const renewEdgeCertificate = async (
         hostnames: [`*.${zone}`, zone],
         publishChallenge: (recordName, value) => setAcmeChallenge(apiToken, dnsZone, recordName, value),
         removeChallenge: (recordName) => setAcmeChallenge(apiToken, dnsZone, recordName, undefined),
+        // A server whose network blocks direct DNS never sees the zone's nameservers; Cloudflare's read-back stands in.
+        confirmChallenge: (recordName, value) => acmeChallengeHolds(apiToken, dnsZone, recordName, value),
+        warn: (message) => logger.warn({ zone }, `edge certificate: ${message}`),
     });
     const notAfter = new Date(new X509Certificate(certificate).validTo);
     const issued = {

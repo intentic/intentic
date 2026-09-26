@@ -483,3 +483,35 @@ describe(`request body limit`, () => {
         expect(findUnique).not.toHaveBeenCalled();
     });
 });
+
+const confirmLocalDns = (prisma: PrismaClient, body: unknown) =>
+    createApp(config, prisma, logger).app.request(`/sandbox/local-dns/confirm`, {
+        method: `POST`,
+        headers: { "content-type": `application/json`, "x-intentic-connect": `tok` },
+        body: JSON.stringify(body),
+    });
+
+describe(`POST /sandbox/local-dns/confirm`, () => {
+    // The loopback order's fallback proof, for a sandbox whose network cannot see Cloudflare's nameservers.
+    it(`answers Cloudflare's word on the sandbox's own challenge record, and writes nothing`, async () => {
+        const calls: { method: string; url: string }[] = [];
+        stubGlobal(`fetch`, (url: string, init?: RequestInit): Promise<Response> => {
+            calls.push({ method: init?.method ?? `GET`, url });
+            const result = url.includes(`/zones?name=`) ? [{ id: `zone-1` }] : [{ content: `digest` }];
+            return Promise.resolve(new Response(JSON.stringify({ success: true, errors: [], result })));
+        });
+        const prisma = fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue({ id: `s1`, token: `tok` }) } });
+
+        const held = await confirmLocalDns(prisma, { challenge: `digest` });
+        expect(held.status).toBe(200);
+        expect(await held.json()).toEqual({ confirmed: true });
+        expect(await (await confirmLocalDns(prisma, { challenge: `another` })).json()).toEqual({ confirmed: false });
+        expect(calls.every((call) => call.method === `GET`)).toBe(true);
+        expect(calls.at(-1)?.url).toContain(encodeURIComponent(`_acme-challenge.${TUNNEL_ID}.local.intentic.dev`));
+    });
+
+    it(`refuses a request naming no challenge`, async () => {
+        const prisma = fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue({ id: `s1`, token: `tok` }) } });
+        expect((await confirmLocalDns(prisma, {})).status).toBe(400);
+    });
+});

@@ -2,14 +2,14 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { API_BASE_PATH, BootReportSchema, SetupReportSchema } from "@intentic/api-contract";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { ORPCError } from "@orpc/server";
-import { type Context, Hono } from "hono";
+import { type Context, Hono, type HonoRequest } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { type Auth, createAuth } from "./auth.js";
 import { adminUpstreamRoutes } from "./admin/admin-upstream.routes.js";
 import { localHostname } from "@intentic/sandbox-contract";
-import { CloudflareTokenError, ensureLocalDnsRecord, setAcmeChallenge } from "./sandbox/cloudflare.js";
+import { acmeChallengeHolds, CloudflareTokenError, ensureLocalDnsRecord, setAcmeChallenge } from "./sandbox/cloudflare.js";
 import { edgeCertificateFor } from "./sandbox/edge-certificate.js";
 import { ingressEnabled, sandboxHostname } from "./sandbox/reachability.js";
 import type { Config } from "./config.js";
@@ -340,40 +340,76 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         return answer.status === 200 ? c.json(answer.body) : c.json({ error: answer.error }, answer.status);
     });
 
-    // The loopback certificate's DNS relay: a same-machine sandbox still needs a real cert for 127.0.0.1.
-    app.post(`/sandbox/local-dns`, async (c) => {
-        const token = c.req.header(`x-intentic-connect`);
+    // The loopback certificate's DNS relay: a same-machine sandbox still needs a real cert for 127.0.0.1. Both routes take
+    // `{ challenge? }` from a sandbox presenting its connect token, and act only on that sandbox's own record.
+    const loopbackRequest = async (request: HonoRequest): Promise<{ hostname: string; challenge: string | undefined } | { error: string; status: 400 | 404 }> => {
+        const token = request.header(`x-intentic-connect`);
         if (token === undefined || token === ``) {
-            return c.text(`error: missing token`, 400);
+            return { error: `missing token`, status: 400 };
         }
-        const body = (await c.req.json().catch(() => undefined)) as { challenge?: unknown } | undefined;
+        // allow(silent-catch): a body that is not JSON carries no challenge, the same as an empty one.
+        const body = (await request.json().catch(() => undefined)) as { challenge?: unknown } | undefined;
         const challenge = body?.challenge;
         if (challenge !== undefined && (typeof challenge !== `string` || challenge.length > 128)) {
-            return c.text(`error: challenge must be a string of at most 128 characters`, 400);
+            return { error: `challenge must be a string of at most 128 characters`, status: 400 };
         }
         const sandbox = await prisma.sandbox.findUnique({ where: { tokenDigest: sha256Hex(token) } });
         if (!sandbox) {
-            return c.text(`error: unknown sandbox`, 404);
+            return { error: `unknown sandbox`, status: 404 };
         }
         const { apiToken, zone } = config.intenticCloudflare;
         if (apiToken === `` || zone === ``) {
-            return c.json({ error: `the loopback-certificate path is not enabled on this platform` }, 404);
+            return { error: `the loopback-certificate path is not enabled on this platform`, status: 404 };
         }
         const sandboxId = sandboxIdFromToken(decryptSecret(config, sandbox.token));
         if (sandboxId === undefined) {
-            return c.json({ error: `this sandbox has no connect token to derive a hostname from` }, 404);
+            return { error: `this sandbox has no connect token to derive a hostname from`, status: 404 };
         }
-        const hostname = localHostname(sandboxId, zone);
+        return { hostname: localHostname(sandboxId, zone), challenge };
+    };
+
+    // Runs a Cloudflare call for a route: its answer, or the failure as the route's error (a bad token is the caller's 400).
+    const viaCloudflare = async <T extends object>(work: () => Promise<T>): Promise<{ body: T; status: 200 } | { body: { error: string }; status: 400 | 502 }> => {
         try {
-            await ensureLocalDnsRecord(apiToken, zone);
-            await setAcmeChallenge(apiToken, zone, `_acme-challenge.${hostname}`, challenge as string | undefined);
-            return c.json({ ok: true, hostname });
+            return { body: await work(), status: 200 };
         } catch (error) {
             if (error instanceof CloudflareTokenError) {
-                return c.json({ error: error.message }, 400);
+                return { body: { error: error.message }, status: 400 };
             }
-            return c.json({ error: error instanceof Error ? error.message : `local DNS update failed` }, 502);
+            return { body: { error: error instanceof Error ? error.message : `local DNS update failed` }, status: 502 };
         }
+    };
+
+    // Publishes `challenge` as the sandbox's DNS-01 record, or withdraws it when absent, asserting the loopback A record.
+    app.post(`/sandbox/local-dns`, async (c) => {
+        const request = await loopbackRequest(c.req);
+        if (`error` in request) {
+            return c.json({ error: request.error }, request.status);
+        }
+        const { apiToken, zone } = config.intenticCloudflare;
+        const answer = await viaCloudflare(async () => {
+            await ensureLocalDnsRecord(apiToken, zone);
+            await setAcmeChallenge(apiToken, zone, `_acme-challenge.${request.hostname}`, request.challenge);
+            return { ok: true, hostname: request.hostname };
+        });
+        return c.json(answer.body, answer.status);
+    });
+
+    // Cloudflare's own word on whether the sandbox's DNS-01 record holds `challenge`: the proof a sandbox whose network
+    // cannot see the zone's nameservers orders on (obtainCertificate's `confirmChallenge`). Read-only.
+    app.post(`/sandbox/local-dns/confirm`, async (c) => {
+        const request = await loopbackRequest(c.req);
+        if (`error` in request) {
+            return c.json({ error: request.error }, request.status);
+        }
+        if (request.challenge === undefined) {
+            return c.json({ error: `challenge is required` }, 400);
+        }
+        const { apiToken, zone } = config.intenticCloudflare;
+        const recordName = `_acme-challenge.${request.hostname}`;
+        const challenge = request.challenge;
+        const answer = await viaCloudflare(async () => ({ confirmed: await acmeChallengeHolds(apiToken, zone, recordName, challenge) }));
+        return c.json(answer.body, answer.status);
     });
 
     const orpcHandler = new OpenAPIHandler(router, {

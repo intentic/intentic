@@ -147,6 +147,19 @@ export const setAcmeChallenge = async (apiToken: string, zone: string, recordNam
     });
 };
 
+// Whether the zone's API holds `recordName` as a TXT carrying `value`: the provider's word that a challenge is published,
+// for a host whose network cannot see the zone's nameservers (obtainCertificate's `confirmChallenge`).
+export const acmeChallengeHolds = async (apiToken: string, zone: string, recordName: string, value: string): Promise<boolean> => {
+    const { zoneId } = await resolveZone(apiToken, zone);
+    const records = await cfCall(
+        apiToken,
+        `/zones/${encodeURIComponent(zoneId)}/dns_records?type=TXT&name=${encodeURIComponent(recordName)}`,
+        z.array(z.object({ content: z.string() })),
+    );
+    // Cloudflare may hand a TXT's content back wrapped in quotes; the value inside is what a resolver serves.
+    return records.some((record) => record.content.replace(/^"(.*)"$/, `$1`) === value);
+};
+
 const resolveZone = async (apiToken: string, zone: string): Promise<{ zoneId: string }> => {
     const zones = await cfCall(apiToken, `/zones?name=${encodeURIComponent(zone)}`, z.array(z.object({ id: z.string() })));
     const found = zones[0];

@@ -45,6 +45,8 @@ describe(`renewEdgeCertificate`, () => {
         const order = jest.fn(async (options: Parameters<typeof import("@intentic/base/acme").obtainCertificate>[0]) => {
             expect(options.hostnames).toEqual([`*.sbx.test`, `sbx.test`]);
             expect(options.directoryUrl).toBe(`https://ca.test/directory`);
+            // A host that cannot see the zone's nameservers still issues, on Cloudflare's word for the record.
+            expect(options.confirmChallenge).toBeInstanceOf(Function);
             return { certificate: CERTIFICATE };
         });
         expect(await renewEdgeCertificate(prisma, config(), logger, order)).toBe(true);

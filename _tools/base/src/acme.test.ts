@@ -1,5 +1,6 @@
 import { createHash, createPublicKey, generateKeyPairSync, type JsonWebKey, verify } from "node:crypto";
-import { obtainCertificate } from "./acme.js";
+import { obtainCertificate, PROVIDER_SETTLE_MS } from "./acme.js";
+import type { TxtLookup } from "./authoritative-dns.js";
 
 // In-process fake CA exercising ACME's real failure modes: nonce rotation, jwk-then-kid, POST-as-GET vs `{}`, and the
 // digest. Verifies signatures with the account's public key, proving real ES256/P1363, not node's DER default.
@@ -118,13 +119,17 @@ const run = async (
     hooks: {
         publish?: (recordName: string, value: string) => Promise<void>;
         remove?: (recordName: string) => Promise<void>;
-        resolveTxt?: (recordName: string) => Promise<string[]>;
+        resolveTxt?: (recordName: string) => Promise<TxtLookup>;
+        confirmChallenge?: (recordName: string, value: string) => Promise<boolean>;
+        warn?: (message: string) => void;
+        // Every wait the order asked for, in order.
+        waits?: number[];
     } = {},
 ) => {
     const zone = new Map<string, string>();
     const publish = hooks.publish;
     let clock = 0;
-    return obtainCertificate({
+    const options: Parameters<typeof obtainCertificate>[0] = {
         directoryUrl: "https://ca.test/directory",
         accountKey,
         certificateKey,
@@ -134,13 +139,17 @@ const run = async (
             await publish?.(recordName, value);
         },
         removeChallenge: hooks.remove ?? jest.fn(async () => undefined),
-        resolveTxt: hooks.resolveTxt ?? (async (recordName) => (zone.has(recordName) ? [zone.get(recordName)!] : [])),
+        resolveTxt: hooks.resolveTxt ?? (async (recordName) => ({ values: zone.has(recordName) ? [zone.get(recordName)!] : [], reached: "all" })),
+        warn: hooks.warn ?? (() => undefined),
         fetchImpl: ca.fetchImpl,
         wait: async (ms) => {
+            hooks.waits?.push(ms);
             clock += ms;
         },
         now: () => clock,
-    });
+    };
+    // Left out rather than stubbed when a test gives none: the order must behave exactly as it did before the option.
+    return obtainCertificate(hooks.confirmChallenge === undefined ? options : { ...options, confirmChallenge: hooks.confirmChallenge });
 };
 
 it("walks an order to a certificate, publishing the digest the spec asks for", async () => {
@@ -199,9 +208,11 @@ it("fails with the CA's own reason when validation is refused, and still cleans 
     expect(remove).toHaveBeenCalledWith(`_acme-challenge.${HOST}`);
 });
 
+const unreachable = async (): Promise<TxtLookup> => ({ values: [], reached: "none" });
+
 it("never asks the CA to look before the zone actually serves the record", async () => {
     const ca = fakeCa();
-    await expect(run(ca, { resolveTxt: async () => [] })).rejects.toThrowError(`timed out waiting for publication of _acme-challenge.${HOST}`);
+    await expect(run(ca, { resolveTxt: unreachable })).rejects.toThrowError(`timed out waiting for publication of _acme-challenge.${HOST}`);
     expect(ca.seen.some((request) => request.url.endsWith("/challenge/dns"))).toBe(false);
 });
 
@@ -210,12 +221,72 @@ it("waits out the gap between the zone accepting the record and serving it", asy
     let value: string | undefined;
     let lookups = 0;
     // Invisible for the first two lookups, as in a zone mid-propagation.
-    const resolveTxt = async (): Promise<string[]> => (++lookups > 2 && value !== undefined ? [value] : []);
+    const resolveTxt = async (): Promise<TxtLookup> => ({ values: ++lookups > 2 && value !== undefined ? [value] : [], reached: "all" });
     const result = await run(ca, { publish: async (_recordName, published) => void (value = published), resolveTxt });
     expect(result).toEqual({ certificate: PEM });
     expect(lookups).toBe(3);
     // The wait must not become its own dead end: confirms the challenge was still answered after it.
     expect(ca.seen.some((request) => request.url.endsWith("/challenge/dns"))).toBe(true);
+});
+
+// A host whose network blocks direct DNS never sees the zone's nameservers; the provider's read-back stands in for them.
+describe("when this host cannot see the zone's nameservers", () => {
+    it("takes the provider's confirmation, but tells the CA only after the settle delay", async () => {
+        const ca = fakeCa();
+        const waits: number[] = [];
+        const warn = jest.fn();
+        let published: string | undefined;
+        let settledBeforeTheCaLooked = false;
+        // SAFETY: a fetch that only ever takes a URL and init, the two the order passes; the fake CA reads nothing else.
+        const watched = (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+            if (String(input).endsWith("/challenge/dns")) {
+                settledBeforeTheCaLooked = waits.includes(PROVIDER_SETTLE_MS);
+            }
+            return ca.fetchImpl(input, init);
+        }) as typeof fetch;
+        const confirmChallenge = jest.fn(async (_recordName: string, value: string) => value === published);
+        const result = await run(
+            { ...ca, fetchImpl: watched },
+            { publish: async (_recordName, value) => void (published = value), resolveTxt: unreachable, confirmChallenge, warn, waits },
+        );
+        expect(result).toEqual({ certificate: PEM });
+        expect(confirmChallenge).toHaveBeenCalledWith(`_acme-challenge.${HOST}`, published);
+        expect(settledBeforeTheCaLooked).toBe(true);
+        // The warning names which way DNS failed, so an operator can tell a blocked network from a slow zone.
+        expect(warn).toHaveBeenCalledWith(expect.stringMatching(/none of the zone's nameservers answered this host/));
+    });
+
+    it("fails as before when the provider does not confirm the record either", async () => {
+        const ca = fakeCa();
+        const confirmChallenge = jest.fn(async () => false);
+        await expect(run(ca, { resolveTxt: unreachable, confirmChallenge })).rejects.toThrowError(`timed out waiting for publication of _acme-challenge.${HOST}`);
+        expect(confirmChallenge).toHaveBeenCalledTimes(1);
+        expect(ca.seen.some((request) => request.url.endsWith("/challenge/dns"))).toBe(false);
+    });
+
+    it("fails as before when the provider cannot be asked", async () => {
+        const ca = fakeCa();
+        const confirmChallenge = jest.fn(async () => {
+            throw new Error("zone API unreachable");
+        });
+        await expect(run(ca, { resolveTxt: unreachable, confirmChallenge })).rejects.toThrowError(`timed out waiting for publication of _acme-challenge.${HOST}`);
+        expect(ca.seen.some((request) => request.url.endsWith("/challenge/dns"))).toBe(false);
+    });
+
+    it("fails as before with no provider confirmation to ask", async () => {
+        const ca = fakeCa();
+        const waits: number[] = [];
+        await expect(run(ca, { resolveTxt: unreachable, waits })).rejects.toThrowError(`timed out waiting for publication of _acme-challenge.${HOST}`);
+        expect(waits).not.toContain(PROVIDER_SETTLE_MS);
+    });
+
+    it("skips the provider and the settle delay when DNS shows the record", async () => {
+        const waits: number[] = [];
+        const confirmChallenge = jest.fn(async () => true);
+        expect(await run(fakeCa(), { confirmChallenge, waits })).toEqual({ certificate: PEM });
+        expect(confirmChallenge).not.toHaveBeenCalled();
+        expect(waits).not.toContain(PROVIDER_SETTLE_MS);
+    });
 });
 
 it("re-sends a request that never reached the CA", async () => {

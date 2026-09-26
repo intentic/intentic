@@ -77,6 +77,14 @@ const relayChallenge = async (config: Config, value: string | undefined): Promis
     return typeof answered === `string` && answered !== `` ? answered : undefined;
 };
 
+// The platform's read-back of the challenge through Cloudflare, for a host whose network cannot see the zone's
+// nameservers. Anything but a plain yes (an older platform without the route, a refusal) is a no.
+const confirmChallenge = async (config: Config, value: string): Promise<boolean> => {
+    const { status, json } = await postToPlatform(config, "/sandbox/local-dns/confirm", { challenge: value });
+    // SAFETY: `confirmed` is only compared with `true`, so any other shape of answer reads as no.
+    return status >= 200 && status < 300 && (json as { confirmed?: unknown } | undefined)?.confirmed === true;
+};
+
 // Obtains or renews the certificate; undefined means the sandbox cannot or need not have one — every branch here is a
 // normal state, not an error.
 const ensureLocalCertificate = async (config: Config, logger: Logger): Promise<LocalCertificate | undefined> => {
@@ -109,6 +117,8 @@ const ensureLocalCertificate = async (config: Config, logger: Logger): Promise<L
         hostnames: [hostname],
         publishChallenge: async (_recordName, value) => void (await relayChallenge(config, value)),
         removeChallenge: async () => void (await relayChallenge(config, undefined)),
+        confirmChallenge: async (_recordName, value) => confirmChallenge(config, value),
+        warn: (message) => logger.warn({ hostname }, `loopback certificate: ${message}`),
     });
     const privateKey = certificateKey.export({ type: "pkcs8", format: "pem" }).toString();
     mkdirSync(paths.dir, { recursive: true });

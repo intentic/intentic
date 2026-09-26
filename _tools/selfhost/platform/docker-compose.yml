@@ -103,6 +103,8 @@ services:
             INGRESS_ZONE: ${INGRESS_ZONE:-}
             INGRESS_URL: ${INGRESS_URL:-}
             INGRESS_SIGNING_KEY: ${INGRESS_SIGNING_KEY:-}
+            # The token an edge presents for the wildcard certificate this api orders; blank = no edge certificate.
+            INGRESS_PLATFORM_TOKEN: ${INGRESS_PLATFORM_TOKEN:-}
             # Hosted sandboxes: the platform creates each new user's machine on its OWN Fly account, so signing
             # in IS the setup — and it keeps the way back in (wake/stop/destroy). Blank (the default) → the lane
             # is off and every user sets up their own machine as before. The token must be ORG-scoped

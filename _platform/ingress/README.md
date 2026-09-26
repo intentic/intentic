@@ -151,6 +151,15 @@ docker buildx imagetools inspect ghcr.io/intentic/sandbox:stable | grep -m1 Dige
 docker buildx imagetools inspect "ghcr.io/intentic/sandbox:$(gh release view --json tagName -q .tagName | tr -d v)" | grep -m1 Digest
 ```
 
+**The edge rolls only where CI has a Fly token.** `images-platform` skips the edge deploy, and still goes green, unless
+the repository has a `FLY_API_TOKEN` Actions secret: a deploy token scoped to the edge app, made with `fly tokens
+create deploy -a intentic-ingress`. The job then logs `No FLY_API_TOKEN — skipping the edge deploy`. Without the
+secret, roll the edge by hand once `images-platform` has pushed the image, and check `/health` below the same way:
+
+```sh
+flyctl deploy --config _platform/ingress/fly.toml --app intentic-ingress --image ghcr.io/intentic/ingress:latest --yes
+```
+
 `tunnels` climbs back to where it was within a minute. **Restarts:** the edge machines, and the api and web for a
 few seconds. No sandbox restarts: one on an older image keeps dialling `/tunnel/v1`, which this edge still serves.
 **Rollback:** images first, then the edge, because an edge without `/tunnel/v2` strands every front that already
@@ -210,7 +219,13 @@ Check: `dig +short CNAME _acme-challenge.sbx.intentic.dev` answers nothing. Fly'
 would renew, about thirty days before it expires (`flyctl certs show '*.sbx.intentic.dev' -a intentic-ingress`), so
 finish step 5 well inside that.
 
-In Komodo, stack `intentic-platform`, add `INGRESS_PLATFORM_TOKEN=$TOKEN` to its environment. The api also needs
+In Komodo, store the token as a secret variable `INGRESS_PLATFORM_TOKEN` (Settings, Variables, marked secret) rather
+than in plain env, and add `INGRESS_PLATFORM_TOKEN=[[INGRESS_PLATFORM_TOKEN]]` to stack `intentic-platform`'s
+environment. The api reads it only when the compose maps it into the api service: the repository's
+[docker-compose.yml](../../_tools/selfhost/platform/docker-compose.yml) has `INGRESS_PLATFORM_TOKEN:
+${INGRESS_PLATFORM_TOKEN:-}` beside `INGRESS_SIGNING_KEY`, but **the production stack's compose is kept by hand in
+Komodo and has drifted from that file**, so check its api `environment:` for the line and add it when missing (a
+variable in the stack's env that the compose never maps does nothing). The api also needs
 `INTENTIC_CLOUDFLARE_API_TOKEN` and `INTENTIC_CLOUDFLARE_ZONE=intentic.dev`, already set for loopback certificates.
 Then redeploy it:
 
@@ -228,7 +243,10 @@ curl -fsS -H "authorization: Bearer $TOKEN" https://api.intentic.dev/api/ingress
 ```
 
 names `*.sbx.intentic.dev` and `sbx.intentic.dev`. Keep the fingerprint for step 5. A 404 `no certificate has been
-issued` means the order has not finished or has failed (the api logs why and retries every six hours). **Restarts:**
+issued` means the order has not finished or has failed (the api logs why and retries every six hours). A server whose
+network blocks direct DNS to Cloudflare's nameservers still issues: when its own lookup never shows the challenge, the
+api reads the record back through Cloudflare's API, waits 30 s more and logs `edge certificate: … never showed the
+challenge in DNS` as a warning before the CA looks. **Restarts:**
 the api and web, for a few seconds; sandboxes and tunnels are untouched. **Rollback:** remove the variable and
 redeploy the stack; the stored certificate is inert without it. Recreate the CNAME (the output you kept) only if you
 are abandoning the switch, so that Fly can renew its own.
