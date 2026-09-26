@@ -33,6 +33,9 @@ const resetDaemon = (answer?: unknown): void => {
 };
 // Which of them anything reached, by name.
 const reached = (): string[] => Object.entries(daemon).flatMap(([name, procedure]) => (procedure.mock.calls.length > 0 ? [name] : []));
+// The unsent-words report the fleet sends by itself whenever a composer's words come or go. Always answered, and kept
+// out of `daemon` so a reset never leaves it answering nothing and `reached()` still counts only what a case asked for.
+const reportUnsent = jest.fn().mockResolvedValue(undefined);
 jest.mock("../../sandbox/client/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({
         agents: {
@@ -41,6 +44,7 @@ jest.mock("../../sandbox/client/sandboxRpc", () => ({
             seen: daemon.seen,
             archive: daemon.archive,
             unarchive: daemon.unarchive,
+            unsent: reportUnsent,
         },
         automations: { approve: daemon.approve, reject: daemon.reject },
     }),

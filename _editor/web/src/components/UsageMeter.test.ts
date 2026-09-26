@@ -2,7 +2,7 @@
 // one run-on label, and the card opens beside the meter rather than over the column of rows being compared.
 import "@intentic/testing/dom";
 import { createApp, h, nextTick } from "vue";
-import { formatReset, type PlanHeadroom } from "../features/chat/session/usageStatus";
+import { formatReset, type PlanHeadroom, type PlanLimitPool } from "../features/chat/session/usageStatus";
 import UsageMeter from "./UsageMeter.vue";
 
 // The @intentic/ui barrel calls window.matchMedia at import time (via useDevice), which jsdom doesn't provide.
@@ -78,7 +78,7 @@ it(`draws a bar per account-wide pool, not a ring`, async () => {
 });
 
 it(`adds the binding pool when it is a per-model slice, and draws one full bar when every pool has reset`, async () => {
-    const fable = { kind: `model:Fable`, label: `Weekly · Fable`, percent: 100, resetsAt: undefined, gates: { models: [`Fable`] } } as const;
+    const fable: PlanLimitPool = { kind: `model:Fable`, label: `Weekly · Fable`, percent: 100, resetsAt: undefined, gates: { models: [`Fable`] } };
     const sliced = await mount({ pools: [headroom().pools[1]!, fable], binding: fable });
     expect(sliced.querySelectorAll(`.ui-meter-fill`)).toHaveLength(2);
     document.body.innerHTML = ``;

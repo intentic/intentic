@@ -165,7 +165,8 @@ test("each mount is a router in the daemon, reached at the MCP door under its na
     lease.release();
     lease.release();
     expect(closed.slice(-2).toSorted()).toEqual([`router-${before + 1}`, `router-${before + 2}`]);
-    expect(mounts.resolve(web?.token, "browser")).toEqual({ refused: "unleased" });
+    // A turn's own bearer goes with its lease (turn-mounts.ts): after the release it names nothing at all.
+    expect(mounts.resolve(web?.token, "browser")).toEqual({ refused: "unknown" });
 });
 
 test("browserServerSpec is a HEADED stdio server bound to the profile + stealth + display", () => {

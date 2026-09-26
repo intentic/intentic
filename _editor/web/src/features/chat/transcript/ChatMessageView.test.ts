@@ -641,7 +641,7 @@ describe(`ChatMessageView permission card`, () => {
 
     it(`freezes with the answer that settled it, and offers nothing once it has`, () => {
         const element = mount(held({ status: `always` }));
-        expect(element.textContent).toContain(`✓ Always allowed`);
+        expect(element.querySelector(`[data-icon="check"]`)?.parentElement?.textContent?.trim()).toBe(`Always allowed`);
         expect([...element.querySelectorAll(`button`)].some((button) => button.textContent?.includes(`Allow once`))).toBe(false);
     });
 });
@@ -760,7 +760,7 @@ describe(`ChatMessageView child-agent card`, () => {
         const element = mount(
             held({ provider: `codex`, model: `gpt-5.5`, effort: undefined, account: undefined, proposed: { provider: `claude`, model: `claude-opus-4-6` } }, { status: `allowed` }),
         );
-        expect(element.textContent).toContain(`✓ Allowed`);
+        expect(element.querySelector(`[data-icon="check"]`)?.parentElement?.textContent?.trim()).toBe(`Allowed`);
         expect(element.textContent).toContain(`Changed from the agent's pick: Claude Opus 4.6`);
         expect(chip(element)).toBeNull();
         expect(button(element, `Use the agent's pick`)).toBeUndefined();

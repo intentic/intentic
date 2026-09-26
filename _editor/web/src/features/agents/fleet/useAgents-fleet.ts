@@ -272,10 +272,9 @@ watch(
 // Tells the daemon which registered conversations this browser holds unsent words for, since the words never leave it:
 // without that, the unattended sweep archived a chat whose message was still waiting in a composer (archive.ts). Clears
 // only what this browser watched go, so one device with an empty composer cannot unmark another device's words.
-// allow(module-state): which conversations this browser has seen holding words, as per-sandbox as the ids themselves
+// Which conversations this browser has seen holding words: plain, not reactive, and as per-sandbox as the ids themselves.
 const heldHere = new Set<string>();
-// allow(module-state): what was last asked of the daemon per conversation, so a roster frame landing before its answer
-// does not ask again
+// What was last asked of the daemon per conversation, so a roster frame landing before its answer does not ask again.
 const asked = new Map<string, boolean>();
 watch(
     [unsentTabs, registry] as const,

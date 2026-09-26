@@ -20,6 +20,7 @@ import { createLogger } from "./logger.js";
 import { createBootTracker } from "./system/boot/boot.js";
 
 import type { AgentRequest } from "./agent/providers/agent-request.js";
+import { ANONYMOUS_BROWSER_SERVER } from "./browser/tools/browser-tools.js";
 
 import { testConfig } from "./testing.js";
 
@@ -947,8 +948,10 @@ test("agent.run merges internal (env) tools with the mcp-kind capabilities for t
         ),
     );
     await runAgentTurn(client, { prompt: "do it" });
-    // Internal first, then external mcp capabilities (last-wins on name collisions).
-    expect(seen?.tools.remote).toEqual([
+    // Internal first, then external mcp capabilities (last-wins on name collisions). The credential-free browser rides
+    // after them wherever Chromium is on disk, which is the machine's say, not this merge's
+    // (browser-tools.integration.test.ts owns that mount).
+    expect(seen?.tools.remote?.filter((tool) => tool.name !== ANONYMOUS_BROWSER_SERVER)).toEqual([
         { name: "obs", url: "https://signoz.example.com/mcp", token: "internal" },
         { name: "linear", url: "https://mcp.linear.app/sse", token: "external" },
     ]);
