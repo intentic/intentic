@@ -19,10 +19,12 @@ import {
     isStale,
     liveUsage,
     meterFill,
+    meterTint,
     meterTrack,
     modelAllowance,
     orderedWindows,
     planLimitBand,
+    planLimitBandTint,
     planLimitGroups,
     type PlanLimitRow,
     planLimitRows,
@@ -35,6 +37,7 @@ import {
     usageDetail,
     usagePercent,
     usageStatusFor,
+    usageTone,
     usageWindowLabel,
 } from "./usageStatus";
 
@@ -185,6 +188,28 @@ describe(`meterFill / meterTrack`, () => {
         expect(meterFill(99, 5)).toBe(5);
     });
 
+    it(`holds the healthy green while half or more is left: plenty is not news`, () => {
+        expect(meterTint(0)).toEqual({});
+        expect(meterTint(50)).toEqual({});
+        expect(usageTone(50)).toBe(`text-success`);
+    });
+
+    it(`turns green to amber, then amber to red, as the last half drains`, () => {
+        // 35% left: halfway from green to amber.
+        expect(meterTint(65).color).toBe(`color-mix(in oklch, var(--color-warning) 50%, var(--color-success))`);
+        // 20% left: fully amber, where the turn toward red starts.
+        expect(meterTint(80).color).toBe(`color-mix(in oklch, var(--color-warning) 100%, var(--color-success))`);
+        // 5% left: nearly the spent red, but not it, so a pool on its last turns never reads as spent.
+        expect(meterTint(95).color).toBe(`color-mix(in oklch, var(--color-danger) 75%, var(--color-warning))`);
+        expect(meterTint(100).color).toBe(`color-mix(in oklch, var(--color-danger) 100%, var(--color-warning))`);
+    });
+
+    it(`draws the tight band in a tight bar's own colour, never the spent red`, () => {
+        expect(planLimitBandTint(`tight`).color).toContain(`var(--color-warning)`);
+        expect(planLimitBandTint(`tight`)).not.toEqual(meterTint(100));
+        expect(planLimitBandTint(`room`)).toEqual({});
+    });
+
     it(`draws a spent pool as an empty, tinted track, distinct from one with room`, () => {
         expect(meterFill(100)).toBe(0);
         expect(meterTrack(100)).toContain(`danger`);
@@ -305,7 +330,7 @@ describe(`planHeadroom`, () => {
     it(`treats a fully reset account as 0%, not as unknown`, () => {
         const reset = headroom({ windows: [] });
         expect(reset.percent).toBe(0);
-        expect(reset.tone).toBe(`text-link`);
+        expect(reset.tone).toBe(`text-success`);
         expect(reset.binding).toBeUndefined();
     });
 

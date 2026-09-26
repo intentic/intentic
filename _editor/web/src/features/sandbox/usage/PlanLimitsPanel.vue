@@ -12,11 +12,13 @@ import {
     formatRemaining,
     formatReset,
     meterFill,
+    meterTint,
     meterTrack,
     type PlanLimitBand,
     PLAN_LIMIT_BANDS,
     type PlanLimitGroup,
     planLimitBandLabel,
+    planLimitBandTint,
     planLimitBandTone,
     planLimitGroups,
     type PlanLimitRow,
@@ -183,14 +185,18 @@ const roster = computed(() => {
                         v-tooltip.top="`${segment.count} ${segment.label}`"
                         class="ui-meter-fill h-full rounded-full"
                         :class="planLimitBandTone(segment.band)"
-                        :style="{ width: `${segment.share}%` }"
+                        :style="{ width: `${segment.share}%`, ...planLimitBandTint(segment.band) }"
                     />
                 </div>
 
                 <!-- Legend is the sentence: swatch, count and word together, nothing carried by colour alone. -->
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
                     <span v-for="segment in capacity" :key="segment.band" class="flex items-center gap-1.5">
-                        <span class="ui-meter-fill size-2 shrink-0 rounded-2xs" :class="planLimitBandTone(segment.band)" />
+                        <span
+                            class="ui-meter-fill size-2 shrink-0 rounded-2xs"
+                            :class="planLimitBandTone(segment.band)"
+                            :style="planLimitBandTint(segment.band)"
+                        />
                         <span class="tabular-nums text-content">{{ segment.count }}</span>
                         {{ segment.label }}
                     </span>
@@ -272,14 +278,22 @@ const roster = computed(() => {
                                             <div
                                                 class="ui-meter-fill h-full rounded-full"
                                                 :class="usageTone(pool.percent)"
-                                                :style="{ width: `${meterFill(pool.percent)}%` }"
+                                                :style="{ width: `${meterFill(pool.percent)}%`, ...meterTint(pool.percent) }"
                                             />
                                         </div>
-                                        <span class="w-16 shrink-0 text-right text-2xs tabular-nums" :class="usageTone(pool.percent)">
+                                        <span
+                                            class="w-16 shrink-0 text-right text-2xs tabular-nums"
+                                            :class="usageTone(pool.percent)"
+                                            :style="meterTint(pool.percent)"
+                                        >
                                             {{ formatRemaining(pool.percent, row.stale) }}
                                         </span>
                                         <span class="shrink-0 truncate text-right text-2xs text-subtle @xl:w-32">
-                                            {{ pool.resetsAt === undefined ? `` : t(`sandbox.planLimitsPanel.resets`, { resetsAt: formatReset(pool.resetsAt) }) }}
+                                            {{
+                                                pool.resetsAt === undefined
+                                                    ? ``
+                                                    : t(`sandbox.planLimitsPanel.resets`, { resetsAt: formatReset(pool.resetsAt) })
+                                            }}
                                         </span>
                                     </div>
                                 </div>
@@ -299,7 +313,7 @@ const roster = computed(() => {
                                             v-if="row.percent !== undefined"
                                             class="ui-meter-fill w-full rounded-2xs"
                                             :class="usageTone(row.percent)"
-                                            :style="{ height: `${meterFill(row.percent, 5)}%` }"
+                                            :style="{ height: `${meterFill(row.percent, 5)}%`, ...meterTint(row.percent) }"
                                         />
                                     </span>
                                 </div>
@@ -405,7 +419,11 @@ const roster = computed(() => {
                                 <td class="py-1.5 pr-3">
                                     {{ row.binding?.label ?? (row.readable ? `—` : t(`sandbox.planLimitsPanel.noPublishedLimits`)) }}
                                 </td>
-                                <td class="py-1.5 pr-3 text-right tabular-nums" :class="row.percent === undefined ? `` : usageTone(row.percent)">
+                                <td
+                                    class="py-1.5 pr-3 text-right tabular-nums"
+                                    :class="row.percent === undefined ? `` : usageTone(row.percent)"
+                                    :style="row.percent === undefined ? {} : meterTint(row.percent)"
+                                >
                                     {{ row.percent === undefined ? `—` : remainingFigure(row.percent, row.stale) }}
                                 </td>
                                 <td class="py-1.5 pr-3">{{ row.binding?.resetsAt === undefined ? `—` : formatReset(row.binding.resetsAt) }}</td>

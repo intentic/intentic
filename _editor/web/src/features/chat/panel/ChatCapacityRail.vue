@@ -3,7 +3,7 @@ import { ui } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
 import { type CapacityLane, type CapacityProvider, type CapacityRow, type CapacityUnread, chatCapacity, heldReadings } from "./chatCapacity";
 import { accountsLoaded } from "../accounts/providerAccounts";
-import { formatAge, formatRemaining, formatReset, meterFill, meterTrack, remainingFigure, usageTone } from "../session/usageStatus";
+import { formatAge, formatRemaining, formatReset, meterFill, meterTint, meterTrack, remainingFigure, usageTone } from "../session/usageStatus";
 import { heldAccounts, refreshConnections } from "../accounts/useChat-accounts";
 import ProviderLogo from "../accounts/ProviderLogo.vue";
 import { useT } from "@intentic/ui/i18n";
@@ -188,11 +188,11 @@ const unreadLine = (entry: CapacityUnread): { readonly subject: string; readonly
                                     <span
                                         class="ui-meter-fill block h-full rounded-full"
                                         :class="usageTone(lane.percent)"
-                                        :style="{ width: `${meterFill(lane.percent)}%` }"
+                                        :style="{ width: `${meterFill(lane.percent)}%`, ...meterTint(lane.percent) }"
                                     />
                                 </span>
                                 <div class="flex items-baseline justify-end gap-1 whitespace-nowrap text-right">
-                                    <span class="text-2xs font-medium tabular-nums" :class="usageTone(lane.percent)">
+                                    <span class="text-2xs font-medium tabular-nums" :class="usageTone(lane.percent)" :style="meterTint(lane.percent)">
                                         {{ remainingFigure(lane.percent, row.stale) }}
                                     </span>
                                     <span v-if="laneReset(lane)" class="text-3xs text-subtle">·&nbsp;{{ laneReset(lane) }}</span>

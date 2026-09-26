@@ -68,8 +68,9 @@ export const usagePercent = (usage: AccountUsage | undefined, model?: ModelRef):
 
 // Severity shared by every surface that draws a percentage, so it means the same thing everywhere. Danger is the
 // contract's one spent line (SPENT_UTILIZATION), the same the daemon's pickers use; warning is only a tint on the way.
+// The healthy tone is success green, the start of the drain ramp (meterTint), never the brand accent.
 export const usageTone = (percent: number): string =>
-    percent >= SPENT_UTILIZATION ? `text-danger` : percent >= TIGHT_PERCENT ? `text-warning` : `text-link`;
+    percent >= SPENT_UTILIZATION ? `text-danger` : percent >= TIGHT_PERCENT ? `text-warning` : `text-success`;
 
 // Past this a pool is drawn as tight; never a verdict, which is the contract's alone.
 const TIGHT_PERCENT = 75;
@@ -301,6 +302,30 @@ export const meterFill = (percent: number, sliver = 2): number =>
     percent >= SPENT_UTILIZATION ? 0 : Math.max(remainingPercent(percent), sliver);
 export const meterTrack = (percent: number): string => (percent >= SPENT_UTILIZATION ? `bg-danger/25` : `bg-content/10`);
 
+// A draining meter changes colour as it empties, the way a battery does: green while there is plenty, turning through
+// amber to the danger red a spent pool wears, so "full" and "nearly out" are seen before they are read. It holds green
+// down to half, since plenty is not news and a ramp over the whole range would give every bar its own in-between hue;
+// below that it moves, reaching amber at a fifth left and red only at the very end, so tight and spent never share a
+// colour. The stops are the status roles, not the brand accent, which in some looks already sits between them.
+// Returned as the element's `color`, so the figure and the fill (ui-meter-fill paints from currentColor) change
+// together. Colour only reinforces: length and figure carry the reading, since the ramp is lost on a red-weak reader.
+const GREEN_DOWN_TO = 50;
+const AMBER_AT = 20;
+const mixed = (toward: string, from: string, share: number): string =>
+    `color-mix(in oklch, var(--color-${toward}) ${Math.round(100 * share)}%, var(--color-${from}))`;
+export const meterTint = (percent: number): { color?: string } => {
+    const left = remainingPercent(percent);
+    if (left >= GREEN_DOWN_TO) {
+        return {};
+    }
+    return {
+        color:
+            left >= AMBER_AT
+                ? mixed(`warning`, `success`, (GREEN_DOWN_TO - left) / (GREEN_DOWN_TO - AMBER_AT))
+                : mixed(`danger`, `warning`, (AMBER_AT - left) / AMBER_AT),
+    };
+};
+
 // Same breakdown as one sentence: the ring's accessible name, since a screen reader has no hover to reach the
 // card. Lists every pool (a single number can't say which is binding), reset in parens.
 export const usageDetail = (headroom: PlanHeadroom): string =>
@@ -502,7 +527,11 @@ export const planLimitBandLabel = (band: PlanLimitBand): string => {
 // Same three tones a percentage uses everywhere, so the bar and its meters agree. `unread`/`none` are
 // achromatic on purpose: absence of a reading, not a severity.
 export const planLimitBandTone = (band: PlanLimitBand): string =>
-    band === `spent` || band === `blocked` ? `text-danger` : band === `tight` ? `text-warning` : band === `room` ? `text-link` : `text-muted`;
+    band === `spent` || band === `blocked` ? `text-danger` : band === `tight` ? `text-warning` : band === `room` ? `text-success` : `text-muted`;
+// The tight band drawn in the colour a tight account's own bar wears (meterTint, mid-band), since beside `room` the
+// warning tone alone is near-identical in some looks.
+const TIGHT_LEFT_MID = 10;
+export const planLimitBandTint = (band: PlanLimitBand): { color?: string } => (band === `tight` ? meterTint(100 - TIGHT_LEFT_MID) : {});
 
 export type PlanLimitCounts = Record<PlanLimitBand, number>;
 

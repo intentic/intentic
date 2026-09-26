@@ -7,6 +7,7 @@ import {
     formatRemaining,
     formatReset,
     meterFill,
+    meterTint,
     meterTrack,
     type PlanHeadroom,
     remainingPercent,
@@ -108,7 +109,12 @@ onBeforeUnmount(hide);
     <!-- The anchor includes whatever rides beside the ring (the chip's percentage), so hovering it opens the card. -->
     <span ref="anchor" class="inline-flex items-center gap-1" @mouseenter="show" @mouseleave="hide" @pointerdown="hide">
         <!-- Drains like every allowance meter: the arc is what is left, and a spent pool keeps a tinted empty ring. -->
-        <ProgressRing :value="remainingPercent(headroom.percent)" :class="headroom.tone" :tint-track="headroom.percent >= SPENT_UTILIZATION" />
+        <ProgressRing
+            :value="remainingPercent(headroom.percent)"
+            :class="headroom.tone"
+            :style="meterTint(headroom.percent)"
+            :tint-track="headroom.percent >= SPENT_UTILIZATION"
+        />
         <slot />
         <!-- The arc is aria-hidden and a pointer-only card never reaches a screen reader, so it's spoken here instead. -->
         <span class="sr-only">{{ activity ? `${usageDetail(headroom)} ${activity}.` : usageDetail(headroom) }}</span>
@@ -137,7 +143,7 @@ onBeforeUnmount(hide);
                             <span class="min-w-0 truncate text-xs" :class="pool === headroom.binding ? `font-medium text-content` : `text-muted`">
                                 {{ pool.label }}
                             </span>
-                            <span class="shrink-0 text-xs font-medium tabular-nums" :class="usageTone(pool.percent)">
+                            <span class="shrink-0 text-xs font-medium tabular-nums" :class="usageTone(pool.percent)" :style="meterTint(pool.percent)">
                                 {{ formatRemaining(pool.percent, headroom.stale) }}
                             </span>
                         </div>
@@ -146,7 +152,7 @@ onBeforeUnmount(hide);
                             <div
                                 class="ui-meter-fill h-full rounded-full"
                                 :class="usageTone(pool.percent)"
-                                :style="{ width: `${meterFill(pool.percent)}%` }"
+                                :style="{ width: `${meterFill(pool.percent)}%`, ...meterTint(pool.percent) }"
                             />
                         </div>
                         <span v-if="pool.resetsAt !== undefined" class="text-2xs text-subtle">{{
