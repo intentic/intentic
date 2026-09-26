@@ -51,7 +51,8 @@ const TONES = {
                     {{ title }}
                 </h3>
                 <!-- How it stands, in one line under its name: failing since when, how many wait, what a push left. -->
-                <div v-if="$slots[`meta`]" data-meta class="flex min-w-0 items-center gap-1.5 text-2xs text-subtle">
+                <!-- Clipped, so a line too long for a narrow lane gives way at its end instead of running under the card's control. -->
+                <div v-if="$slots[`meta`]" data-meta class="flex min-w-0 items-center gap-1.5 overflow-hidden text-2xs text-subtle">
                     <slot name="meta" />
                 </div>
             </div>

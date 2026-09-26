@@ -12,10 +12,11 @@ import { findingGist, type PushDebt, projectName, shortSha, sinceWhen } from "./
 import { openLandConversation } from "./openLanded";
 import { dismissPushFindings, handPushFindings, recheckPushFindings, usePushFixAttempt } from "./useMainline";
 
-// WHAT ONE PROJECT'S PUSHES LEFT BEHIND, as a card in the Main line board's Result lane: what its push Red owes. The hook
-// never refused them, so none of this is a failure of anyone's: it waits, in amber, until a later measurement no longer
-// prints it or the owner dismisses it, and the owner picks it up when they choose. Nothing here raises a notice or calls
-// for attention; the only words it puts up of its own are the receipts of the owner's own presses.
+// WHAT ONE PROJECT'S PUSHES LEFT BEHIND, as a card in the Main line board's Left at push lane: what its push Red
+// owes. The pre-push check never refused them, so none of this is a failure of anyone's: it waits, in amber, until a
+// later measurement no longer prints it or the owner dismisses it, and the owner picks it up when they choose. Nothing
+// here raises a notice or calls for attention; the only words it puts up of its own are the receipts of the owner's
+// own presses.
 
 const t = useT();
 
@@ -42,18 +43,17 @@ const expanded = ref(false);
 const shown = computed(() => (expanded.value ? standing.value : standing.value.slice(0, SHOWN)));
 const hidden = computed(() => standing.value.length - SHOWN);
 
-// The push the findings came with, as git would name it, and when; its branch even when it is main, since a push to a
-// feature branch leaving something is a different story from main leaving it.
+// The push the findings came with, as git would name it: the commit and the branch it went to (even main, since a push to
+// a feature branch leaving something is a different story from main leaving it), how much it carried, and when.
 const pushLine = computed(() => {
     const push = props.debt.newest;
     if (push === undefined) {
         return undefined;
     }
     return [
-        shortSha(push.head),
-        sinceWhen(push.at, props.minute),
-        ...(push.branch === undefined ? [] : [push.branch]),
+        push.branch === undefined ? shortSha(push.head) : `${shortSha(push.head)} → ${push.branch}`,
         t(`agents.mainline.push.commits`, { count: push.commits }, push.commits),
+        sinceWhen(push.at, props.minute),
     ].join(SEP);
 });
 const earlier = computed(() => Math.max(0, props.debt.pushes.length - 1));
@@ -164,11 +164,11 @@ const handOver = async (): Promise<void> => {
 
 <template>
     <!-- One project's card, drawn the way a failing project's is: its name, what it stands at under it, and its one
-         measuring press at the end of that row; then what it holds, and the owner's hands on it at its foot. -->
+         measuring press at the end of that row; then the push it came with, what it found, and the owner's hands on it. -->
     <MainlineCard :data-section="`push-${debt.project}`" :title="name" icon="arrow-up-right" tone="warning" live edge>
         <template #meta>
             <span class="min-w-0 truncate text-warning" v-tooltip.top="t(`agents.mainline.push.explain`)">{{
-                t(`agents.mainline.push.bar`, { count: standing.length }, standing.length)
+                t(`agents.mainline.board.stillOpen`, { count: standing.length }, standing.length)
             }}</span>
         </template>
         <template #trailing>
@@ -183,10 +183,13 @@ const handOver = async (): Promise<void> => {
                 <Icon name="refresh" :spin="rechecking" class="text-2xs" />
             </button>
         </template>
-        <p v-if="pushLine !== undefined" data-push-line class="truncate text-2xs text-subtle">
-            <span class="font-mono">{{ pushLine }}</span>
-            <template v-if="earlier > 0">{{ SEP }}{{ t(`agents.mainline.push.earlier`, { count: earlier }, earlier) }}</template>
-        </p>
+        <dl v-if="pushLine !== undefined" class="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3">
+            <dt class="text-2xs text-subtle">{{ t(`agents.mainline.board.lastPush`) }}</dt>
+            <dd data-push-line class="min-w-0 truncate text-2xs text-muted">
+                <span class="font-mono">{{ pushLine }}</span>
+                <template v-if="earlier > 0">{{ SEP }}{{ t(`agents.mainline.push.earlier`, { count: earlier }, earlier) }}</template>
+            </dd>
+        </dl>
         <!-- What it found, set in from the card like a terminal's excerpt: the check that printed each, then its line. -->
         <div class="flex min-w-0 flex-col rounded-lg bg-content/5 px-1.5 py-1.5 text-2xs">
             <ul class="flex min-w-0 flex-col">

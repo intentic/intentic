@@ -444,11 +444,8 @@
         "mainline": {
             "title": "Main line",
             "root": "workspace",
-            "mainPassing": "Main passing",
-            "needsUpdate": "Sandbox needs an update",
             "projectFailing": "{project} failing",
             "projectsFailing": "{count} project failing | {count} projects failing",
-            "checking": "Checking {project}",
             "queued": "{count} queued",
             "columnQueued": "Queued",
             "columnChecking": "Checking",
@@ -457,8 +454,6 @@
             "nothingQueued": "Nothing queued",
             "noResults": "No results yet",
             "outdatedMissing": "Until it updates, this panel can't say who a failing check is laid at or who is fixing it, open a check's logs, or show what your pushes left behind.",
-            "passing": "passing",
-            "failing": "failing",
             "logs": "Logs",
             "moreFailures": "+{count} more",
             "noFailureList": "No failures listed",
@@ -484,7 +479,6 @@
             "shortDismissed": "set aside",
             "push": {
                 "explain": "The push went; its check let these through. Each waits here until a later measurement no longer finds it or you dismiss it. Nobody is sent after them unless you hand them over.",
-                "bar": "{count} left at push | {count} left at push",
                 "commits": "{count} commit | {count} commits",
                 "earlier": "+{count} earlier push | +{count} earlier pushes",
                 "more": "+{count} more | +{count} more",
@@ -508,7 +502,6 @@
                 "clean": "clean",
                 "handled": "handled"
             },
-            "checkingOn": "Checking {project} on {machine}",
             "description": "Work that lands is checked on the main tree: what waits for the check, what it is measuring, what it found, and what your pushes left.",
             "nothingChecked": "Nothing checked yet. When work lands, its check on the main tree shows here.",
             "unservedMissing": "Until it updates, this sandbox can't show the check its main tree gets after each land.",
@@ -517,7 +510,6 @@
                 "checkingOn": "checking {project} on {machine}"
             },
             "board": {
-                "summary": "Main line status",
                 "idle": "No check running",
                 "waiting": "{count} land waits for the next check | {count} lands wait for the next check",
                 "measuring": "Measuring {count} land | Measuring {count} lands",
@@ -528,7 +520,19 @@
                 "more": "+{count} more",
                 "backToResults": "Back to the results",
                 "openHistory": "Open the history ({count})",
-                "historyHint": "Every check and push, newest first"
+                "historyHint": "Every check after landing, newest first",
+                "queuedHint": "Landed work, waiting for its project's next check",
+                "checkingHint": "The check running on the main tree now",
+                "resultHint": "Each project's last check after work landed",
+                "pushedHint": "What the pre-push check found in your pushes. It never stops a push.",
+                "leftAtPush": "Left at push",
+                "nothingLeft": "Nothing left at push",
+                "command": "Command",
+                "fix": "Fix",
+                "failures": "{count} failure | {count} failures",
+                "after": "after {work}",
+                "stillOpen": "{count} finding still open | {count} findings still open",
+                "lastPush": "Last push"
             }
         },
         "landCheck": {

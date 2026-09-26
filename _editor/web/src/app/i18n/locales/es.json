@@ -429,11 +429,8 @@
         "mainline": {
             "title": "Línea principal",
             "root": "espacio de trabajo",
-            "mainPassing": "main sin fallos",
-            "needsUpdate": "El sandbox necesita una actualización",
             "projectFailing": "{project} con fallos",
             "projectsFailing": "{count} proyecto con fallos | {count} proyectos con fallos",
-            "checking": "Comprobando {project}",
             "queued": "{count} en cola",
             "columnQueued": "En cola",
             "columnChecking": "Comprobando",
@@ -442,8 +439,6 @@
             "nothingQueued": "Nada en cola",
             "noResults": "Aún no hay resultados",
             "outdatedMissing": "Hasta que se actualice, este panel no puede decir a quién se atribuye una comprobación fallida ni quién la está arreglando, abrir los registros de una comprobación ni mostrar lo que dejaron tus pushes.",
-            "passing": "sin fallos",
-            "failing": "con fallos",
             "logs": "Registros",
             "moreFailures": "+{count} más",
             "noFailureList": "No se listaron fallos",
@@ -469,7 +464,6 @@
             "shortDismissed": "apartado",
             "push": {
                 "explain": "El push se hizo; su comprobación dejó pasar esto. Cada hallazgo espera aquí hasta que una medición posterior ya no lo encuentre o lo descartes. Nadie se pone con ellos a menos que los entregues.",
-                "bar": "{count} pendiente del push | {count} pendientes del push",
                 "commits": "{count} commit | {count} commits",
                 "earlier": "+{count} push anterior | +{count} pushes anteriores",
                 "more": "+{count} más | +{count} más",
@@ -494,7 +488,6 @@
                 "handled": "atendido"
             },
             "board": {
-                "summary": "Estado de la línea principal",
                 "idle": "Ninguna comprobación en curso",
                 "waiting": "{count} integración espera la próxima comprobación | {count} integraciones esperan la próxima comprobación",
                 "measuring": "Midiendo {count} integración | Midiendo {count} integraciones",
@@ -505,7 +498,19 @@
                 "more": "+{count} más",
                 "backToResults": "Volver a los resultados",
                 "openHistory": "Abrir el historial ({count})",
-                "historyHint": "Cada comprobación y cada push, lo más reciente primero"
+                "historyHint": "Cada comprobación tras integrar, lo más reciente primero",
+                "queuedHint": "Trabajo integrado, esperando la próxima comprobación de su proyecto",
+                "checkingHint": "La comprobación que se ejecuta ahora en el árbol principal",
+                "resultHint": "La última comprobación de cada proyecto tras integrar trabajo",
+                "pushedHint": "Lo que encontró la comprobación previa al push en tus pushes. Nunca detiene un push.",
+                "leftAtPush": "Pendiente del push",
+                "nothingLeft": "Nada pendiente del push",
+                "command": "Comando",
+                "fix": "Arreglo",
+                "failures": "{count} fallo | {count} fallos",
+                "after": "tras {work}",
+                "stillOpen": "{count} hallazgo aún abierto | {count} hallazgos aún abiertos",
+                "lastPush": "Último push"
             }
         },
         "landCheck": {

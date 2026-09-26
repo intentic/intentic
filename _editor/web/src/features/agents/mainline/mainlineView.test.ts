@@ -9,12 +9,12 @@ import {
     mainlineBadge,
     mainlineSummary,
     pushDebtOf,
+    pushRecordOf,
     queuesOf,
     redsOf,
     resultDot,
     resultsOf,
     routingMeta,
-    timelineOf,
     usualBranch,
 } from "./mainlineView";
 import { mainlineTileBadge, shellMainline } from "./mainlineTile";
@@ -421,30 +421,25 @@ describe(`mainlineSummary with pushes`, () => {
     });
 });
 
-describe(`timelineOf`, () => {
-    it(`merges lands' checks and pushes newest first, and cuts at the limit`, () => {
-        const landNew = run({ at: NOW - MINUTE });
-        const landOld = run({ at: NOW - 10 * MINUTE, status: `red` });
+// THE PUSH RECORD, the Left at push lane's receipts: each push by what it left, newest first as the daemon lists them.
+describe(`pushRecordOf`, () => {
+    it(`reads each push by what it left, newest first: still owed, all of it since settled, or clean`, () => {
         const left = push(`left`, NOW - 2 * MINUTE, [finding(`paths`), finding(`lint`)]);
         const handled = push(`handled`, NOW - 5 * MINUTE, [finding(`layout`)]);
         const clean = push(`clean`, NOW - 20 * MINUTE, []);
-        const merged = pushStatus([left, handled, clean], { settled: [`lint`, `layout`], recent: [landNew, landOld] });
+        const record = pushStatus([left, handled, clean], { settled: [`lint`, `layout`], recent: [run({ at: NOW - MINUTE })] });
 
-        expect(timelineOf(merged, 8)).toEqual([
-            { kind: `land`, run: landNew },
-            { kind: `push`, push: left, open: 1, handled: false },
-            { kind: `push`, push: handled, open: 0, handled: true },
-            { kind: `land`, run: landOld },
-            { kind: `push`, push: clean, open: 0, handled: false },
+        expect(pushRecordOf(record)).toEqual([
+            { push: left, open: 1, handled: false },
+            { push: handled, open: 0, handled: true },
+            { push: clean, open: 0, handled: false },
         ]);
-        expect(timelineOf(merged, 2).map((event) => (event.kind === `land` ? event.run.at : event.push.id))).toEqual([NOW - MINUTE, `left`]);
     });
 
-    it(`is the lands' record alone for a sandbox too old to say what its pushes left, even one that sent them`, () => {
-        const checked = run();
-        expect(timelineOf(pushStatus(undefined, { recent: [checked] }), 8)).toEqual([{ kind: `land`, run: checked }]);
-        const older: MainlineStatus = { projects: [], recent: [checked], pushed: [push(`a`, NOW, [finding(`paths`)])] };
-        expect(timelineOf(older, 8)).toEqual([{ kind: `land`, run: checked }]);
+    it(`is nothing for a sandbox that records no pushes, or one too old to say what its pushes left, even one that sent them`, () => {
+        expect(pushRecordOf(pushStatus(undefined, { recent: [run()] }))).toEqual([]);
+        const older: MainlineStatus = { projects: [], recent: [run()], pushed: [push(`a`, NOW, [finding(`paths`)])] };
+        expect(pushRecordOf(older)).toEqual([]);
     });
 });
 

@@ -424,11 +424,8 @@
         "mainline": {
             "title": "Hauptlinie",
             "root": "Arbeitsbereich",
-            "mainPassing": "main besteht",
-            "needsUpdate": "Sandbox braucht ein Update",
             "projectFailing": "{project} schlägt fehl",
             "projectsFailing": "{count} Projekt schlägt fehl | {count} Projekte schlagen fehl",
-            "checking": "Prüfe {project}",
             "queued": "{count} wartend",
             "columnQueued": "Warteschlange",
             "columnChecking": "Wird geprüft",
@@ -437,8 +434,6 @@
             "nothingQueued": "Nichts in der Warteschlange",
             "noResults": "Noch keine Ergebnisse",
             "outdatedMissing": "Bis zum Update kann dieses Panel nicht sagen, wem eine fehlschlagende Prüfung zugeschrieben wird oder wer sie behebt, keine Logs einer Prüfung öffnen und nicht zeigen, was deine Pushes hinterlassen haben.",
-            "passing": "besteht",
-            "failing": "schlägt fehl",
             "logs": "Logs",
             "moreFailures": "+{count} weitere",
             "noFailureList": "Keine Fehler aufgeführt",
@@ -464,7 +459,6 @@
             "shortDismissed": "zurückgestellt",
             "push": {
                 "explain": "Der Push ist durch; seine Prüfung hat diese Befunde durchgelassen. Jeder wartet hier, bis eine spätere Messung ihn nicht mehr findet oder du ihn verwirfst. Niemand wird darauf angesetzt, außer du übergibst sie.",
-                "bar": "{count} vom Push übrig | {count} vom Push übrig",
                 "commits": "{count} Commit | {count} Commits",
                 "earlier": "+{count} früherer Push | +{count} frühere Pushes",
                 "more": "+{count} weitere | +{count} weitere",
@@ -489,7 +483,6 @@
                 "handled": "erledigt"
             },
             "board": {
-                "summary": "Status der Hauptlinie",
                 "idle": "Keine Prüfung läuft",
                 "waiting": "{count} Landung wartet auf die nächste Prüfung | {count} Landungen warten auf die nächste Prüfung",
                 "measuring": "Misst {count} Landung | Misst {count} Landungen",
@@ -500,7 +493,19 @@
                 "more": "+{count} weitere",
                 "backToResults": "Zurück zu den Ergebnissen",
                 "openHistory": "Verlauf öffnen ({count})",
-                "historyHint": "Jede Prüfung und jeder Push, neueste zuerst"
+                "historyHint": "Jede Prüfung nach dem Landen, neueste zuerst",
+                "queuedHint": "Gelandete Arbeit, wartet auf die nächste Prüfung ihres Projekts",
+                "checkingHint": "Die Prüfung, die gerade auf dem Hauptbaum läuft",
+                "resultHint": "Die letzte Prüfung jedes Projekts nach dem Landen",
+                "pushedHint": "Was die Prüfung vor dem Push in Ihren Pushes gefunden hat. Sie hält keinen Push auf.",
+                "leftAtPush": "Vom Push übrig",
+                "nothingLeft": "Nichts vom Push übrig",
+                "command": "Befehl",
+                "fix": "Behebung",
+                "failures": "{count} Fehler | {count} Fehler",
+                "after": "nach {work}",
+                "stillOpen": "{count} Fund noch offen | {count} Funde noch offen",
+                "lastPush": "Letzter Push"
             }
         },
         "landCheck": {

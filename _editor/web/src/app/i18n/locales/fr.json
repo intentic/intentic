@@ -425,11 +425,8 @@
         "mainline": {
             "title": "Ligne principale",
             "root": "espace de travail",
-            "mainPassing": "main au vert",
-            "needsUpdate": "La sandbox doit être mise à jour",
             "projectFailing": "{project} en échec",
             "projectsFailing": "{count} projet en échec | {count} projets en échec",
-            "checking": "Vérification de {project}",
             "queued": "{count} en attente",
             "columnQueued": "En attente",
             "columnChecking": "Vérification",
@@ -438,8 +435,6 @@
             "nothingQueued": "Rien en attente",
             "noResults": "Pas encore de résultat",
             "outdatedMissing": "Tant qu'elle n'est pas à jour, ce panneau ne peut pas dire à qui un contrôle en échec est imputé ni qui le corrige, ouvrir les journaux d'un contrôle, ni montrer ce que vos pushs ont laissé.",
-            "passing": "au vert",
-            "failing": "en échec",
             "logs": "Journaux",
             "moreFailures": "+{count} de plus",
             "noFailureList": "Aucun échec listé",
@@ -465,7 +460,6 @@
             "shortDismissed": "mis de côté",
             "push": {
                 "explain": "Le push est parti ; sa vérification a laissé passer ceci. Chaque constat attend ici jusqu'à ce qu'une mesure ultérieure ne le trouve plus ou que vous l'écartiez. Personne ne s'en occupe à moins que vous ne le confiiez.",
-                "bar": "{count} laissé au push | {count} laissés au push",
                 "commits": "{count} commit | {count} commits",
                 "earlier": "+{count} push antérieur | +{count} pushs antérieurs",
                 "more": "+{count} de plus | +{count} de plus",
@@ -490,7 +484,6 @@
                 "handled": "traité"
             },
             "board": {
-                "summary": "État de la ligne principale",
                 "idle": "Aucune vérification en cours",
                 "waiting": "{count} intégration attend la prochaine vérification | {count} intégrations attendent la prochaine vérification",
                 "measuring": "Mesure {count} intégration | Mesure {count} intégrations",
@@ -501,7 +494,19 @@
                 "more": "+{count} de plus",
                 "backToResults": "Retour aux résultats",
                 "openHistory": "Ouvrir l'historique ({count})",
-                "historyHint": "Chaque vérification et chaque push, du plus récent au plus ancien"
+                "historyHint": "Chaque vérification après intégration, de la plus récente à la plus ancienne",
+                "queuedHint": "Travail intégré, en attente de la prochaine vérification de son projet",
+                "checkingHint": "La vérification qui tourne en ce moment sur l'arbre principal",
+                "resultHint": "La dernière vérification de chaque projet après intégration",
+                "pushedHint": "Ce que la vérification avant push a trouvé dans vos pushes. Elle n'arrête jamais un push.",
+                "leftAtPush": "Laissé au push",
+                "nothingLeft": "Rien de laissé au push",
+                "command": "Commande",
+                "fix": "Correction",
+                "failures": "{count} échec | {count} échecs",
+                "after": "après {work}",
+                "stillOpen": "{count} problème encore ouvert | {count} problèmes encore ouverts",
+                "lastPush": "Dernier push"
             }
         },
         "landCheck": {

@@ -429,11 +429,8 @@
         "mainline": {
             "title": "Główna linia",
             "root": "przestrzeń robocza",
-            "mainPassing": "main przechodzi",
-            "needsUpdate": "Sandbox wymaga aktualizacji",
             "projectFailing": "{project} nie przechodzi",
             "projectsFailing": "{count} projekt nie przechodzi | {count} projekty nie przechodzą | {count} projektów nie przechodzi",
-            "checking": "Sprawdzanie {project}",
             "queued": "{count} w kolejce",
             "columnQueued": "W kolejce",
             "columnChecking": "Sprawdzanie",
@@ -442,8 +439,6 @@
             "nothingQueued": "Kolejka jest pusta",
             "noResults": "Brak wyników",
             "outdatedMissing": "Do czasu aktualizacji ten panel nie powie, komu przypisano nieudane sprawdzenie ani kto je naprawia, nie otworzy logów sprawdzenia i nie pokaże, co zostawiły twoje pushe.",
-            "passing": "przechodzi",
-            "failing": "nie przechodzi",
             "logs": "Logi",
             "moreFailures": "+{count} więcej",
             "noFailureList": "Brak listy błędów",
@@ -469,7 +464,6 @@
             "shortDismissed": "odłożone",
             "push": {
                 "explain": "Push poszedł; jego sprawdzenie przepuściło to, co tu widać. Każde znalezisko czeka tu, aż późniejszy pomiar go nie znajdzie albo je odrzucisz. Nikt się tym nie zajmie, dopóki go nie przekażesz.",
-                "bar": "{count} zostało po pushu | {count} zostały po pushu | {count} zostało po pushu",
                 "commits": "{count} commit | {count} commity | {count} commitów",
                 "earlier": "+{count} wcześniejszy push | +{count} wcześniejsze pushe | +{count} wcześniejszych pushy",
                 "more": "+{count} więcej | +{count} więcej | +{count} więcej",
@@ -494,7 +488,6 @@
                 "handled": "załatwione"
             },
             "board": {
-                "summary": "Stan głównej linii",
                 "idle": "Żadne sprawdzenie nie trwa",
                 "waiting": "{count} scalenie czeka na następne sprawdzenie | {count} scalenia czekają na następne sprawdzenie | {count} scaleń czeka na następne sprawdzenie",
                 "measuring": "Mierzy {count} scalenie | Mierzy {count} scalenia | Mierzy {count} scaleń",
@@ -505,7 +498,19 @@
                 "more": "+{count} więcej",
                 "backToResults": "Wróć do wyników",
                 "openHistory": "Otwórz historię ({count})",
-                "historyHint": "Każde sprawdzenie i każdy push, od najnowszych"
+                "historyHint": "Każde sprawdzenie po scaleniu, od najnowszych",
+                "queuedHint": "Scalona praca czeka na następne sprawdzenie swojego projektu",
+                "checkingHint": "Sprawdzenie, które teraz działa na głównym drzewie",
+                "resultHint": "Ostatnie sprawdzenie każdego projektu po scaleniu",
+                "pushedHint": "Co sprawdzenie przed pushem znalazło w Twoich pushach. Nigdy nie wstrzymuje pusha.",
+                "leftAtPush": "Zostało po pushu",
+                "nothingLeft": "Nic nie zostało po pushu",
+                "command": "Polecenie",
+                "fix": "Naprawa",
+                "failures": "{count} błąd | {count} błędy | {count} błędów",
+                "after": "po {work}",
+                "stillOpen": "{count} znalezisko wciąż otwarte | {count} znaleziska wciąż otwarte | {count} znalezisk wciąż otwartych",
+                "lastPush": "Ostatni push"
             }
         },
         "landCheck": {

@@ -103,7 +103,8 @@ const lanes = (element: HTMLElement): string[] => [...element.querySelectorAll<H
 const lane = (element: HTMLElement, id: string): HTMLElement => element.querySelector<HTMLElement>(`[data-lane="${id}"]`)!;
 // A lane's own header, the fleet board's (LaneHeader): its name, and its count or its door.
 const laneHead = (element: HTMLElement, id: string): string => wordsOf(lane(element, id).querySelector(`header`));
-const summaryOf = (element: HTMLElement): HTMLElement => element.querySelector<HTMLElement>(`[data-summary]`)!;
+// The line under a lane's name that says what the lane holds.
+const laneHint = (element: HTMLElement, id: string): string => wordsOf(lane(element, id).querySelector(`[data-lane-hint]`));
 const buttonNamed = (within: HTMLElement, words: string): HTMLButtonElement =>
     [...within.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => wordsOf(button) === words)!;
 
@@ -242,25 +243,40 @@ afterEach(() => {
 });
 
 describe(`the Main line view`, () => {
-    it(`opens onto a board of the road a land travels, queued, checking, result, under a header that says how main stands`, () => {
+    it(`opens onto its lanes and nothing above them: queued, checking, result, each saying what it holds`, () => {
         const element = mount(redStatus());
-        expect(wordsOf(summaryOf(element))).toBe(`web failing · fixing 1 queued`);
-        expect(summaryOf(element).getAttribute(`aria-label`)).toBe(`Main line status`);
+        // The lanes are the whole page: no line above them restates what they show.
+        expect(element.querySelector(`[data-summary]`)).toBeNull();
+        expect(element.querySelector(`header`)?.closest(`[data-lane]`)?.getAttribute(`data-lane`)).toBe(`queued`);
         // Nothing in it is explained on hover: the page carries no note.
         expect(element.querySelector(`[role="note"]`)).toBeNull();
+        // A sandbox that never pushed has no Left at push lane.
         expect(lanes(element)).toEqual([`queued`, `checking`, `result`]);
         expect(laneHead(element, `queued`)).toBe(`Queued 1`);
-        expect(wordsOf(lane(element, `checking`))).toBe(`Checking No check running`);
+        expect(laneHint(element, `queued`)).toBe(`Landed work, waiting for its project's next check`);
+        expect(laneHead(element, `checking`)).toBe(`Checking`);
+        expect(laneHint(element, `checking`)).toBe(`The check running on the main tree now`);
+        expect(wordsOf(lane(element, `checking`).querySelector(`p:not([data-lane-hint])`))).toBe(`No check running`);
         // The Result lane's door to the record is its header's chip, counting what is behind it.
         expect(laneHead(element, `result`)).toBe(`Result 2`);
+        expect(laneHint(element, `result`)).toBe(`Each project's last check after work landed`);
         expect(lane(element, `result`).querySelector(`[data-history]`)?.getAttribute(`aria-label`)).toBe(`Open the history (2)`);
+    });
+
+    // Off the land's road: what the pre-push check found, in a lane of its own for a sandbox that records pushes.
+    it(`adds a Left at push lane once the sandbox records pushes, counting what they left and saying what it is`, () => {
+        const element = mount(pushedStatus());
+        expect(lanes(element)).toEqual([`queued`, `checking`, `result`, `pushed`]);
+        expect(laneHead(element, `pushed`)).toBe(`Left at push 7`);
+        expect(laneHint(element, `pushed`)).toBe(`What the pre-push check found in your pushes. It never stops a push.`);
+        // Nothing a push left is a result of the check after landing, so none of it sits in the Result lane.
+        expect(lane(element, `result`).querySelector(`[data-section^="push-"], [data-event="push"]`)).toBeNull();
     });
 
     it(`says nothing was checked yet in place of an empty board, while nothing was and before the read answers`, () => {
         const element = mount(undefined);
         expect(wordsOf(element.querySelector(`[data-empty]`))).toBe(`Nothing checked yet. When work lands, its check on the main tree shows here.`);
         expect(element.querySelector(`[data-lane]`)).toBeNull();
-        expect(element.querySelector(`[data-summary]`)).toBeNull();
         app?.unmount();
 
         const nothing = mount({ projects: [], recent: [], reds: [] });
@@ -274,86 +290,6 @@ describe(`the Main line view`, () => {
             `Until it updates, this sandbox can't show the check its main tree gets after each land.`,
         );
         expect(element.querySelector(`[data-empty]`)).toBeNull();
-    });
-});
-
-// What the board's status bar used to say at rest, now the view's header: read at a glance, above the lanes.
-describe(`the view's header, at rest`, () => {
-    // Health and activity side by side; what the check runs and whose work it measures are the lanes' to say.
-    it(`says whether main passes and what the check is doing, in two short answers`, async () => {
-        const element = mount(runningStatus());
-        expect(wordsOf(summaryOf(element))).toBe(`Main passing Checking web 1m 5s`);
-        expect(wordsOf(summaryOf(element).querySelector(`[data-item="health"]`))).toBe(`Main passing`);
-        expect(wordsOf(summaryOf(element).querySelector(`[data-item="running"]`))).toBe(`Checking web 1m 5s`);
-        expect(summaryOf(element).textContent).not.toContain(`pnpm verify`);
-        expect(summaryOf(element).textContent).not.toContain(`Add Stripe checkout`);
-
-        jest.advanceTimersByTime(1_000);
-        await nextTick();
-        expect(wordsOf(summaryOf(element).querySelector(`[data-item="running"]`))).toBe(`Checking web 1m 6s`);
-    });
-
-    it(`says which project fails and who has it, with nothing to press beside it`, () => {
-        const element = mount(redStatus());
-        expect(wordsOf(summaryOf(element).querySelector(`[data-item="health"]`))).toBe(`web failing · fixing`);
-        expect(wordsOf(summaryOf(element).querySelector(`[data-item="queued"]`))).toBe(`1 queued`);
-        expect(summaryOf(element).querySelectorAll(`a, button`)).toHaveLength(0);
-    });
-
-    it(`asks for the reader's eye only when a red waits for them`, () => {
-        const spent: MainlineRun = { ...RED, routing: { kind: `spent`, at: NOW - 5 * MINUTE, detail: `Still red after 2 fresh attempt(s); it waits for you.` } };
-        const element = mount({ projects: [redProject(spent)], recent: [spent], reds: [] });
-        const health = summaryOf(element).querySelector(`[data-item="health"]`)!;
-        expect(wordsOf(health)).toBe(`web failing · needs you`);
-        expect(health.querySelector(`.text-warning`)?.textContent?.trim()).toBe(`· needs you`);
-        app?.unmount();
-
-        const fixing = mount(redStatus());
-        expect(summaryOf(fixing).querySelector(`.text-warning`)).toBeNull();
-    });
-
-    it(`counts the projects failing when there is more than one, and keeps a red on the line while another check runs`, () => {
-        const apiRed: MainlineRun = { ...RED, project: `api`, at: NOW - 20 * MINUTE, routing: undefined };
-        const status = redStatus();
-        const element = mount({
-            projects: [...status.projects, redProject(apiRed, { running: { command: `pnpm test`, startedAt: NOW - 5_000, lands: [] } })],
-            recent: [apiRed, ...status.recent],
-            reds: [],
-        });
-        expect(wordsOf(summaryOf(element))).toBe(`2 projects failing Checking api 5s 1 queued`);
-    });
-
-    it(`says main passes once something was checked, and nothing about health before`, () => {
-        const element = mount({ projects: [{ project: `web`, queued: [], last: green() }], recent: [green()], reds: [] });
-        expect(wordsOf(summaryOf(element))).toBe(`Main passing`);
-        app?.unmount();
-
-        const first = mount({ projects: [{ project: `web`, running: { command: `pnpm verify`, startedAt: NOW - 5_000, lands: [] }, queued: [] }], recent: [], reds: [] });
-        expect(wordsOf(summaryOf(first))).toBe(`Checking web 5s`);
-        expect(first.querySelector(`[data-item="health"]`)).toBeNull();
-    });
-
-    it(`counts the lands queued for the next check, each once`, () => {
-        const waiting = { conversationId: `a`, at: NOW - 5_000 };
-        const element = mount({
-            projects: [
-                { project: `web`, queued: [waiting, { conversationId: `b`, at: NOW - 3_000 }], last: green() },
-                // The same land waiting in a second project is still one land.
-                { project: `api`, queued: [waiting] },
-            ],
-            recent: [green()],
-            reds: [],
-        });
-        expect(wordsOf(summaryOf(element))).toBe(`Main passing 2 queued`);
-        // The lane counts it once too, and draws it in each queue it waits in.
-        expect(laneHead(element, `queued`)).toBe(`Queued 2`);
-        expect([...lane(element, `queued`).querySelectorAll<HTMLElement>(`[data-queue]`)].map((queue) => queue.dataset[`queue`])).toEqual([`web`, `api`]);
-    });
-
-    it(`counts what pushes left in amber beside main passing, which it never takes off the header`, () => {
-        const element = mount(pushedStatus());
-        expect(wordsOf(summaryOf(element))).toBe(`Main passing 7 left at push`);
-        expect(summaryOf(element).querySelector(`[data-item="push"]`)?.className).toBe(`flex shrink-0 items-center gap-1.5 text-warning`);
     });
 });
 
@@ -409,16 +345,39 @@ describe(`the Queued lane`, () => {
     });
 });
 
+// A land touching two projects waits in both queues, and is still one land.
+describe(`the Queued lane's count`, () => {
+    it(`counts the lands queued for the next check, each once, and draws one in each queue it waits in`, () => {
+        const waiting = { conversationId: `a`, at: NOW - 5_000 };
+        const element = mount({
+            projects: [
+                { project: `web`, queued: [waiting, { conversationId: `b`, at: NOW - 3_000 }], last: green() },
+                { project: `api`, queued: [waiting] },
+            ],
+            recent: [green()],
+            reds: [],
+        });
+        expect(laneHead(element, `queued`)).toBe(`Queued 2`);
+        expect([...lane(element, `queued`).querySelectorAll<HTMLElement>(`[data-queue]`)].map((queue) => queue.dataset[`queue`])).toEqual([`web`, `api`]);
+    });
+});
+
 describe(`the Checking lane`, () => {
     it(`draws the running check with its clock and its logs, and the lands it measures hung under it`, async () => {
         const element = mount(runningStatus());
-        expect(wordsOf(lane(element, `queued`))).toBe(`Queued Nothing queued`);
-        expect(wordsOf(lane(element, `checking`))).toBe(`Checking web Measuring 2 lands 1m 5s Logs Add Stripe checkout Tighten the pricing copy`);
+        expect(wordsOf(lane(element, `queued`))).toBe(`Queued Landed work, waiting for its project's next check Nothing queued`);
+        // The command it runs, on the card, in its own face: what is being checked is not left to be guessed.
+        expect(wordsOf(lane(element, `checking`).querySelector(`article`))).toBe(`web pnpm verify · Measuring 2 lands 1m 5s Logs`);
+        expect(lane(element, `checking`).querySelector(`[data-meta] .font-mono`)?.textContent).toBe(`pnpm verify`);
+        expect([...lane(element, `checking`).querySelectorAll(`[data-land]`)].map((row) => wordsOf(row))).toEqual([
+            `Add Stripe checkout`,
+            `Tighten the pricing copy`,
+        ]);
         expect(lane(element, `checking`).querySelector(`[role="group"]`)?.getAttribute(`aria-label`)).toBe(`Lands the check on web is measuring`);
 
         jest.advanceTimersByTime(1_000);
         await nextTick();
-        expect(wordsOf(lane(element, `checking`).querySelector(`article`))).toBe(`web Measuring 2 lands 1m 6s Logs`);
+        expect(wordsOf(lane(element, `checking`).querySelector(`article`))).toBe(`web pnpm verify · Measuring 2 lands 1m 6s Logs`);
 
         buttonNamed(lane(element, `checking`), `Logs`).click();
         expect(watched).toHaveBeenCalledWith(`panel-web--verify`);
@@ -427,7 +386,7 @@ describe(`the Checking lane`, () => {
     it(`says where a check sent to another machine runs`, () => {
         const status = runningStatus();
         const element = mount({ ...status, projects: [{ ...status.projects[0]!, running: { ...status.projects[0]!.running!, on: `omen` } }] });
-        expect(wordsOf(lane(element, `checking`).querySelector(`[data-meta]`))).toBe(`Measuring 2 lands · on omen`);
+        expect(wordsOf(lane(element, `checking`).querySelector(`[data-meta]`))).toBe(`pnpm verify · Measuring 2 lands · on omen`);
     });
 
     // One terminal per project: while it is being checked again, its Logs sit with the running check.
@@ -441,17 +400,21 @@ describe(`the Checking lane`, () => {
         expect(buttonNamed(lane(element, `result`), `Logs`)).toBeUndefined();
         buttonNamed(lane(element, `checking`), `Logs`).click();
         expect(watched).toHaveBeenCalledWith(`panel-web--verify`);
-        expect(wordsOf(lane(element, `checking`))).toBe(`Checking web Re-check 5s Logs`);
+        expect(wordsOf(lane(element, `checking`).querySelector(`article`))).toBe(`web pnpm verify · Re-check 5s Logs`);
     });
 });
 
 describe(`the Result lane`, () => {
-    it(`says of a failing project who has it, what it is laid at, then what failed, test names first`, () => {
+    it(`says of a failing project the command its check ran, who has it, what it is laid at, then what failed, counted`, () => {
         const element = mount(redStatus());
         const web = lane(element, `result`).querySelector<HTMLElement>(`[data-result="web"]`)!;
         expect(wordsOf(web.firstElementChild)).toBe(`web Failing since ${sinceWhen(RED.at)} Logs`);
+        // Each on a labelled row, so no line has to be decoded: the command, who is fixing it, what it is laid at.
+        expect([...web.querySelectorAll(`dt`)].map((term) => wordsOf(term))).toEqual([`Command`, `Fix`, `Likely cause`]);
+        expect(wordsOf(web.querySelector(`[data-command]`))).toBe(`pnpm verify`);
         expect(wordsOf(web.querySelector(`[data-fix]`))).toBe(`Being fixed in Fix main after "Release notes"`);
-        expect(wordsOf(web.querySelector(`[data-cause]`))).toBe(`Likely cause Release notes`);
+        expect(wordsOf(web.querySelector(`[data-cause]`))).toBe(`Release notes`);
+        expect(wordsOf(web.querySelector(`[data-failures-count]`))).toBe(`2 failures`);
         expect([...web.querySelectorAll(`[data-failures] li`)].map((item) => wordsOf(item))).toEqual([
             `lists every release changelog.test.ts`,
             `links each tag changelog.test.ts`,
@@ -467,6 +430,7 @@ describe(`the Result lane`, () => {
         const many: MainlineRun = { ...RED, failures: units.map((unit) => `${unit.path} › ${unit.name}`), units, failureCount: 40 };
         const element = mount({ projects: [redProject(many)], recent: [many], reds: [] });
         const listed = (): string[] => [...lane(element, `result`).querySelectorAll(`[data-failures] li`)].map((item) => wordsOf(item));
+        expect(wordsOf(lane(element, `result`).querySelector(`[data-failures-count]`))).toBe(`40 failures`);
         expect(listed()).toEqual([
             `case 1 changelog.test.ts`,
             `case 2 changelog.test.ts`,
@@ -488,11 +452,11 @@ describe(`the Result lane`, () => {
         const wide: MainlineRun = { ...RED, lands, suspects: lands.map((land) => land.conversationId) };
         const element = mount({ projects: [redProject(wide)], recent: [wide], reds: [] });
         const cause = (): string => wordsOf(lane(element, `result`).querySelector(`[data-cause]`));
-        expect(cause()).toBe(`Likely cause Land 1 , Land 2 , Land 3 +2 more`);
+        expect(cause()).toBe(`Land 1 , Land 2 , Land 3 +2 more`);
 
         buttonNamed(lane(element, `result`), `+2 more`).click();
         await nextTick();
-        expect(cause()).toBe(`Likely cause Land 1 , Land 2 , Land 3 , Land 4 , Land 5 Show fewer`);
+        expect(cause()).toBe(`Land 1 , Land 2 , Land 3 , Land 4 , Land 5 Show fewer`);
     });
 
     it(`gives a red one line on who has it, in the words a reader acts on`, () => {
@@ -537,13 +501,14 @@ describe(`the Result lane`, () => {
         });
     });
 
-    it(`says a project with nothing failing passes, and what its last check measured`, () => {
+    it(`says a project with nothing failing passes, the command that passed, and after what`, () => {
         const element = mount(runningStatus());
-        expect(wordsOf(lane(element, `result`))).toBe(`Result 1 web passing · Add Stripe checkout 11m ago`);
+        expect(wordsOf(lane(element, `result`).querySelector(`[data-result="web"]`))).toBe(`web pnpm verify passed after Add Stripe checkout 11m ago`);
+        expect(lane(element, `result`).querySelector(`[data-result="web"] [data-meta] .font-mono`)?.textContent).toBe(`pnpm verify`);
     });
 
-    // What fails first, what a push left next, what passes last: the order a reader is owed them in.
-    it(`orders the lane by what it asks of the reader`, () => {
+    // What fails first, what passes after: the order a reader is owed them in. What a push left is another lane's.
+    it(`orders the lane by what it asks of the reader, and keeps what a push left in a lane of its own`, () => {
         const status = redStatus();
         const element = mount({
             projects: [...status.projects, { project: `api`, queued: [], last: green({ project: `api` }) }],
@@ -551,10 +516,10 @@ describe(`the Result lane`, () => {
             pushed: [PUSHED],
             reds: [LEFT_RED],
         });
-        const cards = [...lane(element, `result`).querySelectorAll<HTMLElement>(`article`)].map(
-            (card) => card.dataset[`result`] ?? card.dataset[`section`] ?? ``,
-        );
-        expect(cards).toEqual([`web`, `push-intentic`, `api`]);
+        const cards = (id: string): string[] =>
+            [...lane(element, id).querySelectorAll<HTMLElement>(`article`)].map((card) => card.dataset[`result`] ?? card.dataset[`section`] ?? card.dataset[`event`] ?? ``);
+        expect(cards(`result`)).toEqual([`web`, `api`]);
+        expect(cards(`pushed`)).toEqual([`push-intentic`, `push`]);
     });
 
     // Opened to be watched: a conversation or the logs opened from it leave it standing.
@@ -579,20 +544,22 @@ describe(`the Result lane`, () => {
 
 // THE RECORD, behind the Result lane's header the way the fleet board's archive is behind its Finished lane's.
 describe(`the record`, () => {
-    it(`opens in the Result lane from its header, newest first, and goes back the same way`, async () => {
+    it(`opens in the Result lane from its header, newest first, each check by the command it ran, and goes back the same way`, async () => {
         const element = mount(redStatus());
         lane(element, `result`).querySelector<HTMLButtonElement>(`[data-history]`)!.click();
         await nextTick();
         expect(laneHead(element, `result`)).toBe(`History 2`);
+        expect(laneHint(element, `result`)).toBe(`Every check after landing, newest first`);
         expect([...lane(element, `result`).querySelectorAll<HTMLElement>(`[data-event]`)].map((event) => wordsOf(event))).toEqual([
-            `Release notes failed 30m ago`,
-            `Add Stripe checkout passed 1h ago`,
+            `Release notes pnpm verify failed 30m ago`,
+            `Add Stripe checkout pnpm verify passed 1h ago`,
         ]);
         expect(lane(element, `result`).querySelector(`[data-result]`)).toBeNull();
 
         lane(element, `result`).querySelector<HTMLButtonElement>(`button[aria-label="Back to the results"]`)!.click();
         await nextTick();
         expect(laneHead(element, `result`)).toBe(`Result 2`);
+        expect(laneHint(element, `result`)).toBe(`Each project's last check after work landed`);
         expect(lane(element, `result`).querySelector(`[data-event]`)).toBeNull();
         expect(lane(element, `result`).querySelector(`[data-result="web"]`)).not.toBeNull();
     });
@@ -610,20 +577,33 @@ describe(`the record`, () => {
         expect(buttonNamed(lane(element, `result`), `2 earlier`)).toBeUndefined();
     });
 
-    it(`keeps pushes in the record beside the lands' checks, by what each left`, async () => {
+    // The record is the checks after landing; the pushes the pre-push check measured are the Left at push lane's.
+    it(`keeps the checks after landing in the record, and the pushes in their own lane by what each left`, async () => {
         const status = pushedStatus();
         const element = mount({ ...status, pushed: [PUSHED, { ...CLEAN_PUSH, branch: `docs/verify-push` }] });
-        lane(element, `result`).querySelector<HTMLButtonElement>(`[data-history]`)!.click();
-        await nextTick();
-        const events = [...element.querySelectorAll<HTMLElement>(`[data-lane="result"] [data-event]`)];
         // Aged from the minute the board reads, 40s before NOW: 12m reads as 11, 20m as 19, 300m as 4h. Two projects
-        // between the lands and the pushes, so every record names its own; a push names its branch only when it is not
-        // the one the pushes go to.
-        expect(events.map((event) => [event.dataset[`event`], wordsOf(event)])).toEqual([
-            [`land`, `Add Stripe checkout passed · web 11m ago`],
-            [`push`, `725e054 7 left · intentic 19m ago`],
+        // between the lands and the pushes, so every record names its own, and every push the branch it went to.
+        expect([...lane(element, `pushed`).querySelectorAll<HTMLElement>(`[data-event]`)].map((event) => [event.dataset[`event`], wordsOf(event)])).toEqual([
+            [`push`, `725e054 → main 7 left · intentic 19m ago`],
             [`push`, `6c6a13a → docs/verify-push clean · intentic 4h ago`],
         ]);
+
+        lane(element, `result`).querySelector<HTMLButtonElement>(`[data-history]`)!.click();
+        await nextTick();
+        expect([...lane(element, `result`).querySelectorAll<HTMLElement>(`[data-event]`)].map((event) => [event.dataset[`event`], wordsOf(event)])).toEqual([
+            [`land`, `Add Stripe checkout pnpm verify passed · web 11m ago`],
+        ]);
+    });
+
+    it(`lists five pushes, and the rest on a press`, async () => {
+        const pushes = Array.from({ length: 7 }, (_, at) => ({ ...CLEAN_PUSH, id: `push-${at}`, head: `${at}abcdef00`, at: NOW - (at + 1) * 60 * MINUTE }));
+        const element = mount({ ...pushedStatus(), pushed: pushes, reds: [] });
+        expect(lane(element, `pushed`).querySelectorAll(`[data-event]`)).toHaveLength(5);
+        expect(wordsOf(lane(element, `pushed`).querySelector(`p:not([data-lane-hint])`))).toBe(`Nothing left at push`);
+
+        buttonNamed(lane(element, `pushed`), `2 earlier`).click();
+        await nextTick();
+        expect(lane(element, `pushed`).querySelectorAll(`[data-event]`)).toHaveLength(7);
     });
 });
 
@@ -640,11 +620,12 @@ describe(`what a push left, on the board`, () => {
         const block = element.querySelector<HTMLElement>(`[data-section="push-intentic"]`)!;
         const rows = (): string[] => [...block.querySelectorAll(`[data-finding]`)].map((row) => wordsOf(row));
 
-        // A card of its own in the Result lane, its name and what it stands at, then the push it came with.
-        expect(block.closest(`[data-lane]`)?.getAttribute(`data-lane`)).toBe(`result`);
+        // A card of its own in the Left at push lane, its name and what it stands at, then the push it came with.
+        expect(block.closest(`[data-lane]`)?.getAttribute(`data-lane`)).toBe(`pushed`);
         expect(wordsOf(block.querySelector(`h3`))).toBe(`intentic`);
-        expect(wordsOf(block.querySelector(`[data-meta]`))).toBe(`14 left at push`);
-        expect(wordsOf(block.querySelector(`[data-push-line]`))).toBe(`725e054 · ${sinceWhen(PUSHED.at)} · main · 2 commits`);
+        expect(wordsOf(block.querySelector(`[data-meta]`))).toBe(`14 findings still open`);
+        expect(wordsOf(block.querySelector(`dt`))).toBe(`Last push`);
+        expect(wordsOf(block.querySelector(`[data-push-line]`))).toBe(`725e054 → main · 2 commits · ${sinceWhen(PUSHED.at)}`);
         // Each row names the file or folder, not the five folders above it every row shares.
         expect(rows()).toEqual([
             `daemon-boundaries portability -> settings closes a cycle`,
@@ -761,12 +742,11 @@ describe(`the main line of an older sandbox, in the view`, () => {
             `This sandbox runs an older version Until it updates, this panel can't say who a failing check is laid at or who is fixing it, open a check's logs, or show what your pushes left behind. Update the sandbox Installed it yourself? Reinstall it, or run this on the machine that runs it: ic sandbox update`,
         );
         expect(note.querySelector(`a[data-update]`)?.getAttribute(`href`)).toBe(`/sandbox/overview`);
-        // Where health would be, the header says it needs an update: a pass for want of a red would be a guess.
-        expect(wordsOf(summaryOf(element))).toBe(`Sandbox needs an update`);
-        expect(summaryOf(element).textContent).not.toContain(`left at push`);
-        expect(wordsOf(lane(element, `result`).querySelector(`[data-result="web"]`))).toBe(`web failing · Release notes 30m ago`);
+        expect(wordsOf(lane(element, `result`).querySelector(`[data-result="web"]`))).toBe(`web pnpm verify failed after Release notes 30m ago`);
         expect(element.querySelector(`[data-cause], [data-fix], [data-failures], [data-section="push-web"], [data-section="push-intentic"]`)).toBeNull();
         expect([...element.querySelectorAll(`button`)].some((button) => wordsOf(button) === `Logs`)).toBe(false);
+        // Nothing says what of its pushes is still owed, so there is no lane for them rather than a guess at one.
+        expect(lanes(element)).toEqual([`queued`, `checking`, `result`]);
 
         lane(element, `result`).querySelector<HTMLButtonElement>(`[data-history]`)!.click();
         await nextTick();
@@ -776,6 +756,6 @@ describe(`the main line of an older sandbox, in the view`, () => {
     it(`draws no note for a current sandbox`, () => {
         const element = mount(redStatus());
         expect(element.querySelector(`[data-outdated]`)).toBeNull();
-        expect(wordsOf(summaryOf(element))).not.toContain(`needs an update`);
+        expect(element.textContent).not.toContain(`needs an update`);
     });
 });

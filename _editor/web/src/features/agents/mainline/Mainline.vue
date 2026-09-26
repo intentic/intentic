@@ -4,14 +4,12 @@ import { computed } from "vue";
 import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
 import SandboxOutdatedNotice from "../../sandbox/overview/version/SandboxOutdatedNotice.vue";
 import MainlineBoard from "./MainlineBoard.vue";
-import MainlineSummary from "./MainlineSummary.vue";
 import { mainlineSummary } from "./mainlineView";
 import { useMainline } from "./useMainline";
 
 // THE MAIN LINE, A BOARD OF ITS OWN (/ext/mainline, the rail's Main line tile): the check the main tree gets after every
-// land, laid out the way the fleet board lays out its agents. Its header says at a glance what the board says in full
-// (whether main passes, what the check is doing, what pushes left), where the fleet board keeps its own controls, so the
-// two views' headers line up with the chat's beside them; the lanes are MainlineBoard's.
+// land, laid out the way the fleet board lays out its agents. The lanes are the whole page: each says what it holds in a
+// line under its name, so nothing above them restates what they show (MainlineBoard).
 
 const t = useT();
 
@@ -26,16 +24,7 @@ const unserved = computed(() => !supportsRoute(`workspace.mainline`));
         <div v-if="unserved" class="p-4 sm:p-6">
             <SandboxOutdatedNotice :missing="t(`agents.mainline.unservedMissing`)" />
         </div>
-        <template v-else-if="status !== undefined && summary !== undefined">
-            <header
-                data-summary
-                :aria-label="t(`agents.mainline.board.summary`)"
-                class="view-header view-header-wrap flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-1 text-xs"
-            >
-                <MainlineSummary :summary="summary" />
-            </header>
-            <MainlineBoard :status="status" :summary="summary" />
-        </template>
+        <MainlineBoard v-else-if="status !== undefined && summary !== undefined" :status="status" :summary="summary" />
         <!-- Nothing landed yet is the board's one true empty state: what it will hold, where the lanes would be. -->
         <div v-else class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-4 text-center">
             <Icon name="mainline" class="text-3xl text-subtle" />

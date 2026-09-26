@@ -181,11 +181,12 @@ rebuild, a daemon restart from the host). Say plainly that nothing was changed.
   panel with every figure, memory by kind of process, and memory and CPU by session; each card shows its own
   conversation's.
 - **Main line** (`/ext/mainline`, a rail tile that counts a failing project and turns while a check runs): the
-  check main gets after every land, laid out as a board like Agents. Its header says in one line whether main
-  passes (or which project fails, and whether someone is fixing it, it is on hold, or it needs you) and what the
-  check is doing. Its lanes read left to right as the road a land travels: Queued (each project's lands, waiting)
-  → Checking (the running check, with the lands it measures under it) → Result (a failing project with who has it
-  and what failed, what the last push left behind, then the passing ones). The Result lane's header opens History.
+  check main gets after every land, laid out as a board like Agents, each lane saying under its name what it
+  holds. Its lanes read left to right as the road a land travels: Queued (each project's lands, waiting) →
+  Checking (the running check, the command it runs and the lands it measures under it) → Result (each project's
+  last check after landing: the command, and for a failing one who is fixing it, the likely cause and what
+  failed). The Result lane's header opens History. A fourth lane, Left at push, holds what the pre-push check
+  found in your pushes, which never stops a push, and the pushes it measured.
 - **Capabilities** (`/capabilities`): the connections; each card is a connector, account, device or service.
 - **Sandbox** (`/sandbox/<tab>`): Overview, Status (running turns), Usage, Environment, Secrets, Agent (the
   settings above), Extensions, Discover, Access, Personas, Devices.
