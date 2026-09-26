@@ -1,6 +1,7 @@
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { PrismaClient } from "@intentic/prisma";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
+import { CLEAR_STATE_PLAN, type FakeFlyCall, installFakeFly } from "@intentic/testing/fly-fake";
 import type { Config } from "../../../config.js";
 import { testIngressConfig } from "../../../testing.js";
 import { BUILD_ENV, BUILD_PATHS } from "./hosted-build-script.js";
@@ -15,6 +16,7 @@ import {
     sweepHostedBuilds,
 } from "./hosted-build.js";
 import { hostedInstanceId } from "../hosted.js";
+import { STATE_PROBE_ENV } from "../hosted-state-gate.js";
 import * as timersPromisesOriginal from "node:timers/promises";
 
 /* The settle between a machine's config update and its start (hosted.ts SETTLE_MS) is half a second of real time in production, polled up to sixty times. */
@@ -203,6 +205,23 @@ const graphqlRoute = () => ({
     },
 });
 
+// The stock image the sandbox's machine was provisioned on, and that machine on the shared Fly fake, which models the
+// state gate's probe (exec, stop, start) as the hand-written routes above cannot. GraphQL (the token mint and revoke)
+// is answered beside it.
+const STOCK = `ghcr.io/intentic/sandbox@sha256:${`a`.repeat(64)}`;
+const sandboxFly = (state: `started` | `stopped`) => {
+    const graphql = graphqlRoute();
+    const fly = installFakeFly((name, value) => stubGlobal(name, value), {
+        passThrough: (_input, init) => Promise.resolve(graphql.respond(JSON.parse(String(init?.body ?? `{}`)) as unknown)),
+    });
+    fly.apps.add(`intentic-sbx-abc`);
+    const at = new Date().toISOString();
+    fly.machines.set(`m1`, { id: `m1`, app: `intentic-sbx-abc`, region: `iad`, state, config: { image: STOCK, env: {} }, createdAt: at, updatedAt: at });
+    return fly;
+};
+// SAFETY: the fake holds the config fly.ts last wrote, which is a FlyMachineConfig.
+const configOf = (fly: ReturnType<typeof sandboxFly>) => fly.machines.get(`m1`)?.config as { image: string; env: Record<string, string> };
+
 afterEach(() => {
     unstubAllGlobals();
 });
@@ -375,22 +394,20 @@ describe(`requesting a build: the start`, () => {
     });
 
     it(`re-applies an image already built for this recipe and base instead of building it again`, async () => {
-        const calls = stubFetch([
-            { match: (method, url) => method === `GET` && url.endsWith(`/machines/m1`), respond: () => json({ id: `m1`, state: `stopped` }) },
-            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1`), respond: () => json({ id: `m1`, state: `stopped` }) },
-        ]);
+        const fly = sandboxFly(`stopped`);
         const built = buildRow({ state: `built`, digest: DIGEST, finishedAt: new Date() });
         const prisma = fakePrisma({ hostedBuild: { findFirst: jest.fn().mockResolvedValue(built) } });
         expect((await requestHostedBuild(prisma, config(), logger, request())).state).toBe(`built`);
-        expect(calls.some((call) => call.method === `POST` && call.url.endsWith(`/machines`))).toBe(false);
-        const update = calls.find((call) => call.method === `POST` && call.url.endsWith(`/machines/m1`))!.body as {
-            config: { image: string; env: Record<string, string> };
-        };
-        expect(update.config.image).toBe(`registry.fly.io/intentic-sbx-abc@${DIGEST}`);
-        expect(update.config.env[`SANDBOX_ENVIRONMENT_HASH`]).toBe(HASH);
-        expect(update.config.env[`SANDBOX_BASE_IMAGE`]).toBe(BASE);
-        // Stopped stays stopped: applying a build must never start a machine on its own.
-        expect(calls.some((call) => call.url.endsWith(`/start`))).toBe(false);
+        expect(fly.called(`POST`, `/apps/intentic-sbx-abc/machines`)).toEqual([]);
+        const applied = configOf(fly);
+        expect(applied.image).toBe(`registry.fly.io/intentic-sbx-abc@${DIGEST}`);
+        expect(applied.env[`SANDBOX_ENVIRONMENT_HASH`]).toBe(HASH);
+        expect(applied.env[`SANDBOX_BASE_IMAGE`]).toBe(BASE);
+        // Asked first: the new image's planner ran over this volume before its config was applied.
+        expect(fly.called(`POST`, `/machines/m1/exec`)).toHaveLength(1);
+        // Stopped stays stopped: the probe ran and was stopped again, and nothing booted the daemon.
+        expect(fly.machines.get(`m1`)?.state).toBe(`stopped`);
+        expect(applied.env[STATE_PROBE_ENV]).toBeUndefined();
     });
 });
 
@@ -415,12 +432,7 @@ describe(`the builder's report`, () => {
     });
 
     it(`on success: records the verdict once, charges the minutes, destroys the builder, revokes the token, boots the image`, async () => {
-        const calls = stubFetch([
-            graphqlRoute(),
-            { match: (method, url) => method === `DELETE` && url.includes(`/machines/mb1`), respond: () => json({ ok: true }) },
-            { match: (method, url) => method === `GET` && url.endsWith(`/machines/m1`), respond: () => json({ id: `m1`, state: `stopped` }) },
-            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1`), respond: () => json({ id: `m1`, state: `stopped` }) },
-        ]);
+        const fly = sandboxFly(`stopped`);
         const prisma = withBuild(buildRow());
         expect(await reportHostedBuild(prisma, config(), logger, `b1`, `s3cret`, { exitCode: 0, digest: DIGEST, log: `#1 DONE\n` })).toBe(`done`);
         const verdict = (prisma.hostedBuild.updateMany as ReturnType<typeof jest.fn>).mock.calls[0]?.[0] as {
@@ -437,37 +449,50 @@ describe(`the builder's report`, () => {
                 update: { minutes: { increment: 3 } },
             }),
         );
-        expect(calls.some((call) => call.method === `DELETE` && call.url.endsWith(`/machines/mb1?force=true`))).toBe(true);
-        const revoke = calls.find((call) => (call.body as { query?: string } | undefined)?.query?.includes(`deleteLimitedAccessToken`));
-        expect((revoke!.body as { variables: unknown }).variables).toEqual({ input: { id: `lat-1` } });
+        expect(fly.called(`DELETE`, `/machines/mb1`)).toHaveLength(1);
+        expect(fly.called(`DELETE`, `/machines/mb1`)[0]?.url).toMatch(/\?force=true$/u);
         expect(prisma.hostedMachine.updateMany).toHaveBeenCalledWith({ where: { id: `h1`, buildingId: `b1` }, data: { buildingId: null } });
-        const update = calls.find((call) => call.method === `POST` && call.url.endsWith(`/machines/m1`))!.body as {
-            config: { image: string; env: Record<string, string> };
-        };
-        expect(update.config.image).toBe(`registry.fly.io/intentic-sbx-abc@${DIGEST}`);
-        expect(update.config.env[`SANDBOX_ENVIRONMENT_HASH`]).toBe(HASH);
+        const applied = configOf(fly);
+        expect(applied.image).toBe(`registry.fly.io/intentic-sbx-abc@${DIGEST}`);
+        expect(applied.env[`SANDBOX_ENVIRONMENT_HASH`]).toBe(HASH);
         expect(prisma.hostedMachine.update).toHaveBeenCalledWith({
             where: { id: `h1` },
             data: { image: `registry.fly.io/intentic-sbx-abc@${DIGEST}`, baseImage: BASE, environmentHash: HASH },
         });
-        expect(calls.some((call) => call.url.endsWith(`/start`))).toBe(false);
+        expect(fly.machines.get(`m1`)?.state).toBe(`stopped`);
     });
 
-    it(`on a running machine, waits for the replacement to settle rather than leaving it stopped`, async () => {
-        let reads = 0;
-        stubFetch([
-            graphqlRoute(),
-            { match: (method, url) => method === `DELETE` && url.includes(`/machines/mb1`), respond: () => json({ ok: true }) },
-            {
-                match: (method, url) => method === `GET` && url.endsWith(`/machines/m1`),
-                // Mock returns started, then replacing on the second read, then started again.
-                respond: () => json({ id: `m1`, state: (reads += 1) === 2 ? `replacing` : `started` }),
-            },
-            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1`), respond: () => json({ id: `m1`, state: `started` }) },
-        ]);
+    it(`on a running machine, starts it again on the new image rather than leaving it stopped`, async () => {
+        const fly = sandboxFly(`started`);
         const prisma = withBuild(buildRow());
         expect(await reportHostedBuild(prisma, config(), logger, `b1`, `s3cret`, { exitCode: 0, digest: DIGEST, log: `` })).toBe(`done`);
-        expect(reads).toBeGreaterThanOrEqual(3);
+        expect(configOf(fly).image).toBe(`registry.fly.io/intentic-sbx-abc@${DIGEST}`);
+        expect(fly.machines.get(`m1`)?.state).toBe(`started`);
+        // The start that counts comes after the last config replacement, not the probe's.
+        const lastUpdate = fly.calls.findLastIndex((call: FakeFlyCall) => call.method === `POST` && call.path.endsWith(`/machines/m1`));
+        const lastStart = fly.calls.findLastIndex((call: FakeFlyCall) => call.method === `POST` && call.path.endsWith(`/machines/m1/start`));
+        expect(lastStart).toBeGreaterThan(lastUpdate);
+    });
+
+    // The state gate's refusal reaches the owner where every failed switch already does: the build's own error.
+    it(`leaves the machine on its image and says why when the new one cannot convert this sandbox's state`, async () => {
+        const fly = sandboxFly(`started`);
+        fly.commands.answer = () => ({
+            exit_code: 0,
+            stdout: `${JSON.stringify({ ...CLEAR_STATE_PLAN, ok: false, failures: [{ document: `notes/theme.json`, detail: `theme: not a colour` }] })}\n`,
+            stderr: ``,
+        });
+        const prisma = withBuild(buildRow());
+        expect(await reportHostedBuild(prisma, config(), logger, `b1`, `s3cret`, { exitCode: 0, digest: DIGEST, log: `` })).toBe(`done`);
+        expect(configOf(fly).image).toBe(STOCK);
+        expect(fly.machines.get(`m1`)?.state).toBe(`started`);
+        expect(prisma.hostedMachine.update).not.toHaveBeenCalled();
+        expect(prisma.hostedBuild.update).toHaveBeenCalledWith({
+            where: { id: `b1` },
+            data: {
+                error: `built, but the machine could not be switched to it: intentic 9.9.9 cannot convert this sandbox's stored state, so the update was stopped before it began and the sandbox stays on the version it had (notes/theme.json: theme: not a colour)`,
+            },
+        });
     });
 
     it(`on failure: records the exit, the log and a reason, charges the minutes, and leaves the machine alone`, async () => {

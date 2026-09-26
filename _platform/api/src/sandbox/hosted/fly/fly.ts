@@ -56,14 +56,14 @@ const FLY_TIMEOUT_MS = 30_000;
 
 // Attaches the deadline and turns a transport failure into a named FlyError. Any abort spelling (`TimeoutError`,
 // `AbortError`) is read as this deadline, the only signal on the request.
-const flyFetch = async (method: string, path: string, init: RequestInit): Promise<Response> => {
+const flyFetch = async (method: string, path: string, init: RequestInit, deadlineMs: number = FLY_TIMEOUT_MS): Promise<Response> => {
     try {
-        return await fetch(`${BASE}${path}`, { ...init, method, signal: AbortSignal.timeout(FLY_TIMEOUT_MS) });
+        return await fetch(`${BASE}${path}`, { ...init, method, signal: AbortSignal.timeout(deadlineMs) });
     } catch (error) {
         const aborted = error instanceof Error && (error.name === `TimeoutError` || error.name === `AbortError`);
         throw new FlyError(
             aborted
-                ? `Fly did not answer ${method} ${path} within ${FLY_TIMEOUT_MS / 1000}s`
+                ? `Fly did not answer ${method} ${path} within ${deadlineMs / 1000}s`
                 : `Fly could not be reached for ${method} ${path}: ${error instanceof Error ? error.message : `transport failure`}`,
         );
     }
@@ -77,11 +77,16 @@ const idSchema = z.object({ id: z.string() });
 // `updated_at`: Fly's last-transition stamp (stop time, if stopped); optional, omitted by create.
 const machineSchema = z.object({ id: z.string(), state: z.string(), updated_at: z.string().optional() });
 
-const call = async (token: string, method: string, path: string, body?: unknown): Promise<unknown> => {
-    const response = await flyFetch(method, path, {
-        headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { "content-type": `application/json` }) },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
+const call = async (token: string, method: string, path: string, body?: unknown, deadlineMs?: number): Promise<unknown> => {
+    const response = await flyFetch(
+        method,
+        path,
+        {
+            headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { "content-type": `application/json` }) },
+            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        },
+        deadlineMs,
+    );
     if (response.ok) {
         // DELETE answers an empty body; parse only when there is something to parse.
         const text = await response.text();
@@ -365,6 +370,49 @@ export interface FlyMachineLaunch {
 export const getMachineLaunch = async (token: string, app: string, machineId: string): Promise<FlyMachineLaunch> => {
     const parsed = machineLaunchSchema.parse(await call(token, `GET`, `/apps/${encodeURIComponent(app)}/machines/${encodeURIComponent(machineId)}`));
     return { state: parsed.state, image: parsed.config?.image, env: parsed.config === undefined ? undefined : (parsed.config.env ?? {}) };
+};
+
+// A machine's whole config as Fly holds it, and the digest its image resolved to. Read before an image change
+// (hosted-state-gate.ts), so the config can be put back exactly as it was: every field is kept, the ones this client
+// never writes included.
+const machineConfigSchema = z.object({
+    state: z.string(),
+    config: z.looseObject({ image: z.string(), env: z.record(z.string(), z.string()).optional() }),
+    image_ref: z.object({ digest: z.string().optional() }).optional(),
+});
+export interface FlyMachineCurrent {
+    readonly state: string;
+    readonly config: FlyMachineConfig;
+    readonly imageDigest: string | undefined;
+}
+export const getMachineConfig = async (token: string, app: string, machineId: string): Promise<FlyMachineCurrent> => {
+    const parsed = machineConfigSchema.parse(await call(token, `GET`, `/apps/${encodeURIComponent(app)}/machines/${encodeURIComponent(machineId)}`));
+    // SAFETY: Fly's own config for this machine, which it accepts back as it gave it; the two fields this platform reads
+    // off it (image, env) are the ones parsed above.
+    const config = { ...parsed.config, env: parsed.config.env ?? {} } as FlyMachineConfig;
+    return { state: parsed.state, config, imageDigest: parsed.image_ref?.digest };
+};
+
+// What a command run inside a started machine answered. Fly omits a field that is zero or empty.
+const execSchema = z.object({ exit_code: z.number().optional(), stdout: z.string().optional(), stderr: z.string().optional() });
+export interface FlyExecAnswer {
+    readonly exitCode: number;
+    readonly stdout: string;
+    readonly stderr: string;
+}
+// Runs `command` in a started machine and waits for it, up to `timeoutSeconds`; the request's own deadline sits past
+// that, so a command that runs long is Fly's timeout to report rather than a dropped socket.
+export const execMachine = async (token: string, app: string, machineId: string, command: readonly string[], timeoutSeconds: number): Promise<FlyExecAnswer> => {
+    const parsed = execSchema.parse(
+        await call(
+            token,
+            `POST`,
+            `/apps/${encodeURIComponent(app)}/machines/${encodeURIComponent(machineId)}/exec`,
+            { command, timeout: timeoutSeconds },
+            (timeoutSeconds + 15) * 1000,
+        ),
+    );
+    return { exitCode: parsed.exit_code ?? 0, stdout: parsed.stdout ?? ``, stderr: parsed.stderr ?? `` };
 };
 
 // Every machine in an app, with what the orphan sweep judges it by: its metadata stamp and `created_at` (fresh signup

@@ -123,7 +123,8 @@ const seedHostedSandbox = async (prisma: PrismaClient, fly: FakeFly, owner: Pers
         app: appName,
         region,
         state: `stopped`,
-        config: {},
+        // The digest it was provisioned on: a tier move keeps it (hosted-migrate.ts), so the move has no state to convert.
+        config: { image: `ghcr.io/intentic/sandbox@sha256:${`a`.repeat(64)}` },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
     });

@@ -6,6 +6,7 @@ import { RECOVERY_WINDOW_MS } from "../durations.js";
 import { isFlyGone, stopMachine, updateMachine } from "./hosted/fly/fly.js";
 import { hostedMachineConfig, withHostedSlot, type HostedProvisionArgs } from "./hosted/hosted.js";
 import { shapeOfRow } from "./hosted/hosted-shape.js";
+import { runningImageOf } from "./hosted/hosted-state-gate.js";
 import { dropHostedMachine } from "./hosted/hosted-usage.js";
 import { lockHostedSandbox } from "./hosted/hosted-cleanup.js";
 import { mintSandbox } from "./mint-sandbox.js";
@@ -139,6 +140,10 @@ export const restoreSandbox = async (prisma: PrismaClient, config: Config, owner
         region: machine.region,
         tier: machine.tier,
     };
+    // A stock machine comes back on the version it ran, pinned: a restore is not an update, so it has no stored
+    // state to convert (hosted-state-gate.ts). The next restart or wake heal moves it, under the gate. Read before the
+    // row is written, so a machine Fly cannot describe fails the restore with nothing written.
+    const stockImage = row.flyImage === null ? await runningImageOf(config, machine) : undefined;
     // Under the owner's slot count like any other machine row: a week in the trash is not a way past the plan.
     const hosted = await withHostedSlot(prisma, config, args, machine.appName, (tx) =>
         tx.hostedMachine.create({
@@ -162,7 +167,7 @@ export const restoreSandbox = async (prisma: PrismaClient, config: Config, owner
             machine.appName,
             machine.volumeId,
             { image: row.flyImage, environmentHash: row.environmentHash },
-            undefined,
+            stockImage,
             shape,
         ),
     );

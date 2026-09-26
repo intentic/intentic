@@ -59,11 +59,70 @@ export interface FakeFlyFaults {
     readonly snapshotNeverFinishes?: boolean;
     /** A start is accepted and the machine stays where it was: the shape of a host that will not take it. */
     readonly machineWontStart?: boolean;
+    /** A start of a machine whose config names this image is accepted and leaves it stopped: a new version that
+     * will not boot, while the one before it still does. */
+    readonly imageWontStart?: string;
     /** Every request answers this status with Fly's error envelope; for the "provider is down" branches. */
     readonly status?: number;
 }
 
+/** What a command run in a machine answered (`POST …/machines/{id}/exec`), in Fly's field names. */
+export interface FakeFlyExecAnswer {
+    readonly exit_code: number;
+    readonly stdout: string;
+    readonly stderr: string;
+}
+
+/** What a command run in a machine answers; a test replaces `answer` to play another planner. */
+export interface FakeFlyCommands {
+    answer: (machine: FakeFlyMachine, command: readonly string[]) => FakeFlyExecAnswer;
+}
+
+/** The planner line an image with a current conversion engine prints over data it can convert. */
+export const CLEAR_STATE_PLAN = {
+    plan: 1,
+    version: "9.9.9",
+    engine: 0,
+    digest: "fake",
+    ok: true,
+    downgrade: false,
+    failures: [],
+    steps: [],
+    converts: [],
+    files: [],
+};
+
 const BASE = "https://api.machines.dev/v1";
+
+const json = (payload: unknown, status = 200): Response =>
+    new Response(JSON.stringify(payload), { status, headers: { "content-type": "application/json" } });
+const refuse = (status: number, message: string): Response => json({ error: message }, status);
+
+interface Route {
+    readonly method: string;
+    readonly pattern: RegExp;
+    readonly handle: (match: RegExpExecArray, body: Record<string, unknown>) => Response;
+}
+
+/** What a command run in a machine answers until a test says otherwise: the state planner's clear plan. */
+const clearPlanAnswer = (): FakeFlyExecAnswer => ({ exit_code: 0, stdout: `${JSON.stringify(CLEAR_STATE_PLAN)}\n`, stderr: "" });
+
+/* POST /apps/{app}/machines/{id}/exec: Fly runs a command only in a machine that is running, and answers what the
+ * test's `commands.answer` says it printed. */
+const execRoute = (machines: ReadonlyMap<string, FakeFlyMachine>, commands: FakeFlyCommands): Route => ({
+    method: "POST",
+    pattern: /^\/v1\/apps\/[^/]+\/machines\/([^/]+)\/exec$/u,
+    handle: (match, body) => {
+        // SAFETY: the pattern's one capture group always matches, so `match[1]` is the id.
+        const machine = machines.get(match[1] as string);
+        if (machine === undefined) {
+            return refuse(404, `Machine '${match[1] ?? ""}' not found`);
+        }
+        const command = Array.isArray(body["command"]) ? body["command"].map(String) : [];
+        return machine.state === "started" ? json(commands.answer(machine, command)) : refuse(412, `machine ${machine.id} is ${machine.state}, not started`);
+    },
+});
+
 
 let counter = 0;
 const nextId = (prefix: string): string => {
@@ -80,6 +139,8 @@ export interface FakeFly {
     readonly snapshots: Map<string, FakeFlySnapshot>;
     /** Turns faults on and off mid-test, for the cases where a call succeeds and the next one must not. */
     fail: (faults: FakeFlyFaults) => void;
+    /** What a command run in a started machine answers: the state planner by default, printing CLEAR_STATE_PLAN. */
+    readonly commands: FakeFlyCommands;
     /** Seeds an app with one machine on one volume, which is what a provisioned sandbox is. */
     seedSandbox: (app: string, over?: { region?: string; sizeGb?: number; usedBytes?: number }) => { machine: FakeFlyMachine; volume: FakeFlyVolume };
     /** Only the calls matching this method and the END of the path; `/volumes/v/snapshots` is not a volume create. */
@@ -102,12 +163,10 @@ export const installFakeFly = (
     const volumes = new Map<string, FakeFlyVolume>();
     const snapshots = new Map<string, FakeFlySnapshot>();
     let faults: FakeFlyFaults = options.faults ?? {};
+    const commands: FakeFlyCommands = { answer: clearPlanAnswer };
     const passThrough = options.passThrough ?? globalThis.fetch;
 
     const now = (): string => new Date().toISOString();
-    const json = (payload: unknown, status = 200): Response =>
-        new Response(JSON.stringify(payload), { status, headers: { "content-type": "application/json" } });
-    const refuse = (status: number, message: string): Response => json({ error: message }, status);
 
     const wireMachine = (machine: FakeFlyMachine) => ({
         id: machine.id,
@@ -233,11 +292,6 @@ export const installFakeFly = (
         return item === undefined ? refuse(404, `${what} '${id}' not found`) : handle(item);
     };
 
-    interface Route {
-        readonly method: string;
-        readonly pattern: RegExp;
-        readonly handle: (match: RegExpExecArray, body: Record<string, unknown>) => Response;
-    }
 
     const routes: Route[] = [
         { method: "GET", pattern: /^\/v1\/apps$/u, handle: () => json({ apps: [...apps].map((name) => ({ name })) }) },
@@ -347,7 +401,8 @@ export const installFakeFly = (
             pattern: /^\/v1\/apps\/[^/]+\/machines\/([^/]+)\/start$/u,
             handle: (match) =>
                 found(machines, match[1] as string, "Machine", (machine) => {
-                    machine.state = faults.machineWontStart === true ? "stopped" : "started";
+                    const wont = faults.machineWontStart === true || (faults.imageWontStart !== undefined && machine.config["image"] === faults.imageWontStart);
+                    machine.state = wont ? "stopped" : "started";
                     machine.updatedAt = now();
                     return json({ ok: true });
                 }),
@@ -362,6 +417,7 @@ export const installFakeFly = (
                     return json({ ok: true });
                 }),
         },
+        execRoute(machines, commands),
         { method: "POST", pattern: /^\/v1\/apps\/[^/]+\/machines\/[^/]+\/metadata\/[^/]+$/u, handle: () => json({ ok: true }) },
     ];
 
@@ -411,6 +467,7 @@ export const installFakeFly = (
         fail: (next) => {
             faults = next;
         },
+        commands,
         seedSandbox: (app, over = {}) => {
             apps.add(app);
             const volume: FakeFlyVolume = {
@@ -427,7 +484,7 @@ export const installFakeFly = (
                 app,
                 region: volume.region,
                 state: "started",
-                config: { mounts: [{ volume: volume.id, path: "/data" }] },
+                config: { image: "registry.test/sandbox:seeded", mounts: [{ volume: volume.id, path: "/data" }] },
                 createdAt: now(),
                 updatedAt: now(),
             };

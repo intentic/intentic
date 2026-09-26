@@ -15,6 +15,8 @@ import { HostedAlreadyProvisioned } from "./hosted-cleanup.js";
 import { hostedShapeFor } from "./hosted-shape.js";
 import { AT_CAPACITY_MESSAGE, forgetProviderCapacity, HostedAtCapacity } from "./hosted-capacity.js";
 import { forgetHostedImage } from "./build/hosted-image.js";
+import { STATE_PROBE_ENV } from "./hosted-state-gate.js";
+import { CLEAR_STATE_PLAN, type FakeFly, type FakeFlyCall, type FakeFlyMachine, installFakeFly } from "@intentic/testing/fly-fake";
 import { fakeHostedAppLock, testIngressConfig } from "../../testing.js";
 import { createApp } from "../../app.js";
 import { RECOVERY_WINDOW_MS } from "../../durations.js";
@@ -747,37 +749,40 @@ const currentTunnelEnv = () => ({
     SANDBOX_GRANT: mintReachabilityGrant(testIngressConfig.signingKey, sandboxIdFromToken(WAKE_TOKEN) ?? ``, Date.now()),
 });
 
-// A machine that answers its config until it is replaced, then settles and starts like settlingMachine.
-const configuredMachine = (env: Record<string, string>, state = `stopped`) => {
-    const settling = settlingMachine(`m1`);
-    let replaced = false;
-    return {
-        read: () => (replaced ? settling.read() : json({ id: `m1`, state, config: { image: PINNED, env } })),
-        replace: () => {
-            replaced = true;
-            return json({ id: `m1`, state: `replacing` });
+// A hosted machine on the shared Fly fake, configured with `env` on the digest it was provisioned on; the registry answers
+// today's `stable` beside it. The fake models what the state gate does around a config change: the probe's exec, its
+// stop, the start after.
+const configuredFly = (env: Record<string, string>, state = `stopped`, beside: (url: string) => Response | undefined = () => undefined) => {
+    const fly = installFakeFly((name, value) => stubGlobal(name, value), {
+        passThrough: (input) => {
+            const url = input instanceof Request ? input.url : String(input);
+            const answer = url.includes(`/v2/intentic/sandbox/manifests/`)
+                ? new Response(null, { status: 200, headers: { "docker-content-digest": STABLE_DIGEST } })
+                : beside(url);
+            return answer === undefined ? Promise.reject(new Error(`unexpected fetch: ${url}`)) : Promise.resolve(answer);
         },
-        start: () => (replaced ? settling.start() : json({ ok: true })),
-        get started() {
-            return settling.started;
-        },
-    };
+    });
+    fly.apps.add(`intentic-sbx-a`);
+    const at = new Date().toISOString();
+    fly.machines.set(`m1`, { id: `m1`, app: `intentic-sbx-a`, region: `iad`, state, config: { image: PINNED, env }, createdAt: at, updatedAt: at });
+    return fly;
 };
-const configuredFly = (machine: ReturnType<typeof configuredMachine>) =>
-    stubFetch([
-        {
-            match: (_method, url) => url.includes(`/v2/intentic/sandbox/manifests/`),
-            respond: () => new Response(null, { status: 200, headers: { "docker-content-digest": STABLE_DIGEST } }),
-        },
-        { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1/start`), respond: () => machine.start() },
-        { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1`), respond: () => machine.replace() },
-        { match: (method, url) => method === `GET` && url.endsWith(`/machines/m1`), respond: () => machine.read() },
-    ]);
-const updatesIn = (calls: { method: string; url: string; body?: unknown }[]) =>
-    calls.filter((entry) => entry.method === `POST` && entry.url.endsWith(`/machines/m1`));
-// SAFETY: every body read here is the JSON of an updateMachine call, whose shape fly.ts writes as `{ config }`.
-const envOf = (update: { body?: unknown } | undefined): Record<string, string> =>
-    (update?.body as { config: { env: Record<string, string> } } | undefined)?.config.env ?? {};
+// Every config replacement, the probe's included.
+const updatesIn = (fly: FakeFly): FakeFlyCall[] => fly.called(`POST`, `/machines/m1`);
+// The config the machine ends on: the last one written.
+// SAFETY: the fake holds the config fly.ts last wrote, which is a FlyMachineConfig.
+const finalConfigOf = (fly: FakeFly) =>
+    fly.machines.get(`m1`)?.config as { image: string; env: Record<string, string>; guest: Record<string, unknown>; mounts: unknown[] };
+const runningIn = (fly: FakeFly): boolean => fly.machines.get(`m1`)?.state === `started`;
+const machineIn = (fly: FakeFly): FakeFlyMachine => {
+    const machine = fly.machines.get(`m1`);
+    if (machine === undefined) {
+        throw new Error(`the fake holds no machine m1`);
+    }
+    return machine;
+};
+// The row a restart reads: a stock machine on the free rung.
+const RESTART_ROW = { id: `h1`, sandboxId: `s1`, appName: `intentic-sbx-a`, machineId: `m1`, volumeId: `vol_1`, region: `iad`, wokeAt: null, tier: `free` };
 
 describe(`wakeHosted`, () => {
     it(`treats "already running" as success, the browser's daemon probe is the real verdict`, async () => {
@@ -797,32 +802,30 @@ describe(`wakeHosted`, () => {
     });
 
     it(`starts a machine whose tunnel environment is current, and writes no config`, async () => {
-        const machine = configuredMachine(currentTunnelEnv());
-        const calls = configuredFly(machine);
+        const fly = configuredFly(currentTunnelEnv());
         await expect(wakeHosted(config(), WAKE_TARGET, wakeArgs)).resolves.toBe(false);
-        expect(updatesIn(calls)).toHaveLength(0);
-        expect(calls.filter((entry) => entry.url.endsWith(`/start`))).toHaveLength(1);
+        expect(updatesIn(fly)).toHaveLength(0);
+        expect(fly.called(`POST`, `/machines/m1/start`)).toHaveLength(1);
     });
 
     // The row's guest and volume stay; the image is today's stock digest, since one this old predates the front.
     it(`re-applies the config of a machine missing the tunnel's pair, onto today's stock digest`, async () => {
-        const machine = configuredMachine(PRE_TUNNEL_ENV);
-        const calls = configuredFly(machine);
+        const fly = configuredFly(PRE_TUNNEL_ENV);
         await expect(wakeHosted(config(), WAKE_TARGET, wakeArgs)).resolves.toBe(true);
-        const [update] = updatesIn(calls);
-        expect(update?.body).toMatchObject({
-            config: {
-                image: `ghcr.io/intentic/sandbox@${STABLE_DIGEST}`,
-                guest: { cpu_kind: `shared`, cpus: 2, memory_mb: 4096 },
-                mounts: [{ volume: `vol1`, path: FLY_VOLUME_PATH }],
-            },
+        expect(finalConfigOf(fly)).toMatchObject({
+            image: `ghcr.io/intentic/sandbox@${STABLE_DIGEST}`,
+            guest: { cpu_kind: `shared`, cpus: 2, memory_mb: 4096 },
+            mounts: [{ volume: `vol1`, path: FLY_VOLUME_PATH }],
         });
-        const env = envOf(update);
+        const { env } = finalConfigOf(fly);
         expect(env[`INGRESS_URL`]).toBe(testIngressConfig.url);
         expect(verifyReachabilityGrant(publicKeyPemOf(testIngressConfig.signingKey), env[`SANDBOX_GRANT`] ?? ``)?.sandboxId).toBe(
             sandboxIdFromToken(WAKE_TOKEN),
         );
-        expect(machine.started).toBe(true);
+        expect(env[STATE_PROBE_ENV]).toBeUndefined();
+        // A new digest is an image change: its planner was asked first, in a probe, and the machine runs the real config.
+        expect(fly.called(`POST`, `/machines/m1/exec`)).toHaveLength(1);
+        expect(runningIn(fly)).toBe(true);
     });
 
     // Stale is as bad as missing: an edge that moved, or a grant signed by a key the edge no longer holds.
@@ -841,33 +844,59 @@ describe(`wakeHosted`, () => {
         ],
         [`a grant for another sandbox`, () => ({ ...currentTunnelEnv(), SANDBOX_GRANT: mintReachabilityGrant(testIngressConfig.signingKey, `0123456789ab`, Date.now()) })],
     ])(`re-applies the config of a machine with %s`, async (_, env) => {
-        const calls = configuredFly(configuredMachine(env()));
+        const fly = configuredFly(env());
         await expect(wakeHosted(config(), WAKE_TARGET, wakeArgs)).resolves.toBe(true);
-        expect(envOf(updatesIn(calls)[0])[`INGRESS_URL`]).toBe(testIngressConfig.url);
+        expect(finalConfigOf(fly).env[`INGRESS_URL`]).toBe(testIngressConfig.url);
     });
 
     // A running machine the browser cannot reach is the case this is for: the replacement restarts it with the tunnel.
     it(`re-applies the config of a running machine that lacks the grant, and confirms it runs again`, async () => {
-        const machine = configuredMachine(PRE_TUNNEL_ENV, `started`);
-        const calls = configuredFly(machine);
+        const fly = configuredFly(PRE_TUNNEL_ENV, `started`);
         await expect(wakeHosted(config(), WAKE_TARGET, wakeArgs)).resolves.toBe(true);
-        expect(updatesIn(calls)).toHaveLength(1);
-        expect(machine.started).toBe(true);
+        // The probe's config, then the real one.
+        expect(updatesIn(fly)).toHaveLength(2);
+        expect(finalConfigOf(fly).env[STATE_PROBE_ENV]).toBeUndefined();
+        expect(runningIn(fly)).toBe(true);
     });
 
     // An overlay is the owner's environment, built on a base only a rebuild moves; the heal gives it the tunnel as it is.
     it(`keeps an overlay machine on its overlay`, async () => {
-        const calls = configuredFly(configuredMachine(PRE_TUNNEL_ENV));
-        const overlay = `registry.fly.io/intentic-sbx-a:env-1`;
+        const overlay = `registry.fly.io/intentic-sbx-a@sha256:${`c`.repeat(64)}`;
+        const fly = configuredFly(PRE_TUNNEL_ENV);
+        machineIn(fly).config = { image: overlay, env: PRE_TUNNEL_ENV };
         await expect(wakeHosted(config(), { ...WAKE_TARGET, image: overlay, environmentHash: `h1` }, wakeArgs)).resolves.toBe(true);
-        expect(updatesIn(calls)[0]?.body).toMatchObject({ config: { image: overlay } });
+        expect(finalConfigOf(fly).image).toBe(overlay);
+        // Its own digest again converts nothing, so nothing was asked.
+        expect(fly.called(`POST`, `/machines/m1/exec`)).toEqual([]);
+        expect(updatesIn(fly)).toHaveLength(1);
     });
 
     // Mid-transition, a replacement would only earn a 412: the plain start answers, and the next wake asks again.
     it(`leaves a machine mid-transition to the plain start`, async () => {
-        const calls = configuredFly(configuredMachine(PRE_TUNNEL_ENV, `replacing`));
+        const fly = configuredFly(PRE_TUNNEL_ENV, `replacing`);
         await expect(wakeHosted(config(), WAKE_TARGET, wakeArgs)).resolves.toBe(false);
-        expect(updatesIn(calls)).toHaveLength(0);
+        expect(updatesIn(fly)).toHaveLength(0);
+    });
+
+    /* THE WAKE IS NEVER WHAT STRANDS A MACHINE. Today's digest cannot convert this sandbox's state: the tunnel is healed
+     * on the digest the machine already runs, and the wake answers as a woken machine. */
+    it(`heals the tunnel on the version the machine runs when today's digest cannot convert its state`, async () => {
+        const fly = configuredFly(PRE_TUNNEL_ENV);
+        fly.commands.answer = () => ({ exit_code: 0, stdout: JSON.stringify({ ...CLEAR_STATE_PLAN, ok: false, failures: [{ document: `a.json`, detail: `no` }] }), stderr: `` });
+        await expect(wakeHosted(config(), WAKE_TARGET, wakeArgs)).resolves.toBe(true);
+        expect(finalConfigOf(fly).image).toBe(PINNED);
+        expect(finalConfigOf(fly).env[`INGRESS_URL`]).toBe(testIngressConfig.url);
+        expect(finalConfigOf(fly).env[STATE_PROBE_ENV]).toBeUndefined();
+        expect(runningIn(fly)).toBe(true);
+    });
+
+    // A gate that died mid-probe left a config that only sleeps: the wake re-applies the real one rather than starting it.
+    it(`re-applies the config of a machine a dead gate left on its probe`, async () => {
+        const fly = configuredFly({ ...currentTunnelEnv(), [STATE_PROBE_ENV]: PINNED });
+        await expect(wakeHosted(config(), WAKE_TARGET, wakeArgs)).resolves.toBe(true);
+        expect(finalConfigOf(fly).image).toBe(`ghcr.io/intentic/sandbox@${STABLE_DIGEST}`);
+        expect(finalConfigOf(fly).env[STATE_PROBE_ENV]).toBeUndefined();
+        expect(runningIn(fly)).toBe(true);
     });
 });
 
@@ -1271,46 +1300,55 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
     });
 
     it(`hostedRestart refreshes the current image onto the existing volume before starting`, async () => {
-        // Restart replaces the config too, so it must observe the machine running rather than merely asking it to.
-        const machine = settlingMachine(`m1`);
-        const calls = stubFetch([
-            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1/stop`), respond: () => json({ ok: true }) },
-            {
-                match: (method, url) => method === `GET` && url.endsWith(`/api/v2/namespaces`),
-                respond: () => json([{ namespaceToken: `ns-1`, name: `public`, open: true }]),
-            },
-            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1`), respond: () => json({ id: `m1`, state: `stopped` }) },
-            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1/start`), respond: () => machine.start() },
-            { match: (method, url) => method === `GET` && url.includes(`/machines/m1`), respond: () => machine.read() },
-        ]);
-        const hosted = {
-            id: `h1`,
-            appName: `intentic-sbx-a`,
-            machineId: `m1`,
-            volumeId: `vol_1`,
-            region: `iad`,
-            wokeAt: null,
-            tier: `free`,
-        };
+        const fly = configuredFly(currentTunnelEnv(), `started`, (url) =>
+            url.endsWith(`/api/v2/namespaces`) ? json([{ namespaceToken: `ns-1`, name: `public`, open: true }]) : undefined,
+        );
+        const hosted = { ...RESTART_ROW };
         const prisma = fakePrisma({
             sandbox: { findFirst: jest.fn().mockResolvedValue(ownedRow) },
             hostedMachine: { findUnique: jest.fn().mockResolvedValue(hosted), update: jest.fn().mockResolvedValue({}) },
         });
 
         expect(await call(sandboxRoutes.hostedRestart, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).toEqual({ ok: true });
-        const update = calls.find((entry) => entry.url.endsWith(`/machines/m1`))?.body as {
-            config: { image: string; mounts: { volume: string; path: string }[]; env: Record<string, string> };
-            skip_launch?: boolean;
-        };
-        expect(update.config.image).toBe(`ghcr.io/intentic/sandbox:stable`);
-        expect(update.config.mounts).toEqual([{ volume: `vol_1`, path: `/data` }]);
-        expect(update.config.env[`CONNECT_TOKEN`]).toBe(`t0k3n`);
-        expect(update.config.env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
-        // The replacement itself carries the launch; the wake that follows only confirms it landed (fly.ts).
-        expect(update.skip_launch).toBeUndefined();
-        expect(calls.findIndex((entry) => entry.url.endsWith(`/machines/m1`))).toBeLessThan(
-            calls.findIndex((entry) => entry.url.endsWith(`/machines/m1/start`)),
-        );
+        // Today's stock digest, on the same volume, with this sandbox's identity; the planner was asked first.
+        const applied = finalConfigOf(fly);
+        expect(applied.image).toBe(`ghcr.io/intentic/sandbox@${STABLE_DIGEST}`);
+        expect(applied.mounts).toEqual([{ volume: `vol_1`, path: `/data` }]);
+        expect(applied.env[`CONNECT_TOKEN`]).toBe(`t0k3n`);
+        expect(applied.env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
+        expect(fly.called(`POST`, `/machines/m1/exec`)).toHaveLength(1);
+        // Restart replaces the config too, so it must observe the machine running rather than merely asking it to.
+        const lastUpdate = fly.calls.findLastIndex((entry) => entry.method === `POST` && entry.path.endsWith(`/machines/m1`));
+        expect(fly.calls.findLastIndex((entry) => entry.path.endsWith(`/machines/m1/start`))).toBeGreaterThan(lastUpdate);
+        expect(runningIn(fly)).toBe(true);
+        expect(prisma.hostedMachine.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: `h1` }, data: expect.objectContaining({ wokeAt: expect.any(Date) }) }));
+    });
+
+    /* THE STATE GATE'S REFUSAL, where the owner reads it. Today's digest cannot convert this sandbox's stored state, so
+     * the restart keeps the version the machine ran (with the fresh config around it), runs it, meters it, and answers
+     * the conflict in the refusal's own words. */
+    it(`hostedRestart keeps the machine's version and says why when today's digest cannot convert its state`, async () => {
+        const fly = configuredFly(currentTunnelEnv(), `started`);
+        fly.commands.answer = () => ({
+            exit_code: 0,
+            stdout: `${JSON.stringify({ ...CLEAR_STATE_PLAN, ok: false, failures: [{ document: `notes/theme.json`, detail: `theme: not a colour` }] })}\n`,
+            stderr: ``,
+        });
+        const stretch = jest.fn().mockResolvedValue({});
+        const prisma = fakePrisma({
+            sandbox: { findFirst: jest.fn().mockResolvedValue(ownedRow) },
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue({ ...RESTART_ROW }), update: stretch },
+        });
+        const refused = await call(sandboxRoutes.hostedRestart, { sandboxId: `s1` }, { context: routeContext({ prisma }) }).catch((error: unknown) => error);
+        expect(refused).toBeInstanceOf(ORPCError);
+        expect(refused).toMatchObject({
+            code: `CONFLICT`,
+            message: `intentic 9.9.9 cannot convert this sandbox's stored state, so the update was stopped before it began and the sandbox stays on the version it had (notes/theme.json: theme: not a colour)`,
+        });
+        expect(finalConfigOf(fly).image).toBe(PINNED);
+        expect(finalConfigOf(fly).env[STATE_PROBE_ENV]).toBeUndefined();
+        expect(runningIn(fly)).toBe(true);
+        expect(stretch).toHaveBeenCalledWith(expect.objectContaining({ where: { id: `h1` }, data: expect.objectContaining({ wokeAt: expect.any(Date) }) }));
     });
 
     // Same sandbox identity (name, address, sharing) on a fresh, empty disk; nothing on a destroyed machine is worth
@@ -1479,8 +1517,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
      * grant the edge will check names the id the edge reads off the machine's own address, and the daemon's report,
      * authenticated by the token in that same environment, lands. Woken by a member, so the owner's address is kept. */
     it(`a machine configured before 71dbfb7145 wakes, gets the grant, and reports reachable`, async () => {
-        const machine = configuredMachine(PRE_TUNNEL_ENV);
-        const calls = configuredFly(machine);
+        const fly = configuredFly(PRE_TUNNEL_ENV);
         const row = {
             id: `s1`,
             ownerId: `u1`,
@@ -1496,13 +1533,12 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const member = { id: `u2`, email: `member@example.com`, name: `Member`, image: null };
         expect(await call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma, user: member }) })).toEqual({ ok: true });
 
-        const [update] = updatesIn(calls);
-        const env = envOf(update);
+        const { env } = finalConfigOf(fly);
         expect(env[`INGRESS_URL`]).toBe(testIngressConfig.url);
         expect(env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
         const grant = verifyReachabilityGrant(publicKeyPemOf(testIngressConfig.signingKey), env[`SANDBOX_GRANT`] ?? ``);
         expect(grant?.sandboxId).toBe(hostOwnerId(new URL(env[`SANDBOX_PUBLIC_URL`] ?? ``).host));
-        expect(machine.started).toBe(true);
+        expect(runningIn(fly)).toBe(true);
         // Metered as a wake: the stretch opens on the row once the machine runs.
         expect(stretch).toHaveBeenCalledWith(expect.objectContaining({ where: { id: `h1` }, data: expect.objectContaining({ wokeAt: expect.any(Date) }) }));
 

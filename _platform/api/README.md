@@ -21,6 +21,14 @@ flowchart LR
 - The hosted lane is one Fly app, machine and volume per sandbox, named `<HOSTED_APP_PREFIX>-<id>`. The background
   jobs started in `src/main.ts` (warm pool, meter, abuse watch, builds, health) take a Postgres advisory lock per run
   (`src/jobs-lock.ts`), so two replicas never double-bill or double-provision.
+- A hosted image change goes through the state gate (`src/sandbox/hosted/hosted-state-gate.ts`), the hosted half of
+  the stored-state promise in [COMPATIBILITY.md](../../COMPATIBILITY.md#stored-data). A restart, a rebuild, or a wake
+  that heals a stale tunnel first runs the target image's planner (`state-plan.js`) over the machine's own volume. It
+  runs in a probe: the same machine with its daemon replaced by a sleep, asked through Fly's exec. A plan that says a
+  conversion would fail keeps the machine on its version and answers the owner in the refusal's words (a restart's
+  `CONFLICT`, a build's error). A missing or unreadable plan lets the change go ahead as before the gate. A new
+  version that does not start is put back on the config and digest the machine had, and started there. A resize, a
+  move and a restore from the trash keep the running digest, so they have nothing to convert.
 - `src/config.ts` is the one config schema; each field is an env var in SCREAMING_SNAKE. A lane whose credential is
   unset (Stripe, APNs, trial keys, Fly) is switched off rather than failing the boot.
 - Bun runs the TypeScript source; there is no build. The image applies migrations and then refuses to start if the

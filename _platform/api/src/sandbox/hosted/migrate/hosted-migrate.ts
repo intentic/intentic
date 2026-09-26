@@ -24,6 +24,7 @@ import { HostedAtCapacity, AT_CAPACITY_MESSAGE, noteProviderAtCapacity, provider
 import { withHostedAppLock } from "../hosted-app-lock.js";
 import { hostedEnabled, hostedInstanceId, hostedMachineConfig, type HostedProvisionArgs, startAfterUpdate } from "../hosted.js";
 import { hostedShapeFor, sameShape, shapeOfRow } from "../hosted-shape.js";
+import { runningImageOf } from "../hosted-state-gate.js";
 
 /* MOVING A SANDBOX FROM ONE MACHINE TO ANOTHER, and being able to undo it.
  *
@@ -387,7 +388,12 @@ export const migrateHosted = async (
         // Whether anything about the machine has actually been changed yet. A run that fails while still taking its
         // snapshot has nothing to undo, and restarting the machine to "put it back" would be the only harm done.
         let applied = false;
+        // The version a stock machine runs, pinned for everything below: a resize or a move changes where and on what
+        // the sandbox runs, never which version, so it has no stored state to convert (hosted-state-gate.ts). An
+        // overlay machine names its own image already.
+        let pinned = machine;
         try {
+            pinned = machine.image === null ? { ...machine, image: await runningImageOf(config, machine) } : machine;
             // Before anything: the disk as it is now, recoverable even after a rollback has put the machine back.
             await setState(prisma, row.id, `snapshotting`);
             const snapshot = await createVolumeSnapshot(config.hosted.flyApiToken, machine.appName, machine.volumeId);
@@ -397,7 +403,7 @@ export const migrateHosted = async (
 
             if (plan.kind === `resize`) {
                 applied = true;
-                await applyResize(prisma, config, machine, plan, sleep);
+                await applyResize(prisma, config, pinned, plan, sleep);
                 await setState(prisma, row.id, `verifying`);
                 await commitMigration(prisma, machine.id, row.id, plan);
                 logger.info({ app: machine.appName, from: plan.from.tier, to: plan.to.tier }, `hosted migrate: resized in place`);
@@ -405,7 +411,7 @@ export const migrateHosted = async (
             }
 
             applied = true;
-            const built = await applyMove(prisma, config, logger, machine, plan, snapshotId, sleep);
+            const built = await applyMove(prisma, config, logger, pinned, plan, snapshotId, sleep);
             await setState(prisma, row.id, `verifying`, { newMachineId: built.machineId, newVolumeId: built.volumeId });
             // The swap, and only now: the new machine has said it is up on the new disk.
             await commitMigration(prisma, machine.id, row.id, plan, built);
@@ -425,7 +431,7 @@ export const migrateHosted = async (
             }
             const undone =
                 applied &&
-                (await rollback(config, logger, machine, plan).then(
+                (await rollback(config, logger, pinned, plan).then(
                     () => true,
                     (failure: unknown) => {
                         logger.error({ err: failure, app: machine.appName }, `hosted migrate: putting the machine back failed; it needs a person`);

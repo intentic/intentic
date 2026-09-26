@@ -1,5 +1,5 @@
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
-import { type FakeFly, installFakeFly } from "./fly-fake.js";
+import { CLEAR_STATE_PLAN, type FakeFly, installFakeFly } from "./fly-fake.js";
 
 /* A FIXTURE WITH RULES IN IT NEEDS ITS OWN TEST. This one is not a stub returning canned JSON: it refuses a fork
  * smaller than its source, refuses a restore from a snapshot that has not finished, and remembers which machine is
@@ -108,6 +108,32 @@ describe("what the fake remembers", () => {
         await call("DELETE", "/apps/app");
         expect([...fly.machines.values()].map((machine) => machine.app)).toEqual(["other"]);
         expect([...fly.volumes.values()].map((volume) => volume.app)).toEqual(["other"]);
+    });
+});
+
+describe("running a command in a machine", () => {
+    // The state gate's probe is only as right as this: Fly runs a command only in a machine that is running.
+    it("runs one only in a started machine, answering the planner's clear plan unless told otherwise", async () => {
+        const fly = install();
+        const { machine } = fly.seedSandbox("app");
+        const ran = await call("POST", `/apps/app/machines/${machine.id}/exec`, { command: ["node", "state-plan.js"], timeout: 60 });
+        expect(ran.status).toBe(200);
+        expect(JSON.parse(String(ran.json["stdout"]))).toEqual(CLEAR_STATE_PLAN);
+        fly.commands.answer = () => ({ exit_code: 1, stdout: "", stderr: "no" });
+        expect((await call("POST", `/apps/app/machines/${machine.id}/exec`, { command: [] })).json).toEqual({ exit_code: 1, stdout: "", stderr: "no" });
+        await call("POST", `/apps/app/machines/${machine.id}/stop`);
+        expect((await call("POST", `/apps/app/machines/${machine.id}/exec`, { command: [] })).status).toBe(412);
+    });
+
+    it("leaves a machine stopped on a start while its config names an image that will not boot", async () => {
+        const fly = install({ faults: { imageWontStart: "bad" } });
+        const { machine } = fly.seedSandbox("app");
+        await call("POST", `/apps/app/machines/${machine.id}`, { config: { image: "bad" } });
+        await call("POST", `/apps/app/machines/${machine.id}/start`);
+        expect(fly.machines.get(machine.id)?.state).toBe("stopped");
+        await call("POST", `/apps/app/machines/${machine.id}`, { config: { image: "good" } });
+        await call("POST", `/apps/app/machines/${machine.id}/start`);
+        expect(fly.machines.get(machine.id)?.state).toBe("started");
     });
 });
 

@@ -137,6 +137,11 @@ const built = (fly: ReturnType<typeof stubFly>, seeded: { machineId: string; vol
  * under the ids the row names. A local stub could answer each call, but not the rules these cases turn on: that a
  * fork carries the source's bytes, that a snapshot must finish before it can be restored from, and that a machine
  * somebody stopped does not answer `started`. */
+// What the seeded machine's config names, a tag, and the digest it resolved to when it last started (the fake's
+// `image_ref` is `sha256:<machine id>`): a move or a resize keeps that digest, never whatever the tag names today.
+const RUNNING_TAG = `ghcr.io/intentic/sandbox:stable`;
+const RUNNING = `ghcr.io/intentic/sandbox@sha256:m1`;
+
 const stubFly = (over: { snapshotNeverFinishes?: boolean; stopRefused?: boolean } = {}) => {
     // A refused stop is the one fault the shared fake has no switch for; it is answered here, before the fake sees it.
     const refusingStop =
@@ -162,7 +167,7 @@ const stubFly = (over: { snapshotNeverFinishes?: boolean; stopRefused?: boolean 
         app: seeded.appName,
         region: seeded.region,
         state: `started`,
-        config: {},
+        config: { image: RUNNING_TAG },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
     });
@@ -206,9 +211,11 @@ describe(`resizing where the machine stands`, () => {
         expect(fly.indexOf(`PUT`, `/extend`)).toBeLessThan(fly.indexOf(`POST`, `/machines/m1`));
         expect(fly.called(`PUT`, `/extend`)[0]?.body).toEqual({ size_gb: STANDARD.volumeGb });
         const replaced = fly.called(`POST`, `/machines/m1`)[0]?.body as {
-            config: { guest: Record<string, unknown> };
+            config: { guest: Record<string, unknown>; image: string };
         };
         expect(replaced.config.guest).toEqual({ cpu_kind: STANDARD.cpuKind, cpus: STANDARD.cpus, memory_mb: STANDARD.memoryMb });
+        // The version it ran, pinned: a resize changes the guest, never which build reads the volume.
+        expect(replaced.config.image).toBe(RUNNING);
         // Nothing is forked or destroyed: a resize is one machine on one disk throughout.
         expect(fly.called(`POST`, `/volumes`)).toEqual([]);
         expect(fly.calls.filter((call) => call.method === `DELETE` && call.path.includes(`/volumes/`))).toEqual([]);
@@ -235,7 +242,8 @@ describe(`resizing where the machine stands`, () => {
         // Two config replacements: the one that failed and the one that undid it, the second carrying the old guest.
         const replacements = fly.called(`POST`, `/machines/m1`);
         expect(replacements).toHaveLength(2);
-        const undone = replacements[1] as { body: { config: { guest: Record<string, unknown> } } };
+        const undone = replacements[1] as { body: { config: { guest: Record<string, unknown>; image: string } } };
+        expect(undone.body.config.image).toBe(RUNNING);
         expect(undone.body.config.guest).toEqual({
             cpu_kind: FREE_TIER.cpuKind,
             cpus: FREE_TIER.cpus,
@@ -286,6 +294,8 @@ describe(`moving to another machine`, () => {
         expect(fly.indexOf(`DELETE`, `/machines/m1`)).toBeLessThan(fly.indexOf(`DELETE`, `/volumes/vol_1`));
 
         const made = built(fly, machine());
+        // The copy runs the version the original ran, so the move has no stored state to convert.
+        expect(fly.machines.get(made.machineId)?.config[`image`]).toBe(RUNNING);
         expect(state).toMatchObject({ ...made, region: `arn`, tier: STANDARD.id, migratingId: null });
         expect(migrations[0]).toMatchObject({
             kind: `move`,

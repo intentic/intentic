@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { setTimeout as delay } from "node:timers/promises";
 import { FREE_TIER, type HostedShape, type HostedTierId } from "@intentic/constants";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
 import { ENV_INGRESS_URL, ENV_SANDBOX_GRANT, verifyReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
@@ -37,6 +36,11 @@ import { hostedSlotUse } from "./hosted-plan.js";
 import { assertHostedIdentity, HostedAlreadyProvisioned, HostedProvisionCancelled, lockHostedSandbox, withHostedApp } from "./hosted-cleanup.js";
 import { hostedShapeFor, shapeOfRow, volumeOptions } from "./hosted-shape.js";
 import { dropHostedMachine } from "./hosted-usage.js";
+import { startAfterUpdate } from "./hosted-start.js";
+import { HostedImageKept, STATE_PROBE_ENV, switchHostedImage } from "./hosted-state-gate.js";
+
+// Where every caller has always found it; it lives beside the gate that starts machines too.
+export { startAfterUpdate } from "./hosted-start.js";
 
 // Hosted lane orchestration over fly.ts: one machine and one volume in one app per sandbox, named `<prefix>-<12-hex
 // tunnel id>` always. The machine dials the edge's tunnel like every sandbox; until it has, the edge answers `sandbox-<id>`
@@ -210,6 +214,20 @@ export interface HostedWakeTarget {
 // States a config replacement is safe from; anything mid-transition is left to the plain start and its own verdict.
 const HEALABLE_STATES = new Set([`stopped`, `suspended`, `started`]);
 
+// The wake's config replacement, under the state gate. A machine kept on its version and running there is a woken
+// machine, which is what was asked for; anything else is the wake's failure.
+const healHosted = async (config: Config, hosted: HostedWakeTarget, args: HostedProvisionArgs, logger: Logger | undefined): Promise<void> => {
+    const overlay: HostedOverlay = { image: hosted.image ?? null, environmentHash: hosted.environmentHash ?? null };
+    const target = hostedMachineConfig(config, args, hosted.appName, hosted.volumeId, overlay, await resolveHostedImage(config), shapeOfRow(hosted));
+    try {
+        await switchHostedImage(config, hosted, target, { start: true, keepImage: true, logger });
+    } catch (error) {
+        if (!(error instanceof HostedImageKept && error.running)) {
+            throw error;
+        }
+    }
+};
+
 /* A WAKE ALSO HEALS THE TUNNEL. A machine configured before hosted machines dialled the edge (71dbfb7145) carries
  * neither SANDBOX_GRANT nor INGRESS_URL, and a stop/start never changes a config, so it would stay reachable only by
  * replay, and not at all once the edge terminates TLS itself. So the wake reads the machine's environment first and,
@@ -217,23 +235,21 @@ const HEALABLE_STATES = new Set([`stopped`, `suspended`, `started`]);
  * re-applies the whole config the way a restart does, with the machine's own overlay and guest, then starts it and
  * confirms. A stock machine moves onto today's stock digest, as a restart moves it: one that old most likely runs an
  * image from before the front that dials (aa02061469 landed hours before 71dbfb7145), and a grant it cannot present
- * would heal nothing. An overlay machine keeps its overlay, whose base is the owner's rebuild to move. `heal` is lazy
- * because only this case needs the sandbox's identity. A read that fails is not a verdict: the plain start runs and the
- * next wake asks again. Answers whether it healed. */
-export const wakeHosted = async (config: Config, hosted: HostedWakeTarget, heal?: () => HostedProvisionArgs): Promise<boolean> => {
+ * would heal nothing. That move is an image change, so it goes through the state gate (hosted-state-gate.ts): a target
+ * that cannot convert this sandbox's state heals the tunnel on the image the machine already runs instead, and a
+ * target that does not start is put back, so the wake is never the thing that leaves a machine unable to boot. A
+ * config a dead gate left mid-probe (its marker in the environment) is re-applied the same way. An overlay machine
+ * keeps its overlay, whose base is the owner's rebuild to move. `heal` is lazy because only this case needs the
+ * sandbox's identity. A read that fails is not a verdict: the plain start runs and the next wake asks again. Answers
+ * whether it healed. */
+export const wakeHosted = async (config: Config, hosted: HostedWakeTarget, heal?: () => HostedProvisionArgs, logger?: Logger): Promise<boolean> => {
     if (heal !== undefined && ingressEnabled(config)) {
+        // allow(silent-catch): a read that fails is not a verdict; the plain start below runs and the next wake asks again
         const launch = await getMachineLaunch(config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch(() => undefined);
         if (launch?.env !== undefined && HEALABLE_STATES.has(launch.state)) {
             const args = heal();
-            if (!tunnelEnvCurrent(config, args.connectToken, launch.env)) {
-                const overlay: HostedOverlay = { image: hosted.image ?? null, environmentHash: hosted.environmentHash ?? null };
-                await updateMachine(
-                    config.hosted.flyApiToken,
-                    hosted.appName,
-                    hosted.machineId,
-                    hostedMachineConfig(config, args, hosted.appName, hosted.volumeId, overlay, await resolveHostedImage(config), shapeOfRow(hosted)),
-                );
-                await startAfterUpdate(config, hosted);
+            if (!tunnelEnvCurrent(config, args.connectToken, launch.env) || launch.env[STATE_PROBE_ENV] !== undefined) {
+                await healHosted(config, hosted, args, logger);
                 return true;
             }
         }
@@ -254,58 +270,6 @@ const startHosted = async (config: Config, hosted: { appName: string; machineId:
         }
         throw error;
     }
-};
-
-// After a config replacement, a machine refuses starts (412) while `replacing`, and an update never starts one that was
-// stopped. Wait for it to settle, then start, then confirm it ran.
-const SETTLE_ATTEMPTS = 60;
-const SETTLE_MS = 500;
-/* WHAT COUNTS AS RUNNING HERE, and why `created` does not.
- *
- * Replacing a stopped machine's config builds it a new VM record, and that record reads `created` for about a second
- * before settling back to `stopped` — the machine has not been asked to run, and nothing is going to ask it. Counting
- * `created` as running made this loop return the moment it caught that second, so the claim committed the row, the
- * hand-off succeeded, and the owner was given a machine that had never been started. It is a race, so it only bit
- * whichever claims read fast: in the live fleet it was half of one day's claims, plus the platform's own canary, plus
- * one sandbox that sat un-started for seventeen days. A machine is running here when Fly says it is starting or
- * started, and a start is issued for every other reading that will accept one. */
-const RUNNING_STATES = new Set([`starting`, `started`]);
-export const startAfterUpdate = async (
-    config: Config,
-    hosted: { appName: string; machineId: string },
-    assertActive?: () => Promise<void>,
-): Promise<void> => {
-    let lastError: unknown;
-    for (let attempt = 1; attempt <= SETTLE_ATTEMPTS; attempt += 1) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- settling is sequential by definition
-        const machine = await getMachine(config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch((error: unknown) => {
-            lastError = error;
-            return undefined;
-        });
-        // A read that answered supersedes an earlier failure: the cause named at the end is the latest one.
-        if (machine !== undefined) {
-            lastError = undefined;
-        }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- cancellation must stop the settling loop before another start
-        await assertActive?.();
-        if (machine !== undefined && RUNNING_STATES.has(machine.state)) {
-            return;
-        }
-        // Still replacing (or unreadable): starting now would only earn the 412 above.
-        if (machine !== undefined && machine.state !== `replacing`) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
-            await startMachine(config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch((error: unknown) => {
-                lastError = error;
-            });
-        }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- as above
-        await delay(SETTLE_MS);
-    }
-    // Settled but still won't run: broken, not busy; the claim must fail rather than hand over a dead machine.
-    throw new Error(
-        `fly machine ${hosted.machineId} did not start after its config was replaced${lastError === undefined ? `` : `: ${String(lastError)}`}`,
-        { cause: lastError },
-    );
 };
 
 // Claims a warm machine for this sandbox or returns undefined for the cold path. A guarded ready-to-claimed update
@@ -493,21 +457,21 @@ export const provisionHosted = async (
 };
 
 // Explicit repair/update boundary: a plain stop/start can't fix a boot-crashing machine pinned to its original rootfs,
-// so this replaces the full config while stopped, then wakes it as one metered transition.
+// so this replaces the full config while stopped, then wakes it as one metered transition. A stock machine moves onto
+// today's stock digest, under the state gate (hosted-state-gate.ts): a target that cannot convert this sandbox's state
+// leaves it on its version with the fresh config, and one that does not start is put back; both throw HostedImageKept.
 export const refreshHosted = async (
     config: Config,
     args: HostedProvisionArgs,
     hosted: { appName: string; machineId: string; volumeId: string; image?: string | null; environmentHash?: string | null },
+    logger?: Logger,
 ): Promise<void> => {
     // Keeps the machine's existing overlay; a moved base image is a rebuild's job (hosted-build.ts), not this call's.
     const overlay: HostedOverlay = { image: hosted.image ?? null, environmentHash: hosted.environmentHash ?? null };
-    await updateMachine(
-        config.hosted.flyApiToken,
-        hosted.appName,
-        hosted.machineId,
-        hostedMachineConfig(config, args, hosted.appName, hosted.volumeId, overlay),
-    );
-    await startAfterUpdate(config, hosted);
+    // Resolved to a digest, so a restart on the digest the machine already runs converts nothing and asks nothing.
+    const stockImage = overlay.image === null ? await resolveHostedImage(config, logger) : config.hosted.image;
+    const target = hostedMachineConfig(config, args, hosted.appName, hosted.volumeId, overlay, stockImage);
+    await switchHostedImage(config, hosted, target, { start: true, keepImage: true, logger });
 };
 
 // Tears the app down (machines and volume go with it); 404-tolerant by fly.ts's contract.

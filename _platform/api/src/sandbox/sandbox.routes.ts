@@ -30,6 +30,7 @@ import {
     requestHostedBuild,
 } from "./hosted/build/hosted-build.js";
 import { HostedAtCapacity, hostedCapacity } from "./hosted/hosted-capacity.js";
+import { HostedImageKept } from "./hosted/hosted-state-gate.js";
 import { kickHostedPool } from "./hosted/hosted-pool.js";
 import {
     assertHostedIdentity,
@@ -110,6 +111,20 @@ const loopbackHostname = (config: Config, encryptedToken: string): string | null
     return id === undefined ? null : localHostname(id, zone);
 };
 
+// The state gate kept the machine on the version it had (a target that cannot convert its state, or one that did not
+// start): the owner reads why, and a machine running there is metered like any restart.
+const keptVersion = async (
+    context: OrpcContext,
+    hosted: { id: string; sandboxId: string; appName: string; machineId: string },
+    ownerId: string,
+    kept: HostedImageKept,
+): Promise<ORPCError<string, unknown>> => {
+    if (kept.running) {
+        await openStretchOrStop(context, hosted, ownerId);
+    }
+    return new ORPCError(kept.reason === `refused` ? `CONFLICT` : `BAD_GATEWAY`, { message: kept.message });
+};
+
 // Reboots the machine, or replaces it when Fly says it's gone. The dead row is deleted before reprovisioning:
 // `sandboxId` is unique on HostedMachine, so keeping it would fail the new machine's write and strand the owner.
 const restartOrRebuild = async (
@@ -119,7 +134,7 @@ const restartOrRebuild = async (
     ownerId: string,
 ): Promise<boolean> => {
     try {
-        await refreshHosted(context.config, args, hosted);
+        await refreshHosted(context.config, args, hosted, context.logger);
         return false;
     } catch (error) {
         if (!isFlyGone(error)) {
@@ -524,6 +539,9 @@ export const sandboxRoutes = {
             if (error instanceof ORPCError) {
                 throw error;
             }
+            if (error instanceof HostedImageKept) {
+                throw await keptVersion(context, hosted, sandbox.ownerId, error);
+            }
             // The rebuild half provisions too, so it can meet a full fleet like any other provision; the sandbox and
             // its address survive regardless.
             if (error instanceof HostedAtCapacity) {
@@ -607,13 +625,18 @@ export const sandboxRoutes = {
         try {
             // What a re-applied config is composed from, as a restart composes it; the owner's address and not the
             // caller's, since a member may be the one waking it.
-            const healed = await wakeHosted(context.config, hosted, () => ({
-                sandboxId: sandbox.id,
-                connectToken: decryptSecret(context.config, sandbox.token),
-                ownerEmail: sandbox.owner.email.toLowerCase(),
-                region: hosted.region,
-                tier: hostedTier(hosted.tier).id,
-            }));
+            const healed = await wakeHosted(
+                context.config,
+                hosted,
+                () => ({
+                    sandboxId: sandbox.id,
+                    connectToken: decryptSecret(context.config, sandbox.token),
+                    ownerEmail: sandbox.owner.email.toLowerCase(),
+                    region: hosted.region,
+                    tier: hostedTier(hosted.tier).id,
+                }),
+                context.logger,
+            );
             if (healed) {
                 context.logger.info(
                     { app: hosted.appName, sandboxId: sandbox.id },

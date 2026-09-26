@@ -151,6 +151,21 @@ describe(`restoreSandbox`, () => {
         expect(drop).toHaveBeenCalledWith({ where: { id: `t1` } });
     });
 
+    /* A RESTORE IS NOT AN UPDATE. A stock machine comes back on the digest it last ran (the fake reports
+     * `sha256:<machine id>`), never on whatever the configured tag names today: the version that wrote its stored
+     * state is the one that reads it again, and a later restart moves it under the state gate. */
+    it(`brings a stock machine back on the digest it ran, not on today's tag`, async () => {
+        const fly = stubFly();
+        const create = jest.fn().mockResolvedValue({ region: `iad`, warm: false });
+        const prisma = fakePrisma({
+            hostedMachine: { create, count: jest.fn().mockResolvedValue(0) },
+            sandboxTrash: { findUnique: jest.fn().mockResolvedValue({ ...trashRow, flyImage: null, environmentHash: null }), delete: jest.fn().mockResolvedValue({}) },
+        });
+        await restoreSandbox(prisma, config(), `u1`, `t1`);
+        expect(fly.machines.get(`m1`)?.config[`image`]).toBe(`registry.test/sandbox@sha256:m1`);
+        expect(fly.called(`POST`, `/machines/m1/start`)).toEqual([]);
+    });
+
     it(`mints a fresh identity: the deleted sandbox's connect token died with its row`, async () => {
         stubFly();
         const create = jest.fn().mockResolvedValue({ id: `s2`, name: `dev`, image: null, hosted: null });

@@ -18,12 +18,12 @@ import {
     isFlyCapacity,
     isFlyGone,
     listMachines,
-    updateMachine,
 } from "../fly/fly.js";
 import { mintAppDeployToken, organizationIdOf, revokeDeployToken } from "../fly/fly-tokens.js";
 import { hostedCapacity, noteProviderAtCapacity, providerWords } from "../hosted-capacity.js";
 import { BUILD_ENV, BUILD_PATHS, buildScript, dockerConfigJson, LOG_TAIL_BYTES } from "./hosted-build-script.js";
-import { hostedInstanceId, hostedMachineConfig, type HostedProvisionArgs, startAfterUpdate } from "../hosted.js";
+import { hostedInstanceId, hostedMachineConfig, type HostedProvisionArgs } from "../hosted.js";
+import { switchHostedImage } from "../hosted-state-gate.js";
 import { chargeMinutes, hostedBudgetOf, usageMonth } from "../hosted-usage.js";
 
 // Executes `ic sandbox rebuild` for hosted sandboxes: builds the approved overlay in a builder machine inside the
@@ -177,15 +177,14 @@ const applyHostedBuild = async (prisma: PrismaClient, config: Config, logger: Lo
         return undefined;
     });
     const running = before !== undefined && RUNNING_STATES.has(before.state);
-    await updateMachine(
-        config.hosted.flyApiToken,
-        machine.appName,
-        machine.machineId,
+    // Under the state gate (hosted-state-gate.ts): an overlay on a new base is a new daemon over the same volume. A
+    // refusal or a start that fails leaves the machine on the image it had and throws, so the row below still names it.
+    await switchHostedImage(
+        config,
+        machine,
         hostedMachineConfig(config, provisionArgsOf(config, machine), machine.appName, machine.volumeId, { image, environmentHash: build.hash }),
+        { start: running, logger },
     );
-    if (running) {
-        await startAfterUpdate(config, machine);
-    }
     await prisma.hostedMachine.update({
         where: { id: machine.id },
         data: { image, baseImage: build.baseImage, environmentHash: build.hash },
