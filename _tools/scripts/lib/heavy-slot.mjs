@@ -9,7 +9,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { mergeHeavyRules, QUEUE_SKIPPED_EXIT_CODE, queueArgs, ruleById } from "../../constants/src/heavy-rules.cjs";
+import { mergeHeavyRules, QUEUE_SKIPPED_EXIT_CODE, queueArgs, ruleById } from "../../constants/src/heavy/heavy-rules.cjs";
 
 // The `repo-verify` rule as shipped (@intentic/constants heavy-rules.cjs, the table the daemon reads too), so a script
 // queued this way competes for the same slot as the same command run by an agent: one at a time, a wait of up to 15

@@ -1,14 +1,12 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { ExtensionServerApi, ToolDefinition } from "@intentic/extension-api";
+import { NOTES_PATH } from "./notes";
 
 /* The backend half, which here does one thing: hand the agent tools (`contributes.tools`). The host owns the MCP
    transport, each call's deadline and cancellation; this only says what the tools are and what each does. With no
    `perCard` in the manifest there is one server for the extension, named by its `name` (`mcp__example__…`), in every
    turn while the extension is enabled, on whichever runtime serves it. */
-
-// The same file the CLI and the view use; the view updates the moment a tool writes it (`contributes.files`).
-const NOTES_PATH = `.intentic/example-notes.json`;
 
 interface Note {
     readonly at: string;
