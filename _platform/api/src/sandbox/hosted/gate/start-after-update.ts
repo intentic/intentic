@@ -1,6 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
-import type { Config } from "../../config.js";
-import { getMachine, startMachine } from "./fly/fly.js";
+import type { Config } from "../../../config.js";
+import { getMachine, startMachine } from "../fly/fly.js";
 
 // After a config replacement, a machine refuses starts (412) while `replacing`, and an update never starts one that was
 // stopped. Wait for it to settle, then start, then confirm it ran.

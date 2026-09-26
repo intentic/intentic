@@ -36,11 +36,11 @@ import { hostedSlotUse } from "./hosted-plan.js";
 import { assertHostedIdentity, HostedAlreadyProvisioned, HostedProvisionCancelled, lockHostedSandbox, withHostedApp } from "./hosted-cleanup.js";
 import { hostedShapeFor, shapeOfRow, volumeOptions } from "./hosted-shape.js";
 import { dropHostedMachine } from "./hosted-usage.js";
-import { startAfterUpdate } from "./hosted-start.js";
-import { HostedImageKept, STATE_PROBE_ENV, switchHostedImage } from "./hosted-state-gate.js";
+import { startAfterUpdate } from "./gate/start-after-update.js";
+import { HostedImageKept, STATE_PROBE_ENV, switchHostedImage } from "./gate/state-gate.js";
 
 // Where every caller has always found it; it lives beside the gate that starts machines too.
-export { startAfterUpdate } from "./hosted-start.js";
+export { startAfterUpdate } from "./gate/start-after-update.js";
 
 // Hosted lane orchestration over fly.ts: one machine and one volume in one app per sandbox, named `<prefix>-<12-hex
 // tunnel id>` always. The machine dials the edge's tunnel like every sandbox; until it has, the edge answers `sandbox-<id>`
@@ -235,7 +235,7 @@ const healHosted = async (config: Config, hosted: HostedWakeTarget, args: Hosted
  * re-applies the whole config the way a restart does, with the machine's own overlay and guest, then starts it and
  * confirms. A stock machine moves onto today's stock digest, as a restart moves it: one that old most likely runs an
  * image from before the front that dials (aa02061469 landed hours before 71dbfb7145), and a grant it cannot present
- * would heal nothing. That move is an image change, so it goes through the state gate (hosted-state-gate.ts): a target
+ * would heal nothing. That move is an image change, so it goes through the state gate (gate/state-gate.ts): a target
  * that cannot convert this sandbox's state heals the tunnel on the image the machine already runs instead, and a
  * target that does not start is put back, so the wake is never the thing that leaves a machine unable to boot. A
  * config a dead gate left mid-probe (its marker in the environment) is re-applied the same way. An overlay machine
@@ -458,7 +458,7 @@ export const provisionHosted = async (
 
 // Explicit repair/update boundary: a plain stop/start can't fix a boot-crashing machine pinned to its original rootfs,
 // so this replaces the full config while stopped, then wakes it as one metered transition. A stock machine moves onto
-// today's stock digest, under the state gate (hosted-state-gate.ts): a target that cannot convert this sandbox's state
+// today's stock digest, under the state gate (gate/state-gate.ts): a target that cannot convert this sandbox's state
 // leaves it on its version with the fresh config, and one that does not start is put back; both throw HostedImageKept.
 export const refreshHosted = async (
     config: Config,

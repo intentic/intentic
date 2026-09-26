@@ -373,7 +373,7 @@ export const getMachineLaunch = async (token: string, app: string, machineId: st
 };
 
 // A machine's whole config as Fly holds it, and the digest its image resolved to. Read before an image change
-// (hosted-state-gate.ts), so the config can be put back exactly as it was: every field is kept, the ones this client
+// (gate/state-gate.ts), so the config can be put back exactly as it was: every field is kept, the ones this client
 // never writes included.
 const machineConfigSchema = z.object({
     state: z.string(),

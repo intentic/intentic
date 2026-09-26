@@ -24,7 +24,7 @@ import { HostedAtCapacity, AT_CAPACITY_MESSAGE, noteProviderAtCapacity, provider
 import { withHostedAppLock } from "../hosted-app-lock.js";
 import { hostedEnabled, hostedInstanceId, hostedMachineConfig, type HostedProvisionArgs, startAfterUpdate } from "../hosted.js";
 import { hostedShapeFor, sameShape, shapeOfRow } from "../hosted-shape.js";
-import { runningImageOf } from "../hosted-state-gate.js";
+import { runningImageOf } from "../gate/state-gate.js";
 
 /* MOVING A SANDBOX FROM ONE MACHINE TO ANOTHER, and being able to undo it.
  *
@@ -389,7 +389,7 @@ export const migrateHosted = async (
         // snapshot has nothing to undo, and restarting the machine to "put it back" would be the only harm done.
         let applied = false;
         // The version a stock machine runs, pinned for everything below: a resize or a move changes where and on what
-        // the sandbox runs, never which version, so it has no stored state to convert (hosted-state-gate.ts). An
+        // the sandbox runs, never which version, so it has no stored state to convert (gate/state-gate.ts). An
         // overlay machine names its own image already.
         let pinned = machine;
         try {

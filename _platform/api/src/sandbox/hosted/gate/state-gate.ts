@@ -3,9 +3,9 @@ import { type PlanFailure, PlanFailureSchema, STATE_PLAN_FORMAT } from "@intenti
 import { FLY_VOLUME_LAYOUT, type FlyMachineConfig } from "@intentic/sandbox-run/fly";
 import type { Logger } from "pino";
 import { z } from "zod";
-import type { Config } from "../../config.js";
-import { execMachine, type FlyExecAnswer, type FlyMachineCurrent, getMachine, getMachineConfig, stopMachine, updateMachine } from "./fly/fly.js";
-import { startAfterUpdate } from "./hosted-start.js";
+import type { Config } from "../../../config.js";
+import { execMachine, type FlyExecAnswer, type FlyMachineCurrent, getMachine, getMachineConfig, stopMachine, updateMachine } from "../fly/fly.js";
+import { startAfterUpdate } from "./start-after-update.js";
 
 /* A HOSTED IMAGE CHANGE ASKS THE TARGET IMAGE FIRST, AND PUTS THE MACHINE BACK WHEN THE NEW ONE WILL NOT START.
  *
@@ -29,7 +29,7 @@ import { startAfterUpdate } from "./hosted-start.js";
  *
  * A config replacement that keeps the running digest converts nothing, so it skips the probe. A crash between the probe
  * and the final config leaves the probe's marker in the machine's environment, naming the image it ran before: the wake
- * reads it as a config to re-apply (hosted.ts), and the next gate as the version to go back to. */
+ * reads it as a config to re-apply (../hosted.ts), and the next gate as the version to go back to. */
 
 // The planner the target image carries; an image built before the conversion engine has none.
 export const STATE_PLANNER = `/opt/sandbox/dist/state-plan.js`;
@@ -146,8 +146,10 @@ export const probeConfig = (target: FlyMachineConfig, previousImage: string): Fl
 // Stops a machine and waits until it reads stopped, so the next config replacement leaves it stopped rather than
 // restarting it. Bounded: a machine that will not say so is replaced anyway.
 const stopAndSettle = async (config: Config, machine: HostedGateMachine): Promise<void> => {
+    // allow(silent-catch): a refused stop (a probe that already exited) is judged by the state read below, not by the refusal
     await stopMachine(config.hosted.flyApiToken, machine.appName, machine.machineId).catch(() => undefined);
     for (let attempt = 0; attempt < STOP_ATTEMPTS; attempt += 1) {
+        // allow(silent-catch): an unanswered read is one more attempt; the bound below applies the final config regardless
         // oxlint-disable-next-line eslint/no-await-in-loop -- settling is sequential by definition
         const read = await getMachine(config.hosted.flyApiToken, machine.appName, machine.machineId).catch(() => undefined);
         if (read?.state === `stopped`) {

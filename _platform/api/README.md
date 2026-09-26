@@ -21,7 +21,7 @@ flowchart LR
 - The hosted lane is one Fly app, machine and volume per sandbox, named `<HOSTED_APP_PREFIX>-<id>`. The background
   jobs started in `src/main.ts` (warm pool, meter, abuse watch, builds, health) take a Postgres advisory lock per run
   (`src/jobs-lock.ts`), so two replicas never double-bill or double-provision.
-- A hosted image change goes through the state gate (`src/sandbox/hosted/hosted-state-gate.ts`), the hosted half of
+- A hosted image change goes through the state gate (`src/sandbox/hosted/gate/state-gate.ts`), the hosted half of
   the stored-state promise in [COMPATIBILITY.md](../../COMPATIBILITY.md#stored-data). A restart, a rebuild, or a wake
   that heals a stale tunnel first runs the target image's planner (`state-plan.js`) over the machine's own volume. It
   runs in a probe: the same machine with its daemon replaced by a sleep, asked through Fly's exec. A plan that says a

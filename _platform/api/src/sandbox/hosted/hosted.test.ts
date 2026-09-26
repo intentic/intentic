@@ -15,7 +15,7 @@ import { HostedAlreadyProvisioned } from "./hosted-cleanup.js";
 import { hostedShapeFor } from "./hosted-shape.js";
 import { AT_CAPACITY_MESSAGE, forgetProviderCapacity, HostedAtCapacity } from "./hosted-capacity.js";
 import { forgetHostedImage } from "./build/hosted-image.js";
-import { STATE_PROBE_ENV } from "./hosted-state-gate.js";
+import { STATE_PROBE_ENV } from "./gate/state-gate.js";
 import { CLEAR_STATE_PLAN, type FakeFly, type FakeFlyCall, type FakeFlyMachine, installFakeFly } from "@intentic/testing/fly-fake";
 import { fakeHostedAppLock, testIngressConfig } from "../../testing.js";
 import { createApp } from "../../app.js";

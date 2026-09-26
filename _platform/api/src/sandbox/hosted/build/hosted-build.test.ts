@@ -16,7 +16,7 @@ import {
     sweepHostedBuilds,
 } from "./hosted-build.js";
 import { hostedInstanceId } from "../hosted.js";
-import { STATE_PROBE_ENV } from "../hosted-state-gate.js";
+import { STATE_PROBE_ENV } from "../gate/state-gate.js";
 import * as timersPromisesOriginal from "node:timers/promises";
 
 /* The settle between a machine's config update and its start (hosted.ts SETTLE_MS) is half a second of real time in production, polled up to sixty times. */

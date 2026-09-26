@@ -30,7 +30,7 @@ import {
     requestHostedBuild,
 } from "./hosted/build/hosted-build.js";
 import { HostedAtCapacity, hostedCapacity } from "./hosted/hosted-capacity.js";
-import { HostedImageKept } from "./hosted/hosted-state-gate.js";
+import { HostedImageKept } from "./hosted/gate/state-gate.js";
 import { kickHostedPool } from "./hosted/hosted-pool.js";
 import {
     assertHostedIdentity,

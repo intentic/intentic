@@ -1,7 +1,7 @@
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { CLEAR_STATE_PLAN, type FakeFly, type FakeFlyExecAnswer, type FakeFlyMachine, installFakeFly } from "@intentic/testing/fly-fake";
 import type { FlyMachineConfig } from "@intentic/sandbox-run/fly";
-import type { Config } from "../../config.js";
+import type { Config } from "../../../config.js";
 import {
     HostedImageKept,
     pinnedImage,
@@ -11,7 +11,7 @@ import {
     STATE_PLANNER,
     STATE_PROBE_ENV,
     switchHostedImage,
-} from "./hosted-state-gate.js";
+} from "./state-gate.js";
 import * as timersPromisesOriginal from "node:timers/promises";
 
 /* The settles around a probe and a start are half a second of real time each in production, polled many times. */
