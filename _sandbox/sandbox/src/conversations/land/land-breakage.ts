@@ -330,7 +330,7 @@ const sendBack = (services: BreakageRouter, breakage: LandBreakage, land: Depend
     // A live conversation takes the words as a steer, an idle one is started, and a busy one queues them for its next turn.
     void deliverWake(
         { turns: services.turns, sessionIdOf: (conversationId) => services.conversations.sessionIdOf(conversationId) },
-        { conversationId: land.agentId, prompt: followUpOf(breakage), voice: "sandbox", profile: conversationProfile(entry) },
+        { conversationId: land.agentId, prompt: followUpOf(breakage), voice: "sandbox", errand: "land-breakage", source: "land-breakage", profile: conversationProfile(entry) },
     ).then((receipt) => {
         if ("invalid" in receipt) {
             services.logger.warn({ conversationId: land.agentId, project: breakage.project, invalid: receipt.invalid }, "land breakage: the conversation could not take the follow-up");
@@ -413,7 +413,7 @@ const hold = async (services: Services, owed: Owed, on: readonly string[], packa
         }
         void deliverWake(
             { turns: services.turns, sessionIdOf: (conversationId) => services.conversations.sessionIdOf(conversationId) },
-            { conversationId: id, prompt: heldNoteOf(breakage, packages), voice: "sandbox", profile: conversationProfile(entry) },
+            { conversationId: id, prompt: heldNoteOf(breakage, packages), voice: "sandbox", errand: "land-held", source: "land-breakage", profile: conversationProfile(entry) },
         );
     }
     append(services, "deps.breakage_held", `${breakage.fresh.length} failure(s) in ${where(breakage.project)} wait on ${on.length} conversation(s) still working on what failed.`);

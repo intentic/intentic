@@ -115,6 +115,7 @@ export const startCiFix = async (services: Services, request: CiFixRequest, fetc
             base: ciFixConversationId(project.repo, runId),
             prompt: promptOf(request, where),
             nudge,
+            errands: { prompt: "ci-fix", nudge: "ci-fix-nudge" },
             title: `Fix CI: ${run?.title ?? project.repo}`.slice(0, TITLE_MAX),
             // `runRole` alone is what pins the model (turn-resume.ts); the pick and who pressed ride in `turn`.
             turn: { isolated: true, runRole: `pipeline-fix`, ...request.turn },

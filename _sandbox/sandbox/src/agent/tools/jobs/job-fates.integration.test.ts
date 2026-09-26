@@ -117,10 +117,27 @@ describe("a job's fate, from what its turn did", () => {
         expect(jobFate({ ports: [], targets: ["curl localhost:5173"], closing: "It is up at http://localhost:5173", handed: none })).toBe("awaited");
     });
 
-    it("hands over a server the last reply gives the address of, in any of the ways an agent writes one", () => {
-        for (const closing of ["Open http://localhost:5173/ to try it", "It's on `127.0.0.1:5173`.", "Serving on :5173", "The dev server is on port 5173."]) {
-            expect(jobFate({ ports: [5173], targets: [], closing, handed: none })).toBe("handed");
+    it("hands over a server the turn reached and whose link its last reply gives", () => {
+        for (const closing of ["Open http://localhost:5173/ to try it", "It's up at <http://127.0.0.1:5173>.", "Try https://[::1]:5173/app"]) {
+            expect(jobFate({ ports: [5173], targets: ["curl -s localhost:5173"], closing, handed: none })).toBe("handed");
         }
+    });
+
+    // The misfire this rule exists for: the reply names the address it just stopped, which is not giving it to anybody.
+    it("does not hand over a server the reply says it stopped, or one it names without a link", () => {
+        for (const closing of [
+            "I stopped the server on localhost:5173.",
+            "I stopped the dev server at http://localhost:5173 once the check passed.",
+            "It's on `127.0.0.1:5173`.",
+            "Serving on :5173",
+            "The dev server is on port 5173.",
+        ]) {
+            expect(jobFate({ ports: [5173], targets: ["curl -s localhost:5173"], closing, handed: none })).toBe("stopped");
+        }
+    });
+
+    it("does not hand over a server the turn never reached, whatever link it gives: it stays awaited", () => {
+        expect(jobFate({ ports: [5173], targets: [], closing: "Open http://localhost:5173/ to try it", handed: none })).toBe("awaited");
     });
 
     it("stops a server the turn reached and said nothing about", () => {

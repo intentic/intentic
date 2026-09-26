@@ -43,6 +43,7 @@ const ASK = {
     prompt: "The CI pipeline failed. Investigate and fix it.",
     nudge: "Carry on from where you left off.",
     title: "Fix CI: build broke",
+    errands: { prompt: "ci-fix" as const, nudge: "ci-fix-nudge" as const },
     turn: { isolated: true as const, runRole: "pipeline-fix" as const },
 };
 
@@ -53,6 +54,7 @@ test("with nobody on the failure, the press opens attempt 1 with the opening pro
     expect(started[0]).toMatchObject({
         conversationId: BASE,
         prompt: ASK.prompt,
+        errand: "ci-fix",
         title: ASK.title,
         isolated: true,
         runRole: "pipeline-fix" as const,
@@ -64,7 +66,7 @@ test("an attempt that ended is continued with the nudge, keeping its title", asy
     const { deps, started, calls } = fakes([agent(BASE, { status: "error", failure: "no capacity" })]);
     const outcome = await startFixAttempt(deps, ASK);
     expect(outcome).toEqual({ kind: "started", conversationId: BASE, attempt: 1, continued: true });
-    expect(started[0]).toMatchObject({ conversationId: BASE, prompt: ASK.nudge });
+    expect(started[0]).toMatchObject({ conversationId: BASE, prompt: ASK.nudge, errand: "ci-fix-nudge" });
     expect(started[0]).not.toHaveProperty("title");
     expect(calls).toEqual([`start ${BASE}`]);
 });
@@ -127,7 +129,7 @@ describe("an attempt turned away before it started", () => {
         const outcome = await startFixAttempt(deps, ASK);
         expect(outcome).toEqual({ kind: "started", conversationId: BASE, attempt: 1, continued: true });
         expect(calls).toEqual([`rerun ${BASE}`, `start ${BASE}`]);
-        expect(started[0]).toMatchObject({ conversationId: BASE, prompt: ASK.prompt, runRole: "pipeline-fix" });
+        expect(started[0]).toMatchObject({ conversationId: BASE, prompt: ASK.prompt, errand: "ci-fix", runRole: "pipeline-fix" });
         expect(started[0]).not.toHaveProperty("title");
     });
 });

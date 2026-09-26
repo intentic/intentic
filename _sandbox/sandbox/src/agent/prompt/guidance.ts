@@ -243,11 +243,14 @@ const ENTRIES: readonly GuidanceEntry[] = [
             "is the most expensive way this harness can do nothing. If you already started work here, wait on it with the " +
             "`wait` tool (a background command by the ID its Bash call returned, a child agent by its id) rather than " +
             "re-reading its log on a timer. Do not detach a process yourself (setsid, nohup, `&` with disown): once this " +
-            "conversation stops, whatever it left running outside run_in_background is reclaimed.",
+            "conversation stops, whatever it left running outside run_in_background is reclaimed. A server you start for the " +
+            "person keeps running after your turn only when you reached it yourself and your reply gives its link " +
+            "(`http://localhost:PORT`); one you only used for your own look is stopped with your turn.",
         lean:
             "Never wait with `sleep`: run long commands with `run_in_background: true` and collect them with the `wait` tool, " +
             "and for something outside this sandbox arm `mcp__watch__start` and end your turn. Never detach a process " +
-            "yourself (setsid, nohup, `&`): it is reclaimed when the conversation stops.",
+            "yourself (setsid, nohup, `&`): it is reclaimed when the conversation stops. A server left for the person needs " +
+            "you to have reached it and to give its `http://` link.",
     },
     {
         id: "context-reuse",

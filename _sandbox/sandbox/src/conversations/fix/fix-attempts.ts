@@ -1,4 +1,4 @@
-import { type AgentSummary, type AgentTurn, type FixAttemptPlan, type FixResume, planFixAttempt } from "@intentic/sandbox-contract";
+import { type AgentSummary, type AgentTurn, type FixAttemptPlan, type FixResume, planFixAttempt, type TurnErrand } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import type { TurnInput } from "../../seams/turn-starter.js";
 import { archiveAgents } from "../registry/archive.js";
@@ -32,6 +32,9 @@ export interface FixAttemptAsk {
     readonly turn: Omit<TurnInput, "prompt" | "conversationId" | "title">;
     // The verb the picker's bar was ended with; absent is the plain press.
     readonly resume?: FixResume | undefined;
+    // What the opening prompt and the nudge are for (schemas/speaker.ts), which the row each opens carries: both are the
+    // sandbox's words, whoever pressed for them.
+    readonly errands: { readonly prompt: TurnErrand; readonly nudge: TurnErrand };
 }
 
 export type FixAttemptOutcome =
@@ -46,15 +49,15 @@ type StartingPlan = Exclude<FixAttemptPlan, { readonly kind: "busy" }>;
 
 // What an attempt's turn says: a continued one the nudge under the title it has, one turned away the whole prompt under
 // the title it has, since it never saw a word of it; a fresh one the whole prompt under a title numbered past attempt 1.
-const openingOf = (plan: StartingPlan, ask: FixAttemptAsk): Pick<AgentTurn, "prompt" | "title"> => {
+const openingOf = (plan: StartingPlan, ask: FixAttemptAsk): Pick<AgentTurn, "prompt" | "title" | "errand"> => {
     if (plan.kind === "continue") {
-        return { prompt: ask.nudge };
+        return { prompt: ask.nudge, errand: ask.errands.nudge };
     }
     if (plan.kind === "resend") {
-        return { prompt: ask.prompt };
+        return { prompt: ask.prompt, errand: ask.errands.prompt };
     }
     const title = plan.attempt > 1 ? `${ask.title} (attempt ${plan.attempt})` : ask.title;
-    return { prompt: ask.prompt, title: title.slice(0, TITLE_MAX) };
+    return { prompt: ask.prompt, title: title.slice(0, TITLE_MAX), errand: ask.errands.prompt };
 };
 
 export const startFixAttempt = async (deps: FixAttemptDeps, ask: FixAttemptAsk): Promise<FixAttemptOutcome> => {
@@ -113,7 +116,8 @@ export const daemonFixAttemptDeps = (services: Services, request: { readonly pre
         if (request.pressed) {
             await services.agents.clearArchived([turn.conversationId]);
         }
-        const started = await services.turns.start(turn);
+        // Nobody pressed for it: the sandbox speaks the turn it starts by itself.
+        const started = await services.turns.start(request.pressed || turn.speaker !== undefined ? turn : { ...turn, speaker: { kind: "sandbox" } });
         return typeof started === "string" ? undefined : started;
     },
     // A pick is a choice made now, so it outranks the kept turn's routing: the whole prompt goes on it.

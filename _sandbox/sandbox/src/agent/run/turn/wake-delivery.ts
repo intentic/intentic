@@ -1,4 +1,4 @@
-import type { MessageReceipt, TurnProfile } from "@intentic/sandbox-contract";
+import type { MessageReceipt, TurnErrand, TurnProfile } from "@intentic/sandbox-contract";
 import { opt } from "../../../opt.js";
 import type { SteerVoice, TurnStarter, Unsaid } from "../../../seams/turn-starter.js";
 
@@ -14,6 +14,9 @@ export interface Wake {
     readonly outside?: string;
     // The turn the wake continues, whole; conversation, prompt, session and taint are the wake's own.
     readonly profile: TurnProfile;
+    // What composed words are for, and what in the sandbox sent them: the row they open says the sandbox spoke them.
+    readonly errand?: TurnErrand;
+    readonly source?: string;
 }
 
 // The port's door a wake takes, and where it reads the session a turn of its own continues.
@@ -31,6 +34,8 @@ export const deliverWake = (doors: WakeDoors, wake: Wake): Promise<MessageReceip
             ...wake.profile,
             conversationId: wake.conversationId,
             prompt: wake.prompt,
+            ...opt("errand", wake.errand),
+            ...opt("speaker", wake.voice === "sandbox" ? { kind: "sandbox" as const, ...opt("source", wake.source) } : undefined),
             ...opt("sessionId", doors.sessionIdOf(wake.conversationId)),
         },
     });

@@ -1393,7 +1393,13 @@
             "sentBySandboxLand": "Wysłane przez sandbox — scalenie jego pracy wywróciło sprawdzenie głównego drzewa",
             "sentBySandboxTurn": "Wysłane przez sandbox — tamta tura skończyła się niezweryfikowana",
             "fixingRedMainLine": "Naprawia czerwoną główną linię",
-            "startedBySandboxRedMain": "Uruchomione przez sandbox: sprawdzenie main zrobiło się czerwone po scaleniu pracy, a żadna rozmowa, która ją miała, nie mogła się tym zająć"
+            "startedBySandboxRedMain": "Uruchomione przez sandbox: sprawdzenie main zrobiło się czerwone po scaleniu pracy, a żadna rozmowa, która ją miała, nie mogła się tym zająć",
+            "mainRedOnItsWork": "Dowiaduje się, że main zrobił się czerwony na jego pracy",
+            "sentBySandboxHeld": "Wysłane przez sandbox — sprawdzenie main zrobiło się czerwone na tym, nad czym ta rozmowa wciąż pracuje",
+            "fixingPushFindings": "Naprawia to, co znalazły sprawdzenia pushu",
+            "sentBySandboxPush": "Wysłane przez sandbox — z tego, co znalazły sprawdzenia pushu",
+            "fixingFailedCi": "Naprawia nieudane uruchomienie CI",
+            "sentBySandboxCi": "Wysłane przez sandbox — z nieudanego uruchomienia CI"
         },
         "hostPickerBody": {
             "carriesOnInSame": "Idzie dalej w tej samej rozmowie, na modelu powyżej — ⌘/Ctrl + Enter",

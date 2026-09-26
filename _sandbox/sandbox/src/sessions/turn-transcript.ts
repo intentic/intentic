@@ -1,5 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { type AgentTurn, capabilitiesOf, type TranscriptRow, unspokenPromptRow, withRuntimeDefaults } from "@intentic/sandbox-contract";
+import {
+    type AgentTurn,
+    capabilitiesOf,
+    type TranscriptRow,
+    type TurnErrand,
+    type TurnSpeaker,
+    unspokenPromptRow,
+    withRuntimeDefaults,
+} from "@intentic/sandbox-contract";
+import { opt } from "../opt.js";
 import { userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { parseQueuedPrompt } from "../agent/prompt/turn-preamble.js";
 import type { Services } from "../composition.js";
@@ -15,7 +24,13 @@ const messageIdOf = (turn: { readonly messageId?: string | undefined }): string 
 
 // The user's own words and root-relative attachments off `turn.prompt`, `turn.attachments` winning when the turn has them.
 export const openingRows = (
-    turn: { readonly prompt: string; readonly attachments?: readonly string[] | undefined; readonly messageId?: string | undefined },
+    turn: {
+        readonly prompt: string;
+        readonly attachments?: readonly string[] | undefined;
+        readonly messageId?: string | undefined;
+        readonly speaker?: TurnSpeaker | undefined;
+        readonly errand?: TurnErrand | undefined;
+    },
     root: string,
     // When the turn started; the user row is stamped with this (`TranscriptRow.sentAt`).
     sentAt: number,
@@ -33,7 +48,8 @@ export const openingRows = (
     if (spoken.length === 0 && attachments.length === 0) {
         return [];
     }
-    const row = userRow(spoken, sentAt, attachments, messageIdOf(turn));
+    // Who spoke it and what a composed one is for ride the row, so a reader never shows the sandbox's words as the owner's.
+    const row: TranscriptRow = { ...userRow(spoken, sentAt, attachments, messageIdOf(turn)), ...opt("speaker", turn.speaker), ...opt("errand", turn.errand) };
     // An answered-park resume's note rides the user's own row, like every other daemon note.
     return [resume?.kind === "note" ? { ...row, notes: [resume.note] } : row];
 };

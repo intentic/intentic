@@ -51,6 +51,24 @@ Subsystems that react to each other never import each other:
 - `seams/turn-starter.ts` is how automations, loops, approvals, CI fixes, subagents and runners start or drive a turn;
   composition hands them `agent/run/turn/turn-doors.ts`.
 
+## Who spoke a row
+
+A turn's words carry who spoke them (`TurnSpeaker`, `seams/turn-speaker.ts`) and, when the sandbox or the editor
+composed them, the errand they are (`TurnErrand`, contract `schemas/speaker.ts`): a land's breakage sent back, a red
+held on a conversation still working, a land, push or CI fix attempt and its nudge, a land conflict. Both ride the
+turn input, the conversation's queue and a live steer onto the transcript row, so no reader shows the sandbox's words
+as the owner's. A wake (`agent/run/turn/wake-delivery.ts`) is the sandbox's by construction; a fix attempt
+(`conversations/fix/fix-attempts.ts`) names its errand for the opening prompt and the nudge, and is the sandbox's own
+when nobody pressed for it. Over HTTP a client may name only `land-conflict`. Rows written before rows named an errand
+are still read by the prompt's opening paragraph (`errandOfRow`, contract `events/errands.ts`), which is why every
+opening stays byte-identical.
+
+## Background jobs at a turn's end
+
+A job the turn left running is stopped with it, unless the turn reached it and its closing reply gives the person its
+link (`http://host:PORT`) in a sentence that does not say it was stopped (`agent/tools/jobs/job-fates.ts`); one the
+turn never reached is waited for.
+
 ## Asking a person
 
 Every card a turn can park on is one list, `PARK_KINDS` in the contract, read by the conversation's parked state, the

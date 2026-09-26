@@ -85,12 +85,14 @@ export const steerPerson = async (services: Services, conversationId: string, st
 
 // The message as the queue keeps it, named: a sender that gave no id gets one, since the queue and a rewind name it.
 const named = (said: Said): Omit<QueuedItem, "revision"> => {
-    const { actor, owner, areas, unseenRuns: _unseen, ...turn } = said.turn;
+    const { actor, owner, areas, unseenRuns: _unseen, speaker, ...turn } = said.turn;
     const id = turn.messageId ?? randomUUID();
     return {
         id,
         voice: said.voice,
         ...opt("actor", actor),
+        // The sandbox's own words are the sandbox's whoever queued them, so the row they open never reads as the owner's.
+        ...opt("speaker", speaker ?? (said.voice === "sandbox" ? { kind: "sandbox" as const } : undefined)),
         ...opt("owner", owner),
         ...opt("areas", areas),
         ...opt("outside", said.outside),
@@ -102,6 +104,7 @@ const named = (said: Said): Omit<QueuedItem, "revision"> => {
 // The request a queued message makes, with whoever sent it attributed again, and the taint its outside words carry.
 const requestOf = (item: Omit<QueuedItem, "revision">): Turn => ({
     ...item.turn,
+    ...opt("speaker", item.speaker),
     ...opt("actor", item.actor),
     ...opt("owner", item.owner),
     ...opt("areas", item.areas),
@@ -146,7 +149,10 @@ const steerItem = async (services: Services, item: Omit<QueuedItem, "revision">)
     if (composed.invalid !== undefined) {
         return { invalid: composed.invalid };
     }
-    return steerTurn(services.conversations, conversationId, { text: composed.text, voice: item.voice, ...opt("outside", item.outside) }) || NOT_STEERABLE;
+    return (
+        steerTurn(services.conversations, conversationId, { text: composed.text, voice: item.voice, ...opt("outside", item.outside), ...opt("errand", item.turn.errand) }) ||
+        NOT_STEERABLE
+    );
 };
 
 // Messages that go out as one turn: one person's in a row, joined as the composer always joined them; anything else

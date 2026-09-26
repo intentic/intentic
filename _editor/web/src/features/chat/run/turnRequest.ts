@@ -1,4 +1,4 @@
-import type { AgentHarness, AgentProvider, EditorContext, PermissionMode } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentProvider, EditorContext, PermissionMode, TurnErrand } from "@intentic/sandbox-contract";
 import type { ProcedureInput } from "../../sandbox/client/sandboxRpc";
 
 // The turn body the daemon receives: what a send carries, which session it may resume, and the shape that
@@ -117,6 +117,8 @@ export const turnRequestBody = (input: {
     // daemon drops one that doesn't resolve rather than refusing the turn over a word in a paste.
     readonly mentionedPaths: string[];
     readonly editorContext: EditorContext | undefined;
+    // What the words are for when this window composed them (an errand), which the row they open carries.
+    readonly errand?: TurnErrand | undefined;
 }): ProcedureInput<`agent.run`> => {
     // Whether this body targets this sandbox; fields scoped to another box's store are dropped otherwise.
     const here = input.box === undefined;
@@ -142,6 +144,7 @@ export const turnRequestBody = (input: {
         // Omitted for another box, whose projects are its own.
         ...(here && input.settings.startIn !== undefined ? { startIn: input.settings.startIn } : {}),
         sessionId: input.resume?.id,
+        errand: input.errand,
         ...(input.forkOf !== undefined ? { forkOf: input.forkOf } : {}),
         // Empty selection (catalog not yet loaded) is dropped; the daemon resolves its own live default.
         model: input.settings.model || undefined,

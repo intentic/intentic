@@ -1384,7 +1384,13 @@
             "sentBySandboxLand": "Envoyé par le sandbox ; intégrer son travail a fait échouer la vérification de l'arbre principal",
             "sentBySandboxTurn": "Envoyé par le sandbox ; ce tour s'est terminé sans vérification",
             "fixingRedMainLine": "Répare une ligne principale rouge",
-            "startedBySandboxRedMain": "Lancé par le sandbox : la vérification de main est passée au rouge après l'intégration de travail, et aucune conversation détenant ce travail n'a pu s'en charger"
+            "startedBySandboxRedMain": "Lancé par le sandbox : la vérification de main est passée au rouge après l'intégration de travail, et aucune conversation détenant ce travail n'a pu s'en charger",
+            "mainRedOnItsWork": "Averti que main est passé au rouge sur son travail",
+            "sentBySandboxHeld": "Envoyé par le sandbox : la vérification de main est passée au rouge sur ce que cette conversation est encore en train de faire",
+            "fixingPushFindings": "Répare ce que les vérifications du push ont trouvé",
+            "sentBySandboxPush": "Envoyé par le sandbox, d'après ce que les vérifications du push ont trouvé",
+            "fixingFailedCi": "Répare une exécution CI en échec",
+            "sentBySandboxCi": "Envoyé par le sandbox, d'après une exécution CI en échec"
         },
         "hostPickerBody": {
             "carriesOnInSame": "Continue dans la même conversation, sur le modèle ci-dessus — ⌘/Ctrl + Entrée",

@@ -101,6 +101,7 @@ export const startLandFix = (services: Services, ask: LandFixAsk): Promise<FixAt
         base: landFixConversationId(ask.breakage.project, ask.breakage.redSince),
         prompt: landFixBrief(ask, services.agentWorktrees.mainDir(ask.breakage.project === "" ? "root" : ask.breakage.project)),
         nudge: nudgeOf(ask.breakage),
+        errands: { prompt: "land-fix", nudge: "land-fix-nudge" },
         title: titleOf(ask),
         // `runRole` alone pins the model (turn-resume.ts); a red main line is fixed by the same kind of agent a red
         // pipeline is, so it shares that role's pick.

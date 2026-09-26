@@ -43,6 +43,19 @@ describe("foldTurn", () => {
         ]);
     });
 
+    // The sandbox's composed words (a land's breakage sent back into the live turn) are not the owner's: the row says who
+    // spoke them and what for, and a person's steer carries neither.
+    it("writes the sandbox's steer down with its speaker and errand, and a person's with neither", () => {
+        const events: AgentEvent[] = [
+            { kind: "steer", text: "the land broke main", sentAt: SENT_AT + 1, voice: "sandbox", errand: "land-breakage" },
+            { kind: "steer", text: "and the docs", sentAt: SENT_AT + 2 },
+        ];
+        expect(foldOf("ship it", events).slice(1)).toEqual([
+            { role: "user", text: "the land broke main", sentAt: SENT_AT + 1, speaker: { kind: "sandbox" }, errand: "land-breakage" },
+            { role: "user", text: "and the docs", sentAt: SENT_AT + 2 },
+        ]);
+    });
+
     it("does not retire a bubble that has written no prose", () => {
         const events: AgentEvent[] = [
             { kind: "tool_call", id: "t1", name: "Read", category: "read", status: "completed" },

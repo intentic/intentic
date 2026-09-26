@@ -1392,7 +1392,13 @@
             "sentBySandboxLand": "Enviado por el sandbox; integrar su trabajo dejó en rojo la comprobación del árbol principal",
             "sentBySandboxTurn": "Enviado por el sandbox; ese turno terminó sin verificar",
             "fixingRedMainLine": "Arreglando una línea principal en rojo",
-            "startedBySandboxRedMain": "Iniciado por el sandbox: la comprobación de main se puso en rojo tras integrarse trabajo, y ninguna conversación que tuviera ese trabajo pudo encargarse"
+            "startedBySandboxRedMain": "Iniciado por el sandbox: la comprobación de main se puso en rojo tras integrarse trabajo, y ninguna conversación que tuviera ese trabajo pudo encargarse",
+            "mainRedOnItsWork": "Avisado de que main se puso en rojo con su trabajo",
+            "sentBySandboxHeld": "Enviado por el sandbox: la comprobación de main se puso en rojo en lo que esta conversación aún está trabajando",
+            "fixingPushFindings": "Arreglando lo que encontraron las comprobaciones del push",
+            "sentBySandboxPush": "Enviado por el sandbox, a partir de lo que encontraron las comprobaciones del push",
+            "fixingFailedCi": "Arreglando una ejecución de CI fallida",
+            "sentBySandboxCi": "Enviado por el sandbox, a partir de una ejecución de CI fallida"
         },
         "hostPickerBody": {
             "carriesOnInSame": "Sigue en la misma conversación, con el modelo de arriba — ⌘/Ctrl + Intro",

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PermissionModeSchema } from "../schemas/agent.js";
+import { TurnErrandSchema } from "../schemas/speaker.js";
 import { LandConflictSchema } from "../schemas/agents.js";
 import { ContextTrimSchema } from "../schemas/context-trim.js";
 import { RateLimitInfoSchema } from "../schemas/providers/claude-gate.js";
@@ -65,6 +66,8 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         sentAt: z.number(),
         attachments: z.array(z.string()).optional(),
         voice: z.enum(["sandbox", "agent"]).optional(),
+        // What a composed message is for, stamped on the row it becomes (TranscriptRow.errand).
+        errand: TurnErrandSchema.optional(),
         // The message's own id, stamped on the row it becomes (TranscriptRow.messageId).
         messageId: z.string().optional(),
     }),

@@ -33,6 +33,13 @@ describe("openingRows", () => {
         ]);
     });
 
+    // A turn the sandbox opened by itself says so on its row, and what for, so no reader shows it as the owner's words.
+    it("carries who spoke the opening and the errand it is", () => {
+        expect(openingRows({ prompt: "main is red", messageId: "m-9", speaker: { kind: "sandbox", source: "land-breakage" }, errand: "land-fix" }, "/work", SENT_AT)).toEqual([
+            { role: "user", text: "main is red", sentAt: SENT_AT, messageId: "m-9", speaker: { kind: "sandbox", source: "land-breakage" }, errand: "land-fix" },
+        ]);
+    });
+
     // Nothing in the frame log timestamps an individual assistant block, so only the user row can be.
     it("stamps the user's row with the turn's start and leaves the answer unstamped", () => {
         const events: AgentEvent[] = [{ kind: "delta", text: "on it" }];

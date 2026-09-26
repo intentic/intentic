@@ -308,8 +308,10 @@ const fleet = (conversations: readonly Conversation[], options: { readonly autoR
     });
     // Who each thing the router said was said to, and what, in order.
     const told = (): { readonly to: string; readonly prompt: string }[] => said.map(({ turn }) => ({ to: turn.conversationId, prompt: turn.prompt }));
+    // What each told turn is for and who spoke it: the row it opens reads as the sandbox's errand, never the owner's words.
+    const errandsOf = (): { readonly errand: string | undefined; readonly speaker: unknown }[] => said.map(({ turn }) => ({ errand: turn.errand, speaker: turn.speaker }));
     const types = (): string[] => activity.map(({ type }) => type);
-    return { services, running, told, started, filed, types, activity, lines, ahead };
+    return { services, running, told, errandsOf, started, filed, types, activity, lines, ahead };
 };
 
 type World = ReturnType<typeof fleet>;
@@ -405,6 +407,7 @@ describe("the conversation that landed it", () => {
         expect(routing).toEqual(routed("original", { conversationId: "one", detail: "Sent back to the conversation that landed it (1 of 2)." }));
         expect(world.told()).toEqual([{ to: "one", prompt: followUp([SANDBOX_TEST]) }]);
         expect(world.started).toEqual([]);
+        expect(world.errandsOf()).toEqual([{ errand: "land-breakage", speaker: { kind: "sandbox", source: "land-breakage" } }]);
         expect(world.filed).toEqual([{ project: "", at: 1_000, routing, suspects: ["one"], named: true }]);
         expect(world.activity).toEqual([
             {
@@ -453,6 +456,9 @@ describe("the conversation that landed it", () => {
                 isolated: true,
                 runRole: "pipeline-fix",
                 prompt: expect.stringContaining(passedOver),
+                errand: "land-fix",
+                // Nobody pressed for it: the row it opens is the sandbox's words.
+                speaker: { kind: "sandbox" },
                 title: 'Fix main after "Work one"',
                 conversationId: landFixConversationId("", 1_000),
             },
@@ -700,6 +706,7 @@ describe("a red a conversation still working touches", () => {
             }),
         );
         expect(world.told()).toEqual([{ to: "busy", prompt: heldNote }]);
+        expect(world.errandsOf()).toEqual([{ errand: "land-held", speaker: { kind: "sandbox", source: "land-breakage" } }]);
         expect(world.filed).toEqual([{ project: "", at: 1_000, routing: held, suspects: ["one"], named: true }]);
         expect(world.types()).toEqual(["deps.breakage_held"]);
 

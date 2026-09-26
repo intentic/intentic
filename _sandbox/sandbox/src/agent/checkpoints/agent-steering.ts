@@ -1,4 +1,5 @@
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
+import { opt } from "../../opt.js";
 import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { markConversationTaint } from "../../guard/turn-taint.js";
 import type { Steer } from "../../seams/turn-starter.js";
@@ -119,7 +120,7 @@ export interface ActiveTurn {
 export function steerTurn(
     conversations: Pick<ConversationActors, "steer" | "send" | "holdings">,
     conversationId: string,
-    steer: Pick<Steer, "text" | "voice" | "outside">,
+    steer: Pick<Steer, "text" | "voice" | "outside" | "errand">,
 ): boolean {
     if (!conversations.steer(conversationId, steer.text)) {
         return false;
@@ -130,7 +131,7 @@ export function steerTurn(
     if (steer.voice === "person") {
         conversations.send(conversationId, { kind: "person-steered" });
     } else {
-        turnRunOf(conversations, conversationId)?.push({ kind: "steer", text: steer.text, sentAt: Date.now(), voice: steer.voice });
+        turnRunOf(conversations, conversationId)?.push({ kind: "steer", text: steer.text, sentAt: Date.now(), voice: steer.voice, ...opt("errand", steer.errand) });
     }
     return true;
 }

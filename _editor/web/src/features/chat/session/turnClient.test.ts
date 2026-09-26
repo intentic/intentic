@@ -1,5 +1,5 @@
 import { STATE_DIR } from "@intentic/constants";
-import { type AttachFrame, type ConversationQueue, deriveTitle, type MessageReceipt, type TranscriptRow } from "@intentic/sandbox-contract";
+import { type AttachFrame, type ConversationQueue, deriveTitle, LAND_CONFLICT_OPENING, type MessageReceipt, type TranscriptRow } from "@intentic/sandbox-contract";
 import { userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { unstubbed } from "@intentic/testing";
 import { AsyncIteratorClass } from "@orpc/client";
@@ -224,6 +224,18 @@ describe(`a run's lifecycle`, () => {
 
         expect(phases.slice(0, 3)).toEqual([`composing`, `sending`, `running`]);
         expect(run.mock.calls[0]?.[0]).toMatchObject({ conversationId: `c1`, prompt: `Resolve the conflict in docs/a.md` });
+    });
+
+    // The row it opens names the errand, so it reads as the app's words and not the owner's, whatever the text says later.
+    it(`names the errand its composed words are, by the contract's own reader`, async () => {
+        const { client } = clientOf();
+        answers({ delivered: `started`, run: `r3` });
+        const prompt = `${LAND_CONFLICT_OPENING}\n\nroot: docs/a.md`;
+        attach.mockImplementation(async () => attached(`r3`, 5_000, prompt));
+
+        expect(await client.startErrand(`Resolving the conflict`, async () => prompt)).toBe(true);
+
+        expect(run.mock.calls[0]?.[0]).toMatchObject({ prompt, errand: `land-conflict` });
     });
 
     it(`adopts a run the daemon already took, from its own start, and settles it as taken`, async () => {

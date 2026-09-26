@@ -1189,3 +1189,14 @@ test("an empty model pick is recorded as no pick at all, not as an empty one", a
     await waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
     expect("modelRequested" in (ledger[0] ?? {})).toBe(false);
 });
+
+// Only the land-conflict errand is a client's to compose; every other one is the sandbox's, and a request naming one
+// would pass its sender's words off as the sandbox's on the row.
+test("a message keeps the land-conflict errand its window composed, and is refused any errand only the sandbox sends", async () => {
+    const client = clientFor(createApp(services()));
+    const composed = await runAgentTurn(client, { prompt: "resolve it", conversationId: "conv-errand", isolated: true, errand: "land-conflict" });
+    expect(composed.rows[0]).toMatchObject({ role: "user", text: "resolve it", errand: "land-conflict" });
+    const claimed = await runAgentTurn(client, { prompt: "fix main", conversationId: "conv-claimed", isolated: true, errand: "land-fix" });
+    expect(claimed.rows[0]).toMatchObject({ role: "user", text: "fix main" });
+    expect(claimed.rows[0]).not.toHaveProperty("errand");
+});

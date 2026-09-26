@@ -17,8 +17,11 @@ import {
 // What happens to what a turn leaves running, decided the moment it ends, from facts the sandbox already holds rather
 // than anything the agent is told to declare. A job listening on a port is a server; the rest is work whose exit the
 // conversation waits on (background-adoption.ts), as it always was. A server goes one of two ways:
-// - handed over, when the turn's last reply gives its address: an agent that runs something FOR the person has to say
-//   where it is, so it keeps running, wakes nothing and holds no land, and the person stops it (chat, Preview);
+// - handed over, when the turn reached it itself and its last reply gives it to the person as a link (`http://host:port`,
+//   in a sentence that is not about stopping it): an agent that runs something FOR the person checks it answers and
+//   says where it is, so it keeps running, wakes nothing and holds no land, and the person stops it (chat, Preview). A
+//   bare `host:port` or "port 5173" is not a hand-over: "I stopped the server on localhost:5173" names one too, and read
+//   as a hand-over it kept the server the turn had just stopped;
 // - stopped, when the turn reached it itself and said nothing about it: the instrument of the agent's own look, which
 //   the sandbox reclaims rather than leave holding memory, the land and a six-hour watch.
 // A listener the turn never reached (a test suite's own server mid-run) is neither: its job stays awaited, so a turn
@@ -37,9 +40,15 @@ const LOOPBACK = String.raw`(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1?\])`;
 // The agent reaching it: a URL or host:port naming the port.
 const reachedAt = (port: number): RegExp => new RegExp(`${LOOPBACK}:${String(port)}(?!\\d)`, "u");
 
-// The reply handing it over: any address carrying the port (a loopback one, a hostname, a bare `:5173`), or the port
-// named as one.
-const namedIn = (port: number): RegExp => new RegExp(`(?:${LOOPBACK}|[\\w.-]*):${String(port)}(?!\\d)|\\bport\\s+${String(port)}(?!\\d)`, "iu");
+// The reply handing it over: a link carrying the port, the one form an address is given to somebody to open.
+const linkTo = (port: number): RegExp => new RegExp(`https?://(?:[\\w.-]+|\\[[\\d:]*\\]):${String(port)}(?!\\d)`, "iu");
+
+// A sentence about ending it, which a link in it does not hand over.
+const STOPPING = /\b(?:stop(?:ped|s)?|kill(?:ed|s)?|shut(?:s|ting)?\s+(?:it\s+)?down|terminat(?:ed|es)?|no longer (?:running|up))\b/iu;
+
+// Whether the reply gives the port to the person: a sentence with a link to it that is not about stopping it.
+const handedIn = (closing: string, port: number): boolean =>
+    closing.split(/(?<=[.!?])\s+|\n+/u).some((sentence) => linkTo(port).test(sentence) && !STOPPING.test(sentence));
 
 // What a call acted on, its helpers' calls included; never what it printed, where a test suite's own log would name
 // its server. The call that started a job is left out, so a command that starts a server and never reaches it is not
@@ -66,10 +75,15 @@ export const jobFate = (fact: {
     if (fact.ports.length === 0) {
         return "awaited";
     }
-    if (fact.ports.some((port) => fact.handed.has(port) || namedIn(port).test(fact.closing))) {
+    if (fact.ports.some((port) => fact.handed.has(port))) {
         return "handed";
     }
-    return fact.ports.some((port) => fact.targets.some((target) => reachedAt(port).test(target))) ? "stopped" : "awaited";
+    const reached = fact.ports.filter((port) => fact.targets.some((target) => reachedAt(port).test(target)));
+    if (reached.length === 0) {
+        return "awaited";
+    }
+    // Only a server the turn itself reached can be handed over: it has checked the address it gives answers.
+    return reached.some((port) => handedIn(fact.closing, port)) ? "handed" : "stopped";
 };
 
 // Disarming a watch that already fired or was stopped is nothing to report; any other failure is logged, never thrown,
@@ -122,7 +136,7 @@ export const resolveTurnJobs = async (deps: JobFateDeps, conversationId: string)
                 if (watch !== undefined) {
                     await disarmWith(deps.logger)(conversationId, watch);
                 }
-                deps.logger.info({ conversationId, job: job.id, ports }, "background job: left running for the person, its turn's reply gave its address");
+                deps.logger.info({ conversationId, job: job.id, ports }, "background job: left running for the person, its turn reached it and its reply gave its link");
             } else if (verdict === "stopped") {
                 deps.logger.info({ conversationId, job: job.id, ports }, "background job: stopped with its turn, which used it and handed it to nobody");
                 // Not awaited: marking it is what frees the land, and the processes take their grace in the background.

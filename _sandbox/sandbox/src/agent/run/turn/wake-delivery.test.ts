@@ -27,8 +27,15 @@ describe("wake delivery", () => {
         const doors = fake();
         expect(await deliverWake(doors.doors, wake({ outside: "watch-fetch" }))).toEqual({ delivered: "started", run: "run-1" });
         expect(doors.started).toEqual([
-            { agent: "claude", model: "opus", conversationId: "conv-1", prompt: "Watch fired: …", sessionId: "sess-7", outsideWake: "watch-fetch" },
+            { agent: "claude", model: "opus", conversationId: "conv-1", prompt: "Watch fired: …", speaker: { kind: "sandbox" }, sessionId: "sess-7", outsideWake: "watch-fetch" },
         ]);
+    });
+
+    // The row it opens says the sandbox spoke it, and what for, so no reader shows the sandbox's words as the owner's.
+    it("carries the errand it is and the sandbox as its speaker, naming what in the sandbox sent it", async () => {
+        const doors = fake();
+        await deliverWake(doors.doors, wake({ errand: "land-breakage", source: "land-breakage" }));
+        expect(doors.started[0]).toMatchObject({ errand: "land-breakage", speaker: { kind: "sandbox", source: "land-breakage" } });
     });
 
     it("leaves a wake with nothing outside in it untainted", async () => {
@@ -45,7 +52,7 @@ describe("wake delivery", () => {
             {
                 voice: "sandbox",
                 outside: "watch-fetch",
-                turn: { agent: "claude", model: "opus", conversationId: "conv-1", prompt: "Watch fired: …", sessionId: "sess-7" },
+                turn: { agent: "claude", model: "opus", conversationId: "conv-1", prompt: "Watch fired: …", speaker: { kind: "sandbox" }, sessionId: "sess-7" },
             },
         ]);
         expect(doors.started).toEqual([]);

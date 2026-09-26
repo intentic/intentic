@@ -1383,7 +1383,13 @@
             "sentBySandboxLand": "Von der Sandbox gesendet, das Landen seiner Arbeit hat die Prüfung des Hauptbaums rot gemacht",
             "sentBySandboxTurn": "Von der Sandbox gesendet, jener Zug endete ungeprüft",
             "fixingRedMainLine": "Behebt eine rote Hauptlinie",
-            "startedBySandboxRedMain": "Von der Sandbox gestartet: Die Prüfung von main wurde nach dem Landen von Arbeit rot, und keine Unterhaltung, die diese Arbeit hielt, konnte es übernehmen"
+            "startedBySandboxRedMain": "Von der Sandbox gestartet: Die Prüfung von main wurde nach dem Landen von Arbeit rot, und keine Unterhaltung, die diese Arbeit hielt, konnte es übernehmen",
+            "mainRedOnItsWork": "Erfährt, dass main an seiner Arbeit rot wurde",
+            "sentBySandboxHeld": "Von der Sandbox gesendet: Die Prüfung von main wurde rot an dem, woran diese Unterhaltung noch arbeitet",
+            "fixingPushFindings": "Behebt, was die Push-Prüfungen gefunden haben",
+            "sentBySandboxPush": "Von der Sandbox gesendet, aus den Funden der Push-Prüfungen",
+            "fixingFailedCi": "Behebt einen fehlgeschlagenen CI-Lauf",
+            "sentBySandboxCi": "Von der Sandbox gesendet, aus einem fehlgeschlagenen CI-Lauf"
         },
         "hostPickerBody": {
             "carriesOnInSame": "Macht in derselben Unterhaltung weiter, auf dem Modell oben — ⌘/Strg + Enter",

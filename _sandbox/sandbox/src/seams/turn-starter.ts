@@ -16,6 +16,7 @@ import type {
     SessionOwner,
     StopResult,
     StopTurn,
+    TurnErrand,
     TurnSpeaker,
 } from "@intentic/sandbox-contract";
 import type { BeginRefusal } from "../conversations/actor/conversation-decide.js";
@@ -53,6 +54,8 @@ export interface Steer {
     readonly voice: SteerVoice;
     // The source of outside content in these words; the live turn is tainted by it as they land.
     readonly outside?: string;
+    // What composed words are for (schemas/speaker.ts), which the row they become carries.
+    readonly errand?: TurnErrand | undefined;
     // A person's references, composed into the words against this workspace before they land.
     readonly attachments?: readonly string[] | undefined;
     readonly mentions?: readonly string[] | undefined;

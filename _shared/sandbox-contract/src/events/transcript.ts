@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { AgentHarnessSchema, AgentProviderSchema } from "../schemas/agent.js";
 import { ShareDetailSchema } from "../schemas/share.js";
+import { TurnErrandSchema, TurnSpeakerSchema } from "../schemas/speaker.js";
 import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
 import { RetryLadderSchema } from "../schemas/turn-break.js";
 import type { ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind} from "./requests.js";
@@ -245,6 +246,13 @@ export const TranscriptRowSchema = z.object({
         .describe(
             "What the sandbox added to this message before the model saw it. Carried on the message rather than as rows of their own, because they genuinely were part of what was sent.",
         ),
+    // Who spoke a message row, as the sandbox verified it (schemas/speaker.ts), and what a composed one is for: a reader
+    // shows the sandbox's own words as the sandbox's, never as the owner's. Absent on rows written before rows said so,
+    // which are read by their opening (events/errands.ts).
+    speaker: TurnSpeakerSchema.optional().describe("Who sent this message, as the sandbox verified it. Absent where it does not say."),
+    errand: TurnErrandSchema.optional().describe(
+        "What this message is for, when the sandbox or the app composed it rather than a person typing it. Absent on a person's own words.",
+    ),
     // The user wrote this as the agent, no turn behind it; marked for a human reader, never surfaced to the agent.
     placed: z
         .boolean()

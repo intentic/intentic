@@ -171,6 +171,9 @@ describe("the attempt it starts", () => {
                 isolated: true,
                 runRole: "pipeline-fix",
                 prompt: landFixBrief(ask, MAIN),
+                errand: "land-fix",
+                // Nobody pressed for it: the row it opens is the sandbox's words.
+                speaker: { kind: "sandbox" },
                 title: 'Fix main after "Fix the parser"',
                 conversationId: id,
             },

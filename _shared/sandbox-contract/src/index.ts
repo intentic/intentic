@@ -114,6 +114,7 @@ export * from "./events/transcript.js";
 export * from "./events/land-breakage.js";
 export * from "./events/land-conflict.js";
 export * from "./events/verify-nudge.js";
+export * from "./events/errands.js";
 export * from "./events/watch-wake.js";
 export * from "./policy/request-status.js";
 export * from "./policy/turned-away.js";

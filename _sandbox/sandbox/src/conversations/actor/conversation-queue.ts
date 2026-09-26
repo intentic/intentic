@@ -7,6 +7,7 @@ import {
     QueuePauseSchema,
     type ResumeRouting,
     SessionOwnerSchema,
+    TurnSpeakerSchema,
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { opt } from "../../opt.js";
@@ -24,6 +25,8 @@ const QueuedItemSchema = z.object({
     voice: MessageVoiceSchema,
     // Who sent it, as the daemon verified them; what the turn it reaches is attributed to.
     actor: z.string().optional(),
+    // The same, whole (schemas/speaker.ts): what the row it opens says spoke it.
+    speaker: TurnSpeakerSchema.optional(),
     // The verified member who sent it: the owner of a conversation this message opens.
     owner: SessionOwnerSchema.pick({ email: true, name: true }).optional(),
     // The fence its sender works behind, which a conversation this message opens is born inside.

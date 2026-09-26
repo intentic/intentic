@@ -1,5 +1,5 @@
-import { LAND_FIX_OPENING, landFixPrompt, RESUME_NOTES, VERIFY_NUDGE_OPENING, verifyNudgePrompt, withResumeNote } from "@intentic/sandbox-contract";
-import { errands, errandOf, errandPrompt } from "./errands";
+import { LAND_FIX_OPENING, landFixPrompt, RESUME_NOTES, TurnErrandSchema, VERIFY_NUDGE_OPENING, verifyNudgePrompt, withResumeNote } from "@intentic/sandbox-contract";
+import { type Errand, errands, errandOf, errandPrompt } from "./errands";
 
 /* Errand classification keeps app-generated prose out of user turns. */
 
@@ -46,8 +46,24 @@ it(`still recognises the retired verify nudge in older transcripts`, () => {
 // Two errands sharing an opening would make the pair unresolvable, and the registry is where a new one is
 // added, so the uniqueness it depends on is checked over whatever it currently holds, not over today's two.
 it(`gives every errand an opening no other errand's prompt starts with`, () => {
-    const openings = Object.values(errands()).map((entry) => entry.opening);
+    const openings = Object.values(errands() as Record<string, Errand>).flatMap((entry) => (entry.opening === undefined ? [] : [entry.opening]));
     for (const opening of openings) {
         expect(openings.filter((other) => other.startsWith(opening) || opening.startsWith(other))).toEqual([opening]);
     }
+});
+
+// Rows name their errand now, so what the sandbox composed without an opening (a push or CI fix, its nudge, a held red's
+// note) no longer reads as the owner's words, and a row's own name wins over whatever its text happens to open with.
+it(`reads the errand a row names before its text`, () => {
+    expect(errandOf({ ...user(`Fix what the push checks found in web.`), errand: `push-fix` })?.label).toBe(errands().pushFix.label);
+    expect(errandOf({ ...user(`Carry on from where you left off.`), errand: `ci-fix-nudge` })?.label).toBe(errands().ciFix.label);
+    expect(errandOf({ ...user(`Main went red on what you are working on.`), errand: `land-held` })?.label).toBe(errands().landHeld.label);
+    expect(errandOf({ ...user(`${LAND_FIX_OPENING}\n\nmore`), errand: `land-fix-nudge` })?.label).toBe(errands().landFix.label);
+    expect(errandOf(user(`Carry on from where you left off.`))).toBeUndefined();
+});
+
+// Every kind the sandbox can name has its entry, or a row naming it would read as the owner's words after all.
+it(`has an entry for every errand a row can name`, () => {
+    const named = Object.values(errands() as Record<string, Errand>).flatMap((entry) => entry.kinds);
+    expect([...named].sort()).toEqual([...TurnErrandSchema.options].sort());
 });

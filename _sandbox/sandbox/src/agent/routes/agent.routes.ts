@@ -65,10 +65,14 @@ export const createAgentRoutes = (services: Services) => {
             // A person's words reopen an archived conversation, here at their door; the engine refuses every archived one.
             await services.agents.clearArchived([conversationId]);
             // Push rides the run's own lifecycle, not this request, since a tab may be asleep.
+            // A client composes only the land-conflict errand (the editor's own words); every other errand is the sandbox's,
+            // so a request naming one would pass its sender's words off as the sandbox's.
+            const { errand, ...asked } = input;
             const receipt = await services.turns.say({
                 voice: speaker === undefined ? "person" : speakerVoice(speaker),
                 turn: {
-                    ...input,
+                    ...asked,
+                    ...opt("errand", errand === "land-conflict" ? errand : undefined),
                     conversationId,
                     ...spokenBy(speaker),
                     ...opt("areas", areasOf(context.identity)),

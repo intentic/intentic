@@ -3,11 +3,13 @@ import {
     type ConversationQueue,
     deriveTitle,
     type EditorContext,
+    errandOfPrompt,
     mentionPaths,
     type MessageReceipt,
     type PermissionMode,
     type QueuedMessage,
     type ResumeRouting,
+    type TurnErrand,
     type TurnFact,
 } from "@intentic/sandbox-contract";
 import { errorMessage } from "@intentic/ui/async";
@@ -247,7 +249,8 @@ export class TurnClient {
         this.host.transcript.reword(opened.bubble, prompt);
         const words = prompt;
         return new Promise<boolean>((taken) => {
-            void this.deliverTurn(opened, words, [], settings, undefined, taken);
+            // The contract's own recogniser names the errand these words are, so the row says so whatever it reads later.
+            void this.deliverTurn(opened, words, [], settings, undefined, taken, errandOfPrompt(words));
         });
     }
 
@@ -340,6 +343,7 @@ export class TurnClient {
         settings: TurnSettings,
         editorContext: EditorContext | undefined,
         taken: (taken: boolean) => void = () => undefined,
+        errand: TurnErrand | undefined = undefined,
     ): Promise<void> {
         const { bubble: userMessageId, controller, resume } = opened;
         const { host } = this;
@@ -374,6 +378,7 @@ export class TurnClient {
                     attachmentPaths,
                     mentionedPaths,
                     editorContext,
+                    errand,
                 }),
                 controller.signal,
             );
