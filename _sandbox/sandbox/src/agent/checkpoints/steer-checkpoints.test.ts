@@ -6,18 +6,22 @@ import { checkpointSteeredMessage } from "./steer-checkpoints.js";
 
 const logger = { warn: jest.fn() } as never;
 
-// A history whose capture takes as long as it is told to, so the test can make two steers finish out of order.
-const history = (order: string[], delays: Record<string, number>) => {
+// A history whose captures are named in call order (snap-1, snap-2, ...). A capture named in `held` resolves only
+// once the test releases it, so the test, not a timer race a loaded runner can lose, decides which one finishes first.
+const history = (held: readonly string[] = []) => {
+    const gates = new Map(held.map((id) => [id, Promise.withResolvers<void>()]));
     let next = 0;
     return {
-        snapshot: async () => {
-            const id = `snap-${++next}`;
-            await new Promise((resolve) => setTimeout(resolve, delays[id] ?? 0));
-            order.push(id);
-            return id;
-        },
-        list: async () => [],
-    } as never;
+        release: (id: string) => gates.get(id)?.resolve(),
+        history: {
+            snapshot: async () => {
+                const id = `snap-${++next}`;
+                await gates.get(id)?.promise;
+                return id;
+            },
+            list: async () => [],
+        } as never,
+    };
 };
 
 // Each test's boxes live in its own fleet's actors, taken back the way the settle takes them.
@@ -32,15 +36,17 @@ const taken = (deps: { readonly conversations: ReturnType<typeof memoryFleet>["c
 const mainTree = { agents: { entry: () => conversationEntry() } };
 
 test("a slow capture keeps its place, so states stay paired with the messages that took them", async () => {
-    const finished: string[] = [];
-    // The first steer's capture is slower, resolving after the second's: what a finish-order queue would reorder.
-    const deps = services(mainTree.agents, { history: history(finished, { "snap-1": 20 }) });
+    // The first steer's capture resolves after the second's has been filed: what a finish-order queue would reorder.
+    const captures = history(["snap-1", "snap-2"]);
+    const deps = services(mainTree.agents, { history: captures.history });
 
     const first = checkpointSteeredMessage(deps, "c1");
     const second = checkpointSteeredMessage(deps, "c1");
-    await Promise.all([first, second]);
+    captures.release("snap-2");
+    await second;
+    captures.release("snap-1");
+    await first;
 
-    expect(finished).toEqual(["snap-2", "snap-1"]);
     expect(taken(deps, "c1")).toEqual([
         { kind: "tree", snapshot: "snap-1" },
         { kind: "tree", snapshot: "snap-2" },
@@ -52,7 +58,7 @@ test("a slow capture keeps its place, so states stay paired with the messages th
 test("a conversation whose state is elsewhere leaves an empty box rather than no box", async () => {
     const entries = [isolatedAgent([], { placement: { kind: "worktree", branch: "agent/c1", repos: [], runner: "mac-1" } }), conversationEntry()];
     let at = 0;
-    const deps = services({ entry: () => entries[at++] }, { history: history([], {}) });
+    const deps = services({ entry: () => entries[at++] }, { history: history().history });
 
     await checkpointSteeredMessage(deps, "c1");
     await checkpointSteeredMessage(deps, "c1");
@@ -62,7 +68,7 @@ test("a conversation whose state is elsewhere leaves an empty box rather than no
 
 // The queue always drains; a box left behind would be picked up by the next turn and filed under one of its rows.
 test("draining empties the queue, so nothing carries into the next turn", async () => {
-    const deps = services(mainTree.agents, { history: history([], {}) });
+    const deps = services(mainTree.agents, { history: history().history });
 
     await checkpointSteeredMessage(deps, "c1");
     expect(taken(deps, "c1")).toHaveLength(1);
@@ -71,7 +77,7 @@ test("draining empties the queue, so nothing carries into the next turn", async 
 
 // An unknown conversation has nothing to checkpoint against, and a failing capture isn't fatal: both just mean no bookmark.
 test("an unknown conversation and a failing capture both come back empty rather than throwing", async () => {
-    const unknown = services({ entry: () => undefined }, { history: history([], {}) });
+    const unknown = services({ entry: () => undefined }, { history: history().history });
     await checkpointSteeredMessage(unknown, "c2");
     expect(taken(unknown, "c2")).toEqual([undefined]);
 
