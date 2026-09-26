@@ -266,7 +266,7 @@ const openStartOver = (): void => {
         </template>
 
         <template #title>
-            <div class="flex flex-wrap items-center gap-2">
+            <div class="flex min-w-0 items-center gap-2">
                 <a
                     :href="run.url"
                     target="_blank"
