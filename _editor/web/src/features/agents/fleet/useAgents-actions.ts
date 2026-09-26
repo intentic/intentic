@@ -72,7 +72,8 @@ export const stopWatching = (id: string, watchId?: string): Promise<void> => {
     const held = agentById(id)?.watches ?? [];
     const kept = watchId === undefined ? [] : held.filter((watch) => watch.id !== watchId);
     // An empty array is not absence: the registry reads absence as "never watched", which would redraw the card.
-    return optimistic(id, { watches: kept.length > 0 ? kept : undefined }, () => sandboxRpc.agents.stopWatching({ id, watchId }));
+    // The daemon's reading goes with them until it says again, so the card is read by the watches it still holds.
+    return optimistic(id, { watches: kept.length > 0 ? kept : undefined, awaitingWake: undefined }, () => sandboxRpc.agents.stopWatching({ id, watchId }));
 };
 
 // Ends a command this conversation left running (a server handed over, a build it waits on). Drawn from the press as

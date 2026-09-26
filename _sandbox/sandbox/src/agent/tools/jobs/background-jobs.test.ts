@@ -23,9 +23,10 @@ import {
     restoreBackgroundJobs,
     settledBackgroundJobs,
     sweepJobEnds,
-    wakesItself,
 } from "./background-jobs.js";
 import { fakeTurns, memoryFleet } from "../../../testing.js";
+import { awaitingWake } from "../../../conversations/actor/conversation-state.js";
+import { turnCloser } from "../../run/placement/turn-close.js";
 
 // One fleet's actors, which hold every record the registry under test files.
 const actors = memoryFleet().conversations;
@@ -275,39 +276,6 @@ describe("background job registry", () => {
     });
 });
 
-// What holds a conversation's land and keeps it from reading `ready`: the jobs its settle hands to a watch, and the
-// watches themselves; nothing else.
-describe("a conversation waking itself", () => {
-    it("is true while a job runs that no settle has handed to a watch yet, and false once one has", () => {
-        opened("conv-wakes-running");
-        expect(wakesItself(actors, "conv-wakes-running")).toBe(true);
-        settledBackgroundJobs(actors, "conv-wakes-running");
-        // The watch it was handed to answers from here: stopped, the job runs on and wakes nothing.
-        expect(wakesItself(actors, "conv-wakes-running")).toBe(false);
-    });
-
-    it("is true for a finished job whose completion the model never read, and false for one it did", () => {
-        finish(opened("conv-wakes-unseen"));
-        expect(wakesItself(actors, "conv-wakes-unseen")).toBe(true);
-        const read = opened("conv-wakes-read", "pnpm build", "tu-wakes-read");
-        noteJobShell(actors, "tu-wakes-read", "bsh-wakes-read");
-        finish(read);
-        noteJobNotice(actors, "bsh-wakes-read");
-        noteModelRequest(actors, "conv-wakes-read");
-        expect(wakesItself(actors, "conv-wakes-read")).toBe(false);
-    });
-
-    it("is true while a watch is armed, whatever its jobs", () => {
-        actors.send("conv-wakes-watch", {
-            kind: "watches-shown",
-            watches: [{ id: "watch-a1b2", note: "CI on the pushed branch", intervalSeconds: 60, deadlineAt: 9_000 }],
-        });
-        expect(wakesItself(actors, "conv-wakes-watch")).toBe(true);
-        actors.send("conv-wakes-watch", { kind: "watches-shown", watches: [] });
-        expect(wakesItself(actors, "conv-wakes-watch")).toBe(false);
-    });
-});
-
 // Delivery runs on a promise chain the adoption does not await; bounded, so a missing wake fails rather than hangs.
 const delivered = async (count: () => number): Promise<void> => {
     const deadline = Date.now() + 2_000;
@@ -371,6 +339,38 @@ describe("background job adoption", () => {
         finish(job, "0");
         await delivered(() => (listed("conv-card-now") ?? []).filter((entry) => entry.endedAt !== undefined).length);
         expect(listed("conv-card-now")).toMatchObject([{ id: job.id, exitCode: 0 }]);
+    });
+
+    // The turn's close arms the wakes before its land asks whether anything still wakes the conversation: what it
+    // answers is read from what the conversation then holds, and a wake already on its way, never predicted from jobs.
+    describe("at the turn's close", () => {
+        const close = (conversationId: string) => turnCloser({ conversations: actors, scanPorts: async () => [], logger }, conversationId, undefined);
+
+        it("leaves a conversation whose job still runs awaiting the wake its watch will send", async () => {
+            stop = startWatcherRuntime(runtime());
+            opened("conv-close-running", "pnpm test");
+            expect(await close("conv-close-running").armWakes()).toBe(true);
+            expect(awaitingWake(actors.state("conv-close-running")!)).toBe(true);
+        });
+
+        it("counts a job that finished unseen, whose wake is already on its way", async () => {
+            stop = startWatcherRuntime(runtime());
+            finish(opened("conv-close-unseen", "pnpm test"));
+            expect(await close("conv-close-unseen").armWakes()).toBe(true);
+            await delivered(() => started.length);
+            expect(started).toHaveLength(1);
+        });
+
+        it("awaits nothing once the model read how its job ended", async () => {
+            stop = startWatcherRuntime(runtime());
+            const read = opened("conv-close-read", "pnpm build", "tu-close-read");
+            noteJobShell(actors, "tu-close-read", "bsh-close-read");
+            finish(read);
+            noteJobNotice(actors, "bsh-close-read");
+            noteModelRequest(actors, "conv-close-read");
+            expect(await close("conv-close-read").armWakes()).toBe(false);
+            expect(awaitingWake(actors.state("conv-close-read")!)).toBe(false);
+        });
     });
 
     it("reports a job that finished unseen straight away", async () => {

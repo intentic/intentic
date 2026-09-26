@@ -199,3 +199,13 @@ export const writing = (state: ConversationState): boolean => {
 
 // Whether a turn is unwinding or a land or resume holds the card; a settled card must not borrow `lastAt` for recency.
 export const activityLive = (state: ConversationState): boolean => state.phase.kind === "running" || state.turn.resuming || state.turn.landing;
+
+/**
+ * Whether the conversation runs again by itself, with nobody pressing anything: a watch is armed on it (its own, or one
+ * a job its turn left running was handed to as that turn closed), or words the sandbox or an agent sent wait in a queue
+ * nothing holds. Read from what the conversation holds, never predicted: the turn's close arms every wake before its land
+ * asks, so there is no job left whose wake is still to come. The one reading status, fixStance and the card share
+ * (AgentSummary.awaitingWake).
+ */
+export const awaitingWake = (state: ConversationState): boolean =>
+    state.watches.length > 0 || (state.queue.paused === undefined && state.queue.items.some((item) => item.voice !== "person"));

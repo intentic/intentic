@@ -33,7 +33,7 @@ import { promptDisclosure } from "../prompt/prompt-disclosure.js";
 import type { TurnBriefing } from "../prompt/turn-briefing.js";
 import { limitReopensAt } from "../models/limit-reset.js";
 import type { RoutedTurn, TurnInput } from "../../seams/turn-starter.js";
-import { type LiveRun } from "../../conversations/actor/conversation-holdings.js";
+import type { LiveRun } from "../../conversations/actor/conversation-holdings.js";
 import { opt } from "../../opt.js";
 import { SteeringQueue } from "../checkpoints/agent-steering.js";
 import { recordProviderFailure } from "../providers/provider-health.js";
@@ -54,7 +54,8 @@ import { performSettlement } from "./settle/settle-turn.js";
 import { settleTurn } from "./settle/turn-settlement.js";
 import { conversationIdentity, mainTreePlacement, type Placement, placedTurn, refusedBegin, runnerPlacement } from "./placement/turn-placement.js";
 import { type WorktreeRun, worktreePlacement } from "./placement/worktree-placement.js";
-import { resolveTurnJobs } from "../tools/jobs/job-fates.js";
+import { turnCloser } from "./placement/turn-close.js";
+import { runWorktreeFixers } from "../../conversations/land/worktree-fixers.js";
 
 // One turn from placement to settlement (streamAgent): placed, prepared, run on its provider, folded, settled.
 
@@ -157,6 +158,7 @@ const placementOf = (
             versionMain: (repos) => versionMainTree(services, repos),
             run: (worktree) => runTurn(services, input, signal, worktree, steering, snapshot),
             settleLanding: (conversationId) => settleLandingInBackground(services, conversationId),
+            fix: (span) => runWorktreeFixers(services, id, span),
         },
     );
 };
@@ -214,8 +216,7 @@ async function* runConversationTurn(
         services.conversations,
         conversationId,
         placementOf(services, input, signal, steering, { id: conversationId, snapshot, runner, isolated }),
-        // Never throws: a job it cannot judge stays awaited.
-        () => resolveTurnJobs({ conversations: services.conversations, scanPorts: services.scanPorts, logger: services.logger }, conversationId),
+        turnCloser(services, conversationId, steering),
     );
 }
 

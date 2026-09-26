@@ -69,6 +69,8 @@ const stepsOf = (composed: ConversationWorktree, runs: WorktreeRun[], bases: unk
         return body([{ kind: "done" }])();
     },
     settleLanding: () => {},
+    // A test repository ships no fixers of its own; the fixers are worktree-fixers.test.ts's.
+    fix: async () => [],
 });
 
 test("a runner's mirror is announced under its runner, anchored for a rewind, and settled in `measure` after the remote turn", async () => {
@@ -151,6 +153,34 @@ test("a pinned workflow step runs on its run's snapshot, and is never rebased on
     ]);
 });
 
+// A rebase by hand leaves the last land's recorded tip off the branch's history; the land check once measured from such a
+// tip and charged the land with everything main had gained since. The span starts where the branch sits on main instead.
+test("a last land's tip the branch no longer descends from is not where the turn's span starts", async () => {
+    const { deps, worktree, composed, base } = await begun("orphaned");
+    await writeFile(join(worktree, "gone.ts"), "a land a rebase by hand rewrote\n");
+    await gitOut(worktree, "add", "-A");
+    await gitOut(worktree, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "landed, then rewritten");
+    const orphan = await gitOut(worktree, "rev-parse", "HEAD");
+    await gitOut(worktree, "reset", "-q", "--hard", base);
+    await deps.agents.recordWorktree("orphaned", [{ repo: "root", base, landedTip: orphan }]);
+    const emitted: WorkspaceEvent[] = [];
+    deps.events.subscribe("workspace", (event) => void emitted.push(event));
+    const placement = worktreePlacement(
+        deps,
+        {
+            input: { prompt: "p", conversationId: "orphaned", worktreeBase: [{ repo: "root", base }], autoLand: false },
+            conversationId: "orphaned",
+            snapshot: { conversationId: "orphaned", index: 0 },
+            signal: undefined,
+        },
+        stepsOf(composed, []),
+    );
+
+    await drain(placedTurn(deps.conversations, "orphaned", placement));
+
+    expect(emitted.filter((event) => event.event === "turn.settled").map((event) => event.repos)).toStrictEqual([[{ repo: "root", from: base, dir: composed.cwd }]]);
+});
+
 test("a fork wanting its source's files composes from the source's own anchored commits", async () => {
     const source = [{ repo: "root", base: "d".repeat(40) }];
     const { turnCheckpoints } = services(recordingTurnStores().overrides);
@@ -216,12 +246,13 @@ test("a land whose last rebase fails still lands, on the old base, and says why"
         autoLand: false,
         failed: false,
         aborted: false,
+        awaitingWake: false,
         sync: async () => {
             throw new Error("rebase refused");
         },
     };
 
-    const frames = await drain(landTurn(deps, { settleLanding: () => {} }, turn, books));
+    const frames = await drain(landTurn(deps, { settleLanding: () => {}, fix: async () => [] }, turn, books));
 
     expect(frames).toStrictEqual([{ kind: "landed", landed: false, held: true }]);
     expect(books).toMatchObject({ reconciled: true, outcome: "ready" });

@@ -1,8 +1,7 @@
-import type { AgentStatus } from "@intentic/sandbox-contract";
+import type { AgentStatus, ParkKind } from "@intentic/sandbox-contract";
 import type { LandStanding } from "../land/standing.js";
 import type { EndingStatus } from "../registry/agents-store.js";
-import type { ParkKind } from "@intentic/sandbox-contract";
-import type { ConversationState } from "./conversation-state.js";
+import { awaitingWake, type ConversationState } from "./conversation-state.js";
 
 // The live turn's word: a chosen ending outranks a park.
 const liveStatus = (stopping: "stopped" | "dismissed" | undefined, parked: readonly unknown[]): AgentStatus => {
@@ -18,7 +17,6 @@ export const conversationStatus = (
     state: ConversationState | undefined,
     entryStatus: EndingStatus,
     standing: LandStanding,
-    wakes: boolean,
 ): AgentStatus => {
     if (state?.phase.kind === "running") {
         return liveStatus(state.phase.stopping, state.phase.parked);
@@ -32,7 +30,7 @@ export const conversationStatus = (
     if (entryStatus !== "idle") {
         return entryStatus;
     }
-    return standing === "ready" && wakes ? "idle" : standing;
+    return standing === "ready" && state !== undefined && awaitingWake(state) ? "idle" : standing;
 };
 
 // What the card's attention lanes read: the kinds of every card parked right now, none outside a live turn.

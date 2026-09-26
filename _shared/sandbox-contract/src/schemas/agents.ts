@@ -494,6 +494,14 @@ export const AgentSummarySchema = z.object({
         .describe(
             "The workflow run this conversation is a step of. Without it, a four-step run reads as four unrelated conversations that happen to have started together.",
         ),
+    // The one reading of "runs again by itself" (the daemon's awaitingWake, conversation-state.ts): status, fixStance and
+    // the card read it, never the watch list, which is only what the card lists. Absent from a daemon older than it.
+    awaitingWake: z
+        .boolean()
+        .optional()
+        .describe(
+            "Whether this conversation runs again by itself with nobody pressing anything: a watch is armed on it, or words the sandbox or another agent sent wait for it. A finished-looking card that is awaiting a wake is not finished yet.",
+        ),
     // Outside conditions a conversation is parked on; a finished-looking card can restart itself when one fires, and an
     // armed watch keeps a hosted machine (and its bill) awake. The check command itself never rides the wire, since it
     // may hold a secret.
@@ -557,6 +565,10 @@ export const AgentSummarySchema = z.object({
         ),
 });
 export type AgentSummary = z.infer<typeof AgentSummarySchema>;
+// Whether a conversation runs again by itself: the daemon's own reading, or, from a daemon older than it, whether a watch
+// is armed, which was all that one could say.
+export const awaitsWake = (agent: { readonly awaitingWake?: boolean | undefined; readonly watches?: readonly unknown[] | undefined }): boolean =>
+    agent.awaitingWake ?? (agent.watches?.length ?? 0) > 0;
 // One armed watch as a card carries it; derived from AgentSummarySchema.watches so the two shapes can't drift apart.
 export type AgentWatch = NonNullable<AgentSummary["watches"]>[number];
 // One background job as a card carries it.

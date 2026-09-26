@@ -59,6 +59,14 @@ test.each([
     });
 });
 
+// The daemon's own reading decides, whatever the watch list says: a wake waiting in its queue keeps it working with no
+// watch at all, and a daemon that says nothing wakes it is not second-guessed from a list it still shows.
+test("an agent the daemon says awaits a wake is still working, and one it says does not is judged on what it holds", () => {
+    expect(fixStance(agent({ status: `idle`, awaitingWake: true })).kind).toBe(`working`);
+    const watches = [{ id: `watch-a1b2`, note: `CI on the pushed branch`, intervalSeconds: 60, deadlineAt: 9_000 }];
+    expect(fixStance(agent({ status: `idle`, awaitingWake: false, watches, diff: { files: 1, insertions: 1, deletions: 0 } })).kind).toBe(`ready`);
+});
+
 // Diff present doesn't change a failed status to ready; it only earns a mention in the hint.
 test("an agent that failed after writing files still reads as failed", () => {
     const stance = fixStance(agent({ status: `error`, diff: { files: 2, insertions: 34, deletions: 6 } }));

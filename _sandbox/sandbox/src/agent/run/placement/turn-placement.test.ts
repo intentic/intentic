@@ -1,6 +1,7 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
+import type { TurnCloser } from "./turn-close.js";
 import { conversationIdentity, mainTreePlacement, type Placement, placedTurn, refusedBegin } from "./turn-placement.js";
 
 // The two events a placed turn sends its conversation, and every step of the placement, in one running order.
@@ -30,13 +31,22 @@ const placement = (steps: unknown[][], body: () => AsyncIterable<AgentEvent>): P
         yield { kind: "worktree", branch: "agent/c", base: "abc1234" };
         return body();
     },
-    async *land(failed) {
-        steps.push(["land", failed]);
+    async *land(failed, awaiting) {
+        steps.push(["land", failed, awaiting]);
         yield { kind: "landed", landed: true };
     },
     close: async (failed) => void steps.push(["close", failed]),
-    settled: (failed) => void steps.push(["settled", failed]),
+    settled: (ending) => void steps.push(["settled", ending]),
     thrown: "the placement's own words",
+});
+
+// The close's first steps, noted where they run; `awaiting` is what arming the wakes answers.
+const closer = (steps: unknown[][], awaiting = false): TurnCloser => ({
+    hush: () => void steps.push(["hush"]),
+    armWakes: async () => {
+        steps.push(["arm"]);
+        return awaiting;
+    },
 });
 
 const drain = async (frames: AsyncIterable<AgentEvent>): Promise<AgentEvent[]> => {
@@ -50,7 +60,9 @@ const drain = async (frames: AsyncIterable<AgentEvent>): Promise<AgentEvent[]> =
 describe("a placed turn", () => {
     test("observes only its body's frames, lands after a clean body, and always closes, finishes and settles", async () => {
         const { steps, conversations } = recorded();
-        const frames = await drain(placedTurn(conversations, "c", placement(steps, stream([{ kind: "delta", text: "hi" }, { kind: "done" }]))));
+        const frames = await drain(
+            placedTurn(conversations, "c", placement(steps, stream([{ kind: "delta", text: "hi" }, { kind: "done" }])), closer(steps)),
+        );
 
         expect(frames).toStrictEqual([
             { kind: "worktree", branch: "agent/c", base: "abc1234" },
@@ -62,39 +74,61 @@ describe("a placed turn", () => {
             ["open"],
             ["frame", "c", { kind: "delta", text: "hi" }],
             ["frame", "c", { kind: "done" }],
-            ["land", false],
+            ["hush"],
+            ["arm"],
+            ["land", false, false],
             ["close", false],
             ["settle", "c"],
-            ["settled", false],
+            ["settled", "finished"],
+        ]);
+    });
+
+    // The wake it armed is the turn that finishes the work: the land is told, and the ending says so.
+    test("that armed a wake tells its land, and ends awaiting it", async () => {
+        const { steps, conversations } = recorded();
+        await drain(placedTurn(conversations, "c", placement(steps, stream([{ kind: "done" }])), closer(steps, true)));
+        expect(steps.filter(([step]) => step !== "frame")).toStrictEqual([
+            ["open"],
+            ["hush"],
+            ["arm"],
+            ["land", false, true],
+            ["close", false],
+            ["settle", "c"],
+            ["settled", "awaiting-wake"],
         ]);
     });
 
     test("whose body emitted an error frame is failed, which the land and the books are told", async () => {
         const { steps, conversations } = recorded();
-        await drain(placedTurn(conversations, "c", placement(steps, stream([{ kind: "error", message: "died" }, { kind: "done" }]))));
+        await drain(placedTurn(conversations, "c", placement(steps, stream([{ kind: "error", message: "died" }, { kind: "done" }])), closer(steps)));
         expect(steps.filter(([step]) => step !== "frame")).toStrictEqual([
             ["open"],
-            ["land", true],
+            ["hush"],
+            ["arm"],
+            ["land", true, false],
             ["close", true],
             ["settle", "c"],
-            ["settled", true],
+            ["settled", "failed"],
         ]);
     });
 
     test("that throws is observed as failed with the error's own words, rethrown, and still finished", async () => {
         const { steps, conversations } = recorded();
         const run = drain(
-            placedTurn(conversations, "c", placement(steps, stream([{ kind: "delta", text: "hi" }], new Error("the harness crashed")))),
+            placedTurn(conversations, "c", placement(steps, stream([{ kind: "delta", text: "hi" }], new Error("the harness crashed"))), closer(steps)),
         );
 
         await expect(run).rejects.toThrow("the harness crashed");
+        // What it left running is judged and its wakes armed all the same, once, before its books close.
         expect(steps).toStrictEqual([
             ["open"],
             ["frame", "c", { kind: "delta", text: "hi" }],
             ["frame", "c", { kind: "error", message: "the harness crashed" }],
+            ["hush"],
+            ["arm"],
             ["close", true],
             ["settle", "c"],
-            ["settled", true],
+            ["settled", "failed"],
         ]);
     });
 
@@ -107,8 +141,8 @@ describe("a placed turn", () => {
     test("that is stopped is not failed: nothing is observed, and the books close as for a clean turn", async () => {
         const { steps, conversations } = recorded();
         const aborted = Object.assign(new Error("aborted"), { name: "AbortError" });
-        await expect(drain(placedTurn(conversations, "c", placement(steps, stream([], aborted))))).rejects.toBe(aborted);
-        expect(steps).toStrictEqual([["open"], ["close", false], ["settle", "c"], ["settled", false]]);
+        await expect(drain(placedTurn(conversations, "c", placement(steps, stream([], aborted)), closer(steps, true)))).rejects.toBe(aborted);
+        expect(steps).toStrictEqual([["open"], ["hush"], ["arm"], ["close", false], ["settle", "c"], ["settled", "stopped"]]);
     });
 
     test("whose placement fails to open is failed before any body ran", async () => {
@@ -125,7 +159,22 @@ describe("a placed turn", () => {
             ["frame", "c", { kind: "error", message: "no worktree" }],
             ["close", true],
             ["settle", "c"],
-            ["settled", true],
+            ["settled", "failed"],
+        ]);
+    });
+
+    // A close that could not arm its wakes still settles: a turn's ending never fails on what it left running.
+    test("whose wakes could not be armed still closes, settles and announces, as awaiting nothing", async () => {
+        const { steps, conversations } = recorded();
+        const broken: TurnCloser = { hush: () => void steps.push(["hush"]), armWakes: () => Promise.reject(new Error("no watchers")) };
+        await drain(placedTurn(conversations, "c", placement(steps, stream([{ kind: "done" }])), broken));
+        expect(steps.filter(([step]) => step !== "frame")).toStrictEqual([
+            ["open"],
+            ["hush"],
+            ["land", false, false],
+            ["close", false],
+            ["settle", "c"],
+            ["settled", "finished"],
         ]);
     });
 });

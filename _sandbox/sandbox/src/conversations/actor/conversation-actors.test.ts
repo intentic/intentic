@@ -163,8 +163,9 @@ interface Child {
 }
 
 // The status precedence, restated from the rules rather than read from the code under test.
-// Whether it will wake itself: an armed watch, or a job not yet handed out, since no completion notice is read in a walk.
-const wakes = (model: Model): boolean => model.watches.length > 0 || model.jobs.some((job) => !job.adopted);
+// Whether it will wake itself: an armed watch. A job counts only once it is handed to one, which a turn's close does before
+// it settles (turn-close.ts), and a walk queues no wake, so a job alone never does.
+const wakes = (model: Model): boolean => model.watches.length > 0;
 
 const expectedStatus = (model: Model): AgentStatus => {
     if (model.running) {

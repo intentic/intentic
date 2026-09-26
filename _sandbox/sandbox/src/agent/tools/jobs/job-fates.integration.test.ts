@@ -17,7 +17,6 @@ import {
     settledBackgroundJobs,
     stopBackgroundJob,
     sweepJobEnds,
-    wakesItself,
 } from "./background-jobs.js";
 import { jobFate, resolveTurnJobs, stopJob } from "./job-fates.js";
 
@@ -165,9 +164,9 @@ describe("a turn's ending, over a real job", () => {
         const { job, leader } = await running("conv-fate-stop");
         turnWith("conv-fate-stop", [called("http://127.0.0.1:47148/demo/kit"), said("HTML blocks are highlighted now.")]);
         await resolveTurnJobs(listening(leader, 47_148), "conv-fate-stop");
-        // Decided before the processes are gone: the land asks at once.
-        expect(wakesItself(actors, "conv-fate-stop")).toBe(false);
+        // Decided before the processes are gone: the close arms wakes next, and this one is handed to none.
         expect(card("conv-fate-stop", job.id)?.stoppedBy).toBe("turn");
+        expect(settledBackgroundJobs(actors, "conv-fate-stop").running).toEqual([]);
         await ended(job);
         expect(readFileSync(jobStatusPath(job), "utf8").trim()).toBe("143");
         expect(card("conv-fate-stop", job.id)).toMatchObject({ stoppedBy: "turn", exitCode: 143 });
@@ -179,7 +178,6 @@ describe("a turn's ending, over a real job", () => {
         turnWith("conv-fate-hand", [called("curl -s localhost:5173"), said("The app is running at http://localhost:5173.")]);
         await resolveTurnJobs(listening(leader, 5173), "conv-fate-hand");
         expect(card("conv-fate-hand", job.id)).toMatchObject({ handed: true, ports: [5173] });
-        expect(wakesItself(actors, "conv-fate-hand")).toBe(false);
         // Not handed to a watch: its exit is the person's business now.
         expect(settledBackgroundJobs(actors, "conv-fate-hand").running).toEqual([]);
         expect(existsSync(jobStatusPath(job))).toBe(false);
@@ -190,17 +188,16 @@ describe("a turn's ending, over a real job", () => {
         expect(card("conv-fate-hand", job.id)?.handed).toBeUndefined();
     });
 
-    it("leaves a listener the turn never reached awaited, and judges each job once per run", async () => {
+    // One judgement per run is the close's (turn-placement.test.ts); a later run's ending judges an awaited job again.
+    it("leaves a listener the turn never reached awaited, and a later run that reached it and gave its link hands it over", async () => {
         const { job, leader } = await running("conv-fate-await");
         turnWith("conv-fate-await", [said("The suite is still running; I'll pick it up when it finishes.")]);
         await resolveTurnJobs(listening(leader, 34_567), "conv-fate-await");
         expect(card("conv-fate-await", job.id)?.stoppedBy).toBeUndefined();
-        expect(wakesItself(actors, "conv-fate-await")).toBe(true);
         expect(settledBackgroundJobs(actors, "conv-fate-await").running.map((entry) => entry.id)).toEqual([job.id]);
-        // The settle's second look at the same run judges nothing again, even with the reply now naming it.
-        turnWith("conv-fate-await", [said("It's at localhost:34567.")]);
+        turnWith("conv-fate-await", [called("curl -s localhost:34567"), said("It's up at http://localhost:34567.")]);
         await resolveTurnJobs(listening(leader, 34_567), "conv-fate-await");
-        expect(card("conv-fate-await", job.id)?.handed).toBeUndefined();
+        expect(card("conv-fate-await", job.id)).toMatchObject({ handed: true, ports: [34_567] });
     });
 
     it("disarms the watch an awaited job was handed to before a person's stop ends it", async () => {

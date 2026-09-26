@@ -1,7 +1,7 @@
 import type { IconName } from "@intentic/ui";
 import { briefDuration } from "@intentic/base/format";
 import { formatWeekdayTime } from "@intentic/ui/format";
-import type { AgentAttention, AgentOrigin, AgentStatus, AgentSummary, AgentWatch, LandConflictReason, LoopState } from "@intentic/sandbox-contract";
+import { type AgentAttention, type AgentOrigin, type AgentStatus, type AgentSummary, type AgentWatch, awaitsWake, type LandConflictReason, type LoopState } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 
 // Every projection of a fleet agent's state (lane, attention label, drill-in verb, glyphs). Nothing else may
@@ -23,6 +23,8 @@ export interface AgentStanding {
     // Outside conditions this conversation is parked on (AgentSummary.watches); `laneOf` reads it alongside `status`
     // and `attention`. Absent for nearly every conversation.
     readonly watches?: readonly AgentWatch[];
+    // Whether it runs again by itself (AgentSummary.awaitingWake): the daemon's one reading, which `watching` asks.
+    readonly awaitingWake?: boolean;
     // Why a refused land is still refusing (AgentSummary.conflictCauses), which decides whose press can clear it.
     // Absent for every card but one refusing to merge.
     readonly conflictCauses?: readonly LandConflictReason[];
@@ -65,9 +67,10 @@ export const limitScheduled = (agent: AgentStanding): boolean => limited(agent) 
 export const conflictIsYours = (agent: AgentStanding): boolean =>
     agent.conflictCauses !== undefined && agent.conflictCauses.length > 0 && agent.conflictCauses.every((cause) => cause === `workspace`);
 
-// This conversation runs again by itself, with nobody pressing anything: a watched agent's last turn ended (status
-// is `idle`/`landed`, never `ready`, since the daemon holds the land for the wake), but the conversation is not over.
-export const watching = (agent: AgentStanding): boolean => (agent.watches?.length ?? 0) > 0;
+// This conversation runs again by itself, with nobody pressing anything: its last turn ended (status is `idle`/`landed`,
+// never `ready`, since the daemon holds the land for the wake), but the conversation is not over. The daemon's own
+// reading (a watch, or a wake waiting in its queue); a daemon older than it is read by its watches.
+export const watching = (agent: AgentStanding): boolean => awaitsWake(agent);
 
 // No registry entry behind this card: archiving, reviewing, landing, discarding and dropping all address an agent
 // by id through the daemon, and none of these ids name anything there.
@@ -280,6 +283,7 @@ export const standingFrom = (agent: AgentStanding): AgentStanding => ({
     // Copied, not referenced: this outlives the roster entry it was read from, in a tab and in storage.
     attention: { ...agent.attention },
     ...(agent.watches !== undefined ? { watches: agent.watches } : {}),
+    ...(agent.awaitingWake !== undefined ? { awaitingWake: agent.awaitingWake } : {}),
     ...(agent.conflictCauses !== undefined ? { conflictCauses: agent.conflictCauses } : {}),
     ...(agent.failureCode !== undefined ? { failureCode: agent.failureCode } : {}),
     ...(agent.limitResetsAt !== undefined ? { limitResetsAt: agent.limitResetsAt } : {}),

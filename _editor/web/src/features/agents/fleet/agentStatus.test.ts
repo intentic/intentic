@@ -119,6 +119,13 @@ describe("laneOf", () => {
         expect(laneOf({ status: `landed`, attention: none, watches: [watch()] })).toBe(`active`);
     });
 
+    // The daemon's own reading decides where it says: a wake waiting in the queue keeps a card active with no watch at
+    // all, and a daemon that says nothing wakes it is not second-guessed from the list it still shows.
+    it("reads the daemon's awaitingWake before its watch list", () => {
+        expect(laneOf({ status: `idle`, attention: none, awaitingWake: true })).toBe(`active`);
+        expect(laneOf({ status: `idle`, attention: none, awaitingWake: false, watches: [watch()] })).toBe(`finished`);
+    });
+
     // An empty watch list is the same as no list: the daemon clears the projection when the last watch ends.
     it("treats a conversation whose watches have all ended as finished again", () => {
         expect(laneOf({ status: `idle`, attention: none, watches: [] })).toBe(`finished`);

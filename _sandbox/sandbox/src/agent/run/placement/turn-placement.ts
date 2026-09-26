@@ -8,6 +8,7 @@ import type { Services } from "../../../composition.js";
 import { checkpointWorktree } from "../../checkpoints/checkpoint-worktree.js";
 import { opt } from "../../../opt.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
+import type { TurnCloser, TurnEnding } from "./turn-close.js";
 
 // Where a conversation's turn runs, as the one value its lifecycle is parameterized by: the runner, the main tree, or a
 // worktree. Each announces itself, hands over the turn's body, and has its own after-turn and its own books; the
@@ -16,12 +17,13 @@ import type { TurnInput } from "../../../seams/turn-starter.js";
 export interface Placement {
     // Frames announcing where the turn runs, ahead of its body; the generator returns the body itself.
     readonly open: () => AsyncGenerator<AgentEvent, AsyncIterable<AgentEvent>>;
-    // After a body that ran to its end; `failed` is whether it emitted an error frame.
-    readonly land: (failed: boolean) => AsyncGenerator<AgentEvent>;
+    // After a body that ran to its end and its wakes were armed; `failed` is whether it emitted an error frame, and
+    // `awaiting` whether the conversation now runs again by itself (turn-close.ts).
+    readonly land: (failed: boolean, awaiting: boolean) => AsyncGenerator<AgentEvent>;
     // In the turn's finally, before the conversation settles.
     readonly close: (failed: boolean) => Promise<void>;
-    // After the settle, once per turn whatever happened.
-    readonly settled: (failed: boolean) => void;
+    // After the settle, once per turn whatever happened: the one announcement of how it ended.
+    readonly settled: (ending: TurnEnding) => void;
     // What a thrown error carrying no message of its own is observed as.
     readonly thrown: string;
 }
@@ -30,16 +32,29 @@ export interface Placement {
 const isAbort = (error: unknown): boolean => typeof error === "object" && error !== null && (error as { name?: string }).name === "AbortError";
 
 // The conversation's lifecycle around one placed turn the caller has begun: every body frame sent to its actor, an
-// error frame or a thrown error marking it failed, a thrown one sent and rethrown, and the settle always sent.
-// `ended` runs between a body that ran to its end and the land, whatever the placement: what the turn's ending decides
-// about what it left running must be decided before the land asks whether anything still wakes the conversation.
+// error frame or a thrown error marking it failed, a thrown one sent and rethrown, and the turn's close run in its one
+// order (turn-close.ts): hushed and its wakes armed once, whatever way it ended, before a clean turn's land; then the
+// placement's books, the settle, and the one announcement of how it ended.
 export async function* placedTurn(
     conversations: Pick<ConversationActors, "send">,
     conversationId: string,
     placement: Placement,
-    ended?: () => Promise<void>,
+    closer?: TurnCloser,
 ): AsyncGenerator<AgentEvent> {
     let failed = false;
+    let stopped = false;
+    // Steps 1 to 3 run once per run: before the land when the body ran to its end, else in the finally.
+    let armed: Promise<boolean> | undefined;
+    const armOnce = (): Promise<boolean> => {
+        if (armed === undefined) {
+            closer?.hush();
+            // allow(silent-catch): armWakes never throws by its own contract and logs what it could not do; a close that
+            // could not arm still settles, as awaiting nothing.
+            armed = (closer?.armWakes() ?? Promise.resolve(false)).catch(() => false);
+        }
+        return armed;
+    };
+    let awaiting = false;
     try {
         const body = yield* placement.open();
         for await (const event of body) {
@@ -47,20 +62,33 @@ export async function* placedTurn(
             failed ||= event.kind === "error";
             yield event;
         }
-        await ended?.();
-        yield* placement.land(failed);
+        awaiting = await armOnce();
+        yield* placement.land(failed, awaiting);
     } catch (error) {
-        if (!isAbort(error)) {
+        stopped = isAbort(error);
+        if (!stopped) {
             failed = true;
             conversations.send(conversationId, { kind: "frame", frame: { kind: "error", message: error instanceof Error ? error.message : placement.thrown } });
         }
         throw error;
     } finally {
+        awaiting = await armOnce();
         await placement.close(failed);
         await conversations.send(conversationId, { kind: "settle" }).settled;
-        placement.settled(failed);
+        placement.settled(endingOf(failed, stopped, awaiting));
     }
 }
+
+// The turn's ending by precedence: an error outranks a stop, and a stop outranks the wake it may still have armed.
+const endingOf = (failed: boolean, stopped: boolean, awaiting: boolean): TurnEnding => {
+    if (failed) {
+        return "failed";
+    }
+    if (stopped) {
+        return "stopped";
+    }
+    return awaiting ? "awaiting-wake" : "finished";
+};
 
 // What a conversation's turn begins as: its profile whole, and what an opening turn decides. Placement is the
 // conversation's: a fresh one takes the request's, later turns follow the registry's own record.

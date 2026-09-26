@@ -63,11 +63,46 @@ when nobody pressed for it. Over HTTP a client may name only `land-conflict`. Ro
 are still read by the prompt's opening paragraph (`errandOfRow`, contract `events/errands.ts`), which is why every
 opening stays byte-identical.
 
-## Background jobs at a turn's end
+## A turn's close
 
-A job the turn left running is stopped with it, unless the turn reached it and its closing reply gives the person its
-link (`http://host:PORT`) in a sentence that does not say it was stopped (`agent/tools/jobs/job-fates.ts`); one the
-turn never reached is waited for.
+Every conversation turn ends through one ordered pipeline, `placedTurn` (`agent/run/placement/turn-placement.ts`),
+whose steps are named in `agent/run/placement/turn-close.ts`:
+
+1. **Hush.** The body has ended, so its steering closes: a person's words or a wake that fires from here wait in the
+   conversation's queue for the next turn, rather than going into a queue no model reads.
+2. **Judge jobs**, once per run, however the turn ended. A job the turn left running is stopped with it, unless the
+   turn reached it and its closing reply gives the person its link (`http://host:PORT`) in a sentence that does not say
+   it was stopped (`agent/tools/jobs/job-fates.ts`); one the turn never reached is awaited.
+3. **Arm wakes.** Each awaited job, and each finished one whose exit the model never read, is handed to a watch
+   (`background-adoption.ts`). Whether the conversation now runs again by itself is read from what it holds:
+   `awaitingWake` (`conversations/actor/conversation-state.ts`: an armed watch, or the sandbox's or an agent's words
+   waiting in a queue nothing holds). Status, `fixStance` and the card read that one reading
+   (`AgentSummary.awaitingWake`); nothing predicts it from job records.
+4. **Land**, a clean turn only (`turn-landing.ts`). Nothing lands while the conversation awaits a wake, since the wake
+   is the turn that finishes the work. Otherwise the repository's own machine fixers run in the worktree on what the
+   turn changed (`conversations/land/worktree-fixers.ts`, `_tools/scripts/verify/fixers.mjs` where the repository
+   ships it), so what they write rides this land; then the rules decide, and it lands under the lease. The check after
+   the land runs the same fixers on the main tree as the backstop.
+5. **Settle.** The placement's books, then the conversation's actor.
+6. **Publish, once.** The placement announces how the turn ended (`TurnEnding`: failed, stopped, awaiting a wake, or
+   finished); a worktree turn's is the workspace `turn.settled` event.
+
+After all of it the run registry announces `run.settled` (`agent/run/turn/turn-runs.ts`). Its listeners are independent
+of each other: none reads what another writes, each reads the conversation as the settle left it, and none may be moved
+into the pipeline's order by subscribing earlier. They are, in subscription order:
+
+| Listener | Where | What it does |
+| --- | --- | --- |
+| reaper | `composition.ts` | frees what a stopped owner held |
+| taint | `composition.ts` | drops the turn's outside-content taint |
+| drain | `composition.ts` (`wireReactions`) | lets out what waited in the conversation's queue |
+| held red | `bootstrap/deps-coordination.ts` | routes a main-line red that waited on this conversation |
+| invariants | `bootstrap/boot-sweeps.ts` | runs the `turn-settled` self-checks |
+| child report | `bootstrap/boot-schedulers.ts` | tells a spawned child's parent it settled |
+| keep-warm | `bootstrap/boot-schedulers.ts` | arms a prompt-cache hold after a person's turn, from the event alone |
+
+A listener takes the `run.settled` event and decides for itself; one that needs an order against the close belongs in
+the pipeline instead.
 
 ## Asking a person
 

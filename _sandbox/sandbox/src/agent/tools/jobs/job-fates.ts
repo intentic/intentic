@@ -109,9 +109,10 @@ export const stopJob = async (deps: Omit<JobFateDeps, "scanPorts">, job: Backgro
 };
 
 /**
- * Judges every job the conversation still has running as its turn ends: once before the land (so a reclaimed server
- * no longer holds it), again at the settle for a turn that never reached its land; each run's ending judges a job
- * once. Never throws: a turn's ending must not fail on it, and a job it could not judge stays awaited.
+ * Judges every job the conversation still has running as its turn ends, once per run: the turn's close asks it first,
+ * whatever way the turn ended, before it arms the wakes the awaited ones are handed to and before any land (so a
+ * reclaimed server no longer holds it). Never throws: a turn's ending must not fail on it, and a job it could not judge
+ * stays awaited.
  */
 export const resolveTurnJobs = async (deps: JobFateDeps, conversationId: string): Promise<void> => {
     const run = turnRunOf(deps.conversations, conversationId);
@@ -119,7 +120,7 @@ export const resolveTurnJobs = async (deps: JobFateDeps, conversationId: string)
         return;
     }
     try {
-        const jobs = jobsToJudge(deps.conversations, conversationId, run.id);
+        const jobs = jobsToJudge(deps.conversations, conversationId);
         if (jobs.length === 0) {
             return;
         }

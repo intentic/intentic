@@ -1,6 +1,4 @@
 import { startRuntimeHealth } from "../agent/providers/adapter-health.js";
-import { adoptBackgroundJobs } from "../agent/tools/jobs/background-adoption.js";
-import { resolveTurnJobs } from "../agent/tools/jobs/job-fates.js";
 import { type ChildReportDeps, reportChildTurn } from "../agent/subagents/child-report.js";
 import { childKillNote } from "../agent/subagents/children.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
@@ -21,19 +19,9 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
         scheduler.start();
     }
 
-    // Stop clears timers only; the watch journal survives for the next boot to restore.
+    // Stop clears timers only; the watch journal survives for the next boot to restore. What a turn left running is
+    // judged and handed to a watch by the turn's own close (agent/run/placement/turn-close.ts), which needs this bound.
     shutdown.push(startWatchers(services));
-
-    // A turn ending is the moment its background jobs become nobody's. A server it used and never handed over is
-    // stopped, one whose address it gave is left to the person (job-fates.ts; judged already before the land when the
-    // turn reached it), and each other one still running is handed to a watch of its own, so the conversation is woken
-    // when it exits. Beside the watchers because it arms one, and after them because it needs their runtime bound.
-    shutdown.push(
-        services.events.subscribe("run.settled", async (settled) => {
-            await resolveTurnJobs({ conversations: services.conversations, scanPorts: services.scanPorts, logger }, settled.conversationId);
-            await adoptBackgroundJobs(services.conversations, settled.conversationId, logger);
-        }),
-    );
 
     // A spawned child's settled turn is its parent's news, delivered like a wake unless a parked `wait` took it.
     const childReports: ChildReportDeps = {

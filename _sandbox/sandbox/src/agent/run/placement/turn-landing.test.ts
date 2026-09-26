@@ -110,6 +110,11 @@ describe("a turn that may not land", () => {
         return unstubbed<LandingDeps>("deps", { agents, conversations });
     };
     const hooks = unstubbed<LandingHooks>("hooks", {});
+    // The fixers run once the land is sure to go on; what they ran on, in order, for the test to read.
+    const fixing = (): { readonly hooks: LandingHooks; readonly fixed: unknown[] } => {
+        const fixed: unknown[] = [];
+        return { hooks: unstubbed<LandingHooks>("hooks", { fix: async (span) => void fixed.push(span) }), fixed };
+    };
     const books = (): LandBooks => ({ span: [{ repo: "root", from: "a", dir: "/w" }], branch: "agent/c", outcome: undefined, reconciled: false });
     const drain = async (frames: AsyncIterable<unknown>): Promise<unknown[]> => {
         const out: unknown[] = [];
@@ -125,36 +130,36 @@ describe("a turn that may not land", () => {
         const deps = await registered(true);
         const kept = books();
         const frames = await drain(
-            landTurn(deps, hooks, { conversationId: "c", prompt: "p", autoLand: true, sync: async () => [], ...ending }, kept),
+            landTurn(deps, hooks, { conversationId: "c", prompt: "p", autoLand: true, awaitingWake: false, sync: async () => [], ...ending }, kept),
         );
         expect(frames).toStrictEqual([]);
         expect(kept).toStrictEqual(books());
     });
 
-    // Auto-land is on and no rule holds anything, so only the armed watch can be what stops this land: past the guard,
-    // the unstubbed settings store would name itself. Which jobs count as armed is background-jobs.test.ts's to pin.
-    test("because it ended to wait on a watch it armed lands nothing and reconciles nothing", async () => {
+    // Auto-land is on and no rule holds anything, so only the wake it awaits can be what stops this land: past the guard,
+    // the fixers would run and the unstubbed settings store would name itself. What counts as awaiting a wake is the
+    // turn's close's to say (turn-close.ts), from what the conversation holds once its wakes are armed.
+    test("because it ended to wait on a wake it armed lands nothing, fixes nothing and reconciles nothing", async () => {
         const deps = await registered(true);
-        deps.conversations.send("c", {
-            kind: "watches-shown",
-            watches: [{ id: "watch-a1b2", note: "CI on the pushed branch", intervalSeconds: 60, deadlineAt: 9_000 }],
-        });
         const kept = books();
-        const turn = { conversationId: "c", prompt: "p", autoLand: true, failed: false, aborted: false, sync: async () => [] };
-        expect(await drain(landTurn(deps, hooks, turn, kept))).toStrictEqual([]);
+        const { hooks: fixer, fixed } = fixing();
+        const turn = { conversationId: "c", prompt: "p", autoLand: true, failed: false, aborted: false, awaitingWake: true, sync: async () => [] };
+        expect(await drain(landTurn(deps, fixer, turn, kept))).toStrictEqual([]);
+        expect(fixed).toStrictEqual([]);
         expect(kept).toStrictEqual(books());
     });
 
-    test("once nothing is armed, the same turn goes on to its land", async () => {
+    test("awaiting nothing, the same turn runs the repository's fixers on its span first, then goes on to decide its land", async () => {
         const deps = await registered(true);
-        deps.conversations.send("c", { kind: "watches-shown", watches: [] });
-        const turn = { conversationId: "c", prompt: "p", autoLand: true, failed: false, aborted: false, sync: async () => [] };
-        await expect(drain(landTurn(deps, hooks, turn, books()))).rejects.toThrow("deps.sandboxSettings.get was called, and this test did not stub it");
+        const { hooks: fixer, fixed } = fixing();
+        const turn = { conversationId: "c", prompt: "p", autoLand: true, failed: false, aborted: false, awaitingWake: false, sync: async () => [] };
+        await expect(drain(landTurn(deps, fixer, turn, books()))).rejects.toThrow("deps.sandboxSettings.get was called, and this test did not stub it");
+        expect(fixed).toStrictEqual([books().span]);
     });
 
     test("because the conversation is not isolated lands nothing either", async () => {
         const kept = books();
-        const turn = { conversationId: "c", prompt: "p", autoLand: true, failed: false, aborted: false, sync: async () => [] };
+        const turn = { conversationId: "c", prompt: "p", autoLand: true, failed: false, aborted: false, awaitingWake: false, sync: async () => [] };
         expect(await drain(landTurn(await registered(false), hooks, turn, kept))).toStrictEqual([]);
         expect(kept).toStrictEqual(books());
     });

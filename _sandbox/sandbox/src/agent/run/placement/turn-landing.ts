@@ -2,17 +2,18 @@ import type { AgentEvent, Rule, WorkspaceEvent } from "@intentic/sandbox-contrac
 import { landAgent, type LandOutcome, reportLockfileFailures } from "../../../conversations/land/land.js";
 import { landingPaths } from "../../../conversations/land/landing-paths.js";
 import { type LandVerifier, verifyLandedTree } from "../../../conversations/land/verify-landed.js";
-import { wakesItself } from "../../tools/jobs/background-jobs.js";
 import { type IsolatedAgent, isIsolated } from "../../../conversations/registry/agents-store.js";
 import type { Services } from "../../../composition.js";
 import { landingVerdict, type RuleFacts, standing } from "../../../rules/rules.js";
 import type { DependencyLandOrigin } from "../../../workspace/deps/dependency-origin.js";
 import type { ReconcileOutcome } from "../../../workspace/deps/reconcile-deps.js";
 import { opt } from "../../../opt.js";
+import type { FixersRepo } from "../../../conversations/land/worktree-fixers.js";
 
-// A finished isolated turn's land. Whether its work reaches the main tree or waits on its branch is decided purely, from
-// the rules and the paths it touched; no check holds it, since checks run after the work lands and never block. The land
-// around that decision runs as the sequence below: decide, land under the lease, record, verify, announce.
+// A finished isolated turn's land, step 4 of the turn's close (turn-close.ts). Whether its work reaches the main tree or
+// waits on its branch is decided purely, from the rules and the paths it touched; no check holds it, since checks run
+// after the work lands and never block. The land runs as the sequence below: the repository's fixers in the worktree,
+// decide, land under the lease, record, verify, announce.
 
 // What the land did, for the turn's `turn.settled` event; the card's standing is derived elsewhere.
 export type LandedOutcome = "landed" | "conflict" | "ready";
@@ -76,6 +77,9 @@ export type LandingDeps = Pick<
 export interface LandingHooks {
     // Drafts what a land did and commits it where the version rule stands, off the turn's clock.
     readonly settleLanding: (conversationId: string) => void;
+    // Runs the repository's own machine fixers in the worktree on what the turn changed (worktree-fixers.ts), so what
+    // they write rides this land; never throws.
+    readonly fix: (span: readonly FixersRepo[]) => Promise<unknown>;
 }
 
 export interface LandingTurn {
@@ -85,6 +89,8 @@ export interface LandingTurn {
     // A failed turn must not auto-land half-done work, and a stopped one lands nothing either.
     readonly failed: boolean;
     readonly aborted: boolean;
+    // The conversation runs again by itself (turn-close.ts): its wake is the turn that finishes the work, so nothing lands.
+    readonly awaitingWake: boolean;
     // The rebase onto today's main line, run once more under the lease since the top-of-turn one is stale by now.
     readonly sync: () => Promise<unknown>;
 }
@@ -170,9 +176,11 @@ async function* recordLand(
 export async function* landTurn(deps: LandingDeps, hooks: LandingHooks, turn: LandingTurn, books: LandBooks): AsyncGenerator<AgentEvent> {
     const id = turn.conversationId;
     const finished = deps.agents.entry(id);
-    if (turn.failed || turn.aborted || wakesItself(deps.conversations, id) || finished === undefined || !isIsolated(finished)) {
+    if (turn.failed || turn.aborted || turn.awaitingWake || finished === undefined || !isIsolated(finished)) {
         return;
     }
+    // Before the decision, so a path a fixer wrote is one the rules read, and before the lease, so the land commits it.
+    await hooks.fix(books.span);
     const { rules } = await deps.sandboxSettings.get();
     const facts = await landingFacts(deps, rules, finished, books.span);
     const decision = landingDecision(rules, facts, turn.autoLand ?? finished.postures.autoLand);

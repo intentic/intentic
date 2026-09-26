@@ -1,5 +1,5 @@
 import { turnedAwayCode } from "../policy/turned-away.js";
-import type { AgentSummary } from "../schemas/agents.js";
+import { type AgentSummary, awaitsWake } from "../schemas/agents.js";
 
 /* WHAT BECAME OF THE AGENT A SURFACE SENT AFTER A FAILURE — a red pipeline row, a refused push. */
 
@@ -130,8 +130,8 @@ const RULES: readonly ((agent: AgentSummary) => FixStance | undefined)[] = [
             ? needsYou("Needs you", "The fix agent has stopped and is waiting on you.")
             : undefined,
     (agent) => (IN_FLIGHT.has(agent.status) ? WORKING : undefined),
-    // An armed watch wakes it again by itself, so neither what it holds nor holding nothing is its last word yet.
-    (agent) => ((agent.watches?.length ?? 0) > 0 ? WORKING : undefined),
+    // It runs again by itself (a watch, a waiting wake), so neither what it holds nor holding nothing is its last word yet.
+    (agent) => (awaitsWake(agent) ? WORKING : undefined),
     (agent) => (holdingWork(agent) ? READY : undefined),
     (agent) => (agent.status === "landed" ? LANDED : undefined),
 ];

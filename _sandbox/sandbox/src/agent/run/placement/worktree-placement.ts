@@ -1,7 +1,8 @@
 import type { AgentEvent, RepoBase, SnapshotTurn } from "@intentic/sandbox-contract";
 import { settleIndex } from "@intentic/scaffold";
 import { type RepoSync, syncConversation } from "../../../conversations/land/sync.js";
-import { agentRepoReview } from "../../../conversations/land/agent-changes.js";
+import { agentRepoReview, checkpointOf } from "../../../conversations/land/agent-changes.js";
+import { headSha } from "../../../git/changes/changes.js";
 import { isIsolated, worktreeOf } from "../../../conversations/registry/agents-store.js";
 import type { ConversationWorktree } from "../../../conversations/worktrees/worktrees.js";
 import type { Services } from "../../../composition.js";
@@ -86,6 +87,31 @@ const rebaser =
         return synced;
     };
 
+// Where a repo stood before this turn, as a commit its branch descends from: where a rebase this turn moved it, else
+// its last land's tip while the branch still descends from it, else where the branch sits on main (checkpointOf, the
+// anchor the review measures from too). A last tip a rebase by hand orphaned is no such commit: the land check measured
+// from one once and charged the land with everything main had gained since.
+const spanFrom = async (
+    deps: Pick<Services, "agentWorktrees">,
+    conversationId: string,
+    recorded: { readonly repo: string; readonly base: string; readonly landedTip: string | undefined },
+    onto: ReadonlyMap<string, string>,
+): Promise<string> => {
+    const moved = onto.get(recorded.repo);
+    if (moved !== undefined) {
+        return moved;
+    }
+    const fallback = recorded.landedTip ?? recorded.base;
+    const dir = deps.agentWorktrees.worktreeDir(conversationId, recorded.repo);
+    try {
+        const tip = await headSha(dir);
+        return tip === undefined ? fallback : await checkpointOf(dir, deps.agentWorktrees.mainDir(recorded.repo), tip, recorded.landedTip, recorded.base);
+    } catch {
+        // allow(silent-catch): a checkout git cannot read keeps the recorded anchor, as every turn before this did.
+        return fallback;
+    }
+};
+
 // Every row of the conversation's review counted in the background once a turn settles, so opening the review after it
 // reads each code count from cache instead of waiting on a tokenizer.
 const warmReview = (deps: Pick<Services, "agents" | "agentWorktrees" | "logger">, conversationId: string): void => {
@@ -135,12 +161,13 @@ export const worktreePlacement = (
             await steps.versionMain(worktree.repos.map(({ repo }) => repo));
             const synced = await rebase();
             books.branch = worktree.branch;
-            // Where each repo stood before this turn; a moved repo reads from `onto` instead of `landedTip`.
-            books.span = worktree.repos.map(({ repo, base }) => ({
-                repo,
-                from: onto.get(repo) ?? worktreeOf(entry)?.repos.find((recorded) => recorded.repo === repo)?.landedTip ?? base,
-                dir: deps.agentWorktrees.worktreeDir(conversationId, repo),
-            }));
+            books.span = await Promise.all(
+                worktree.repos.map(async ({ repo, base }) => ({
+                    repo,
+                    from: await spanFrom(deps, conversationId, { repo, base, landedTip: worktreeOf(entry)?.repos.find((recorded) => recorded.repo === repo)?.landedTip }, onto),
+                    dir: deps.agentWorktrees.worktreeDir(conversationId, repo),
+                })),
+            );
             yield worktreeFrame(worktree, onto, enforced, synced);
             // Recorded after the rebase: "before this message" means the branch the agent is about to read.
             yield* anchorIsolatedTurn(deps, conversationId, worktree.repos, turn.snapshot);
@@ -163,11 +190,19 @@ export const worktreePlacement = (
             };
             return steps.run({ id: conversationId, cwd: worktree.cwd, fenced: worktree.fenced, synced, resync });
         },
-        land: (failed) =>
+        land: (failed, awaiting) =>
             landTurn(
                 deps,
                 steps,
-                { conversationId, prompt: input.prompt, autoLand: input.autoLand, failed, aborted: turn.signal?.aborted === true, sync: () => rebase() },
+                {
+                    conversationId,
+                    prompt: input.prompt,
+                    autoLand: input.autoLand,
+                    failed,
+                    aborted: turn.signal?.aborted === true,
+                    awaitingWake: awaiting,
+                    sync: () => rebase(),
+                },
                 books,
             ),
         // A person-ended turn skipped the land, so its books are settled here; an errored one is left as it is.
@@ -177,7 +212,7 @@ export const worktreePlacement = (
             }
         },
         // Once per turn, whatever the outcome; an empty span means the worktree never came up.
-        settled: (failed) => {
+        settled: (ending) => {
             if (books.span.length === 0) {
                 return;
             }
@@ -187,7 +222,7 @@ export const worktreePlacement = (
                 agentId: conversationId,
                 ...(title !== undefined ? { title } : {}),
                 branch: books.branch,
-                outcome: failed ? "error" : (books.outcome ?? "idle"),
+                outcome: ending === "failed" ? "error" : (books.outcome ?? "idle"),
                 repos: books.span,
             });
             warmReview(deps, conversationId);

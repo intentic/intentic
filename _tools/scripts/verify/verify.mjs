@@ -5,7 +5,7 @@
 // measurement it leaves for the sandbox (push-report.mjs), which is why the sandbox no longer runs a recheck of its own. THE check work gets: the sandbox runs it on the main tree after every land, in the
 // background, never inside a conversation and never holding anything (a land, a commit, a push). Records its verdict,
 // green or red, for the push check to report. Run after a land (INTENTIC_LAND_FROM set), it first writes what a machine
-// decides (fixers.mjs), since no turn end does that any more.
+// decides (fixers.mjs), the backstop for what the land's own worktree run of them left.
 // node _tools/checks/run.mjs the checkout gates (once, as data)
 // node _tools/scripts/build/emit-declarations.mjs every emitted package's dist
 // turbo run typecheck
@@ -33,15 +33,25 @@ const root = repoRoot(import.meta.url);
 const { say, step, skip, fail, failing, failedSteps, finish } = createSteps("verify", root);
 const head = git(root, "rev-parse", "HEAD")?.trim();
 
-// Set by the daemon to the main-line commit the land it verifies departed from; a run by hand measures no land.
-const landFrom = process.env.INTENTIC_LAND_FROM;
+// Set by the daemon to the main-line commit the land it verifies departed from; a run by hand measures no land. One the
+// tree's HEAD does not descend from (a branch tip a rebase by hand orphaned) is no such commit: measured from, it charges
+// the land with everything main gained since, so the land is measured from HEAD instead, over what is not committed yet.
+const askedFrom = process.env.INTENTIC_LAND_FROM;
+const landFrom =
+    askedFrom === undefined || askedFrom === "" || head === undefined || git(root, "merge-base", "--is-ancestor", askedFrom, "HEAD") !== undefined
+        ? askedFrom
+        : head;
+if (landFrom !== askedFrom) {
+    say(`the land's base ${askedFrom.slice(0, 9)} is not on this tree's history; what it added is measured from HEAD ${head.slice(0, 9)}`);
+}
 const afterLand = landFrom !== undefined && landFrom !== "";
 // What the land changed, for the fixers that act only on what changed; undefined (git could not say) widens them.
 const landed = afterLand ? changedSince(root, landFrom) : undefined;
 
 // What a machine decides is written before anything is judged, on the tree the land left: formatting, and each failing
-// check's own fix. These used to run at every turn's end in the turn's own worktree; now they run once, here, and show
-// up in the main tree as ordinary uncommitted changes for whoever commits it.
+// check's own fix. A conversation's worktree runs the change's fixers before its land (the sandbox's
+// worktree-fixers.ts), so what they write rides that land; this is the backstop, and what it still writes shows up in
+// the main tree as ordinary uncommitted changes for whoever commits it.
 // The checks' answer for the tree as it will be judged: asked again only when a fixer wrote the tree.
 let verdicts = checkVerdicts(root);
 if (afterLand) {

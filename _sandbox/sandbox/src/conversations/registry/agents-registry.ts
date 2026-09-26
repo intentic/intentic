@@ -22,14 +22,13 @@ import type { JournalledTurn, TurnJournalRows } from "../../agent/run/turn/turn-
 import { opt } from "../../opt.js";
 import { parentOfActor } from "../../auth/principal.js";
 import { subagentCountsOf } from "../../agent/subagents/subagents.js";
-import { wakesItself } from "../../agent/tools/jobs/background-jobs.js";
 import { liveRunOf } from "../actor/conversation-holdings.js";
 import { queueView } from "../actor/conversation-queue.js";
 import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-message.js";
 import type { ConversationUnits } from "../../store/conversation-units.js";
 import { type ConversationActors, type ConversationBooks, createConversationActors } from "../actor/conversation-actors.js";
 import type { BeginTurn, SettleFlush } from "../actor/conversation-decide.js";
-import { activityLive, type ConversationState, NO_USAGE, type TurnUsage } from "../actor/conversation-state.js";
+import { activityLive, awaitingWake, type ConversationState, NO_USAGE, type TurnUsage } from "../actor/conversation-state.js";
 import { conversationStatus, parkedKinds } from "../actor/conversation-status.js";
 import {
     type AgentsStore,
@@ -448,6 +447,7 @@ const liveReadings = (entry: PersistedAgent, state: ConversationState | undefine
         ...opt("loop", loop),
         ...opt("workflow", workflow),
         ...(watches !== undefined && watches.length > 0 ? { watches: [...watches] } : {}),
+        awaitingWake: state !== undefined && awaitingWake(state),
         ...(jobs !== undefined && jobs.length > 0 ? { jobs: [...jobs] } : {}),
     };
 };
@@ -807,7 +807,6 @@ export const createFleet = (
             state,
             endingStatus(entry.ending),
             entry.placement.kind === "main" ? "idle" : standings.of(entry.id),
-            wakesItself(conversations, entry.id),
         );
         return {
             id: entry.id,

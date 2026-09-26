@@ -125,8 +125,6 @@ interface JobRecord {
     // Where a `handed` job listens.
     ports: readonly number[] | undefined;
     stoppedBy: JobStopper | undefined;
-    // The last run whose ending judged it, so the two looks one ending takes (before the land, at the settle) judge once.
-    judged: string | undefined;
 }
 
 // A conversation's jobs, by job id, until nothing depends on one any more.
@@ -347,7 +345,6 @@ const UNJUDGED = {
     watch: undefined,
     ports: undefined,
     stoppedBy: undefined,
-    judged: undefined,
 } as const satisfies Omit<JobRecord, "job" | "shellId" | "toolUseId">;
 
 // Undefined for anything that is not a job file; never throws, so a bad entry cannot fail a boot.
@@ -462,18 +459,6 @@ export const settledBackgroundJobs = (actors: Actors, conversationId: string): S
     return { running, unseen };
 };
 
-/**
- * Whether something already armed runs the conversation again by itself: a watch, or a job `settledBackgroundJobs`
- * would still hand to one. A job whose watch was stopped keeps running but wakes nothing, and so does one left running
- * for the person or being stopped.
- */
-export const wakesItself = (actors: Pick<ConversationActors, "holdings" | "state">, conversationId: string): boolean =>
-    (actors.state(conversationId)?.watches.length ?? 0) > 0 ||
-    actors
-        .holdings(JOBS)
-        .of(conversationId)
-        .some((record) => record.fate === undefined && (!jobFinished(record.job) || record.notice !== "read"));
-
 /** tmux sessions holding a still-running job, for the reaper to spare; prunes finished and expired records. */
 export const backgroundJobSessions = (actors: Actors, now: number = Date.now()): ReadonlySet<string> => {
     const live = new Set<string>();
@@ -509,18 +494,16 @@ export interface JudgedJob {
     readonly toolUseId: string | undefined;
 }
 
-/** The conversation's jobs one run's ending has not judged yet; claims them for that run, so each is judged once. */
-export const jobsToJudge = (actors: Holders, conversationId: string, runId: string): readonly JudgedJob[] => {
-    const judged: JudgedJob[] = [];
-    for (const record of actors.holdings(JOBS).of(conversationId)) {
-        if (record.judged === runId || jobFinished(record.job) || (record.fate !== undefined && record.fate !== "awaited")) {
-            continue;
-        }
-        record.judged = runId;
-        judged.push({ job: record.job, toolUseId: record.toolUseId });
-    }
-    return judged;
-};
+/**
+ * The conversation's jobs a run's ending has to judge: running, and neither handed over nor being stopped. Asked once
+ * per run, by the turn's close (turn-placement.ts), so nothing here has to remember which run asked.
+ */
+export const jobsToJudge = (actors: Holders, conversationId: string): readonly JudgedJob[] =>
+    actors
+        .holdings(JOBS)
+        .of(conversationId)
+        .filter((record) => !jobFinished(record.job) && (record.fate === undefined || record.fate === "awaited"))
+        .map((record) => ({ job: record.job, toolUseId: record.toolUseId }));
 
 /** Where a running job's pane leads a session, for the dirs that have one; the pid is the session's id. */
 export const jobPanes = (jobs: readonly BackgroundJob[]): Promise<Map<string, number>> => jobRunnerPids(jobs.map((job) => job.dir));
