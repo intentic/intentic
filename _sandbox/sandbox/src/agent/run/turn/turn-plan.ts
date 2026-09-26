@@ -68,6 +68,12 @@ export const planTurn = async (services: Services, sent: TurnInput, context: Tur
         const { warnings: _logged, spawn: _armed, ...refusal } = decision;
         return refusal;
     }
+    // The move off a blocked account is the conversation's, not only this turn's: switchAccount's profile write, so every
+    // later turn and every window reads where it runs now. Its session carries across (already chosen before planning),
+    // and the session frame binds it to the new account.
+    if (decision.accountMove !== undefined && input.conversationId !== undefined) {
+        await services.agents.switchAccount(input.conversationId, decision.accountMove);
+    }
     // Nothing is planned for the turn's end: no check runs there and nothing sends the model back. Its work is checked
     // after it lands (workspace/deps/verify-deps.ts), off everyone's clock.
     const base: TurnBase = {

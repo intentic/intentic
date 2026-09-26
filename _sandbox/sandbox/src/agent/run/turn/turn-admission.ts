@@ -115,14 +115,16 @@ const requestOf = (item: Omit<QueuedItem, "revision">): Turn => ({
 // it runs when the wake goes out, never as it ran when the wake was armed or queued: the routing it captured then goes
 // stale the moment the conversation moves, and replaying it would put the current session on an account, runtime or
 // model nobody chose. Only who serves the turn is replaced; its persona, placement, audience and job stay the wake's.
+// The account is left unnamed: routingFor fills in the conversation's own, and a wake naming none is routed off that
+// account where it can no longer serve (blocked-account.ts), as a person's next message is; naming it would pin it.
 const onCurrentRouting = (services: Services, turn: Turn): Turn => {
     const entry = services.agents.entry(turn.conversationId);
     if (entry === undefined) {
         return turn;
     }
     const { agent: _agent, harness: _harness, account: _account, model: _model, effort: _effort, thinking: _thinking, fast: _fast, ...own } = turn;
-    const { agent, harness, account, model, effort, thinking, fast } = conversationProfile(entry);
-    return { ...own, ...profileOf({ agent, harness, account, model, effort, thinking, fast }) };
+    const { agent, harness, model, effort, thinking, fast } = conversationProfile(entry);
+    return { ...own, ...profileOf({ agent, harness, model, effort, thinking, fast }) };
 };
 
 // What goes before anything waiting: a recovery the daemon runs by itself, or a rewind restoring files.
@@ -166,10 +168,23 @@ export const together = (items: readonly QueuedItem[]): readonly QueuedItem[] =>
     return items.slice(0, end === -1 ? items.length : end);
 };
 
-// Whether a drained batch goes on in the conversation's session: only on the runtime and account the session was minted
-// on, by the one routing rule (agent/providers/accounts/routing.ts).
-const continuesSession = (services: Services, routing: Pick<Turn, "conversationId" | "agent" | "harness" | "account">): boolean =>
-    routingFor(services.agents.entry(routing.conversationId)?.profile, routing).continues;
+// The session a person's turn goes on in, decided here and nowhere else: on a conversation the daemon holds, its own
+// session, only on the runtime and account that minted it, by the one routing rule (agent/providers/accounts/routing.ts).
+// A `sessionId` a client sent is no say in it; an older editor sends one it worked out itself, which this ignores. Only
+// a conversation not on record yet takes the one it names: a past session resumed from the history menu has no record.
+const sessionFor = (services: Services, routing: Pick<Turn, "conversationId" | "agent" | "harness" | "account" | "sessionId">): string | undefined => {
+    const entry = services.agents.entry(routing.conversationId);
+    if (entry === undefined) {
+        return routing.sessionId;
+    }
+    return routingFor(entry.profile, routing).continues ? services.conversations.sessionIdOf(routing.conversationId) : undefined;
+};
+
+// A person's turn as its sender asked for it, but on the session the daemon decides (sessionFor), never one it was sent.
+const personTurn = (services: Services, turn: Turn): Turn => {
+    const { sessionId: _asked, ...rest } = turn;
+    return { ...rest, ...opt("sessionId", sessionFor(services, turn)) };
+};
 
 // The turn a batch of waiting messages makes: the sandbox's alone on the session it continues; a person's words joined,
 // their files together, on the newest sender's routing, which is the latest pick. Its opening row is the first message's.
@@ -183,11 +198,11 @@ const turnOf = (services: Services, batch: readonly QueuedItem[]): Turn => {
         const { sessionId: _asked, ...wake } = onCurrentRouting(services, requestOf(last));
         return { ...wake, ...opt("sessionId", services.conversations.sessionIdOf(conversationId)) };
     }
-    const { prompt: _p, attachments: _a, mentions: _m, editorContext: _e, messageId: _i, sessionId: _s, ...routing } = requestOf(last);
+    const { prompt: _p, attachments: _a, mentions: _m, editorContext: _e, messageId: _i, sessionId: asked, ...routing } = requestOf(last);
     const attachments = batch.flatMap((item) => item.turn.attachments ?? []);
     const mentions = [...new Set(batch.flatMap((item) => item.turn.mentions ?? []))].filter((path) => !attachments.includes(path));
     const editorContext = batch.find((item) => item.turn.editorContext !== undefined)?.turn.editorContext;
-    const session = continuesSession(services, routing) ? services.conversations.sessionIdOf(conversationId) : undefined;
+    const session = sessionFor(services, { ...routing, sessionId: asked });
     return {
         ...routing,
         prompt: batch
@@ -326,9 +341,10 @@ export const createAdmission = (
         if (live !== undefined || daemon.conversations.state(conversationId)?.phase.kind === "running") {
             return intoLive(item, live);
         }
-        // Its own turn, as its sender asked for it, session and all; a wake on the routing the conversation has now.
+        // Its own turn, as its sender asked for it, on the session the daemon says it continues; a wake on the routing
+        // the conversation has now.
         const request = requestOf(item);
-        const run = await startWith([item], item.voice === "person" ? request : onCurrentRouting(daemon, request));
+        const run = await startWith([item], item.voice === "person" ? personTurn(daemon, request) : onCurrentRouting(daemon, request));
         if (run === "archived") {
             return ARCHIVED;
         }

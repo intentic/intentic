@@ -1,3 +1,4 @@
+import { type AccountRoute, heldForAccountMessage } from "../../providers/accounts/blocked-account.js";
 import { routingFor } from "../../providers/accounts/routing.js";
 import type {
     AgentCapabilities,
@@ -54,6 +55,8 @@ export interface TurnDecision extends DecidedEffects {
     readonly harness: AgentHarness;
     // As its arm is called with it: the conversation's latched account filled in where the turn named none.
     readonly input: RoutedAgentTurn;
+    // The account the conversation is moved to because the one it ran on cannot serve; the planner records the move.
+    readonly accountMove?: string;
     // What every arm builds on, the composed request as its base.
     readonly context: TurnContext;
     // The manifest after the persona's shelves and the owner's gates: the only list an arm may mount from.
@@ -72,11 +75,23 @@ const underRepoChecks = (settings: SandboxSettings, declared: readonly Rule[]): 
 
 // The account the arm is called with, by the one routing rule (agent/providers/accounts/routing.ts): the one the turn names, else
 // the one its conversation runs on for this provider, else none, which the credential resolver answers by serviceability.
-// A session resumes only under the account that minted it, so a turn naming none must not wander.
-const routedInput = (input: RoutedAgentTurn, entry: ConversationEntry | undefined): RoutedAgentTurn => {
-    const { account } = routingFor(entry?.profile, input);
+// A session resumes only under the account that minted it, so a turn naming none must not wander, except off an account
+// that can no longer serve it (blocked-account.ts), onto the ready one the conversation is moved to.
+const routedInput = (input: RoutedAgentTurn, entry: ConversationEntry | undefined, route: AccountRoute | undefined): RoutedAgentTurn => {
+    const account = route?.kind === "move" ? route.to : routingFor(entry?.profile, input).account;
     return account === undefined || account === input.account ? input : { ...input, account };
 };
+
+// What the log owes a turn moved off its conversation's account.
+const routeWarnings = (route: AccountRoute | undefined, input: AgentTurn): TurnWarning[] =>
+    route?.kind === "move"
+        ? [
+              {
+                  fields: { conversationId: input.conversationId, from: route.from, to: route.to, reason: route.reason },
+                  message: "account: the conversation's account cannot serve, moving the conversation to one that can",
+              },
+          ]
+        : [];
 
 // Taught through the `agents` CLI to runtimes with only a shell door (the Claude Code loop and Cursor carry the tools
 // in-prompt), once, on the conversation's opening turn.
@@ -165,11 +180,17 @@ export const decideTurn = (facts: TurnFacts, input: RoutedAgentTurn, context: Tu
         // Spread whole: the reading rides through to the composer's notice, which can only size a raise it was told.
         return { ok: false, code: "sandbox-memory-low", ...facts.held, warnings: [], spawn: false };
     }
+    // Refused before anything spawns rather than sent into a certain refusal; turned away at the door, so the words wait.
+    if (facts.accountRoute?.kind === "held") {
+        const { account, reason } = facts.accountRoute;
+        const warning = { fields: { conversationId: input.conversationId, account, reason }, message: "account: no account of the provider can serve, turn held" };
+        return { ok: false, code: "claude-not-entitled", message: heldForAccountMessage(input.agent, reason), account, warnings: [warning], spawn: false };
+    }
     const runtime = turnRuntime(input, facts.entry);
     const { capabilities } = runtime;
     const premise = premiseOf(facts, input, runtime);
     const { persona } = premise;
-    const warnings = personaWarnings(persona, input);
+    const warnings = [...personaWarnings(persona, input), ...routeWarnings(facts.accountRoute, input)];
     // What the declared window will not pay for; undefined for every model whose window holds a full turn.
     const trim = turnTrim(facts.declared?.window, capabilities.instructions);
     const settings = underRepoChecks(facts.settings, facts.repoChecks);
@@ -200,7 +221,8 @@ export const decideTurn = (facts: TurnFacts, input: RoutedAgentTurn, context: Tu
         ok: true,
         provider: runtime.provider,
         harness: runtime.harness,
-        input: routedInput(input, facts.entry),
+        input: routedInput(input, facts.entry, facts.accountRoute),
+        ...opt("accountMove", facts.accountRoute?.kind === "move" ? facts.accountRoute.to : undefined),
         context: planned,
         granted: mounts.capabilities,
         dependencyDir: premise.startIn ?? "",

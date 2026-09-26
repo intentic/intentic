@@ -65,6 +65,15 @@ export const context: TurnContext = {
 
 // Only the seams a given arm actually reaches for matter; each test overrides just those. An unnamed seam answers with
 // its own name (via `unstubbed`), never a bare undefined.
+// What a turn on a remembered Claude account reads to learn whether that account can still serve it: no account held
+// here, so nothing is judged and the turn runs where routing points.
+const noClaudeAccounts = (): Pick<Services, "claudeStore" | "claudeSeats" | "accountUsage" | "providerRefusals"> => ({
+    claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", { list: async () => [] }),
+    claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => ({}) }),
+    accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => ({}) }),
+    providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { read: async () => ({}) }),
+});
+
 export const servicesWith = (overrides: Partial<Services> = {}): Services =>
     unstubbed<Services>("services", {
         tools: [],
@@ -115,6 +124,7 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
         // No translator and no api key: the state both Codex gates refuse from, where most cases here start.
         config: testConfig,
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", { accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }) }),
+        ...noClaudeAccounts(),
         // Nothing to delegate to by default; Grok's own gate reads this same seam, so it belongs in the shared fixture
         // rather than duplicated.
         openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),

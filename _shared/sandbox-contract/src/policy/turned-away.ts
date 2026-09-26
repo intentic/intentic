@@ -5,6 +5,9 @@
 // A set rather than a run of case labels: what they share is a fact about the turn, not a shape.
 const TURNED_AWAY: ReadonlySet<string> = new Set([
     "claude-reauth",
+    // An organisation turned the account's Claude Code access off, or no account of the provider can serve: the next
+    // turn is routed off it (the daemon's blocked-account route), so the words wait for it rather than being spent.
+    "claude-not-entitled",
     "unknown-command",
     "context-window-too-small",
     "sandbox-memory-low",

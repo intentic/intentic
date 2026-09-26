@@ -860,6 +860,11 @@
         }
     },
     "chat": {
+        "accountFix": {
+            "admin": "sin puesto",
+            "reconnect": "hay que volver a conectarla",
+            "wait": "en pausa por ahora"
+        },
         "cardStatus": {
             "allowed": "Permitido",
             "alwaysAllowed": "Siempre permitido",
@@ -896,6 +901,15 @@
             "pause": "Pausar {name}",
             "play": "Reproducir {name}",
             "seek": "Avanzar en {name}"
+        },
+        "chatCapacity": {
+            "coolingDown": "en pausa de enfriamiento",
+            "noPublishedLimits": "sin límites publicados",
+            "noReadingYet": "todavía sin lectura",
+            "nothingAvailable": "nada disponible",
+            "nothingCanServe": "nada que pueda servir",
+            "refusedLastTurn": "rechazó tu último turno",
+            "spent": "agotado"
         },
         "chatCapacityRail": {
             "cantServe": "{count} no pueden servir",
@@ -1441,6 +1455,14 @@
         "pickerRunSettings": {
             "extendedThinking": "Razonamiento extendido",
             "fastSpeed": "Velocidad alta"
+        },
+        "planLimitBand": {
+            "blocked": "sin poder servir",
+            "none": "sin límites publicados",
+            "room": "con sitio",
+            "spent": "sin cupo",
+            "tight": "al límite",
+            "unread": "sin leer"
         },
         "subagents": {
             "agentDelegatesAgentTool": "Cuando un agente delega —con su herramienta Agent, o conduciendo Codex o Grok desde su shell— el agente que ha iniciado aparece aquí, con su propia transcripción.",

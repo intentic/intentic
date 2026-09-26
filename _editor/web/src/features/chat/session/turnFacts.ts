@@ -44,9 +44,16 @@ const surfaceSession = (conversation: Conversation, session: string): void => {
 // Each fact kind's consequence, one entry per kind of the contract's union, so a kind added there is a compile error
 // here until it is given one.
 const FACTS: { readonly [K in TurnFact["kind"]]: (conversation: Conversation, fact: Extract<TurnFact, { kind: K }>, turn: TurnContext) => void } = {
-    // Account comes off the fact when the daemon named one, else falls back to what this turn asked for.
-    session: (conversation, fact, turn) =>
-        conversation.selection.apply({ kind: `bindSession`, session: boundSession(fact.sessionId, turn, fact.account) }),
+    // Account comes off the fact when the daemon named one, else falls back to what this turn asked for. A session other
+    // than the one held is a new segment, whoever decided it (the daemon's routing): the terminal and browser the old one
+    // drove are not this one's.
+    session: (conversation, fact, turn) => {
+        if (conversation.session.value !== undefined && conversation.session.value.id !== fact.sessionId) {
+            conversation.agentTerminal.value = undefined;
+            conversation.agentBrowser.value = undefined;
+        }
+        conversation.selection.apply({ kind: `bindSession`, session: boundSession(fact.sessionId, turn, fact.account) });
+    },
     // First fact of an isolated turn: which branch/base this conversation works on. The sandbox can't enforce the
     // worktree with mounts, so tool paths redirect instead; said once, ever.
     worktree: (conversation, fact) => {

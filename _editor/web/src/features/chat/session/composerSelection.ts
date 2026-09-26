@@ -3,7 +3,7 @@ import { computed, shallowRef } from "vue";
 import { modelLabelFor, providerModels, providerTabs } from "../accounts/providerCatalog";
 import { clampEffort } from "../models/run-settings/effortScale";
 import { rememberedModelFor, rememberedProviderFor, rememberPick, turnDefaults } from "../run/turnDefaults";
-import { resumes, type TurnSettings } from "../run/turnRequest";
+import { readsAsContinuing, type TurnSettings } from "../run/turnRequest";
 import type { Conversation } from "./conversation";
 import { type PickAction, type PickEffects, type PickWorld, reduceSelection, type Selection, UNPICKED } from "./selectionReducer";
 import type { TranscriptView } from "./transcriptView";
@@ -18,7 +18,8 @@ import { formatReset, formatUtilization, isStale, modelAllowance, usageStatusFor
 export interface SwitchPoint {
     // Anything has happened on this chat: a row on screen, or a session held.
     readonly started: boolean;
-    // The held session still matches the selection, so the next turn resumes it.
+    // The held session still reads as matching the selection, so the next turn should resume it: the divider's words
+    // only, since which session a turn goes on in is the daemon's to say.
     readonly resumes: boolean;
     // The provider as the picker names it.
     readonly providerLabel: string;
@@ -213,7 +214,7 @@ export class ComposerSelection {
         const model = { id: this.model.value, label: modelLabelFor(this.provider.value, this.model.value) };
         return {
             started: this.host.transcript.messages.value.length > 0 || session !== undefined,
-            resumes: resumes(session, { agent: this.provider.value, account: this.account.value, harness: this.harness.value }),
+            resumes: readsAsContinuing(session, { agent: this.provider.value, account: this.account.value, harness: this.harness.value }),
             // ACP providers have no tab entry; falls back to the capability name or the raw provider id.
             providerLabel: providerTabs.find((tab) => tab.value === this.provider.value)?.label ?? providerLabel(this.provider.value),
             sentModel: this.state.value.sentModel,

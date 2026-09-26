@@ -466,14 +466,22 @@ export const planLimitBand = (row: Pick<PlanLimitRow, `state` | `readable`>): Pl
     }
 };
 
-// Sentence fragments, not headings — read as "3 with room · 1 tight".
-export const PLAN_LIMIT_BAND_LABEL: Record<PlanLimitBand, string> = {
-    blocked: `can't serve`,
-    spent: `spent`,
-    tight: `tight`,
-    room: `with room`,
-    unread: `unread`,
-    none: `no published limits`,
+// Sentence fragments, not headings — read as "3 with room · 1 tight". Built when read, in the reader's language.
+export const planLimitBandLabel = (band: PlanLimitBand): string => {
+    switch (band) {
+        case `blocked`:
+            return t(`chat.planLimitBand.blocked`);
+        case `spent`:
+            return t(`chat.planLimitBand.spent`);
+        case `tight`:
+            return t(`chat.planLimitBand.tight`);
+        case `room`:
+            return t(`chat.planLimitBand.room`);
+        case `unread`:
+            return t(`chat.planLimitBand.unread`);
+        case `none`:
+            return t(`chat.planLimitBand.none`);
+    }
 };
 
 // Same three tones a percentage uses everywhere, so the bar and its meters agree. `unread`/`none` are

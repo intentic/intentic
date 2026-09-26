@@ -129,9 +129,10 @@ test("a custom endpoint with no resolved model pins nothing rather than an empty
     expect(env["CLAUDE_CODE_SUBAGENT_MODEL"]).toBeUndefined();
 });
 
-// Which account an unnamed turn lands on (every unattended run, since only a composer names one), picked by headroom —
-// which an entitlement refusal alone can defeat: an untouched, refused account has the best-looking meter and would win
-// forever without this.
+// Which account an unnamed turn lands on (a conversation's first turn on a provider, a one-off, an automation naming
+// none), picked by headroom — which an entitlement refusal alone can defeat: an untouched, refused account has the
+// best-looking meter and would win forever without this. Every later turn of a conversation arrives here already
+// naming its account (routingFor), and is moved off a refused one before this (providers/accounts/blocked-account.ts).
 const twoAccounts = (refusal: ProviderRefusal | undefined, seats: Record<string, SeatRefusal> = {}): Services =>
     services({
         claudeStore: {
@@ -197,8 +198,10 @@ test("a spent allowance reads its account as spent until a reading with room lan
     expect(answered.ok && answered.credentials.account).toBe("refused");
 });
 
-test("a named account is still the account that runs, refused or not", async () => {
-    // A composer's own pick is made with the refusal visible; this gate is only for callers that name nobody.
+test("a named account is the account that runs, refused or not", async () => {
+    // Routing is decided before a credential is minted: a conversation's remembered account is moved off a refused one
+    // where the turn is planned (blocked-account.ts), so the account named here is either one a person or an
+    // automation chose for this turn, which runs and lets its refusal say why, or the ready one the turn was moved to.
     const result = await resolved(
         { at: Date.now(), kind: "entitlement", message: "organization has disabled Claude Code", account: "refused" },
         "refused",

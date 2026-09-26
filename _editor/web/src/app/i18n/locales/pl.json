@@ -861,6 +861,11 @@
         }
     },
     "chat": {
+        "accountFix": {
+            "admin": "brak stanowiska",
+            "reconnect": "wymaga ponownego połączenia",
+            "wait": "chwilowo wstrzymane"
+        },
         "cardStatus": {
             "allowed": "Dozwolone",
             "alwaysAllowed": "Zawsze dozwolone",
@@ -898,6 +903,15 @@
             "pause": "Wstrzymaj {name}",
             "play": "Odtwórz {name}",
             "seek": "Przewiń {name}"
+        },
+        "chatCapacity": {
+            "coolingDown": "chwilowo wstrzymany",
+            "noPublishedLimits": "brak opublikowanych limitów",
+            "noReadingYet": "brak odczytu",
+            "nothingAvailable": "nic nie jest dostępne",
+            "nothingCanServe": "nic nie może obsłużyć",
+            "refusedLastTurn": "odrzucił Twoją ostatnią turę",
+            "spent": "wyczerpany"
         },
         "chatCapacityRail": {
             "cantServe": "{count} nie może obsłużyć",
@@ -1441,6 +1455,14 @@
         "pickerRunSettings": {
             "extendedThinking": "Rozszerzone myślenie",
             "fastSpeed": "Wysokie tempo"
+        },
+        "planLimitBand": {
+            "blocked": "nie może obsłużyć",
+            "none": "brak opublikowanych limitów",
+            "room": "z miejscem",
+            "spent": "limit wyczerpany",
+            "tight": "na granicy",
+            "unread": "bez odczytu"
         },
         "subagents": {
             "agentDelegatesAgentTool": "Kiedy agent deleguje — swoim narzędziem Agent albo sterując Codexem czy Grokiem z powłoki — agent, którego uruchomił, pojawia się tutaj, z własnym zapisem rozmowy.",

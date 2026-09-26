@@ -1,4 +1,5 @@
 import type { AccountFix, AgentProvider, PlanLimitsHeld } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 import { providerAccounts, providerRefusals, translatorAccounts } from "../accounts/providerAccounts";
 import { providerDisplayLabel } from "../accounts/providerCatalog";
 import {
@@ -20,10 +21,6 @@ import {
 
 // How many accounts of one provider get a row before the rest are counted instead.
 const ROWS_PER_PROVIDER = 3;
-
-// Which of two kinds of nothing to report: never publishes limits, or not read yet.
-const NO_LIMITS = `no published limits`;
-const UNREAD = `no reading yet`;
 
 /** One allowance on one account: its bar, the window it measures, and that window's full name. */
 export interface CapacityLane {
@@ -201,7 +198,8 @@ const capacityRow = (row: PlanLimitRow, label: string | undefined): CapacityRow 
     identity: row.identity === label ? undefined : row.identity,
     percent: openPercent(row.pools),
     lanes: capacityLanes(row),
-    note: row.readable ? UNREAD : NO_LIMITS,
+    // Which of two kinds of nothing to report: not read yet, or never publishes limits.
+    note: row.readable ? t(`chat.chatCapacity.noReadingYet`) : t(`chat.chatCapacity.noPublishedLimits`),
     stale: row.stale,
 });
 
@@ -231,15 +229,15 @@ const outReason = (group: PlanLimitGroup): string => {
     // waiting for a pool, and must not be dated as though it were.
     const blocked = attentionGroups(group.rows);
     if (blocked.length > 0 && blocked.reduce((count, entry) => count + entry.rows.length, 0) === group.rows.length) {
-        return blocked.length === 1 && blocked[0] !== undefined ? accountFixLabel(blocked[0].fix) : `nothing that can serve`;
+        return blocked.length === 1 && blocked[0] !== undefined ? accountFixLabel(blocked[0].fix) : t(`chat.chatCapacity.nothingCanServe`);
     }
     if (group.rows.some((row) => row.state.kind === `spent`)) {
-        return `spent`;
+        return t(`chat.chatCapacity.spent`);
     }
     if (group.rows.every((row) => row.state.kind === `blocked` && row.state.fix === `wait`)) {
-        return `cooling down`;
+        return t(`chat.chatCapacity.coolingDown`);
     }
-    return group.refusal?.current === true ? `refused your last turn` : `nothing available`;
+    return group.refusal?.current === true ? t(`chat.chatCapacity.refusedLastTurn`) : t(`chat.chatCapacity.nothingAvailable`);
 };
 
 // Soonest instant an account that is waiting comes back: a spent account's reopening, or a bench's own retry instant,
@@ -262,7 +260,9 @@ export const chatCapacity = (held: readonly PlanLimitsHeld[] = [], now: number =
     // An account whose provider is holding reads off has an age nothing can move, so it must not date the fleet: one
     // stuck credential would otherwise print "11h ago" over thirty accounts read a minute ago. It is not dropped from
     // the reckoning, it is said separately (heldReadings), which is the only form of it a reader can act on. The daemon
-    // marks the same park on the snapshot (`unread`); this covers the beat between a press's answer and that mark.
+    // marks a sweep's park on the snapshot (`unread`), but not every park: the limit-reset probe parks on a 429 without
+    // marking it, and the sweep then skips the account, so nothing marks it until the park lifts. The press's answer
+    // also lands ahead of a sweep's mark.
     const heldNow = new Set(held.flatMap((entry) => (entry.resumesAt * 1000 > now ? [`${entry.provider}:${entry.account}`] : [])));
     // Held to the rows whose reading this rail rests something on: a credential no turn can run on is named by what it
     // is missing, never by a figure, so its last reading — of any age — must not date the ones that are drawn.

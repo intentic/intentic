@@ -11,10 +11,10 @@ import {
     formatAge,
     formatReset,
     formatUtilization,
-    PLAN_LIMIT_BAND_LABEL,
     type PlanLimitBand,
     PLAN_LIMIT_BANDS,
     type PlanLimitGroup,
+    planLimitBandLabel,
     planLimitBandTone,
     planLimitGroups,
     type PlanLimitRow,
@@ -59,7 +59,7 @@ const capacity = computed(() =>
     CAPACITY_BANDS.filter((band) => summary.value.counts[band] > 0).map((band) => ({
         band,
         count: summary.value.counts[band],
-        label: PLAN_LIMIT_BAND_LABEL[band],
+        label: planLimitBandLabel(band),
         share: (100 * summary.value.counts[band]) / Math.max(1, capacityTotal.value),
     })),
 );
@@ -192,9 +192,9 @@ const roster = computed(() => {
                         {{ segment.label }}
                     </span>
                     <span v-if="summary.counts.blocked > 0" class="text-danger">
-                        · {{ summary.counts.blocked }} {{ PLAN_LIMIT_BAND_LABEL.blocked }}
+                        · {{ summary.counts.blocked }} {{ planLimitBandLabel(`blocked`) }}
                     </span>
-                    <span v-if="summary.counts.none > 0" class="text-subtle"> · {{ summary.counts.none }} {{ PLAN_LIMIT_BAND_LABEL.none }} </span>
+                    <span v-if="summary.counts.none > 0" class="text-subtle"> · {{ summary.counts.none }} {{ planLimitBandLabel(`none`) }} </span>
                 </div>
             </div>
         </RowNote>

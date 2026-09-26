@@ -18,7 +18,7 @@ import { uuid } from "../../../lib/uuid";
 import { orRefusal, SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 import { type ProcedureInput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
-import { accountIntent, resumes, type SessionRef, type TurnSettings, turnRequestBody } from "../run/turnRequest";
+import { accountIntent, type SessionRef, type TurnSettings, turnRequestBody } from "../run/turnRequest";
 import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
 import { type AttachHead, followRun, type SentMessage, type TurnContext } from "../run/turnStream";
 import { invalidateAgentTranscript } from "../transcript/agentTranscript";
@@ -31,11 +31,12 @@ import { accepted, advance, IDLE, type RunEvent, type RunPhase } from "./runPhas
 // attached to by its run. Where a run stands is one value (runPhase.ts). What waits for the next turn is the daemon's
 // queue, the same for every window (Conversation.queue); nothing here holds words of its own.
 
-// A turn this window has opened and not yet handed to the daemon: its drawn bubble, its abort, the session it resumes.
+// A turn this window has opened and not yet handed to the daemon: its drawn bubble, its abort, and the session this
+// window held when it opened, which the account intent and an older daemon's fallback are read against.
 interface OpenedTurn {
     readonly bubble: number;
     readonly controller: AbortController;
-    readonly resume: SessionRef | undefined;
+    readonly session: SessionRef | undefined;
 }
 
 // A message sent again under the same id while no answer comes back: the daemon answers a resend with what it did the
@@ -57,11 +58,13 @@ const repeatsNudge = (message: { readonly text: string; readonly attachments: re
     return isNudgeText(message.text) && isNudgeText(waiting.text);
 };
 
-// What a press re-runs a held turn on: the runtime and model the composer holds, the account only as intent (the same
-// rule a send names it by, accountIntent). An empty pick means the daemon keeps the held model. `carry` keeps the
-// provider session across an account change, only when asked; moving to another account is switchAccount's (continueOn).
+// What a press re-runs a held turn on: the runtime and model the composer holds, the account only as a pick the daemon
+// has not taken (the same rule a send names it by, accountIntent); naming none leaves it to the daemon's record, which
+// also moves the turn off an account that can no longer serve. An empty pick means the daemon keeps the held model.
+// `carry` keeps the provider session across an account change, only when asked; moving to another account is
+// switchAccount's (continueOn).
 const heldRouting = (settings: TurnSettings, session: SessionRef | undefined, options: { readonly carry?: boolean }): ResumeRouting => {
-    const account = accountIntent(settings, { registered: true, resume: resumes(session, settings) ? session : undefined });
+    const account = accountIntent(settings, { registered: true, session });
     return {
         agent: settings.agent,
         harness: settings.harness,
@@ -266,12 +269,9 @@ export class TurnClient {
         // A pending reattach probe must not race this send's stream, nor must a superseded resume fire one later.
         this.probe?.abort();
         this.host.failures.cancelProbe();
-        // The session is resumed only while the selection still matches what minted it; the daemon reseeds otherwise.
+        // Whether the turn goes on in this session is the daemon's to say (routing.ts); a new session it names on the
+        // session frame is what cuts the segment here (turnFacts.ts).
         const session = this.host.session.value;
-        const resume = resumes(session, settings) ? session : undefined;
-        if (resume === undefined) {
-            this.cutSegment();
-        }
         this.host.selection.apply({ kind: `sent` });
         // The user's bubble, drawn now so the send reads as sent, replaced once the daemon's row arrives, same id.
         const bubble = this.host.transcript.append({
@@ -283,7 +283,7 @@ export class TurnClient {
         this.liveMode.value = undefined;
         const controller = new AbortController();
         this.beginTurn({ kind: `open`, composing, controller, startedAt: Date.now() });
-        return { bubble, controller, resume };
+        return { bubble, controller, session };
     }
 
     // First message of a fresh conversation names it, free; an attachment-only send is named after the files.
@@ -345,7 +345,7 @@ export class TurnClient {
         taken: (taken: boolean) => void = () => undefined,
         errand: TurnErrand | undefined = undefined,
     ): Promise<void> {
-        const { bubble: userMessageId, controller, resume } = opened;
+        const { bubble: userMessageId, controller, session } = opened;
         const { host } = this;
         // A fork names its origin on its first turn; consumed on the daemon's ack, so a refused send can retry cleanly.
         const forkOf = host.pendingForkOf.value;
@@ -373,7 +373,7 @@ export class TurnClient {
                     mode: host.selection.mode.value,
                     settings,
                     registered: host.registered.value,
-                    resume,
+                    session,
                     forkOf,
                     attachmentPaths,
                     mentionedPaths,
@@ -460,7 +460,7 @@ export class TurnClient {
                     mode: host.selection.mode.value,
                     settings,
                     registered: host.registered.value,
-                    resume: resumes(session, settings) ? session : undefined,
+                    session,
                     forkOf: undefined,
                     attachmentPaths,
                     mentionedPaths: mentionPaths(text).filter((path) => !attachmentPaths.includes(path)),
@@ -604,8 +604,9 @@ export class TurnClient {
         return true;
     }
 
-    // Drop the session ref and terminal/browser handles when the next turn opens a fresh session, a new tmux session.
-    // Written once since two callers cut a segment: an ordinary send, and resumeHeldTurn on a switched account.
+    // Drop the session ref and terminal/browser handles when the next turn opens a fresh session, a new tmux session:
+    // continueOn's, whose command retires the session by itself. Every other cut is the daemon's word, a session frame
+    // naming a new session (turnFacts.ts).
     private cutSegment(): void {
         this.host.session.value = undefined;
         this.host.agentTerminal.value = undefined;
@@ -621,14 +622,8 @@ export class TurnClient {
         if (this.stopping !== undefined) {
             await this.stopping;
         }
-        const settings = this.host.selection.turnSettings();
-        const session = this.host.session.value;
-        const routing = heldRouting(settings, session, options);
-        // A press that moves the conversation is also a segment cut: the fresh session belongs to the new credential,
-        // unless carried across. One naming no account continues on the daemon's own, so there's nothing to cut.
-        if (routing.account !== undefined && !resumes(session, settings) && options.carry !== true) {
-            this.cutSegment();
-        }
+        // Where it re-runs, and in which session, is the daemon's to say; a new session it names cuts the segment then.
+        const routing = heldRouting(this.host.selection.turnSettings(), this.host.session.value, options);
         this.host.selection.apply({ kind: `rerun` });
         if (!(await this.askResume(routing))) {
             return false;

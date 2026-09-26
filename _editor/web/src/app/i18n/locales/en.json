@@ -930,6 +930,15 @@
             "play": "Play {name}",
             "seek": "Seek {name}"
         },
+        "chatCapacity": {
+            "coolingDown": "cooling down",
+            "noPublishedLimits": "no published limits",
+            "noReadingYet": "no reading yet",
+            "nothingAvailable": "nothing available",
+            "nothingCanServe": "nothing that can serve",
+            "refusedLastTurn": "refused your last turn",
+            "spent": "spent"
+        },
         "chatCapacityRail": {
             "cantServe": "{count} can't serve",
             "moreRoom": "+{hidden} more with room",
@@ -1495,6 +1504,14 @@
         "pickerRunSettings": {
             "extendedThinking": "Extended thinking",
             "fastSpeed": "Fast speed"
+        },
+        "planLimitBand": {
+            "blocked": "can't serve",
+            "none": "no published limits",
+            "room": "with room",
+            "spent": "spent",
+            "tight": "tight",
+            "unread": "unread"
         },
         "subagents": {
             "agentDelegatesAgentTool": "When an agent delegates: with its Agent tool, or by driving Codex or Grok from its shell, the agent it started appears here, with its own transcript.",

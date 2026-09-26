@@ -1,4 +1,4 @@
-import { resumes, turnRequestBody } from "./turnRequest";
+import { turnRequestBody } from "./turnRequest";
 
 // Baseline turn settings reused across the request-shape tests below.
 const settings = {
@@ -25,7 +25,7 @@ describe(`turnRequestBody`, () => {
         mode: `plan`,
         settings,
         registered: false,
-        resume: undefined,
+        session: undefined,
         forkOf: undefined,
         attachmentPaths: [] as string[],
         mentionedPaths: [] as string[],
@@ -62,11 +62,15 @@ describe(`turnRequestBody`, () => {
         expect(wire(turnRequestBody({ ...base, isolated: true }))).toMatchObject({ isolated: true });
     });
 
-    it(`carries a resumed session id, and nothing at all in its place when there is none`, () => {
-        const resumed = wire(turnRequestBody({ ...base, resume: { id: `s-1`, provider: `claude`, account: undefined, harness: `native` } }));
-        expect(resumed).toMatchObject({ sessionId: `s-1` });
+    // Which session a turn goes on in is the daemon's to say (routing.ts). The id rides only for a daemon older than that,
+    // which resumes exactly what it is sent, and for a past session resumed from history, which no record holds yet.
+    it(`carries the held session id as a fallback while the selection reads as continuing it, and nothing otherwise`, () => {
+        const session = { id: `s-1`, provider: `claude`, account: undefined, harness: `native` } as const;
+        expect(wire(turnRequestBody({ ...base, session }))).toMatchObject({ sessionId: `s-1` });
 
         expect(wire(turnRequestBody(base))).not.toHaveProperty(`sessionId`);
+        expect(wire(turnRequestBody({ ...base, session, settings: { ...settings, harness: `claude-code` } }))).not.toHaveProperty(`sessionId`);
+        expect(wire(turnRequestBody({ ...base, session, settings: { ...settings, agent: `codex` } }))).not.toHaveProperty(`sessionId`);
     });
 
     it(`names a fork's origin and its file choice, and only for the fork's own first turn`, () => {
@@ -81,28 +85,31 @@ describe(`turnRequestBody`, () => {
         expect(wire(turnRequestBody({ ...base, settings: { ...settings, actsAs: `work` } }))).toMatchObject({ actsAs: `work` });
     });
 
-    // A window's account can be older than the conversation's (another window moved it, a limit move did), and naming it
-    // on a turn that only continues the conversation took it back there: an account switch nobody chose.
+    // A window's account can be older than the conversation's (another window moved it, a limit move did, the daemon
+    // moved it off an account that can no longer serve), and naming it on a turn that only continues the conversation
+    // took it back there: an account switch nobody chose, and a pin the daemon may not move off a refused seat.
     describe(`the account`, () => {
         const session = { id: `s-1`, provider: `claude`, account: `acct-a`, harness: `native` } as const;
         const onA = { ...settings, account: `acct-a` };
 
-        it(`is left to the daemon on a turn that continues the conversation's session`, () => {
-            expect(wire(turnRequestBody({ ...base, registered: true, settings: onA, resume: session }))).not.toHaveProperty(`account`);
+        it(`is left to the daemon where the selection holds what the daemon last reported`, () => {
+            expect(wire(turnRequestBody({ ...base, registered: true, settings: onA, session }))).not.toHaveProperty(`account`);
+            // Another loop on the same provider keeps the account: it belongs to the provider, not to the loop.
+            expect(wire(turnRequestBody({ ...base, registered: true, settings: { ...onA, harness: `claude-code` }, session }))).not.toHaveProperty(`account`);
         });
 
-        // A pick on a conversation the daemon holds goes as switchAccount; it rides a turn too only because that turn
-        // resumes nothing on the old account (resumes() says so), which is also how a daemon too old for the route learns it.
-        it(`is named for a pick that leaves the session behind`, () => {
-            const picked = { ...settings, account: `acct-b` };
-            expect(wire(turnRequestBody({ ...base, registered: true, settings: picked, resume: resumes(session, picked) ? session : undefined }))).toMatchObject({
+        // A pick on a conversation the daemon holds goes as switchAccount; it rides the turn too until the daemon reports
+        // it back, which is how a daemon too old for the route, or busy with a turn when it was asked, learns it.
+        it(`is named for a pick the daemon has not reported back`, () => {
+            expect(wire(turnRequestBody({ ...base, registered: true, settings: { ...settings, account: `acct-b` }, session }))).toMatchObject({
                 account: `acct-b`,
             });
         });
 
-        it(`is named where there is no conversation to follow: its first turn, or a turn that leaves the session behind`, () => {
-            expect(wire(turnRequestBody({ ...base, registered: false, settings: onA, resume: session }))).toMatchObject({ account: `acct-a` });
-            expect(wire(turnRequestBody({ ...base, registered: true, settings: onA, resume: undefined }))).toMatchObject({ account: `acct-a` });
+        it(`is named where there is no record to follow: a first turn, another provider, a window holding no session`, () => {
+            expect(wire(turnRequestBody({ ...base, registered: false, settings: onA, session }))).toMatchObject({ account: `acct-a` });
+            expect(wire(turnRequestBody({ ...base, registered: true, settings: { ...onA, agent: `codex` }, session }))).toMatchObject({ account: `acct-a` });
+            expect(wire(turnRequestBody({ ...base, registered: true, settings: onA, session: undefined }))).toMatchObject({ account: `acct-a` });
         });
     });
 

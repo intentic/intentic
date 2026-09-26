@@ -467,6 +467,70 @@ test("an account the turn names outranks the conversation's latched one", async 
     expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "the-account-the-user-picked" }));
 });
 
+// An organisation that turns an account's Claude Code off leaves it signing in fine and showing full headroom, so a
+// conversation remembering it would be sent back to it turn after turn, refused each time. THE FAILURE THIS PREVENTS:
+// the seat mark was read only by the unnamed pick, and every later turn names its account through routingFor.
+describe("a conversation whose account can no longer serve it", () => {
+    const moves: [string, string][] = [];
+    const roomy = { measuredAt: Date.now(), windows: [{ kind: "five_hour" as const, utilization: 20, gates: "all" as const }] };
+    const fleet = (ready: boolean): Services =>
+        harnessServices({
+            agents: unstubbed<Services["agents"]>("agents", {
+                entry: () => conversationAfter(3, { profile: { provider: "claude", harness: "native", account: "seatless" } }),
+                switchAccount: async (id: string, account: string) => {
+                    moves.push([id, account]);
+                    return undefined;
+                },
+            }),
+            claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", {
+                list: async () => [
+                    { id: "seatless", label: "seatless", connectedAt: 0 },
+                    { id: "spare", label: "spare", connectedAt: 1 },
+                ],
+            }),
+            claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", {
+                read: async () => ({ seatless: { at: 0, reason: "Your organization has disabled Claude Code." } }),
+            }),
+            // The refused seat reads emptiest, as a seat nothing ran on does; the spare is ready only when it has a reading.
+            accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", {
+                read: async () => (ready ? { seatless: { ...roomy, windows: [] }, spare: roomy } : { seatless: { ...roomy, windows: [] } }),
+            }),
+            providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { read: async () => ({}) }),
+        });
+
+    beforeEach(() => {
+        moves.length = 0;
+    });
+
+    test("moves the turn to a ready account, and the conversation with it", async () => {
+        const services = fleet(true);
+
+        await planTurn(services, turn({ conversationId: "conv-seat" }), context);
+
+        expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "spare" }));
+        expect(moves).toEqual([["conv-seat", "spare"]]);
+    });
+
+    test("holds the turn with the account's own reason when no account can serve it, before anything spawns", async () => {
+        const plan = await planTurn(fleet(false), turn({ conversationId: "conv-seat" }), context);
+
+        expect(plan).toMatchObject({ ok: false, code: "claude-not-entitled", account: "seatless" });
+        expect(plan.ok ? "" : plan.message).toContain("Your organization has disabled Claude Code.");
+        expect(credentials).not.toHaveBeenCalled();
+        expect(moves).toEqual([]);
+    });
+
+    // The composer naming the account for this very turn is a person's choice, made with the account's state in view.
+    test("runs a turn that names the account itself, and lets the refusal say why", async () => {
+        const services = fleet(true);
+
+        await planTurn(services, turn({ conversationId: "conv-seat", account: "seatless" }), context);
+
+        expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "seatless" }));
+        expect(moves).toEqual([]);
+    });
+});
+
 // A conversation with no turn behind it has nothing to latch, and that is the one case the headroom pick exists for.
 test("a conversation that has never run leaves the account to the resolver's own pick", async () => {
     const services = harnessServices({ agents: conversationAt({ turns: 0 }) });

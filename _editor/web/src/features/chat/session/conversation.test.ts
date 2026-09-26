@@ -2022,8 +2022,9 @@ describe(`Conversation`, () => {
         expect(conversation.session.value).toMatchObject({ id: `s-1` });
 
         conversation.selection.apply({ kind: `selectAccount`, account: `with-room` });
+        conversation.agentTerminal.value = `agent-s-1`;
         daemon.mockImplementation(
-            turnDaemon([{ kind: `delta`, text: `on it` }, { kind: `done` }], {
+            turnDaemon([{ kind: `session`, sessionId: `s-2`, account: `with-room` }, { kind: `delta`, text: `on it` }, { kind: `done` }], {
                 head: () => ({ prompt: withResumeNote(`ship the parser`, RESUME_NOTES.switched), startedAt: Date.now() }),
             }),
         );
@@ -2034,8 +2035,10 @@ describe(`Conversation`, () => {
             conversationId: `c1`,
             routing: { agent: `claude`, harness: `native`, account: `with-room`, model: `opus` },
         });
-        // Reset the session when the credential changes so the daemon can seed a fresh one.
-        expect(conversation.session.value).toBeUndefined();
+        // The daemon seeds a fresh session on the new credential and says so; this window takes its word, not a guess.
+        expect(conversation.session.value).toEqual({ id: `s-2`, provider: `claude`, account: `with-room`, harness: `native` });
+        // A new session is a new segment: the terminal the old one drove is not this one's.
+        expect(conversation.agentTerminal.value).toBeUndefined();
         // Still one turn and one user row: a press is the same request again, not a new message.
         expect(turnBodies()).toHaveLength(1);
         expect(conversation.transcript.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `ship the parser` }]);

@@ -7,6 +7,9 @@ import { type AgentHarness, type AgentProvider, DEFAULT_HARNESS, DEFAULT_PROVIDE
 //
 // An account left undefined is `auto`: nothing on file for this provider, so the credential resolver takes the
 // serviceability pick (usage/serviceability.ts via preferredAccount), and the session frame then latches what served.
+// An account filled in from the profile (the turn named none) is the conversation's remembered routing, not a choice
+// made for this turn: where it can no longer serve, planning moves the conversation off it (blocked-account.ts).
+// Continuing (`continues`) is decided here too, and only here: a client's own idea of the session is no say in it.
 
 /** What a conversation runs on as its record has it; undefined for a conversation not opened yet. */
 export interface RoutingProfile {

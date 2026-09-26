@@ -386,7 +386,10 @@ export const resolveHarnessCredentials = async (
         };
     }
     // An unnamed account is picked by the one serviceability rule (usage/serviceability.ts); a named account is never
-    // filtered. The only account there is runs whatever its state: a failure now explains itself, unlike a stale verdict.
+    // filtered here. Routing decided it before this: a conversation's remembered account is moved off one that cannot
+    // serve where the turn is planned (providers/accounts/blocked-account.ts), so a named account is a choice made for
+    // this turn, or the ready account the turn was moved to. The only account there is runs whatever its state: a
+    // failure now explains itself, unlike a stale verdict.
     // Refreshed within a bounded wait: a slow endpoint costs the pick freshness, not the turn its start.
     const unnamed = input.account === undefined;
     const connected = unnamed ? await services.claudeStore.list() : [];

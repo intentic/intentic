@@ -2,6 +2,7 @@ import type { Area, Capability, CredentialGate, Persona, Rule, SandboxSettings, 
 import type { Services } from "../../../composition.js";
 import { readPersonaPrompt } from "../../../personas/persona-kit.js";
 import type { ShortMemory } from "@intentic/constants/memory-room";
+import type { ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
 import { repoCheckRules } from "../../../rules/repo-checks.js";
 import { createCredentialGrants, type CredentialGrants } from "../../../secrets/credential-grants.js";
 import { loadedSkillCatalogNote } from "../../../store/loaded-skills.js";
@@ -9,6 +10,8 @@ import { landingChecksNoteFor } from "../../../workspace/deps/mainline-note.js";
 import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
 import type { ProjectSetupStatus } from "../../../workspace/layout/workspace-setup.js";
 import { contextNoteIfDue } from "../../context/conversation-context.js";
+import { type AccountRoute, offBlockedAccount } from "../../providers/accounts/blocked-account.js";
+import { routingFor } from "../../providers/accounts/routing.js";
 import { type FieldNotes, fieldNotes } from "../../prompt/field-notes.js";
 import { type IqSearchTeaching, iqSearchInstruction } from "../../prompt/iq-search-instruction.js";
 import { type DeclaredWindow, declaredWindow } from "../../prompt/window/context-budget.js";
@@ -17,6 +20,7 @@ import { workspaceMemoryNote } from "../../prompt/workspace-memory.js";
 import type { RoutedTurn, TurnInput } from "../../../seams/turn-starter.js";
 import { retrieveTurnContext, type TurnContextOutcome } from "../turn/turn-context.js";
 import type { TurnContext } from "../../providers/adapter.js";
+import { opt } from "../../../opt.js";
 import { EXPERIMENTS } from "./experiments.js";
 import { type ConversationEntry, type TurnPremise, type TurnRuntime, premiseOf, turnRuntime } from "./turn-premise.js";
 
@@ -63,6 +67,8 @@ export interface AdmittedTurnFacts {
     // What runs after the work lands and which failures the main tree already has; present only on a turn that owes it.
     readonly landingChecksNote: TurnNote | undefined;
     readonly sessionStore: string;
+    // Where a turn that names no account goes when the one its conversation remembers is blocked; absent is `keep`.
+    readonly accountRoute?: AccountRoute;
 }
 
 export type TurnFacts = HeldTurnFacts | AdmittedTurnFacts;
@@ -154,8 +160,26 @@ const treeReads = (context: TurnContext, premise: TurnPremise): Pick<AdmittedTur
     };
 };
 
+// Asked only for a turn that names no account on a conversation remembering one, so every other turn pays no read. An
+// unreadable verdict routes as before: the credential then refuses on its own read if the account cannot serve.
+const accountRouteOf = async (services: TurnFactsDeps, input: RoutedTurn, entry: ConversationEntry | undefined): Promise<AccountRoute> => {
+    const remembered = routingFor(entry?.profile, input).account;
+    if (input.account !== undefined || remembered === undefined) {
+        return { kind: "keep" };
+    }
+    try {
+        return await services.perf.track("turn.plan.account", { provider: input.agent }, () =>
+            offBlockedAccount(services, { provider: input.agent, named: input.account, remembered, model: input.model }),
+        );
+    } catch (error) {
+        services.logger.warn({ err: error, account: remembered }, "account route: the account's state could not be read, the turn runs where it was routed");
+        return { kind: "keep" };
+    }
+};
+
 // Every seam the reads above reach; nothing here writes.
-export type TurnFactsDeps = Pick<
+export type TurnFactsDeps = ServiceabilityDeps &
+    Pick<
     Services,
     | "agents"
     | "agentWorktrees"
@@ -204,7 +228,7 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
         runtime,
         settings,
     );
-    const gates = await gatesOf(services);
+    const [gates, accountRoute] = await Promise.all([gatesOf(services), accountRouteOf(services, input, entry)]);
     const premise = premiseOf({ entry, settings, personas, areas }, input, runtime);
     const [iqTeaching, landingChecksNote] = await Promise.all([
         iqTeachingFor(services, premise),
@@ -238,5 +262,6 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
         landingChecksNote,
         ...treeReads(context, premise),
         sessionStore: services.agentWorktrees.sessionStore(entry),
+        ...opt("accountRoute", accountRoute.kind === "keep" ? undefined : accountRoute),
     };
 };

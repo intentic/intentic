@@ -62,7 +62,7 @@ export interface PickWorld {
     // Most picks wait out a live turn; an account waits only while the model is generating (not parked on a card).
     readonly streaming: boolean;
     readonly generating: boolean;
-    // The session the next turn would resume, and whether this chat runs in this browser's own box.
+    // The session the daemon last reported for this chat, and whether this chat runs in this browser's own box.
     readonly session: SessionRef | undefined;
     readonly local: boolean;
     // Where a pick of a provider lands in this browser, and what a fresh chat starts on. No account: a fresh chat's is
@@ -121,7 +121,7 @@ export interface PickEffects {
     readonly segmentCut?: true;
     // The last speed answer described a turn run under the old fast pick.
     readonly fastStale?: true;
-    // The session the next turn resumes, as this pick leaves it.
+    // The session as the daemon last reported it, as this pick leaves it.
     readonly session?: SessionRef;
     // The one pending "switched" divider: follow the picks, stay in the record as it is, or be owed by a settle
     // (`settle` says whether a segment switch was made while the turn ran).
@@ -164,8 +164,8 @@ const pointAt = (selection: Selection, next: AgentProvider, world: PickWorld): S
     return {
         ...selection,
         provider: next,
-        // Switching back to the session's own runtime restores its account, so the next send resumes it. A pick made on
-        // the provider being left names none of the next one's accounts: another provider starts on auto.
+        // Switching back to the session's own runtime shows its account again, the one the daemon runs it on. A pick
+        // made on the provider being left names none of the next one's accounts: another provider starts on auto.
         account: next === world.session?.provider ? world.session.account : undefined,
         model: world.rememberedModel(next),
         displacedModel: undefined,
@@ -314,8 +314,10 @@ const REDUCERS: Reducers = {
                   selection: { ...selection, harness, sentModel: undefined },
                   effects: { kept: true, defaults: { harness }, segmentCut: true, divider: `refresh` },
               },
-    // The daemon's word on where the conversation runs: the selection shows it. A remote box's foreign id and another
-    // provider's session are never taken, and a session naming no account says nothing about one.
+    // The daemon's word on where the conversation runs, shown: how a move the daemon made by itself (a limit move, a
+    // turn moved off an account that can no longer serve) reaches the composer. It decides nothing: a turn names no
+    // account the daemon already holds (accountIntent). A remote box's foreign id and another provider's session are
+    // never taken, and a session naming no account says nothing about one.
     bindSession: (selection, { session }, world) =>
         world.local && session.provider === selection.provider && session.account !== undefined && session.account !== selection.account
             ? { selection: { ...selection, account: session.account }, effects: { session, divider: `refresh` } }

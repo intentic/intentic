@@ -17,11 +17,11 @@ import {
     formatAge,
     liveUsage,
     oldestMovableReading,
-    PLAN_LIMIT_BAND_LABEL,
     PLAN_LIMIT_BANDS,
     planHeadroom,
     type PlanLimitBand,
     planLimitBand,
+    planLimitBandLabel,
     planLimitBandTone,
     refusalFor,
     routedAccountFacts,
@@ -60,7 +60,7 @@ export const capacityCounts = (
     // Worst first; `none` is dropped, since unpublished limits aren't a fullness reading.
     return PLAN_LIMIT_BANDS.flatMap((band) => {
         const count = counts.get(band) ?? 0;
-        return count === 0 || band === `none` ? [] : [{ band, count, label: PLAN_LIMIT_BAND_LABEL[band], tone: planLimitBandTone(band) }];
+        return count === 0 || band === `none` ? [] : [{ band, count, label: planLimitBandLabel(band), tone: planLimitBandTone(band) }];
     });
 };
 

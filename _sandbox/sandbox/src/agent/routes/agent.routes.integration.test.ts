@@ -458,6 +458,148 @@ test("a wake runs on the account its conversation is on now, not the one the wat
     expect(daemon.agents.entry("conv-wake")?.profile.account).toBe("acct-b");
 });
 
+// Which session a person's turn goes on in is the daemon's to say (routing.ts `continues`). A window's idea of it can be
+// older than the conversation's (another window moved it, the daemon moved it off a refused seat), and an older editor
+// still sends one: it is no say in the matter.
+test("a person's turn goes on in the session the daemon holds, not one the client names", async () => {
+    const sessions: (string | undefined)[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                async *agent(request) {
+                    sessions.push(request.spec.sessionId);
+                    yield { kind: "session", sessionId: "s-daemon" };
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+    await runAgentTurn(client, { prompt: "start", conversationId: "conv-session" });
+
+    await runAgentTurn(client, { prompt: "carry on", conversationId: "conv-session", sessionId: "s-stale-window" });
+
+    expect(sessions).toEqual([undefined, "s-daemon"]);
+});
+
+// An organisation turning Claude Code off for an account leaves it signing in fine and reading full headroom. The seat is
+// marked at the first refusal, and a conversation still pinned to it moves off it on its next turn, whoever sends that
+// turn, while a person naming the account for a turn still gets it. THE FAILURE THIS PREVENTS: only the unnamed pick
+// read the mark, so every later turn of the conversation was sent back to the refused seat and refused again.
+describe("a conversation on an account its organisation turned off", () => {
+    const roomy = { measuredAt: Date.now(), windows: [{ kind: "five_hour" as const, utilization: 20, gates: "all" as const }] };
+    const fleet = (seats: Record<string, { at: number; reason: string }>, ready: readonly string[]) => {
+        const tokens: string[] = [];
+        const daemon = services({
+            claudeStore: {
+                read: async (id) => ({ id, label: id, connectedAt: 0, accessToken: `tok-${id}` }),
+                list: async () => ["acct-a", "acct-b", "acct-c"].map((id) => ({ id, label: id, connectedAt: 0 })),
+            },
+            claudeSeats: { read: async () => seats, refuse: async () => {}, clear: async () => {} },
+            accountUsage: {
+                read: async () => Object.fromEntries(ready.map((id) => [id, roomy])),
+                record: async () => {},
+                markUnread: async () => undefined,
+                clear: async () => {},
+            },
+            async *agent(request) {
+                tokens.push(request.credential?.kind === "claude-oauth" ? request.credential.token : (request.credential?.kind ?? "none"));
+                yield { kind: "done" };
+            },
+        });
+        return { daemon, tokens, client: clientFor(createApp(daemon)) };
+    };
+    const SEAT_OFF = { at: 0, reason: "Your organization has disabled Claude Code." };
+
+    it("moves a person's next message to a ready account, and the conversation with it", async () => {
+        const seats: Record<string, { at: number; reason: string }> = {};
+        const { daemon, tokens, client } = fleet(seats, ["acct-c"]);
+        await runAgentTurn(client, { prompt: "start", conversationId: "conv-seat", account: "acct-a" });
+        seats["acct-a"] = SEAT_OFF;
+
+        await runAgentTurn(client, { prompt: "carry on", conversationId: "conv-seat" });
+
+        expect(tokens).toEqual(["tok-acct-a", "tok-acct-c"]);
+        expect(daemon.agents.entry("conv-seat")?.profile.account).toBe("acct-c");
+    });
+
+    it("runs the account a person names for the turn, refused or not", async () => {
+        const { tokens, client } = fleet({ "acct-a": SEAT_OFF }, ["acct-c"]);
+
+        await runAgentTurn(client, { prompt: "on this one, please", conversationId: "conv-named", account: "acct-a" });
+
+        expect(tokens).toEqual(["tok-acct-a"]);
+    });
+
+    it("holds the words for a press when no account can serve, spawning nothing", async () => {
+        const seats: Record<string, { at: number; reason: string }> = {};
+        const { daemon, tokens, client } = fleet(seats, []);
+        await runAgentTurn(client, { prompt: "start", conversationId: "conv-held", account: "acct-a" });
+        seats["acct-a"] = SEAT_OFF;
+
+        await runAgentTurn(client, { prompt: "carry on", conversationId: "conv-held", messageId: "m-held" });
+
+        await waitFor(async () => expect(await queueOf(client, "conv-held")).toMatchObject({ items: [{ id: "m-held" }], paused: "refused" }), SETTLES);
+        expect(tokens).toEqual(["tok-acct-a"]);
+        expect(daemon.agents.entry("conv-held")?.profile.account).toBe("acct-a");
+    });
+
+    // The first refusal is the provider's: nothing had marked the seat yet. It marks it, holds the words, and the press
+    // that sends them again is routed off the refused seat like any later turn.
+    it("holds the words the provider refused for want of a seat, and sends them again on a ready account", async () => {
+        const seats: Record<string, { at: number; reason: string }> = {};
+        const tokens: string[] = [];
+        const daemon = services({
+            claudeStore: {
+                read: async (id) => ({ id, label: id, connectedAt: 0, accessToken: `tok-${id}` }),
+                list: async () => ["acct-a", "acct-c"].map((id) => ({ id, label: id, connectedAt: 0 })),
+            },
+            claudeSeats: {
+                read: async () => seats,
+                refuse: async (id, reason) => void (seats[id] = { at: Date.now(), reason }),
+                clear: async () => {},
+            },
+            accountUsage: { read: async () => ({ "acct-c": roomy }), record: async () => {}, markUnread: async () => undefined, clear: async () => {} },
+            async *agent(request) {
+                const token = request.credential?.kind === "claude-oauth" ? request.credential.token : "none";
+                tokens.push(token);
+                if (token === "tok-acct-a" && tokens.length > 1) {
+                    yield { kind: "error", code: "claude-not-entitled", message: SEAT_OFF.reason };
+                }
+                yield { kind: "done" };
+            },
+        });
+        const client = clientFor(createApp(daemon));
+        await runAgentTurn(client, { prompt: "start", conversationId: "conv-refused-seat", account: "acct-a" });
+
+        await runAgentTurn(client, { prompt: "carry on", conversationId: "conv-refused-seat", messageId: "m-seat" });
+        await waitFor(
+            async () => expect(await queueOf(client, "conv-refused-seat")).toMatchObject({ items: [{ id: "m-seat" }], paused: "refused" }),
+            SETTLES,
+        );
+        expect(seats["acct-a"]?.reason).toBe(SEAT_OFF.reason);
+
+        await client.agent.queueResume({ conversationId: "conv-refused-seat" });
+        await waitFor(() => expect(tokens).toEqual(["tok-acct-a", "tok-acct-a", "tok-acct-c"]), SETTLES);
+        expect(daemon.agents.entry("conv-refused-seat")?.profile.account).toBe("acct-c");
+    });
+
+    // A wake names the account its conversation runs on only by leaving it to routing, so it is moved the same way.
+    it("moves a wake the same way, whichever account the wake was armed under", async () => {
+        const seats: Record<string, { at: number; reason: string }> = {};
+        const { daemon, tokens, client } = fleet(seats, ["acct-c"]);
+        await runAgentTurn(client, { prompt: "start the server and watch it", conversationId: "conv-wake-seat", account: "acct-a" });
+        await runAgentTurn(client, { prompt: "now the docs", conversationId: "conv-wake-seat", account: "acct-b" });
+        seats["acct-b"] = SEAT_OFF;
+
+        await daemon.turns.say({ voice: "sandbox", turn: { prompt: "The watch fired.", conversationId: "conv-wake-seat", account: "acct-a" } });
+        await waitFor(() => expect(tokens).toHaveLength(3), SETTLES);
+        await waitFor(() => expect(daemon.conversations.running("conv-wake-seat")).toBe(false), SETTLES);
+
+        expect(tokens).toEqual(["tok-acct-a", "tok-acct-b", "tok-acct-c"]);
+        expect(daemon.agents.entry("conv-wake-seat")?.profile.account).toBe("acct-c");
+    });
+});
+
 // Only a person reopens an archived conversation: the sandbox's own words go nowhere, and a person's message brings it back.
 describe("an archived conversation", () => {
     it("takes the sandbox's words nowhere, not even into its queue, and stays archived", async () => {

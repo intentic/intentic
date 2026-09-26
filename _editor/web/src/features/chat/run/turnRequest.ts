@@ -1,9 +1,8 @@
 import type { AgentHarness, AgentProvider, EditorContext, PermissionMode, TurnErrand } from "@intentic/sandbox-contract";
 import type { ProcedureInput } from "../../sandbox/client/sandboxRpc";
 
-// The turn body the daemon receives: what a send carries, which session it may resume, and the shape that
-// states both on the wire. Provider and harness are switchable mid-conversation; a session id only resumes on
-// the runtime that minted it, so a switched turn omits it.
+// The turn body the daemon receives: what a send carries and the shape that states it on the wire. Which session a turn
+// goes on in is the daemon's to decide (routing.ts); the session id rides only as a fallback for an older daemon.
 
 // Where a fork was cut from, carried by its first turn: `keep` rows of `conversationId`, over `files` then or now.
 export type ForkLink = NonNullable<ProcedureInput<`agent.run`>["forkOf"]>;
@@ -51,9 +50,11 @@ export const boundSession = (
     resolvedAccount: string | undefined,
 ): SessionRef => ({ id: sessionId, provider: turn.provider, account: resolvedAccount ?? turn.account, harness: turn.harness });
 
-// True when a session's runtime, account and harness still match the current selection; any mismatch means the
-// next turn starts fresh. A selection on auto names no account, so it continues wherever the daemon runs the session.
-export const resumes = (
+// This window's reading of the daemon's continuation rule (routing.ts `continues`: same runtime, account and harness),
+// for two things only: the words of the "switched" divider, and the session id a daemon older than daemon-side
+// continuation needs sent (fallbackSessionId). The daemon decides which session a turn goes on in; nothing here routes.
+// A selection on auto names no account, so it continues wherever the daemon runs the session.
+export const readsAsContinuing = (
     session: SessionRef | undefined,
     selection: { agent: AgentProvider; account: string | undefined; harness: AgentHarness },
 ): boolean =>
@@ -62,15 +63,27 @@ export const resumes = (
     (selection.account === undefined || session.account === selection.account) &&
     session.harness === selection.harness;
 
-// The account a request names: intent only. The conversation's account is the daemon's record (AgentSummary.account),
-// moved by `switchAccount`, so a turn that continues the session this window holds names none: this window's idea of it
-// can be older than the conversation's (another window, a limit move). Named only where there is nothing to continue:
-// a chat's first turn, or a turn that leaves the session behind (another runtime, or a pick a daemon too old for
-// `switchAccount` could only take this way). Undefined there too is auto.
+// FALLBACK for a daemon older than daemon-side continuation, which resumes exactly the session it is sent: the one this
+// window holds, while the selection still reads as continuing it. A current daemon ignores it on a conversation it
+// holds (routingFor decides) and takes it only for a conversation not on record yet: a past session resumed from the
+// history menu. Remove once no supported daemon predates that.
+export const fallbackSessionId = (session: SessionRef | undefined, settings: Pick<TurnSettings, "agent" | "account" | "harness">): string | undefined =>
+    readsAsContinuing(session, settings) ? session?.id : undefined;
+
+// The account a request names: a pick the daemon has not taken yet, and only that. Where a conversation runs is the
+// daemon's record (routingFor), moved by `switchAccount` and reported back on each session frame (`session`), so a turn
+// naming none runs there, and is moved off it by the daemon when that account can no longer serve. Named, and so run
+// whatever the account's state, only where the selection holds something that record does not: a chat's first turn
+// (undefined there too is auto), a turn onto another provider than the conversation's, or an account other than the
+// one the daemon last reported (a pick a daemon too old for `switchAccount`, or busy with a turn, has not taken).
 export const accountIntent = (
-    settings: Pick<TurnSettings, "account">,
-    facts: { readonly registered: boolean; readonly resume: SessionRef | undefined },
-): string | undefined => (facts.registered && facts.resume !== undefined ? undefined : settings.account);
+    settings: Pick<TurnSettings, "agent" | "account">,
+    facts: { readonly registered: boolean; readonly session: SessionRef | undefined },
+): string | undefined => {
+    const { session } = facts;
+    const recorded = facts.registered && session !== undefined && session.provider === settings.agent;
+    return recorded && (settings.account === undefined || settings.account === session.account) ? undefined : settings.account;
+};
 
 // Flags that ride only when true, since the daemon reads false and unset the same way. `autoPicked` is deliberately not
 // one of them: unset there would leave an earlier turn's veto standing on the conversation.
@@ -108,8 +121,9 @@ export const turnRequestBody = (input: {
     readonly settings: TurnSettings;
     // The daemon has this conversation on record, so a turn naming no account runs on the one it is on (accountIntent).
     readonly registered: boolean;
-    // Session this turn resumes, if the selection still matches the runtime and account that minted it.
-    readonly resume: SessionRef | undefined;
+    // The session this window holds, as the daemon last reported it (bindSession). Not which one the turn resumes: the
+    // daemon decides that; this is only what the account intent and an older daemon's fallback are read against.
+    readonly session: SessionRef | undefined;
     readonly forkOf: ForkLink | undefined;
     // Files the user staged as chips. A path the daemon can't resolve refuses the send, since the user chose it.
     readonly attachmentPaths: string[];
@@ -143,7 +157,8 @@ export const turnRequestBody = (input: {
         ...(here && input.settings.actsAs !== undefined ? { actsAs: input.settings.actsAs } : {}),
         // Omitted for another box, whose projects are its own.
         ...(here && input.settings.startIn !== undefined ? { startIn: input.settings.startIn } : {}),
-        sessionId: input.resume?.id,
+        // FALLBACK only (fallbackSessionId): a current daemon picks the session itself.
+        sessionId: fallbackSessionId(input.session, input.settings),
         errand: input.errand,
         ...(input.forkOf !== undefined ? { forkOf: input.forkOf } : {}),
         // Empty selection (catalog not yet loaded) is dropped; the daemon resolves its own live default.

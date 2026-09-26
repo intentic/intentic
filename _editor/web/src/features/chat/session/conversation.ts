@@ -75,7 +75,8 @@ export class Conversation {
     // Where this conversation was cut from, until the daemon accepts a turn carrying it; a fork's only record.
     readonly pendingForkOf = ref<ForkLink | undefined>(undefined);
 
-    // Session the next matching turn resumes, with the provider/account that minted it; public for the manager.
+    // The session the daemon last reported for this conversation, with the provider/account that minted it; public for
+    // the manager. Which session the next turn goes on in is the daemon's to say.
     readonly session = ref<SessionRef | undefined>();
 
     // tmux session this conversation's Bash runs in (`agent-<sdk session>`); undefined until the first Bash.
