@@ -35,7 +35,9 @@ flowchart LR
 - Fronts that predate `/tunnel/v2` still dial `/tunnel/v1`, two lanes each an h2 session, an upgrade carried as a
   CONNECT whose h1 head rides under `x-ingress-*`. [legacy.rs](src/legacy.rs) alone speaks it, reading those fronts'
   transfer routes from the list frozen with the door, and goes once no front dials it.
-- The front pings its WebSockets every 15 s and the edge only listens; either end drops a peer silent for 45 s. A QUIC
+- A `/tunnel/v2` front pings its WebSockets every 15 s and the edge only listens; either end drops a peer silent for
+  45 s. On `/tunnel/v1` the edge pings too, because some older fronts never ping and only answer: an edge that
+  stopped pinging them dropped each one for silence every minute (`Door::liveness` in src/edge.rs). A QUIC
   connection's own keep-alive and idle timeout, on the same cadence, are its only liveness.
 - With the certificate held here (below), browsers get HTTP/3 on the same port, and the editor's terminals ride
   WebTransport where the platform relays the edge's declaration on the sandbox's row: a session opened at
@@ -254,13 +256,18 @@ are abandoning the switch, so that Fly can renew its own.
 **3. Stage the edge's secrets**, without a restart:
 
 ```sh
-flyctl secrets list -a intentic-ingress        # PLATFORM_URL must already be https://api.intentic.dev
+flyctl secrets list -a intentic-ingress
 flyctl secrets set --stage -a intentic-ingress \
-    INGRESS_PLATFORM_TOKEN="$TOKEN" \
+    INGRESS_PLATFORM_TOKEN="$TOKEN" PLATFORM_URL=https://api.intentic.dev \
     INGRESS_TLS_PORT=8443 INGRESS_PROXY_PROTOCOL=true \
-    INGRESS_QUIC_PORT=8443 INGRESS_QUIC_HOST=fly-global-services \
+    INGRESS_QUIC_PORT=443 INGRESS_QUIC_HOST=fly-global-services \
     INGRESS_ALT_SVC='h3=":443"; ma=86400'
 ```
+
+`PLATFORM_URL` is where the edge fetches the certificate with that token, and without both the TLS listener refuses to
+start. It also turns on revocation (`GET /api/reachability/<id>`, fail-open: only a definite 404 refuses), so first check
+that every sandbox in the edge's `tunnel registered` log answers 200 there. `INGRESS_QUIC_PORT` must be the public 443:
+Fly rewrites only a UDP packet's address, never its port, and a QUIC door on 8443 hears nothing (it did, on the day).
 
 Check: `flyctl secrets list -a intentic-ingress` lists them as staged, and `flyctl status -a intentic-ingress` shows
 the machines' uptime unchanged. **Restarts:** nothing. **Rollback:** `flyctl secrets unset --stage -a intentic-ingress

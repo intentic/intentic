@@ -16,9 +16,11 @@
 # and one that dials nothing answers the `no-tunnel` verdict. That is why every hosted machine must dial before this
 # file is deployed.
 #
-# The ports the process binds are set as secrets, not here: INGRESS_TLS_PORT=8443 and INGRESS_QUIC_PORT=8443 with
-# INGRESS_QUIC_HOST=fly-global-services, the only address Fly delivers UDP to. The plain listener (INGRESS_PORT, 8080)
-# stays up for the health check and the redirect on 80.
+# The ports the process binds are set as secrets, not here: INGRESS_TLS_PORT=8443 (TCP, behind the PROXY header), and
+# INGRESS_QUIC_PORT=443 with INGRESS_QUIC_HOST=fly-global-services, the only address Fly delivers UDP to. The QUIC port
+# MUST equal the public 443: Fly rewrites only the address of a UDP packet, never its port, so a QUIC door on any other
+# port receives nothing (go-live, 2026-09-26: 8443 here left HTTP/3 silent until it became 443). The plain listener
+# (INGRESS_PORT, 8080) stays up for the redirect on 80.
 
 app = "intentic-ingress"
 primary_region = "iad"
@@ -52,8 +54,9 @@ primary_region = "iad"
     timeout = "5s"
     grace_period = "5s"
 
-# Plain HTTP only to be sent to HTTPS; Fly's proxy answers the redirect itself. The check reads /health off the plain
-# listener, which answers it with no tunnel, no platform call and no disk (src/edge.rs).
+# Plain HTTP only to be sent to HTTPS; Fly's proxy answers the redirect itself. The check is TCP: an HTTP check on this
+# service never reported through Fly's proxy at go-live ("waiting for status update", and the deploy timed out on it),
+# while the process's own /health stays readable over TLS for deploy-ingress.sh's read-back.
 [[services]]
   internal_port = 8080
   protocol = "tcp"
@@ -66,18 +69,16 @@ primary_region = "iad"
     handlers = ["http"]
     force_https = true
 
-  [[services.http_checks]]
-    path = "/health"
-    method = "GET"
-    protocol = "http"
+  [[services.tcp_checks]]
     interval = "15s"
     timeout = "5s"
     grace_period = "5s"
 
 # QUIC on the same public port: a front's tunnel (ALPN intentic-tunnel/1), a browser's HTTP/3 and WebTransport (h3).
-# Fly delivers UDP only to a dedicated IPv4 (`fly ips allocate-v4`) and only to fly-global-services.
+# Fly delivers UDP only to a dedicated IPv4 (`fly ips allocate-v4`), only to fly-global-services, and only on the port
+# it arrived on, so internal_port is 443 like the public one (INGRESS_QUIC_PORT=443).
 [[services]]
-  internal_port = 8443
+  internal_port = 443
   protocol = "udp"
   auto_stop_machines = false
   auto_start_machines = false

@@ -160,8 +160,9 @@ fn the_tls_config_passes_443_through_with_proxy_headers_and_carries_udp_beside_i
         Some(true)
     );
 
+    // Fly rewrites only a UDP packet's address, never its port: the QUIC door listens on the public port itself.
     let quic = on("udp", 443);
-    assert_eq!(quic["internal_port"].as_integer(), Some(TLS_PORT));
+    assert_eq!(quic["internal_port"].as_integer(), Some(443));
 
     for service in &listed {
         assert_eq!(

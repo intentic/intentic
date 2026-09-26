@@ -368,7 +368,7 @@ impl Edge {
         )
         .await;
         let (closing, closed) = watch::channel(None);
-        let (session_side, mut pumping) = tunnel::pump(socket, Liveness::Listens, closed);
+        let (session_side, mut pumping) = tunnel::pump(socket, door.liveness(), closed);
         let (session, mut driving) = match &door {
             Door::Mux(_, routes) => {
                 let (opener, driving) = mux::client(session_side);
@@ -443,6 +443,16 @@ impl Door {
     fn lane(&self) -> Lane {
         match self {
             Self::Mux(lane, _) | Self::Legacy(lane) => *lane,
+        }
+    }
+
+    // Who keeps the socket alive. A `/tunnel/v2` front always pings, so the edge only listens. A `/tunnel/v1` front
+    // may predate that one-sided rule: some never ping and only answer the edge's pings, and an edge that stopped
+    // pinging dropped them for silence every `DEAD_AFTER` (each drop cutting that sandbox's terminals and streams).
+    fn liveness(&self) -> Liveness {
+        match self {
+            Self::Mux(..) => Liveness::Listens,
+            Self::Legacy(_) => Liveness::Pings,
         }
     }
 
@@ -626,6 +636,15 @@ fn text(status: StatusCode, sentence: &str) -> Response<Body> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_edge_pings_legacy_fronts_and_leaves_v2_fronts_to_ping_it() {
+        assert_eq!(Door::Legacy(Lane::Interactive).liveness(), Liveness::Pings);
+        assert_eq!(
+            Door::Mux(Lane::Interactive, BulkRoutes::parse("")).liveness(),
+            Liveness::Listens
+        );
+    }
 
     #[test]
     fn http_3_is_advertised_unless_the_sandbox_named_its_own() {
