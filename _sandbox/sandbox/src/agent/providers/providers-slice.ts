@@ -1,19 +1,23 @@
 import type { AcpAgentConfig, AgentEvent, ModelPin, NativeProvider, SafetyVerdict } from "@intentic/sandbox-contract";
-import type { EndpointCatalog } from "../../endpoints/endpoint-catalog.js";
+import { join } from "node:path";
+import type { Services } from "../../composition.js";
+import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
+import { createEndpointCatalog, type EndpointCatalog } from "../../endpoints/endpoint-catalog.js";
 import type { AcpConnections } from "../../runtimes/acp/acp-connection.js";
 import type { OpenCodeService } from "../../runtimes/opencode/opencode.js";
-import type { ProviderDeps, RuntimeAdapters } from "../../runtimes/runtime-table.js";
+import { PROVIDER_MODULES, type ProviderDeps, RUNTIME_ADAPTERS, type RuntimeAdapters } from "../../runtimes/runtime-table.js";
 import type { AccountUsageStore } from "../../usage/account-usage.js";
 import type { HeadroomService } from "../../usage/headroom.js";
-import type { ModelCooldownStore } from "../../usage/model-cooldowns.js";
-import type { ModelRefusalStore } from "../../usage/model-refusals.js";
+import { fileModelCooldownStore, modelCooldownsDocument, type ModelCooldownStore } from "../../usage/model-cooldowns.js";
+import { fileModelRefusalStore, modelRefusalsDocument, type ModelRefusalStore } from "../../usage/model-refusals.js";
 import type { ObservedLimitStore } from "../../usage/observed-limits.js";
-import type { ProviderRefusalStore } from "../../usage/provider-refusals.js";
-import type { UsageStore } from "../../usage/usage-store.js";
-import type { HarnessRequest } from "../run/agent.js";
-import type { JudgeFacts } from "../tools/command-judge.js";
+import { fileProviderRefusalStore, providerRefusalsDocument, type ProviderRefusalStore } from "../../usage/provider-refusals.js";
+import { fileUsageStore, type UsageStore } from "../../usage/usage-store.js";
+import { type HarnessRequest, runAgent } from "../run/agent.js";
+import { judgeCommand, type JudgeFacts } from "../tools/command-judge.js";
 import type { AgentRequest, ContainerCredential } from "./agent-request.js";
 import type { ProviderCatalog, ProviderModule } from "./provider-module.js";
+import { providerCatalogsOf, providerReadiness } from "./provider-registry.js";
 import type { CliProxyClient } from "./translator.js";
 
 // Model providers: their modules, catalogs and readiness, the runtimes' adapters, and what each account has left.
@@ -70,3 +74,36 @@ export interface ProvidersSlice {
     // is the reading, and the only one Cursor ever gives.
     readonly observedLimits: ObservedLimitStore;
 }
+
+// What the slice is built from: the members built before it, since the provider areas and the headroom read them too;
+// the one whose code this directory may not import (wakeLocalModel, above); and the ACP and Pi adapters, whose
+// runtimes import agent/ back, so building them here would close a cycle.
+export interface ProvidersDeps
+    extends Pick<
+        ProvidersSlice,
+        "cliProxy" | "openCode" | "authRoot" | "accountUsage" | "headroom" | "observedLimits" | "acpConnections" | "acpAgent" | "piAgent" | "wakeLocalModel"
+    > {
+    readonly historyRoot: string;
+    // The actors that hold the children and background commands a Claude Code turn starts.
+    readonly conversations: ConversationActors;
+    // The catalogs, readiness and the safety judge each read every provider module's own stores, the provider areas
+    // included, so they take the finished services per call.
+    readonly whole: () => Services;
+}
+
+// Builds the providers slice.
+export const createProvidersSlice = ({ historyRoot, conversations, whole, ...built }: ProvidersDeps): ProvidersSlice => ({
+    ...built,
+    usage: fileUsageStore(join(historyRoot, "usage.jsonl")),
+    providerRefusals: fileProviderRefusalStore(join(historyRoot, providerRefusalsDocument.path)),
+    modelRefusals: fileModelRefusalStore(join(historyRoot, modelRefusalsDocument.path)),
+    modelCooldowns: fileModelCooldownStore(join(historyRoot, modelCooldownsDocument.path)),
+    providerCatalogs: providerCatalogsOf(PROVIDER_MODULES, whole),
+    providerReadiness: () => providerReadiness(whole()),
+    providerModules: PROVIDER_MODULES,
+    adapters: RUNTIME_ADAPTERS,
+    judgeCommand: (input, signal) => judgeCommand(whole(), input, signal),
+    endpointModels: createEndpointCatalog(join(built.authRoot, "endpoints")),
+    // The Claude Code loop over these actors, which hold the children and background commands a turn starts.
+    agent: (request) => runAgent(conversations, request),
+});

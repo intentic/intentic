@@ -1,9 +1,33 @@
+import { resolve } from "node:path";
 import type { ResidentEngine } from "@intentic/iq-engine";
 import type { DerivedSide, SidecarStatus, WorkspaceChildren, WorkspaceDerived, WorkspaceTree } from "@intentic/sandbox-contract";
+import type { Logger } from "pino";
 import type { BlobSource } from "../derived/derived-blob.js";
-import type { WorkspaceTrash } from "./files/trash/workspace-trash.js";
-import type { OpenedWorkspaceFile, WorkspaceFileWindow } from "./files/workspace-files.js";
-import type { WorkspacePaths } from "./workspace.js";
+import type { Config } from "../env.config.js";
+import { statePath } from "../state-paths.js";
+import { createCodeSearchEngine } from "./code-search.js";
+import { heldDirReads } from "./files/dir-reads.js";
+import { createWorkspaceTrash, type WorkspaceTrash } from "./files/trash/workspace-trash.js";
+import { extractArchive } from "./files/workspace-extract.js";
+import {
+    copyWorkspacePath,
+    makeWorkspaceDir,
+    moveWorkspacePath,
+    openWorkspaceFile,
+    type OpenedWorkspaceFile,
+    readWorkspaceFile,
+    readWorkspaceFileWindow,
+    removeWorkspacePath,
+    setWorkspaceMtime,
+    statWorkspaceFileSize,
+    type WorkspaceFileWindow,
+    writeWorkspaceFile,
+} from "./files/workspace-files.js";
+import { writeWorkspaceFileStream } from "./files/workspace-files-upload.js";
+import { coalescingWorkspaceTree } from "./files/workspace-tree-coalesce.js";
+import { listWorkspaceChildren, walkWorkspaceTree } from "./files/workspace-tree.js";
+import { residentWorkspaceTree } from "./watch/workspace-watch.js";
+import { type WorkspacePaths, workspacePaths } from "./workspace.js";
 
 // The workspace tree: its paths, files, derived sidecars, tree reads and the code-search engine.
 export interface WorkspaceSlice {
@@ -47,3 +71,41 @@ export interface WorkspaceSlice {
     // Resident workspace search: one iq engine, its sweep cached in memory; indexing runs on its own thread.
     readonly iq: ResidentEngine;
 }
+
+// The members derived/ and scaffold/ build, which composition.ts adds: both import workspace back, so building them
+// here would close a cycle.
+export type DerivedMembers = "derived" | "workspaceArrivedEmpty";
+
+// Builds the workspace slice from config alone; everything else reads the workspace paths off it.
+export const createWorkspaceSlice = ({ config, logger }: { readonly config: Config; readonly logger: Logger }): Omit<WorkspaceSlice, DerivedMembers> => {
+    const workspace = workspacePaths(config.workspaceRoot);
+    const treeReads = heldDirReads(workspace.root);
+    // Shared by every caller that walks at once; one walk per checkout serves them all.
+    const walkedWorkspaceTree = coalescingWorkspaceTree((root: string) =>
+        walkWorkspaceTree(root, resolve(root) === resolve(workspace.root) ? { reads: treeReads } : {}),
+    );
+    return {
+        workspace,
+        files: {
+            read: readWorkspaceFile,
+            readWindow: readWorkspaceFileWindow,
+            write: writeWorkspaceFile,
+            writeStream: writeWorkspaceFileStream,
+            setMtime: setWorkspaceMtime,
+            open: openWorkspaceFile,
+            size: statWorkspaceFileSize,
+            mkdir: makeWorkspaceDir,
+            remove: removeWorkspacePath,
+            trash: createWorkspaceTrash(statePath(workspace.root, ".intentic/local/trash/")),
+            move: moveWorkspacePath,
+            copy: copyWorkspacePath,
+            extract: extractArchive,
+        },
+        // The watched workspace answers from the tree its watcher holds; the walk behind it reads the workspace through
+        // what that watcher keeps current, and a conversation's own checkout straight from disk.
+        workspaceTree: (root: string) => residentWorkspaceTree(root) ?? walkedWorkspaceTree(root),
+        workspaceTreeChanged: treeReads.changed,
+        workspaceChildren: listWorkspaceChildren,
+        iq: createCodeSearchEngine(config, workspace.root, logger),
+    };
+};

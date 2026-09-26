@@ -91,8 +91,10 @@ flowchart LR
   the platform client. `sandboxes/` creates other sandboxes on the owner's account; `hosts/` holds the owner's own
   computers, desktop sync included.
 - Each subsystem declares its part of `Services` beside its code (`auth/auth-slice.ts`,
-  `conversations/conversations-slice.ts`, …) and builds it there where it can (`createAuthSlice`,
-  `createSessionsSlice`); `composition.ts` extends the slices and wires them in the one order that works.
+  `conversations/conversations-slice.ts`, …) with the builder that makes it from typed dependencies
+  (`createConversationsSlice`, `createGitSlice`, …); `composition.ts` calls the builders in dependency order, so a new
+  service in a slice is written in that slice's file. Members that would close an import cycle there are built in
+  composition, named by the builder's `Omit`.
 
 More: [subsystems](docs/subsystems.md) (how the parts connect), [environment](docs/env-contract.md) (what the daemon
 reads at start), [debugging](docs/debugging.md) (logs, diagnostics, state on disk).

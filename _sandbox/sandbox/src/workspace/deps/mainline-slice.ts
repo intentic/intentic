@@ -1,8 +1,13 @@
-import type { HeavyCommandsStore } from "../../system/resources/heavy-commands.js";
-import type { PushChecks } from "./push-checks.js";
-import type { DependencyCoordinator } from "./reconcile-deps.js";
+import { join } from "node:path";
+import type { Logger } from "pino";
+import type { ManagedProcesses } from "../../processes/managed-processes.js";
+import { fileHeavyCommandsStore, heavyCommandsDocument, type HeavyCommandsStore } from "../../system/resources/heavy-commands.js";
+import type { WorkspacePaths } from "../workspace.js";
+import { filePushChecksStore, pushChecksDocument } from "./push-checks-store.js";
+import { createPushChecks, type PushChecks } from "./push-checks.js";
+import { createDependencyCoordinator, type DependencyCoordinator, dependencyRequestsDocument } from "./reconcile-deps.js";
 import type { LandCheck } from "./verify-deps.js";
-import type { VerifyStore } from "./verify-store.js";
+import { fileVerifyStore, verifyDocument, type VerifyStore } from "./verify-store.js";
 
 // The main tree's own check and its dependencies: the land check, its verdicts, push findings and the heavy-command queue.
 export interface MainlineSlice {
@@ -24,3 +29,33 @@ export interface MainlineSlice {
     // The check after landing's own queue prefix, the `repo-verify` rule by name; what offload-run keeps for running it here.
     readonly heavyPrefix: (line: string) => Promise<string>;
 }
+
+export interface MainlineDeps {
+    readonly workspace: WorkspacePaths;
+    readonly historyRoot: string;
+    readonly processes: ManagedProcesses;
+    readonly logger: Logger;
+}
+
+// The members composition.ts adds: the land check hands a red run to conversations/, and the heavy queue is the agent's
+// terminal lane (agent/tools/agent-terminals.ts); importing either here would close a cycle back into workspace/.
+export type LandMembers = "landCheck" | "queueHeavy" | "heavyPrefix";
+
+// Builds the mainline slice but for the land check and the heavy queue.
+export const createMainlineSlice = ({ workspace, historyRoot, processes, logger }: MainlineDeps): Omit<MainlineSlice, LandMembers> => ({
+    dependencies: createDependencyCoordinator({
+        workspace,
+        processes,
+        logger,
+        requestsPath: join(historyRoot, dependencyRequestsDocument.path),
+    }),
+    verifyStore: fileVerifyStore(join(workspace.root, verifyDocument.path)),
+    pushChecks: createPushChecks({
+        root: workspace.root,
+        store: filePushChecksStore(join(workspace.root, pushChecksDocument.path)),
+        logger,
+    }),
+    heavyCommands: fileHeavyCommandsStore(join(workspace.root, heavyCommandsDocument.path), (reason) =>
+        logger.warn(`heavy-commands: ${reason}, falling back to the shipped rules`),
+    ),
+});

@@ -1,4 +1,5 @@
 import { converterReadable } from "@intentic/sandbox-contract/peer-mcp-server";
+import type { Logger } from "pino";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import type { PeerHubSpec } from "./peer.js";
 import { memoryPeerTools, type PeerToolMemory } from "./peer-tool-memory.js";
@@ -65,6 +66,13 @@ export interface PeerHub<Client extends PeerClient<Facts, Scopes>, Announced, Fa
     // distro that went to sleep is still an environment of that machine.
     readonly known: () => readonly string[];
     readonly state: (id: string) => PeerState<Announced, Facts>;
+}
+
+// What a peer door's slice builder is handed: where its enrollments live, and the one tool table every door shares.
+export interface PeerDoorDeps {
+    readonly historyRoot: string;
+    readonly logger: Logger;
+    readonly peerTools: PeerToolMemory;
 }
 
 // How long a peer has to answer for its tool table at connect; past that, whatever was remembered stands.

@@ -1,24 +1,8 @@
 import { queuePrefixFor, queueWhole } from "./agent/tools/agent-terminals.js";
-import { join, resolve } from "node:path";
-import type { DeviceFacts, DeviceScopes, RunnerFacts, WebExtFacts, WebExtScopes, IntenticLine } from "@intentic/sandbox-contract";
+import { join } from "node:path";
+import type { DeviceFacts, DeviceScopes, IntenticLine } from "@intentic/sandbox-contract";
 import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
-import {
-    defaultGit,
-    gitCheckout,
-    gitClone,
-    gitCommitAll,
-    gitFullHead,
-    gitHead,
-    gitInit,
-    gitListFiles,
-    gitStatus,
-    gitSync,
-    politeGit,
-} from "@intentic/scaffold";
 import { capabilityCtx } from "./capabilities/capability.js";
-import { openBrowserAccount } from "./capabilities/open-account.js";
-import { composeEnvironment } from "./environment/environment.js";
-import { judgeCommand } from "./agent/tools/command-judge.js";
 import { wakeLocalModel as wakeLocalModelServer } from "./capabilities/handlers/localmodel.handler.js";
 import { LOCAL_MODEL_WAKE_MS } from "./endpoints/local-model-idle.js";
 import { createInvariantRegistry, type InvariantRegistry } from "./invariants/invariants.js";
@@ -29,41 +13,19 @@ import { createAcpConnections } from "./runtimes/acp/acp-connection.js";
 import { createPiAgent } from "./runtimes/pi/pi-agent.js";
 import { piSpawner } from "./runtimes/pi/pi-rpc.js";
 import { type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
-import { runAgent } from "./agent/run/agent.js";
 import { cliProxyAuthDir, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient } from "./agent/providers/translator.js";
-import { fileHeldWakesStore, heldWakesDocument } from "./automations/held-wakes-store.js";
-import { fileSendersStore, sendersDocument } from "./automations/senders-store.js";
-import { automationRunsDocument, automationsDocument, fileAutomationsStore } from "./automations/automations-store.js";
-import { fileLoopDesignsStore, fileLoopsStore, loopDesignsDocument, loopsDocument } from "./loops/loops-store.js";
 import { fileWorkflowRunsStore, fileWorkflowsStore, workflowRunsDocument, workflowsDocument } from "./workflows/workflows-store.js";
 import { type ChoresStore, fileChoresStore, LEDGER_FILE, PROBES_FILE } from "./chores/chores-store.js";
 import { createProbeRunner, type ProbeRunner } from "./chores/probe-runner.js";
-import { capabilitiesDocument, fileCapabilitiesStore, vaultManifestSecrets, withSecretVault } from "./capabilities/capabilities-store.js";
-import { contributionRegistry, invalidatingContributions } from "./capabilities/contributions.js";
-import { capabilitySecretsDocument, extensionSecretsDocument, fileSecretVault } from "./capabilities/credentials/secret-vault.js";
-import { secretRegistryOf } from "./secrets/secret-registry.js";
-import { fileSecretUses, secretUsesDocument } from "./secrets/secret-uses.js";
-import { fileCredentialGates } from "./secrets/credential-gates.js";
-import { createCredentialGrants } from "./secrets/credential-grants.js";
-import { createCredentialGate } from "./secrets/credential-gate.js";
 import { fileWalletLedger, walletLedgerDocument, type WalletLedgerStore } from "./wallet/wallet-ledger.js";
 import { createTrialService, type TrialService } from "./trial/trial.js";
 import { withTrialEndpoint } from "./trial/trial-endpoint.js";
-import { dismissalsDocument, fileDismissalsStore } from "./capabilities/offers/dismissals-store.js";
 import { filePersonasStore, personasDocument, type PersonasStore } from "./personas/personas-store.js";
 import { areasDocument, type AreasStore, fileAreasStore } from "./areas/areas-store.js";
-import { fileHeavyCommandsStore, heavyCommandsDocument } from "./system/resources/heavy-commands.js";
-import { createResourceBudget } from "./workload/resource-budget.js";
 import { deriveBytes } from "./derived/derived-blob.js";
 import { deriveText, readDerivedText } from "./derived/derived-text.js";
 import { sidecarStatus } from "./derived/sidecar-service.js";
-import { ciDocument, fileCiStore } from "./ci/ci-store.js";
-import { fileVerifyStore, verifyDocument } from "./workspace/deps/verify-store.js";
-import { landCheckOf } from "./conversations/land/verify-landed.js";
-import { filePushChecksStore, pushChecksDocument } from "./workspace/deps/push-checks-store.js";
-import { createPushChecks } from "./workspace/deps/push-checks.js";
-import { createCiHookReconciler } from "./ci/hooks.js";
-import { createRunsCache } from "./ci/runs-cache.js";
+import { landCheckOf, type LandCheckWiring } from "./conversations/land/verify-landed.js";
 import { createBrowserRouters } from "./browser/tools/browser-prepare.js";
 import type { BrowserRouterFactory } from "./browser/tools/browser-router.js";
 
@@ -71,68 +33,21 @@ import { accountUsageDocument, fileAccountUsageStore } from "./usage/account-usa
 import { claudeHeadroomSource } from "./usage/claude-usage.js";
 import { createHeadroomService } from "./usage/headroom.js";
 import { fileUsageParkStore, usageParksDocument } from "./usage/usage-parks.js";
-import { fileModelCooldownStore, modelCooldownsDocument } from "./usage/model-cooldowns.js";
-import { fileModelRefusalStore, modelRefusalsDocument } from "./usage/model-refusals.js";
 import { fileObservedLimitStore, observedLimitsDocument } from "./usage/observed-limits.js";
-import { fileProviderRefusalStore, providerRefusalsDocument } from "./usage/provider-refusals.js";
 import { cursorHeadroomSource } from "./runtimes/cursor/cursor-usage.js";
 import { approvalsDocument, type ApprovalsStore, fileApprovalsStore } from "./approvals/approvals-store.js";
 import { fileIssuesStore, issuesDocument } from "./issues/issues-store.js";
 import { fileInstallsStore, issueInstallsDocument } from "./store/installs.js";
 import { HOST_PEER, type HostAnnounced, type HostClient } from "./hosts/host-peer.js";
 import { hostDeviceReach } from "./hosts/self-host.js";
-import { ownBrowserReach, WEBEXT_PEER, type WebExtAnnounced, type WebExtClient } from "./webext/webext-peer.js";
-import { RUNNER_PEER, type RunnerAnnounced, type RunnerClient } from "./runners/runner-peer.js";
-import { createPeerHub } from "./peers/peer-hub.js";
+import { createPeerHub, type PeerDoorDeps } from "./peers/peer-hub.js";
 import { filePeerStore } from "./peers/peer-store.js";
 import { filePeerTools } from "./peers/peer-tool-memory.js";
 import { fetchPresentation, type SandboxPresentation } from "./system/platform-client.js";
 import { enrolledFleet, syncPairBurns, type SyncMode } from "./hosts/desktop-sync.js";
 import { pairings } from "./peers/enrollment.js";
-import { sqliteTurnJournal, turnJournalRows } from "./agent/run/turn/turn-journal.js";
-import { sqliteWatchJournal } from "./agent/verification/watch-journal.js";
-import { sqliteTurnCheckpoints } from "./agent/checkpoints/turn-checkpoints.js";
-import { filePromptRecord } from "./agent/prompt/prompt-record.js";
 import type { Config } from "./env.config.js";
-import { createFleet } from "./conversations/registry/agents-registry.js";
-import { sqliteAgentsStore } from "./conversations/registry/agents-store.js";
-import { conversationsDbPath, openConversationsDb } from "./store/conversations-db.js";
-import { conversationUnits } from "./store/conversation-units.js";
-import { createTurnIsolation } from "./conversations/worktrees/isolation.js";
-import { createAgentOrigins } from "./conversations/land/origins.js";
-import { createExpiryTracker } from "./conversations/registry/expiry.js";
-import { createLandedPresences } from "./conversations/land/landed-presence.js";
-import { createLandStandings } from "./conversations/land/standing.js";
-import { createAgentWorktrees } from "./conversations/worktrees/worktrees.js";
-import { changedFiles } from "./git/changes/changes.js";
-import {
-    checkoutRef,
-    cherryPick,
-    commitChanges,
-    commitLog,
-    createBranchAt,
-    createTagAt,
-    deleteTag,
-    dropCommit,
-    mergeCommit,
-    pushTag,
-    rebaseOnto,
-    resetTo,
-    revertCommit,
-} from "./git/changes/changes-commits.js";
-import { commitFileDiff, conflictedFileDiff, refFileDiff, stagedFileDiff, unstagedFileDiff, workingFileDiff } from "./git/changes/changes-diff.js";
-import { commitIndex, discardPaths, stageAll, stagePaths, unstagePaths } from "./git/changes/changes-index.js";
 import { keepCodeCounts } from "./git/changes/code-counts.js";
-import { scratchOf } from "./git/changes/scratch.js";
-import { collectRepoDiff } from "./git/ops/commit-message.js";
-import { createBranch, deleteBranch, listBranches, listRemoteBranches } from "./git/ops/branches.js";
-import { abortOperation, operationInProgress } from "./git/ops/operation.js";
-import { undoableAction, undoLastAction } from "./git/ops/undo.js";
-import { stashApply, stashChanges, stashDrop, stashList, stashPush } from "./git/ops/stash.js";
-import { fetchRemote, pullRemote, remoteState } from "./git/remote/remote.js";
-import { remoteProjectOf } from "./git/remote/remote-urls.js";
-import { publishFile } from "./git/ops/publish-file.js";
-import { createEndpointCatalog } from "./endpoints/endpoint-catalog.js";
 import { createOpenCodeService } from "./runtimes/opencode/opencode.js";
 import { createOpenCodeAgent, createOpenCodeRunner } from "./runtimes/opencode/opencode-agent.js";
 import { type ClaudeSlice, createClaudeSlice } from "./runtimes/claude/claude-provider.js";
@@ -143,20 +58,15 @@ import { createGeminiSlice, type GeminiSlice } from "./runtimes/gemini/gemini-pr
 import type { GrokSlice } from "./runtimes/grok/grok-provider.js";
 import { createMintedSlice, type MintedSlice } from "./runtimes/minted/minted-provider.js";
 import { createKimiSlice, type KimiSlice } from "./runtimes/kimi/kimi-provider.js";
-import { providerCatalogsOf, providerReadiness } from "./agent/providers/provider-registry.js";
-import { PROVIDER_MODULES, RUNTIME_ADAPTERS } from "./runtimes/runtime-table.js";
 import { createWorkspaceHistory, type WorkspaceHistory } from "./history/history.js";
 import { type IntenticRun, runIntentic } from "./intentic/intentic-runner.js";
-import { createManagedProcesses } from "./processes/managed-processes.js";
-import { createServiceProcesses } from "./processes/service-processes.js";
 import { createPanelUpstreamResolver, type PanelUpstreamResolver } from "./panels/panel-upstream.js";
 import { discoverRepos } from "./workspace/layout/repo-discovery.js";
 import { filePushStore, pushDocument, type PushStore } from "./push/push-store.js";
 import { createPushSender, type PushSender } from "./push/push.js";
 import { createPortForwards } from "./ports/port-forwards.js";
-import { scanListeningPorts, withOwningSessions } from "./ports/port-scan.js";
+import { type ListeningPort, scanListeningPorts, withOwningSessions } from "./ports/port-scan.js";
 import { transcriptSearchMetrics } from "./sessions/transcript-search.js";
-import { fileThreadSessionsStore, threadSessionsDocument } from "./sessions/thread-sessions.js";
 import { fileWebchatOutbox, outboxStreamFor, webchatOutboxDocument } from "./webchat/webchat-outbox.js";
 import { fileShareStore, sharesDocument, type ShareStore } from "./share/share-store.js";
 import { createSpeech, type Speech } from "./speech/transcribe.js";
@@ -168,8 +78,6 @@ import { type DriftSweep, createDriftSweep } from "./environment/drift-sweep.js"
 import { fileRuntimeInstallsStore, runtimeInstallsDocument, type RuntimeInstallsStore } from "./environment/runtime-installs.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { cardDeps } from "./conversations/actor/card-offers.js";
-import { turnDoors } from "./agent/run/turn/turn-doors.js";
-import { streamAgent } from "./agent/run/stream-agent.js";
 import { dispatchWorkspaceEvent } from "./automations/workspace-events.js";
 import { clearTurnTaint } from "./guard/turn-taint.js";
 import { turnAwaiting, turnFinished } from "./push/notifications.js";
@@ -180,65 +88,36 @@ import { type BootTracker, createBootTracker } from "./system/boot/boot.js";
 import { DAEMON_OWNER } from "./seams/workload-stamp.js";
 import { type PlatformTunnel, startPlatformTunnel } from "./system/listeners/local-tunnel.js";
 import { createResourceReaper, type ResourceReaper } from "./system/boot/reaper.js";
-import { createClientLogger, createPerfLogger, inLogContext } from "./logger.js";
+import { createClientLogger, createPerfLogger } from "./logger.js";
 import { createPerfTracker } from "./system/resources/perf.js";
-import { createLiveMetrics } from "./system/resources/live-metrics.js";
-import { createTerminalRunner } from "./terminal/terminal-run.js";
 import { panePids } from "./terminal/terminal-session.js";
 import { version } from "./version.js";
 import { internalTools } from "./agent/tools/agent-tools.js";
 import { backgroundJobSessions } from "./agent/tools/jobs/background-jobs.js";
 import { conversationBusy } from "./agent/run/turn/turn-liveness.js";
-import { fileUsageStore } from "./usage/usage-store.js";
-import { extensionIdOf } from "@intentic/extension-manifest";
-import { createExtensionBackend } from "./extensions/backend/backend-supervisor.js";
 import { createTurnMounts, TURN_MOUNT_BASE, type TurnMounts } from "./agent/tools/turn-mounts.js";
-import { type SecretKeyResolver, vaultExtensionSettingSecrets } from "./extensions/extension-settings.js";
-import { enabledExtensions, installedExtensions } from "./extensions/installed-extensions.js";
+import { enabledExtensions, type ExtensionHost } from "./extensions/installed-extensions.js";
 import { workspaceArrivedEmpty } from "./scaffold/starter-site.js";
-import { workspacePaths } from "./workspace/workspace.js";
-import { writeWorkspaceFileStream } from "./workspace/files/workspace-files-upload.js";
-import { extractArchive } from "./workspace/files/workspace-extract.js";
-import { createWorkspaceTrash } from "./workspace/files/trash/workspace-trash.js";
-import {
-    copyWorkspacePath,
-    makeWorkspaceDir,
-    moveWorkspacePath,
-    readWorkspaceFile,
-    openWorkspaceFile,
-    readWorkspaceFileWindow,
-    removeWorkspacePath,
-    setWorkspaceMtime,
-    statWorkspaceFileSize,
-    writeWorkspaceFile,
-} from "./workspace/files/workspace-files.js";
-import { coalescingWorkspaceTree } from "./workspace/files/workspace-tree-coalesce.js";
-import { residentWorkspaceTree } from "./workspace/watch/workspace-watch.js";
-import { listWorkspaceChildren, walkWorkspaceTree } from "./workspace/files/workspace-tree.js";
-import { heldDirReads } from "./workspace/files/dir-reads.js";
 
 import { statePath } from "./state-paths.js";
-import { createDependencyCoordinator, dependencyRequestsDocument } from "./workspace/deps/reconcile-deps.js";
-import { parkedCards } from "./conversations/actor/parked-cards.js";
 import { createAuthSlice, type AuthSlice } from "./auth/auth-slice.js";
 import type { HostsSlice } from "./hosts/hosts-slice.js";
-import type { WebextSlice } from "./webext/webext-slice.js";
-import type { RunnersSlice } from "./runners/runners-slice.js";
-import type { CapabilitiesSlice } from "./capabilities/capabilities-slice.js";
-import type { SecretsSlice } from "./secrets/secrets-slice.js";
-import type { ExtensionsSlice } from "./extensions/extensions-slice.js";
-import type { AutomationsSlice } from "./automations/automations-slice.js";
-import type { LoopsSlice } from "./loops/loops-slice.js";
-import type { CiSlice } from "./ci/ci-slice.js";
-import type { MainlineSlice } from "./workspace/deps/mainline-slice.js";
-import type { ResourcesSlice } from "./system/resources/resources-slice.js";
-import type { ProvidersSlice } from "./agent/providers/providers-slice.js";
-import type { ConversationsSlice } from "./conversations/conversations-slice.js";
-import type { WorkspaceSlice } from "./workspace/workspace-slice.js";
+import { createWebextSlice, type WebextSlice } from "./webext/webext-slice.js";
+import { createRunnersSlice, type RunnersSlice } from "./runners/runners-slice.js";
+import { type AgentToolsMember, createCapabilitiesSlice, type CapabilitiesSlice } from "./capabilities/capabilities-slice.js";
+import { createSecretsSlice, type SecretsSlice } from "./secrets/secrets-slice.js";
+import { createExtensionsSlice, type ExtensionsSlice } from "./extensions/extensions-slice.js";
+import { type AutomationsSlice, createAutomationsSlice, type IntakeMembers } from "./automations/automations-slice.js";
+import { createLoopsSlice, type LoopsSlice, type WorkflowsMembers } from "./loops/loops-slice.js";
+import { type CiSlice, createCiSlice } from "./ci/ci-slice.js";
+import { createMainlineSlice, type LandMembers, type MainlineSlice } from "./workspace/deps/mainline-slice.js";
+import { createResourcesSlice, type ResourcesSlice } from "./system/resources/resources-slice.js";
+import { createProvidersSlice, type ProvidersSlice } from "./agent/providers/providers-slice.js";
+import { createConversationsSlice, type ConversationsSlice } from "./conversations/conversations-slice.js";
+import { createWorkspaceSlice, type DerivedMembers, type WorkspaceSlice } from "./workspace/workspace-slice.js";
 import { createSessionsSlice, type SessionsSlice } from "./sessions/sessions-slice.js";
-import type { ProcessesSlice } from "./processes/processes-slice.js";
-import type { GitSlice } from "./git/git-slice.js";
-import { createCodeSearchEngine } from "./workspace/code-search.js";
+import { createProcessesSlice, type PortsMembers, type ProcessesSlice } from "./processes/processes-slice.js";
+import { createGitSlice, type GitSlice } from "./git/git-slice.js";
 
 // Wired once at boot for the route factories; a module should Pick only the seams it uses, not take Services whole,
 // unless it orchestrates most of the daemon.
@@ -351,17 +230,22 @@ export interface Services
     readonly panelUpstreamOf: PanelUpstreamResolver;
 }
 
-// Builds production services from config; the agent/intentic/git/files/sessions/tree members default to real
-// subprocess/fs functions.
-export const createServices = (config: Config, logger: Logger): Services => {
-    const workspace = workspacePaths(config.workspaceRoot);
-    const treeReads = heldDirReads(workspace.root);
-    // Shared by every caller that walks at once; one walk per checkout serves them all.
-    const walkedWorkspaceTree = coalescingWorkspaceTree((root: string) =>
-        walkWorkspaceTree(root, resolve(root) === resolve(workspace.root) ? { reads: treeReads } : {}),
-    );
-    // AI-provider credential root; AGENT_AUTH_DIR shares it across dev sandboxes so subscription OAuth survives.
-    const authRoot = config.agentAuthDir !== "" ? config.agentAuthDir : statePath(workspace.root, ".intentic/secrets/auth/");
+// This sandbox's identity for the Connections card, or undefined outside a named, imaged sandbox.
+const infoOf = (config: Config): Services["info"] =>
+    config.sandbox.name !== "" && config.sandbox.image !== ""
+        ? {
+              name: config.sandbox.name,
+              image: config.sandbox.image,
+              version,
+              // Empty means not set, never a value to publish; "" would be an unclickable rollback button.
+              ...(config.sandbox.channel !== "" ? { channel: config.sandbox.channel } : {}),
+              ...(config.sandbox.previousImage !== "" ? { previousImage: config.sandbox.previousImage } : {}),
+          }
+        : undefined;
+
+// The provider areas, each built by its own directory, and what they share: the translator, OpenCode, and the headroom
+// every account's allowance is read through.
+const createProviderAreas = (config: Config, logger: Logger, authRoot: string) => {
     // Hoisted: the turn stream and the translator client both read and record into this same file.
     const accountUsage = fileAccountUsageStore(join(config.historyRoot, accountUsageDocument.path));
     const cliProxy = createCliProxyClient({
@@ -390,23 +274,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
               }),
     });
     gemini = createGeminiSlice({ config, authRoot, geminiAgent: createOpenCodeAgent(createOpenCodeRunner(openCode), OPENCODE_GEMINI_PROVIDER) });
-    const info =
-        config.sandbox.name !== "" && config.sandbox.image !== ""
-            ? {
-                  name: config.sandbox.name,
-                  image: config.sandbox.image,
-                  version,
-                  // Empty means not set, never a value to publish; "" would be an unclickable rollback button.
-                  ...(config.sandbox.channel !== "" ? { channel: config.sandbox.channel } : {}),
-                  ...(config.sandbox.previousImage !== "" ? { previousImage: config.sandbox.previousImage } : {}),
-              }
-            : undefined;
-    // Who may call this daemon, and how: the roster, passkeys, sessions and every per-boot and per-extension token.
-    const authSlice = createAuthSlice(config, workspace.root);
-
-    // Provider areas: each directory builds its own Services members; Gemini's area is built beside OpenCode.
-    const claude = createClaudeSlice({ config, logger, authRoot, workspaceRoot: workspace.root });
-    const codex = createCodexSlice({ config, authRoot });
+    const claude = createClaudeSlice({ config, logger, authRoot, workspaceRoot: config.workspaceRoot });
     const cursor = createCursorSlice({ authRoot, logger });
     // What this sandbox has been refused, for the plans that publish no allowance to read; Cursor's only reading.
     const observedLimits = fileObservedLimitStore(join(config.historyRoot, observedLimitsDocument.path));
@@ -423,64 +291,25 @@ export const createServices = (config: Config, logger: Logger): Services => {
         logger,
     });
     const grok: GrokSlice = { grokAgent: createOpenCodeAgent(createOpenCodeRunner(openCode)) };
-    const kimi = createKimiSlice(cliProxy);
-    // One area for every minted provider, built from a spec table so adding one is a contract row, not code here.
-    const minted = createMintedSlice({ authRoot, logger });
-
-    // Hoisted: worktree ops and the Changes scan must file into the same tracker the summary line reads.
-    const perf = createPerfTracker(logger, createPerfLogger(config));
-
-    // One database for the registry and everything keyed by a conversation, so a fact spanning its tables is one write.
-    const conversationsDb = openConversationsDb(conversationsDbPath(config.historyRoot));
-    const agentsStore = sqliteAgentsStore(conversationsDb);
-    const units = conversationUnits(config.historyRoot, agentsStore.has);
-    // Hoisted: the invariant companions below observe these exact instances, not a second, disagreeing one.
-    const turnJournal = sqliteTurnJournal(conversationsDb);
-    const invariants = createInvariantRegistry(logger);
-
-    // Hoisted: the ACP connection pool implements ACP terminal/* over the same runner, so both share one instance.
-    const terminalRun = createTerminalRunner();
-    const acpConnections = createAcpConnections(logger, terminalRun);
-    const processes = createManagedProcesses(undefined, { logger });
-    const serviceProcesses = createServiceProcesses(join(config.historyRoot, "logs", "services"), logger);
-    const dependencies = createDependencyCoordinator({
-        workspace,
-        processes,
-        logger,
-        requestsPath: join(config.historyRoot, dependencyRequestsDocument.path),
-    });
-    // Hoisted: the store and the sender reading it must be the same instance, or a subscription would go unseen.
-    const pushStore = filePushStore(join(config.historyRoot, pushDocument.path));
-    // Hoisted because the credential gate notifies through it when a release card goes up.
-    const pushSender = createPushSender(pushStore, logger);
-    // Shared by the turn path and worktree creation so both read one capability probe.
-    const turnIsolation = createTurnIsolation({ root: workspace.root, historyRoot: config.historyRoot, logger });
-    // Hoisted above the registry, which now derives a card's land standing through it rather than a stored verdict.
-    const agentWorktrees = createAgentWorktrees(
-        {
-            workspace,
-            worktreesRoot: join(config.historyRoot, "worktrees"),
-            historyRoot: config.historyRoot,
-            isolation: turnIsolation,
-            logger,
-            perf,
+    return {
+        shared: { accountUsage, cliProxy, openCode, authRoot, observedLimits, headroom },
+        // Spread whole into Services; their members' docs live on the area interfaces, beside the code.
+        areas: {
+            ...claude,
+            ...createCodexSlice({ config, authRoot }),
+            ...cursor,
+            ...grok,
+            ...gemini,
+            ...createKimiSlice(cliProxy),
+            // One area for every minted provider, built from a spec table so adding one is a contract row, not code here.
+            ...createMintedSlice({ authRoot, logger }),
         },
-        // Demoted: a worktree ensure is bulk agent-plane IO that must lose to the daemon's own loop under contention.
-        politeGit,
-    );
-    // Hoisted: the Changes scan and the turns share one registry; one tracker serves both landing readers' query.
-    const landingExpiry = createExpiryTracker();
-    const landedPresences = createLandedPresences(agentWorktrees, logger, landingExpiry);
-    const { agents, conversations } = createFleet(
-        { agents: agentsStore, journal: turnJournalRows(conversationsDb), transaction: conversationsDb.transaction, units },
-        createLandStandings(agentWorktrees),
-        landedPresences,
-    );
-    const cards = parkedCards(conversations);
-    // A reaction's failure is its own; the announcement it answered has already been made.
-    const events = createDomainEvents((name, error) => logger.warn({ err: error, event: name }, "domain event: a reaction failed"));
-    // Reaper keys to the same three facts as everything else: whose work, whether it's live, whether it's ours.
-    const reaper = createResourceReaper({
+    };
+};
+
+// Reaper keys to the same three facts as everything else: whose work, whether it's live, whether it's ours.
+const createReaper = ({ conversations, agents, events, logger }: Pick<Services, "conversations" | "agents" | "events" | "logger">): ResourceReaper =>
+    createResourceReaper({
         ownerLive: (owner) => owner === DAEMON_OWNER || conversationBusy(conversations, owner),
         ownerKnown: (owner) => agents.entry(owner) !== undefined,
         liveSessionNames: () =>
@@ -498,441 +327,277 @@ export const createServices = (config: Config, logger: Logger): Services => {
         onOwnerStopped: (listener) => events.subscribe("run.settled", (settled) => listener(settled.conversationId)),
         logger,
     });
-    // A settled turn's outside-content taint drops with the turn; the registry must be told when that moment is.
-    events.subscribe("run.settled", (settled) => clearTurnTaint(settled.conversationId));
-    // Hoisted like the presences above: its attribution caches report into the resource series.
-    const agentOrigins = createAgentOrigins({ agents, logger, expiry: landingExpiry });
-    // Hoisted: the CI hook reconciler reads the same manifest the routes edit.
-    // The free trial lays over the manifest, never into it; routing stays a config constant, not probe timing.
-    const trial = createTrialService(config);
-    // The bundled translator opens the trial's connection and verifies its cert; a self-signed platform fails this.
-    const platformTunnel = startPlatformTunnel(config.platform.url, logger);
-    // Every write moves the contribution inventory (contributions.ts), which enumerates installed extensions from here;
-    // the file watcher would too, but only after a turn planned in between had read the old one.
-    const capabilityManifest = invalidatingContributions(
-        fileCapabilitiesStore(join(workspace.root, capabilitiesDocument.path), (id, reason) =>
-            logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}), the rest of the manifest is unaffected`),
-        ),
-    );
-    // Credential values, off /work, sited beside the AI-provider logins outside the file routes and search index.
-    const secretVault = fileSecretVault(capabilitySecretsDocument, join(authRoot, capabilitySecretsDocument.path));
-    // Approval policy sits beside the vault it guards, off the tracked, agent-editable config directory.
-    const credentialGates = fileCredentialGates(join(authRoot, "credential-gates.json"));
-    const credentialGrants = createCredentialGrants();
-    // Resolved against the raw manifest, not the vaulted store, since enumeration never reads a credential.
-    const secretFieldConnectors = () =>
-        contributionRegistry({
-            workspace: { root: workspace.root },
-            files: { read: readWorkspaceFile },
-            capabilities: capabilityManifest,
-            config: { extensionsDir: config.extensionsDir, historyRoot: config.historyRoot },
-        });
-    const onUnvaultable = (id: string, fields: readonly string[]): void =>
-        logger.warn(
-            `capabilities: "${id}" holds non-string credential field(s) ${fields.join(", ")}, left in the manifest, which the agent can read`,
-        );
-    // Extension-settings' own vault, keyed by publisher.name, not capability id, since the two ids can collide.
-    const extensionSecretVault = fileSecretVault(extensionSecretsDocument, join(authRoot, extensionSecretsDocument.path));
-    const extensionHostAdapter = {
-        workspace: { root: workspace.root },
-        files: { read: readWorkspaceFile },
-        capabilities: capabilityManifest,
-        config: { extensionsDir: config.extensionsDir, historyRoot: config.historyRoot },
-    };
-    const settingSecretKeys = async (): Promise<SecretKeyResolver> => {
-        const declared = new Map<string, ReadonlySet<string>>(
-            (await installedExtensions(extensionHostAdapter)).map((extension) => [
-                extensionIdOf(extension.manifest),
-                new Set((extension.manifest.contributes?.settings ?? []).filter((setting) => setting.secret === true).map((setting) => setting.key)),
-            ]),
-        );
-        return (extensionId) => declared.get(extensionId) ?? new Set<string>();
-    };
-    const onUnvaultableSetting = (id: string, keys: readonly string[]): void =>
-        logger.warn(`extension settings: "${id}" declares ${keys.join(", ")} secret but stores a non-string, left in the tracked settings file`);
-    const capabilities = withTrialEndpoint(
-        withSecretVault(capabilityManifest, secretVault, secretFieldConnectors, onUnvaultable),
-        config,
-        trial,
-        platformTunnel,
-    );
-    const personas = filePersonasStore(join(workspace.root, personasDocument.path), (id, reason) =>
-        logger.warn(`personas: skipping unreadable card "${id}" (${reason}), the rest are unaffected`),
-    );
-    const areas = fileAreasStore(join(workspace.root, areasDocument.path), (id, reason) =>
-        logger.warn(`areas: skipping unreadable area "${id}" (${reason}); anyone fenced to it reaches nothing until it parses`),
-    );
-    const heavyCommands = fileHeavyCommandsStore(join(workspace.root, heavyCommandsDocument.path), (reason) =>
-        logger.warn(`heavy-commands: ${reason}, falling back to the shipped rules`),
-    );
-    const ciStore = fileCiStore(join(workspace.root, ciDocument.path));
-    // Samples on a timer of its own, so a death certificate can look back at what the sandbox had.
-    const resources = createResourceBudget();
-    const verifyStore = fileVerifyStore(join(workspace.root, verifyDocument.path));
-    // Hoisted: the drift sweep and the install-steering hook write the same ledger the /environment route reads.
-    const runtimeInstalls = fileRuntimeInstallsStore(join(workspace.root, runtimeInstallsDocument.path));
-    // Hoisted: the background probe runner writes the same cache the /chores route reads.
-    const chores = fileChoresStore(join(workspace.root, PROBES_FILE), join(workspace.root, LEDGER_FILE));
-    // Bound once against the same registry, whose sessionIdOf reads live turn state as well as the persisted entry.
-    const turnCheckpoints = sqliteTurnCheckpoints(conversationsDb);
-    // Transcripts, session files and phrase search, and what a conversation's purge takes with it.
-    const sessionsSlice = createSessionsSlice({
-        historyRoot: config.historyRoot,
-        workspaceRoot: workspace.root,
-        logger,
-        turnCheckpoints,
-        roster: () =>
-            [...agents.list(), ...agents.listArchived()].flatMap((summary) => {
-                const entry = agents.entry(summary.id);
-                return entry === undefined ? [] : [entry];
+
+// The hosts slice, built here rather than beside its interface while the devices work reshapes hosts/.
+const createHostsSlice = ({ historyRoot, logger, peerTools, whole }: PeerDoorDeps & { readonly whole: () => Services }): HostsSlice => ({
+    hosts: filePeerStore(historyRoot, HOST_PEER.store),
+    // Reads only readings already held (hosts/self-host.ts), so composing a turn never waits on a laptop.
+    hostReach: (granted) => hostDeviceReach(whole(), granted),
+    syncFleet: () => enrolledFleet(historyRoot),
+    hostHub: createPeerHub<HostClient, HostAnnounced, DeviceFacts, DeviceScopes>(HOST_PEER.hub, logger, peerTools),
+    syncPairings: pairings<SyncMode>(syncPairBurns(historyRoot)),
+});
+
+// Pane listing rides with the scan rather than behind it: both are cheap, and an unowned port is unactionable.
+const scanPortsWith =
+    (logger: Logger) =>
+    async (): Promise<ListeningPort[]> => {
+        const [listeners, panes] = await Promise.all([
+            scanListeningPorts(),
+            // The ports list never fails for want of owners: unknown panes leave each port unowned, said in the log.
+            panePids().catch((error: unknown) => {
+                logger.warn({ err: error }, "ports: terminal panes could not be listed, ports show no owning session");
+                return new Map<number, string>();
             }),
-        forget: (conversationId) => credentialGrants.forget(conversationId),
-    });
-    // A review's code-only counts outlive the process: a restart reopening every review tab reads them back.
-    keepCodeCounts(statePath(workspace.root, ".intentic/local/cache/", "code-counts.db"));
-    const iq = createCodeSearchEngine(config, workspace.root, logger);
+        ]);
+        return withOwningSessions(listeners, panes);
+    };
 
-    // One tool table per connected peer, shared by every door: what a turn lists for a machine or a browser that is
-    // asleep right now, and the reason a restart doesn't make one vanish from the next turn's tools.
-    const peerTools = filePeerTools(config.historyRoot, logger);
+// Slice members a slice builder leaves out, each because the builder importing it would close a cycle between
+// subsystems (daemon-boundaries): the builder's Omit<…> type names them, and this Pick of the same names is checked
+// against it, so leaving one out fails to compile.
+type BridgedMembers = DerivedMembers | PortsMembers | LandMembers | IntakeMembers | WorkflowsMembers | AgentToolsMember;
+const createBridgedMembers = (
+    deps: Pick<Services, "config" | "logger" | "workspace" | "heavyCommands"> & { readonly landCheck: LandCheckWiring },
+): Pick<Services, BridgedMembers> => {
+    const { config, logger, workspace } = deps;
+    const webchatOutbox = fileWebchatOutbox(join(workspace.root, webchatOutboxDocument.path));
+    return {
+        // WorkspaceSlice: derived/ and scaffold/ import workspace/ back. Read here, once, at composition: the last moment
+        // /work still looks the way the user handed it over.
+        workspaceArrivedEmpty: workspaceArrivedEmpty(workspace.root),
+        derived: { read: readDerivedText, derive: deriveText, deriveBytes, status: sidecarStatus },
+        // ProcessesSlice: ports/ reaches processes/ back through system/. Slot names are salted with the connect token so
+        // a port's hostname can't be guessed from the sandbox id.
+        portForwards: createPortForwards(portSlotsFromToken(config.connectToken)),
+        scanPorts: scanPortsWith(logger),
+        // MainlineSlice: the land check routes a red run into conversations/, the heavy queue is agent/'s terminal lane.
+        landCheck: landCheckOf(deps.landCheck),
+        queueHeavy: queueWhole(deps.heavyCommands.read),
+        heavyPrefix: queuePrefixFor(deps.heavyCommands.read),
+        // AutomationsSlice: issues/ and webchat/ import automations/ back.
+        webchatOutbox,
+        outboxStreamFor: (origin) => outboxStreamFor({ webchatOutbox, logger }, origin),
+        issues: fileIssuesStore(join(workspace.root, issuesDocument.path)),
+        issueInstalls: fileInstallsStore(issueInstallsDocument, join(workspace.root, issueInstallsDocument.path)),
+        // LoopsSlice: workflows/ imports loops/ back.
+        workflows: fileWorkflowsStore(join(workspace.root, workflowsDocument.path)),
+        workflowRuns: fileWorkflowRunsStore(join(workspace.root, workflowRunsDocument.path)),
+        // CapabilitiesSlice: agent/ imports capabilities/ back.
+        tools: internalTools(config.intenticAgentTools),
+    };
+};
 
-    // The backend supervisor enumerates extensions through the finished services object, so it needs a thunk after.
-    const servicesHolder: { current?: Services } = {};
-    const services: Services = {
-        ...authSlice,
-        ...sessionsSlice.slice,
+// The members Services declares itself, which no slice owns: what the daemon is, and the stores and services beside
+// the slices.
+const createDaemonMembers = (
+    deps: Pick<
+        Services,
+        "config" | "logger" | "workspace" | "capabilities" | "conversations" | "chores" | "runtimeInstalls" | "processes" | "serviceProcesses" | "scanPorts"
+    > & { readonly manifestHost: ExtensionHost },
+) => {
+    const { config, logger, workspace, capabilities, conversations, chores, runtimeInstalls, processes, serviceProcesses } = deps;
+    // Born converged: main() closes the gate, so a test or host-internal preview build has nothing to wait for.
+    const boot = createBootTracker(logger);
+    return {
         config,
         logger,
         // The browser's own reports, in their own file.
         clientLogger: createClientLogger(config),
-        perf,
-        resourceOwners: () => {
-            const operations = perf.ranked();
-            return {
-                transcriptSearch: transcriptSearchMetrics(),
-                saidIndex: sessionsSlice.saidIndexMetrics(),
-                agentOrigins: agentOrigins.metrics(),
-                landedPresences: landedPresences.metrics(),
-                landingExpiry: landingExpiry.metrics(),
-                iq: iq.metrics(),
-                perf: { operations: operations.length, spans: operations.reduce((total, operation) => total + operation.count, 0) },
-            };
-        },
-        liveMetrics: createLiveMetrics({ workspaceRoot: workspace.root, budget: resources }),
-        // Born converged: main() closes the gate, so a test or host-internal preview build has nothing to wait for.
-        boot: createBootTracker(logger),
+        boot,
         announcer: createAnnouncer(config, logger),
-        // Reads the tracker through the holder at call time, since this and boot are siblings in the same literal.
-        reach: createReachReporter(config, logger, () => servicesHolder.current?.boot),
-        workspace,
-        // Read here, once, at composition: the last moment /work still looks the way the user handed it over.
-        workspaceArrivedEmpty: workspaceArrivedEmpty(workspace.root),
-        processes,
-        serviceProcesses,
-        dependencies,
-        extensionBackend: createExtensionBackend(
-            () => {
-                if (servicesHolder.current === undefined) {
-                    throw new Error("extension backend used before services finished composing");
-                }
-                return servicesHolder.current;
-            },
-            config.sandbox.port,
-            logger,
-        ),
-        // Slot names are salted with the connect token so a port's hostname can't be guessed from the sandbox id.
-        portForwards: createPortForwards(portSlotsFromToken(config.connectToken)),
-        // Pane listing rides with the scan rather than behind it: both are cheap, and an unowned port is unactionable.
-        scanPorts: async () => {
-            const [listeners, panes] = await Promise.all([
-                scanListeningPorts(),
-                // The ports list never fails for want of owners: unknown panes leave each port unowned, said in the log.
-                panePids().catch((error: unknown) => {
-                    logger.warn({ err: error }, "ports: terminal panes could not be listed, ports show no owning session");
-                    return new Map<number, string>();
-                }),
-            ]);
-            return withOwningSessions(listeners, panes);
-        },
-        terminalRun,
-        hosts: filePeerStore(config.historyRoot, HOST_PEER.store),
-        // Reads only readings already held (hosts/self-host.ts), so composing a turn never waits on a laptop.
-        hostReach: (granted) => hostDeviceReach(services, granted),
-        syncFleet: () => enrolledFleet(config.historyRoot),
-        hostHub: createPeerHub<HostClient, HostAnnounced, DeviceFacts, DeviceScopes>(HOST_PEER.hub, logger, peerTools),
-        browserRouters: createBrowserRouters(() => services),
+        reach: createReachReporter(config, logger, () => boot),
+        browserRouters: createBrowserRouters(() => ({ capabilities, workspace })),
         turnMounts: createTurnMounts({ baseUrl: () => `http://127.0.0.1:${config.sandbox.port}${TURN_MOUNT_BASE}` }),
-        webexts: filePeerStore(config.historyRoot, WEBEXT_PEER.store),
-        webextHub: createPeerHub<WebExtClient, WebExtAnnounced, WebExtFacts, WebExtScopes>(WEBEXT_PEER.hub, logger, peerTools),
-        // Held readings only (webext/webext-peer.ts), like hostReach: a browser that is closed costs the turn nothing.
-        webextReach: (granted) => ownBrowserReach(services, granted),
-        runners: filePeerStore(config.historyRoot, RUNNER_PEER.store),
-        runnerHub: createPeerHub<RunnerClient, RunnerAnnounced, RunnerFacts, never>(RUNNER_PEER.hub, logger, peerTools),
-        syncPairings: pairings<SyncMode>(syncPairBurns(config.historyRoot)),
-        runnerParent: {},
-        info,
-        tools: internalTools(config.intenticAgentTools),
-        capabilities,
-        vaultManifestSecrets: () => vaultManifestSecrets(capabilityManifest, secretVault, secretFieldConnectors, onUnvaultable),
+        info: infoOf(config),
         presentation: () => fetchPresentation(config),
-        extensionSecretVault,
-        vaultExtensionSettingSecrets: async () =>
-            vaultExtensionSettingSecrets(workspace.root, extensionSecretVault, await settingSecretKeys(), onUnvaultableSetting),
-        secretRegistry: secretRegistryOf(secretVault, () => workspace.repos["desired-state"]),
-        secretUses: fileSecretUses(join(workspace.root, secretUsesDocument.path)),
-        credentialGates,
-        credentialGrants,
-        // Grants must be one map: a release clicked at the shell exit must be the release the browser reads next turn.
-        credentialGate: createCredentialGate({ gates: credentialGates, grants: credentialGrants, ...cardDeps({ conversations, cards, events }) }),
         walletLedger: fileWalletLedger(join(workspace.root, walletLedgerDocument.path)),
-        trial,
-        platformTunnel,
-        capabilityDismissals: fileDismissalsStore(join(workspace.root, dismissalsDocument.path)),
-        personas,
-        areas,
-        heavyCommands,
-        queueHeavy: queueWhole(heavyCommands.read),
-        heavyPrefix: queuePrefixFor(heavyCommands.read),
-        resources,
-        ciStore,
-        verifyStore,
-        landCheck: landCheckOf(() => services),
-        pushChecks: createPushChecks({
-            root: workspace.root,
-            store: filePushChecksStore(join(workspace.root, pushChecksDocument.path)),
-            logger,
-        }),
-        ciRuns: createRunsCache(),
-        ciHooks: createCiHookReconciler({ workspace, capabilities, ciStore, config, logger }),
-        automations: fileAutomationsStore(
-            join(workspace.root, automationsDocument.path),
-            join(workspace.root, automationRunsDocument.path),
-        ),
-        loops: fileLoopsStore(join(workspace.root, loopsDocument.path)),
-        loopDesigns: fileLoopDesignsStore(join(workspace.root, loopDesignsDocument.path)),
-        workflows: fileWorkflowsStore(join(workspace.root, workflowsDocument.path)),
-        workflowRuns: fileWorkflowRunsStore(join(workspace.root, workflowRunsDocument.path)),
-        chores,
         probeRunner: createProbeRunner({
             workspace,
             chores,
             conversations,
-            wanted: async () => (await enabledExtensions(extensionHostAdapter)).some((extension) => extension.id === "intentic.maintenance"),
+            wanted: async () => (await enabledExtensions(deps.manifestHost)).some((extension) => extension.id === "intentic.maintenance"),
             logger,
         }),
-        heldWakes: fileHeldWakesStore(join(workspace.root, heldWakesDocument.path)),
-        threadSessions: fileThreadSessionsStore(
-            join(workspace.root, threadSessionsDocument.path),
-            (conversationId) => agents.entry(conversationId)?.archivedAt !== undefined,
-        ),
-        senders: fileSendersStore(join(workspace.root, sendersDocument.path)),
-        webchatOutbox: fileWebchatOutbox(join(workspace.root, webchatOutboxDocument.path)),
-        outboxStreamFor: (origin) => outboxStreamFor(services, origin),
         approvals: fileApprovalsStore(join(workspace.root, approvalsDocument.path)),
-        issues: fileIssuesStore(join(workspace.root, issuesDocument.path)),
-        issueInstalls: fileInstallsStore(issueInstallsDocument, join(workspace.root, issueInstallsDocument.path)),
-        turnJournal,
-        // Beside the turn journal, for the same reason: it must outlive a container recreate.
-        watchJournal: sqliteWatchJournal(conversationsDb),
-        invariants,
-        // The same instance the transcript reader holds; a second would answer from a file the first already passed.
-        turnCheckpoints,
-        // Beside the transcript in the conversation's unit: what a conversation is told outlives a container recreate the
-        // same way what it said does.
-        promptRecord: filePromptRecord(config.historyRoot),
-        activity: fileActivityStore(join(config.historyRoot, "activity.jsonl")),
-        usage: fileUsageStore(join(config.historyRoot, "usage.jsonl")),
-        sandboxSettings: fileSandboxSettingsStore(join(workspace.root, settingsDocument.path)),
         safetyPolicy: fileSafetyPolicyStore(statePath(workspace.root, ".intentic/config/safety.md")),
         safetyLog: fileSafetyLog(join(workspace.root, safetyLogDocument.path)),
         ruleFirings: fileRuleFiringsStore(join(workspace.root, ruleFiringsDocument.path)),
-        runtimeInstalls,
         driftSweep: createDriftSweep({ workspace, runtimeInstalls, conversations, logger }),
-        push: pushStore,
-        pushSender,
-        // Provider areas, spread whole; their members' docs live on the area interfaces, beside the code.
-        ...claude,
-        ...codex,
-        ...cursor,
-        ...grok,
-        ...gemini,
-        ...kimi,
-        ...minted,
-        accountUsage,
-        headroom,
-        providerRefusals: fileProviderRefusalStore(join(config.historyRoot, providerRefusalsDocument.path)),
-        modelRefusals: fileModelRefusalStore(join(config.historyRoot, modelRefusalsDocument.path)),
-        modelCooldowns: fileModelCooldownStore(join(config.historyRoot, modelCooldownsDocument.path)),
-        observedLimits,
-        // Late-bound through the same holder the extension backend uses; the thunks only run per request.
-        providerCatalogs: providerCatalogsOf(PROVIDER_MODULES, () => {
-            if (servicesHolder.current === undefined) {
-                throw new Error("provider catalog read before services finished composing");
-            }
-            return servicesHolder.current;
-        }),
-        providerReadiness: () => {
-            if (servicesHolder.current === undefined) {
-                throw new Error("provider readiness read before services finished composing");
-            }
-            return providerReadiness(servicesHolder.current);
-        },
-        providerModules: PROVIDER_MODULES,
-        adapters: RUNTIME_ADAPTERS,
-        judgeCommand: (input, signal) => judgeCommand(services, input, signal),
-        openBrowserAccount: (input) => openBrowserAccount(services, input),
-        composeEnvironment: () => composeEnvironment(services),
-        endpointModels: createEndpointCatalog(join(authRoot, "endpoints")),
-        // Same late binding as the thunks above: a wake needs the finished Services to build a capability context,
-        // and the only caller is a turn, long after composing.
-        wakeLocalModel: async (id: string) => {
-            const current = servicesHolder.current;
-            return current === undefined ? false : wakeLocalModelServer(capabilityCtx(current), id, LOCAL_MODEL_WAKE_MS);
-        },
-        cliProxy,
-        openCode,
-        authRoot,
         history: createWorkspaceHistory({ workspace, historyRoot: config.historyRoot, logger }),
-        // The Claude Code loop over these actors, which hold the children and background commands a turn starts.
-        agent: (request) => runAgent(conversations, request),
-        acpAgent: createAcpAgent(acpConnections),
-        acpConnections,
-        // Pi sessions sit beside other AI-provider state under authRoot, so a stable dir keeps them resumable.
-        piAgent: createPiAgent(piSpawner(join(authRoot, "pi", "sessions"))),
         // Bound to the daemon logger so a CLI run's lifecycle is attributable from daemon.log.
-        intentic: (run, signal) => runIntentic(run, signal, logger),
-        git: {
-            init: gitInit,
-            status: gitStatus,
-            listFiles: gitListFiles,
-            commitAll: gitCommitAll,
-            clone: gitClone,
-            checkout: gitCheckout,
-            head: gitHead,
-            fullHead: gitFullHead,
-            sync: gitSync,
-            changedFiles,
-            stagePaths,
-            stageAll,
-            scratchOf,
-            unstagePaths,
-            commitIndex,
-            discardPaths,
-            listBranches,
-            listRemoteBranches,
-            createBranch,
-            deleteBranch,
-            remoteState,
-            fetchRemote,
-            pullRemote,
-            remoteProjectOf: (dir) => remoteProjectOf(dir, defaultGit),
-            publishFile,
-            stagedFileDiff,
-            unstagedFileDiff,
-            conflictedFileDiff,
-            fileDiff: workingFileDiff,
-            refFileDiff,
-            commitLog,
-            operationInProgress,
-            abortOperation,
-            undoableAction,
-            undoLastAction,
-            stashList,
-            stashChanges,
-            stashPush,
-            stashApply,
-            stashDrop,
-            collectRepoDiff,
-            commitChanges,
-            commitFileDiff,
-            createBranchAt,
-            createTagAt,
-            deleteTag,
-            pushTag,
-            checkoutRef,
-            resetTo,
-            revertCommit,
-            cherryPick,
-            mergeCommit,
-            rebaseOnto,
-            dropCommit,
-        },
-        agents,
-        conversationUnits: units,
-        conversationsDb,
-        conversations,
-        cards,
-        // Bound to streamAgent here, the one module that may name the turn body.
-        turns: turnDoors(
-            () => services,
-            (input, signal) =>
-                input.conversationId === undefined
-                    ? streamAgent(services, input, signal)
-                    : inLogContext({ conversationId: input.conversationId }, streamAgent(services, input, signal)),
-        ),
-        events,
-        agentWorktrees,
-        reaper,
-        workspaceScope: {
-            main: workspace.root,
-            entry: (id) => agents.entry(id),
-            worktreeDir: (id) => agentWorktrees.conversationDir(id),
-        },
-        turnIsolation,
-        agentOrigins,
-        files: {
-            read: readWorkspaceFile,
-            readWindow: readWorkspaceFileWindow,
-            write: writeWorkspaceFile,
-            writeStream: writeWorkspaceFileStream,
-            setMtime: setWorkspaceMtime,
-            open: openWorkspaceFile,
-            size: statWorkspaceFileSize,
-            mkdir: makeWorkspaceDir,
-            remove: removeWorkspacePath,
-            trash: createWorkspaceTrash(statePath(workspace.root, ".intentic/local/trash/")),
-            move: moveWorkspacePath,
-            copy: copyWorkspacePath,
-            extract: extractArchive,
-        },
-        derived: {
-            read: readDerivedText,
-            derive: deriveText,
-            deriveBytes,
-            status: sidecarStatus,
-        },
-        // The watched workspace answers from the tree its watcher holds; the walk behind it reads the workspace through
-        // what that watcher keeps current, and a conversation's own checkout straight from disk.
-        workspaceTree: (root: string) => residentWorkspaceTree(root) ?? walkedWorkspaceTree(root),
-        workspaceTreeChanged: treeReads.changed,
-        workspaceChildren: listWorkspaceChildren,
-        iq,
+        intentic: (run: IntenticRun, signal?: AbortSignal) => runIntentic(run, signal, logger),
         shares: fileShareStore(join(config.historyRoot, sharesDocument.path)),
         speech: createSpeech({ workspaceRoot: workspace.root, log: (message) => logger.info(`speech: ${message}`) }),
         // Reads live sockets through the shared scan rather than the assigned port, since a monorepo can pin its own.
         panelUpstreamOf: createPanelUpstreamResolver({
             workspaceRoot: workspace.root,
             repos: () => discoverRepos(workspace.root),
-            listeners: () => services.scanPorts(),
+            listeners: deps.scanPorts,
             // Panels answer from the panel manager; an extension preview answers from the supervisor that assigned it.
             portOf: (key) => processes.portOf(key) ?? serviceProcesses.portOf(key),
         }),
     };
-    servicesHolder.current = services;
+};
+
+// Builds production services from config, one slice builder at a time in the order their dependencies ask for: each
+// takes what it reads as a typed argument, so a dependency missing here is a compile error, not a first-request crash.
+export const createServices = (config: Config, logger: Logger): Services => {
+    // The one late binding left. A few services do work that reaches back into most of the daemon (a turn, a land's
+    // breakage route, the provider catalogs, the safety judge, filing a browser account, a host's reach); they read the
+    // finished services through this per call, and none is called before composing returns.
+    const whole = (): Services => services;
+
+    const workspaceSlice = createWorkspaceSlice({ config, logger });
+    const { workspace } = workspaceSlice;
+    // AI-provider credential root; AGENT_AUTH_DIR shares it across dev sandboxes so subscription OAuth survives.
+    const authRoot = config.agentAuthDir !== "" ? config.agentAuthDir : statePath(workspace.root, ".intentic/secrets/auth/");
+    const providers = createProviderAreas(config, logger, authRoot);
+    // Who may call this daemon, and how: the roster, passkeys, sessions and every per-boot and per-extension token.
+    const authSlice = createAuthSlice(config, workspace.root);
+    // Hoisted: worktree ops and the Changes scan must file into the same tracker the summary line reads.
+    const perf = createPerfTracker(logger, createPerfLogger(config));
+    const conversationsParts = createConversationsSlice({ historyRoot: config.historyRoot, workspace, logger, perf, whole });
+    const { agents, conversations, cards } = conversationsParts.slice;
+    const invariants = createInvariantRegistry(logger);
+    const processesSlice = createProcessesSlice({ config, logger });
+    // The ACP connection pool implements ACP terminal/* over the processes' terminal runner, so both share one instance.
+    const acpConnections = createAcpConnections(logger, processesSlice.terminalRun);
+    const mainlineSlice = createMainlineSlice({ workspace, historyRoot: config.historyRoot, processes: processesSlice.processes, logger });
+    // Hoisted: the store and the sender reading it must be the same instance, or a subscription would go unseen.
+    const push = filePushStore(join(config.historyRoot, pushDocument.path));
+    // A reaction's failure is its own; the announcement it answered has already been made.
+    const events = createDomainEvents((name, error) => logger.warn({ err: error, event: name }, "domain event: a reaction failed"));
+    const reaper = createReaper({ conversations, agents, events, logger });
+    // A settled turn's outside-content taint drops with the turn; the registry must be told when that moment is.
+    events.subscribe("run.settled", (settled) => clearTurnTaint(settled.conversationId));
+    // The free trial lays over the manifest, never into it; routing stays a config constant, not probe timing.
+    const trial = createTrialService(config);
+    // The bundled translator opens the trial's connection and verifies its cert; a self-signed platform fails this.
+    const platformTunnel = startPlatformTunnel(config.platform.url, logger);
+    const capabilitiesParts = createCapabilitiesSlice({
+        config,
+        logger,
+        workspaceRoot: workspace.root,
+        authRoot,
+        overlay: (store) => withTrialEndpoint(store, config, trial, platformTunnel),
+        whole,
+    });
+    const { capabilities } = capabilitiesParts.slice;
+    const secretsSlice = createSecretsSlice({ workspace, authRoot, secretVault: capabilitiesParts.secretVault, cards: cardDeps({ conversations, cards, events }) });
+    const extensionsSlice = createExtensionsSlice({
+        config,
+        logger,
+        workspaceRoot: workspace.root,
+        authRoot,
+        served: { workspace, files: workspaceSlice.files, capabilities, config },
+        declared: capabilitiesParts.manifestHost,
+    });
+    const personas = filePersonasStore(join(workspace.root, personasDocument.path), (id, reason) =>
+        logger.warn(`personas: skipping unreadable card "${id}" (${reason}), the rest are unaffected`),
+    );
+    const areas = fileAreasStore(join(workspace.root, areasDocument.path), (id, reason) =>
+        logger.warn(`areas: skipping unreadable area "${id}" (${reason}); anyone fenced to it reaches nothing until it parses`),
+    );
+    // Hoisted: the drift sweep and the install-steering hook write the same ledger the /environment route reads.
+    const runtimeInstalls = fileRuntimeInstallsStore(join(workspace.root, runtimeInstallsDocument.path));
+    // Hoisted: the background probe runner writes the same cache the /chores route reads.
+    const chores = fileChoresStore(join(workspace.root, PROBES_FILE), join(workspace.root, LEDGER_FILE));
+    // Hoisted: the land check files into the same log and reads the same settings the routes do.
+    const activity = fileActivityStore(join(config.historyRoot, "activity.jsonl"));
+    const sandboxSettings = fileSandboxSettingsStore(join(workspace.root, settingsDocument.path));
+    // Transcripts, session files and phrase search, and what a conversation's purge takes with it.
+    const sessionsSlice = createSessionsSlice({
+        historyRoot: config.historyRoot,
+        workspaceRoot: workspace.root,
+        logger,
+        turnCheckpoints: conversationsParts.slice.turnCheckpoints,
+        roster: () => [...agents.list(), ...agents.listArchived()].flatMap((summary) => agents.entry(summary.id) ?? []),
+        forget: (conversationId) => secretsSlice.credentialGrants.forget(conversationId),
+    });
+    // A review's code-only counts outlive the process: a restart reopening every review tab reads them back.
+    keepCodeCounts(statePath(workspace.root, ".intentic/local/cache/", "code-counts.db"));
+    // One tool table per connected peer, shared by every door: what a turn lists for a machine or a browser that is
+    // asleep right now, and the reason a restart doesn't make one vanish from the next turn's tools.
+    const peerDoors = { historyRoot: config.historyRoot, logger, peerTools: filePeerTools(config.historyRoot, logger) };
+    const bridged = createBridgedMembers({
+        config,
+        logger,
+        workspace,
+        heavyCommands: mainlineSlice.heavyCommands,
+        landCheck: { ...mainlineSlice, workspace, processes: processesSlice.processes, logger, activity, events, sandboxSettings, agents, whole },
+    });
+
+    const services: Services = {
+        ...authSlice,
+        ...sessionsSlice.slice,
+        ...workspaceSlice,
+        ...processesSlice,
+        ...mainlineSlice,
+        ...conversationsParts.slice,
+        ...capabilitiesParts.slice,
+        ...secretsSlice,
+        ...extensionsSlice,
+        ...createAutomationsSlice({ workspaceRoot: workspace.root, archived: (conversationId) => agents.entry(conversationId)?.archivedAt !== undefined }),
+        ...createLoopsSlice(workspace.root),
+        ...createCiSlice({ workspace, capabilities, config, logger }),
+        ...createGitSlice(),
+        ...createHostsSlice({ ...peerDoors, whole }),
+        ...createWebextSlice(peerDoors),
+        ...createRunnersSlice(peerDoors),
+        ...createResourcesSlice({
+            workspaceRoot: workspace.root,
+            perf,
+            owners: () => ({
+                transcriptSearch: transcriptSearchMetrics(),
+                saidIndex: sessionsSlice.saidIndexMetrics(),
+                ...conversationsParts.metrics(),
+                iq: workspaceSlice.iq.metrics(),
+            }),
+        }),
+        ...createProvidersSlice({
+            ...providers.shared,
+            historyRoot: config.historyRoot,
+            conversations,
+            whole,
+            acpConnections,
+            acpAgent: createAcpAgent(acpConnections),
+            // Pi sessions sit beside other AI-provider state under authRoot, so a stable dir keeps them resumable.
+            piAgent: createPiAgent(piSpawner(join(authRoot, "pi", "sessions"))),
+            // A wake needs the finished Services to build a capability context, and the only caller is a turn.
+            wakeLocalModel: async (id) => wakeLocalModelServer(capabilityCtx(whole()), id, LOCAL_MODEL_WAKE_MS),
+        }),
+        ...providers.areas,
+        ...bridged,
+        ...createDaemonMembers({ ...processesSlice, config, logger, workspace, capabilities, conversations, chores, runtimeInstalls, scanPorts: bridged.scanPorts, manifestHost: capabilitiesParts.manifestHost }),
+        trial,
+        platformTunnel,
+        personas,
+        areas,
+        chores,
+        invariants,
+        activity,
+        sandboxSettings,
+        runtimeInstalls,
+        push,
+        pushSender: createPushSender(push, logger),
+        events,
+        reaper,
+    };
     wireReactions(services);
     // Registration only; nothing runs until a boot phase drives a moment, so a test build carries it unpaid for.
     registerDaemonInvariants(invariants, {
-        turnJournal,
+        turnJournal: services.turnJournal,
         agents,
         conversations,
-        agentWorktrees,
+        agentWorktrees: services.agentWorktrees,
         areas,
-        members: authSlice.members,
+        members: services.members,
         personas,
-        manifest: capabilityManifest,
-        connectors: secretFieldConnectors,
+        manifest: capabilitiesParts.manifest,
+        connectors: capabilitiesParts.connectors,
         // The decorated store, since the exit checks read kind and a country code, never a credential.
-        capabilities: services.capabilities,
+        capabilities,
         hosts: services.hosts,
         hostHub: services.hostHub,
         runners: services.runners,

@@ -9,12 +9,49 @@ import type {
     ScratchPath,
     StashEntry,
 } from "@intentic/sandbox-contract";
-import type { GitCloneOptions, GitStatus, GitSyncResult } from "@intentic/scaffold";
-import type { ActionResult } from "./changes/changes-commits.js";
-import type { ScratchScope } from "./changes/scratch.js";
-import type { CommitScope, RepoDiff } from "./ops/commit-message.js";
-import type { GitOperation } from "./ops/operation.js";
-import type { UndoableAction } from "./ops/undo.js";
+import {
+    defaultGit,
+    gitCheckout,
+    type GitCloneOptions,
+    gitClone,
+    gitCommitAll,
+    gitFullHead,
+    gitHead,
+    gitInit,
+    gitListFiles,
+    type GitStatus,
+    gitStatus,
+    gitSync,
+    type GitSyncResult,
+} from "@intentic/scaffold";
+import { changedFiles } from "./changes/changes.js";
+import {
+    type ActionResult,
+    checkoutRef,
+    cherryPick,
+    commitChanges,
+    commitLog,
+    createBranchAt,
+    createTagAt,
+    deleteTag,
+    dropCommit,
+    mergeCommit,
+    pushTag,
+    rebaseOnto,
+    resetTo,
+    revertCommit,
+} from "./changes/changes-commits.js";
+import { commitFileDiff, conflictedFileDiff, refFileDiff, stagedFileDiff, unstagedFileDiff, workingFileDiff } from "./changes/changes-diff.js";
+import { commitIndex, discardPaths, stageAll, stagePaths, unstagePaths } from "./changes/changes-index.js";
+import { type ScratchScope, scratchOf } from "./changes/scratch.js";
+import { createBranch, deleteBranch, listBranches, listRemoteBranches } from "./ops/branches.js";
+import { type CommitScope, collectRepoDiff, type RepoDiff } from "./ops/commit-message.js";
+import { abortOperation, type GitOperation, operationInProgress } from "./ops/operation.js";
+import { publishFile } from "./ops/publish-file.js";
+import { stashApply, stashChanges, stashDrop, stashList, stashPush } from "./ops/stash.js";
+import { type UndoableAction, undoableAction, undoLastAction } from "./ops/undo.js";
+import { fetchRemote, pullRemote, remoteState } from "./remote/remote.js";
+import { remoteProjectOf } from "./remote/remote-urls.js";
 
 // Git as the daemon runs it on the workspace's repositories: status, history, changes, branches and remotes.
 export interface GitSlice {
@@ -111,3 +148,64 @@ export interface GitSlice {
         readonly dropCommit: (dir: string, sha: string, author: { name: string; email: string }) => Promise<ActionResult>;
     };
 }
+
+// The slice as the daemon runs it: every verb is the real subprocess function, so a new one is a line here and its
+// declaration above, never a line in composition.ts.
+export const createGitSlice = (): GitSlice => ({
+    git: {
+        init: gitInit,
+        status: gitStatus,
+        listFiles: gitListFiles,
+        commitAll: gitCommitAll,
+        clone: gitClone,
+        checkout: gitCheckout,
+        head: gitHead,
+        fullHead: gitFullHead,
+        sync: gitSync,
+        changedFiles,
+        stagePaths,
+        stageAll,
+        scratchOf,
+        unstagePaths,
+        commitIndex,
+        discardPaths,
+        listBranches,
+        listRemoteBranches,
+        createBranch,
+        deleteBranch,
+        remoteState,
+        fetchRemote,
+        pullRemote,
+        remoteProjectOf: (dir) => remoteProjectOf(dir, defaultGit),
+        publishFile,
+        stagedFileDiff,
+        unstagedFileDiff,
+        conflictedFileDiff,
+        fileDiff: workingFileDiff,
+        refFileDiff,
+        commitLog,
+        operationInProgress,
+        abortOperation,
+        undoableAction,
+        undoLastAction,
+        stashList,
+        stashChanges,
+        stashPush,
+        stashApply,
+        stashDrop,
+        collectRepoDiff,
+        commitChanges,
+        commitFileDiff,
+        createBranchAt,
+        createTagAt,
+        deleteTag,
+        pushTag,
+        checkoutRef,
+        resetTo,
+        revertCommit,
+        cherryPick,
+        mergeCommit,
+        rebaseOnto,
+        dropCommit,
+    },
+});

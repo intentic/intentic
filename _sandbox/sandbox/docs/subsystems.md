@@ -19,10 +19,19 @@ flowchart LR
 
 `createServices` in [src/composition.ts](../src/composition.ts) builds `Services` once from the config. `Services` is
 the sum of slices each subsystem declares beside its own code (`auth/auth-slice.ts`, `conversations/conversations-slice.ts`,
-`runtimes/claude/claude-provider.ts`, …), and a slice whose construction stands alone is built there too
-(`createAuthSlice`, `createSessionsSlice`); what spans subsystems is wired in composition, in the one order that works. A
-module takes `Pick<Services, …>` of the seams it uses, so its dependencies are visible in its signature. `wireReactions`
-in the same file subscribes the reacting subsystems to the domain events.
+`runtimes/claude/claude-provider.ts`, …), and each slice file also holds the slice's builder (`createConversationsSlice`,
+`createGitSlice`, …), which takes what it reads as a typed argument. Composition calls the builders in dependency order,
+so a new member of a slice is written in its slice file alone, and a dependency a builder gains but is not handed fails
+to compile. A member whose code would close an import cycle if its slice's builder imported it (`daemon-boundaries`) is
+built in composition instead: the builder returns `Omit<Slice, …>` over an exported union of those names, and
+composition's `createBridgedMembers` returns the `Pick` of the same union.
+
+Nothing is filled in after construction but one binding: `whole`, the finished `Services`, read per call by the few
+services whose work reaches most of the daemon (a turn, a land's breakage route, the provider catalogs and readiness,
+the safety judge, filing a browser account, recomposing the environment, a host's reach). None of them is called before
+`createServices` returns. `runnerParent` is the one holder left, filled when runner mode enrolls after the boot gate.
+A module takes `Pick<Services, …>` of the seams it uses, so its dependencies are visible in its signature.
+`wireReactions` in the same file subscribes the reacting subsystems to the domain events.
 
 ## Boot
 

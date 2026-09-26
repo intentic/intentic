@@ -1,5 +1,6 @@
+import { join } from "node:path";
 import type { WorkflowRunsStore, WorkflowsStore } from "../workflows/workflows-store.js";
-import type { LoopDesignsStore, LoopsStore } from "./loops-store.js";
+import { fileLoopDesignsStore, fileLoopsStore, loopDesignsDocument, type LoopDesignsStore, loopsDocument, type LoopsStore } from "./loops-store.js";
 
 // Loops and workflows: their saved designs and their run ledgers.
 export interface LoopsSlice {
@@ -12,3 +13,12 @@ export interface LoopsSlice {
     // Workflow runs, the ledger the scheduler writes per step; kept apart so a run outlives a deleted design.
     readonly workflowRuns: WorkflowRunsStore;
 }
+
+// The members workflows/ builds, which composition.ts adds: building them here would close loops -> workflows -> loops.
+export type WorkflowsMembers = "workflows" | "workflowRuns";
+
+// Builds the loops half of the slice: two documents under the workspace root, nothing else read.
+export const createLoopsSlice = (workspaceRoot: string): Omit<LoopsSlice, WorkflowsMembers> => ({
+    loops: fileLoopsStore(join(workspaceRoot, loopsDocument.path)),
+    loopDesigns: fileLoopDesignsStore(join(workspaceRoot, loopDesignsDocument.path)),
+});

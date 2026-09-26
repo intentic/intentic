@@ -1,11 +1,12 @@
+import { join } from "node:path";
 import type { AgentOrigin } from "@intentic/sandbox-contract";
 import type { IssuesStore } from "../issues/issues-store.js";
-import type { ThreadSessionsStore } from "../sessions/thread-sessions.js";
+import { fileThreadSessionsStore, threadSessionsDocument, type ThreadSessionsStore } from "../sessions/thread-sessions.js";
 import type { InstallsStore } from "../store/installs.js";
 import type { OutboxSink, WebchatOutbox } from "../webchat/webchat-outbox.js";
-import type { AutomationsStore } from "./automations-store.js";
-import type { HeldWakesStore } from "./held-wakes-store.js";
-import type { SendersStore } from "./senders-store.js";
+import { automationRunsDocument, automationsDocument, type AutomationsStore, fileAutomationsStore } from "./automations-store.js";
+import { fileHeldWakesStore, heldWakesDocument, type HeldWakesStore } from "./held-wakes-store.js";
+import { fileSendersStore, sendersDocument, type SendersStore } from "./senders-store.js";
 
 // Automations and what a fire carries: held wakes, threads, senders, and the web chat outbox.
 export interface AutomationsSlice {
@@ -28,3 +29,21 @@ export interface AutomationsSlice {
     // Which sites loaded the reporter's script and which were turned away; the install panel's landing check.
     readonly issueInstalls: InstallsStore;
 }
+
+export interface AutomationsDeps {
+    readonly workspaceRoot: string;
+    // Whether a conversation is archived, so a thread whose conversation was archived starts fresh.
+    readonly archived: (conversationId: string) => boolean;
+}
+
+// The members issues/ and webchat/ build, which composition.ts adds: both import automations back, so building them
+// here would close a cycle.
+export type IntakeMembers = "issues" | "issueInstalls" | "webchatOutbox" | "outboxStreamFor";
+
+// Builds the automations half of the slice: its documents under the workspace root.
+export const createAutomationsSlice = ({ workspaceRoot, archived }: AutomationsDeps): Omit<AutomationsSlice, IntakeMembers> => ({
+    automations: fileAutomationsStore(join(workspaceRoot, automationsDocument.path), join(workspaceRoot, automationRunsDocument.path)),
+    heldWakes: fileHeldWakesStore(join(workspaceRoot, heldWakesDocument.path)),
+    threadSessions: fileThreadSessionsStore(join(workspaceRoot, threadSessionsDocument.path), archived),
+    senders: fileSendersStore(join(workspaceRoot, sendersDocument.path)),
+});

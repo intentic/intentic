@@ -131,7 +131,7 @@ export interface OutboxSink {
 // A TurnStream that queues the whole answer instead of streaming it: what a wake with no live visitor writes into.
 // Attaching one also earns the run its STREAM_NOTE, which is what stops the model trying to send the reply itself —
 // correct here, since a Visitor chat gives it no tool that could.
-export const outboxTurnStream = (services: Services, key: string): OutboxSink => {
+export const outboxTurnStream = (services: Pick<Services, "webchatOutbox" | "logger">, key: string): OutboxSink => {
     let text = "";
     let write: Promise<void> = Promise.resolve();
     return {
@@ -155,7 +155,7 @@ export const outboxTurnStream = (services: Services, key: string): OutboxSink =>
 
 // The sink an approved wake answers into, or undefined when its origin is not a Visitor chat. Called by the scheduler's
 // held-wake release, which has no other way to know a visitor is waiting.
-export const outboxStreamFor = (services: Services, origin: AgentOrigin | undefined): OutboxSink | undefined => {
+export const outboxStreamFor = (services: Pick<Services, "webchatOutbox" | "logger">, origin: AgentOrigin | undefined): OutboxSink | undefined => {
     const key = outboxKeyOf(origin);
     return key === undefined ? undefined : outboxTurnStream(services, key);
 };
