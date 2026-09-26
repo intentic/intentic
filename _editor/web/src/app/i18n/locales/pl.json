@@ -1740,7 +1740,7 @@
         },
         "agentChecks": {
             "repairAfterLanding": "Naprawiaj to, co psuje się po scaleniu",
-            "repairAfterLandingNote": "Czerwone landy wracają; CI main dostaje jednego agenta naprawczego.",
+            "repairAfterLandingNote": "Gdy po scaleniu sprawdzenia się nie powiodą, wysyłany jest agent naprawczy. To samo, gdy CI na main utknie na błędzie.",
             "afterLanding": "Po scaleniu pracy"
         },
         "agentClock": {

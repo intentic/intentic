@@ -1732,7 +1732,7 @@
         },
         "agentChecks": {
             "repairAfterLanding": "Reparieren, was nach dem Landen kaputtgeht",
-            "repairAfterLandingNote": "Rote Landings kommen zurück; main-CI bekommt einen Fix-Agenten.",
+            "repairAfterLandingNote": "Schlagen Prüfungen nach dem Landen fehl, schickt Intentic einen Agenten zur Reparatur. Dauerhaft rotes Main-CI ebenfalls.",
             "afterLanding": "Nachdem Arbeit gelandet ist"
         },
         "agentClock": {

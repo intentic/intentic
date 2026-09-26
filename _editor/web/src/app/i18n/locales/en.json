@@ -1884,7 +1884,7 @@
         },
         "agentChecks": {
             "repairAfterLanding": "Repair what breaks after landing",
-            "repairAfterLandingNote": "Red lands route back; main CI gets one fix agent.",
+            "repairAfterLandingNote": "If checks fail after landing, an agent is sent to fix them. Main CI failures get the same.",
             "afterLanding": "After work lands"
         },
         "agentClock": {

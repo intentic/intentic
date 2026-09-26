@@ -1731,7 +1731,7 @@
         },
         "agentChecks": {
             "repairAfterLanding": "Réparer ce qui casse après l'intégration",
-            "repairAfterLandingNote": "Les lands rouges reviennent ; la CI main reçoit un agent correctif.",
+            "repairAfterLandingNote": "Si les vérifications échouent après une intégration, un agent part les corriger. Pareil si la CI de main reste en échec.",
             "afterLanding": "Après l'intégration du travail"
         },
         "agentClock": {

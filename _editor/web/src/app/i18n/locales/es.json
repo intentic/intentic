@@ -1741,7 +1741,7 @@
         },
         "agentChecks": {
             "repairAfterLanding": "Reparar lo que se rompe tras integrar",
-            "repairAfterLandingNote": "Los lands rojos vuelven; la CI de main recibe un agente correctivo.",
+            "repairAfterLandingNote": "Si fallan las comprobaciones tras integrar, se envía un agente a corregirlo. Lo mismo si la CI de main sigue rota.",
             "afterLanding": "Tras integrar el trabajo"
         },
         "agentClock": {
