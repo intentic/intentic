@@ -284,8 +284,16 @@
             "daemonHint": "Der eigene Steuerprozess der Sandbox: sein Speicher, seine CPU (100 % ist ein Kern) und wie ausgelastet seine Ereignisschleife war.",
             "diskHint": "Belegter Platz auf dem Volume, auf dem der Arbeitsbereich liegt.",
             "diskLabel": "Platte",
-            "loadHint": "Die durchschnittliche Last über 1, 5 und 15 Minuten. Sie gilt für die ganze Maschine, andere Sandboxes darauf zählen also mit.",
-            "loadLabel": "Last",
+            "loadAverages": "Durchschnittliche Last über 1, 5 und 15 Minuten: {one} · {five} · {fifteen}.",
+            "loadBusy": "{load} Kerne belegt",
+            "loadHint": "Wie viele Kerne voll Arbeit auf der ganzen Maschine in der letzten Minute liefen oder warteten, und wohin das im Vergleich zu den letzten 15 Minuten geht. Andere Sandboxes auf der Maschine zählen mit; über ihrer Kernzahl staut sich Arbeit.",
+            "loadLabel": "Maschinenlast",
+            "loadOf": "{load} von {cores} Kern belegt | {load} von {cores} Kernen belegt",
+            "loadTrend": {
+                "falling": "sinkend",
+                "rising": "steigend",
+                "steady": "gleichbleibend"
+            },
             "loop": "Schleife {percent}",
             "memoryHint": "Belegter Arbeitsspeicher ohne den Dateicache, den der Kernel zuerst zurückholt, gemessen am Limit der Sandbox. Diese Zahl ist es, die ausgeht.",
             "memoryLabel": "Arbeitsspeicher",
@@ -313,6 +321,8 @@
             "rolesLabel": "Speicher nach Art",
             "sandboxLabel": "Ressourcen der Sandbox",
             "sessionHint": "Was die Prozesse dieser Unterhaltung nutzen: CPU der letzten Sekunden, wobei 100 % ein ganzer Kern ist, und belegter Arbeitsspeicher.",
+            "smallRoles": "{count} kleinere Art · {size} | {count} kleinere Arten · {size}",
+            "smallRolesHide": "Kleinere Arten ausblenden",
             "swapHint": "Arbeitsspeicher, den der Kernel auf die Platte ausgelagert hat. Ein wenig ist normal; viel und weiter wachsend heißt, der Sandbox fehlt Speicher."
         },
         "ownerMark": {

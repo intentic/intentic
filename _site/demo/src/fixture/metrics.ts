@@ -26,6 +26,7 @@ export const demoMetrics = (now: number, roster: readonly AgentSummary[]): Sandb
             diskBytes: 42 * GIB,
             diskTotalBytes: 100 * GIB,
             loadAverage: [tenth(2.4 + swing(now, 2)), 2.1, 1.8],
+            machineCores: 16,
             processes: 140 + running.length * 9,
             pressure: { cpu: tenth(3.2 + swing(now, 3) * 2), memory: 0.4, io: 0.8 },
         },

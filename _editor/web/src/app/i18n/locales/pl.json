@@ -289,8 +289,16 @@
             "daemonLabel": "Demon",
             "diskHint": "Zajęte miejsce na woluminie, na którym leży przestrzeń robocza.",
             "diskLabel": "Dysk",
-            "loadHint": "Średnie obciążenie z 1, 5 i 15 minut. Dotyczy całej maszyny, więc liczą się też inne sandboxy na niej.",
-            "loadLabel": "Obciążenie",
+            "loadAverages": "Średnie obciążenie z 1, 5 i 15 minut: {one} · {five} · {fifteen}.",
+            "loadBusy": "zajęte {load} rdzenia",
+            "loadHint": "Ile rdzeni pracy cała maszyna miała uruchomione lub w kolejce w ostatniej minucie i w którą stronę to zmierza w porównaniu z ostatnimi 15 minutami. Liczą się też inne sandboxy na maszynie, a powyżej liczby jej rdzeni praca czeka w kolejce.",
+            "loadLabel": "Obciążenie maszyny",
+            "loadOf": "zajęte {load} z {cores} rdzenia | zajęte {load} z {cores} rdzeni | zajęte {load} z {cores} rdzeni",
+            "loadTrend": {
+                "falling": "spada",
+                "rising": "rośnie",
+                "steady": "stabilnie"
+            },
             "loop": "pętla {percent}",
             "memoryHint": "Zajęta pamięć bez pamięci podręcznej plików, którą jądro odzyskuje najpierw, względem limitu sandboxa. To ta liczba się kończy.",
             "memoryLabel": "Pamięć",
@@ -317,6 +325,8 @@
             "rolesLabel": "Pamięć według rodzaju",
             "sandboxLabel": "Zasoby sandboxa",
             "sessionHint": "Czego używają procesy tej rozmowy: CPU z ostatnich sekund, gdzie 100% to cały rdzeń, oraz pamięci rezydentnej.",
+            "smallRoles": "{count} mniejszy rodzaj · {size} | {count} mniejsze rodzaje · {size} | {count} mniejszych rodzajów · {size}",
+            "smallRolesHide": "Ukryj mniejsze rodzaje",
             "swapHint": "Pamięć, którą jądro przeniosło na dysk. Trochę to norma; dużo i wciąż rośnie oznacza, że sandboxowi brakuje pamięci."
         },
         "ownerMark": {

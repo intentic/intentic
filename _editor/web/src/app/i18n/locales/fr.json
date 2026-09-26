@@ -285,8 +285,16 @@
             "daemonLabel": "Démon",
             "diskHint": "L'espace utilisé sur le volume où se trouve l'espace de travail.",
             "diskLabel": "Disque",
-            "loadHint": "La charge moyenne sur 1, 5 et 15 minutes. Elle concerne toute la machine : les autres sandboxes qui y tournent comptent aussi.",
-            "loadLabel": "Charge",
+            "loadAverages": "Charge moyenne sur 1, 5 et 15 minutes : {one} · {five} · {fifteen}.",
+            "loadBusy": "{load} cœurs occupés",
+            "loadHint": "Combien de cœurs de travail toute la machine avait en cours ou en attente sur la dernière minute, et dans quel sens cela évolue par rapport aux 15 dernières minutes. Les autres sandboxes de la machine comptent aussi ; au-delà de son nombre de cœurs, le travail fait la queue.",
+            "loadLabel": "Charge de la machine",
+            "loadOf": "{load} sur {cores} cœur occupés | {load} sur {cores} cœurs occupés",
+            "loadTrend": {
+                "falling": "en baisse",
+                "rising": "en hausse",
+                "steady": "stable"
+            },
             "loop": "boucle {percent}",
             "memoryHint": "La mémoire utilisée, moins le cache de fichiers que le noyau reprend en premier, rapportée à la limite du sandbox. C'est ce chiffre qui s'épuise.",
             "memoryLabel": "Mémoire",
@@ -312,6 +320,8 @@
             "rolesLabel": "Mémoire par type",
             "sandboxLabel": "Ressources du sandbox",
             "sessionHint": "Ce qu'utilisent les processus de cette conversation : le CPU des dernières secondes, où 100 % correspond à un cœur entier, et la mémoire résidente.",
+            "smallRoles": "{count} type plus petit · {size} | {count} types plus petits · {size}",
+            "smallRolesHide": "Masquer les types plus petits",
             "swapHint": "La mémoire que le noyau a déplacée sur le disque. Un peu, c'est normal ; beaucoup, et en hausse, signifie que le sandbox manque de mémoire."
         },
         "ownerMark": {

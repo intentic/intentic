@@ -90,6 +90,12 @@ export const SandboxUsageSchema = z.object({
     loadAverage: z
         .tuple([z.number(), z.number(), z.number()])
         .describe("The load average over 1, 5 and 15 minutes. It is the machine's, so other sandboxes on it count too."),
+    machineCores: z
+        .number()
+        .optional()
+        .describe(
+            "Cores the machine's load average reads against: every core the sandbox may be scheduled on, before any quota. Absent from a daemon that predates it.",
+        ),
     processes: z.number().describe("How many processes are running in the sandbox."),
     pressure: PressureMetricsSchema.optional().describe(
         "How much work waited on CPU, memory or disk lately. Absent where the kernel does not report it.",

@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import type { SandboxMetrics } from "@intentic/sandbox-contract";
 import { Meter, ui } from "@intentic/ui";
+import { formatBytes } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
+import { computed, ref } from "vue";
 import { useSandboxReadout } from "./sandboxFigures";
 
 // The panel the board's metrics segment opens above its status bar: every figure the bar leaves out, grouped by
 // what it answers. The gauges again with their capacity, then the machine's other readings, then which kinds of process
-// hold the memory, side by side while the panel is wide. The kinds take whatever width is left and flow into as many
-// columns as fit, so the panel stays about as tall as its three gauges rather than growing a scrollbar. Every figure
-// explains itself on hover, since "load" or "pressure" is a number only a reader who already knows it can read bare. Its
-// heading is the status bar panel's header (BoardStatusBar.vue).
+// hold the memory, one kind a row with the small ones folded (sandboxFigures.ts decides which), since a row of
+// side-by-side kinds reads as a puzzle rather than a list. Every figure explains itself on hover, since "load" or
+// "pressure" is a number only a reader who already knows it can read bare. Its heading is the status bar panel's header
+// (BoardStatusBar.vue).
 
 const t = useT();
 
@@ -18,6 +20,10 @@ const props = defineProps<{
 }>();
 
 const readout = useSandboxReadout(() => props.metrics);
+
+// Folded until asked for, and for as long as the panel stays open.
+const smallOpen = ref(false);
+const shownRoles = computed(() => (smallOpen.value ? [...readout.value.roles, ...readout.value.smallRoles] : readout.value.roles));
 </script>
 
 <template>
@@ -50,22 +56,40 @@ const readout = useSandboxReadout(() => props.metrics);
             </template>
         </dl>
 
-        <div v-if="readout.roles.length > 0" role="group" data-section="roles" class="flex min-w-56 flex-1 flex-col gap-1.5">
+        <!-- One kind a row, so the eye runs down names and sizes alike; the small kinds fold behind a line that sums them. -->
+        <div v-if="readout.roles.length > 0" role="group" data-section="roles" class="flex w-72 shrink-0 flex-col gap-1.5">
             <h4 v-tooltip.left="t(`agents.liveMetrics.rolesHint`)" :class="ui.sectionLabelSm(`cursor-help self-start`)">
                 {{ t(`agents.liveMetrics.rolesLabel`) }}
             </h4>
-            <div class="grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-x-6 gap-y-1.5">
-                <div
-                    v-for="role in readout.roles"
-                    :key="role.key"
-                    data-figure
-                    class="grid grid-cols-[minmax(0,7.5rem)_minmax(1.5rem,1fr)_auto] items-center gap-2 text-2xs"
-                >
-                    <span class="truncate text-muted">{{ role.label }}</span>
-                    <Meter :value="role.share" />
-                    <span class="text-right whitespace-nowrap tabular-nums text-content">{{ role.value }}</span>
-                </div>
+            <div
+                v-for="role in shownRoles"
+                :key="role.key"
+                data-figure
+                class="grid grid-cols-[minmax(0,8rem)_minmax(1.5rem,1fr)_4.5rem] items-center gap-2 text-2xs"
+            >
+                <span class="truncate text-muted">{{ role.label }}</span>
+                <Meter :value="role.share" />
+                <span class="text-right whitespace-nowrap tabular-nums text-content">{{ role.value }}</span>
             </div>
+            <button
+                v-if="readout.smallRoles.length > 0"
+                type="button"
+                data-small-roles
+                :class="ui.textAction(`flex items-center gap-1 self-start text-2xs text-subtle`)"
+                :aria-expanded="smallOpen"
+                @click="smallOpen = !smallOpen"
+            >
+                <Icon :name="smallOpen ? `chevron-down` : `chevron-right`" class="shrink-0 text-2xs" />
+                {{
+                    smallOpen
+                        ? t(`agents.liveMetrics.smallRolesHide`)
+                        : t(
+                              `agents.liveMetrics.smallRoles`,
+                              { count: readout.smallRoles.length, size: formatBytes(readout.smallRolesBytes) },
+                              readout.smallRoles.length,
+                          )
+                }}
+            </button>
         </div>
     </div>
 </template>

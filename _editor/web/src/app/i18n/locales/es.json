@@ -288,8 +288,16 @@
             "daemonHint": "El proceso de control del propio sandbox: su memoria, su CPU (100 % es un núcleo) y cuán ocupado estuvo su bucle de eventos.",
             "diskHint": "Espacio usado en el volumen donde está el espacio de trabajo.",
             "diskLabel": "Disco",
-            "loadHint": "La carga media de 1, 5 y 15 minutos. Es de toda la máquina, así que otros sandboxes en ella también cuentan.",
-            "loadLabel": "Carga",
+            "loadAverages": "Carga media de 1, 5 y 15 minutos: {one} · {five} · {fifteen}.",
+            "loadBusy": "{load} núcleos ocupados",
+            "loadHint": "Cuántos núcleos de trabajo tuvo en marcha o en espera toda la máquina en el último minuto, y hacia dónde va frente a los últimos 15 minutos. Otros sandboxes en la máquina también cuentan; por encima de su número de núcleos, el trabajo hace cola.",
+            "loadLabel": "Carga de la máquina",
+            "loadOf": "{load} de {cores} núcleo ocupados | {load} de {cores} núcleos ocupados",
+            "loadTrend": {
+                "falling": "bajando",
+                "rising": "subiendo",
+                "steady": "estable"
+            },
             "loop": "bucle {percent}",
             "memoryHint": "Memoria en uso, sin la caché de archivos que el kernel recupera primero, frente al límite del sandbox. Es la cifra que se agota.",
             "memoryLabel": "Memoria",
@@ -316,6 +324,8 @@
             "rolesLabel": "Memoria por tipo",
             "sandboxLabel": "Recursos del sandbox",
             "sessionHint": "Lo que usan los procesos de esta conversación: CPU de los últimos segundos, donde 100 % es un núcleo entero, y memoria residente.",
+            "smallRoles": "{count} tipo menor · {size} | {count} tipos menores · {size}",
+            "smallRolesHide": "Ocultar los tipos menores",
             "swapHint": "Memoria que el kernel ha llevado al disco. Un poco es normal; mucha y en aumento significa que al sandbox le falta memoria."
         },
         "ownerMark": {

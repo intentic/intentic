@@ -207,6 +207,7 @@ describe("the sandbox and the daemon", () => {
             diskBytes: 5,
             diskTotalBytes: 9,
             loadAverage: [1.5, 1.25, 1],
+            machineCores: 8,
             processes: 42,
             pressure: { cpu: 1.5, memory: 12.25, io: 0 },
         });
@@ -219,6 +220,7 @@ describe("the sandbox and the daemon", () => {
             memoryLimitBytes: 32 * 2 ** 30,
             memoryRoom: { reservedBytes: 0, personNeedBytes: 2 ** 30, stallPercent: 0, stallLimitPercent: 20 },
             loadAverage: [1.5, 1.25, 1],
+            machineCores: 8,
             processes: 3,
         });
     });

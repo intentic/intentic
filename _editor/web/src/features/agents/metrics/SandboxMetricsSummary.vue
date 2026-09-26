@@ -16,7 +16,6 @@ const readout = useSandboxReadout(() => props.metrics);
 
 <template>
     <span class="flex min-w-0 items-center gap-4 overflow-hidden">
-        <Icon name="server" class="shrink-0 text-2xs text-subtle" />
         <span v-for="gauge in readout.gauges" :key="gauge.key" data-figure class="inline-flex shrink-0 items-center gap-1.5">
             <span>{{ gauge.label }}</span>
             <Meter :value="gauge.fraction" :tone="gauge.warn ? `warning` : `muted`" class="w-8" />

@@ -3,7 +3,7 @@ import "@intentic/testing/dom";
 import type { SandboxMetrics } from "@intentic/sandbox-contract";
 import { formatPercent, setFormatLocale } from "@intentic/ui/format";
 import { IconStub } from "@intentic/ui/testing";
-import { type App, type Component, computed, createApp, h } from "vue";
+import { type App, type Component, computed, createApp, h, nextTick } from "vue";
 
 const { default: SessionMetrics } = await import("./SessionMetrics.vue");
 const { default: SandboxMetricsSummary } = await import("./SandboxMetricsSummary.vue");
@@ -25,6 +25,7 @@ const reading = (patch: { sandbox?: Partial<SandboxMetrics[`sandbox`]>; daemon?:
         diskBytes: 400 * GIB,
         diskTotalBytes: 1_000 * GIB,
         loadAverage: [1.5, 1.25, 1],
+        machineCores: 32,
         processes: 104,
         pressure: { cpu: 0.2, memory: 0, io: 0.1 },
         ...patch.sandbox,
@@ -127,8 +128,55 @@ describe("the sandbox panel", () => {
     it("reads capacity against use, and leaves out what is quiet: no swap in use, no pressure worth naming", () => {
         const el = mount(SandboxMetricsDetails, { metrics: reading() });
         expect(figuresOf(el, `gauges`)).toEqual([`CPU 23% of 16 cores`, `Memory 5.5 GB / 16 GB`, `Disk 400 GB / 1,000 GB`]);
-        expect(termsOf(el)).toEqual([`Load: 1.50 1.25 1.00`, `Processes: 104`, `Daemon: 412 MB · 2.0% CPU · loop 4.5%`]);
+        expect(termsOf(el)).toEqual([`Machine load: 1.5 of 32 cores busy · steady`, `Processes: 104`, `Daemon: 412 MB · 2.0% CPU · loop 4.5%`]);
         expect(figuresOf(el, `roles`)).toEqual([`builds and tests 2.0 GB`, `browsers 1.2 GB`]);
+    });
+
+    it("says which way the machine's load is heading, and its cores' worth alone from a daemon that does not send its cores", () => {
+        const rising = mount(SandboxMetricsDetails, { metrics: reading({ sandbox: { loadAverage: [6, 3, 2] } }) });
+        expect(termsOf(rising)[0]).toBe(`Machine load: 6.0 of 32 cores busy · rising`);
+        app?.unmount();
+        const older = mount(SandboxMetricsDetails, { metrics: reading({ sandbox: { loadAverage: [0.5, 1, 2.5], machineCores: undefined } }) });
+        expect(termsOf(older)[0]).toBe(`Machine load: 0.5 cores busy · easing`);
+    });
+
+    it("folds the kinds under 100 MB past the heaviest few behind one line that sums them, and unfolds them on a click", async () => {
+        const el = mount(SandboxMetricsDetails, {
+            metrics: {
+                ...reading(),
+                roles: {
+                    toolchain: { processes: 4, rssBytes: 2 * GIB },
+                    browser: { processes: 20, rssBytes: 1.2 * GIB },
+                    other: { processes: 3, rssBytes: 60 * MIB },
+                    git: { processes: 1, rssBytes: 30 * MIB },
+                    terminal: { processes: 2, rssBytes: 10 * MIB },
+                },
+            },
+        });
+        expect(figuresOf(el, `roles`)).toEqual([`builds and tests 2.0 GB`, `browsers 1.2 GB`, `other 60 MB`]);
+        const fold = el.querySelector<HTMLButtonElement>(`[data-small-roles]`)!;
+        expect(wordsOf(fold)).toBe(`2 smaller kinds · 40 MB`);
+        expect(fold.getAttribute(`aria-expanded`)).toBe(`false`);
+        fold.click();
+        await nextTick();
+        expect(figuresOf(el, `roles`)).toEqual([`builds and tests 2.0 GB`, `browsers 1.2 GB`, `other 60 MB`, `git 30 MB`, `terminals 10 MB`]);
+        expect(fold.getAttribute(`aria-expanded`)).toBe(`true`);
+    });
+
+    it("folds nothing when only one small kind would go, since hiding a single row saves nothing", () => {
+        const el = mount(SandboxMetricsDetails, {
+            metrics: {
+                ...reading(),
+                roles: {
+                    toolchain: { processes: 4, rssBytes: 2 * GIB },
+                    browser: { processes: 20, rssBytes: 1.2 * GIB },
+                    searchEngine: { processes: 1, rssBytes: 800 * MIB },
+                    git: { processes: 1, rssBytes: 30 * MIB },
+                },
+            },
+        });
+        expect(figuresOf(el, `roles`)).toHaveLength(4);
+        expect(el.querySelector(`[data-small-roles]`)).toBeNull();
     });
 
     it("names the capacity alone on a first reading, and swap and pressure once there is some", () => {

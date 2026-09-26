@@ -275,8 +275,16 @@
             "swapHint": "Memory the kernel has pushed out to disk. A little is normal; a lot that keeps growing means the sandbox is short of memory.",
             "diskLabel": "Disk",
             "diskHint": "Space used on the volume the workspace lives on.",
-            "loadLabel": "Load",
-            "loadHint": "The load average over 1, 5 and 15 minutes. It is the whole machine's, so other sandboxes on it count too.",
+            "loadLabel": "Machine load",
+            "loadOf": "{load} of {cores} core busy | {load} of {cores} cores busy",
+            "loadBusy": "{load} cores busy",
+            "loadTrend": {
+                "rising": "rising",
+                "falling": "easing",
+                "steady": "steady"
+            },
+            "loadHint": "How many cores' worth of work the whole machine had running or waiting over the last minute, and which way that is heading against the last 15 minutes. Other sandboxes on the machine count too, and past its core count work is queuing.",
+            "loadAverages": "Load average over 1, 5 and 15 minutes: {one} · {five} · {fifteen}.",
             "processesLabel": "Processes",
             "processesHint": "Every process running in the sandbox, the daemon included.",
             "pressureLabel": "Pressure",
@@ -287,6 +295,8 @@
             "loop": "loop {percent}",
             "rolesLabel": "Memory by kind",
             "rolesHint": "Resident memory of every process in the sandbox, by the kind of work it does. Memory two processes share is counted in each.",
+            "smallRoles": "{count} smaller kind · {size} | {count} smaller kinds · {size}",
+            "smallRolesHide": "Hide the smaller kinds",
             "role": {
                 "languageServer": "language servers",
                 "searchEngine": "search",

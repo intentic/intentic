@@ -181,6 +181,7 @@ export const sandboxUsageOf = ({ cgroup, room, machine, disk, processes, coresUs
         },
         ...(disk === undefined ? {} : { diskBytes: disk.usedBytes, diskTotalBytes: disk.totalBytes }),
         loadAverage: [...machine.loadAverage],
+        machineCores: machine.cores,
         processes,
         ...(cpu === undefined || memory === undefined || io === undefined ? {} : { pressure: { cpu: cpu.some, memory: memory.some, io: io.some } }),
     };

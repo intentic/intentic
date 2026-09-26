@@ -33,6 +33,7 @@ export interface RoleRow {
     readonly key: string;
     readonly label: string;
     readonly value: string;
+    readonly bytes: number;
     // Share of the heaviest kind, so the longest bar is always full and the rest read against it.
     readonly share: number;
 }
@@ -40,7 +41,10 @@ export interface RoleRow {
 export interface SandboxReadout {
     readonly gauges: readonly Gauge[];
     readonly figures: readonly Figure[];
+    // The kinds worth a glance, heaviest first; the small ones fold away (smallRoles) behind one line that sums them.
     readonly roles: readonly RoleRow[];
+    readonly smallRoles: readonly RoleRow[];
+    readonly smallRolesBytes: number;
     // Figures past a limit, besides the gauges: what the bar names on its own so nobody has to open the panel to see it.
     readonly alerts: readonly Figure[];
 }
@@ -53,6 +57,28 @@ export const usedOf = (used: number, total: number): string => {
 };
 
 const clamp = (value: number): number => Math.min(1, Math.max(0, value));
+
+// A kind under this much memory folds away: a long list of 40 MB kinds buries the two that matter.
+export const SMALL_ROLE_BYTES = 100 * 2 ** 20;
+// The heaviest few always show, whatever they hold, so the list never folds down to nothing.
+const ROLES_ALWAYS_SHOWN = 3;
+
+export type LoadTrend = `rising` | `falling` | `steady`;
+
+// Which way the machine's load is heading: the last minute against the last quarter hour, past a margin a single build
+// starting or ending would not cross.
+export const loadTrend = ([one, , fifteen]: readonly [number, number, number]): LoadTrend => {
+    const margin = Math.max(0.5, 0.2 * fifteen);
+    return one - fifteen > margin ? `rising` : fifteen - one > margin ? `falling` : `steady`;
+};
+
+// Where the kinds split into shown and folded: under SMALL_ROLE_BYTES past the first few, and only when that folds
+// more than one, since a fold that hides a single row saves nothing.
+export const splitRoles = <Row extends { readonly bytes: number }>(rows: readonly Row[]): [Row[], Row[]] => {
+    const firstSmall = rows.findIndex((row) => row.bytes < SMALL_ROLE_BYTES);
+    const at = firstSmall === -1 ? rows.length : Math.max(ROLES_ALWAYS_SHOWN, firstSmall);
+    return rows.length - at < 2 ? [[...rows], []] : [rows.slice(0, at), rows.slice(at)];
+};
 
 // Warned exactly when the daemon would hold a person's turn: the same figures and the same thresholds, read off one
 // reading. A daemon that predates `memoryRoom` sends neither, and its gauge falls back to how full it is.
@@ -106,6 +132,28 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
         return [cpu, memory, disk];
     };
 
+    // Load as cores' worth of work against the cores there are, and which way it is heading: three bare averages mean
+    // nothing to a reader who does not already know how many cores stand behind them. The averages stay in the hint.
+    const loadOf = ({ loadAverage, machineCores }: SandboxMetrics[`sandbox`]): Figure => {
+        const [one, five, fifteen] = loadAverage;
+        const load = formatFixed(one, 1);
+        const busy =
+            machineCores === undefined
+                ? t(`agents.liveMetrics.loadBusy`, { load })
+                : t(`agents.liveMetrics.loadOf`, { load, cores: formatFixed(machineCores, 0) }, machineCores);
+        return {
+            key: `load`,
+            label: t(`agents.liveMetrics.loadLabel`),
+            value: `${busy} · ${t(`agents.liveMetrics.loadTrend.${loadTrend(loadAverage)}`)}`,
+            hint: `${t(`agents.liveMetrics.loadHint`)} ${t(`agents.liveMetrics.loadAverages`, {
+                one: formatFixed(one, 2),
+                five: formatFixed(five, 2),
+                fifteen: formatFixed(fifteen, 2),
+            })}`,
+            warn: false,
+        };
+    };
+
     const figuresOf = ({ sandbox, daemon }: SandboxMetrics): Figure[] => {
         const { pressure } = sandbox;
         const worst = pressure === undefined ? 0 : Math.max(pressure.cpu, pressure.memory, pressure.io);
@@ -121,13 +169,7 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
                           warn: false,
                       },
                   ]),
-            {
-                key: `load`,
-                label: t(`agents.liveMetrics.loadLabel`),
-                value: sandbox.loadAverage.map((load) => formatFixed(load, 2)).join(` `),
-                hint: t(`agents.liveMetrics.loadHint`),
-                warn: false,
-            },
+            loadOf(sandbox),
             {
                 key: `processes`,
                 label: t(`agents.liveMetrics.processesLabel`),
@@ -174,6 +216,7 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
             key: role,
             label: t(`agents.liveMetrics.role.${role}`),
             value: formatBytes(rssBytes),
+            bytes: rssBytes,
             share: heaviest === 0 ? 0 : rssBytes / heaviest,
         }));
     };
@@ -181,6 +224,14 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
     return computed(() => {
         const reading = metrics();
         const figures = figuresOf(reading);
-        return { gauges: gaugesOf(reading), figures, roles: rolesOf(reading), alerts: figures.filter((figure) => figure.warn) };
+        const [roles, smallRoles] = splitRoles(rolesOf(reading));
+        return {
+            gauges: gaugesOf(reading),
+            figures,
+            roles,
+            smallRoles,
+            smallRolesBytes: smallRoles.reduce((sum, role) => sum + role.bytes, 0),
+            alerts: figures.filter((figure) => figure.warn),
+        };
     });
 }
