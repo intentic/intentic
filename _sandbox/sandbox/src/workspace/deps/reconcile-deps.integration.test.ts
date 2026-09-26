@@ -1,6 +1,9 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+// Naming `jest` takes the module's globals off the table, so `test` and `expect` come from it too.
+import { expect, jest, test } from "bun:test";
+import { advanceTimersByTimeAsync, realSleep, SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Logger } from "pino";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
 import { createDependencyCoordinator, type DependencyCoordinator } from "./reconcile-deps.js";
@@ -18,23 +21,21 @@ const drifted = async (root: string, dir = "app", name = "left-pad"): Promise<vo
 };
 const silent = { info: () => undefined, warn: () => undefined } as unknown as Logger;
 
-const processes = (started: string[], runMs = 10): ManagedProcesses => {
-    const running = new Set<string>();
-    return {
-        start: async (key: string) => {
-            started.push(key);
-            running.add(key);
-            setTimeout(() => running.delete(key), runMs);
-        },
-        stop: (key: string) => running.delete(key),
-        running: (key: string) => running.has(key),
-    } as unknown as ManagedProcesses;
-};
+// Records the panels started, and none of them ever READS as running: a project whose install panel is up reports
+// `installing` rather than `stale`, so a fake that held a key for a few milliseconds let a maintenance pass in flight
+// rewrite the state under the next assertion about drift. The one test about an install's own lifetime brings its own
+// fake (below), which is where that state belongs.
+const processes = (started: string[]): ManagedProcesses =>
+    ({
+        start: async (key: string) => void started.push(key),
+        stop: () => undefined,
+        running: () => false,
+    }) as unknown as ManagedProcesses;
 
-const coordinator = (root: string, started: string[], runMs = 10): DependencyCoordinator =>
+const coordinator = (root: string, started: string[]): DependencyCoordinator =>
     createDependencyCoordinator({
         workspace: { root },
-        processes: processes(started, runMs),
+        processes: processes(started),
         logger: silent,
         requestsPath: join(root, "requests.json"),
         settleMs: 20,
@@ -137,22 +138,41 @@ test("a durable request can be retried by a later status read if its panel did n
 
 test("a manifest burst installs only once the writes around it have gone quiet", async () => {
     const root = await workspace();
+    // The checkout's manifest is already on disk before the coordinator exists. Written after it instead, the drift
+    // lands in a race with the coordinator's own startup scan — which order the two reach the filesystem is the
+    // threadpool's to decide, and a scan that sees the drift installs on sight, with no window to hold it back.
+    await drifted(root);
     const started: string[] = [];
     const changes = watch();
     const deps = coordinator(root, started);
-    const stop = deps.watch(changes.subscribe);
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    await drifted(root);
-    changes.emit(["app/package.json"]);
-    await new Promise((resolve) => setTimeout(resolve, 15));
-    // A checkout writes the manifest early and ordinary source much longer after; once the manifest arms the window,
-    // later source traffic must keep extending it.
-    changes.emit(["app/src/main.ts"]);
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(started).toEqual([]);
-    await settle(() => started.length > 0);
-    expect(started).toEqual(["app--install"]);
-    stop();
+    jest.useFakeTimers();
+    try {
+        // The watcher's first batch arrives as the coordinator subscribes, which `watch` does before it schedules its
+        // startup pass: the window is armed first, so every pass waits for quiet, the startup one included.
+        const stop = deps.watch((listener) => {
+            const unsubscribe = changes.subscribe(listener);
+            listener(["app/package.json"]);
+            return unsubscribe;
+        });
+        await advanceTimersByTimeAsync(15);
+        // A checkout writes the manifest early and ordinary source much longer after; once the manifest arms the
+        // window, later source traffic must keep extending it.
+        changes.emit(["app/src/main.ts"]);
+        // 30ms in: past the 20ms the manifest armed on its own, so nothing but the extension holds the install back.
+        // The deadline is exact on the fake clock, but a pass that DID wake still needs a millisecond or two of real
+        // filesystem work to reach `startInstall`; the wall-clock wait is what gives it that, at a hundred times what
+        // the work costs on a temp tree. Too short and this reads green for want of time rather than for the window.
+        await advanceTimersByTimeAsync(15);
+        await realSleep(200);
+        expect(started).toEqual([]);
+        // Quiet at last. The pass wakes on the clock; the walk to the install is bounded by the suite's hang
+        // detector rather than by a wait of its own.
+        await advanceTimersByTimeAsync(10);
+        await waitFor(() => expect(started).toEqual(["app--install"]), SETTLES);
+        stop();
+    } finally {
+        jest.useRealTimers();
+    }
 });
 
 test("an install that outruns its watch window is stopped rather than left going", async () => {
