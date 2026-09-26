@@ -12,6 +12,8 @@ const { badge } = defineProps<{ badge?: ViewBadge | undefined }>();
 // The badge only while it has a chip to draw: `v-if` on the value, so the template narrows and the leave
 // transition gets a falsy toggle rather than a changed prop.
 const shown = computed<ViewBadge | undefined>(() => (badge !== undefined && badgeChip(badge) ? badge : undefined));
+// The round plate already frames a warning. A second filled silhouette crowds its punctuation at rail size.
+const warningMark = computed(() => shown.value?.mark === `exclamation-triangle`);
 </script>
 
 <template>
@@ -26,7 +28,11 @@ const shown = computed<ViewBadge | undefined>(() => (badge !== undefined && badg
             :class="badgeClass(shown)"
         >
 <!-- A mark REPLACES the number rather than sitting beside it: the chip is four pixels of glance. -->
-            <Icon v-if="shown.mark !== undefined" :name="shown.mark as IconName" class="text-[0.9em]" />
+            <Icon
+                v-if="shown.mark !== undefined"
+                :name="warningMark ? `exclamation` : shown.mark as IconName"
+                :class="warningMark ? `text-[1.2em]` : `text-[0.9em]`"
+            />
             <template v-else>{{ badgeText(shown) }}</template>
         </span>
     </Transition>

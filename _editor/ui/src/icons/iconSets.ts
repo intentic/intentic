@@ -56,6 +56,7 @@ export const ICONS = {
     ellipsis: NAVIGATION_GLYPHS[`ellipsis`],
     envelope: OBJECT_GLYPHS[`envelope`],
     eraser: ACTION_GLYPHS[`eraser`],
+    exclamation: STATUS_GLYPHS.exclamation,
     "exclamation-circle": STATUS_GLYPHS[`exclamation-circle`],
     "exclamation-triangle": NAVIGATION_GLYPHS[`exclamation-triangle`],
     expand: ACTION_GLYPHS[`expand`],

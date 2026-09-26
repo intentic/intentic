@@ -12,6 +12,8 @@ export const STATUS_GLYPHS = {
     circle: { outline: `M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z` },
     "circle-fill": { outline: ``, solid: `M20 12a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z` },
     clock: { outline: `M8 3h8l5 5v8l-5 5H8l-5-5V8Z M12 7v5l4 2` },
+    // For warning badges whose plate already supplies the surrounding shape.
+    exclamation: { outline: ``, solid: `M10 3h4v11h-4Z M10 17h4v4h-4Z` },
     "exclamation-circle": {
         outline: ``,
         solid: `M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0Z M10.5 6v6h3V6Z M10.5 15v3h3v-3Z`,
