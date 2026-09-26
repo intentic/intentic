@@ -928,7 +928,7 @@
             "spent": "agotado"
         },
         "chatCapacityRail": {
-            "allowanceLeft": "Cuota restante",
+            "allowanceLeft": "Uso restante",
             "cantServe": "{count} no pueden servir",
             "moreRoom": "+{hidden} más con sitio",
             "nothingRoomRightNow": "Ahora mismo no hay sitio en ninguno.",

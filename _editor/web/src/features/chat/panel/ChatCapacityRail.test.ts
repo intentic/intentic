@@ -202,7 +202,7 @@ it(`draws both the session and the week, each named by its own window`, () => {
     expect(lanes(el)).toEqual([`5h`, `wk`]);
     expect([...el.querySelectorAll(`[aria-hidden="true"] .tabular-nums`)].map((node) => node.textContent?.trim())).toEqual([`88%`, `13%`]);
     // Every figure is what is left, said once above them rather than on each lane.
-    expect(el.textContent).toContain(`Allowance left`);
+    expect(el.textContent).toContain(`Usage left`);
 });
 
 it(`displays remaining minutes on 5h window and remaining time on weekly window when not exhausted`, () => {

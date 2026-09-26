@@ -956,7 +956,7 @@
             "spent": "spent"
         },
         "chatCapacityRail": {
-            "allowanceLeft": "Allowance left",
+            "allowanceLeft": "Usage left",
             "cantServe": "{count} can't serve",
             "moreRoom": "+{hidden} more with room",
             "nothingRoomRightNow": "Nothing has room right now.",

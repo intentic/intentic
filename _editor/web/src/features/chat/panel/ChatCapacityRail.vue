@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ui } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
-import { type CapacityLane, type CapacityProvider, type CapacityRow, type CapacityUnread, chatCapacity, heldReadings } from "./chatCapacity";
+import { type CapacityBlocked, type CapacityLane, type CapacityProvider, type CapacityRow, type CapacityUnread, chatCapacity, heldReadings } from "./chatCapacity";
 import { accountsLoaded } from "../accounts/providerAccounts";
 import { formatAge, formatRemaining, formatReset, meterFill, meterTint, meterTrack, remainingFigure, usageTone } from "../session/usageStatus";
 import { heldAccounts, refreshConnections } from "../accounts/useChat-accounts";
@@ -89,25 +89,38 @@ const remeasureLabel = computed(() =>
         : `Re-measure plan limits, oldest reading ${formatAge(capacity.value.measuredAt)}`,
 );
 
-// What the last press could not read: while the provider holds a read off, the oldest age below cannot move however
-// often the button is pressed. Says re-read, never "rate-limited", which on a panel of plan limits would read as the
-// allowance itself being spent.
-const heldNote = computed((): { readonly subject: string; readonly retry: string } | undefined => {
-    const entry = heldReadings(heldAccounts.value);
-    if (entry === undefined) {
-        return undefined;
-    }
-    const names = entry.labels.length === entry.count ? entry.labels.join(`, `) : `${entry.count} ${entry.count === 1 ? `account` : `accounts`}`;
-    return { subject: `Can't re-read ${names} yet`, retry: `retry ${formatReset(entry.resumesAt)}` };
+// Readings a re-read could not reach: the provider holding reads off, or refusing them ("Verify your account to
+// continue"). Worth knowing, since the age above leaves them out and their bars are older than it says, but not worth
+// the column's height: this rail is not where accounts are fixed. So the drawn form is one quiet icon and a count
+// beside the age, and every sentence rides the hover and the screen reader.
+const staleNote = computed((): { readonly count: number; readonly detail: string } | undefined => {
+    const held = heldReadings(heldAccounts.value);
+    const lines = [
+        ...(held === undefined
+            ? []
+            : [`Can't re-read ${held.labels.length === held.count ? held.labels.join(`, `) : plural(held.count)} yet, retry ${formatReset(held.resumesAt)}`]),
+        ...capacity.value.unread.map((entry: CapacityUnread) =>
+            [
+                `Can't re-read ${entry.count <= 2 && entry.labels.length === entry.count ? entry.labels.join(`, `) : plural(entry.count)}`,
+                entry.reason.replace(/\.$/, ``),
+                ...(entry.lastReadAt === undefined ? [] : [`last read ${formatAge(entry.lastReadAt)}`]),
+            ].join(` · `),
+        ),
+    ];
+    const count = (held?.count ?? 0) + capacity.value.unread.reduce((sum, entry) => sum + entry.count, 0);
+    return lines.length === 0 ? undefined : { count, detail: lines.join(`. `) };
 });
 
-// Every other reading a re-read could not reach, one line per reason in the provider's own words ("Verify your account
-// to continue"): the age above leaves these out, and this is where they go instead. Names up to two, counts past that
-// (the hover names them all), since a column this narrow can't carry four email addresses.
-const unreadLine = (entry: CapacityUnread): { readonly subject: string; readonly detail: string } => ({
-    subject: `Can't re-read ${entry.count === entry.labels.length && entry.count <= 2 ? entry.labels.join(`, `) : `${entry.count} ${entry.count === 1 ? `account` : `accounts`}`}`,
-    detail: [entry.reason.replace(/\.$/, ``), ...(entry.lastReadAt === undefined ? [] : [`last read ${formatAge(entry.lastReadAt)}`])].join(` · `),
-});
+const plural = (count: number): string => `${count} ${count === 1 ? `account` : `accounts`}`;
+
+// Everything the one-line blocked row leaves out: which accounts, what each provider said, and who can fix it.
+const blockedDetail = (entry: CapacityBlocked): string =>
+    [
+        ...entry.labels,
+        entry.fix === `reconnect` ? t(`chat.chatCapacityRail.reconnectOnAgentTab`) : entry.fix === `admin` ? t(`chat.chatCapacityRail.seatFromAdmin`) : undefined,
+    ]
+        .filter((part) => part !== undefined)
+        .join(` · `);
 </script>
 
 <template>
@@ -121,6 +134,12 @@ const unreadLine = (entry: CapacityUnread): { readonly subject: string; readonly
             <span v-if="measuredProviders.length > 0" class="mr-auto min-w-0 truncate text-2xs font-medium uppercase tracking-wide text-subtle">{{
                 t(`chat.chatCapacityRail.allowanceLeft`)
             }}</span>
+            <!-- Readings the age leaves out: a quiet mark by the number it qualifies, the reasons on hover. -->
+            <span v-if="staleNote !== undefined" v-tooltip.left="staleNote.detail" class="flex shrink-0 items-center gap-0.5 text-2xs text-warning">
+                <Icon name="exclamation-circle" class="text-[0.6rem]" />
+                <span class="tabular-nums" aria-hidden="true">{{ staleNote.count }}</span>
+                <span class="sr-only">{{ staleNote.detail }}</span>
+            </span>
             <button
                 type="button"
                 :class="ui.textAction(`gap-1 text-2xs text-subtle`)"
@@ -132,16 +151,6 @@ const unreadLine = (entry: CapacityUnread): { readonly subject: string; readonly
                 <span v-if="capacity.measuredAt !== undefined">{{ formatAge(capacity.measuredAt) }}</span>
             </button>
         </div>
-
-        <!-- Sits with the control it explains: the age above is the oldest reading here, so one account held off pins it. -->
-        <p v-if="heldNote !== undefined" class="shrink-0 px-3 pb-2 text-2xs">
-            <span class="text-warning">{{ heldNote.subject }}</span>
-            <span class="text-subtle"> · {{ heldNote.retry }}</span>
-        </p>
-        <p v-for="entry in capacity.unread" :key="entry.reason" v-tooltip.left="entry.labels.join(`, `)" class="shrink-0 px-3 pb-2 text-2xs">
-            <span class="text-warning">{{ unreadLine(entry).subject }}</span>
-            <span class="text-subtle"> · {{ unreadLine(entry).detail }}</span>
-        </p>
 
         <!-- Unread isn't empty: until accounts load, this must not claim the fleet has nothing — drawn as the shape that's coming, not stated in words. -->
         <div v-if="!accountsLoaded" class="flex min-h-0 flex-1 flex-col gap-4 px-3 py-1" role="status" aria-busy="true">
@@ -237,19 +246,15 @@ const unreadLine = (entry: CapacityUnread): { readonly subject: string; readonly
                         <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{ entry.label }}</span>
                         <span class="shrink-0 text-2xs text-subtle">{{ outNote(entry) }}</span>
                     </div>
-                    <!-- Counted, not listed, one line per condition: a credential that stays broken until a person acts is the one thing a fleet's percentages cannot say. -->
-                    <!-- The condition is the alarm; the instruction stays quiet beside it (as in the Usage tab's attention block), so the sentence doesn't shout twice. -->
-                    <p v-for="entry in capacity.blocked" :key="entry.fix" v-tooltip.left="entry.labels.join(`, `)" class="text-2xs">
-                        <span class="text-warning">{{ t(`chat.chatCapacityRail.cantServe`, { count: entry.count }) }}</span>
-                        <span class="text-subtle"> · {{ entry.reason }}{{ entry.reasons.length === 1 ? ` (${entry.reasons[0]})` : `` }}</span>
-                    </p>
-                    <!-- One line per door, chosen by the verdict's fix: signing in again, or the organisation handing a seat back. -->
-                    <p v-if="capacity.blocked.some((entry) => entry.fix === `reconnect`)" class="text-2xs text-subtle">
-                        {{ t(`chat.chatCapacityRail.reconnectOnAgentTab`) }}
-                    </p>
-                    <p v-if="capacity.blocked.some((entry) => entry.fix === `admin`)" class="text-2xs text-subtle">
-                        {{ t(`chat.chatCapacityRail.seatFromAdmin`) }}
-                    </p>
+                    <!-- Counted, not listed, one line per condition, shaped like the rows above it. Which accounts, the provider's
+                         own words and the fix ride the hover: this rail says what can't run, the Agent tab is where it's fixed. -->
+                    <div v-for="entry in capacity.blocked" :key="entry.fix" v-tooltip.left="blockedDetail(entry)">
+                        <div class="flex items-baseline gap-2" aria-hidden="true">
+                            <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{ t(`chat.chatCapacityRail.cantServe`, { count: entry.count }) }}</span>
+                            <span class="shrink-0 text-2xs text-warning">{{ entry.reason }}</span>
+                        </div>
+                        <span class="sr-only">{{ t(`chat.chatCapacityRail.cantServe`, { count: entry.count }) }} · {{ entry.reason }} · {{ blockedDetail(entry) }}</span>
+                    </div>
                 </div>
             </div>
         </template>

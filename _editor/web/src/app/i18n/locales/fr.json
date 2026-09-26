@@ -922,7 +922,7 @@
             "spent": "épuisé"
         },
         "chatCapacityRail": {
-            "allowanceLeft": "Quota restant",
+            "allowanceLeft": "Utilisation restante",
             "cantServe": "{count} ne peuvent pas servir",
             "moreRoom": "+{hidden} autres avec de la place",
             "nothingRoomRightNow": "Rien n'a de place en ce moment.",
