@@ -77,10 +77,11 @@ describe(`what the rail offers`, () => {
 
         const [entry] = chatCapacity([], NOW).providers;
         expect(entry?.rows[0]?.percent).toBe(73);
-        expect(entry?.rows[0]?.lanes.map((lane) => [lane.short, lane.scope, lane.percent])).toEqual([
-            [`wk`, `Fable`, 100],
-            [`wk`, undefined, 73],
-            [`5h`, undefined, 58],
+        // The week holds both the Fable slice and the session, so they hang under it, the spent slice first.
+        expect(entry?.rows[0]?.lanes.map((lane) => [lane.short, lane.scope, lane.percent, lane.depth, lane.within])).toEqual([
+            [`wk`, undefined, 73, 0, undefined],
+            [`wk`, `Fable`, 100, 1, `Weekly · all models`],
+            [`5h`, undefined, 58, 1, `Weekly · all models`],
         ]);
         expect(chatCapacity([], NOW).out).toEqual([]);
     });
@@ -210,10 +211,10 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
 
         const [entry] = chatCapacity([], NOW).providers;
         expect(entry?.rows[0]).toMatchObject({ percent: 40 });
-        expect(entry?.rows[0]?.lanes.map((lane) => [lane.scope, lane.percent])).toEqual([
-            [`Fable`, 100],
-            [undefined, 40],
-            [undefined, 20],
+        expect(entry?.rows[0]?.lanes.map((lane) => [lane.scope, lane.percent, lane.depth])).toEqual([
+            [undefined, 40, 0],
+            [`Fable`, 100, 1],
+            [undefined, 20, 1],
         ]);
     });
 
@@ -492,10 +493,10 @@ describe(`the allowances behind one account`, () => {
         };
 
         const [row] = chatCapacity([], NOW).providers[0]?.rows ?? [];
-        expect(row?.lanes.map((lane) => [lane.short, lane.scope])).toEqual([
-            [`wk`, `Opus`],
-            [`wk`, `Fable`],
-            [`wk`, undefined],
+        expect(row?.lanes.map((lane) => [lane.short, lane.scope, lane.depth])).toEqual([
+            [`wk`, undefined, 0],
+            [`wk`, `Opus`, 1],
+            [`wk`, `Fable`, 1],
         ]);
     });
 
@@ -531,7 +532,11 @@ describe(`the allowances behind one account`, () => {
         };
 
         const [row] = chatCapacity([], NOW).providers[0]?.rows ?? [];
-        expect(row?.lanes.map((lane) => lane.short)).toEqual([`wk`, `12h`, `5h`]);
+        expect(row?.lanes.map((lane) => [lane.short, lane.depth])).toEqual([
+            [`wk`, 0],
+            [`12h`, 1],
+            [`5h`, 2],
+        ]);
     });
 });
 

@@ -51,8 +51,11 @@ const laneReset = (lane: CapacityLane, now: number = Date.now()): string | undef
 
 // Full row as one sentence (hover + screen reader): every lane in drawn order, reset in parentheses per lane.
 // Provider name omitted — already said by the heading above.
+// A nested lane says which allowance holds it, and that its room waits on that one when the holder is spent.
 const laneDetail = (lane: CapacityLane, row: CapacityRow): string =>
-    `${lane.label} ${formatRemaining(lane.percent, row.stale)}${lane.resetsAt === undefined ? `` : ` (resets ${formatReset(lane.resetsAt)})`}`;
+    `${lane.label} ${formatRemaining(lane.percent, row.stale)}${lane.resetsAt === undefined ? `` : ` (resets ${formatReset(lane.resetsAt)})`}${
+        lane.within === undefined ? `` : lane.capped ? `, unusable until ${lane.within} reopens` : `, within ${lane.within}`
+    }`;
 
 const rowDetail = (row: CapacityRow, entry: CapacityProvider): string =>
     [row.label, row.identity, ...(row.lanes.length === 0 ? [row.note] : row.lanes.map((lane) => laneDetail(lane, row)))]
@@ -193,20 +196,33 @@ const blockedDetail = (entry: CapacityBlocked): string =>
                             </span>
 
                             <template v-for="lane in row.lanes" :key="lane.kind">
-                                <!-- Below the account name, not beside it at the same size: this is the little chart's axis, not another name. -->
-                                <span class="max-w-18 truncate text-3xs text-subtle">
-                                    {{ lane.short }}<span v-if="lane.scope !== undefined">&nbsp;·&nbsp;{{ lane.scope }}</span>
+                                <!-- Below the account name, not beside it at the same size: this is the little chart's axis, not another name.
+                                     A lane inside another (the session inside the week) hangs off it on an elbow, one step in per level. -->
+                                <span class="flex min-w-0 items-center text-3xs text-subtle">
+                                    <span
+                                        v-if="lane.depth > 0"
+                                        class="mr-1 ml-0.5 size-1.5 shrink-0 -translate-y-0.5 rounded-bl-2xs border-b border-l border-line-strong"
+                                        :style="{ marginLeft: `${0.125 + (lane.depth - 1) * 0.625}rem` }"
+                                    />
+                                    <span class="max-w-18 truncate">
+                                        {{ lane.short }}<span v-if="lane.scope !== undefined">&nbsp;·&nbsp;{{ lane.scope }}</span>
+                                    </span>
                                 </span>
                                 <!-- Drains as turns spend it: the fill is what is left. A spent pool draws no fill and tints its
-                                     track instead, since an empty neutral track reads as "no reading". -->
-                                <span class="block h-1 overflow-hidden rounded-full" :class="meterTrack(lane.percent)">
+                                     track instead, since an empty neutral track reads as "no reading". A nested lane draws thinner,
+                                     since the lane holding it is the headline; and fades when that one is spent, since its room
+                                     can't be used until the holder reopens. -->
+                                <span
+                                    class="block overflow-hidden rounded-full"
+                                    :class="[meterTrack(lane.percent), lane.depth > 0 ? `h-0.5` : `h-1`, lane.capped ? `opacity-40` : ``]"
+                                >
                                     <span
                                         class="ui-meter-fill block h-full rounded-full"
                                         :class="usageTone(lane.percent)"
                                         :style="{ width: `${meterFill(lane.percent)}%`, ...meterTint(lane.percent) }"
                                     />
                                 </span>
-                                <div class="flex items-baseline justify-end gap-1 whitespace-nowrap text-right">
+                                <div class="flex items-baseline justify-end gap-1 whitespace-nowrap text-right" :class="lane.capped ? `opacity-40` : ``">
                                     <span class="text-2xs font-medium tabular-nums" :class="usageTone(lane.percent)" :style="meterTint(lane.percent)">
                                         {{ remainingFigure(lane.percent, row.stale) }}
                                     </span>

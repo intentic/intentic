@@ -11,6 +11,7 @@ import {
     type PlanLimitPool,
     type PlanLimitRow,
     planLimitRows,
+    nestPools,
     poolPeriod,
     poolScope,
     unreadGroups,
@@ -34,6 +35,12 @@ export interface CapacityLane {
     readonly label: string;
     readonly percent: number;
     readonly resetsAt: number | undefined;
+    // How deep it sits inside the allowances it spends into: the 5-hour session is 1, inside the week at 0.
+    readonly depth: number;
+    // The allowance holding this one ("Weekly · all models"), for the sentence; undefined at the top.
+    readonly within: string | undefined;
+    // A holding allowance is spent, so this one's room can't be used until that reopens.
+    readonly capped: boolean;
 }
 
 /** One offer as the rail draws it: a name, plus one bar per allowance the plan publishes. */
@@ -161,34 +168,36 @@ const ambiguousLabels = (rows: readonly PlanLimitRow[]): ReadonlySet<string> => 
     return new Set([...seen].filter(([, count]) => count > 1).map(([label]) => label));
 };
 
-// One lane per pool that gates something, longest window first, tightest first within a window. No cap: plans publish
-// few enough pools that summarizing one would hide the one about to gate a turn. The week leads because the top lane is
+// One lane per pool that gates something, longest window first, tightest first within a window, each nested under the
+// allowance it spends into. No cap: plans publish few enough pools that summarizing one would hide the one about to
+// gate a turn. The week leads because the top lane is
 // read as the account's room: a roomy 5-hour lane above a spent week read as capacity that isn't there, while the week
 // is never overruled by the session nested inside it.
-const capacityLanes = (row: PlanLimitRow): readonly CapacityLane[] =>
-    row.pools
+const capacityLanes = (row: PlanLimitRow): readonly CapacityLane[] => {
+    const sorted = row.pools
         .filter((pool) => pool.gates !== `none`)
-        .map((pool) => {
-            const period = poolPeriod(pool);
-            return {
-                lane: {
-                    kind: pool.kind,
-                    // Falls back to the pool's own label when the period can't be read; the column truncates it.
-                    short: period?.short ?? pool.label,
-                    scope: period === undefined ? undefined : poolScope(pool),
-                    label: pool.label,
-                    percent: pool.percent,
-                    resetsAt: pool.resetsAt,
-                },
-                // Unreadable periods sort last, not as the longest.
-                seconds: period?.seconds ?? Number.NEGATIVE_INFINITY,
-            };
-        })
+        .map((pool) => ({ pool, period: poolPeriod(pool) }))
         .toSorted(
             (left, right) =>
-                right.seconds - left.seconds || right.lane.percent - left.lane.percent || left.lane.label.localeCompare(right.lane.label),
-        )
-        .map((entry) => entry.lane);
+                // Unreadable periods sort last, not as the longest.
+                (right.period?.seconds ?? Number.NEGATIVE_INFINITY) - (left.period?.seconds ?? Number.NEGATIVE_INFINITY) ||
+                right.pool.percent - left.pool.percent ||
+                left.pool.label.localeCompare(right.pool.label),
+        );
+    // Each shorter allowance then moves under the one it spends into, so the rail draws the session inside the week.
+    return nestPools(sorted, (entry) => entry.pool).map(({ item: { pool, period }, depth, parent, capped }) => ({
+        kind: pool.kind,
+        // Falls back to the pool's own label when the period can't be read; the column truncates it.
+        short: period?.short ?? pool.label,
+        scope: period === undefined ? undefined : poolScope(pool),
+        label: pool.label,
+        percent: pool.percent,
+        resetsAt: pool.resetsAt,
+        depth,
+        within: parent?.pool.label,
+        capped,
+    }));
+};
 
 // A credential no turn runs on until someone acts: named by what it is missing, never dated by a figure.
 const needsAPerson = (row: PlanLimitRow): boolean => row.state.kind === `blocked` && row.state.fix !== `wait`;

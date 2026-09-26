@@ -991,8 +991,16 @@ const DEMO_CLAUDE_ACCOUNT: OauthAccount = {
     email: `ada@acme.dev`,
     organization: `Acme`,
     connectedAt: STARTED_AT - 30 * 24 * 3_600_000,
-    // The daemon's serviceability verdict, as a current daemon sends it: nothing measured, nothing in the way.
-    state: { kind: `unknown` },
+    // A plan's pools as the tree the Usage tab and chat rail draw: the session and the Opus slice inside the week.
+    usage: {
+        measuredAt: STARTED_AT - 4 * 60_000,
+        windows: [
+            { kind: `seven_day`, utilization: 29, resetsAt: Math.round(STARTED_AT / 1000) + 3 * 24 * 3600, gates: `all` },
+            { kind: `five_hour`, utilization: 50, resetsAt: Math.round(STARTED_AT / 1000) + 2 * 3600, gates: `all` },
+            { kind: `seven_day_opus`, utilization: 64, resetsAt: Math.round(STARTED_AT / 1000) + 3 * 24 * 3600, gates: { models: [`Opus`] } },
+        ],
+    },
+    state: { kind: `ready`, room: 36 },
 };
 
 const DEMO_CLAUDE_ACCOUNT_SECOND: OauthAccount = {
@@ -1001,7 +1009,15 @@ const DEMO_CLAUDE_ACCOUNT_SECOND: OauthAccount = {
     email: `work@acme.dev`,
     organization: `Acme`,
     connectedAt: STARTED_AT - 12 * 24 * 3_600_000,
-    state: { kind: `unknown` },
+    // A spent week with a fresh session inside it: the session's room is drawn, faded, as waiting on the week.
+    usage: {
+        measuredAt: STARTED_AT - 4 * 60_000,
+        windows: [
+            { kind: `seven_day`, utilization: 100, resetsAt: Math.round(STARTED_AT / 1000) + 26 * 3600, gates: `all` },
+            { kind: `five_hour`, utilization: 8, resetsAt: Math.round(STARTED_AT / 1000) + 4 * 3600, gates: `all` },
+        ],
+    },
+    state: { kind: `spent`, reopensAt: Math.round(STARTED_AT / 1000) + 26 * 3600 },
 };
 
 const DEMO_TRANSLATOR_ACCOUNTS: TranslatorAccounts = {
@@ -1011,7 +1027,18 @@ const DEMO_TRANSLATOR_ACCOUNTS: TranslatorAccounts = {
     // One of every state a Google row can be in, so the Agent tab shows what each says: serving, waiting on its owner
     // to verify it, its allowance spent, and benched by the proxy until an instant.
     gemini: [
-        { name: `antigravity-ada.json`, label: `ada@acme.dev`, state: { kind: `ready`, room: 64 } },
+        {
+            name: `antigravity-ada.json`,
+            label: `ada@acme.dev`,
+            usage: {
+                measuredAt: STARTED_AT - 6 * 60_000,
+                windows: [
+                    { kind: `seven_day`, utilization: 29, resetsAt: Math.round(STARTED_AT / 1000) + 3 * 24 * 3600, gates: `all` },
+                    { kind: `five_hour`, utilization: 36, resetsAt: Math.round(STARTED_AT / 1000) + 2 * 3600, gates: `all` },
+                ],
+            },
+            state: { kind: `ready`, room: 64 },
+        },
         {
             name: `antigravity-lin.json`,
             label: `lin@acme.dev`,

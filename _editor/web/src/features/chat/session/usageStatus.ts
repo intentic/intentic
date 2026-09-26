@@ -185,6 +185,66 @@ export const poolScope = (pool: Pick<PlanLimitPool, `label` | `gates`>): string 
     return (named ?? pool.gates.models.join(`, `)).replace(/\s+models?$/iu, ``);
 };
 
+// Whether every turn that spends `inner` also spends `outer`: `outer` gates at least the same models and runs on a
+// clock at least as long. On equal clocks, only an all-models pool holds a scoped slice ("Weekly · Opus" sits inside
+// "Weekly · all models"), so two pools of the same shape never contain each other.
+const containsPool = (outer: Pick<PlanLimitPool, `kind` | `label` | `gates`>, inner: Pick<PlanLimitPool, `kind` | `label` | `gates`>): boolean => {
+    if (outer.gates === `none` || inner.gates === `none` || outer.kind === inner.kind) {
+        return false;
+    }
+    const [outerPeriod, innerPeriod] = [poolPeriod(outer), poolPeriod(inner)];
+    if (outerPeriod === undefined || innerPeriod === undefined || outerPeriod.seconds < innerPeriod.seconds) {
+        return false;
+    }
+    if (outerPeriod.seconds === innerPeriod.seconds) {
+        return outer.gates === `all` && inner.gates !== `all`;
+    }
+    if (outer.gates === `all`) {
+        return true;
+    }
+    const outerModels = new Set(outer.gates.models.map((name) => name.toLowerCase()));
+    return inner.gates !== `all` && inner.gates.models.every((name) => outerModels.has(name.toLowerCase()));
+};
+
+/** A pool placed in the tree of allowances it spends into: the 5-hour session sits inside the week. */
+export interface NestedPool<T> {
+    readonly item: T;
+    // 0 for an outermost allowance, 1 for one inside it, and so on.
+    readonly depth: number;
+    // The allowance holding this one, when there is one.
+    readonly parent: T | undefined;
+    // Set when a pool holding this one is spent: then this one's room can't be used until that one reopens.
+    readonly capped: boolean;
+}
+
+// Orders pools as a tree, each under the tightest-fitting pool that contains it (the shortest clock that still holds
+// it), parents before their children, and otherwise in the order given. Callers pass their own row type and how to
+// read it as a pool, so one rule nests the rail's lanes and the Usage tab's meters alike.
+export const nestPools = <T>(items: readonly T[], poolOf: (item: T) => PlanLimitPool): readonly NestedPool<T>[] => {
+    const parentOf = new Map<T, T>();
+    for (const item of items) {
+        const pool = poolOf(item);
+        // Containment is a strict order, so the holder that holds no other holder is the nearest one.
+        const holders = items.filter((other) => containsPool(poolOf(other), pool));
+        const holder = holders.find((other) => !holders.some((inner) => containsPool(poolOf(other), poolOf(inner))));
+        if (holder !== undefined) {
+            parentOf.set(item, holder);
+        }
+    }
+    const placed: NestedPool<T>[] = [];
+    const place = (item: T, depth: number, capped: boolean): void => {
+        placed.push({ item, depth, parent: parentOf.get(item), capped });
+        const spent = capped || poolOf(item).percent >= SPENT_UTILIZATION;
+        for (const child of items.filter((other) => parentOf.get(other) === item)) {
+            place(child, depth + 1, spent);
+        }
+    };
+    for (const root of items.filter((item) => !parentOf.has(item))) {
+        place(root, 0, false);
+    }
+    return placed;
+};
+
 // Which pool a model draws on: one pool per model when a plan meters them separately (plan-pools.ts decides which).
 
 // One model's own pool, as much as the plan publishes: its figures plus the plan's name for it (e.g. "Opus"),

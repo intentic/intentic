@@ -14,6 +14,7 @@ import {
     meterFill,
     meterTint,
     meterTrack,
+    nestPools,
     type PlanLimitBand,
     PLAN_LIMIT_BANDS,
     type PlanLimitGroup,
@@ -104,6 +105,9 @@ const groupState = (group: PlanLimitGroup): string => {
     }
     return ``;
 };
+
+// An account's pools as a tree: the 5-hour session drawn under the week it spends into, not beside it as a peer.
+const nestedPools = (row: PlanLimitRow) => nestPools(row.pools, (pool) => pool);
 
 const barTooltip = (row: PlanLimitRow): string =>
     row.percent === undefined
@@ -265,17 +269,32 @@ const roster = computed(() => {
                                     </p>
 
                                     <!-- Narrow layouts wrap meters without hiding reset dates. -->
+                                    <!-- A pool inside another (the session inside the week) hangs off it on an elbow, one step in per
+                                         level; the elbow sits inside the label's fixed width, so every bar still starts on one line. -->
                                     <div
-                                        v-for="pool in row.pools"
+                                        v-for="{ item: pool, depth, parent, capped } in nestedPools(row)"
                                         :key="pool.kind"
                                         class="flex flex-wrap items-center gap-x-3 gap-y-1 @xl:flex-nowrap"
                                     >
-                                        <span class="min-w-0 flex-1 truncate text-2xs text-muted @xl:w-40 @xl:flex-none">{{ pool.label }}</span>
+                                        <span class="flex min-w-0 flex-1 items-center text-2xs text-muted @xl:w-40 @xl:flex-none">
+                                            <span
+                                                v-if="depth > 0"
+                                                class="mr-1.5 size-2 shrink-0 -translate-y-0.5 rounded-bl-2xs border-b border-l border-line-strong"
+                                                :style="{ marginLeft: `${0.25 + (depth - 1) * 0.75}rem` }"
+                                                aria-hidden="true"
+                                            />
+                                            <span class="min-w-0 truncate">{{ pool.label }}</span>
+                                            <span v-if="parent !== undefined" class="sr-only">
+                                                {{ capped ? `, unusable until ${parent.label} reopens` : `, within ${parent.label}` }}
+                                            </span>
+                                        </span>
                                         <!-- Drains as turns spend it: the fill is what is left. A spent pool tints its empty track, so
-                                             it can't be mistaken for one with no reading. -->
+                                             it can't be mistaken for one with no reading. A nested pool draws thinner, the one holding
+                                             it being the headline, and fades while that one is spent: its room waits on the holder. -->
                                         <div
-                                            class="order-last h-1.5 min-w-0 flex-1 basis-full overflow-hidden rounded-full @xl:order-none @xl:basis-0"
-                                            :class="meterTrack(pool.percent)"
+                                            v-tooltip.top="capped && parent !== undefined ? `Unusable until ${parent.label} reopens` : undefined"
+                                            class="order-last min-w-0 flex-1 basis-full overflow-hidden rounded-full @xl:order-none @xl:basis-0"
+                                            :class="[meterTrack(pool.percent), depth > 0 ? `h-1` : `h-1.5`, capped ? `opacity-40` : ``]"
                                         >
                                             <div
                                                 class="ui-meter-fill h-full rounded-full"
@@ -285,7 +304,7 @@ const roster = computed(() => {
                                         </div>
                                         <span
                                             class="w-16 shrink-0 text-right text-2xs tabular-nums"
-                                            :class="usageTone(pool.percent)"
+                                            :class="[usageTone(pool.percent), capped ? `opacity-40` : ``]"
                                             :style="meterTint(pool.percent)"
                                         >
                                             {{ formatRemaining(pool.percent, row.stale) }}
