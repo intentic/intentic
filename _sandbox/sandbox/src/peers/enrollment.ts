@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
-import { derivedMachineId, hostEntryOf, hostEnvironmentOf } from "@intentic/sandbox-contract";
+import { derivedMachineId, parseHostConnection } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { tokenEquals } from "../auth/auth.js";
@@ -203,12 +203,10 @@ export const hostEnrollmentsDocument = defineDocument({
                 "names the card, environment and machine of an enrollment that only spelled them in its id",
                 (entry: JsonObject): entry is LegacyHostEnrollment =>
                     typeof entry["id"] === "string" && typeof entry["hash"] === "string" && typeof entry["enrolledAt"] === "number" && !Object.hasOwn(entry, "card"),
-                (entry: LegacyHostEnrollment) => ({
-                    ...entry,
-                    card: hostEntryOf(entry.id),
-                    environment: hostEnvironmentOf(entry.id),
-                    machineId: derivedMachineId(hostEntryOf(entry.id)),
-                }),
+                (entry: LegacyHostEnrollment) => {
+                    const { card, environment } = parseHostConnection(entry.id);
+                    return { ...entry, card, environment, machineId: derivedMachineId(card) };
+                },
             ),
         ),
     ],

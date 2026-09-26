@@ -1,4 +1,4 @@
-import { clearableOnDevice, type DeviceConflict, HOST_NATIVE_ENVIRONMENT, hostEntryOf, hostEnvironmentOf } from "@intentic/sandbox-contract";
+import { clearableOnDevice, type DeviceConflict, HOST_NATIVE_ENVIRONMENT } from "@intentic/sandbox-contract";
 import { composeAsk } from "@intentic/sandbox-contract/chores";
 import { t } from "@intentic/ui/i18n";
 
@@ -53,9 +53,10 @@ export interface ConflictAsk {
 export interface ConflictSubject {
     /** What the machine is called on screen and to its owner. */
     readonly machine: string;
-    // The door's connection key. The tools are the CARD's (`mcp__<card>__…`) and an environment of that machine is
-    // reached through them with a crossing, so both are read off this rather than named separately.
-    readonly hostId: string;
+    // The card the door is a connection of, and which environment of it the door is. The tools are the CARD's
+    // (`mcp__<card>__…`) and an environment of that machine is reached through them with a crossing.
+    readonly card: string;
+    readonly environment: string;
     /** The folder on that machine this sandbox is synced with. */
     readonly localDir: string | undefined;
     /** Mutagen's total, which can exceed the paths the report carries. */
@@ -63,12 +64,10 @@ export interface ConflictSubject {
     readonly conflictedPaths: readonly DeviceConflict[];
 }
 
-export const conflictAsk = ({ machine, hostId, localDir, conflicts, conflictedPaths }: ConflictSubject): ConflictAsk => {
+export const conflictAsk = ({ machine, card, environment, localDir, conflicts, conflictedPaths }: ConflictSubject): ConflictAsk => {
     const folder = localDir ?? `the folder it syncs`;
     // The tools are named after the card, never after the connection: a PC's distro is reached through the PC's own
     // tools, with the crossing as an argument.
-    const card = hostEntryOf(hostId);
-    const environment = hostEnvironmentOf(hostId);
     // Said because the folder is inside the distro's filesystem: without the crossing, every read lands in the shell on
     // the other side of it and the paths below do not exist there.
     const crossing =

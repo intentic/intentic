@@ -2,6 +2,7 @@ pub mod connect;
 pub mod desired;
 pub mod doctor;
 pub mod listing;
+pub mod logs;
 pub mod power;
 pub mod preflight;
 pub mod recreate;

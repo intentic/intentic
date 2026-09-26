@@ -90,6 +90,7 @@ test("says what a connected device is even when it reported nothing", () => {
         key: "my-pc",
         label: "my-pc",
         hostId: "my-pc",
+        card: "my-pc",
         online: true,
         platform: "windows",
         facts,

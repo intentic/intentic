@@ -6,14 +6,13 @@ import {
     DEV_REBUILD_QUIET_MARK,
     devRebuildLogPath,
     HOST_NATIVE_ENVIRONMENT,
-    hostEntryOf,
     hostConnectionKey,
-    hostEnvironmentOf,
     pathReach,
 } from "@intentic/sandbox-contract";
 import { ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import { callTool, forgetPull, heldHostDevices } from "./device-reports.js";
+import { hostConnectionOf } from "./host-connection.js";
 import { ownSlug } from "./self-host.js";
 
 // This product's own CLI, run from a button on a device the user connected. The set of actions is closed and the
@@ -39,6 +38,10 @@ const CALL_SLACK_MS = 5_000;
 // pattern-bounded by the contract; the rest is this sandbox's own knowledge of itself and of the machine it is talking
 // to, which is the whole reason these lines are built here rather than sent by a browser.
 export interface DeviceCommandFacts {
+    // The card the caller's connection is of and the environment it is, off its enrollment's record: what a route to
+    // a sibling environment of the same computer is built from.
+    readonly card: string;
+    readonly environment: string;
     readonly sandboxId: string | undefined;
     readonly ownSlug: string | undefined;
     readonly devRoot: string | undefined;
@@ -289,12 +292,17 @@ const doorPlatform = (door: Device | undefined, card: Capability | undefined): s
 // so no other action mints a credential as a side effect of being run.
 const commandFacts = async (services: Services, input: DeviceCommandInput): Promise<DeviceCommandFacts> => {
     const spec = DEVICE_COMMANDS[input.command];
-    // By card, since an environment of a machine is a connection of that card rather than a card of its own.
-    const card = (await services.capabilities.list()).find((capability) => capability.id === hostEntryOf(input.id));
+    // By card, since an environment of a machine is a connection of that card rather than a card of its own; which
+    // card is the enrollment's own say.
+    const connection = await hostConnectionOf(services, input.id);
+    const card = (await services.capabilities.list()).find((capability) => capability.id === connection.card);
+    const siblings = (await services.hosts.list()).filter((entry) => entry.card === connection.card);
     // Held readings only, never a fresh pull: the facts arrive at connect and a command must not wait on a laptop to
     // describe itself again before it can be sent.
     const door = (await heldHostDevices(services)).find((device) => device.hostId === input.id);
     return {
+        card: connection.card,
+        environment: connection.environment,
         sandboxId: input.sandboxId,
         ownSlug: ownSlug(services),
         devRoot: services.config.sandbox.devRoot,
@@ -305,7 +313,7 @@ const commandFacts = async (services: Services, input: DeviceCommandInput): Prom
         localDir: input.localDir,
         port: input.port,
         pairedDir: door?.report?.pairings.find((pairing) => pairing.sandboxId === input.sandboxId)?.localDir,
-        connections: services.hostHub.connected().filter((key) => hostEntryOf(key) === hostEntryOf(input.id)).map(hostEnvironmentOf),
+        connections: siblings.filter((entry) => services.hostHub.online(entry.id)).map((entry) => entry.environment),
         pairToken: spec.mints === true ? services.syncPairings.mint(input.mode ?? "sync").token : undefined,
     };
 };
@@ -322,14 +330,14 @@ export const doorRoute = (spec: DeviceCommandSpec, facts: DeviceCommandFacts, in
     }
     const reach = pathReach(facts.platform, facts.hostFacts, path);
     if (reach.kind === "direct") {
-        return { environment: hostEnvironmentOf(input.id) };
+        return { environment: facts.environment };
     }
     if (reach.kind === "wsl") {
         const environment = `wsl:${reach.distro}`;
         // Its own agent if it has one — a distro connected in its own right needs no interop hop, and its login shell
         // is the one the owner's tools are installed in. Crossing is the fallback for an environment with no agent.
         return facts.connections.includes(environment)
-            ? { environment, connection: hostConnectionKey(hostEntryOf(input.id), environment) }
+            ? { environment, connection: hostConnectionKey(facts.card, environment) }
             : { environment, in: environment };
     }
     const several =

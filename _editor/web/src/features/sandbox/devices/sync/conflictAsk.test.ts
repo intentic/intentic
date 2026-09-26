@@ -6,7 +6,8 @@ import { conflictAsk, type ConflictSubject } from "./conflictAsk";
 
 const subject = (over: Partial<ConflictSubject> = {}): ConflictSubject => ({
     machine: `radarsu-rog`,
-    hostId: `radarsu-rog`,
+    card: `radarsu-rog`,
+    environment: `native`,
     localDir: `/home/radarsu/intentic/radarsu-local-0738cd6b5027`,
     conflicts: 2,
     conflictedPaths: [
@@ -33,7 +34,14 @@ describe(`conflictAsk`, () => {
     });
 
     it(`names the device's own tool namespace, because those tools are deferred until asked for`, () => {
-        expect(conflictAsk(subject({ hostId: `ada-laptop` })).prompt).toContain(`+mcp__ada-laptop__`);
+        expect(conflictAsk(subject({ card: `ada-laptop` })).prompt).toContain(`+mcp__ada-laptop__`);
+    });
+
+    // A distro's folder is reached through its PC's own tools, with the crossing named.
+    it(`sends a turn about a distro's folder through the card's tools, crossing into that distro`, () => {
+        const { prompt } = conflictAsk(subject({ card: `ada-laptop`, environment: `wsl:archlinux` }));
+        expect(prompt).toContain(`+mcp__ada-laptop__`);
+        expect(prompt).toContain(`in: "wsl:archlinux"`);
     });
 
     // A turn sent to read both copies of a `node_modules` proves only that nobody wrote either. The button beside this

@@ -6,12 +6,11 @@ import {
     environmentKeyOf,
     environmentOf,
     HOST_NATIVE_ENVIRONMENT,
-    hostEntryOf,
     hostConnectionKey,
-    hostEnvironmentOf,
     type DeviceFacts,
     type DeviceScopes,
     machinesOf,
+    parseHostConnection,
     windowsPathOf,
     wslPathOf,
 } from "@intentic/sandbox-contract";
@@ -120,15 +119,12 @@ test("names the same folder from either side", () => {
 test("names a machine's environments without giving any of them a card of its own", () => {
     expect(hostConnectionKey("rog", HOST_NATIVE_ENVIRONMENT)).toBe("rog");
     expect(hostConnectionKey("rog", "wsl:archlinux")).toBe("rog::wsl:archlinux");
-    // Both directions, since the store and the hub only ever hold the key and the grant only ever hangs off the card.
-    expect(hostEntryOf("rog")).toBe("rog");
-    expect(hostEntryOf("rog::wsl:archlinux")).toBe("rog");
-    expect(hostEnvironmentOf("rog")).toBe(HOST_NATIVE_ENVIRONMENT);
-    expect(hostEnvironmentOf("rog::wsl:archlinux")).toBe("wsl:archlinux");
+    // Both directions, one constructor and one parser: the parser is for a key with no record beside it.
+    expect(parseHostConnection("rog")).toEqual({ card: "rog", environment: HOST_NATIVE_ENVIRONMENT });
+    expect(parseHostConnection("rog::wsl:archlinux")).toEqual({ card: "rog", environment: "wsl:archlinux" });
     // The single colon inside an environment key is why the separator is doubled: a distro named with one cannot
     // split a card in two.
-    expect(hostEntryOf(hostConnectionKey("rog", "wsl:my:distro"))).toBe("rog");
-    expect(hostEnvironmentOf(hostConnectionKey("rog", "wsl:my:distro"))).toBe("wsl:my:distro");
+    expect(parseHostConnection(hostConnectionKey("rog", "wsl:my:distro"))).toEqual({ card: "rog", environment: "wsl:my:distro" });
 });
 
 // The key is read off what the agent reported at connect, so the distro carries the name WSL registered — the one

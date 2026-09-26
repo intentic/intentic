@@ -541,6 +541,16 @@ pub fn cp_out(container: &str, path: &str, dest: &std::path::Path) -> Option<Str
     }
 }
 
+/// The container's log tail straight onto this process's own stdout and stderr, docker's two streams kept apart: what
+/// `ic sandbox logs` prints, for a person or for the machine agent reading it back.
+pub fn logs_passthrough(container: &str, tail: u32) -> Result<()> {
+    let status = docker(&["logs", "--tail", &tail.to_string(), container]).status()?;
+    if !status.success() {
+        bail!("docker logs {container} failed.");
+    }
+    Ok(())
+}
+
 /// The container's log tail into OUR log — captured before an rm destroys it.
 pub fn logs_into(container: &str, tail: &str, log: &Log) {
     if let Ok(out) = docker(&["logs", "--tail", tail, container]).output() {

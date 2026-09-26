@@ -1,7 +1,8 @@
-import { HOST_NATIVE_ENVIRONMENT, type DeviceFacts, hostEntryOf, hostConnectionKey, hostEnvironmentOf, userDistrosOf } from "@intentic/sandbox-contract";
+import { HOST_NATIVE_ENVIRONMENT, type DeviceFacts, type HostConnection, hostConnectionKey, userDistrosOf } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { agentInstallLine } from "./device-commands.js";
 import { callTool } from "./device-reports.js";
+import { hostConnectionOf } from "./host-connection.js";
 
 // ONE INSTALL CONNECTS THE WHOLE COMPUTER. The owner connected a PC, not one of its shells, so the moment any
 // environment of a machine holds a socket the daemon puts an agent in the rest: from the Windows side into every WSL
@@ -69,11 +70,17 @@ const bootstrapOne = async (services: Services, from: string, card: string, targ
 };
 
 // Called when an environment of a machine comes up and says what it is. Fire-and-forget by design: a connect must not
-// wait on a download, and the agent it installs arrives as its own connection when it is ready.
+// wait on a download, and the agent it installs arrives as its own connection when it is ready. Which card and
+// environment the connection is comes off its enrollment's record.
 export const bootstrapEnvironments = (services: Services, from: string, facts: DeviceFacts): void => {
-    const card = hostEntryOf(from);
+    void hostConnectionOf(services, from)
+        .then((connection) => bootstrapFrom(services, from, connection, facts))
+        .catch((error: Error) => services.logger.warn({ err: error, connection: from }, "hosts: could not read which computer connected"));
+};
+
+const bootstrapFrom = (services: Services, from: string, { card, environment }: HostConnection, facts: DeviceFacts): void => {
     const now = Date.now();
-    for (const target of bootstrapTargets(hostEnvironmentOf(from), facts)) {
+    for (const target of bootstrapTargets(environment, facts)) {
         const connection = hostConnectionKey(card, target);
         const last = attempted.get(connection);
         if (last !== undefined && now - last < RETRY_AFTER_MS) {

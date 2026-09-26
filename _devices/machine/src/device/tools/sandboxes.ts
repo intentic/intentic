@@ -31,20 +31,8 @@ const exec = promisify(execFile);
 // trouble, and every caller is a screen or a model waiting to draw.
 const LIST_TIMEOUT_MS = 60_000;
 
-// Room for every container's share and a log tail at MAX_LOG_LINES, well past exec's 1 MB default.
+// Room for every container's share, well past exec's 1 MB default.
 const MAX_BUFFER = 8 * 1024 * 1024;
-
-const PREFIX = "intentic-sandbox-";
-
-// `windowsHide` here and on every other spawn in this agent: the connection agent runs detached with no console
-// of its own, and a console child of a console-less process gets a brand-new console, window and all.
-const docker = async (args: readonly string[]): Promise<{ readonly stdout: string; readonly stderr: string }> =>
-    await exec("docker", [...args], { timeout: 120_000, maxBuffer: MAX_BUFFER, windowsHide: true }).catch((error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT") {
-            throw new Error("This device has no docker command, so no Intentic sandboxes can run here.");
-        }
-        throw error;
-    });
 
 // `ic sandbox list --json` prints one line of JSON on stdout (notes, if any, go to stderr), in the contract's own
 // shape: running state, the share docker enforces, the shape the container runs with, the shape saved for its next
@@ -184,28 +172,6 @@ export const icConnectEnv = (platformUrl: string | undefined): { readonly PLATFO
     }
     // ic appends `/setup/claim` itself, so a trailing slash would double it.
     return { PLATFORM_URL: `${url.origin}${url.pathname.replace(/\/+$/, "")}` };
-};
-
-// The OLD `reshape` op's argv, kept one release for pages served by sandboxes older than `set-shape`: a delta as
-// `ic sandbox reshape` flags, `later` as `--later` (ic validates and saves it as the shape for the next restart), and
-// an empty `later` as `--forget`. An empty immediate ask is ic's own "apply what is saved", which ic refuses when
-// nothing is. New callers send `set-shape`, spelled once in the contract (`icShapeArgs`).
-const capFlag = (value: number | null | undefined, spell: (value: number) => string): string | undefined =>
-    value === undefined ? undefined : value === null ? "default" : spell(value);
-const switchFlag = (value: boolean | undefined): string | undefined => (value === undefined ? undefined : value ? "on" : "off");
-
-export const icReshapeArgs = (slug: string, ask: SandboxResourcesAsk | undefined, { later = false }: { readonly later?: boolean | undefined } = {}): string[] => {
-    const flags: readonly (readonly [string, string | undefined])[] = [
-        ["--memory", capFlag(ask?.memoryGib, (gib) => `${gib}g`)],
-        ["--cpus", capFlag(ask?.cpus, String)],
-        ["--privileged", switchFlag(ask?.privileged)],
-        ["--gpus", switchFlag(ask?.gpu)],
-    ];
-    const given = flags.flatMap(([flag, value]) => (value === undefined ? [] : [flag, value]));
-    if (later) {
-        return ["sandbox", "reshape", slug, ...(given.length === 0 ? ["--forget"] : [...given, "--later"])];
-    }
-    return ["sandbox", "reshape", slug, ...given];
 };
 
 // The parent sandbox's shape, riding along on runner-up so the container starts as its twin: a settings-only
@@ -442,7 +408,23 @@ export const forgetShape = async (slug: string, scopes: DeviceScopes, onLine: (l
     return `Nothing is saved for the next restart of "${slug}" any more. It keeps running as it is.`;
 };
 
-// The old `reshape` op, for one release (see icReshapeArgs).
+// The OLD `reshape` op, kept one release for pages served by sandboxes older than `set-shape`, carried out through the
+// same `ic sandbox shape` argv as `set-shape` (the contract's `icShapeArgs`) so there is one spelling of the shape
+// flags: a delta now is a shape now, a delta with `later` a shape for the next restart, an empty `later` the forget,
+// and an empty delta now the restart that applies what is saved. Pure, so the mapping is asserted without an ic.
+export type OlderResizePlan =
+    | { readonly kind: "shape"; readonly fields: SandboxShapeFields; readonly when: SandboxShapeWhen }
+    | { readonly kind: "forget" }
+    | { readonly kind: "apply-saved" };
+export const olderResizePlan = (ask: SandboxResourcesAsk | undefined, later: boolean): OlderResizePlan => {
+    const fields: SandboxShapeFields = ask ?? {};
+    const empty = Object.values(fields).every((value) => value === undefined);
+    if (empty) {
+        return later ? { kind: "forget" } : { kind: "apply-saved" };
+    }
+    return { kind: "shape", fields, when: later ? "nextRestart" : "now" };
+};
+
 export const reshapeSandbox = async (
     slug: string,
     ask: SandboxResourcesAsk | undefined,
@@ -451,19 +433,18 @@ export const reshapeSandbox = async (
     { later = false }: { readonly later?: boolean | undefined } = {},
 ): Promise<string> => {
     assertScope(scopes, "sandboxes");
-    const args = icReshapeArgs(slug, ask, { later });
-    await find(slug);
-    const run = await icFlow(slug, args, onLine);
-    if (run.code !== 0) {
-        throw new Error(`That reshape failed on this device.\n\n${run.output}`);
+    const plan = olderResizePlan(ask, later);
+    if (plan.kind === "shape") {
+        return await shapeSandbox(slug, plan.fields, plan.when, scopes, onLine);
     }
-    const empty = ask === undefined || Object.values(ask).every((value) => value === undefined);
-    if (later) {
-        return empty
-            ? `Nothing is saved for the next restart of "${slug}" any more. It keeps running as it is.`
-            : `Saved for the next restart of "${slug}" through ic. It keeps running as it is until then.`;
+    if (plan.kind === "forget") {
+        return await forgetShape(slug, scopes, onLine);
     }
-    return `Reshaped sandbox "${slug}". Its files and its history were kept, and the new share survives every later update.`;
+    // ic's old bare reshape refused when nothing was saved; a restart would not, so the refusal is kept here.
+    if ((await find(slug)).resources?.desired === undefined) {
+        throw new Error(`Nothing is saved for the next restart of "${slug}", so there is nothing to apply.`);
+    }
+    return await manageSandbox("restart", slug, scopes, onLine);
 };
 
 export const reconnectSandbox = async (
@@ -530,16 +511,19 @@ export const removeSandbox = async (slug: string, scopes: DeviceScopes, onLine: 
 export const DEFAULT_LOG_LINES = 200;
 export const MAX_LOG_LINES = 2_000;
 
-// The container's own log, gated like `list_sandboxes` since it's a way of seeing what you already manage. Both
-// streams, since a container that died wrote its reason to stderr. `--timestamps` is off: the daemon stamps its
-// own lines. Raw and possibly empty, since the two readers phrase "it has said nothing" differently.
+// The container's own log, gated like `list_sandboxes` since it's a way of seeing what you already manage, read
+// through `ic sandbox logs` like every other verb here: both streams, since a container that died wrote its reason to
+// stderr. Possibly empty, since the two readers phrase "it has said nothing" differently.
 const readLogs = async (slug: string, lines: number, scopes: DeviceScopes): Promise<string> => {
     if (scopes.shell !== "on") {
         assertScope(scopes, "sandboxes");
     }
     await find(slug);
-    const { stdout, stderr } = await docker(["logs", "--tail", String(lines), `${PREFIX}${slug}`]);
-    return [stdout, stderr].filter((part) => part !== "").join("\n");
+    const run = await runIc(["sandbox", "logs", slug, "--tail", String(lines)], () => {});
+    if (run.code !== 0) {
+        throw new Error(`The log of "${slug}" could not be read on this device.\n\n${run.output}`);
+    }
+    return run.output;
 };
 
 export const sandboxLogs = async (slug: string, lines: number | undefined, scopes: DeviceScopes): Promise<string> => {

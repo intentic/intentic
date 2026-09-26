@@ -7,9 +7,9 @@ import {
     icConnectArgs,
     icConnectEnv,
     icRemoveArgs,
-    icReshapeArgs,
     icRunnerArgs,
     icSwapArgs,
+    olderResizePlan,
     listSandboxes,
     manageSandbox,
     reconnectSandbox,
@@ -146,43 +146,14 @@ test("a rebuild without the approved digest is refused rather than built against
     expect(() => icSwapArgs("rebuild", "work", "")).toThrow(/approved/);
 });
 
-// The reshape argv: every value is a flag with a word after it, never a bare flag, and `null` becomes ic's own
-// `default`.
-test("a reshape builds ic's flags from the ask, with null as default and switches spelled out", () => {
-    expect(icReshapeArgs("work", { memoryGib: 12, cpus: 4, privileged: true, gpu: false })).toEqual([
-        "sandbox",
-        "reshape",
-        "work",
-        "--memory",
-        "12g",
-        "--cpus",
-        "4",
-        "--privileged",
-        "on",
-        "--gpus",
-        "off",
-    ]);
-    expect(icReshapeArgs("work", { memoryGib: null, cpus: null })).toEqual([
-        "sandbox",
-        "reshape",
-        "work",
-        "--memory",
-        "default",
-        "--cpus",
-        "default",
-    ]);
-    // Only what was asked rides: an untouched switch must not be re-stated as either state.
-    expect(icReshapeArgs("work", { gpu: true })).toEqual(["sandbox", "reshape", "work", "--gpus", "on"]);
-});
-
-// The old op's `later` saves instead of restarting and an empty `later` forgets; an empty immediate reshape is ic's own
-// "apply what is saved", which ic refuses when nothing is. No saved file is read on this side any more.
-test("the old reshape op maps later onto --later, an empty later onto --forget, and an empty ask onto a bare reshape", () => {
-    expect(icReshapeArgs("work", { memoryGib: 20 }, { later: true })).toEqual(["sandbox", "reshape", "work", "--memory", "20g", "--later"]);
-    expect(icReshapeArgs("work", undefined, { later: true })).toEqual(["sandbox", "reshape", "work", "--forget"]);
-    expect(icReshapeArgs("work", {}, { later: true })).toEqual(["sandbox", "reshape", "work", "--forget"]);
-    expect(icReshapeArgs("work", undefined)).toEqual(["sandbox", "reshape", "work"]);
-    expect(icReshapeArgs("work", { cpus: 4 })).toEqual(["sandbox", "reshape", "work", "--cpus", "4"]);
+// The old op is carried out by the same `ic sandbox shape` argv as `set-shape`: its delta is a shape, `later` is the next
+// restart, an empty `later` forgets, and an empty ask now is the restart that applies what is saved.
+test("the old reshape op maps onto the shape verb, the forget, or the restart that applies what is saved", () => {
+    expect(olderResizePlan({ memoryGib: 12, cpus: null }, false)).toEqual({ kind: "shape", fields: { memoryGib: 12, cpus: null }, when: "now" });
+    expect(olderResizePlan({ gpu: true }, true)).toEqual({ kind: "shape", fields: { gpu: true }, when: "nextRestart" });
+    expect(olderResizePlan(undefined, true)).toEqual({ kind: "forget" });
+    expect(olderResizePlan({}, true)).toEqual({ kind: "forget" });
+    expect(olderResizePlan(undefined, false)).toEqual({ kind: "apply-saved" });
 });
 
 test("a shape that sets nothing is refused before ic is asked, so it can never restart anything", async () => {
@@ -288,14 +259,13 @@ test("an ic older than the agent, or none, is fetched; a newer one and a dev age
 });
 
 // The optional ops are advertised from what the device's ic says it has, not from a list written beside the agent: an
-// agent whose ic predates `shape` must not be sent an op it would run against a verb that is not there.
-test("advertises an optional op only when the ic under the agent has the verb behind it", () => {
-    const reshape = "Usage: ic sandbox reshape [OPTIONS] <SLUG>\n      --later   Save the ask…";
-    const shape = "Usage: ic sandbox shape [OPTIONS] <SLUG>\n      --when <WHEN>";
-    expect(featuresFrom(reshape, shape)).toEqual(["reshape-later", "set-shape"]);
-    expect(featuresFrom("Usage: ic sandbox reshape [OPTIONS] <SLUG>", undefined)).toEqual([]);
-    expect(featuresFrom(reshape, undefined)).toEqual(["reshape-later"]);
-    expect(featuresFrom(undefined, undefined)).toEqual([]);
+// agent whose ic cannot take the contract's shape must not be sent an op it would run against a flag that is not there.
+test("advertises an optional op only when the ic under the agent takes the contract's shape", () => {
+    const shape = "Usage: ic sandbox shape [OPTIONS] <SLUG>\n      --set <FIELD=JSON>\n      --when <WHEN>";
+    expect(featuresFrom(shape)).toEqual(["reshape-later", "set-shape"]);
+    // An ic from before `--set` has the verb but not the shape as the contract spells it.
+    expect(featuresFrom("Usage: ic sandbox shape [OPTIONS] <SLUG>\n      --when <WHEN>")).toEqual([]);
+    expect(featuresFrom(undefined)).toEqual([]);
 });
 
 test("a machine with no home still tries the rest", () => {

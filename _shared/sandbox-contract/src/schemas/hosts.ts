@@ -60,7 +60,8 @@ export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 // - `reshape-later`: the old `reshape` op with `later`, saving the change for the next restart. An agent from before it
 //   strips `later` and reshapes NOW, which is why a later-reshape is never sent to one.
 // - `set-shape`: the `set-shape`/`forget-shape` ops, and `start`/`restart` applying a saved shape, all through an `ic`
-//   that has `ic sandbox shape`; advertised only when the agent's `ic` answers that verb.
+//   whose `ic sandbox shape` takes the contract's own shape (`--set`); advertised only when the agent's `ic` does.
+//   Both features ride that verb, so an agent advertises both or neither.
 export const DeviceFeatureSchema = z.enum(["reshape-later", "set-shape"]);
 export type DeviceFeature = z.infer<typeof DeviceFeatureSchema>;
 export const DEVICE_FEATURE_RESHAPE_LATER: DeviceFeature = "reshape-later";
@@ -91,11 +92,7 @@ export const windowsPathOf = (distro: string, linuxPath: string): string => `\\\
 // ONE CARD IS ONE COMPUTER, AND EACH OS INSTALL ON IT IS A CONNECTION OF THAT CARD. A PC's Windows side and every WSL
 // distro on it hold their own agent — mutagen has to watch the filesystem it syncs, and a distro's login shell is its
 // own — but the owner connected a computer, not a shell, so the grant, the row and the tools are the machine's.
-// The native environment's connection key IS the card id, by definition rather than as a fallback: a machine with one
-// OS install has one connection named after itself, and a sibling hangs off it as `<card>::wsl:<distro>`. `::` cannot
-// collide with the single colon in an environment key.
 export const HOST_NATIVE_ENVIRONMENT = "native";
-const ENVIRONMENT_SEPARATOR = "::";
 
 // Which environment a machine is describing when it connects: the distro by the name WSL registered (what `wsl -l -q`
 // prints and `in: "wsl:<name>"` takes), or the metal. Facts arrive at connect and no scope withholds them, so this is
@@ -103,14 +100,27 @@ const ENVIRONMENT_SEPARATOR = "::";
 export const environmentKeyOf = (facts: Pick<DeviceFacts, "wsl">): string =>
     facts.wsl === undefined ? HOST_NATIVE_ENVIRONMENT : `wsl:${facts.wsl.distro}`;
 
-export const hostConnectionKey = (entry: string, environment: string): string =>
-    environment === HOST_NATIVE_ENVIRONMENT ? entry : `${entry}${ENVIRONMENT_SEPARATOR}${environment}`;
+// A CONNECTION'S KEY, spelled and read in exactly one place. The key is what the hub, a device RPC and a page's row
+// address a connection by: the native environment's key IS the card id, and a sibling hangs off it as
+// `<card>::wsl:<distro>` (`::` cannot collide with the single colon in an environment key). What a connection IS —
+// its card, its environment, its computer — is the enrollment's own record (a host enrollment says all three, and a
+// device row carries `card`), so the parser is only for a key with nothing beside it: the key the owner asks to pair,
+// an enrollment written before records said, a row from a daemon older than `card`. A rename relabels the record and
+// the key follows from the label; the live connection is held under the new key without being cut (PeerHub.rekey).
+export interface HostConnection {
+    readonly card: string;
+    readonly environment: string;
+}
+const ENVIRONMENT_SEPARATOR = "::";
 
-export const hostEntryOf = (connection: string): string => connection.split(ENVIRONMENT_SEPARATOR)[0] ?? connection;
+export const hostConnectionKey = (card: string, environment: string): string =>
+    environment === HOST_NATIVE_ENVIRONMENT ? card : `${card}${ENVIRONMENT_SEPARATOR}${environment}`;
 
-export const hostEnvironmentOf = (connection: string): string => {
-    const at = connection.indexOf(ENVIRONMENT_SEPARATOR);
-    return at === -1 ? HOST_NATIVE_ENVIRONMENT : connection.slice(at + ENVIRONMENT_SEPARATOR.length);
+export const parseHostConnection = (key: string): HostConnection => {
+    const at = key.indexOf(ENVIRONMENT_SEPARATOR);
+    return at === -1
+        ? { card: key, environment: HOST_NATIVE_ENVIRONMENT }
+        : { card: key.slice(0, at), environment: key.slice(at + ENVIRONMENT_SEPARATOR.length) };
 };
 
 // One OS install of a machine, as its card knows it. `key` is the environment (`native`, `wsl:archlinux`); everything
@@ -129,8 +139,11 @@ export const HostEnvironmentSchema = z.object({
 export type HostEnvironment = z.infer<typeof HostEnvironmentSchema>;
 
 export const HostSummarySchema = z.object({
-    // The capability id, the machine's name, and the prefix of its tools (mcp__<id>__run_command).
+    // The capability id, the machine's name, and the prefix of its tools (mcp__<id>__run_command). On a per-connection
+    // row (`hostConnections`) it is that connection's key instead, and `card` names the machine.
     id: z.string(),
+    // The card a per-connection row is a connection of: a label on the row, read rather than parsed out of `id`.
+    card: z.string().optional(),
     platform: z.string().min(1),
     // Every environment of this machine, native first: what the page draws a row per, and what a command picks from.
     // Never empty — a card that has never connected still has its native environment, offline.

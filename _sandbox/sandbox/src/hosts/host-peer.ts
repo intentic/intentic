@@ -2,10 +2,8 @@ import {
     derivedMachineId,
     HOST_HEARTBEAT_MS,
     HOST_NATIVE_ENVIRONMENT,
-    hostEntryOf,
     hostConnectionKey,
     type deviceContract,
-    hostEnvironmentOf,
     type HostEnvironment,
     isDerivedMachineId,
     type DeviceFacts,
@@ -13,6 +11,7 @@ import {
     HostHelloSchema,
     type DeviceScopes,
     type HostSummary,
+    parseHostConnection,
 } from "@intentic/sandbox-contract";
 import type { ContractRouterClient } from "@orpc/contract";
 import { capabilityCtx } from "../capabilities/capability.js";
@@ -48,9 +47,13 @@ export type HostStore = PeerStore<HostEnrollmentFields>;
 // and the connection key follows from the label. The machine id is the card's derived one until the agent says its own.
 export const HOST_CARD_RULE: CardRule<HostEnrollmentFields> = {
     of: (entry) => entry.card,
-    pairing: (id) => ({ card: hostEntryOf(id), environment: hostEnvironmentOf(id), machineId: derivedMachineId(hostEntryOf(id)) }),
+    pairing: (id) => {
+        const { card, environment } = parseHostConnection(id);
+        return { card, environment, machineId: derivedMachineId(card) };
+    },
     relabel: (entry, card) => ({ ...entry, card, id: hostConnectionKey(card, entry.environment) }),
 };
+
 
 export const HOST_PEER: PeerDoor<HostHello, HostAnnounced, typeof HostEnrollmentFieldsSchema.shape> = {
     slug: PEER_BRIDGES.device,
@@ -87,16 +90,22 @@ const byEnvironment = (a: HostEnvironment, b: HostEnvironment): number =>
 // hub liveness resets on a daemon restart — without them a distro that has not dialled in yet would vanish from its own
 // computer rather than reading as asleep. A card is a computer, so a card with nothing connected is still a computer
 // with one environment nobody has reached. Which card an enrollment is a connection of is the record's own say.
-const environmentsOf = (services: Services, card: string, enrolled: readonly { readonly id: string; readonly card: string; readonly machineId: string }[]): HostEnvironment[] => {
-    const records = new Map(enrolled.filter((entry) => entry.card === card).map((entry) => [entry.id, entry]));
-    // Only enrolled connections can hold a socket (peers/invariant.ts), so the records name every side there is.
-    const keys = new Set([card, ...records.keys()]);
-    return [...keys]
-        .map((key) => {
+const environmentsOf = (
+    services: Services,
+    card: string,
+    enrolled: readonly { readonly id: string; readonly card: string; readonly environment: string; readonly machineId: string }[],
+): HostEnvironment[] => {
+    const records = enrolled.filter((entry) => entry.card === card);
+    // Only enrolled connections can hold a socket (peers/invariant.ts), so the records name every side there is; the
+    // native side is listed even before it has one, under the key that is the card itself.
+    const sides = records.some((entry) => entry.environment === HOST_NATIVE_ENVIRONMENT)
+        ? records
+        : [{ id: hostConnectionKey(card, HOST_NATIVE_ENVIRONMENT), environment: HOST_NATIVE_ENVIRONMENT, machineId: undefined }, ...records];
+    return sides
+        .map(({ id: key, environment, machineId }) => {
             const state = services.hostHub.state(key);
-            const machineId = records.get(key)?.machineId;
             return {
-                key: hostEnvironmentOf(key),
+                key: environment,
                 ...(machineId === undefined || isDerivedMachineId(machineId) ? {} : { machineId }),
                 online: state.online,
                 ...(state.announced === undefined ? {} : { version: state.announced.version }),
@@ -151,6 +160,7 @@ export const hostConnections = (summaries: readonly HostSummary[]): HostSummary[
     summaries.flatMap((summary) =>
         summary.environments.map((environment) => ({
             id: hostConnectionKey(summary.id, environment.key),
+            card: summary.id,
             platform: environmentPlatform(summary.platform, environment.key),
             environments: [environment],
             online: environment.online,

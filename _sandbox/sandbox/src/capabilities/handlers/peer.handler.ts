@@ -21,20 +21,21 @@ export interface PeerHandlerSpec<Scopes extends { readonly platform: string }> {
     readonly awayHint: string;
     readonly added: (id: string) => string;
     readonly store: (ctx: CapabilityCtx) => Pick<PeerStore<unknown>, "enrolled" | "relabelCard" | "revokeCard">;
-    readonly hub: (ctx: CapabilityCtx) => Pick<PeerHub<never, unknown, unknown, Scopes>, "disconnect" | "online" | "pushScopes">;
+    readonly hub: (ctx: CapabilityCtx) => Pick<PeerHub<never, unknown, unknown, Scopes>, "disconnect" | "online" | "pushScopes" | "rekey">;
     // Every field is a permission, none secret: the entry renders the grant back to the owner.
     readonly echo: (config: Scopes) => Record<string, string | number | boolean>;
 }
 
 export const peerHandler = <Scopes extends { readonly platform: string }>(spec: PeerHandlerSpec<Scopes>): CapabilityHandler => ({
     echo: (config) => spec.echo(config as Scopes),
-    // Enrollment travels with the name; no re-pairing needed. Every enrollment the card holds (each OS install of a
-    // machine) is relabelled in one write, then each live socket is cut, since the far end is authenticated by a token
-    // this daemon still honors and reconnecting announces the new name.
+    // THE NAME IS A LABEL. Enrollment travels with it, no re-pairing needed: every enrollment the card holds (each OS
+    // install of a machine) is relabelled in one write, each keeping its own token, and each live connection is held
+    // under its new id with its socket untouched. The grant is the card's config, which a rename does not change, so
+    // there is nothing to push either.
     rename: {
         carry: async (ctx, from, to) => {
             for (const moved of await spec.store(ctx).relabelCard(from, to)) {
-                spec.hub(ctx).disconnect(moved.from, `this ${spec.noun} was renamed: reconnecting under its new name`);
+                spec.hub(ctx).rekey(moved.from, moved.to);
             }
             await removeLoadedSkill(ctx.files, ctx.workspace.root, from);
         },

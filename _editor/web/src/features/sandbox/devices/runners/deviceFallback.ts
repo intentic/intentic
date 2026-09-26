@@ -15,6 +15,8 @@ import type { SyncCommand } from "./deviceOps";
 const CONTAINER = `intentic-sandbox-`;
 
 // What `docker logs` tails, matching the agent's own default so the pasted line answers with what the pane would have.
+// The agent reads it through `ic sandbox logs`; the typed line stays docker's, which answers on a machine whose ic
+// predates that verb (the machine this line is printed for is often one whose agent is behind).
 const LOG_LINES = 200;
 
 // The verbs `ic` owns: moving a sandbox between images, and its power, since a start or restart through ic applies

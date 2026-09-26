@@ -13,7 +13,7 @@ import {
     DEVICE_FEATURE_SET_SHAPE,
     deviceSupports,
     environmentOf,
-    hostEnvironmentOf,
+    HOST_NATIVE_ENVIRONMENT,
     REPORT_QUIET_AFTER_MS,
 } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
@@ -233,6 +233,8 @@ const pulledHost = (
         platform,
         known: {
             hostId: host.id,
+            // A per-connection row names its card; a per-card summary's id is the card.
+            card: host.card ?? host.id,
             online: host.online,
             ...(machineOfHost(host) === undefined ? {} : { machineId: machineOfHost(host) }),
             ...(platform === undefined ? {} : { platform }),
@@ -289,7 +291,7 @@ export const mergeDevices = (
     // No rule may steal an occupied row.
     const claim = (host: HostSummary, report: DeviceReport | undefined): Device | undefined => {
         // The environment the enrollment names (the connection's own), which no report can contradict.
-        const identity = { machineId: machineOfHost(host), environment: host.environments[0]?.key ?? hostEnvironmentOf(host.id) };
+        const identity = { machineId: machineOfHost(host), environment: host.environments[0]?.key ?? HOST_NATIVE_ENVIRONMENT };
         return rows.find((row) => row.hostId === undefined && sameEnvironment(syncIdentity(row), identity));
     };
 

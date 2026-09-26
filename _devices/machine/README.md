@@ -20,9 +20,11 @@ flowchart LR
   through [browser](../browser), `screenshot` and `device` through [desktop-automation](../desktop-automation), and
   the intentic sandboxes on this machine through the `ic` CLI.
 - The sandbox tools are thin callers of `ic` ([`tools/sandboxes.ts`](src/device/tools/sandboxes.ts)): the listing is
-  `ic sandbox list --json` passed through, and start, stop, restart, the swaps, `set-shape` and `forget-shape` are
-  ic's own verbs, argv spelled by the contract (`icShapeArgs`, `icPowerArgs`). Nothing here reads docker's view of a
-  container or the shape saved for its next restart; ic answers both. Before its first `ic` call the agent makes
+  `ic sandbox list --json` passed through, and start, stop, restart, the swaps, `set-shape`, `forget-shape` and the
+  logs are ic's own verbs, argv spelled by the contract (`icShapeArgs`, `icPowerArgs`). The shape reaches ic as the
+  contract's own object (`--set memoryGib=12`), so no flag of ic's is spelled here; the old `reshape` op is carried
+  out through the same verb. Nothing here runs docker or reads the shape saved for a sandbox's next restart; ic
+  answers both. Before its first `ic` call the agent makes
   sure the installed `ic` is at least as new as itself, fetching its own release's into `~/.intentic/ic/bin` when it
   is not ([`tools/ic-binary.ts`](src/device/tools/ic-binary.ts)), since a new verb here arrives with a new verb there.
 - **sync** (`src/sync/`): `sync setup` enrolls an SSH key and runs Mutagen against the sandbox's sshd, reached
@@ -33,7 +35,7 @@ flowchart LR
   Windows side hands its own to the agent it starts in each distro, so every OS install of one PC answers with one id;
   a sandbox joins enrollments, sync enrollments and device rows on it, never on a hostname.
 - The features a device advertises (`set-shape`, `reshape-later`) are read off the `ic` under it, from that `ic`'s own
-  help, rather than listed beside the code; the device RPC inputs are strict, so an op or field this agent does not
+  help (both need `ic sandbox shape --set`), rather than listed beside the code; the device RPC inputs are strict, so an op or field this agent does not
   know is refused rather than dropped.
 - Every path under the user's home goes through `homeDir()` from [local-agent](../local-agent), which follows a `HOME`
   set after startup; a test holds the sources to it.

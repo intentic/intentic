@@ -29,6 +29,9 @@ export interface PeerState<Announced, Facts> {
 }
 
 interface LivePeer<Client, Announced, Facts> {
+    // The id it is held under now: a rename moves a live peer to a new id without touching its socket (`rekey`), so
+    // everything that outlives the attach (its heartbeat, its detach) reads this rather than the id it attached with.
+    key: string;
     readonly client: Client;
     readonly close: (code: number, reason: string) => void;
     readonly heartbeat: NodeJS.Timeout;
@@ -56,6 +59,9 @@ export interface PeerHub<Client extends PeerClient<Facts, Scopes>, Announced, Fa
     readonly pushScopes: (id: string, scopes: Scopes) => Promise<boolean>;
     // Cuts a peer off now: the owner revoking it, or the capability being removed.
     readonly disconnect: (id: string, reason: string) => void;
+    // Holds a peer under a new id, its socket untouched: a renamed card is a new label on the same connection, not a
+    // reason to cut it. What is remembered of it (its last state, its tool table) moves with it.
+    readonly rekey: (from: string, to: string) => void;
     // Last tool list this peer answered with, cached across disconnects so a turn still lists its tools.
     readonly rememberTools: (id: string, result: unknown) => void;
     readonly knownTools: (id: string) => unknown | undefined;
@@ -125,17 +131,18 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
                 live.delete(id);
             }
             const peer: LivePeer<Client, Announced, Facts> = {
+                key: id,
                 client: connection.client,
                 close: connection.close,
                 // Dropped on heartbeat failure, not left looking online; the dot must mean reachable now, not
                 // remembered.
                 heartbeat: setInterval(() => {
                     void connection.client.ping().catch((err: unknown) => {
-                        logger.warn({ err, id }, `${spec.domain}: heartbeat failed, dropping the connection`);
+                        logger.warn({ err, id: peer.key }, `${spec.domain}: heartbeat failed, dropping the connection`);
                         connection.close(1001, "no answer");
-                        const current = live.get(id);
+                        const current = live.get(peer.key);
                         if (current?.client === connection.client) {
-                            drop(id, current);
+                            drop(peer.key, current);
                         }
                     });
                 }, spec.heartbeatMs),
@@ -151,9 +158,9 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
                 logger.warn({ err, id }, `${spec.domain}: could not read this peer's tool list on connect`),
             );
             return () => {
-                const current = live.get(id);
+                const current = live.get(peer.key);
                 if (current === peer) {
-                    drop(id, peer);
+                    drop(peer.key, peer);
                 }
             };
         },
@@ -227,6 +234,34 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
             peer.close(1000, reason);
             seen.delete(id);
             live.delete(id);
+            said();
+        },
+        rekey: (from, to) => {
+            if (from === to) {
+                return;
+            }
+            const peer = live.get(from);
+            if (peer !== undefined) {
+                live.delete(from);
+                // Whatever held the new id is not this peer, and two sockets under one id is the thing `attach` exists
+                // to prevent.
+                const displaced = live.get(to);
+                if (displaced !== undefined) {
+                    clearInterval(displaced.heartbeat);
+                    displaced.close(1000, "replaced");
+                }
+                peer.key = to;
+                live.set(to, peer);
+            }
+            const remembered = seen.get(from);
+            seen.delete(from);
+            if (remembered !== undefined) {
+                seen.set(to, remembered);
+            }
+            const tools = memory.get(toolKey(from));
+            if (tools !== undefined) {
+                memory.set(toolKey(to), tools);
+            }
             said();
         },
         online: (id) => live.has(id),

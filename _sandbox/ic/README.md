@@ -36,8 +36,15 @@ flowchart LR
   channel record's `desired_*` keys, next to what `prepare` staged. The next restart through ic applies it and drops
   it in the same record write that names the new image: `start`, `restart`, an update, a rollback, a rebuild or a
   `reshape`. Docker restarting the container by itself (`--restart unless-stopped`) does not. `--forget` drops it.
-  `reshape --later`/`--forget` are the older spellings, kept one release for machine agents that send them; a
-  `sandbox-<slug>.shape` delta an older ic saved is converted into the record the first time it is read, then deleted.
+  Programs pass the shape as the sandbox contract's own object, one `--set FIELD=JSON` per field (`--set
+  memoryGib=12 --set cpus=null`), and `--when` takes the contract's `nextRestart` too, so no caller spells a flag per
+  field and a field ic does not know is refused. `--memory`/`--cpus`/`--privileged`/`--gpus` on `shape`, and the
+  `reshape` verb with `--later`/`--forget`, are the older spellings, kept for machine agents released before
+  `--set`: a shim fetches a fresh ic on every run, so an older agent can be driving this one. They can go once no
+  agent older than the release carrying `--set` is left; a `sandbox-<slug>.shape` delta an older ic saved is
+  converted into the record the first time it is read, then deleted.
+- `ic sandbox logs [<slug>] [--tail N]` prints the tail of a sandbox's own log, both streams: what the machine
+  agent's Logs button and `sandbox_logs` tool read.
 - `ic sandbox doctor` walks the reachability chain (machine, container, daemon, platform, edge) and names the broken
   link with its fix.
 - The image owns its `docker run` flags. `ic` asks the image for its run command (`contract.rs`) instead of

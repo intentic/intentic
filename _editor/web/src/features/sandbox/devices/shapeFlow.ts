@@ -10,6 +10,10 @@ import type { DeviceSandboxPayload } from "./useDevices";
 /** A shape and when it takes effect, or dropping the one saved for the next restart. */
 export type ShapeIntent = { readonly shape: ResourcesForm; readonly when: SandboxShapeWhen } | { readonly forget: true };
 
+// The contract's four fields and nothing else: the agent refuses a field it does not know, and a form opened on a newer
+// machine's report may carry one.
+const contractFields = ({ memoryGib, cpus, privileged, gpu }: ResourcesForm): ResourcesForm => ({ memoryGib, cpus, privileged, gpu });
+
 /** Whether this machine's agent takes whole shapes (and so can save one for the next restart). */
 export const canSetShape = (facts: Pick<DeviceFacts, "features"> | undefined): boolean => deviceSupports(facts, DEVICE_FEATURE_SET_SHAPE);
 
@@ -25,7 +29,7 @@ export const shapeFlow = (
     running: ResourcesForm,
 ): { readonly op: DeviceSandboxOp; readonly payload: Pick<DeviceSandboxPayload, `shape` | `when` | `resources`> } => {
     if (canShape) {
-        return `forget` in intent ? { op: `forget-shape`, payload: {} } : { op: `set-shape`, payload: { shape: intent.shape, when: intent.when } };
+        return `forget` in intent ? { op: `forget-shape`, payload: {} } : { op: `set-shape`, payload: { shape: contractFields(intent.shape), when: intent.when } };
     }
     if (`forget` in intent || intent.when !== `now`) {
         throw new Error(TOO_OLD_TO_SAVE);

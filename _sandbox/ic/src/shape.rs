@@ -30,7 +30,64 @@ pub struct Ask {
     pub gpus: Option<bool>,
 }
 
+/// A cap as the contract's JSON spells it: a positive whole number, or `null` for the default (the empty string here).
+fn cap_field(field: &str, value: &serde_json::Value, unit: &str) -> Result<String> {
+    match value {
+        serde_json::Value::Null => Ok(String::new()),
+        serde_json::Value::Number(number) => match number.as_u64().filter(|n| *n > 0) {
+            Some(n) => Ok(format!("{n}{unit}")),
+            None => bail!(
+                "{field} is a whole number above zero, or null for the default; got {number}."
+            ),
+        },
+        other => {
+            bail!("{field} is a whole number above zero, or null for the default; got {other}.")
+        }
+    }
+}
+
+fn switch_field(field: &str, value: &serde_json::Value) -> Result<bool> {
+    match value.as_bool() {
+        Some(on) => Ok(on),
+        None => bail!("{field} is true or false; got {value}."),
+    }
+}
+
 impl Ask {
+    /// The ask from `--set FIELD=JSON` pairs: the sandbox contract's own SandboxShape, one field per pair, so a caller
+    /// passes the contract's object and never spells a flag of ours. STRICT, like every order a device is sent: a
+    /// field this ic does not know is refused rather than dropped, and so is one named twice.
+    pub fn from_fields<S: AsRef<str>>(pairs: &[S]) -> Result<Ask> {
+        let mut ask = Ask::default();
+        let mut seen: Vec<&str> = Vec::new();
+        for pair in pairs {
+            let pair = pair.as_ref();
+            let Some((field, raw)) = pair.split_once('=') else {
+                bail!("--set takes FIELD=JSON, e.g. memoryGib=12; got `{pair}`.");
+            };
+            if seen.contains(&field) {
+                bail!("--set names {field} twice.");
+            }
+            seen.push(field);
+            let value: serde_json::Value = match serde_json::from_str(raw) {
+                Ok(value) => value,
+                Err(_) => {
+                    bail!("--set {field}= takes a JSON value (12, null, true, false); got `{raw}`.")
+                }
+            };
+            match field {
+                "memoryGib" => ask.memory = Some(cap_field(field, &value, "g")?),
+                "cpus" => ask.cpus = Some(cap_field(field, &value, "")?),
+                "privileged" => ask.privileged = Some(switch_field(field, &value)?),
+                "gpu" => ask.gpus = Some(switch_field(field, &value)?),
+                other => bail!(
+                    "this ic does not know the shape field `{other}` (it knows memoryGib, cpus, privileged and gpu): update ic."
+                ),
+            }
+        }
+        Ok(ask)
+    }
+
     /// Nothing asked: every field "leave it".
     pub fn is_empty(&self) -> bool {
         self.memory.is_none()
@@ -311,5 +368,46 @@ mod tests {
             shape(Some("20g"), None, false, true).describe(),
             "memory 20g, cpus default, privileged off, gpus on"
         );
+    }
+
+    /* `--set` is the contract's own shape, read strictly. */
+    #[test]
+    fn set_pairs_are_the_contracts_shape_in_its_own_names() {
+        let ask = Ask::from_fields(&["memoryGib=20", "cpus=null", "privileged=false", "gpu=true"])
+            .unwrap();
+        assert_eq!(
+            ask,
+            Ask {
+                memory: Some("20g".into()),
+                cpus: Some(String::new()),
+                privileged: Some(false),
+                gpus: Some(true),
+            }
+        );
+        assert_eq!(
+            Ask::from_fields(&["cpus=4"]).unwrap(),
+            Ask {
+                cpus: Some("4".into()),
+                ..Ask::default()
+            }
+        );
+    }
+
+    #[test]
+    fn set_refuses_what_it_does_not_know_rather_than_dropping_it() {
+        for refused in [
+            &["swapGib=4"][..],
+            &["memoryGib=0"],
+            &["memoryGib=1.5"],
+            &["memoryGib=\"12g\""],
+            &["gpu=on"],
+            &["gpu"],
+            &["cpus=2", "cpus=4"],
+        ] {
+            assert!(
+                Ask::from_fields(refused).is_err(),
+                "{refused:?} was accepted"
+            );
+        }
     }
 }

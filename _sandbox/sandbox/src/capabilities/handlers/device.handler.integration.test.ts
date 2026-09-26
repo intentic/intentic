@@ -6,6 +6,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
 import type { ExtensionHost } from "../../extensions/installed-extensions.js";
 import { HOST_PEER } from "../../hosts/host-peer.js";
+import { createPeerHub, type PeerClient } from "../../peers/peer-hub.js";
 import { filePeerStore } from "../../peers/peer-store.js";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/files/workspace-files.js";
 import type { CapabilityCtx } from "../capability.js";
@@ -119,14 +120,25 @@ const pairedMachine = async () => {
         const enrolled = await hosts.enroll(hosts.mintPairing(id).token);
         tokens.set(id, enrolled?.token ?? "");
     }
+    // A real hub, with the Windows side and its distro holding a socket each: what a rename must not cut.
+    const hub = createPeerHub<PeerClient<unknown, unknown>, { version: string }, unknown, unknown>(HOST_PEER.hub, { warn: () => {} });
+    const closed: string[] = [];
+    for (const id of ["rog", "rog::wsl:archlinux"]) {
+        const client: PeerClient<unknown, unknown> = { describe: async () => ({}), ping: async () => ({}), mcp: async () => ({ from: id }) };
+        hub.attach(id, { client, close: (_code, reason) => void closed.push(`${id}: ${reason}`), announced: { version: "1.0.0" } });
+    }
     const disconnected: string[] = [];
-    const ctx = {
-        ...tempCtx().ctx,
-        hosts,
-        hostHub: { online: () => false, disconnect: (id: string) => void disconnected.push(id) },
-    } as unknown as CapabilityCtx;
+    const hostHub = {
+        online: hub.online,
+        rekey: hub.rekey,
+        disconnect: (id: string, reason: string) => {
+            disconnected.push(id);
+            hub.disconnect(id, reason);
+        },
+    };
+    const ctx = { ...tempCtx().ctx, hosts, hostHub } as unknown as CapabilityCtx;
     const ids = async (): Promise<string[]> => (await hosts.list()).map((peer) => peer.id).toSorted();
-    return { ctx, hosts, tokens, disconnected, ids };
+    return { ctx, hosts, hub, tokens, closed, disconnected, ids };
 };
 
 test("removing a device revokes every OS install it holds, and nothing that merely shares a prefix", async () => {
@@ -140,13 +152,20 @@ test("removing a device revokes every OS install it holds, and nothing that mere
     expect(disconnected).toEqual(["rog", "rog::wsl:archlinux"]);
 });
 
-test("renaming a device carries every OS install to the new name, each keeping its own key", async () => {
-    const { ctx, hosts, tokens, disconnected, ids } = await pairedMachine();
+test("renaming a device carries every OS install to the new name, each keeping its own key and its live socket", async () => {
+    const { ctx, hosts, hub, tokens, closed, disconnected, ids } = await pairedMachine();
 
     await deviceHandler.rename.carry?.(ctx, "rog", "desk", laptop.config);
 
     expect(await ids()).toEqual(["desk", "desk::wsl:archlinux", "omen::wsl:archlinux", "rogue"]);
     // No re-pairing: the distro's own token now answers to the new name.
     expect(await hosts.verify(tokens.get("rog::wsl:archlinux") ?? "")).toEqual({ kind: "enrolled", id: "desk::wsl:archlinux", card: "desk" });
-    expect(disconnected).toEqual(["rog", "rog::wsl:archlinux"]);
+    // The name is a label: nothing was cut, and each side answers under its new id through the socket it already held.
+    expect(disconnected).toEqual([]);
+    expect(closed).toEqual([]);
+    expect(hub.connected().toSorted()).toEqual(["desk", "desk::wsl:archlinux"]);
+    expect(await hub.mcp("desk::wsl:archlinux", {})).toEqual({ from: "rog::wsl:archlinux" });
+    for (const id of hub.connected()) {
+        hub.disconnect(id, "test over");
+    }
 });

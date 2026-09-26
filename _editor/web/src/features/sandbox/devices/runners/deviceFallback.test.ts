@@ -34,15 +34,15 @@ describe(`the power verbs, which go through ic too`, () => {
 
 describe(`a shape`, () => {
     // Whole, with when: the line a person types does exactly what the button asked the machine agent to do.
-    test(`is set whole, spelled the way ic takes it, with a cleared cap as ic's own default`, () => {
+    test(`is set whole, as the contract's own fields, with a cleared cap as the contract's null`, () => {
         expect(sandboxFallback(`resources`, `work`, { shape: { memoryGib: 12, cpus: null, privileged: true, gpu: false }, when: `now` })).toBe(
-            `ic sandbox shape work --memory 12g --cpus default --privileged on --gpus off --when now`,
+            `ic sandbox shape work --set memoryGib=12 --set cpus=null --set privileged=true --set gpu=false --when now`,
         );
     });
 
     test(`saved for the next restart says so, and a save of what already runs forgets what was saved`, () => {
         expect(sandboxFallback(`resources`, `work`, { shape: { memoryGib: 20, cpus: 4, privileged: false, gpu: false }, when: `nextRestart` })).toBe(
-            `ic sandbox shape work --memory 20g --cpus 4 --privileged off --gpus off --when next-restart`,
+            `ic sandbox shape work --set memoryGib=20 --set cpus=4 --set privileged=false --set gpu=false --when nextRestart`,
         );
         expect(sandboxFallback(`resources`, `work`, { forget: true })).toBe(`ic sandbox shape work --forget`);
     });

@@ -13,6 +13,8 @@ import { COMMAND_TIMEOUT_MS, type DeviceCommandFacts, DEVICE_COMMANDS, doorRoute
 // caller; the rest is this sandbox's own knowledge of itself and of the door it is talking to, which is the whole
 // reason these lines are built here.
 const facts = (over: Partial<DeviceCommandFacts> = {}): DeviceCommandFacts => ({
+    card: "rog",
+    environment: HOST_NATIVE_ENVIRONMENT,
     sandboxId: undefined,
     ownSlug: "work-abc",
     devRoot: undefined,

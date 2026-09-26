@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { hostEntryOf } from "@intentic/sandbox-contract";
+import { deviceCard, deviceEnvironment, HOST_NATIVE_ENVIRONMENT } from "@intentic/sandbox-contract";
 import {
     Button,
     ConfirmDialog,
@@ -97,8 +97,8 @@ const ops = useDeviceOps(() => machine, refetch);
 // admitted on are the card's.
 const { capabilities } = useCapabilities();
 const capabilityOf = (row: DeviceRow) => {
-    const hostId = row.device.hostId;
-    return hostId === undefined ? undefined : capabilities.value.find((entry) => entry.id === hostEntryOf(hostId));
+    const card = deviceCard(row.device);
+    return card === undefined ? undefined : capabilities.value.find((entry) => entry.id === card);
 };
 const scopesOf = (row: DeviceRow): DeviceScopes | undefined => capabilityOf(row)?.config;
 
@@ -162,8 +162,9 @@ const connectPlatform = (row: DeviceRow): string => String(row.device.platform ?
 const conflictTurn = (row: DeviceRow, group: DeviceSandboxGroup): ConflictAsk =>
     conflictAsk({
         machine: row.device.label,
-        // Guarded by `fixable`, which already requires this device to have a host id.
-        hostId: row.device.hostId ?? ``,
+        // Guarded by `fixable`, which already requires this device to have a host id, and so a card.
+        card: deviceCard(row.device) ?? ``,
+        environment: deviceEnvironment(row.device) ?? HOST_NATIVE_ENVIRONMENT,
         localDir: group.folder?.localDir,
         conflicts: group.folder?.conflicts ?? 0,
         conflictedPaths: group.folder?.conflictedPaths ?? [],

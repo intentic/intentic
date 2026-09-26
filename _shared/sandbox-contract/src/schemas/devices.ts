@@ -1,6 +1,6 @@
 // What one of the user's own machines is running.
 import { z } from "zod";
-import { hostEntryOf, hostEnvironmentOf, type DeviceFacts, DeviceFactsSchema, MachineIdSchema, userDistrosOf, WslEnvironmentSchema } from "./hosts.js";
+import { parseHostConnection, type DeviceFacts, DeviceFactsSchema, MachineIdSchema, userDistrosOf, WslEnvironmentSchema } from "./hosts.js";
 import { DEV_VERSION } from "../state/versions.js";
 // Desktop-sync report shape shared by the agent, daemon and browser, produced only by the agent's own `deviceReport`.
 // The agent never reports `sandboxes`; the docker half is filled in by whoever reads the report, scoped to the reader's
@@ -55,7 +55,8 @@ export const SandboxResourcesSchema = z.object({
 export type SandboxResources = z.infer<typeof SandboxResourcesSchema>;
 
 // Fields also exported separately for callers that compose them and enforce the at-least-one rule themselves.
-export const SandboxResourcesAskSchema = SandboxResourcesAskFieldsSchema.refine((ask) => Object.values(ask).some((value) => value !== undefined), {
+// Strict like every device input (DeviceSandboxFlowSchema says why): it is only ever sent to a device.
+export const SandboxResourcesAskSchema = SandboxResourcesAskFieldsSchema.strict().refine((ask) => Object.values(ask).some((value) => value !== undefined), {
     message: "a reshape must change at least one thing",
 });
 export type SandboxResourcesAsk = z.infer<typeof SandboxResourcesAskSchema>;
@@ -117,7 +118,9 @@ export const DeviceSandboxFlowSchema = z.strictObject({
     // Approved overlay's sha256, required only by `rebuild`; only content matching it is ever built.
     hash: z.string().optional(),
     // `set-shape` only, both required by it: the whole shape, and when it takes effect.
-    shape: SandboxShapeSchema.optional(),
+    // Strict too, unlike the same shape read off a report (where a newer ic's extra field must not fail an older
+    // reader): an order carrying a field this agent does not know is refused rather than carried out without it.
+    shape: z.strictObject(SandboxShapeSchema.shape).optional(),
     when: SandboxShapeWhenSchema.optional(),
     // READ-ONLY for one release, from pages served by sandboxes older than `set-shape`: the old `reshape` op's delta,
     // and `later` to save it for the next restart instead. Nothing new sends either.
@@ -137,23 +140,22 @@ export const DeviceSandboxFlowSchema = z.strictObject({
     overlayHash: z.string().optional(),
 });
 export type DeviceSandboxFlow = z.infer<typeof DeviceSandboxFlowSchema>;
-// The `ic` argv for the shape and power ops, in the one TS place that spells ic's flags: the machine agent runs it and
-// the Devices view prints it for a person to type when the app's route to the machine is shut. A cap is `<n>g`/`<n>`
-// or ic's `default`, a switch the explicit on/off (a bare flag could only ever add). A field left out keeps what ic
-// already has for it (the shape saved for the next restart, else what runs): the Devices view always sends the whole
-// shape, a model's tool call may name one field. Nothing is judged here; ic checks the shape against the image's run
-// contract.
+// The `ic` argv for the shape and power ops, the one place any caller spells them: the machine agent runs it and the
+// Devices view prints it for a person to type when the app's route to the machine is shut. The shape travels as the
+// contract's own object, one `--set <field>=<JSON value>` per field, so no caller maps a field onto a flag of its own:
+// ic reads the pairs back into the contract's shape and refuses a field it does not know, as every device input does.
+// `when` is the contract's own word too. A field left out keeps what ic already has for it (the shape saved for the
+// next restart, else what runs): the Devices view always sends the whole shape, a model's tool call may name one
+// field. Nothing is judged here; ic checks the shape against the image's run contract. Needs an ic that takes `--set`
+// (the `set-shape` feature is advertised only then).
 export type SandboxShapeFields = { readonly [K in keyof SandboxShape]?: SandboxShape[K] | undefined };
 export const icShapeArgs = (slug: string, fields: SandboxShapeFields, when: SandboxShapeWhen): string[] => [
     "sandbox",
     "shape",
     slug,
-    ...(fields.memoryGib === undefined ? [] : ["--memory", fields.memoryGib === null ? "default" : `${fields.memoryGib}g`]),
-    ...(fields.cpus === undefined ? [] : ["--cpus", fields.cpus === null ? "default" : String(fields.cpus)]),
-    ...(fields.privileged === undefined ? [] : ["--privileged", fields.privileged ? "on" : "off"]),
-    ...(fields.gpu === undefined ? [] : ["--gpus", fields.gpu ? "on" : "off"]),
+    ...Object.entries(fields).flatMap(([field, value]) => (value === undefined ? [] : ["--set", `${field}=${JSON.stringify(value)}`])),
     "--when",
-    when === "now" ? "now" : "next-restart",
+    when,
 ];
 export const icForgetShapeArgs = (slug: string): string[] => ["sandbox", "shape", slug, "--forget"];
 // Power goes through ic too, so a Start or Restart from any door applies the shape saved for the next restart.
@@ -499,8 +501,11 @@ export const DeviceSchema = z.object({
     label: z.string(),
     // Desktop-sync enrollment with this sandbox; absent when reached only via a host capability.
     sync: DeviceSyncSchema.optional(),
-    // The host capability's id, when this machine is also a connected device. Absent otherwise.
+    // The host connection's key, when this machine is also a connected device. Absent otherwise.
     hostId: z.string().optional(),
+    // The card that connection is of, beside the key rather than parsed out of it: the machine's name, a label. Absent
+    // with `hostId`, and from a daemon older than the field (`deviceCard` reads the key then).
+    card: z.string().optional(),
     // The computer this row is an environment of, from whichever door has said (MachineIdSchema): what `machinesOf`
     // groups by. Absent when no door has, which leaves the row a computer of its own.
     machineId: MachineIdSchema.optional(),
@@ -542,7 +547,7 @@ export const deviceHostname = (device: Device): string | undefined => device.fac
 // and that is all an environment nobody has reached since this daemon booted can say about itself: liveness resets on
 // restart, so facts and reports are absent on a side that is merely asleep.
 export const deviceEnvironment = (device: Device): string | undefined =>
-    environmentOf(device.facts, device.report) ?? (device.hostId === undefined ? undefined : hostEnvironmentOf(device.hostId));
+    environmentOf(device.facts, device.report) ?? (device.hostId === undefined ? undefined : parseHostConnection(device.hostId).environment);
 
 const WSL_PREFIX = "wsl:";
 export const isWslDevice = (device: Device): boolean => deviceEnvironment(device)?.startsWith(WSL_PREFIX) === true;
@@ -559,7 +564,9 @@ const byEnvironment = (a: Device, b: Device): number =>
 
 // The card a device's door hangs off: one card is one computer, so two doors naming the same card are one machine
 // whatever either has said about itself — which is the whole of what an environment that has never connected says.
-const cardKey = (device: Device): string | undefined => (device.hostId === undefined ? undefined : hostEntryOf(device.hostId));
+// The row's own label, else its key read by the one parser there is (a row from a daemon older than `card`).
+export const deviceCard = (device: Pick<Device, "card" | "hostId">): string | undefined =>
+    device.card ?? (device.hostId === undefined ? undefined : parseHostConnection(device.hostId).card);
 
 // The computer a device is on, by whichever door said: its row, its connect-time facts, its report, its sync enrollment.
 export const deviceMachineId = (device: Device): string | undefined =>
@@ -568,7 +575,7 @@ export const deviceMachineId = (device: Device): string | undefined =>
 // What makes two devices one computer: a shared card, or a shared machine id. Nothing else: a hostname is shared by a
 // PC and its WSL distros and by two unrelated machines with the same name, so it joined things by accident.
 const tokensOf = (device: Device): string[] => {
-    const card = cardKey(device);
+    const card = deviceCard(device);
     const machine = deviceMachineId(device);
     return [...(card === undefined ? [] : [`card:${card.toLowerCase()}`]), ...(machine === undefined ? [] : [`machine:${machine}`])];
 };
@@ -613,8 +620,8 @@ const machineOf = (environments: readonly Device[]): Machine => {
     if (first === undefined) {
         return { key: "", label: "", environments };
     }
-    const named = environments.map(cardKey).find((key) => key !== undefined) ?? (rest.length === 0 ? undefined : deviceMachineId(first));
-    const label = first.label === first.hostId ? (cardKey(first) ?? first.label) : first.label;
+    const named = environments.map(deviceCard).find((key) => key !== undefined) ?? (rest.length === 0 ? undefined : deviceMachineId(first));
+    const label = first.label === first.hostId ? (deviceCard(first) ?? first.label) : first.label;
     return { key: named ?? first.key, label, environments };
 };
 

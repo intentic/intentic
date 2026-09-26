@@ -44,6 +44,11 @@ const services = (over: { enrolled?: (id: string) => boolean; answer?: () => { t
             config: { sandbox: { publicUrl: "https://work-abc.intentic.dev" } },
             hosts: {
                 enrolled: async (id: string) => over.enrolled?.(id) ?? false,
+                // Which card and environment the connection that came up is: its enrollment's record says.
+                list: async () => [
+                    { id: "rog", card: "rog", environment: HOST_NATIVE_ENVIRONMENT, machineId: "card:rog" },
+                    { id: "rog::wsl:archlinux", card: "rog", environment: "wsl:archlinux", machineId: "card:rog" },
+                ],
                 mintPairing: (id: string) => {
                     minted.push(id);
                     return { token: `iht_for_${id}`, expiresIn: 600 };

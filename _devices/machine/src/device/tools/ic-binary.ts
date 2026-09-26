@@ -100,12 +100,12 @@ const helpOf = async (verb: readonly string[]): Promise<string | undefined> => {
     return undefined;
 };
 
-// Which optional ops this device implements, from what its `ic`'s own help says it has. Pure over the two helps, so
-// the derivation is asserted without an ic.
-export const featuresFrom = (reshapeHelp: string | undefined, shapeHelp: string | undefined): DeviceFeature[] => [
-    ...(reshapeHelp?.includes("--later") === true ? [DEVICE_FEATURE_RESHAPE_LATER] : []),
-    ...(shapeHelp?.includes("--when") === true ? [DEVICE_FEATURE_SET_SHAPE] : []),
-];
+// Which optional ops this device implements, from what its `ic`'s own help says it has. Both ride `ic sandbox shape`
+// taking the contract's own shape (`--set`, the contract's `icShapeArgs`): `set-shape` directly, and the old `reshape`
+// op's `later` through the same verb (sandboxes.ts, olderResizePlan). Pure over the help, so the derivation is asserted
+// without an ic.
+export const featuresFrom = (shapeHelp: string | undefined): DeviceFeature[] =>
+    shapeHelp?.includes("--set") === true ? [DEVICE_FEATURE_RESHAPE_LATER, DEVICE_FEATURE_SET_SHAPE] : [];
 
 // Asked once per process when it answers: the agent keeps its ic current before asking (ensureCurrentIc), so the answer
 // holds until the agent itself is replaced.
@@ -113,8 +113,7 @@ let features: Promise<DeviceFeature[]> | undefined;
 export const deviceFeatures = async (): Promise<DeviceFeature[]> => {
     features ??= (async () => {
         await ensureCurrentIc();
-        const [reshape, shape] = await Promise.all([helpOf(["sandbox", "reshape"]), helpOf(["sandbox", "shape"])]);
-        return featuresFrom(reshape, shape);
+        return featuresFrom(await helpOf(["sandbox", "shape"]));
     })();
     const answered = await features;
     if (answered.length === 0) {

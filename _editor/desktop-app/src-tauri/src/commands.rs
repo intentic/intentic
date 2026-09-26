@@ -648,7 +648,7 @@ pub async fn sandbox_recreate(
 }
 
 /* A SANDBOX'S SHAPE, as the resources form sends it: the sandbox contract's SandboxShape, whole. */
-#[derive(Deserialize, Debug, PartialEq, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
 pub struct Shape {
     /// Whole GiB, or null for the default share derived from this machine.
@@ -659,35 +659,29 @@ pub struct Shape {
     pub gpu: bool,
 }
 
-/// `ic sandbox shape`'s flags for a whole shape and when it takes effect (`now`, `nextRestart`), or `--forget` for
-/// none: a cap is `<n>g` / `<n>` or ic's `default`, a switch the explicit word (a bare flag could only ever add). The
-/// Rust twin of the contract's `icShapeArgs`, which the machine agent and the web run; nothing is judged here, ic
-/// checks the shape against the image's run contract.
+/// `ic sandbox shape`'s arguments for a whole shape and when it takes effect (`now`, `nextRestart`), or `--forget` for
+/// none. The shape goes as the contract's own object, one `--set FIELD=JSON` per field serialized from the struct the
+/// form sent, and `when` as the contract's own word, which ic takes as it is: nothing here maps a field onto a flag,
+/// so ic's own parser is the only place the spelling lives. Nothing is judged here; ic checks the shape against the
+/// image's run contract.
 pub fn shape_flags(shape: Option<&Shape>, when: &str) -> Result<Vec<String>, String> {
     let Some(shape) = shape else {
         return Ok(vec!["--forget".to_string()]);
     };
-    let when = match when {
-        "now" => "now",
-        "nextRestart" => "next-restart",
-        _ => return Err(format!("unknown time for a shape: {when}")),
+    if !matches!(when, "now" | "nextRestart") {
+        return Err(format!("unknown time for a shape: {when}"));
+    }
+    let serde_json::Value::Object(fields) =
+        serde_json::to_value(shape).map_err(|error| error.to_string())?
+    else {
+        return Err("a shape serializes to an object".to_string());
     };
-    let cap = |value: Option<u32>, unit: &str| {
-        value.map_or_else(|| "default".to_string(), |n| format!("{n}{unit}"))
-    };
-    let switch = |on: bool| (if on { "on" } else { "off" }).to_string();
-    Ok(vec![
-        "--memory".to_string(),
-        cap(shape.memory_gib, "g"),
-        "--cpus".to_string(),
-        cap(shape.cpus, ""),
-        "--privileged".to_string(),
-        switch(shape.privileged),
-        "--gpus".to_string(),
-        switch(shape.gpu),
-        "--when".to_string(),
-        when.to_string(),
-    ])
+    let mut args: Vec<String> = fields
+        .iter()
+        .flat_map(|(field, value)| ["--set".to_string(), format!("{field}={value}")])
+        .collect();
+    args.extend(["--when".to_string(), when.to_string()]);
+    Ok(args)
 }
 
 /// `recreate.sh <slug> --shape <ic flags>` / `recreate.ps1 -Slug … -Shape <ic flags>`: everything after the switch
@@ -1270,7 +1264,7 @@ mod tests {
         );
     }
 
-    /* THE SHAPE, PER HOST: the shim's own switch first, then `ic sandbox shape`'s flags verbatim behind it. */
+    /* THE SHAPE, PER HOST: the shim's own switch first, then the contract's shape as `ic sandbox shape --set` pairs behind it. */
     #[test]
     fn a_shape_forwards_ics_flags_behind_the_shims_own_switch_per_host() {
         let unix =
@@ -1281,16 +1275,16 @@ mod tests {
             vec![
                 "work",
                 "--shape",
-                "--memory",
-                "12g",
-                "--cpus",
-                "default",
-                "--privileged",
-                "off",
-                "--gpus",
-                "on",
+                "--set",
+                "cpus=null",
+                "--set",
+                "gpu=true",
+                "--set",
+                "memoryGib=12",
+                "--set",
+                "privileged=false",
                 "--when",
-                "next-restart"
+                "nextRestart"
             ]
         );
         let windows = shape_script("work", None, "nextRestart", Host::Windows, RELEASE).unwrap();

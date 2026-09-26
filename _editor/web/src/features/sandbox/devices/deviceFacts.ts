@@ -1,4 +1,4 @@
-import { agentBuildSkew, agentStalled, type Device, type DeviceAgent, deviceDistro, hostEntryOf, isBehind, reportQuiet } from "@intentic/sandbox-contract";
+import { agentBuildSkew, agentStalled, type Device, type DeviceAgent, deviceCard, deviceDistro, isBehind, reportQuiet } from "@intentic/sandbox-contract";
 import { timeAgo } from "@intentic/ui/format";
 
 // What a Devices row says about the machine itself, as distinct from what it's doing for this sandbox
@@ -207,7 +207,7 @@ export const manageBlock = (device: Device, scopes: DeviceScopes | undefined): M
     }
     const card = cardOf(device, scopes);
     // The card's own form, which is the machine's: an environment of it has no settings page of its own to open.
-    const link = { connection: hostEntryOf(device.hostId), ...(card === undefined ? {} : { card }) };
+    const link = { connection: deviceCard(device) ?? device.hostId, ...(card === undefined ? {} : { card }) };
     // The device door can be shut while the sync door stays open. Suppressed when the row's own `gap` already
     // explains the silence.
     if (device.online !== true) {

@@ -184,16 +184,25 @@ enum SandboxCommand {
     Shape {
         /// The sandbox to shape (always named: this changes a container's privileges)
         slug: String,
-        /// Memory cap in whole GiB, e.g. 12g — or `default` for the share derived from this machine
+        /// One field of the shape in the sandbox contract's own spelling, FIELD=JSON: memoryGib=12,
+        /// memoryGib=null (the share derived from this machine), cpus=4, cpus=null (every core),
+        /// privileged=true, gpu=false. Repeat it per field; a field ic does not know is refused. What every
+        /// program calling ic sends (the contract's `icShapeArgs`, the desktop app)
+        #[arg(long = "set", value_name = "FIELD=JSON", group = "fields", conflicts_with_all = ["memory", "cpus", "privileged", "gpus"])]
+        set: Vec<String>,
+        /// Memory cap in whole GiB, e.g. 12g — or `default` for the share derived from this machine. The
+        /// older spelling of `--set memoryGib=…`, kept for machine agents older than `--set`
         #[arg(long, group = "fields")]
         memory: Option<String>,
-        /// CPU cap in whole cores, e.g. 4 — or `default` for every core the engine has
+        /// CPU cap in whole cores, e.g. 4 — or `default` for every core the engine has (`--set cpus=…`)
         #[arg(long, group = "fields")]
         cpus: Option<String>,
         /// Run the container privileged (on/off); a privilege the approved environment demands stays in force
+        /// (`--set privileged=…`)
         #[arg(long, value_enum, group = "fields")]
         privileged: Option<Switch>,
         /// Pass this machine's NVIDIA GPUs through (on/off); dropped, with a note, on a host without the runtime
+        /// (`--set gpu=…`)
         #[arg(long, value_enum, group = "fields")]
         gpus: Option<Switch>,
         /// `now` restarts onto the shape; `next-restart` saves it and restarts nothing
@@ -220,6 +229,14 @@ enum SandboxCommand {
     Restart {
         /// The sandbox to restart (omit when this machine runs exactly one)
         slug: Option<String>,
+    },
+    /// Print the tail of a sandbox's own log, both streams (read-only)
+    Logs {
+        /// The sandbox whose log to read (omit when this machine runs exactly one)
+        slug: Option<String>,
+        /// How many of the last lines to print
+        #[arg(long, default_value_t = 200)]
+        tail: u32,
     },
     /// Check every link of a sandbox's reachability chain and name what is broken, with its fix (read-only)
     Doctor {
@@ -280,10 +297,12 @@ enum Switch {
     Off,
 }
 
-/// When `ic sandbox shape` takes effect.
+/// When `ic sandbox shape` takes effect. `nextRestart` is the sandbox contract's own word for the second, so a
+/// program passes the contract's value as it is.
 #[derive(Clone, Copy, PartialEq, Debug, ValueEnum)]
 enum When {
     Now,
+    #[value(alias = "nextRestart")]
     NextRestart,
 }
 
@@ -449,6 +468,7 @@ fn main() {
             }
             SandboxCommand::Shape {
                 slug,
+                set,
                 memory,
                 cpus,
                 privileged,
@@ -458,15 +478,24 @@ fn main() {
                 skip_preflight,
             } => match (forget, when) {
                 (true, _) | (false, None) => sandbox::desired::forget(slug),
-                (false, Some(when)) => sandbox::desired::set(
-                    slug,
-                    ask_of(memory, cpus, privileged, gpus),
-                    match when {
-                        When::Now => sandbox::desired::When::Now,
-                        When::NextRestart => sandbox::desired::When::NextRestart,
-                    },
-                    preflight(skip_preflight),
-                ),
+                (false, Some(when)) => {
+                    let ask = if set.is_empty() {
+                        Ok(ask_of(memory, cpus, privileged, gpus))
+                    } else {
+                        shape::Ask::from_fields(&set)
+                    };
+                    ask.and_then(|ask| {
+                        sandbox::desired::set(
+                            slug,
+                            ask,
+                            match when {
+                                When::Now => sandbox::desired::When::Now,
+                                When::NextRestart => sandbox::desired::When::NextRestart,
+                            },
+                            preflight(skip_preflight),
+                        )
+                    })
+                }
             },
             SandboxCommand::Start { slug } => {
                 sandbox::power::run(sandbox::power::Power::Start, slug)
@@ -475,6 +504,7 @@ fn main() {
             SandboxCommand::Restart { slug } => {
                 sandbox::power::run(sandbox::power::Power::Restart, slug)
             }
+            SandboxCommand::Logs { slug, tail } => sandbox::logs::run(slug, tail),
             SandboxCommand::Doctor { slug } => sandbox::doctor::run(slug),
             SandboxCommand::List { json: false } => sandbox::list(),
             SandboxCommand::List { json: true } => sandbox::listing::list_json(),
@@ -1026,6 +1056,7 @@ mod tests {
             command:
                 Command::Sandbox(SandboxCommand::Shape {
                     slug,
+                    set,
                     memory,
                     cpus,
                     privileged,
@@ -1053,6 +1084,7 @@ mod tests {
             panic!("a whole shape for the next restart did not parse")
         };
         assert_eq!(slug, "abc123");
+        assert!(set.is_empty());
         assert_eq!(
             (memory.as_deref(), cpus.as_deref()),
             (Some("20g"), Some("default"))
@@ -1087,6 +1119,66 @@ mod tests {
         assert!(parse(&["sandbox", "shape", "abc123", "--forget", "--skip-preflight"]).is_err());
         // Always named, like reshape: this changes a container's privileges.
         assert!(parse(&["sandbox", "shape", "--forget"]).is_err());
+    }
+
+    /* What every program sends: the contract's own shape as `--set` pairs and its own `when` (the argv the sandbox
+    contract's `icShapeArgs` builds, asserted in its ic-shape-args.test.ts). */
+    #[test]
+    fn shape_takes_the_contracts_own_object_and_word_for_when() {
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Shape { set, when, .. }),
+        }) = parse(&[
+            "sandbox",
+            "shape",
+            "work",
+            "--set",
+            "memoryGib=20",
+            "--set",
+            "cpus=null",
+            "--set",
+            "privileged=false",
+            "--set",
+            "gpu=true",
+            "--when",
+            "nextRestart",
+        ])
+        else {
+            panic!("the contract's argv did not parse")
+        };
+        assert_eq!(when, Some(When::NextRestart));
+        assert_eq!(
+            shape::Ask::from_fields(&set).unwrap(),
+            shape::Ask {
+                memory: Some("20g".into()),
+                cpus: Some(String::new()),
+                privileged: Some(false),
+                gpus: Some(true),
+            }
+        );
+        // One spelling per call: the pairs and the older flags never mix.
+        assert!(parse(&[
+            "sandbox", "shape", "work", "--set", "cpus=4", "--memory", "12g", "--when", "now"
+        ])
+        .is_err());
+        assert!(parse(&["sandbox", "shape", "work", "--set", "cpus=4", "--forget"]).is_err());
+    }
+
+    #[test]
+    fn logs_takes_an_optional_slug_and_a_tail() {
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Logs { slug, tail }),
+        }) = parse(&["sandbox", "logs", "work", "--tail", "50"])
+        else {
+            panic!("logs did not parse")
+        };
+        assert_eq!((slug.as_deref(), tail), (Some("work"), 50));
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Logs { slug: None, tail }),
+        }) = parse(&["sandbox", "logs"])
+        else {
+            panic!("a bare logs did not parse")
+        };
+        assert_eq!(tail, 200);
     }
 
     #[test]
