@@ -12,6 +12,7 @@ import {
     resultsOf,
     routingMeta,
     timelineOf,
+    usualBranch,
 } from "./mainlineView";
 
 // No mocks: the main line's readout is a pure projection over the status the daemon serves, like landCheck beside it.
@@ -412,6 +413,20 @@ describe(`timelineOf`, () => {
         expect(timelineOf(pushStatus(undefined, { recent: [checked] }), 8)).toEqual([{ kind: `land`, run: checked }]);
         const older: MainlineStatus = { projects: [], recent: [checked], pushed: [push(`a`, NOW, [finding(`paths`)])] };
         expect(timelineOf(older, 8)).toEqual([{ kind: `land`, run: checked }]);
+    });
+});
+
+describe(`usualBranch`, () => {
+    // Read off the record, never assumed to be `main`: a repository's main line can be called anything.
+    it(`is the branch most pushes went to, the newest one's on a tie, and none without a branch named`, () => {
+        const to = (id: string, branch: string | undefined, at: number): MainlinePush => {
+            const { branch: _usual, ...rest } = push(id, at, []);
+            return branch === undefined ? rest : { ...rest, branch };
+        };
+        expect(usualBranch(pushStatus([to(`c`, `feature`, NOW), to(`b`, `trunk`, NOW - 1), to(`a`, `trunk`, NOW - 2)]))).toBe(`trunk`);
+        expect(usualBranch(pushStatus([to(`b`, `develop`, NOW), to(`a`, `main`, NOW - 1)]))).toBe(`develop`);
+        expect(usualBranch(pushStatus([to(`a`, undefined, NOW)]))).toBeUndefined();
+        expect(usualBranch(pushStatus(undefined))).toBeUndefined();
     });
 });
 

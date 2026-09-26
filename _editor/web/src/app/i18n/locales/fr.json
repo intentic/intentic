@@ -4509,7 +4509,8 @@
             "untrackedLeave": "{count} fichier non suivi quitte le disque : il n'a jamais été committé, git n'en a donc aucune copie : | {count} fichiers non suivis quittent le disque : ils n'ont jamais été committés, git n'en a donc aucune copie :",
             "watchRun": "Le regarder tourner",
             "leftInMainLine": "{count} restant dans la ligne principale | {count} restants dans la ligne principale",
-            "you": "vous"
+            "you": "vous",
+            "pushOutdated": "mettez à jour le sandbox pour voir ce qu'il a laissé"
         },
         "rowActions": {
             "openManagementPanel": "Ouvrir le panneau de gestion"

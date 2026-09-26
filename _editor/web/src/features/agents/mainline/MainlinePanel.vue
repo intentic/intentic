@@ -23,6 +23,7 @@ import {
     shortSha,
     sinceWhen,
     timelineOf,
+    usualBranch,
 } from "./mainlineView";
 import { openLandConversation, useLandTitle } from "./openLanded";
 
@@ -101,15 +102,23 @@ const measured = (run: MainlineRun): string => {
     return run.lands.length === 1 ? title : t(`agents.mainline.andMore`, { title, count: run.lands.length - 1 });
 };
 
-// A push by its commit, and by its branch only when that is not the one every push goes to.
-const pushName = (push: MainlinePush): string =>
-    push.branch === undefined || push.branch === `main` || push.branch === `master`
-        ? t(`agents.mainline.push.row`, { sha: shortSha(push.head) })
-        : t(`agents.mainline.push.rowBranch`, { sha: shortSha(push.head), branch: push.branch });
+// The branch the record's pushes go to, which no row repeats (usualBranch).
+const usual = computed(() => usualBranch(props.status));
+const elsewhere = (push: MainlinePush): string | undefined => (push.branch === undefined || push.branch === usual.value ? undefined : push.branch);
 
-// The branch a push went to, as the record's narrow row shows it beside the commit: only when it is not main.
-const pushBranch = (push: MainlinePush): string =>
-    push.branch === undefined || push.branch === `main` || push.branch === `master` ? `` : `→ ${push.branch}`;
+// A push by its commit, and by its branch only when that is not the one the pushes go to.
+const pushName = (push: MainlinePush): string => {
+    const branch = elsewhere(push);
+    return branch === undefined
+        ? t(`agents.mainline.push.row`, { sha: shortSha(push.head) })
+        : t(`agents.mainline.push.rowBranch`, { sha: shortSha(push.head), branch });
+};
+
+// The branch a push went to, as the record's narrow row shows it beside the commit: only when it is not the usual one.
+const pushBranch = (push: MainlinePush): string => {
+    const branch = elsewhere(push);
+    return branch === undefined ? `` : `→ ${branch}`;
+};
 
 // What a push left, as the record says it: still standing, all of it since settled, or nothing at all.
 const pushOutcome = (event: Extract<MainlineEvent, { kind: `push` }>): { readonly words: string; readonly tone: string } =>

@@ -4520,7 +4520,8 @@
             "untrackedLeave": "{count} nicht verfolgte Datei verlässt die Platte: sie wurde nie committet, git hat also keine Kopie: | {count} nicht verfolgte Dateien verlassen die Platte: sie wurden nie committet, git hat also keine Kopie:",
             "watchRun": "Ihm zusehen",
             "leftInMainLine": "{count} in der Hauptlinie übrig | {count} in der Hauptlinie übrig",
-            "you": "Sie"
+            "you": "Sie",
+            "pushOutdated": "Sandbox aktualisieren, um zu sehen, was er hinterließ"
         },
         "rowActions": {
             "openManagementPanel": "Verwaltungsbereich öffnen"

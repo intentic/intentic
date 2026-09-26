@@ -4553,7 +4553,8 @@
             "untrackedLeave": "{count} nieśledzony plik znika z dysku: nigdy nie był zacommitowany, więc git nie ma kopii: | {count} nieśledzone pliki znikają z dysku: nigdy nie były zacommitowane, więc git nie ma kopii: | {count} nieśledzonych plików znika z dysku: nigdy nie były zacommitowane, więc git nie ma kopii:",
             "watchRun": "Obejrzyj, jak działa",
             "leftInMainLine": "{count} zostało w głównej linii | {count} zostały w głównej linii | {count} zostało w głównej linii",
-            "you": "Ty"
+            "you": "Ty",
+            "pushOutdated": "zaktualizuj sandbox, by zobaczyć, co zostawił"
         },
         "rowActions": {
             "openManagementPanel": "Otwórz panel zarządzania"

@@ -212,6 +212,20 @@ export const leftSince = (status: MainlineStatus | undefined, since: number): nu
 // A pushed commit as git abbreviates it.
 export const shortSha = (sha: string): string => sha.slice(0, 7);
 
+// The branch the record's pushes go to, so a row names its branch only when it went somewhere else: the one most of them
+// went to, and on a tie the one the newest went to. Read off the record rather than assumed to be `main`, since a
+// repository's own main line can be called anything.
+export const usualBranch = (status: MainlineStatus): string | undefined => {
+    const counts = new Map<string, number>();
+    for (const push of pushesOf(status)) {
+        if (push.branch !== undefined) {
+            counts.set(push.branch, (counts.get(push.branch) ?? 0) + 1);
+        }
+    }
+    // Map keeps first insertion, which is the newest push's order, so a stable sort breaks a tie towards the newest.
+    return [...counts].toSorted((left, right) => right[1] - left[1])[0]?.[0];
+};
+
 // One project's line in the panel's Result column: its last settled check, and the red streak when it is in one.
 export interface MainlineResult {
     readonly project: string;

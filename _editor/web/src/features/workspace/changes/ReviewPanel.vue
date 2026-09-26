@@ -46,7 +46,7 @@ import ChangeRowName from "../../../components/ChangeRowName.vue";
 import OtherSandboxChanges from "./OtherSandboxChanges.vue";
 import ModuleLabel from "../../../components/ModuleLabel.vue";
 import { useVocabulary } from "../../../core-views/vocabulary";
-import { leftSince } from "../../agents/mainline/mainlineView";
+import { daemonOutdated, leftSince } from "../../agents/mainline/mainlineView";
 import { useMainline } from "../../agents/mainline/useMainline";
 import { useT } from "@intentic/ui/i18n";
 
@@ -789,6 +789,10 @@ const stageLine = computed<string | undefined>(() => {
     const sent = pushFlow.pushed.value;
     if (sent === undefined) {
         return undefined;
+    }
+    // A daemon too old to keep what pushes left cannot say, and "Pushed" alone would read as nothing left.
+    if (mainline.value !== undefined && daemonOutdated(mainline.value)) {
+        return `Pushed ${sent.what} · ${t(`workspace.reviewPanel.pushOutdated`)}`;
     }
     const left = leftByPush.value;
     return left === 0 ? `Pushed ${sent.what}` : `Pushed ${sent.what} · ${t(`workspace.reviewPanel.leftInMainLine`, { count: left }, left)}`;

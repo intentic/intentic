@@ -4845,7 +4845,8 @@
             "untrackedLeave": "{count} untracked file leaves the disk: it was never committed, so git has no copy: | {count} untracked files leave the disk: they were never committed, so git has no copy:",
             "watchRun": "Watch it run",
             "leftInMainLine": "{count} left in Main line | {count} left in Main line",
-            "you": "you"
+            "you": "you",
+            "pushOutdated": "update the sandbox to see what it left"
         },
         "rowActions": {
             "openManagementPanel": "Open management panel"

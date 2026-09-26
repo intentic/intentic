@@ -4549,7 +4549,8 @@
             "untrackedLeave": "{count} archivo sin seguimiento sale del disco: nunca se le hizo commit, así que git no tiene copia: | {count} archivos sin seguimiento salen del disco: nunca se les hizo commit, así que git no tiene copia:",
             "watchRun": "Verlo ejecutarse",
             "leftInMainLine": "{count} pendiente en la línea principal | {count} pendientes en la línea principal",
-            "you": "tú"
+            "you": "tú",
+            "pushOutdated": "actualiza el sandbox para ver lo que dejó"
         },
         "rowActions": {
             "openManagementPanel": "Abrir el panel de gestión"
