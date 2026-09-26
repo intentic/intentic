@@ -213,7 +213,7 @@ const backToSetup = async (): Promise<void> => {
                     <!-- `color-scheme: light` matches Google's button iframe so the browser paints no opaque canvas behind it. -->
                     <div v-else ref="btn" class="mt-2 flex justify-center" style="color-scheme: light"></div>
                     <template v-if="passkeyOffered">
-                        <span class="text-2xs uppercase tracking-wide text-subtle">{{ t(`shared.or`) }}</span>
+                        <span class="text-2xs uppercase tracking-wide text-subtle">{{ t(`sandbox.signInWall.or`) }}</span>
                         <Button
                             :label="t(`sandbox.signInWall.usePasskey2`)"
                             severity="secondary"

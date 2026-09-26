@@ -26,6 +26,7 @@
             "sendTurnAgainSame": "Renvoyer ce tour. C'est la même demande qu'avant, pas un nouveau message.",
             "stillWorking": "{running} sur {total} travaillent encore",
             "stopWatchingConversationStays": "Ne plus suivre ; cette conversation reste en place",
+            "temporary": ", temporaire",
             "waitingMaintainer": "{landAsk} : en attente d'un mainteneur"
         },
         "agentConflictReport": {
@@ -70,7 +71,8 @@
             "couldNotReact": "Impossible de laisser cette réaction.",
             "markWith": "Réagir avec {emoji}",
             "markedBy": "{emoji} de {who}",
-            "pickAMark": "Choisir une réaction"
+            "pickAMark": "Choisir une réaction",
+            "you": "vous"
         },
         "agentReviewPanel": {
             "agentHasntChangedAny": "Cet agent n'a modifié aucun fichier. Sa conversation est dans {remoteName} : ouvrez-la là-bas pour lui demander quelque chose, et tout ce qu'il écrit apparaît ici.",
@@ -264,7 +266,8 @@
             "held": "retenu",
             "reject": "Rejeter",
             "rejectHeldWake": "Rejeter ce réveil retenu",
-            "runNowExactlyWhat": "Le lancer maintenant, avec exactement ce qui s'est déclenché : la session atterrit sur ce tableau"
+            "runNowExactlyWhat": "Le lancer maintenant, avec exactement ce qui s'est déclenché : la session atterrit sur ce tableau",
+            "waiting": "vous attend"
         },
         "liveMetrics": {
             "coresValue": "{cores} cœur | {cores} cœurs",
@@ -519,6 +522,7 @@
         },
         "login": {
             "acceptableUsePolicy": "Politique d'usage acceptable",
+            "and": "et",
             "buildAgents": "Construire avec des agents",
             "privacyPolicy": "Politique de confidentialité",
             "terms": "Conditions",
@@ -567,6 +571,7 @@
             "switchBrowserOpen": "Changer de navigateur : {count} ouverts",
             "takeControl": "Prendre le contrôle",
             "takeControlFixStep": "Prenez le contrôle, corrigez cette étape, puis rendez la main.",
+            "waiting": "vous attend",
             "youreDrivingHandBack": "Vous êtes aux commandes · rendre la main"
         }
     },
@@ -1550,7 +1555,8 @@
         "usageRing": {
             "everyPoolResetFull": "Chaque réserve est réinitialisée : la totalité du quota est disponible.",
             "floorsEveryDeviceOn": "≥ sont des planchers : tous les appareils du compte puisent dans les mêmes réserves.",
-            "measured": "mesuré {measuredAt}"
+            "measured": "mesuré {measuredAt}",
+            "resets": "réinitialisation {resetsAt}"
         },
         "vpnConnections": {
             "connectCode": "Se connecter avec un code",
@@ -1562,6 +1568,9 @@
         },
         "workflowMark": {
             "step": "· étape {index}/{total}"
+        },
+        "railCard": {
+            "temporary": ", temporaire"
         }
     },
     "connect": {
@@ -1933,6 +1942,7 @@
             "startAgentOnReads": "Lancer un agent dessus : il lit les deux copies de chaque fichier coincé et met les deux bouts d'accord."
         },
         "connectDeviceHint": {
+            "and": "et",
             "connect": "Le connecter",
             "syncsSandboxNotConnected": "synchronise ce sandbox mais n'est pas connecté comme appareil."
         },
@@ -2600,6 +2610,7 @@
             "read2": "Relevé",
             "reconnectOnAgentTab": "reconnectez-le dans l'onglet Agent | reconnectez-les dans l'onglet Agent",
             "reopens": "Rouvre",
+            "resets": "réinitialisation {resetsAt}",
             "seatFromAdmin": "demandez à un admin de l'organisation de lui attribuer un siège | demandez à un admin de l'organisation de leur attribuer des sièges",
             "showingMostConstrained": "affichage des {max_bars} plus contraintes sur {count}",
             "used": "Utilisé",
@@ -2680,7 +2691,8 @@
             "viewer": "Observateur",
             "watchEverythingAgentsChats": "Peut tout voir : agents, chats, fichiers. Ne peut rien changer.",
             "writer": "Rédacteur",
-            "writerNeedsArea": "Choisissez au moins un dossier. Un rédacteur n'est accordé que lorsqu'il en détient un."
+            "writerNeedsArea": "Choisissez au moins un dossier. Un rédacteur n'est accordé que lorsqu'il en détient un.",
+            "you": "vous"
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Catégorie de paramètres de l'agent",
@@ -3009,6 +3021,7 @@
             "continueGoogleToSecurely": "Continuez avec Google pour relier le navigateur directement et en toute sécurité à votre sandbox.",
             "intenticSignsInThrough": "Intentic vous connecte via votre navigateur, puis vous ramène directement ici.",
             "lostPasskeysUseOne": "Passkeys perdues ? Utilisez l'un de vos codes de récupération.",
+            "or": "ou",
             "ownerSandboxRequiresPasskey": "Le propriétaire de ce sandbox exige une passkey. Ajoutez-en une maintenant : le verrou de votre propre appareil (empreinte, visage ou code) est ce qui ouvrira ce sandbox désormais.",
             "sandboxOnlyOpensPasskey": "Ce sandbox ne s'ouvre qu'avec une passkey. Utilisez celle que vous y avez enregistrée.",
             "signInToReach": "Connectez-vous pour joindre votre sandbox",
@@ -3639,7 +3652,6 @@
         "active": "Actifs",
         "address": "Adresse",
         "allProviders": "Tous les fournisseurs",
-        "and": "et",
         "apiTokens": "Jetons d'API",
         "archived": "Archivés",
         "blocked": "bloquée",
@@ -3650,7 +3662,6 @@
         "connected": "Connecté",
         "connections": "Vos connexions",
         "domain": "Domaine",
-        "earlier": "{hiddenFinished} plus anciens",
         "files": "Fichiers",
         "finished": "Terminés",
         "folders": "Dossiers",
@@ -3660,27 +3671,22 @@
         "models": "Modèles",
         "name": "Nom",
         "needs": "A besoin de vous",
-        "or": "ou",
         "other": "Autre",
         "planLimits": "Limites de l'offre",
         "preview": "Aperçu",
         "removed": "supprimé",
-        "resets": "réinitialisation {resetsAt}",
         "review": "Revue",
         "running": "En marche",
-        "sandbox": "Ce sandbox",
         "settings": "Paramètres",
         "shared": "Partagé",
         "subagents": "Sous-agents",
-        "temporary": ", temporaire",
         "thisMachine": "cette machine",
+        "thisSandbox": "Ce sandbox",
         "token": "Jeton",
         "unfinishedSetup": "Installation inachevée",
         "upToDate": "à jour",
-        "waiting": "vous attend",
         "workspace": "Espace de travail",
-        "worthKnowing": "Bon à savoir",
-        "you": "vous"
+        "worthKnowing": "Bon à savoir"
     },
     "shell": {
         "accountPanel": {
@@ -3965,6 +3971,7 @@
             "noServerYetOne": "Pas encore de serveur. Il en est demandé un dès que quelque chose que vous voulez en a besoin.",
             "noServicesYet": "Pas encore de services.",
             "optionalSelfHosted": "(facultatif : auto-hébergé)",
+            "or": "ou",
             "outlinePaperlessNgxOpenproject": " : Outline, Paperless-ngx, OpenProject, SigNoz et d'autres.",
             "previewChangesAboveApply": "Prévisualisez vos changements ci-dessus, puis appliquez.",
             "provisionedLink": "(provisionné pour vous). Liez",
@@ -4450,7 +4457,8 @@
             "unstaged": "Non indexé",
             "untrackedLeave": "{count} fichier non suivi quitte le disque : il n'a jamais été committé, git n'en a donc aucune copie : | {count} fichiers non suivis quittent le disque : ils n'ont jamais été committés, git n'en a donc aucune copie :",
             "watchRun": "Le regarder tourner",
-            "leftInMainLine": "{count} restant dans la ligne principale | {count} restants dans la ligne principale"
+            "leftInMainLine": "{count} restant dans la ligne principale | {count} restants dans la ligne principale",
+            "you": "vous"
         },
         "rowActions": {
             "openManagementPanel": "Ouvrir le panneau de gestion"

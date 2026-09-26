@@ -489,7 +489,7 @@ const grab = (event: PointerEvent): void => {
                         run.text
                     }}</span>
                     <!-- Italic is invisible to a screen reader, so the peek state rides along as text, not an aria-label with no role. -->
-                    <span v-if="peek" class="sr-only">{{ t(`shared.temporary`) }}</span>
+                    <span v-if="peek" class="sr-only">{{ t(`agents.agentCard.temporary`) }}</span>
                 </span>
                 <!-- Keeps a peeked chat open; leads the affordance row since it's the one press with a deadline (the tab closes on the next click elsewhere). -->
                 <button

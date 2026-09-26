@@ -93,7 +93,7 @@ const overlayChip = (...twClasses: string[]) =>
 /** Uppercase section heading label (e.g. "CONNECTIONS", "YOUR APPS"). */
 const sectionLabel = (...twClasses: string[]) => twMerge(`text-xs font-semibold uppercase tracking-wide text-subtle`, ...twClasses);
 
-/** The same heading on a dense surface (a dock's panel, a group inside a card, a rail's group), one step smaller. A
+/** The same heading on a dense surface (a status bar's panel, a group inside a card, a rail's group), one step smaller. A
  * separate recipe, like `inputSm`, so the size is chosen by name rather than by overriding the text class. */
 const sectionLabelSm = (...twClasses: string[]) => twMerge(`text-2xs font-semibold uppercase tracking-wide text-subtle`, ...twClasses);
 

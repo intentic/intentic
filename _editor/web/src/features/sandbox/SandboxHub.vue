@@ -120,7 +120,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
 
 <template>
     <HubLayout
-        :title="sandbox.active.value?.name ?? t(`shared.sandbox2`)"
+        :title="sandbox.active.value?.name ?? t(`shared.sandboxHub`)"
         :route-name="HUB"
         :default-slug="defaultSlug"
         :addressable="isGuest"

@@ -46,7 +46,7 @@ const landTitle = useLandTitle();
 const FAILURES_SHOWN = 3;
 const RECENT_SHOWN = 8;
 
-const HEADING = `flex h-5 items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle`;
+const HEADING = ui.sectionLabelSm(`flex h-5 items-center gap-1.5`);
 // A land's title, which opens its conversation: the whole row is the press.
 const LAND = `-mx-1.5 flex min-w-0 items-center gap-2 rounded-md px-1.5 py-0.5 text-left text-xs text-muted transition-colors hover:bg-overlay hover:text-content`;
 

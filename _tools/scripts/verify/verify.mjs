@@ -89,9 +89,9 @@ if (verdicts === undefined) {
     }
 }
 
-// `_tools/scripts` is plumbing, not a workspace package, so `turbo run test` can't reach its `*.test.mjs` files; run
-// directly via node:test, which needs no install.
-step("script self-tests", process.execPath, ["--test", "_tools/scripts/**/*.test.mjs"]);
+// `_tools/scripts` and `_tools/checks` are plumbing, not workspace packages, so `turbo run test` can't reach their
+// `*.test.mjs` files; run directly via node:test, which needs no install.
+step("script self-tests", process.execPath, ["--test", "_tools/scripts/**/*.test.mjs", "_tools/checks/**/*.test.mjs"]);
 
 // The JUnit reports the test run leaves for failure-units.mjs; removed once read.
 const junitDir = mkdtempSync(join(tmpdir(), "verify-junit-"));

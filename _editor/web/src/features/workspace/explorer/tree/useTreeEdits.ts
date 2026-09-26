@@ -47,6 +47,8 @@ export interface TreeEditsHost {
     readonly store: Pick<ReturnType<typeof useWorkspaceTree>, "run" | "moveEntry" | "createDir" | "createFile">;
     // A new file opens straight into edit mode, kept rather than previewed, so a later peek can't close it mid-type.
     readonly openCreated: (path: string) => void;
+    // Told the new path once a rename lands; the surface decides whether that is worth saying.
+    readonly renamed: (to: string) => void;
 }
 
 export const useTreeEdits = (host: TreeEditsHost) => {
@@ -72,7 +74,10 @@ export const useTreeEdits = (host: TreeEditsHost) => {
     // package.json starts a fold, which opens so its siblings don't vanish under it.
     const renameTo = (from: string, to: string): void => {
         const type = host.byPath.value.get(from)?.type ?? `file`;
-        void store.run(() => store.moveEntry(from, to), t(`workspace.fileVerbs.couldntRename`));
+        void store.run(async () => {
+            await store.moveEntry(from, to);
+            host.renamed(to);
+        }, t(`workspace.fileVerbs.couldntRename`));
         host.openLanding(parentDir(to), [{ path: to, type }]);
         host.selectSingle(to);
     };

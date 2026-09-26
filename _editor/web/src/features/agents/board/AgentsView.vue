@@ -384,7 +384,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                         @click="move({ kind: 'expand' })"
                     >
                         <Icon :name="view.all ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
-                        {{ view.all ? t(`ui.action.showFewer`) : t(`shared.earlier`, { hiddenFinished }) }}
+                        {{ view.all ? t(`ui.action.showFewer`) : t(`ui.action.showEarlier`, { count: hiddenFinished }) }}
                     </button>
                     <!-- One-way, unlike the lane's toggle: this pile has no "fewer" worth offering, since collapsing it back would lose the reader's place mid-search. -->
                     <button

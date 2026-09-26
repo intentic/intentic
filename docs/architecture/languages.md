@@ -53,6 +53,7 @@ An extension builds its catalog and translator in one call, `extensionI18n` from
 
 - [`i18n-catalogs.mjs`](../../_tools/checks/i18n-catalogs.mjs): a translation holds only keys English has, with the same placeholders and plural forms. `--fix` drops the extras.
 - [`i18n-keys.mjs`](../../_tools/checks/i18n-keys.mjs): every `t()` key exists, every message is used, and every message compiles. vue-i18n's `t` accepts any string, so the compiler cannot catch a typo.
+- [`i18n-shared.mjs`](../../_tools/checks/i18n-shared.mjs): every `shared.*` message is a noun phrase. It refuses a conjunction, a personal pronoun, a leading imperative, a placeholder, punctuation at an edge and a key ending in a digit (`sandbox2`). A message that is right where it stands is listed with its reason in the check's `ALLOWED`, since a catalog has no comments to hold the pragma.
 - [`i18n-literals.mjs`](../../_tools/checks/i18n-literals.mjs): no English typed into a shipped `.vue` template, nor handed from code to what says it on screen (`say`, `warn`, `noticeOf`, `noticeFrom`, a store's `run(task, wrote)`).
 
 The daemon, the CLIs and the public site do not render through vue-i18n and are outside these rules.

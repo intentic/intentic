@@ -26,6 +26,7 @@
             "sendTurnAgainSame": "Envía este turno otra vez. Es la misma petición que antes, no un mensaje nuevo.",
             "stillWorking": "{running} de {total} siguen trabajando",
             "stopWatchingConversationStays": "Dejar de mirar; esta conversación se queda donde está",
+            "temporary": ", temporal",
             "waitingMaintainer": "{landAsk}: esperando a un responsable"
         },
         "agentConflictReport": {
@@ -71,7 +72,8 @@
             "couldNotReact": "No se pudo dejar esa reacción.",
             "markWith": "Reaccionar con {emoji}",
             "markedBy": "{emoji} de {who}",
-            "pickAMark": "Elige una reacción"
+            "pickAMark": "Elige una reacción",
+            "you": "tú"
         },
         "agentReviewPanel": {
             "agentHasntChangedAny": "Este agente no ha cambiado ningún archivo. Su conversación está en {remoteName}: ábrela allí para pedirle algo, y lo que escriba aparecerá aquí.",
@@ -268,7 +270,8 @@
             "held": "retenido",
             "reject": "Rechazar",
             "rejectHeldWake": "Rechazar este despertar retenido",
-            "runNowExactlyWhat": "Ejecútalo ahora, con exactamente lo que se disparó: la sesión aparece en este tablero"
+            "runNowExactlyWhat": "Ejecútalo ahora, con exactamente lo que se disparó: la sesión aparece en este tablero",
+            "waiting": "te espera"
         },
         "liveMetrics": {
             "coresValue": "{cores} núcleo | {cores} núcleos",
@@ -523,6 +526,7 @@
         },
         "login": {
             "acceptableUsePolicy": "Política de uso aceptable",
+            "and": "y",
             "buildAgents": "Construye con agentes",
             "privacyPolicy": "Política de privacidad",
             "terms": "Condiciones",
@@ -571,6 +575,7 @@
             "switchBrowserOpen": "Cambiar de navegador: {count} abiertos",
             "takeControl": "Tomar el control",
             "takeControlFixStep": "Toma el control, arregla ese paso y devuélvelo.",
+            "waiting": "te espera",
             "youreDrivingHandBack": "Estás conduciendo · devolver"
         }
     },
@@ -1559,7 +1564,8 @@
         "usageRing": {
             "everyPoolResetFull": "Todas las bolsas se han reiniciado: la asignación completa está disponible.",
             "floorsEveryDeviceOn": "≥ son mínimos: todos los dispositivos de la cuenta gastan de las mismas bolsas.",
-            "measured": "medido {measuredAt}"
+            "measured": "medido {measuredAt}",
+            "resets": "se reinicia {resetsAt}"
         },
         "vpnConnections": {
             "connectCode": "Conectar con un código",
@@ -1571,6 +1577,9 @@
         },
         "workflowMark": {
             "step": "· paso {index}/{total}"
+        },
+        "railCard": {
+            "temporary": ", temporal"
         }
     },
     "connect": {
@@ -1944,6 +1953,7 @@
             "startAgentOnReads": "Poner un agente a ello: lee las dos copias de cada archivo atascado y hace que los dos extremos coincidan."
         },
         "connectDeviceHint": {
+            "and": "y",
             "connect": "Conéctalo",
             "syncsSandboxNotConnected": "sincroniza este sandbox pero no está conectado como dispositivo."
         },
@@ -2612,6 +2622,7 @@
             "read2": "Leído",
             "reconnectOnAgentTab": "vuelve a conectarla en la pestaña Agente | vuelve a conectarlas en la pestaña Agente",
             "reopens": "Se reabre",
+            "resets": "se reinicia {resetsAt}",
             "seatFromAdmin": "pide a un admin de la organización que le asigne un puesto | pide a un admin de la organización que les asigne puestos",
             "showingMostConstrained": "mostrando las {max_bars} más ajustadas de {count}",
             "used": "Usado",
@@ -2692,7 +2703,8 @@
             "viewer": "Espectador",
             "watchEverythingAgentsChats": "Puede verlo todo: agentes, chats, archivos. No puede cambiar nada.",
             "writer": "Editor",
-            "writerNeedsArea": "Elige al menos una carpeta. Un editor no se concede hasta que tiene una."
+            "writerNeedsArea": "Elige al menos una carpeta. Un editor no se concede hasta que tiene una.",
+            "you": "tú"
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Categoría de ajustes del agente",
@@ -3024,6 +3036,7 @@
             "continueGoogleToSecurely": "Continúa con Google para conectar el navegador directamente a tu sandbox de forma segura.",
             "intenticSignsInThrough": "Intentic te identifica a través de tu navegador y luego te trae directo de vuelta aquí.",
             "lostPasskeysUseOne": "¿Has perdido las passkeys? Usa uno de tus códigos de recuperación.",
+            "or": "o",
             "ownerSandboxRequiresPasskey": "El propietario de este sandbox exige una passkey. Añade una ahora: el bloqueo de tu propio dispositivo (huella, cara o PIN) es lo que abrirá este sandbox de aquí en adelante.",
             "sandboxOnlyOpensPasskey": "Este sandbox solo se abre con una passkey. Usa la que registraste con él.",
             "signInToReach": "Inicia sesión para llegar a tu sandbox",
@@ -3665,7 +3678,6 @@
         "agent": "Agente",
         "agents": "Agentes",
         "allProviders": "Todos los proveedores",
-        "and": "y",
         "apiTokens": "Tokens de API",
         "archived": "Archivados",
         "attention": "Atención",
@@ -3677,7 +3689,6 @@
         "connected": "Conectado",
         "connections": "Tus conexiones",
         "domain": "Dominio",
-        "earlier": "{hiddenFinished} anteriores",
         "files": "Archivos",
         "finished": "Terminados",
         "folders": "Carpetas",
@@ -3688,27 +3699,22 @@
         "models": "Modelos",
         "name": "Nombre",
         "needs": "Te necesita",
-        "or": "o",
         "other": "Otros",
         "planLimits": "Límites del plan",
         "preview": "Vista previa",
         "removed": "eliminado",
-        "resets": "se reinicia {resetsAt}",
         "review": "Revisión",
         "running": "En marcha",
-        "sandbox": "Este sandbox",
         "secret": "secreto",
         "settings": "Ajustes",
         "shared": "Compartido",
         "subagents": "Subagentes",
-        "temporary": ", temporal",
         "thisMachine": "esta máquina",
+        "thisSandbox": "Este sandbox",
         "unfinishedSetup": "Configuración sin terminar",
         "upToDate": "al día",
-        "waiting": "te espera",
         "workspace": "Espacio de trabajo",
-        "worthKnowing": "Conviene saber",
-        "you": "tú"
+        "worthKnowing": "Conviene saber"
     },
     "shell": {
         "accountPanel": {
@@ -3995,6 +4001,7 @@
             "noServerYetOne": "Todavía no hay servidor. Se pide uno cuando algo que quieres lo necesita.",
             "noServicesYet": "Todavía no hay servicios.",
             "optionalSelfHosted": "(opcional: autoalojado)",
+            "or": "o",
             "outlinePaperlessNgxOpenproject": ": Outline, Paperless-ngx, OpenProject, SigNoz y más.",
             "previewChangesAboveApply": "Previsualiza tus cambios arriba y luego aplícalos.",
             "provisionedLink": "(aprovisionado para ti). Vincula",
@@ -4490,7 +4497,8 @@
             "unstaged": "Sin preparar",
             "untrackedLeave": "{count} archivo sin seguimiento sale del disco: nunca se le hizo commit, así que git no tiene copia: | {count} archivos sin seguimiento salen del disco: nunca se les hizo commit, así que git no tiene copia:",
             "watchRun": "Verlo ejecutarse",
-            "leftInMainLine": "{count} pendiente en la línea principal | {count} pendientes en la línea principal"
+            "leftInMainLine": "{count} pendiente en la línea principal | {count} pendientes en la línea principal",
+            "you": "tú"
         },
         "rowActions": {
             "openManagementPanel": "Abrir el panel de gestión"

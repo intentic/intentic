@@ -109,7 +109,7 @@ const { maker } = useAudience();
 const sandboxRows = computed<readonly SectionRow[]>(() => [
     ...(isGuest.value ? [] : [{ id: `capabilities`, to: `/capabilities`, label: t(`shell.words.addCapability`), icon: `plus` } as const]),
     ...(canShip.value && !maker.value ? [{ id: `terminal`, to: `/terminal`, label: t(`shared.terminal`), icon: `code` } as const] : []),
-    { id: `sandbox`, to: sandboxHubPath(isGuest.value), label: t(`shared.sandbox2`), icon: `box` },
+    { id: `sandbox`, to: sandboxHubPath(isGuest.value), label: t(`shared.sandboxHub`), icon: `box` },
     { id: `settings`, to: `/settings`, label: t(`shared.settings`), icon: `cog` },
 ]);
 
@@ -305,7 +305,7 @@ const logout = async (): Promise<void> => {
 
         <!-- The box rather than the work, matching what the desktop rail keeps below its last divider. -->
         <section class="flex flex-col gap-1">
-            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.sandbox2`) }}</h2>
+            <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.sandboxHub`) }}</h2>
             <RouterLink
                 v-for="row in sandboxRows"
                 :key="row.to"

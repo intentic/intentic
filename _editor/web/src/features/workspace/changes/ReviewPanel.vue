@@ -1233,7 +1233,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 @click="toggleOrigin(YOURS)"
                 v-tooltip.right="t(`workspace.reviewPanel.ownEditsTerminalMain`)"
             >
-                {{ t(`shared.you`) }} <span class="opacity-70">{{ legend.yours }}</span>
+                {{ t(`workspace.reviewPanel.you`) }} <span class="opacity-70">{{ legend.yours }}</span>
                 <Icon v-if="originFilter === YOURS" name="times" class="shrink-0 text-[0.6rem] opacity-70" />
             </button>
         </div>

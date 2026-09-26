@@ -77,6 +77,22 @@ describe(`ending the field`, () => {
         release();
     });
 
+    it(`says a rename by its new name once it lands, on a surface that asks, and never on one that does not`, async () => {
+        const renameOn = async (sayRenamed: boolean) => {
+            const surface = treeSurface([dir(`src`, [file(`src/main.ts`)])], { park: true, sayRenamed });
+            surface.edits.beginRename(`src/main.ts`);
+            surface.inline.draft.value = `entry.ts`;
+            await surface.edits.endEdit(`commit`);
+            const before = surface.say.mock.calls.length;
+            surface.release();
+            await surface.store.run.mock.results.at(-1)?.value;
+            return [before, surface.say.mock.calls.map(([message]) => message)];
+        };
+
+        expect(await renameOn(true)).toEqual([0, [`Renamed to entry.ts`]]);
+        expect(await renameOn(false)).toEqual([0, []]);
+    });
+
     it(`creates a file, lands the selection and the keyboard on its entry, and opens it once the daemon has it`, async () => {
         const { inline, edits, selecting, calls, release } = editsOver();
         edits.beginCreate(`src`, `file`);

@@ -151,7 +151,7 @@ watch(
                     <!-- Named separately from Terms since breaching it can destroy a hosted machine without notice. -->
                     <a href="https://intentic.dev/terms/" target="_blank" rel="noopener">{{ t(`auth.login.terms`) }}</a
                     >, <a href="https://intentic.dev/acceptable-use/" target="_blank" rel="noopener">{{ t(`auth.login.acceptableUsePolicy`) }}</a>
-                    {{ t(`shared.and`) }}
+                    {{ t(`auth.login.and`) }}
                     <a href="https://intentic.dev/privacy/" target="_blank" rel="noopener">{{ t(`auth.login.privacyPolicy`) }}</a
                     >.
                 </p>

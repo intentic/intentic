@@ -84,7 +84,7 @@ const place = (at: { box?: string; runner?: string }): void => {
                 :class="picked === undefined && pickedRunner === undefined ? 'text-primary-500' : 'text-subtle'"
             />
             <span class="flex min-w-0 flex-col">
-                <span class="text-sm text-content md:text-xs">{{ t(`shared.sandbox`) }}</span>
+                <span class="text-sm text-content md:text-xs">{{ t(`shared.thisSandbox`) }}</span>
                 <span class="text-2xs text-subtle">{{ t(`chat.chatPlacementMenu.runsOnMachineWorkspace`) }}</span>
             </span>
         </button>

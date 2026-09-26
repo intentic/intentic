@@ -1,4 +1,6 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import { t } from "@intentic/ui/i18n";
+import { basename } from "@intentic/ui/path";
 import type { Ref } from "vue";
 import { type MultiSelect, useMultiSelect } from "../../../../lib/multiSelect";
 import type { useNotifications } from "../../../../shell/notifications/notifications";
@@ -81,6 +83,9 @@ export interface FileVerbsOptions {
     readonly frame: TreeMenuHost["frame"];
     // The folder a menu's New File or New Folder names into; the one the menu was opened on, by default.
     readonly createIn?: (dir: string) => string;
+    // A surface where a row changing its own name is easy to miss (the phone's, under a thumb) names the new one once
+    // the move lands.
+    readonly sayRenamed?: boolean;
 }
 
 const nowhere = (): void => undefined;
@@ -114,6 +119,7 @@ export const createFileVerbs = (options: FileVerbsOptions) => {
         focusLead: options.focusLead,
         store,
         openCreated: options.openCreated,
+        renamed: options.sayRenamed === true ? (to) => say(t(`workspace.fileVerbs.renamedTo`, { name: basename(to) })) : nowhere,
     });
     const deleting = useTreeDelete({ byPath, targetDir, rules, emptyDirs: options.emptyDirs, selecting, store, say, sayDeleted: seams.sayDeleted });
     const transfer = useTreeTransfer({
@@ -148,7 +154,8 @@ export const createFileVerbs = (options: FileVerbsOptions) => {
         requestDelete: deleting.requestDelete,
         stage: transfer.stage,
         paste: transfer.paste,
-        openTerminal: seams.openTerminal,
+        // Read when the row is chosen, so a surface that never opens a terminal (a test's) need not supply one.
+        openTerminal: (dir) => seams.openTerminal(dir),
     });
 
     return { rules, selecting, inline, edits, deleting, transfer, menu };

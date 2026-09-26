@@ -100,7 +100,7 @@ const sandboxRows = (source: NonNullable<QuickPickSources[`sandbox`]>, query: st
             key: `sandbox:`,
             box: undefined,
             runner: undefined,
-            label: t(`shared.sandbox`),
+            label: t(`shared.thisSandbox`),
             detail: t(`chat.composerQuickPick.here`),
             current: here,
         },

@@ -26,6 +26,7 @@
             "sendTurnAgainSame": "Diesen Zug erneut senden. Es ist dieselbe Anfrage wie zuvor, keine neue Nachricht.",
             "stillWorking": "{running} von {total} arbeiten noch",
             "stopWatchingConversationStays": "Nicht mehr beobachten — diese Unterhaltung bleibt, wo sie ist",
+            "temporary": ", vorübergehend",
             "waitingMaintainer": "{landAsk}: wartet auf einen Maintainer"
         },
         "agentConflictReport": {
@@ -70,7 +71,8 @@
             "couldNotReact": "Diese Reaktion konnte nicht hinterlassen werden.",
             "markWith": "Mit {emoji} reagieren",
             "markedBy": "{emoji} von {who}",
-            "pickAMark": "Reaktion auswählen"
+            "pickAMark": "Reaktion auswählen",
+            "you": "Sie"
         },
         "agentReviewPanel": {
             "agentHasntChangedAny": "Dieser Agent hat keine Dateien geändert. Seine Unterhaltung ist in {remoteName}: öffnen Sie sie dort, um etwas zu erbitten, und was immer er schreibt, taucht hier auf.",
@@ -265,7 +267,8 @@
             "held": "gehalten",
             "reject": "Ablehnen",
             "rejectHeldWake": "Diese gehaltene Weckung ablehnen",
-            "runNowExactlyWhat": "Jetzt ausführen, mit genau dem, was ausgelöst hat: die Session landet auf diesem Board"
+            "runNowExactlyWhat": "Jetzt ausführen, mit genau dem, was ausgelöst hat: die Session landet auf diesem Board",
+            "waiting": "wartet auf Sie"
         },
         "liveMetrics": {
             "coresValue": "{cores} Kern | {cores} Kerne",
@@ -517,6 +520,7 @@
         },
         "login": {
             "acceptableUsePolicy": "Richtlinie zur akzeptablen Nutzung",
+            "and": "und",
             "buildAgents": "Mit Agenten bauen",
             "privacyPolicy": "Datenschutzerklärung",
             "terms": "Nutzungsbedingungen",
@@ -565,6 +569,7 @@
             "switchBrowserOpen": "Browser wechseln: {count} offen",
             "takeControl": "Steuerung übernehmen",
             "takeControlFixStep": "Übernehmen Sie die Steuerung, reparieren Sie den Schritt und geben Sie zurück.",
+            "waiting": "wartet auf Sie",
             "youreDrivingHandBack": "Sie steuern · zurückgeben"
         }
     },
@@ -1549,7 +1554,8 @@
         "usageRing": {
             "everyPoolResetFull": "Jeder Topf ist zurückgesetzt: das volle Kontingent steht bereit.",
             "floorsEveryDeviceOn": "≥ sind Untergrenzen: jedes Gerät im Konto zahlt aus denselben Töpfen.",
-            "measured": "gemessen {measuredAt}"
+            "measured": "gemessen {measuredAt}",
+            "resets": "setzt sich zurück {resetsAt}"
         },
         "vpnConnections": {
             "connectCode": "Mit Code verbinden",
@@ -1561,6 +1567,9 @@
         },
         "workflowMark": {
             "step": "· Schritt {index}/{total}"
+        },
+        "railCard": {
+            "temporary": ", vorübergehend"
         }
     },
     "connect": {
@@ -1933,6 +1942,7 @@
             "startAgentOnReads": "Einen Agenten darauf ansetzen: er liest beide Kopien jeder festhängenden Datei und bringt die zwei Enden zur Übereinstimmung."
         },
         "connectDeviceHint": {
+            "and": "und",
             "connect": "Verbinden",
             "syncsSandboxNotConnected": "synchronisiert diese Sandbox, ist aber nicht als Gerät verbunden."
         },
@@ -2599,6 +2609,7 @@
             "read2": "Gemessen",
             "reconnectOnAgentTab": "verbinden Sie es im Tab „Agent“ neu | verbinden Sie sie im Tab „Agent“ neu",
             "reopens": "Öffnet wieder",
+            "resets": "setzt sich zurück {resetsAt}",
             "seatFromAdmin": "bitten Sie einen Org-Admin, ihm einen Sitz zuzuweisen | bitten Sie einen Org-Admin, ihnen Sitze zuzuweisen",
             "showingMostConstrained": "es werden die {max_bars} engsten von {count} gezeigt",
             "used": "Verbraucht",
@@ -2678,7 +2689,8 @@
             "viewer": "Beobachter",
             "watchEverythingAgentsChats": "Kann alles sehen: Agenten, Chats, Dateien. Kann nichts ändern.",
             "writer": "Bearbeiter",
-            "writerNeedsArea": "Wählen Sie mindestens einen Ordner. Ein Bearbeiter wird erst gewährt, wenn er einen hält."
+            "writerNeedsArea": "Wählen Sie mindestens einen Ordner. Ein Bearbeiter wird erst gewährt, wenn er einen hält.",
+            "you": "Sie"
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Kategorie der Agenteneinstellungen",
@@ -3010,6 +3022,7 @@
             "continueGoogleToSecurely": "Weiter mit Google, um den Browser sicher direkt mit Ihrer Sandbox zu verbinden.",
             "intenticSignsInThrough": "Intentic meldet Sie über Ihren Browser an und bringt Sie dann direkt hierher zurück.",
             "lostPasskeysUseOne": "Passkeys verloren? Nutzen Sie einen Ihrer Wiederherstellungscodes.",
+            "or": "oder",
             "ownerSandboxRequiresPasskey": "Der Eigentümer dieser Sandbox verlangt einen Passkey. Fügen Sie jetzt einen hinzu: von hier an öffnet die eigene Sperre Ihres Geräts (Fingerabdruck, Gesicht oder PIN) diese Sandbox.",
             "sandboxOnlyOpensPasskey": "Diese Sandbox öffnet sich nur mit einem Passkey. Nutzen Sie den, den Sie damit registriert haben.",
             "signInToReach": "Melden Sie sich an, um Ihre Sandbox zu erreichen",
@@ -3645,7 +3658,6 @@
         "address": "Adresse",
         "agents": "Agenten",
         "allProviders": "Alle Anbieter",
-        "and": "und",
         "apiTokens": "API-Tokens",
         "archived": "Archiviert",
         "attention": "Achtung",
@@ -3656,7 +3668,6 @@
         "changes": "Änderungen",
         "connected": "Verbunden",
         "connections": "Ihre Verbindungen",
-        "earlier": "{hiddenFinished} frühere",
         "files": "Dateien",
         "finished": "Fertig",
         "folders": "Ordner",
@@ -3665,26 +3676,21 @@
         "model": "Modell",
         "models": "Modelle",
         "needs": "Braucht Sie",
-        "or": "oder",
         "other": "Sonstiges",
         "planLimits": "Tarifgrenzen",
         "preview": "Vorschau",
         "removed": "entfernt",
-        "resets": "setzt sich zurück {resetsAt}",
         "review": "Durchsicht",
         "running": "Läuft",
-        "sandbox": "Diese Sandbox",
         "secret": "Geheimnis",
         "settings": "Einstellungen",
         "shared": "Geteilt",
         "subagents": "Subagenten",
-        "temporary": ", vorübergehend",
         "thisMachine": "diese Maschine",
+        "thisSandbox": "Diese Sandbox",
         "unfinishedSetup": "Unfertige Einrichtung",
         "upToDate": "aktuell",
-        "waiting": "wartet auf Sie",
-        "worthKnowing": "Wissenswert",
-        "you": "Sie"
+        "worthKnowing": "Wissenswert"
     },
     "shell": {
         "accountPanel": {
@@ -3968,6 +3974,7 @@
             "noServerYetOne": "Noch kein Server. Einer wird angefragt, wenn etwas, das Sie wollen, ihn braucht.",
             "noServicesYet": "Noch keine Dienste.",
             "optionalSelfHosted": "(optional: selbst gehostet)",
+            "or": "oder",
             "outlinePaperlessNgxOpenproject": ": Outline, Paperless-ngx, OpenProject, SigNoz und mehr.",
             "previewChangesAboveApply": "Sehen Sie Ihre Änderungen oben in der Vorschau, und wenden Sie sie dann an.",
             "provisionedLink": "(für Sie bereitgestellt). Verknüpfen Sie",
@@ -4461,7 +4468,8 @@
             "unstaged": "Nicht gestaged",
             "untrackedLeave": "{count} nicht verfolgte Datei verlässt die Platte: sie wurde nie committet, git hat also keine Kopie: | {count} nicht verfolgte Dateien verlassen die Platte: sie wurden nie committet, git hat also keine Kopie:",
             "watchRun": "Ihm zusehen",
-            "leftInMainLine": "{count} in der Hauptlinie übrig | {count} in der Hauptlinie übrig"
+            "leftInMainLine": "{count} in der Hauptlinie übrig | {count} in der Hauptlinie übrig",
+            "you": "Sie"
         },
         "rowActions": {
             "openManagementPanel": "Verwaltungsbereich öffnen"

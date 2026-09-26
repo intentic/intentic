@@ -1,5 +1,6 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { noticeOf, type NoticeModel } from "@intentic/ui/async";
+import { unstubbed } from "@intentic/testing";
 import { mock } from "bun:test";
 import { computed, effectScope, ref, shallowRef } from "vue";
 import type { DeleteBatch } from "../features/workspace/explorer/undo/deleteUndo";
@@ -7,7 +8,7 @@ import { barrenChainOf, barrenChildren, barrenRoots } from "../features/workspac
 import type { RowAction } from "../features/workspace/explorer/rowActions";
 import type { DroppedFile } from "../features/workspace/explorer/transfer/dropEntries";
 import { indexEntries } from "../features/workspace/explorer/tree/treeRows";
-import { createFileVerbs } from "../features/workspace/explorer/tree/fileVerbs";
+import { createFileVerbs, type FileVerbSeams } from "../features/workspace/explorer/tree/fileVerbs";
 import type { TreeMenuHost } from "../features/workspace/explorer/tree/useTreeMenu";
 import { useTreeRows } from "../features/workspace/explorer/tree/useTreeRows";
 
@@ -144,12 +145,14 @@ export interface SurfaceOptions extends StoreOptions {
     readonly frame?: TreeMenuHost[`frame`];
     // Whether package.json folds its sibling files (the explorer's file-nesting preference).
     readonly nesting?: boolean;
+    // Whether a landed rename is said by name, as the phone's surface asks.
+    readonly sayRenamed?: boolean;
 }
 
 // The tree's composables over one listing, the way WorkspaceTree.vue builds them; the surface's element is in the DOM.
 export const treeSurface = (
     listing: readonly WorkspaceTreeEntry[],
-    { rootDir = ``, barren = [], rowActions = () => [], frame = () => ({}), nesting = false, ...options }: SurfaceOptions = {},
+    { rootDir = ``, barren = [], rowActions = () => [], frame = () => ({}), nesting = false, sayRenamed = false, ...options }: SurfaceOptions = {},
 ) => {
     const { store, calls, release } = fakeTreeStore(listing, options);
     const { settled, emptyDirs } = emptyDirsOver(barren);
@@ -174,7 +177,7 @@ export const treeSurface = (
             emptyDirs,
         });
         const verbs = createFileVerbs({
-            seams: { store, uploads, say, sayDeleted, openTerminal: () => undefined },
+            seams: unstubbed<FileVerbSeams>(`fileVerbSeams`, { store, uploads, say, sayDeleted }),
             byPath: rows.byPath,
             order: rows.orderedPaths,
             rootDir: () => rootDir,
@@ -190,6 +193,7 @@ export const treeSurface = (
             openCreated: (path) => calls.push(`opened ${path}`),
             rowActions,
             frame,
+            sayRenamed,
         });
         return { rows, ...verbs };
     })!;

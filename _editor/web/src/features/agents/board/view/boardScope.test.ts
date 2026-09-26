@@ -169,7 +169,7 @@ describe(`the board's scope`, () => {
         const { scope } = scopeOf([inShop, elsewhere]);
         expect(scope.ownerOptions.value.map((option) => option.value)).toEqual([`everyone`, ME, ADA]);
         expect(scope.scopeOptions.value).toEqual([
-            { label: t(`shared.sandbox`), value: `box` },
+            { label: t(`shared.thisSandbox`), value: `box` },
             { label: t(`agents.agentsView.allSandboxes`), value: `all` },
         ]);
     });

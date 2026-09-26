@@ -355,7 +355,7 @@ const titleOf = (agent: FleetAgent): string => agentDisplayTitle(agent, previewO
                         @click="toggleUnfolded(group.key)"
                     >
                         <Icon :name="unfolded.has(group.key) ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
-                        {{ unfolded.has(group.key) ? t(`ui.action.showFewer`) : t(`shared.earlier`, { hiddenFinished: shownOf(group).hidden }) }}
+                        {{ unfolded.has(group.key) ? t(`ui.action.showFewer`) : t(`ui.action.showEarlier`, { count: shownOf(group).hidden }) }}
                     </button>
 
                     <!-- Waiting on the reader, though not open here: never folded, since a question can't be answered unseen. -->

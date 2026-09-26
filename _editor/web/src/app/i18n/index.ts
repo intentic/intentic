@@ -18,7 +18,7 @@ type AppMessages = typeof base;
 //   progress words (Loading…, Working…).
 // - `shared.*`: a NOUN (or a state a thing is in) that means the same in every feature that says it: the sections'
 //   own names, Agent, Model, Running. English alone is not a reason to share: "Access" the sandbox section and
-//   "Access" a capability's grant are two keys.
+//   "Access" a capability's grant are two keys. `_tools/checks/i18n-shared.mjs` refuses what is never a noun phrase.
 // - `<area>.words.*`: a word several of one feature's components say; a phrase another feature borrows stays with the
 //   feature it belongs to.
 // - `<area>.<component>.*`: everything else.

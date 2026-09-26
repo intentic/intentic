@@ -14,7 +14,7 @@ const t = useT();
 const MACHINES = computed(
     () =>
         [
-            { locus: `sandbox`, label: t(`shared.sandbox`), track: `bg-content/[0.02]` },
+            { locus: `sandbox`, label: t(`shared.thisSandbox`), track: `bg-content/[0.02]` },
             { locus: `device`, label: t(`sandbox.agentSafetyRules.myDevices`), track: `bg-content/[0.045]` },
         ] as const satisfies readonly { locus: CommandLocus; label: string; track: string }[],
 );

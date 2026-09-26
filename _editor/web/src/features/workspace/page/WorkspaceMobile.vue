@@ -29,7 +29,6 @@ import { useWorkspaceRoute } from "../health/useWorkspaceRoute";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { useWorkspaceTree } from "../explorer/useWorkspaceTree";
 import { useNotifications } from "../../../shell/notifications/notifications";
-import { useDeleteUndo } from "../explorer/undo/useDeleteUndo";
 import DiffToolbar from "../viewers/DiffToolbar.vue";
 import DiffSkeleton from "../viewers/DiffSkeleton.vue";
 import FileDiffPane from "../viewers/FileDiffPane.vue";
@@ -44,9 +43,9 @@ import { opensAsFolder } from "../files/archiveEntries";
 import { withProvisionalEntries } from "../files/provisionalEntries";
 import { explorerShows, technicalHidden } from "../explorer/explorerFilter";
 import { deadLink } from "../explorer/tree/treeRows";
-import { deleteEntries } from "../explorer/tree/useTreeDelete";
-import { useInlineEdit } from "../explorer/tree/useTreeEdits";
-import { useTreeRules } from "../explorer/tree/useTreeRules";
+import { createFileVerbs } from "../explorer/tree/fileVerbs";
+import { fileVerbSeams } from "../explorer/tree/fileVerbSeams";
+import { useEmptyDirs } from "../explorer/useEmptyDirs";
 import FileViewer from "../viewers/FileViewer.vue";
 import HistoryPanel from "../changes/history/HistoryPanel.vue";
 import ReviewPanel from "../changes/ReviewPanel.vue";
@@ -57,7 +56,7 @@ import WorkspaceScopeChip from "../explorer/WorkspaceScopeChip.vue";
 import { workspaceAgent, workspaceDir } from "../health/workspaceScope";
 import { withinScope } from "../../../app/projectScope";
 import WorkspaceSearchResults from "../search/WorkspaceSearchResults.vue";
-import { basename, parentDir } from "@intentic/ui/path";
+import { parentDir } from "@intentic/ui/path";
 import { useT } from "@intentic/ui/i18n";
 
 // Drill-down file browser (one directory per screen) plus Changes/Restore Points panels and a full-screen
@@ -86,7 +85,6 @@ const {
     isLoading,
     refetch,
     readBlob,
-    moveEntry,
     run,
     busy,
     actionError,
@@ -99,7 +97,6 @@ const treeNotice = computed<NoticeModel | undefined>(() =>
 );
 const { enqueue } = useUploadQueue();
 const { say } = useNotifications();
-const { sayDeleted } = useDeleteUndo();
 // Open file lives in the URL, synced by useWorkspaceRoute; this view keeps only its own state (dir, diff).
 const { tabs, activeId, activeTab, openLine, openFile, openAtLine, openDiff } = useWorkspaceTabs();
 useWorkspaceRoute();
@@ -223,8 +220,29 @@ const dirHidden = computed(() => hiddenIn(dir.value));
 // The funnel's sheet (the desktop menu's rows), thumb-sized; stays open, since both repaint the list behind it.
 const filterSheet = ref(false);
 
+// The tree's own verbs over this screen's one folder, as the home has them: the same rules, rename and delete, with the
+// long-press sheet for a menu. `rootEl` is where a clipboard write targets the visible window, not the opener's.
+const rootEl = ref<HTMLElement>();
+const { rules, selecting, inline, edits, deleting } = createFileVerbs({
+    seams: fileVerbSeams(),
+    byPath: entriesByPath,
+    order: computed(() => listing.value.map((node) => node.path)),
+    rootDir: () => dir.value,
+    tree: () => listing.value,
+    childrenOf: (folder) => listingOf(folder.path) ?? [],
+    targetDir: () => dir.value,
+    shows: (path) => parentDir(path) === dir.value,
+    el: rootEl,
+    emptyDirs: useEmptyDirs(() => store.barren.value),
+    focusLead: async () => undefined,
+    openCreated: (path) => openFile(path),
+    rowActions: () => [],
+    frame: () => ({}),
+    // Said once the move lands, and named: on a phone a row changing its own name is easy to miss under a thumb.
+    sayRenamed: true,
+});
 // A file still arriving is drawn but takes nothing, a folder still arriving drills in; an archive's contents are read-only.
-const { pendingRow, pending, archived } = useTreeRules({ byPath: entriesByPath, store });
+const { pendingRow, pending, archived } = rules;
 const openEntry = (node: WorkspaceTreeEntry): void => {
     if (node.type === `dir` && !isLockedWorkspacePath(node.path) && !deadLink(node)) {
         openDir(node.path);
@@ -241,19 +259,18 @@ const openEntry = (node: WorkspaceTreeEntry): void => {
     openFile(node.path);
 };
 
-// Long-press row actions (the ContextMenu equivalents). `rootEl` is where a clipboard write targets the
-// visible window, not the opener's.
-const rootEl = ref<HTMLElement>();
+// Long-press row actions (the ContextMenu equivalents).
 const sheetEntry = ref<WorkspaceTreeEntry | undefined>(undefined);
 // The tree's own naming field, in a box: what a commit writes, and that an empty or unchanged name writes nothing.
-const { edit: renaming, draft: renameValue, apply: renameStep } = useInlineEdit(() => false);
+const { edit: renaming, draft: renameValue } = inline;
 
 const renameField = ref<HTMLInputElement>();
 let selectWholeName = false;
 const startRename = (target: WorkspaceTreeEntry): void => {
     sheetEntry.value = undefined;
-    renameStep({ kind: `rename`, path: target.path });
-    selectWholeName = true;
+    edits.beginRename(target.path);
+    // A name the tree would refuse to change (locked, still arriving) opens no box.
+    selectWholeName = renaming.value.kind === `renaming`;
 };
 // Selected whole only as the box opens, so the first keystroke replaces the name; a later tap in the field places a
 // caret instead. PrimeVue hands the box's focus to `[autofocus]`, which is why the field carries it.
@@ -264,21 +281,13 @@ const onRenameFocus = (): void => {
     selectWholeName = false;
     renameField.value?.select();
 };
-const confirmRename = (): void => {
-    const write = renameStep({ kind: `commit`, draft: renameValue.value, refused: false });
-    if (write?.kind !== `rename`) {
-        return;
-    }
-    // Said only once the move lands, and named: on a phone a row changing its own name is easy to miss under a thumb.
-    void run(async () => {
-        await moveEntry(write.from, write.to);
-        say(t(`workspace.fileVerbs.renamedTo`, { name: basename(write.to) }));
-    }, t(`workspace.fileVerbs.couldntRename`));
-};
+const confirmRename = (): void => void edits.endEdit(`commit`);
+const cancelRename = (): void => void edits.endEdit(`cancel`);
 // No confirm: it goes to the trash, and the receipt's Undo brings it back, which a thumb reaches as easily as a dialog.
 const removeEntry = (target: WorkspaceTreeEntry): void => {
     sheetEntry.value = undefined;
-    void deleteEntries({ store, sayDeleted }, [target.path]);
+    selecting.selectSingle(target.path);
+    deleting.requestDelete();
 };
 const copyPath = (target: WorkspaceTreeEntry): void => {
     sheetEntry.value = undefined;
@@ -752,7 +761,7 @@ const onPick = (event: Event): void => {
             </div>
         </BottomSheet>
 
-        <Modal :open="renaming.kind === 'renaming'" size="sm" :header="t(`ui.action.rename`)" @update:open="renameStep({ kind: 'cancel' })">
+        <Modal :open="renaming.kind === 'renaming'" size="sm" :header="t(`ui.action.rename`)" @update:open="cancelRename()">
             <input
                 ref="renameField"
                 v-model="renameValue"
@@ -763,7 +772,7 @@ const onPick = (event: Event): void => {
                 @keydown.enter="confirmRename"
             />
             <template #footer>
-                <Button :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="renameStep({ kind: 'cancel' })" />
+                <Button :label="t(`ui.action.cancel`)" severity="secondary" :text="true" @click="cancelRename()" />
                 <Button :label="t(`ui.action.rename`)" @click="confirmRename" />
             </template>
         </Modal>

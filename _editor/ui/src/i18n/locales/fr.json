@@ -48,6 +48,7 @@
         "save": "Enregistrer",
         "send": "Envoyer",
         "settings": "Paramètres…",
+        "showEarlier": "{count} plus anciens",
         "showFewer": "Afficher moins",
         "showLess": "Afficher moins",
         "signIn": "Se connecter",

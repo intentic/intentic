@@ -713,7 +713,7 @@ watch(
                             >
                                 <Icon name="exclamation-triangle" class="shrink-0 text-3xs text-warning" />
                                 {{ queuedHelp.length }} {{ t(`browsers.browsers.other`) }} {{ queuedHelp.length === 1 ? "browser" : "browsers" }}
-                                {{ t(`shared.waiting`) }}
+                                {{ t(`browsers.browsers.waiting`) }}
                                 <Icon :name="queueOpen ? 'chevron-down' : 'chevron-up'" class="shrink-0 text-3xs text-muted" />
                             </button>
                         </div>

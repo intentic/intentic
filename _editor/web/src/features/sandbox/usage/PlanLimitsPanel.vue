@@ -274,7 +274,7 @@ const roster = computed(() => {
                                             {{ formatUtilization(pool.percent, row.stale) }}
                                         </span>
                                         <span class="shrink-0 truncate text-right text-2xs text-subtle @xl:w-32">
-                                            {{ pool.resetsAt === undefined ? `` : t(`shared.resets`, { resetsAt: formatReset(pool.resetsAt) }) }}
+                                            {{ pool.resetsAt === undefined ? `` : t(`sandbox.planLimitsPanel.resets`, { resetsAt: formatReset(pool.resetsAt) }) }}
                                         </span>
                                     </div>
                                 </div>

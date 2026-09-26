@@ -51,7 +51,7 @@ watch(carried, (now) => {
 });
 const shown = computed(() => (ahead.value !== undefined && ahead.value.baseline === carried.value ? ahead.value.marks : reactions));
 
-const chips = computed(() => reactionChips(shown.value, { me: presentedEmail.value, you: t(`shared.you`) }));
+const chips = computed(() => reactionChips(shown.value, { me: presentedEmail.value, you: t(`agents.agentReactions.you`) }));
 
 // The emoji whose press is in flight; one at a time, since each answer replaces the whole card.
 const pending = ref<string | undefined>(undefined);

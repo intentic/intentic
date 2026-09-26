@@ -26,6 +26,7 @@
             "sendTurnAgainSame": "Wyślij tę turę jeszcze raz. To ta sama prośba co wcześniej, nie nowa wiadomość.",
             "stillWorking": "{running} z {total} wciąż pracuje",
             "stopWatchingConversationStays": "Przestań obserwować — ta rozmowa zostaje na miejscu",
+            "temporary": ", tymczasowo",
             "waitingMaintainer": "{landAsk}: czeka na opiekuna"
         },
         "agentConflictReport": {
@@ -71,7 +72,8 @@
             "couldNotReact": "Nie udało się dodać tej reakcji.",
             "markWith": "Zareaguj: {emoji}",
             "markedBy": "{emoji} od: {who}",
-            "pickAMark": "Wybierz reakcję"
+            "pickAMark": "Wybierz reakcję",
+            "you": "Ty"
         },
         "agentReviewPanel": {
             "agentHasntChangedAny": "Ten agent nie zmienił żadnych plików. Jego rozmowa jest w {remoteName}: otwórz ją tam, żeby o coś poprosić, a wszystko, co napisze, pokaże się tutaj.",
@@ -269,7 +271,8 @@
             "held": "wstrzymane",
             "reject": "Odrzuć",
             "rejectHeldWake": "Odrzuć tę wstrzymaną pobudkę",
-            "runNowExactlyWhat": "Uruchom teraz, dokładnie z tym, co zadziałało: sesja ląduje na tej tablicy"
+            "runNowExactlyWhat": "Uruchom teraz, dokładnie z tym, co zadziałało: sesja ląduje na tej tablicy",
+            "waiting": "czeka na Ciebie"
         },
         "liveMetrics": {
             "coresValue": "{cores} rdzeń | {cores} rdzenie | {cores} rdzeni",
@@ -522,6 +525,7 @@
         },
         "login": {
             "acceptableUsePolicy": "Zasady dopuszczalnego użytkowania",
+            "and": "i",
             "buildAgents": "Buduj z agentami",
             "privacyPolicy": "Polityka prywatności",
             "terms": "Regulamin",
@@ -570,6 +574,7 @@
             "switchBrowserOpen": "Przełącz przeglądarkę: otwartych {count}",
             "takeControl": "Przejmij sterowanie",
             "takeControlFixStep": "Przejmij sterowanie, napraw ten krok i oddaj.",
+            "waiting": "czeka na Ciebie",
             "youreDrivingHandBack": "Sterujesz · oddaj"
         }
     },
@@ -1558,7 +1563,8 @@
         "usageRing": {
             "everyPoolResetFull": "Każda pula została zresetowana: dostępny jest pełny przydział.",
             "floorsEveryDeviceOn": "≥ to wartości minimalne: wszystkie urządzenia na koncie czerpią z tych samych pul.",
-            "measured": "zmierzono {measuredAt}"
+            "measured": "zmierzono {measuredAt}",
+            "resets": "reset {resetsAt}"
         },
         "vpnConnections": {
             "connectCode": "Połącz kodem",
@@ -1570,6 +1576,9 @@
         },
         "workflowMark": {
             "step": "· krok {index}/{total}"
+        },
+        "railCard": {
+            "temporary": ", tymczasowo"
         }
     },
     "connect": {
@@ -1943,6 +1952,7 @@
             "startAgentOnReads": "Wyślij do tego agenta: czyta obie kopie każdego zablokowanego pliku i doprowadza oba końce do zgody."
         },
         "connectDeviceHint": {
+            "and": "i",
             "connect": "Podłącz",
             "syncsSandboxNotConnected": "synchronizuje ten sandbox, ale nie jest podłączone jako urządzenie."
         },
@@ -2611,6 +2621,7 @@
             "read2": "Odczytano",
             "reconnectOnAgentTab": "podłącz je ponownie w zakładce Agent | podłącz je ponownie w zakładce Agent | podłącz je ponownie w zakładce Agent",
             "reopens": "Otwiera się ponownie",
+            "resets": "reset {resetsAt}",
             "seatFromAdmin": "poproś admina organizacji o przypisanie mu stanowiska | poproś admina organizacji o przypisanie im stanowisk | poproś admina organizacji o przypisanie im stanowisk",
             "showingMostConstrained": "pokazujemy {max_bars} najbardziej ograniczonych z {count}",
             "used": "Zużyto",
@@ -2692,7 +2703,8 @@
             "watchEverythingAgentsChats": "Może wszystko oglądać: agenty, czaty, pliki. Niczego nie może zmienić.",
             "webhooks": "Webhooki",
             "writer": "Edytor",
-            "writerNeedsArea": "Wybierz co najmniej jeden folder. Edytor nie zostaje nadany, dopóki nie ma żadnego."
+            "writerNeedsArea": "Wybierz co najmniej jeden folder. Edytor nie zostaje nadany, dopóki nie ma żadnego.",
+            "you": "Ty"
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Kategoria ustawień agenta",
@@ -3025,6 +3037,7 @@
             "continueGoogleToSecurely": "Kontynuuj przez Google, żeby bezpiecznie połączyć przeglądarkę wprost z Twoim sandboxem.",
             "intenticSignsInThrough": "Intentic loguje Cię przez przeglądarkę, a potem wraca z Tobą prosto tutaj.",
             "lostPasskeysUseOne": "Zgubiłeś klucze dostępu? Użyj jednego ze swoich kodów odzyskiwania.",
+            "or": "albo",
             "ownerSandboxRequiresPasskey": "Właściciel tego sandboxa wymaga klucza dostępu. Dodaj jeden teraz: od tej chwili to własna blokada Twojego urządzenia (odcisk palca, twarz albo PIN) otwiera ten sandbox.",
             "sandboxOnlyOpensPasskey": "Ten sandbox otwiera się wyłącznie kluczem dostępu. Użyj tego, którym go zarejestrowałeś.",
             "signInToReach": "Zaloguj się, żeby sięgnąć do swojego sandboxa",
@@ -3667,7 +3680,6 @@
         "address": "Adres",
         "agents": "Agenty",
         "allProviders": "Wszyscy dostawcy",
-        "and": "i",
         "apiTokens": "Tokeny API",
         "archived": "Zarchiwizowane",
         "attention": "Uwaga",
@@ -3680,7 +3692,6 @@
         "connected": "Podłączone",
         "connections": "Twoje połączenia",
         "domain": "Domena",
-        "earlier": "wcześniejsze: {hiddenFinished}",
         "files": "Pliki",
         "finished": "Skończone",
         "folders": "Foldery",
@@ -3688,29 +3699,24 @@
         "models": "Modele",
         "name": "Nazwa",
         "needs": "Potrzebuje Cię",
-        "or": "albo",
         "other": "Inne",
         "personas": "Persony",
         "planLimits": "Limity planu",
         "preview": "Podgląd",
         "removed": "usunięte",
-        "resets": "reset {resetsAt}",
         "review": "Przegląd",
         "running": "Działa",
-        "sandbox": "Ten sandbox",
         "sandboxes": "Sandboxy",
         "secret": "sekret",
         "settings": "Ustawienia",
         "shared": "Udostępnione",
         "subagents": "Podagenty",
-        "temporary": ", tymczasowo",
         "thisMachine": "ta maszyna",
+        "thisSandbox": "Ten sandbox",
         "unfinishedSetup": "Niedokończona konfiguracja",
         "upToDate": "aktualne",
-        "waiting": "czeka na Ciebie",
         "workspace": "Przestrzeń robocza",
-        "worthKnowing": "Warto wiedzieć",
-        "you": "Ty"
+        "worthKnowing": "Warto wiedzieć"
     },
     "shell": {
         "accountPanel": {
@@ -3997,6 +4003,7 @@
             "noServerYetOne": "Jeszcze żadnego serwera. Prosimy o niego, gdy coś, czego chcesz, go potrzebuje.",
             "noServicesYet": "Jeszcze żadnych usług.",
             "optionalSelfHosted": "(opcjonalnie: hostowane samodzielnie)",
+            "or": "albo",
             "outlinePaperlessNgxOpenproject": ": Outline, Paperless-ngx, OpenProject, SigNoz i więcej.",
             "previewChangesAboveApply": "Zrób podgląd swoich zmian powyżej, a potem je zastosuj.",
             "provisionedLink": "(zaprowiantowane dla Ciebie). Połącz",
@@ -4494,7 +4501,8 @@
             "unstaged": "Poza indeksem",
             "untrackedLeave": "{count} nieśledzony plik znika z dysku: nigdy nie był zacommitowany, więc git nie ma kopii: | {count} nieśledzone pliki znikają z dysku: nigdy nie były zacommitowane, więc git nie ma kopii: | {count} nieśledzonych plików znika z dysku: nigdy nie były zacommitowane, więc git nie ma kopii:",
             "watchRun": "Obejrzyj, jak działa",
-            "leftInMainLine": "{count} zostało w głównej linii | {count} zostały w głównej linii | {count} zostało w głównej linii"
+            "leftInMainLine": "{count} zostało w głównej linii | {count} zostały w głównej linii | {count} zostało w głównej linii",
+            "you": "Ty"
         },
         "rowActions": {
             "openManagementPanel": "Otwórz panel zarządzania"

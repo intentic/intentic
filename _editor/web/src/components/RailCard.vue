@@ -121,7 +121,7 @@ const chipHint = computed(() => (props.chip?.seenAt === undefined ? undefined : 
                         run.text
                     }}</span>
                     <!-- Italic is invisible to screen readers; stated in text since this element's role doesn't accept aria-label. -->
-                    <span v-if="peek" class="sr-only">{{ t(`shared.temporary`) }}</span>
+                    <span v-if="peek" class="sr-only">{{ t(`common.railCard.temporary`) }}</span>
                 </span>
                 <slot name="trailing" />
                 <!-- THE CORNER SAYS IT IN WORDS WHEN THERE ARE WORDS, exactly as the board's card does: a glyph in this seat can say

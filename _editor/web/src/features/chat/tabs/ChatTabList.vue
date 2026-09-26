@@ -378,7 +378,7 @@ const onPersonaSelect = (id: string): void => {
                     @click="showAllFinished = !showAllFinished"
                 >
                     <Icon :name="showAllFinished ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
-                    {{ showAllFinished ? t(`ui.action.showFewer`) : t(`shared.earlier`, { hiddenFinished }) }}
+                    {{ showAllFinished ? t(`ui.action.showFewer`) : t(`ui.action.showEarlier`, { count: hiddenFinished }) }}
                 </button>
             </RailLane>
 

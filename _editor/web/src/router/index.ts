@@ -240,7 +240,7 @@ const routes: RouteRecordRaw[] = [
             {
                 path: `sandbox/:tab?`,
                 name: `sandbox`,
-                meta: { title: () => t(`shared.sandbox2`) },
+                meta: { title: () => t(`shared.sandboxHub`) },
                 // The hub retitles itself with the active sandbox's name once mounted; the outline just says what the
                 // page is.
                 component: asyncView(() => import(`../features/sandbox/SandboxHub.vue`), hubOutline(`Sandbox`, ``, 7)),

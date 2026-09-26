@@ -29,6 +29,6 @@ const card = computed(() => (machine.value === undefined ? undefined : hostEntry
         <RouterLink :to="{ name: `capabilities`, params: { card }, query: { device: machine.label } }" class="text-link hover:underline">
             {{ t(`sandbox.connectDeviceHint.connect`) }}
         </RouterLink>
-        {{ t(`shared.and`) }} {{ gains }}
+        {{ t(`sandbox.connectDeviceHint.and`) }} {{ gains }}
     </p>
 </template>

@@ -138,13 +138,13 @@ onBeforeUnmount(hide);
                             />
                         </div>
                         <span v-if="pool.resetsAt !== undefined" class="text-2xs text-subtle">{{
-                            t(`shared.resets`, { resetsAt: formatReset(pool.resetsAt) })
+                            t(`common.usageRing.resets`, { resetsAt: formatReset(pool.resetsAt) })
                         }}</span>
                     </div>
 
                     <!-- Kept apart from the pools above: those are the plan's allowances, this is spend against them. -->
                     <div v-if="activity" class="mt-1 flex flex-col gap-1">
-                        <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`shared.sandbox`) }}</span>
+                        <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`shared.thisSandbox`) }}</span>
                         <span class="text-xs leading-relaxed text-muted">{{ activity }}</span>
                     </div>
 

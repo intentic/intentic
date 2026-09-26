@@ -26,6 +26,7 @@
             "sendTurnAgainSame": "Send this turn again. It is the same request as before, not a new message.",
             "stillWorking": "{running} of {total} still working",
             "stopWatchingConversationStays": "Stop watching, this conversation stays put",
+            "temporary": ", temporary",
             "waitingMaintainer": "{landAsk}: waiting for a maintainer"
         },
         "agentConflictReport": {
@@ -71,7 +72,8 @@
             "couldNotReact": "Couldn't leave that reaction.",
             "markWith": "React with {emoji}",
             "markedBy": "{emoji} from {who}",
-            "pickAMark": "Pick a reaction"
+            "pickAMark": "Pick a reaction",
+            "you": "you"
         },
         "agentReviewPanel": {
             "agentHasntChangedAny": "This agent hasn't changed any files. Its conversation is in {remoteName}: open it there to ask for something, and whatever it writes shows up here.",
@@ -317,7 +319,8 @@
             "held": "held",
             "reject": "Reject",
             "rejectHeldWake": "Reject this held wake",
-            "runNowExactlyWhat": "Run it now, with exactly what fired: the session lands on this board"
+            "runNowExactlyWhat": "Run it now, with exactly what fired: the session lands on this board",
+            "waiting": "waiting for you"
         },
         "ownerMark": {
             "ownedBy": "Owned by {name}",
@@ -542,6 +545,7 @@
         },
         "login": {
             "acceptableUsePolicy": "Acceptable Use Policy",
+            "and": "and",
             "buildAgents": "Build with agents",
             "privacyPolicy": "Privacy Policy",
             "terms": "Terms",
@@ -591,6 +595,7 @@
             "switchBrowserOpen": "Switch browser: {count} open",
             "takeControl": "Take control",
             "takeControlFixStep": "Take control, fix that step, then hand back.",
+            "waiting": "waiting for you",
             "youreDrivingHandBack": "You're driving · hand back"
         }
     },
@@ -1645,7 +1650,8 @@
         "usageRing": {
             "everyPoolResetFull": "Every pool has reset: the full allowance is available.",
             "floorsEveryDeviceOn": "≥ these are floors: every device on the account spends the same pools.",
-            "measured": "measured {measuredAt}"
+            "measured": "measured {measuredAt}",
+            "resets": "resets {resetsAt}"
         },
         "vpnConnections": {
             "connectCode": "Connect with code",
@@ -1657,6 +1663,9 @@
         },
         "workflowMark": {
             "step": "· step {index}/{total}"
+        },
+        "railCard": {
+            "temporary": ", temporary"
         }
     },
     "connect": {
@@ -2125,6 +2134,7 @@
             "startAgentOnReads": "Start an agent on it: it reads both copies of each stuck file and makes the two ends agree."
         },
         "connectDeviceHint": {
+            "and": "and",
             "connect": "Connect it",
             "syncsSandboxNotConnected": "syncs this sandbox but is not connected as a device."
         },
@@ -2812,6 +2822,7 @@
             "read2": "Read",
             "reconnectOnAgentTab": "reconnect it on the Agent tab | reconnect them on the Agent tab",
             "reopens": "Reopens",
+            "resets": "resets {resetsAt}",
             "seatFromAdmin": "ask an org admin to assign it a seat | ask an org admin to assign them seats",
             "showingMostConstrained": "showing the {max_bars} most constrained of {count}",
             "used": "Used",
@@ -2893,7 +2904,8 @@
             "noAreaMeansWhole": "No area picked: they see the whole workspace, and can talk to every assistant in it.",
             "writer": "Writer",
             "changeFilesInTheirFolders": "Can change files in the folders you name, and drive agents. Landing and publishing are still requests; secrets and settings stay out of reach.",
-            "writerNeedsArea": "Pick at least one area. A writer is not granted until it holds one."
+            "writerNeedsArea": "Pick at least one area. A writer is not granted until it holds one.",
+            "you": "you"
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Agent settings category",
@@ -3182,6 +3194,7 @@
             "continueGoogleToSecurely": "Continue with Google to securely connect the browser directly to your sandbox.",
             "intenticSignsInThrough": "Intentic signs you in through your browser, then brings you straight back here.",
             "lostPasskeysUseOne": "Lost your passkeys? Use one of your recovery codes.",
+            "or": "or",
             "ownerSandboxRequiresPasskey": "The owner of this sandbox requires a passkey. Add one now: your device's own lock (fingerprint, face or PIN) is what opens this sandbox from here on.",
             "sandboxOnlyOpensPasskey": "This sandbox only opens with a passkey. Use the one you registered with it.",
             "signInToReach": "Sign in to reach your sandbox",
@@ -3933,7 +3946,6 @@
         "agent": "Agent",
         "agents": "Agents",
         "allProviders": "All providers",
-        "and": "and",
         "apiTokens": "API tokens",
         "archived": "Archived",
         "attention": "Attention",
@@ -3947,7 +3959,6 @@
         "connected": "Connected",
         "connections": "Your connections",
         "domain": "Domain",
-        "earlier": "{hiddenFinished} earlier",
         "files": "Files",
         "finished": "Finished",
         "folders": "Folders",
@@ -3958,32 +3969,27 @@
         "models": "Models",
         "name": "Name",
         "needs": "Needs you",
-        "or": "or",
         "other": "Other",
         "personas": "Personas",
         "planLimits": "Plan limits",
         "preview": "Preview",
         "removed": "removed",
-        "resets": "resets {resetsAt}",
         "review": "Review",
         "running": "Running",
-        "sandbox": "This sandbox",
-        "sandbox2": "Sandbox",
+        "sandboxHub": "Sandbox",
         "sandboxes": "Sandboxes",
         "secret": "secret",
         "settings": "Settings",
         "shared": "Shared",
         "subagents": "Subagents",
-        "temporary": ", temporary",
         "terminal": "Terminal",
         "thisMachine": "this machine",
+        "thisSandbox": "This sandbox",
         "token": "Token",
         "unfinishedSetup": "Unfinished setup",
         "upToDate": "up to date",
-        "waiting": "waiting for you",
         "workspace": "Workspace",
-        "worthKnowing": "Worth knowing",
-        "you": "you"
+        "worthKnowing": "Worth knowing"
     },
     "shell": {
         "accountPanel": {
@@ -4289,6 +4295,7 @@
             "noServerYetOne": "No server yet. One is asked for when something you want needs it.",
             "noServicesYet": "No services yet.",
             "optionalSelfHosted": "(optional: self-hosted)",
+            "or": "or",
             "outlinePaperlessNgxOpenproject": ": Outline, Paperless-ngx, OpenProject, SigNoz and more.",
             "previewChangesAboveApply": "Preview your changes above, then apply.",
             "provisionedLink": "(provisioned for you). Link",
@@ -4786,7 +4793,8 @@
             "unstaged": "Unstaged",
             "untrackedLeave": "{count} untracked file leaves the disk: it was never committed, so git has no copy: | {count} untracked files leave the disk: they were never committed, so git has no copy:",
             "watchRun": "Watch it run",
-            "leftInMainLine": "{count} left in Main line | {count} left in Main line"
+            "leftInMainLine": "{count} left in Main line | {count} left in Main line",
+            "you": "you"
         },
         "rowActions": {
             "openManagementPanel": "Open management panel"

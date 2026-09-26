@@ -158,7 +158,7 @@ export const useBoardScope = (host: ScopeHost) => {
         },
     });
     const scopeOptions = computed(() => [
-        { label: t(`shared.sandbox`), value: `box` as const },
+        { label: t(`shared.thisSandbox`), value: `box` as const },
         { label: t(`agents.agentsView.allSandboxes`), value: `all` as const },
     ]);
     return { scopedHeld, boardRunRows, archivedRunRows, ledgerRunIds, projectHidden, boardLanes, ownerOptions, ownerScope, scopeOptions };

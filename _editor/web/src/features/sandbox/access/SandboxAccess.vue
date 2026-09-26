@@ -591,7 +591,7 @@ const revoke = async (target: string): Promise<void> => {
                 <Row icon="user" :title="user?.email">
                     <template #meta>
                         <StatusBadge variant="primary" :label="sandbox.active.value?.role ?? `viewer`" size="xs" />
-                        <StatusBadge variant="neutral" :label="t(`shared.you`)" size="xs" />
+                        <StatusBadge variant="neutral" :label="t(`sandbox.sandboxAccess.you`)" size="xs" />
                     </template>
                 </Row>
                 <RowNote>{{ t(`sandbox.sandboxAccess.onlySandboxOwnerInvite`) }}</RowNote>

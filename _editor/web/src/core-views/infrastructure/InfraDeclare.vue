@@ -404,7 +404,7 @@ onMounted(progress.recover);
                             <template v-else-if="hasGitlab">{{ t(`views.infraDeclare.devopsReposLiveOn2`) }}</template>
                             <template v-else
                                 >{{ t(`views.infraDeclare.defaultSelfHosted`) }} <b>{{ t(`views.infraDeclare.forgejo`) }}</b>
-                                {{ t(`views.infraDeclare.provisionedLink`) }} <b>GitHub</b> {{ t(`shared.or`) }} <b>GitLab</b>
+                                {{ t(`views.infraDeclare.provisionedLink`) }} <b>GitHub</b> {{ t(`views.infraDeclare.or`) }} <b>GitLab</b>
                                 {{ t(`views.infraDeclare.toUseOneInstead`) }}</template
                             >
                         </p>
