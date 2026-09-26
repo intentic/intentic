@@ -1,7 +1,8 @@
 import "@intentic/testing/dom";
-import { type Finding, type MainlinePush, type MainlineRun, type MainlineStatus, pushFixBase, type Red, type SandboxMetrics } from "@intentic/sandbox-contract";
+import { type Finding, type MainlineProject, type MainlinePush, type MainlineRun, type MainlineStatus, pushFixBase, type Red, type SandboxMetrics } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
+import { createMemoryHistory, createRouter } from "vue-router";
 import type { PushFixAttempt } from "../mainline/useMainline";
 
 const opened = jest.fn((_conversationId: string, _title?: string) => undefined);
@@ -20,6 +21,7 @@ jest.mock("@intentic/ui", async () => {
     return {
         ResizeSeam: vue.defineComponent({ setup: () => () => vue.h(`div`, { role: `separator` }) }),
         Meter: vue.defineComponent({ setup: () => () => vue.h(`div`, { "data-meter": `` }) }),
+        Notice: vue.defineComponent({ setup: (_props, { slots }) => () => vue.h(`div`, { role: `status` }, slots[`default`]?.()) }),
         AgentRunButton: vue.defineComponent({
             props: { label: { type: String, required: true } },
             emits: [`run`],
@@ -76,7 +78,7 @@ interface Mounted {
 }
 
 // The bar's memory is the window's (two preferences), so a case that starts with a panel open sets it there.
-const mount = (mainline: MainlineStatus | undefined, options: { metrics?: SandboxMetrics; open?: `mainline` | `metrics` } = {}): Mounted => {
+const mount = (mainline: MainlineStatus | undefined, options: { metrics?: SandboxMetrics; open?: `mainline` | `metrics`; router?: boolean } = {}): Mounted => {
     openPanel.value = options.open;
     panelHeight.value = 240;
     const element = document.createElement(`div`);
@@ -86,6 +88,10 @@ const mount = (mainline: MainlineStatus | undefined, options: { metrics?: Sandbo
     });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
+    // Only the older sandbox's note links anywhere (to the sandbox page's Update card).
+    if (options.router === true) {
+        app.use(createRouter({ history: createMemoryHistory(), routes: [{ path: `/:rest(.*)*`, component: { render: () => null } }] }));
+    }
     app.mount(element);
     return { element };
 };
@@ -121,15 +127,34 @@ const RED: MainlineRun = {
     at: NOW - 31 * MINUTE,
     lands: [{ conversationId: `notes`, title: `Release notes`, at: NOW - 34 * MINUTE }],
     failures: [`web/src/pages/changelog.test.ts › lists every release`, `web/src/pages/changelog.test.ts › links each tag`],
+    units: [
+        { name: `lists every release`, path: `web/src/pages/changelog.test.ts` },
+        { name: `links each tag`, path: `web/src/pages/changelog.test.ts` },
+    ],
     failureCount: 2,
     attempt: 1,
     suspects: [`notes`],
+    named: true,
     routing: { kind: `fix-up`, conversationId: `land-fix-web-abc`, at: NOW - 30 * MINUTE, detail: `Its conversation had gone cold.` },
 };
 
+// A red project as a current daemon lays it: at the run's suspects, with its latest decision, and its check's terminal.
+const redProject = (run: MainlineRun, over: Partial<MainlineProject> = {}): MainlineProject => {
+    const red: NonNullable<MainlineProject[`red`]> = {
+        since: run.at,
+        cause: run.lands.filter((each) => run.suspects?.includes(each.conversationId) === true).map(({ conversationId, title }) => ({ conversationId, title })),
+        named: true,
+    };
+    if (run.routing !== undefined) {
+        red.fixer = run.routing;
+    }
+    return { project: run.project, queued: [], session: `panel-${run.project}--verify`, last: run, redSince: run.at, red, ...over };
+};
+
 const redStatus = (): MainlineStatus => ({
-    projects: [{ project: `web`, queued: [{ conversationId: `checkout`, title: `Add Stripe checkout`, at: NOW - 40_000 }], last: RED, redSince: RED.at }],
+    projects: [redProject(RED, { queued: [{ conversationId: `checkout`, title: `Add Stripe checkout`, at: NOW - 40_000 }] })],
     recent: [RED, green({ at: NOW - 90 * MINUTE })],
+    reds: [],
 });
 
 const runningStatus = (): MainlineStatus => ({
@@ -145,10 +170,12 @@ const runningStatus = (): MainlineStatus => ({
                 ],
             },
             queued: [],
+            session: `panel-web--verify`,
             last: green(),
         },
     ],
     recent: [green()],
+    reds: [],
 });
 
 const metrics = (): SandboxMetrics => ({
@@ -237,7 +264,7 @@ describe(`the main line, at rest`, () => {
     it(`draws nothing while no land has been checked, or while the daemon does not say`, () => {
         expect(mount(undefined).element.querySelector(`[role="region"]`)).toBeNull();
         app?.unmount();
-        expect(mount({ projects: [], recent: [] }).element.querySelector(`[role="region"]`)).toBeNull();
+        expect(mount({ projects: [], recent: [], reds: [] }).element.querySelector(`[role="region"]`)).toBeNull();
     });
 
     it(`sits in the status bar, not over the board: no panel until the reader opens one`, () => {
@@ -273,7 +300,7 @@ describe(`the main line, at rest`, () => {
 
     it(`asks for the reader's eye only when a red waits for them`, () => {
         const spent: MainlineRun = { ...RED, routing: { kind: `spent`, at: NOW - 5 * MINUTE, detail: `Still red after 2 fresh attempt(s); it waits for you.` } };
-        const { element } = mount({ projects: [{ project: `web`, queued: [], last: spent, redSince: spent.at }], recent: [spent] });
+        const { element } = mount({ projects: [redProject(spent)], recent: [spent], reds: [] });
         const health = segment(element).querySelector(`[data-item="health"]`)!;
         expect(wordsOf(health)).toBe(`web failing · needs you`);
         expect(health.querySelector(`.text-warning`)?.textContent?.trim()).toBe(`· needs you`);
@@ -289,19 +316,20 @@ describe(`the main line, at rest`, () => {
         const { element } = mount({
             projects: [
                 ...status.projects,
-                { project: `api`, running: { command: `pnpm test`, startedAt: NOW - 5_000, lands: [] }, queued: [], last: apiRed, redSince: apiRed.at },
+                redProject(apiRed, { running: { command: `pnpm test`, startedAt: NOW - 5_000, lands: [] } }),
             ],
             recent: [apiRed, ...status.recent],
+            reds: [],
         });
         expect(wordsOf(segment(element))).toBe(`2 projects failing Checking api 5s 1 queued`);
     });
 
     it(`says main passes once something was checked, and nothing about health before`, () => {
-        const { element } = mount({ projects: [{ project: `web`, queued: [], last: green() }], recent: [green()] });
+        const { element } = mount({ projects: [{ project: `web`, queued: [], last: green() }], recent: [green()], reds: [] });
         expect(wordsOf(segment(element))).toBe(`Main passing`);
         app?.unmount();
 
-        const first = mount({ projects: [{ project: `web`, running: { command: `pnpm verify`, startedAt: NOW - 5_000, lands: [] }, queued: [] }], recent: [] });
+        const first = mount({ projects: [{ project: `web`, running: { command: `pnpm verify`, startedAt: NOW - 5_000, lands: [] }, queued: [] }], recent: [], reds: [] });
         expect(wordsOf(segment(first.element))).toBe(`Checking web 5s`);
         expect(first.element.querySelector(`[data-item="health"]`)).toBeNull();
     });
@@ -315,6 +343,7 @@ describe(`the main line, at rest`, () => {
                 { project: `api`, queued: [waiting] },
             ],
             recent: [green()],
+            reds: [],
         });
         expect(wordsOf(segment(element))).toBe(`Main passing 2 queued`);
     });
@@ -376,7 +405,7 @@ describe(`the main line's panel`, () => {
     it(`gives a red one line on who has it, in the words a reader acts on`, () => {
         const redWith = (routing: MainlineRun[`routing`]): MainlineStatus => {
             const run: MainlineRun = { ...RED, routing };
-            return { projects: [{ project: `web`, queued: [], last: run, redSince: run.at }], recent: [run] };
+            return { projects: [redProject(run)], recent: [run], reds: [] };
         };
         interface FixLine {
             readonly words: string;
@@ -630,5 +659,42 @@ describe(`the board's status bar`, () => {
         const { element } = mount(undefined, { metrics: metrics() });
         expect(element.querySelector(`[data-segment="mainline"]`)).toBeNull();
         expect(segment(element, `metrics`)).not.toBeNull();
+    });
+});
+
+// A SANDBOX FROM BEFORE 2026-09-25: it serves the runs but no reds, no check terminals and no split failures. Nothing is
+// rebuilt from its runs; the bar and the panel say it needs an update, and a current sandbox says neither.
+describe(`the main line of an older sandbox`, () => {
+    // What v1.312 served for the same moment as redStatus: the raw runs, and pushes with nothing saying what is owed.
+    const olderStatus = (): MainlineStatus => ({
+        projects: [{ project: `web`, queued: [], last: { ...RED, units: undefined, named: undefined }, redSince: RED.at }],
+        recent: [{ ...RED, units: undefined, named: undefined }, green({ at: NOW - 90 * MINUTE })],
+        pushed: [PUSHED],
+    });
+
+    it(`says on the bar that the sandbox needs an update, in place of a red it cannot lay or a pass it cannot vouch for`, () => {
+        const { element } = mount(olderStatus());
+        expect(wordsOf(segment(element))).toBe(`Sandbox needs an update`);
+        expect(segment(element).textContent).not.toContain(`failing`);
+        expect(segment(element).textContent).not.toContain(`left at push`);
+    });
+
+    it(`opens onto the note and the runs as served: no cause, no fixer, no logs, no failure list, no pushes`, () => {
+        const { element } = mount(olderStatus(), { open: `mainline`, router: true });
+        const docked = panel(element)!;
+        const note = docked.querySelector<HTMLElement>(`[data-outdated]`)!;
+        expect(wordsOf(note)).toBe(
+            `This sandbox runs an older version Until it updates, this panel can't say who a failing check is laid at or who is fixing it, open a check's logs, or show what your pushes left behind. Update the sandbox Installed it yourself? Reinstall it, or run this on the machine that runs it: ic sandbox update`,
+        );
+        expect(note.querySelector(`a[data-update]`)?.getAttribute(`href`)).toBe(`/sandbox/overview`);
+        expect(wordsOf(docked.querySelector(`[data-section="result"]`))).toBe(`Result web failing 30m ago`);
+        expect(docked.querySelector(`[data-cause], [data-fix], [data-failures], [data-section="pushed"], [data-event="push"]`)).toBeNull();
+        expect([...docked.querySelectorAll(`button`)].some((button) => wordsOf(button) === `Logs`)).toBe(false);
+    });
+
+    it(`draws no note for a current sandbox`, () => {
+        const { element } = mount(redStatus(), { open: `mainline` });
+        expect(panel(element)!.querySelector(`[data-outdated]`)).toBeNull();
+        expect(wordsOf(segment(element))).not.toContain(`needs an update`);
     });
 });

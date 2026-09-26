@@ -23,7 +23,8 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import PersonaForm, { type PersonaDraft } from "./PersonaForm.vue";
 import { useBrowserAccounts } from "../../extensions/useBrowserAccounts";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
-import { grantablesFrom, omittedNotesOf, type PersonaGrantable, personaSlug, powersDraftOf, storedPowers } from "./personaRules";
+import { useExtensions } from "../../extensions/useExtensions";
+import { extensionGrantablesFrom, grantablesFrom, omittedNotesOf, type PersonaGrantable, personaSlug, powersDraftOf, storedPowers } from "./personaRules";
 import { usePersonas } from "./usePersonas";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSandboxSettings } from "../overview/useSandboxSettings";
@@ -50,9 +51,11 @@ const listNotice = computed<NoticeModel | undefined>(() =>
 // appears twice.
 const { accounts, accountOf } = useBrowserAccounts();
 
-// The other three things a persona grants by id (see grantablesFrom), shared with the Workspace tree's quick panel.
+// The other four things a persona grants by id (see grantablesFrom, extensionGrantablesFrom), shared with the Workspace
+// tree's quick panel.
 const { capabilities } = useCapabilities();
-const grantables = computed<PersonaGrantable[]>(() => grantablesFrom(capabilities.value));
+const { extensions } = useExtensions();
+const grantables = computed<PersonaGrantable[]>(() => [...grantablesFrom(capabilities.value), ...extensionGrantablesFrom(extensions.value)]);
 
 // Marks for the accounts a persona names; an id with no matching capability still gets one, so the row doesn't understate
 // what the persona reaches.

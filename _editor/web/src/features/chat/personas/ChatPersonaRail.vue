@@ -19,6 +19,9 @@ import {
     unregistered,
 } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
+import { daemonOutdated } from "../../agents/mainline/mainlineView";
+import { injectMainline } from "../../agents/mainline/useMainline";
+import SandboxOutdatedNotice from "../../sandbox/overview/version/SandboxOutdatedNotice.vue";
 import { canArchive, type FleetAgent, finishedLaneOrder } from "../../agents/fleet/useAgents-fleet";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
 import RailCard from "../../../components/RailCard.vue";
@@ -47,6 +50,12 @@ const GROUP_FINISHED = 3;
 const BACKGROUND_SHOWN = 5;
 
 const known = computed(() => new Set(personas.value.map((persona) => persona.id)));
+
+// A sandbox too old to say who a conversation speaks as now (`lastActsAs`) groups every chat under Anyone. Told by the
+// main line the rail already reads (daemonOutdated: the same releases lack both), and only while there is a persona
+// whose chats that hides.
+const mainline = injectMainline();
+const outdated = computed(() => known.value.size > 0 && mainline?.value !== undefined && daemonOutdated(mainline.value));
 const keyOf = (persona: string | undefined): string => persona ?? ANYONE;
 
 const LANE_RANK: Record<FleetLane, number> = { attention: 0, active: 1, finished: 2 };
@@ -292,6 +301,7 @@ const titleOf = (agent: FleetAgent): string => agentDisplayTitle(agent, previewO
     <!-- No slab: the other half of this rail (the lanes) has none either, and the rows take their step up from `--card-rest`. -->
     <div class="flex min-h-0 min-w-0 flex-col p-2">
         <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+            <SandboxOutdatedNotice v-if="outdated" :missing="t(`chat.chatPersonaRail.outdatedMissing`)" />
             <template v-for="group in groups" :key="group.key">
                 <!-- The header summarises the group, open or folded: what needs you, what works, and the lead chat's live line. -->
                 <RailCard

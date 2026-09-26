@@ -4,7 +4,9 @@ import { Button, ui, FACE_SIZES, Modal, Notice, type NoticeModel, PersonaFace, S
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
+import { useExtensions } from "../../extensions/useExtensions";
 import {
+    extensionGrantablesFrom,
     FULL_POWERS,
     grantablesFrom,
     type PersonaPowersDraft,
@@ -28,7 +30,8 @@ const dir = defineModel<string | undefined>({ required: true });
 
 const { personas, save } = usePersonas();
 const { capabilities } = useCapabilities();
-const grantables = computed(() => grantablesFrom(capabilities.value));
+const { extensions } = useExtensions();
+const grantables = computed(() => [...grantablesFrom(capabilities.value), ...extensionGrantablesFrom(extensions.value)]);
 
 // Open exactly when there's a folder to be open about — one flag, so there's no open-with-no-folder state.
 const visible = computed({

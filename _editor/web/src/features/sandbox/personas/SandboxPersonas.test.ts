@@ -45,6 +45,11 @@ jest.mock(`../../extensions/useBrowserAccounts`, () => ({
 const capabilities = ref<{ id: string; kind: string }[]>([]);
 jest.mock(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
 
+// The installed extensions, for the persona's extensions grant: two switched on, one off (nothing to grant).
+const extension = (id: string, enabled = true) => ({ id, enabled, manifest: { publisher: id.split(`.`)[0]!, name: id.split(`.`)[1]! } });
+const extensions = ref([extension(`acme.notes`), extension(`acme.tasks`), extension(`acme.off`, false)]);
+jest.mock(`../../extensions/useExtensions`, () => ({ useExtensions: () => ({ extensions }) }));
+
 // Stubbed separately from the query mock below, which answers everything with a workspace tree; this suite is about the
 // persona, so the kit answers empty.
 jest.mock(`./usePersonaKit`, () => {
@@ -306,8 +311,8 @@ it(`gives every permission row an icon`, async () => {
 
     // A switch row is a <label> containing a checkbox (ToggleSwitch under its skin).
     const rows = [...el.querySelectorAll(`label`)].filter((row) => row.querySelector(`input[type="checkbox"]`) !== null);
-    // 9 = one workspace shelf, five outward ones (two execution backends among them), three grant groups.
-    expect(rows).toHaveLength(9);
+    // 10 = one workspace shelf, five outward ones (two execution backends among them), four grant groups.
+    expect(rows).toHaveLength(10);
     for (const row of rows) {
         expect(row.querySelector(`i[data-icon]`)).not.toBeNull();
     }
@@ -665,4 +670,58 @@ it(`names the notes no persona may drop, so the checklist reads as complete`, as
 
     expect(text(el)).toContain(fixture.label);
     expect(text(el)).toContain(fixture.why);
+});
+
+// THE EXTENSIONS GRANT (PersonaPowers.extensions): absent means every switched-on extension, an empty list means none. The
+// form lists them by name with their stable id, and each save carries exactly the list the reader left.
+describe(`the extensions a persona gets`, () => {
+    const FULL = { files: `write`, shell: true, code: true, web: true, browser: true, delegate: true, sandbox: true } as const;
+    const chip = (el: HTMLElement, id: string): HTMLButtonElement | undefined =>
+        [...el.querySelectorAll<HTMLButtonElement>(`button[aria-pressed]`)].find((button) => (button.textContent ?? ``).includes(id));
+    const lastSaved = () => save.mock.calls.at(-1)![0].powers;
+    const openPowers = async (el: HTMLElement): Promise<void> => {
+        await openPersona(el, `work`);
+        await openTab(el, `What it may do`);
+    };
+
+    it(`lists the switched-on extensions by name and id, the granted ones pressed, and keeps the list through another save`, async () => {
+        personas.value = [{ id: `work`, capabilities: [], powers: { ...FULL, extensions: [`acme.notes`] } }];
+        const el = mount();
+        await openPowers(el);
+        expect(chip(el, `acme.notes`)?.textContent?.replace(/\s+/g, ` `).trim()).toBe(`notes acme.notes`);
+        expect([chip(el, `acme.notes`)?.getAttribute(`aria-pressed`), chip(el, `acme.tasks`)?.getAttribute(`aria-pressed`)]).toEqual([`true`, `false`]);
+        expect(chip(el, `acme.off`)).toBeUndefined();
+
+        toggleSwitch(el, `Run commands`);
+        await waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
+        expect(lastSaved()).toEqual({ ...FULL, shell: false, extensions: [`acme.notes`] });
+    });
+
+    it(`narrows every extension to the ones picked`, async () => {
+        personas.value = [{ id: `work`, capabilities: [] }];
+        const el = mount();
+        await openPowers(el);
+        expect(chip(el, `acme.notes`)).toBeUndefined();
+
+        toggleSwitch(el, `Extensions`);
+        await waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
+        expect(lastSaved()).toEqual({ ...FULL, extensions: [] });
+        chip(el, `acme.tasks`)!.click();
+        await waitFor(() => expect(save).toHaveBeenCalledTimes(2), { timeout: 2000 });
+        expect(lastSaved()).toEqual({ ...FULL, extensions: [`acme.tasks`] });
+    });
+
+    it(`clears the list to none, and back to every extension`, async () => {
+        personas.value = [{ id: `work`, capabilities: [], powers: { ...FULL, extensions: [`acme.notes`] } }];
+        const el = mount();
+        await openPowers(el);
+
+        chip(el, `acme.notes`)!.click();
+        await waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
+        expect(lastSaved()).toEqual({ ...FULL, extensions: [] });
+        toggleSwitch(el, `Extensions`);
+        await waitFor(() => expect(save).toHaveBeenCalledTimes(2), { timeout: 2000 });
+        // Every shelf on and no list: nothing bounded, so no powers block at all.
+        expect(lastSaved()).toBeUndefined();
+    });
 });

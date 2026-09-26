@@ -79,9 +79,23 @@ const RED: MainlineRun = {
     failureCount: 3,
     attempt: 1,
     suspects: [`breaker`],
+    named: true,
     routing: { kind: `fix-up`, conversationId: `land-fix-web-abc`, at: 1_300 },
 };
-const MAINLINE: MainlineStatus = { projects: [{ project: `web`, queued: [], last: RED, redSince: RED.at }], recent: [RED] };
+// As a current daemon serves it: the red laid at the breaker, and `reds` (the push reds; none here).
+const MAINLINE: MainlineStatus = {
+    projects: [
+        {
+            project: `web`,
+            queued: [],
+            last: RED,
+            redSince: RED.at,
+            red: { since: RED.at, cause: [{ conversationId: `breaker`, title: `Draft the release notes` }], named: true, fixer: RED.routing },
+        },
+    ],
+    recent: [RED],
+    reds: [],
+};
 
 let app: App | undefined;
 

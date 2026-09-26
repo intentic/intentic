@@ -25,7 +25,9 @@ const red = (over: Partial<MainlineRun> = {}): MainlineRun =>
 
 const project = (over: Partial<MainlineProject> = {}): MainlineProject => ({ project: `web`, queued: [], ...over });
 
-const status = (projects: MainlineProject[], recent: MainlineRun[] = []): MainlineStatus => ({ projects, recent });
+// A current daemon always sends `reds`; one from before 2026-09-25 sends none, and never says `named` either.
+const status = (projects: MainlineProject[], recent: MainlineRun[] = []): MainlineStatus => ({ projects, recent, reds: [] });
+const olderStatus = (projects: MainlineProject[], recent: MainlineRun[] = []): MainlineStatus => ({ projects, recent });
 
 describe(`landCheck`, () => {
     it(`says nothing without a status, or for a conversation the record never measured`, () => {
@@ -87,9 +89,17 @@ describe(`landCheck`, () => {
         expect([landCheck(`mine`, status([project()], [untold]))?.kind, landCheck(`other`, status([project()], [untold]))?.kind]).toEqual([`broke`, `broke`]);
     });
 
-    // FALLBACK: from a daemon that never says `named`, the only land of a run that turned the project red is blamed.
-    it(`blames the only land of a run that turned a green project red before anybody is named`, () => {
-        expect(landCheck(`mine`, status([project()], [red()]))?.kind).toBe(`broke`);
+    // An older sandbox files suspects only once it has sent somebody, so its settled record would call a land it broke
+    // merely checked red: the card says nothing settled, and still shows what is running or waiting.
+    it(`reads nothing settled from a sandbox too old to lay its reds, and still its running and queued checks`, () => {
+        expect(landCheck(`mine`, olderStatus([project()], [red()]))).toBeUndefined();
+        expect(landCheck(`mine`, olderStatus([project()], [run()]))).toBeUndefined();
+        const queued = olderStatus([project({ queued: [land(`mine`, NOW - MINUTE)] })], [red()]);
+        expect(landCheck(`mine`, queued)).toEqual({ kind: `waiting`, project: `web`, since: NOW - MINUTE });
+    });
+
+    it(`blames nobody on a red run that names no suspects`, () => {
+        expect(landCheck(`mine`, status([project()], [red()]))).toEqual({ kind: `checked-red`, project: `web`, since: NOW - 2 * MINUTE });
     });
 
     // A red streak's later run names nobody when nothing new failed in it: its one land found main red, it did not
@@ -105,7 +115,7 @@ describe(`landCheck`, () => {
     // One land touching two projects is checked in each; the worse answer is what it did.
     it(`answers a land checked in two projects with the worse of the two`, () => {
         const both = land(`mine`, NOW - 6 * MINUTE);
-        const record = [run({ project: `api`, at: NOW - MINUTE, lands: [both] }), red({ at: NOW - 3 * MINUTE, lands: [both] })];
+        const record = [run({ project: `api`, at: NOW - MINUTE, lands: [both] }), red({ at: NOW - 3 * MINUTE, lands: [both], suspects: [`mine`], named: true })];
         expect(landCheck(`mine`, status([project(), project({ project: `api` })], record))).toMatchObject({ kind: `broke`, project: `web` });
     });
 });
@@ -122,7 +132,7 @@ describe(`proofMark`, () => {
 });
 
 describe(`cardChecks`, () => {
-    const measured = status([project()], [red()]);
+    const measured = status([project()], [red({ suspects: [`mine`], named: true })]);
 
     it(`reads main's check only for this sandbox's own agents`, () => {
         expect(cardChecks({ id: `mine` }, measured, false)?.land?.kind).toBe(`broke`);

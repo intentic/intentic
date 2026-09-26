@@ -411,6 +411,7 @@
             "title": "Hauptlinie",
             "root": "Arbeitsbereich",
             "mainPassing": "main besteht",
+            "needsUpdate": "Sandbox braucht ein Update",
             "projectFailing": "{project} schlägt fehl",
             "projectsFailing": "{count} Projekt schlägt fehl | {count} Projekte schlagen fehl",
             "checking": "Prüfe {project}",
@@ -422,6 +423,7 @@
             "nothingQueued": "Nichts in der Warteschlange",
             "idle": "Leerlauf",
             "noResults": "Noch keine Ergebnisse",
+            "outdatedMissing": "Bis zum Update kann dieses Panel nicht sagen, wem eine fehlschlagende Prüfung zugeschrieben wird oder wer sie behebt, keine Logs einer Prüfung öffnen und nicht zeigen, was deine Pushes hinterlassen haben.",
             "passing": "besteht",
             "failing": "schlägt fehl",
             "failingSince": "schlägt fehl seit {time}",
@@ -1158,6 +1160,7 @@
             "needsYou": "{count} braucht dich | {count} brauchen dich",
             "newChatAs": "Neuer Chat als {label}",
             "notOpen": "{count} nicht offen | {count} nicht offen",
+            "outdatedMissing": "Bis zum Update können Chats nicht der Persona zugeordnet werden, als die sie sprechen, daher stehen alle unter „Jeder“.",
             "showSChats": "Die Chats von {label} zeigen",
             "startAs": "Chat als {label} beginnen",
             "working": "{count} arbeitet | {count} arbeiten"
@@ -2613,12 +2616,14 @@
             "connectors": "Konnektoren",
             "delegate": "Delegieren",
             "driveBrowser": "Einen Browser steuern",
+            "extensions": "Erweiterungen",
             "fetchPageRunSearch": "Eine Seite holen, eine Suche ausführen.",
             "inWorkspace": "In Ihrem Workspace",
             "javascriptRunsFencedBy": "JavaScript läuft eingezäunt von der Laufzeit: Dateien folgen der Antwort zu „Dateien“, keine Programme ohne „Befehle ausführen“.",
             "mcpConnections": "MCP-Verbindungen",
             "noConnectorsAddedYet": "Noch keine Konnektoren hinzugefügt.",
             "noDevicesConnectedYet": "Noch keine Geräte verbunden.",
+            "noExtensionsSwitchedOn": "Noch keine Erweiterungen eingeschaltet.",
             "noMcpConnectionsAdded": "Noch keine MCP-Verbindungen hinzugefügt.",
             "none": "Keine",
             "onEveryOtherLimit": "an, ist jede andere Grenze auf dieser Persona eine starke Voreinstellung und keine Mauer: eine Session mit einer Shell kann eine Zugangsinformation erreichen, die ihr nicht gewährt wurde. Schalten Sie es für eine Persona aus, die eingezäunt sein muss.",
@@ -2843,6 +2848,11 @@
             "secrets": "Geheimnisse",
             "usage": "Nutzung",
             "yourSandboxes": "Deine Sandboxes"
+        },
+        "sandboxOutdatedNotice": {
+            "manual": "Selbst installiert? Installiere sie neu oder führe dies auf dem Rechner aus, auf dem sie läuft:",
+            "title": "Diese Sandbox läuft mit einer älteren Version",
+            "update": "Sandbox aktualisieren"
         },
         "sandboxOverview": {
             "addLogo": "Ein Logo hinzufügen",

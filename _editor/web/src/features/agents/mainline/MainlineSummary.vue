@@ -10,6 +10,8 @@ import { fixTone, type MainlineSummary, projectName, routingMeta } from "./mainl
 // how long, and how many lands queue behind it). What a check runs, whose work it measures and why a red waits are the
 // panel's to say; the bar is read at a glance, so it never carries a sentence. Last, in amber, how many findings pushes
 // left behind: a count, since none of it is urgent and it waits for the owner whenever they get to it.
+// A sandbox too old to lay its reds has no health to give, so the bar says it needs an update where health would be:
+// "passing" for want of a red would be a guess, and the panel's note says what the update brings and how.
 
 const t = useT();
 
@@ -37,6 +39,10 @@ const now = useNow(() => running.value !== undefined);
                     : t(`agents.mainline.projectsFailing`, { count: redCount }, redCount)
             }}</span>
             <span v-if="fix?.short !== undefined" class="shrink-0" :class="fixTone(fix.state)">· {{ fix.short }}</span>
+        </span>
+        <span v-else-if="summary.outdated" data-item="health" class="flex shrink-0 items-center gap-1.5 text-muted">
+            <Icon name="info-circle" class="shrink-0 text-2xs" />
+            <span>{{ t(`agents.mainline.needsUpdate`) }}</span>
         </span>
         <span v-else-if="summary.checked" data-item="health" class="flex shrink-0 items-center gap-1.5">
             <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-success"></span>

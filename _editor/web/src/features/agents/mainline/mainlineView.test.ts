@@ -1,6 +1,7 @@
-import type { Finding, MainlineLand, MainlineProject, MainlinePush, MainlineRoutingKind, MainlineRun, MainlineStatus, Red } from "@intentic/sandbox-contract";
+import type { Finding, MainlineLand, MainlineLandRef, MainlineProject, MainlinePush, MainlineRoutingKind, MainlineRun, MainlineStatus, Red } from "@intentic/sandbox-contract";
 import {
     checkSession,
+    daemonOutdated,
     failuresOf,
     findingGist,
     fixTone,
@@ -36,7 +37,13 @@ const red = (over: Partial<MainlineRun> = {}): MainlineRun => run({ status: `red
 
 const project = (over: Partial<MainlineProject> = {}): MainlineProject => ({ project: `web`, queued: [], ...over });
 
-const status = (projects: MainlineProject[], recent: MainlineRun[] = []): MainlineStatus => ({ projects, recent });
+// A current daemon always sends `reds`; one from before 2026-09-25 sends none of the fields this readout is drawn from.
+const status = (projects: MainlineProject[], recent: MainlineRun[] = []): MainlineStatus => ({ projects, recent, reds: [] });
+const olderStatus = (projects: MainlineProject[], recent: MainlineRun[] = []): MainlineStatus => ({ projects, recent });
+
+// A project red since its run `turned` it, laid where the daemon says.
+const redProject = (turned: MainlineRun, cause: MainlineLandRef[] = []): MainlineProject =>
+    project({ project: turned.project, last: turned, redSince: turned.at, red: { since: turned.at, cause, named: cause.length > 0 } });
 
 describe(`mainlineSummary`, () => {
     it(`is nothing until something was checked, is running, or waits`, () => {
@@ -52,25 +59,44 @@ describe(`mainlineSummary`, () => {
             status(
                 [
                     project({ running, queued: [land(`c`, NOW - 1_000)], last: run() }),
-                    project({ project: `api`, queued: [land(`c`, NOW - 1_000)], last: broken, redSince: broken.at }),
+                    { ...redProject(broken, [{ conversationId: `mine` }]), queued: [land(`c`, NOW - 1_000)] },
                 ],
                 [broken],
             ),
         );
         expect(summary).toEqual({
             running: { project: `web`, ...running },
-            // An older daemon's red, laid by the fallback: the one land of the run that turned it red.
-            reds: [{ project: `api`, run: broken, since: broken.at, cause: [land(`mine`, NOW - 4 * MINUTE)], named: false, fixer: undefined }],
+            reds: [{ project: `api`, run: broken, since: broken.at, cause: [{ conversationId: `mine` }], named: true, fixer: undefined }],
             // One land queued in two projects is one land.
             queued: 1,
             checked: true,
             leftAtPush: 0,
+            outdated: false,
         });
     });
 
     it(`says nothing about health while the first check of all is still running`, () => {
         const running = { command: `pnpm verify`, startedAt: NOW - 5_000, lands: [] };
-        expect(mainlineSummary(status([project({ running })]))).toEqual({ running: { project: `web`, ...running }, reds: [], queued: 0, checked: false, leftAtPush: 0 });
+        expect(mainlineSummary(status([project({ running })]))).toEqual({
+            running: { project: `web`, ...running },
+            reds: [],
+            queued: 0,
+            checked: false,
+            leftAtPush: 0,
+            outdated: false,
+        });
+    });
+
+    // Nothing is rebuilt from an older sandbox's runs: its red project is a red no one could lay, so the bar is told the
+    // sandbox is out of date rather than drawing a guess at who has it, or "passing" for want of a red.
+    it(`lays no red for a sandbox too old to serve one, and says it is out of date`, () => {
+        const broken = red({ at: NOW - 9 * MINUTE, suspects: [`mine`] });
+        const older = olderStatus([project({ last: broken, redSince: broken.at })], [broken]);
+        expect(daemonOutdated(older)).toBe(true);
+        expect(daemonOutdated(status([]))).toBe(false);
+        expect(redsOf(older)).toEqual([]);
+        expect(mainlineSummary(older)).toEqual({ running: undefined, reds: [], queued: 0, checked: true, leftAtPush: 0, outdated: true });
+        expect(resultsOf(older)).toEqual([{ project: `web`, run: broken, red: undefined }]);
     });
 });
 
@@ -82,10 +108,10 @@ describe(`resultsOf`, () => {
         const results = resultsOf(
             status(
                 [
-                    project({ project: `api`, last: apiRed, redSince: apiRed.at }),
+                    redProject(apiRed),
                     project({ project: `docs`, last: docs }),
                     project({ project: `never`, queued: [land(`q`, NOW)] }),
-                    project({ project: `web`, last: webRed, redSince: webRed.at }),
+                    redProject(webRed),
                 ],
                 [apiRed, webRed, docs],
             ),
@@ -115,38 +141,10 @@ describe(`a red's cause`, () => {
         expect(first?.cause).toEqual([]);
     });
 
-    // FALLBACK: a daemon that serves no `red` still gets a cause, rebuilt from its runs the way it used to be.
-    describe(`from a daemon that serves none`, () => {
-        const causeIn = (runs: MainlineRun[]): string[] => {
-            const [newest] = runs;
-            const since = Math.min(...runs.map((each) => each.at));
-            const [first] = redsOf(status([project({ last: newest, redSince: since })], runs));
-            return first === undefined ? [] : first.cause.map((each) => each.conversationId);
-        };
-
-        it(`is the suspects the sandbox named, on whichever run of the streak named them`, () => {
-            const turned = red({ at: NOW - 30 * MINUTE, lands: [land(`a`, NOW - 31 * MINUTE), land(`b`, NOW - 31 * MINUTE)], suspects: [`b`] });
-            const later = red({ at: NOW - 5 * MINUTE, lands: [land(`c`, NOW - 6 * MINUTE)], attempt: 2 });
-            expect(causeIn([later, turned])).toEqual([`b`]);
-        });
-
-        it(`is every land of the run that turned the project red, where nobody was named`, () => {
-            const turned = red({ at: NOW - 30 * MINUTE, lands: [land(`a`, NOW - 31 * MINUTE), land(`b`, NOW - 31 * MINUTE)] });
-            const later = red({ at: NOW - 5 * MINUTE, lands: [land(`c`, NOW - 6 * MINUTE)], attempt: 2 });
-            expect(causeIn([later, turned])).toEqual([`a`, `b`]);
-        });
-
-        // A later run only found main red; offering its land as the cause would blame the work that walked into it.
-        it(`is nobody when the record no longer reaches the run that turned it red`, () => {
-            expect(causeIn([red({ at: NOW - 5 * MINUTE, lands: [land(`c`, NOW - 6 * MINUTE)], attempt: 3 })])).toEqual([]);
-        });
-
-        it(`never reaches back past the streak into an earlier red of the same project`, () => {
-            const earlier = red({ at: NOW - 90 * MINUTE, lands: [land(`old`, NOW - 91 * MINUTE)], suspects: [`old`] });
-            const turned = red({ at: NOW - 30 * MINUTE, lands: [land(`a`, NOW - 31 * MINUTE)] });
-            const [first] = redsOf(status([project({ last: turned, redSince: turned.at })], [turned, run({ at: NOW - 60 * MINUTE }), earlier]));
-            expect(first?.cause.map((each) => each.conversationId)).toEqual([`a`]);
-        });
+    // An older sandbox's runs name suspects too, but only the daemon's own red says who a red is laid at.
+    it(`is never rebuilt from the runs of a sandbox that serves no red`, () => {
+        const turned = red({ at: NOW - 30 * MINUTE, lands: [land(`a`, NOW - 31 * MINUTE), land(`b`, NOW - 31 * MINUTE)], suspects: [`b`] });
+        expect(redsOf(olderStatus([project({ last: turned, redSince: turned.at })], [turned]))).toEqual([]);
     });
 });
 
@@ -163,28 +161,17 @@ describe(`failuresOf`, () => {
         expect(failuresOf(split)).toEqual([{ name: `caps the Finished lane`, file: `chatTabsLanes.test.ts` }, { name: typeError }, { name: `@intentic/web#test` }]);
     });
 
-    // FALLBACK: a daemon that sends no `units` gets its failure lines split here, the way they used to be.
-    it(`splits a failing test's line by its name first and the file it is in after, from a daemon that sends no units`, () => {
-        const lines = red({
-            failures: [
-                `@intentic/web#test _editor/web/src/features/chat/tabs/chatTabsLanes.test.ts › caps the Finished lane`,
-                `web/src/pages/changelog.test.ts › lists every release › under its heading`,
-                `w#test a › `,
-            ],
-        });
-        expect(failuresOf(lines)).toEqual([
-            { name: `caps the Finished lane`, file: `chatTabsLanes.test.ts` },
-            { name: `lists every release › under its heading`, file: `changelog.test.ts` },
-            { name: `w#test a › ` },
-        ]);
+    // An older sandbox's failure lines are never split here: its reds are not drawn, so neither are they.
+    it(`names nothing from a sandbox that sends no units`, () => {
+        expect(failuresOf(red({ failures: [`web/src/pages/changelog.test.ts › lists every release`] }))).toEqual([]);
     });
 });
 
 describe(`checkSession`, () => {
-    it(`is the terminal the daemon names for the project, or the one an older daemon's panel runs in`, () => {
+    it(`is the terminal the daemon names for the project, and none where an older sandbox names none`, () => {
         expect(checkSession(status([project({ session: `panel-web--verify` })]), `web`)).toBe(`panel-web--verify`);
-        expect(checkSession(status([project({ project: `a/b` })]), `a/b`)).toBe(`panel-a_b--verify`);
-        expect(checkSession(status([]), ``)).toBe(`panel-root--verify`);
+        expect(checkSession(olderStatus([project({ project: `a/b` })]), `a/b`)).toBeUndefined();
+        expect(checkSession(status([]), ``)).toBeUndefined();
     });
 });
 
@@ -248,7 +235,7 @@ const owing = (pushes: readonly MainlinePush[], settled: readonly string[] = [])
 };
 
 // A status for what pushes left: the pushes, what is owed of them, the lands' record, and one project checked at `lastAt`
-// when given. `pushes` undefined is a daemon that records none.
+// when given. `pushes` undefined is a sandbox from before 2026-09-25, which sends neither.
 const pushStatus = (
     pushes: MainlinePush[] | undefined,
     { settled = [], recent = [], lastAt, reds }: { settled?: string[]; recent?: MainlineRun[]; lastAt?: number; reds?: Red[] } = {},
@@ -259,7 +246,7 @@ const pushStatus = (
 });
 
 describe(`pushDebtOf`, () => {
-    it(`reads nothing from a daemon that records no pushes, or pushes that left nothing owed`, () => {
+    it(`reads nothing from a sandbox too old to record pushes, or pushes that left nothing owed`, () => {
         expect(pushDebtOf(undefined)).toEqual([]);
         expect(pushDebtOf(pushStatus(undefined))).toEqual([]);
         expect(pushDebtOf(pushStatus([push(`a`, NOW, []), push(`b`, NOW - MINUTE, [finding(`paths`)])], { settled: [`paths`] }))).toEqual([]);
@@ -358,7 +345,7 @@ describe(`mainlineSummary with pushes`, () => {
                 { settled: [`layout`], lastAt: NOW - 5 * MINUTE },
             ),
         );
-        expect(summary).toEqual({ running: undefined, reds: [], queued: 0, checked: true, leftAtPush: 3 });
+        expect(summary).toEqual({ running: undefined, reds: [], queued: 0, checked: true, leftAtPush: 3, outdated: false });
     });
 
     it(`keeps main passing on the bar when what pushes left is the only other news`, () => {
@@ -368,8 +355,16 @@ describe(`mainlineSummary with pushes`, () => {
             queued: 0,
             checked: true,
             leftAtPush: 1,
+            outdated: false,
         });
-        expect(mainlineSummary(pushStatus([], { lastAt: NOW - MINUTE }))).toEqual({ running: undefined, reds: [], queued: 0, checked: true, leftAtPush: 0 });
+        expect(mainlineSummary(pushStatus([], { lastAt: NOW - MINUTE }))).toEqual({
+            running: undefined,
+            reds: [],
+            queued: 0,
+            checked: true,
+            leftAtPush: 0,
+            outdated: false,
+        });
     });
 
     it(`stands for a sandbox that pushed with findings but never landed, and not for one whose pushes left nothing`, () => {
@@ -379,9 +374,17 @@ describe(`mainlineSummary with pushes`, () => {
             queued: 0,
             checked: false,
             leftAtPush: 1,
+            outdated: false,
         });
         expect(mainlineSummary(pushStatus([push(`a`, NOW, [])]))).toBeUndefined();
         expect(mainlineSummary(pushStatus(undefined))).toBeUndefined();
+    });
+
+    // v1.312 files pushes without the reds that say what of them is owed: the bar stands to say it needs an update, and
+    // counts nothing it cannot know.
+    it(`stands for an older sandbox that pushed, counting nothing it cannot say is owed`, () => {
+        const older: MainlineStatus = { projects: [], recent: [], pushed: [push(`a`, NOW, [finding(`paths`)])] };
+        expect(mainlineSummary(older)).toEqual({ running: undefined, reds: [], queued: 0, checked: false, leftAtPush: 0, outdated: true });
     });
 });
 
@@ -404,9 +407,11 @@ describe(`timelineOf`, () => {
         expect(timelineOf(merged, 2).map((event) => (event.kind === `land` ? event.run.at : event.push.id))).toEqual([NOW - MINUTE, `left`]);
     });
 
-    it(`is the lands' record alone for a daemon that records no pushes`, () => {
+    it(`is the lands' record alone for a sandbox too old to say what its pushes left, even one that sent them`, () => {
         const checked = run();
         expect(timelineOf(pushStatus(undefined, { recent: [checked] }), 8)).toEqual([{ kind: `land`, run: checked }]);
+        const older: MainlineStatus = { projects: [], recent: [checked], pushed: [push(`a`, NOW, [finding(`paths`)])] };
+        expect(timelineOf(older, 8)).toEqual([{ kind: `land`, run: checked }]);
     });
 });
 

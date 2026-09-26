@@ -5,6 +5,7 @@ import { useNow } from "@intentic/ui/async";
 import { timeAgo } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
+import SandboxOutdatedNotice from "../../sandbox/overview/version/SandboxOutdatedNotice.vue";
 import { openWorkTerminal } from "../../terminal/useWorkTerminals";
 import { formatElapsed } from "../fleet/agentStatus";
 import MainlinePushSection from "./MainlinePushSection.vue";
@@ -81,8 +82,13 @@ const open = (conversationId: string, title?: string): void => {
     openLandConversation(conversationId, title);
 };
 
+// A sandbox too old to name its check's terminal offers no Logs rather than a guess at one.
+const sessionOf = (project: string): string | undefined => checkSession(props.status, project);
 const showLogs = (project: string): void => {
-    openWorkTerminal(checkSession(props.status, project));
+    const session = sessionOf(project);
+    if (session !== undefined) {
+        openWorkTerminal(session);
+    }
 };
 
 // What a settled run measured: its first land by title and a count of the rest, or a re-check no land asked for.
@@ -118,6 +124,8 @@ const eventKey = (event: MainlineEvent): string => (event.kind === `land` ? `lan
 
 <template>
     <div class="@container">
+        <!-- A sandbox too old for this panel: said once, above the road, which then shows only what it did serve. -->
+        <SandboxOutdatedNotice v-if="summary.outdated" :missing="t(`agents.mainline.outdatedMissing`)" class="mb-4" />
         <!-- Four columns when the dock is wide. Narrower, the two short ones stack beside the result, so what main's state is
              stays in view, and the record goes under them. -->
         <div
@@ -154,7 +162,12 @@ const eventKey = (event: MainlineEvent): string => (event.kind === `land` ? `lan
                             <Icon name="spinner" spin class="shrink-0 text-2xs text-link" />
                             <span class="min-w-0 truncate font-medium text-content">{{ projectName(running.project) }}</span>
                             <span class="shrink-0 tabular-nums text-muted">{{ formatElapsed(running.startedAt, now) }}</span>
-                            <button type="button" :class="ui.textAction(`ml-auto shrink-0 gap-1 text-2xs`)" @click="showLogs(running.project)">
+                            <button
+                                v-if="sessionOf(running.project) !== undefined"
+                                type="button"
+                                :class="ui.textAction(`ml-auto shrink-0 gap-1 text-2xs`)"
+                                @click="showLogs(running.project)"
+                            >
                                 <Icon name="terminal" class="text-2xs" />{{ t(`agents.mainline.logs`) }}
                             </button>
                         </div>
@@ -196,7 +209,7 @@ const eventKey = (event: MainlineEvent): string => (event.kind === `land` ? `lan
                             }}</span>
                             <!-- One terminal per project: while it is being checked again, the Checking column already opens it. -->
                             <button
-                                v-if="running?.project !== result.project"
+                                v-if="running?.project !== result.project && sessionOf(result.project) !== undefined"
                                 type="button"
                                 :class="ui.textAction(`ml-auto shrink-0 gap-1 text-2xs`)"
                                 @click="showLogs(result.project)"

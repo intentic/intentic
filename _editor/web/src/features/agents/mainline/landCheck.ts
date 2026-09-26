@@ -1,4 +1,5 @@
 import type { MainlineLand, MainlineRoutingKind, MainlineRun, MainlineStatus, TurnProof } from "@intentic/sandbox-contract";
+import { daemonOutdated } from "./mainlineView";
 
 // WHAT A CARD SAYS ABOUT ITS WORK NOW THAT NOTHING IS CHECKED INSIDE A TURN: what the main tree's own check made of the
 // conversation's latest land (workspace.mainline), and what its last turn showed of its own work (AgentSummary.proof).
@@ -23,16 +24,9 @@ export interface LandCheck {
 
 const holds = (lands: readonly MainlineLand[], conversationId: string): boolean => lands.some((land) => land.conversationId === conversationId);
 
-// Laid at this conversation: among the suspects the sandbox filed on the run as it settled (a run that says whether blame
-// was `named` says who it was laid at, and a red that only found main red names nobody), the same answer the panel's
-// cause reads.
-const blamed = (run: MainlineRun, conversationId: string): boolean =>
-    run.named === undefined ? legacyBlamed(run, conversationId) : (run.suspects ?? []).includes(conversationId);
-
-// FALLBACK FOR DAEMONS BEFORE 2026-09-25, which file suspects only with a routing decision and never say `named`: the
-// suspects when there are any, else the one land of a run that turned a green project red.
-const legacyBlamed = (run: MainlineRun, conversationId: string): boolean =>
-    run.suspects !== undefined && run.suspects.length > 0 ? run.suspects.includes(conversationId) : run.lands.length === 1 && run.attempt <= 1;
+// Laid at this conversation: among the suspects the sandbox filed on the run as it settled (a red that only found main
+// red names nobody), the same answer the panel's cause reads.
+const blamed = (run: MainlineRun, conversationId: string): boolean => (run.suspects ?? []).includes(conversationId);
 
 // The answer to the newest land: every run that measured it, since a land touching two projects is checked in each, and
 // the worse of them is what it did.
@@ -61,7 +55,9 @@ const settled = (conversationId: string, recent: readonly MainlineRun[]): LandCh
 };
 
 // A check running on the land outranks one it is queued for, which outranks one already settled: the newest land is the
-// one a reader is asking about, and a queued or running one is newer than anything in the record.
+// one a reader is asking about, and a queued or running one is newer than anything in the record. A sandbox too old to
+// lay its reds (daemonOutdated) files suspects only once it has sent somebody, so what it settled says nothing on a card:
+// a land it blamed would read as merely checked red.
 export const landCheck = (conversationId: string, status: MainlineStatus | undefined): LandCheck | undefined => {
     if (status === undefined) {
         return undefined;
@@ -77,7 +73,7 @@ export const landCheck = (conversationId: string, status: MainlineStatus | undef
             return { kind: `waiting`, project: project.project, since: queued.at };
         }
     }
-    return settled(conversationId, status.recent);
+    return daemonOutdated(status) ? undefined : settled(conversationId, status.recent);
 };
 
 export type ProofVerification = Exclude<TurnProof[`verification`], `no-code`>;

@@ -1,5 +1,5 @@
 import type { Persona } from "@intentic/sandbox-contract";
-import { FULL_POWERS, personaSlug, personaStartDirs, personasStartingIn, powersDraftOf, storedPowers } from "./personaRules";
+import { extensionGrantablesFrom, FULL_POWERS, personaSlug, personaStartDirs, personasStartingIn, powersDraftOf, storedPowers } from "./personaRules";
 
 // Rules shared by both persona-card surfaces: an id differing by a hyphen upserts a different persona, and a powers
 // block should only be written once some shelf is off.
@@ -52,8 +52,8 @@ describe(`powersDraftOf`, () => {
         expect(storedPowers(powersDraftOf(persona))).toEqual(persona.powers);
     });
 
-    // The form draws no extensions list yet, so a save must carry the bound one through rather than widen it to all.
-    it(`keeps an extensions bound it does not draw`, () => {
+    // A save must carry the bound list through rather than widen it back to every extension.
+    it(`keeps an extensions bound through a save`, () => {
         const persona: Persona = {
             id: `narrow`,
             capabilities: [],
@@ -92,5 +92,15 @@ describe(`personasStartingIn`, () => {
                 [`intentic/_editor/web`, 1],
             ]),
         );
+    });
+});
+
+describe(`extensionGrantablesFrom`, () => {
+    // What an absent list grants is every switched-on extension, so a switched-off one is nothing to pick.
+    it(`offers each switched-on extension by its stable id, named as the Extensions tab names it`, () => {
+        const extension = (id: string, name: string, enabled: boolean) => ({ id, enabled, manifest: { name } });
+        expect(extensionGrantablesFrom([extension(`acme.notes`, `notes`, true), extension(`acme.off`, `off`, false)])).toEqual([
+            { id: `acme.notes`, kind: `extension`, label: `notes`, detail: `acme.notes` },
+        ]);
     });
 });

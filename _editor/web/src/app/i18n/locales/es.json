@@ -416,6 +416,7 @@
             "title": "Línea principal",
             "root": "espacio de trabajo",
             "mainPassing": "main sin fallos",
+            "needsUpdate": "El sandbox necesita una actualización",
             "projectFailing": "{project} con fallos",
             "projectsFailing": "{count} proyecto con fallos | {count} proyectos con fallos",
             "checking": "Comprobando {project}",
@@ -427,6 +428,7 @@
             "nothingQueued": "Nada en cola",
             "idle": "Inactivo",
             "noResults": "Aún no hay resultados",
+            "outdatedMissing": "Hasta que se actualice, este panel no puede decir a quién se atribuye una comprobación fallida ni quién la está arreglando, abrir los registros de una comprobación ni mostrar lo que dejaron tus pushes.",
             "passing": "sin fallos",
             "failing": "con fallos",
             "failingSince": "con fallos desde {time}",
@@ -1167,6 +1169,7 @@
             "needsYou": "{count} te necesita | {count} te necesitan",
             "newChatAs": "Chat nuevo como {label}",
             "notOpen": "{count} sin abrir | {count} sin abrir",
+            "outdatedMissing": "Hasta que se actualice, los chats no se pueden agrupar bajo la persona con la que hablan, así que todos quedan en «Cualquiera».",
             "showSChats": "Mostrar los chats de {label}",
             "startAs": "Empezar un chat como {label}",
             "working": "{count} en curso | {count} en curso"
@@ -2626,12 +2629,14 @@
             "connectors": "Conectores",
             "delegate": "Delegar",
             "driveBrowser": "Manejar un navegador",
+            "extensions": "Extensiones",
             "fetchPageRunSearch": "Traer una página, hacer una búsqueda.",
             "inWorkspace": "En tu espacio de trabajo",
             "javascriptRunsFencedBy": "JavaScript se ejecuta acotado por el runtime: los archivos siguen la respuesta de Archivos, sin programas si no hay «Ejecutar comandos».",
             "mcpConnections": "Conexiones MCP",
             "noConnectorsAddedYet": "Todavía no se han añadido conectores.",
             "noDevicesConnectedYet": "Todavía no hay dispositivos conectados.",
+            "noExtensionsSwitchedOn": "Todavía no hay extensiones activadas.",
             "noMcpConnectionsAdded": "Todavía no se han añadido conexiones MCP.",
             "none": "Ninguno",
             "onEveryOtherLimit": "activado, cualquier otro límite de esta persona es un valor por defecto fuerte, no un muro: una sesión con shell puede alcanzar una credencial que no se le concedió. Desactívalo para una persona que deba quedar acotada.",
@@ -2857,6 +2862,11 @@
             "secrets": "Secretos",
             "usage": "Uso",
             "yourSandboxes": "Tus sandboxes"
+        },
+        "sandboxOutdatedNotice": {
+            "manual": "¿Lo instalaste tú? Reinstálalo o ejecuta esto en la máquina donde corre:",
+            "title": "Este sandbox ejecuta una versión anterior",
+            "update": "Actualizar el sandbox"
         },
         "sandboxOverview": {
             "addLogo": "Añadir un logo",

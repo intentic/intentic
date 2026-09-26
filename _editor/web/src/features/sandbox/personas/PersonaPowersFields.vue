@@ -17,7 +17,7 @@ const {
     folderBound = false,
 } = defineProps<{
     draft: PersonaPowersDraft;
-    /** The connectors, devices and MCP connections this sandbox has, for the per-id grants. */
+    /** The connectors, devices, MCP connections and switched-on extensions this sandbox has, for the per-id grants. */
     grantables: readonly PersonaGrantable[];
     /** Whether the parent's form has also fenced this persona to a set of folders: the shell caveat's third case. */
     folderBound?: boolean;
@@ -113,20 +113,31 @@ const GRANT_GROUPS = computed(() => [
         label: t(`sandbox.personaPowersFields.mcpConnections`),
         empty: t(`sandbox.personaPowersFields.noMcpConnectionsAdded`),
     },
+    // An extension's own agent tools and its plugin (skills, commands, subagents), by extension id; the tools it serves
+    // for a connected card follow Connectors instead. The glyph is the Extensions tab's own.
+    {
+        key: `extensions` as const,
+        kind: `extension` as const,
+        icon: `sliders-h` as const,
+        label: t(`sandbox.personaPowersFields.extensions`),
+        empty: t(`sandbox.personaPowersFields.noExtensionsSwitchedOn`),
+    },
 ]);
+
+type GrantKey = `connectors` | `devices` | `mcp` | `extensions`;
 
 const groupItems = (kind: PersonaGrantable[`kind`]): PersonaGrantable[] => grantables.filter((entry) => entry.kind === kind);
 
 // undefined means every one of them, including anything connected later; a materialised list of today's ids would
 // silently lose that.
-const grantsAll = (key: `connectors` | `devices` | `mcp`): boolean => draft[key] === undefined;
-const granted = (key: `connectors` | `devices` | `mcp`, id: string): boolean => draft[key]?.includes(id) ?? true;
-const toggleGrant = (key: `connectors` | `devices` | `mcp`, id: string, kind: PersonaGrantable[`kind`]): void => {
+const grantsAll = (key: GrantKey): boolean => draft[key] === undefined;
+const granted = (key: GrantKey, id: string): boolean => draft[key]?.includes(id) ?? true;
+const toggleGrant = (key: GrantKey, id: string, kind: PersonaGrantable[`kind`]): void => {
     // The first click off "all" has to materialise the list before removing one from it.
     const current = draft[key] ?? groupItems(kind).map((entry) => entry.id);
     draft[key] = current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id];
 };
-const setGrantsAll = (key: `connectors` | `devices` | `mcp`, all: boolean): void => {
+const setGrantsAll = (key: GrantKey, all: boolean): void => {
     draft[key] = all ? undefined : [];
 };
 
@@ -218,6 +229,7 @@ const shellCaveat = computed(
                             @click="toggleGrant(group.key, item.id, group.kind)"
                         >
                             {{ item.label }}
+                            <span v-if="item.detail !== undefined" class="ml-1 font-mono text-2xs text-subtle">{{ item.detail }}</span>
                         </button>
                     </div>
                 </div>

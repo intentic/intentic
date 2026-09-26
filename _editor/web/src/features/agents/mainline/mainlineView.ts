@@ -1,14 +1,13 @@
-import {
-    type Finding,
-    headStreak,
-    type MainlineLand,
-    type MainlineLandRef,
-    type MainlinePush,
-    type MainlineRouting,
-    type MainlineRoutingKind,
-    type MainlineRun,
-    type MainlineStatus,
-    type Red,
+import type {
+    Finding,
+    MainlineLand,
+    MainlineLandRef,
+    MainlinePush,
+    MainlineRouting,
+    MainlineRoutingKind,
+    MainlineRun,
+    MainlineStatus,
+    Red,
 } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 import { formatClock, formatDate, formatDayMonthTime } from "@intentic/ui/format";
@@ -20,6 +19,12 @@ import { t } from "@intentic/ui/i18n";
 //
 // Two questions are kept apart everywhere it is drawn, because one sentence answering both is what made it unreadable:
 // HEALTH (is main passing, and if not, who has it) and ACTIVITY (what the check is doing now, and what queues for it).
+
+// A SANDBOX TOO OLD FOR THIS READOUT. Every current daemon sends `reds`, empty or not; one from before 2026-09-25 (every
+// release up to v1.312) sends none, and lays no reds, names no check terminal and splits no failures either. Nothing here
+// rebuilds those from its raw runs: the panel says the sandbox needs an update (SandboxOutdatedNotice.vue) and shows only
+// what it did serve, as served. Read off the field, never the version: a sandbox built from a checkout says 0.0.0.
+export const daemonOutdated = (status: MainlineStatus): boolean => status.reds === undefined;
 
 // One project red right now: the run that says so, when its streak began, the work the sandbox laid it at, and the latest
 // decision about it. All of it is the daemon's (MainlineProject.red), read, never re-derived.
@@ -41,7 +46,7 @@ export const redsOf = (status: MainlineStatus): MainlineRed[] =>
             if (project.last?.status !== `red`) {
                 return [];
             }
-            const red = project.red ?? legacyRed(status, project);
+            const red = project.red;
             return red === undefined
                 ? []
                 : [{ project: project.project, run: project.last, since: red.since, cause: red.cause, named: red.named, fixer: red.fixer }];
@@ -148,6 +153,9 @@ export interface MainlineSummary {
     readonly checked: boolean;
     // What the push reds owe across every project (pushDebtOf).
     readonly leftAtPush: number;
+    // The sandbox is too old to say who has a red or what a push left (daemonOutdated), so `reds` and `leftAtPush` are
+    // empty for want of an answer, not because main is clean: the bar says so instead of "passing".
+    readonly outdated: boolean;
 }
 
 export const mainlineSummary = (status: MainlineStatus | undefined): MainlineSummary | undefined => {
@@ -160,10 +168,13 @@ export const mainlineSummary = (status: MainlineStatus | undefined): MainlineSum
     const reds = redsOf(status);
     const queued = queuedLands(status).length;
     const checked = status.projects.some((candidate) => candidate.last !== undefined);
-    if (running === undefined && reds.length === 0 && queued === 0 && !checked && leftAtPush === 0) {
+    const outdated = daemonOutdated(status);
+    // An older sandbox's pushes still count as something having happened: they are what its update would show.
+    const pushedAny = pushesOf(status).length > 0;
+    if (running === undefined && reds.length === 0 && queued === 0 && !checked && leftAtPush === 0 && !(outdated && pushedAny)) {
         return undefined;
     }
-    return { running, reds, queued, checked, leftAtPush };
+    return { running, reds, queued, checked, leftAtPush, outdated };
 };
 
 // THE RECORD, lands' checks and pushes' measurements in one list, newest first. A push reads as what it left: how many
@@ -174,11 +185,13 @@ export type MainlineEvent =
 
 const eventAt = (event: MainlineEvent): number => (event.kind === `land` ? event.run.at : event.push.at);
 
+// An older sandbox's pushes are left out: with no reds, nothing says what of theirs is still owed, and "handled" would be
+// a guess.
 export const timelineOf = (status: MainlineStatus, limit: number): MainlineEvent[] => {
     const owed = owedByProject(status);
     return [
         ...status.recent.map((run): MainlineEvent => ({ kind: `land`, run })),
-        ...pushesOf(status).map((push): MainlineEvent => {
+        ...(daemonOutdated(status) ? [] : pushesOf(status)).map((push): MainlineEvent => {
             const open = stillOwed(push, owed);
             return { kind: `push`, push, open, handled: open === 0 && push.findings.length > 0 };
         }),
@@ -219,55 +232,16 @@ export const resultsOf = (status: MainlineStatus): MainlineResult[] => {
 
 // A failure as a reader scans it: a failing test by its name, with the file it sits in after, since a whole location
 // would spend a narrow column on the path; anything else as the check printed it, which already names its path.
+// The daemon splits every run that names failures (`units`).
 export const failuresOf = (run: MainlineRun): { readonly name: string; readonly file?: string }[] =>
-    run.units === undefined
-        ? run.failures.map(legacyFailureParts)
-        : run.units.map((unit) => {
-              const file = unit.path === undefined || unit.name.includes(unit.path) ? undefined : unit.path.split(`/`).at(-1);
-              return { name: unit.name, ...(file === undefined || file === `` ? {} : { file }) };
-          });
+    (run.units ?? []).map((unit) => {
+        const file = unit.path === undefined || unit.name.includes(unit.path) ? undefined : unit.path.split(`/`).at(-1);
+        return { name: unit.name, ...(file === undefined || file === `` ? {} : { file }) };
+    });
 
-// The terminal a project's check runs in, as the daemon names it.
-export const checkSession = (status: MainlineStatus, project: string): string =>
-    status.projects.find((candidate) => candidate.project === project)?.session ?? legacyVerifySession(project);
-
-/* FALLBACK FOR DAEMONS BEFORE 2026-09-25, which serve no `red`, `session`, `named` or `units` ("one editor, many daemons",
-   docs/architecture/app-plane.md). Each rebuilds from the raw runs what a newer daemon serves; nothing else reads them,
-   and they go when no supported daemon lacks the fields. */
-
-// The suspects named on any run of the streak, else the lands of the run that turned the project red.
-const legacyRed = (
-    status: MainlineStatus,
-    project: MainlineStatus[`projects`][number],
-): { readonly since: number; readonly cause: readonly MainlineLandRef[]; readonly named: boolean; readonly fixer: MainlineRouting | undefined } | undefined => {
-    const since = project.redSince;
-    if (since === undefined) {
-        return undefined;
-    }
-    // The one streak rule (contract, headStreak): the unbroken run of red at the head of the project's history.
-    const streak = headStreak(
-        status.recent.filter((run) => run.project === project.project),
-        (run) => run.status === `red`,
-    );
-    const named = streak.find((run) => run.suspects !== undefined && run.suspects.length > 0);
-    const first = streak.at(-1);
-    const cause =
-        named?.suspects?.map((conversationId) => named.lands.find((land) => land.conversationId === conversationId) ?? { conversationId }) ??
-        (first === undefined || first.attempt > 1 ? [] : first.lands);
-    return { since, cause, named: named !== undefined, fixer: streak.find((run) => run.routing !== undefined)?.routing };
-};
-
-const legacyFailureParts = (failure: string): { readonly name: string; readonly file?: string } => {
-    const cut = failure.indexOf(` › `);
-    if (cut === -1) {
-        return { name: failure };
-    }
-    const file = failure.slice(0, cut).trim().split(/[\s/]/).at(-1) ?? ``;
-    const name = failure.slice(cut + ` › `.length).trim();
-    return name === `` ? { name: failure } : { name, ...(file === `` ? {} : { file }) };
-};
-
-const legacyVerifySession = (project: string): string => `panel-${project === `` ? `root` : project.replaceAll(/[^a-zA-Z0-9_-]/g, `_`)}--verify`;
+// The terminal a project's check runs in, as the daemon names it; undefined from a sandbox too old to name it.
+export const checkSession = (status: MainlineStatus, project: string): string | undefined =>
+    status.projects.find((candidate) => candidate.project === project)?.session;
 
 // The workspace root is a project with no folder, and "" names nothing a reader can see.
 export const projectName = (project: string): string => (project === `` ? t(`agents.mainline.root`) : project);

@@ -427,6 +427,7 @@
             "title": "Main line",
             "root": "workspace",
             "mainPassing": "Main passing",
+            "needsUpdate": "Sandbox needs an update",
             "projectFailing": "{project} failing",
             "projectsFailing": "{count} project failing | {count} projects failing",
             "checking": "Checking {project}",
@@ -438,6 +439,7 @@
             "nothingQueued": "Nothing queued",
             "idle": "Idle",
             "noResults": "No results yet",
+            "outdatedMissing": "Until it updates, this panel can't say who a failing check is laid at or who is fixing it, open a check's logs, or show what your pushes left behind.",
             "passing": "passing",
             "failing": "failing",
             "failingSince": "failing since {time}",
@@ -1209,6 +1211,7 @@
             "needsYou": "{count} needs you | {count} need you",
             "newChatAs": "New chat as {label}",
             "notOpen": "{count} not open | {count} not open",
+            "outdatedMissing": "Until it updates, chats can't be sorted under the persona they speak as, so they all sit under Anyone.",
             "showSChats": "Show {label}'s chats",
             "startAs": "Start a chat as {label}",
             "working": "{count} working | {count} working"
@@ -2813,12 +2816,14 @@
             "connectors": "Connectors",
             "delegate": "Delegate",
             "driveBrowser": "Drive a browser",
+            "extensions": "Extensions",
             "fetchPageRunSearch": "Fetch a page, run a search.",
             "inWorkspace": "In your workspace",
             "javascriptRunsFencedBy": "JavaScript runs fenced by the runtime: files follow the Files answer, no programs without Run commands.",
             "mcpConnections": "MCP connections",
             "noConnectorsAddedYet": "No connectors added yet.",
             "noDevicesConnectedYet": "No devices connected yet.",
+            "noExtensionsSwitchedOn": "No extensions switched on yet.",
             "noMcpConnectionsAdded": "No MCP connections added yet.",
             "none": "None",
             "onEveryOtherLimit": "on, every other limit on this persona is a strong default rather than a wall: a session with a shell can reach a credential it wasn't granted. Turn it off for a persona that has to be fenced in.",
@@ -3034,6 +3039,11 @@
             "secrets": "Secrets",
             "usage": "Usage",
             "yourSandboxes": "Your sandboxes"
+        },
+        "sandboxOutdatedNotice": {
+            "manual": "Installed it yourself? Reinstall it, or run this on the machine that runs it:",
+            "title": "This sandbox runs an older version",
+            "update": "Update the sandbox"
         },
         "sandboxOverview": {
             "addLogo": "Add a logo",

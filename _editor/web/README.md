@@ -26,6 +26,11 @@ flowchart LR
   stale (`systemEvents.ts`). Terminals and the browser view use WebSockets opened with a short-lived ticket
   (`wsTicket.ts`); a terminal's is spoken on a stream of the edge's WebTransport session where the sandbox row says the
   edge serves one (`features/terminal/channel/`).
+- **Older sandboxes.** A view drawn from fields an older daemon does not send never rebuilds them from what it did
+  send. It shows what was served as served, and `SandboxOutdatedNotice.vue` says the sandbox needs an update, what the
+  view lacks until then, and how to update: the sandbox page's Update card, or `ic sandbox update` for a sandbox
+  installed by hand. The main line and the persona rail read "older" off the main line's missing `reds`
+  (`daemonOutdated`), which every release after v1.312 sends.
 - **Routes.** `/login` and `/setup` sit outside the shell. Everything else lives under `/` in
   `WorkspaceShell.vue`, guarded by `requireAuth` and `requireSetup`, which renders `ShellDesktop.vue` (rail, docked
   chat and terminal) or `ShellMobile.vue` (tab bar, full-screen views).

@@ -7,8 +7,10 @@ import type { Persona, PersonaPowers, TurnBriefingNoteId } from "@intentic/sandb
 /** One connected thing a persona can be granted or denied, in the words the Capabilities page uses. */
 export interface PersonaGrantable {
     id: string;
-    kind: `cli` | `device` | `mcp`;
+    kind: `cli` | `device` | `mcp` | `extension`;
     label: string;
+    /** The stable id, shown beside a label that is not it (an extension's name beside `publisher.name`). */
+    detail?: string;
 }
 
 // Grantable kinds: cli, host, mcp. Agent-runtime and platform kinds are excluded so a persona cannot disable the
@@ -18,6 +20,16 @@ export const grantablesFrom = (capabilities: readonly { id: string; kind: string
     capabilities
         .filter((capability) => GRANTABLE_KINDS.has(capability.kind))
         .map((capability) => ({ id: capability.id, kind: capability.kind as PersonaGrantable[`kind`], label: capability.id }));
+
+// The extensions a persona can be granted, by their stable id and in the name the Extensions tab gives them. Only the
+// switched-on ones: a persona's absent list means every enabled extension (PersonaPowers.extensions), so a switched-off one
+// is nothing to grant.
+export const extensionGrantablesFrom = (
+    extensions: readonly { readonly id: string; readonly enabled: boolean; readonly manifest: { readonly name: string } }[],
+): PersonaGrantable[] =>
+    extensions
+        .filter((extension) => extension.enabled)
+        .map((extension) => ({ id: extension.id, kind: `extension`, label: extension.manifest.name, detail: extension.id }));
 
 // Flat, always-populated draft of a persona's powers; `storedPowers` folds this back into the committed shape.
 export interface PersonaPowersDraft {
@@ -32,8 +44,7 @@ export interface PersonaPowersDraft {
     connectors: string[] | undefined;
     devices: string[] | undefined;
     mcp: string[] | undefined;
-    // Extension ids whose own tools and agent plugin the persona gets. Not drawn by the form yet; carried so a save
-    // keeps a bound set through the API rather than widening it back to every extension.
+    // Extension ids whose own tools and agent plugin (skills, commands, subagents) the persona gets.
     extensions: string[] | undefined;
 }
 

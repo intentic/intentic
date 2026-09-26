@@ -416,6 +416,7 @@
             "title": "Główna linia",
             "root": "przestrzeń robocza",
             "mainPassing": "main przechodzi",
+            "needsUpdate": "Sandbox wymaga aktualizacji",
             "projectFailing": "{project} nie przechodzi",
             "projectsFailing": "{count} projekt nie przechodzi | {count} projekty nie przechodzą | {count} projektów nie przechodzi",
             "checking": "Sprawdzanie {project}",
@@ -427,6 +428,7 @@
             "nothingQueued": "Kolejka jest pusta",
             "idle": "Bezczynne",
             "noResults": "Brak wyników",
+            "outdatedMissing": "Do czasu aktualizacji ten panel nie powie, komu przypisano nieudane sprawdzenie ani kto je naprawia, nie otworzy logów sprawdzenia i nie pokaże, co zostawiły twoje pushe.",
             "passing": "przechodzi",
             "failing": "nie przechodzi",
             "failingSince": "nie przechodzi od {time}",
@@ -1169,6 +1171,7 @@
             "needsYou": "{count} czeka na ciebie | {count} czekają na ciebie | {count} czeka na ciebie",
             "newChatAs": "Nowy czat jako {label}",
             "notOpen": "{count} nieotwarty | {count} nieotwarte | {count} nieotwartych",
+            "outdatedMissing": "Do czasu aktualizacji czaty nie mogą być pogrupowane według persony, w której imieniu mówią, więc wszystkie trafiają do „Ktokolwiek”.",
             "showSChats": "Pokaż czaty: {label}",
             "startAs": "Zacznij czat jako {label}",
             "working": "{count} pracuje | {count} pracują | {count} pracuje"
@@ -2625,12 +2628,14 @@
             "connectors": "Konektory",
             "delegate": "Delegować",
             "driveBrowser": "Sterować przeglądarką",
+            "extensions": "Rozszerzenia",
             "fetchPageRunSearch": "Pobrać stronę, uruchomić wyszukiwanie.",
             "inWorkspace": "W Twojej przestrzeni roboczej",
             "javascriptRunsFencedBy": "JavaScript działa ogrodzony przez środowisko uruchomieniowe: pliki idą za odpowiedzią z „Pliki”, żadnych programów bez „Uruchamiania poleceń”.",
             "mcpConnections": "Połączenia MCP",
             "noConnectorsAddedYet": "Nie dodano jeszcze żadnych konektorów.",
             "noDevicesConnectedYet": "Nie podłączono jeszcze żadnych urządzeń.",
+            "noExtensionsSwitchedOn": "Nie włączono jeszcze żadnych rozszerzeń.",
             "noMcpConnectionsAdded": "Nie dodano jeszcze żadnych połączeń MCP.",
             "none": "Żadne",
             "onEveryOtherLimit": "włączone, każdy inny limit na tej karcie jest mocnym ustawieniem domyślnym, a nie murem: sesja z powłoką może sięgnąć po poświadczenie, którego jej nie przyznano. Wyłącz to dla persony, która ma być zamknięta w ogrodzeniu.",
@@ -2857,6 +2862,11 @@
             "secrets": "Sekrety",
             "usage": "Zużycie",
             "yourSandboxes": "Twoje sandboxy"
+        },
+        "sandboxOutdatedNotice": {
+            "manual": "Instalacja własna? Zainstaluj ponownie albo uruchom to na maszynie, na której działa:",
+            "title": "Ten sandbox działa na starszej wersji",
+            "update": "Zaktualizuj sandbox"
         },
         "sandboxOverview": {
             "addLogo": "Dodaj logo",

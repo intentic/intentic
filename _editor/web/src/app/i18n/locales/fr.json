@@ -412,6 +412,7 @@
             "title": "Ligne principale",
             "root": "espace de travail",
             "mainPassing": "main au vert",
+            "needsUpdate": "La sandbox doit être mise à jour",
             "projectFailing": "{project} en échec",
             "projectsFailing": "{count} projet en échec | {count} projets en échec",
             "checking": "Vérification de {project}",
@@ -423,6 +424,7 @@
             "nothingQueued": "Rien en attente",
             "idle": "Inactif",
             "noResults": "Pas encore de résultat",
+            "outdatedMissing": "Tant qu'elle n'est pas à jour, ce panneau ne peut pas dire à qui un contrôle en échec est imputé ni qui le corrige, ouvrir les journaux d'un contrôle, ni montrer ce que vos pushs ont laissé.",
             "passing": "au vert",
             "failing": "en échec",
             "failingSince": "en échec depuis {time}",
@@ -1161,6 +1163,7 @@
             "needsYou": "{count} a besoin de vous | {count} ont besoin de vous",
             "newChatAs": "Nouveau chat en tant que {label}",
             "notOpen": "{count} non ouvert | {count} non ouverts",
+            "outdatedMissing": "Tant qu'elle n'est pas à jour, les chats ne peuvent pas être rangés sous la persona au nom de laquelle ils parlent : ils sont tous sous « N'importe qui ».",
             "showSChats": "Afficher les chats de {label}",
             "startAs": "Commencer un chat en tant que {label}",
             "working": "{count} en cours | {count} en cours"
@@ -2614,12 +2617,14 @@
             "connectors": "Connecteurs",
             "delegate": "Déléguer",
             "driveBrowser": "Piloter un navigateur",
+            "extensions": "Extensions",
             "fetchPageRunSearch": "Récupérer une page, lancer une recherche.",
             "inWorkspace": "Dans votre espace de travail",
             "javascriptRunsFencedBy": "Le JavaScript tourne clôturé par le runtime : les fichiers suivent la réponse de Fichiers, pas de programmes sans « Exécuter des commandes ».",
             "mcpConnections": "Connexions MCP",
             "noConnectorsAddedYet": "Aucun connecteur ajouté pour l'instant.",
             "noDevicesConnectedYet": "Aucun appareil connecté pour l'instant.",
+            "noExtensionsSwitchedOn": "Aucune extension activée pour l'instant.",
             "noMcpConnectionsAdded": "Aucune connexion MCP ajoutée pour l'instant.",
             "none": "Aucun",
             "onEveryOtherLimit": "activé, toute autre limite de ce persona est une valeur par défaut forte et non un mur : une session avec un shell peut atteindre un identifiant qui ne lui a pas été accordé. Désactivez-le pour un persona qui doit rester clôturé.",
@@ -2841,6 +2846,11 @@
             "overview": "Vue d'ensemble",
             "reach": "Portée",
             "yourSandboxes": "Vos sandboxes"
+        },
+        "sandboxOutdatedNotice": {
+            "manual": "Installée vous-même ? Réinstallez-la, ou lancez ceci sur la machine qui l'exécute :",
+            "title": "Cette sandbox exécute une version plus ancienne",
+            "update": "Mettre à jour la sandbox"
         },
         "sandboxOverview": {
             "addLogo": "Ajouter un logo",

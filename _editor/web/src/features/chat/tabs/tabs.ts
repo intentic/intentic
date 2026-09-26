@@ -68,8 +68,8 @@ export const tabsInLane = (lane: FleetLane): ReadonlySet<string> => {
 };
 
 // Who a conversation speaks as, by the daemon's one field: the persona its last turn ran as (each turn runs as its own).
-// FALLBACK for a daemon older than `lastActsAs`: the first turn's persona, the only one it published.
-export const personaOfAgent = (agent: Pick<FleetAgent, "actsAs" | "lastActsAs">): string | undefined => agent.lastActsAs ?? agent.actsAs;
+// A sandbox too old to send it groups nothing under a persona, and the rail says it needs an update (ChatPersonaRail).
+export const personaOfAgent = (agent: Pick<FleetAgent, "lastActsAs">): string | undefined => agent.lastActsAs;
 
 // The persona a chat sits under in the Personas cut: the daemon's word for a conversation it holds, and only for a draft
 // it has never seen, the pick its first turn will run as. A persona naming no card on file sits with Anyone, so the cut
