@@ -147,7 +147,6 @@ const footerVisible = computed(() => (auto.value ? true : accountsShown.value ||
                     :harness-locked="streaming"
                     @select-account="conversation.selection.apply({ kind: `selectAccount`, account: $event })"
                     @select-harness="conversation.selection.apply({ kind: `selectHarness`, harness: $event })"
-                    @navigate="emit(`selected`)"
                 />
 
                 <!-- Extended thinking and speed: the shell picker's and the settings page's own chips, shared verbatim (PickerRunSettings). -->

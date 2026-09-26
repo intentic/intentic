@@ -15,7 +15,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const emit = defineEmits<{ selectAccount: [string]; selectHarness: [AgentHarness]; navigate: [] }>();
+const emit = defineEmits<{ selectAccount: [string]; selectHarness: [AgentHarness] }>();
 const { provider, harness, model, account, accountsLocked, harnessLocked } = defineProps<{
     provider: AgentProvider;
     harness: AgentHarness;
@@ -164,10 +164,6 @@ const pickAccount = (id: string): void => {
                 <Icon name="refresh" class="text-[0.6rem]" :spin="measuring" />
                 <span v-if="measuredAt !== undefined">{{ formatAge(measuredAt) }}</span>
             </button>
-            <!-- The ring summarizes headroom; Usage holds windows, resets, and spend. -->
-            <RouterLink to="/sandbox/usage#accounts" class="text-2xs text-link hover:underline" @click="emit(`navigate`)">{{
-                t(`chat.pickerAccounts.headroom`)
-            }}</RouterLink>
         </span>
     </div>
 

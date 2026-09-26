@@ -92,7 +92,6 @@ const choose = (entry: PickerEntry): void => {
                     :account="request.account"
                     @select-account="stageModelPick({ account: $event })"
                     @select-harness="stageModelPick({ harness: $event })"
-                    @navigate="dismissModelPick()"
                 />
 
                 <PickerRunSettings
