@@ -3,15 +3,24 @@ import type { Glyph } from "./glyph.js";
 /** State symbols use familiar silhouettes, generous counters and the same carved line as navigation. */
 export const STATUS_GLYPHS = {
     check: { outline: `m4 12 5 5L20 6` },
-    "check-circle": { outline: `M8 3h8l5 5v8l-5 5H8l-5-5V8Z M7 12l3 3 7-7` },
+    // Solid discs leave enough ink at 11–12px. Counter-wound subpaths cut the symbols out of the fill.
+    "check-circle": {
+        outline: ``,
+        solid: `M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0Z M6 12l4.5 4.5L18 9l-2-2-5.5 5.5L8 10Z`,
+    },
     "check-square": { outline: `M21 12v9H3V3h12 M8 10l4 4 9-9` },
     circle: { outline: `M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z` },
     "circle-fill": { outline: ``, solid: `M20 12a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z` },
     clock: { outline: `M8 3h8l5 5v8l-5 5H8l-5-5V8Z M12 7v5l4 2` },
-    "exclamation-circle": { outline: `M8 3h8l5 5v8l-5 5H8l-5-5V8Z M12 7v6`, solid: `M11 16h2v2h-2Z` },
-    // The `i` is bare on purpose: at 11px a serif flag and foot are sub-pixel and only smear the stem. The dot is
-    // wider than the stem and the gap between them is 3.5 units, the least that survives an 11px raster as a gap.
-    "info-circle": { outline: `M8 3h8l5 5v8l-5 5H8l-5-5V8Z M12 12v6`, solid: `M10.5 5h3v2.5h-3Z` },
+    "exclamation-circle": {
+        outline: ``,
+        solid: `M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0Z M10.5 6v6h3V6Z M10.5 15v3h3v-3Z`,
+    },
+    // A broad stem and square dot, separated by three units so they stay distinct at the smallest text size.
+    "info-circle": {
+        outline: ``,
+        solid: `M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0Z M10.5 6v3h3V6Z M10.5 12v6h3v-6Z`,
+    },
     "question-circle": { outline: `M8 3h8l5 5v8l-5 5H8l-5-5V8Z M9 8c0-3 6-3 6 0 0 2-3 2-3 5`, solid: `M11 16h2v2h-2Z` },
     "plus-circle": { outline: `M8 3h8l5 5v8l-5 5H8l-5-5V8Z M12 7v10 M7 12h10` },
     square: { outline: `M3 3h18v18H3Z` },
