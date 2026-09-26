@@ -1,5 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { Rule } from "@intentic/sandbox-contract";
+import type { LandedMessage, Rule } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { committableSubject, subjectFromPaths } from "../../git/ops/commit-message.js";
@@ -19,6 +19,18 @@ const rule = (over: Partial<Rule> & Pick<Rule, "id" | "moment" | "action">): Rul
 const version = (id: string, over: Partial<Rule> = {}): Rule =>
     rule({ id, moment: "agent.landed", action: { kind: "builtin", name: "version-landed" }, ...over });
 
+// The landing's drafted message: the subject, with each note only when the test set one.
+const landedMessage = (subject: string, landed: { testNote?: string; breaking?: string }): LandedMessage => {
+    const message: LandedMessage = { subject };
+    if (landed.testNote !== undefined) {
+        message.testNote = landed.testNote;
+    }
+    if (landed.breaking !== undefined) {
+        message.breaking = landed.breaking;
+    }
+    return message;
+};
+
 const servicesWith = (
     rules: readonly Rule[],
     landedSubject?: string,
@@ -30,16 +42,7 @@ const servicesWith = (
             entry: () =>
                 isolatedAgent([{ repo: "root", base: "a".repeat(40) }], {
                     social: { title: { text: landed.title ?? "Recent commits", source: "derived" }, reactions: [] },
-                    landing:
-                        landedSubject === undefined
-                            ? {}
-                            : {
-                                  message: {
-                                      subject: landedSubject,
-                                      ...(landed.testNote === undefined ? {} : { testNote: landed.testNote }),
-                                      ...(landed.breaking === undefined ? {} : { breaking: landed.breaking }),
-                                  },
-                              },
+                    landing: landedSubject === undefined ? {} : { message: landedMessage(landedSubject, landed) },
                 }),
         }),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", {

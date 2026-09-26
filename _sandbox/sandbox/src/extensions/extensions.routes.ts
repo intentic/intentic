@@ -32,6 +32,7 @@ import { ESSENTIAL_EXTENSIONS, extensionInventory, type InstalledExtension, inst
 import { listenerOwnership } from "./listener-state.js";
 import { writeWorkspaceExtension } from "./workspace-extension-scaffold.js";
 import { publicAddressOf } from "../env.config.js";
+import { opt } from "../opt.js";
 
 // Installed extensions (git-installed ∪ image-baked) resolved to manifests and settings; boots the web extension host.
 // A checkout whose manifest no longer parses is skipped here; its capability row still shows status until re-added.
@@ -108,17 +109,18 @@ export const createExtensionsRoutes = (services: Services) => {
             const policies = await readUpdatePolicies(root);
             // What each enabled extension declared that was refused at load: a listener another extension owns.
             const { refused } = await listenerOwnership(services);
-            const extensions: ExtensionSummary[] = [];
-            for (const extension of inventory.extensions) {
+            const summaryOf = async (extension: InstalledExtension): Promise<ExtensionSummary> => {
+                const installed = extension.source === "installed";
                 // A git-installed extension alone has a pinned HEAD; others use their source as a sentinel.
-                const commit = extension.source === "installed" ? await services.git.head(extensionDir(root, extension.id)) : extension.source;
+                const commit = installed ? await services.git.head(extensionDir(root, extension.id)) : extension.source;
                 // Keyed by publisher.name like settings and the switch, surviving a git install's remove/re-add.
                 const identity = extensionIdOf(extension.manifest);
                 const observed = usage[identity];
                 // Update lifecycle exists only for a git install; record, kept-previous checkout and policy join here.
-                const record = extension.source === "installed" ? updates.extensions[identity] : undefined;
-                const previous = extension.source === "installed" ? await previousVersionOf(services, extension.id, undefined) : undefined;
-                extensions.push({
+                const record = installed ? updates.extensions[identity] : undefined;
+                const previous = installed ? await previousVersionOf(services, extension.id, undefined) : undefined;
+                const refusal = extension.enabled ? refused.get(extension.id) : undefined;
+                return {
                     id: extension.id,
                     manifest: extension.manifest,
                     commit,
@@ -128,13 +130,17 @@ export const createExtensionsRoutes = (services: Services) => {
                     // Absent, not empty, when unobserved: the row must tell never-exercised from exercised-but-unused.
                     ...(observed !== undefined && Object.keys(observed).length > 0 ? { usage: observed } : {}),
                     ...backendStateOf(extension),
-                    ...(extension.enabled && refused.has(extension.id) ? { problems: [refused.get(extension.id) ?? ""] } : {}),
-                    ...(record?.update !== undefined ? { update: record.update } : {}),
-                    ...(record?.advisory !== undefined ? { advisory: record.advisory } : {}),
-                    ...(record?.health !== undefined ? { health: record.health } : {}),
-                    ...(previous !== undefined ? { previous } : {}),
-                    ...(extension.source === "installed" ? { updatePolicy: resolveUpdatePolicy(policies[identity]) } : {}),
-                });
+                    ...opt("problems", refusal === undefined ? undefined : [refusal]),
+                    ...opt("update", record?.update),
+                    ...opt("advisory", record?.advisory),
+                    ...opt("health", record?.health),
+                    ...opt("previous", previous),
+                    ...(installed ? { updatePolicy: resolveUpdatePolicy(policies[identity]) } : {}),
+                };
+            };
+            const extensions: ExtensionSummary[] = [];
+            for (const extension of inventory.extensions) {
+                extensions.push(await summaryOf(extension));
             }
             return {
                 extensions,

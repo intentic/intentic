@@ -91,6 +91,12 @@ interface Mount {
     idleSince: number;
 }
 
+// The mount a turn's lease joined, under the key it is filed by.
+interface HeldMount {
+    readonly key: string;
+    readonly mount: Mount;
+}
+
 // A turn that was planned but never run leaves its lease behind with nothing to release it; a day bounds the map, and a
 // lease that old is past any turn. Its browser routers hold no process until a call spawns one.
 const ABANDONED_MS = 24 * 3_600_000;
@@ -155,7 +161,7 @@ export const createTurnMounts = (deps: {
         return created;
     };
     // A warm session's turn takes the conversation's bearer while no other turn holds it; every other turn mints its own.
-    const acquire = (conversationId: string | undefined, options: LeaseOptions): { readonly key: string; readonly mount: Mount } => {
+    const acquire = (conversationId: string | undefined, options: LeaseOptions): HeldMount => {
         if (options.warmSession === true && conversationId !== undefined) {
             const key = `conversation:${conversationId}`;
             if ((mounts.get(key)?.leases.size ?? 0) === 0) {
@@ -169,7 +175,7 @@ export const createTurnMounts = (deps: {
         lease: (conversationId, options = {}) => {
             sweep();
             const leaseId = randomBytes(8).toString("hex");
-            let held: { readonly key: string; readonly mount: Mount } | undefined;
+            let held: HeldMount | undefined;
             let released = false;
             return {
                 open: ({ name, target, timeoutMs }) => {

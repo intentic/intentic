@@ -27,6 +27,37 @@ export interface ExtensionEntry {
     readonly search: string;
 }
 
+// A blocked advisory or unhealthy update outranks both halves, always pinning the row to attention.
+const registryStateOf = (extension: ExtensionSummary): ExtensionState | undefined => {
+    if (extension.advisory !== undefined) {
+        return { label: t(`shared.blocked`), variant: `danger`, badge: true, attention: true };
+    }
+    if (extension.health?.state === `unhealthy`) {
+        return {
+            label: extension.health.autoReverted === true ? `update rolled back` : `update unhealthy`,
+            variant: `warning`,
+            badge: true,
+            attention: true,
+        };
+    }
+    return undefined;
+};
+
+// The registry's reason for the state above, when it set one.
+const registryDetailOf = (extension: ExtensionSummary): string | undefined => {
+    if (extension.advisory !== undefined) {
+        return `Blocked by its registry: ${extension.advisory.reason}`;
+    }
+    return extension.health?.state === `unhealthy` ? extension.health.detail : undefined;
+};
+
+// A declaration the sandbox refused at load (a listener another extension owns): the rest runs, so it outranks a
+// fine-reading row but not a failure of either half.
+const refusedStateOf = (problems: readonly string[], uiState: ExtensionState, backend: ExtensionState | undefined): ExtensionState | undefined =>
+    problems.length > 0 && !uiState.attention && backend?.attention !== true
+        ? { label: t(`extensions.extensionState.declarationRefused`), variant: `warning`, badge: true, attention: true }
+        : undefined;
+
 export function useExtensionList() {
     const queryClient = useQueryClient();
     const { extensions, invalid, pending, setEnabled, approve, create, remove, checkUpdates, updatesCheckedAt, isLoading, error } = useExtensions();
@@ -65,37 +96,15 @@ export function useExtensionList() {
                 const uiState = extensionState(status);
                 const backend = backendState(extension.backend);
                 const escalated = backend !== undefined && !uiState.attention;
-                // A blocked advisory or unhealthy update outranks both halves, always pinning the row to attention.
-                const registryState: ExtensionState | undefined =
-                    extension.advisory !== undefined
-                        ? { label: t(`shared.blocked`), variant: `danger`, badge: true, attention: true }
-                        : extension.health?.state === `unhealthy`
-                          ? {
-                                label: extension.health.autoReverted === true ? `update rolled back` : `update unhealthy`,
-                                variant: `warning`,
-                                badge: true,
-                                attention: true,
-                            }
-                          : undefined;
-                const registryDetail =
-                    extension.advisory !== undefined
-                        ? `Blocked by its registry: ${extension.advisory.reason}`
-                        : extension.health?.state === `unhealthy`
-                          ? extension.health.detail
-                          : undefined;
-                // A declaration the sandbox refused at load (a listener another extension owns): the rest runs, so it
-                // outranks a fine-reading row but not a failure of either half.
+                const registryState = registryStateOf(extension);
                 const problems = extension.problems ?? [];
-                const refused: ExtensionState | undefined =
-                    problems.length > 0 && !uiState.attention && backend?.attention !== true
-                        ? { label: t(`extensions.extensionState.declarationRefused`), variant: `warning`, badge: true, attention: true }
-                        : undefined;
+                const refused = refusedStateOf(problems, uiState, backend);
                 return {
                     extension,
                     facets,
                     state: registryState ?? refused ?? (escalated ? backend : uiState),
                     detail:
-                        registryDetail ??
+                        registryDetailOf(extension) ??
                         (refused === undefined ? undefined : problems.join(` `)) ??
                         (escalated ? extension.backend?.detail : undefined) ??
                         status?.detail ??

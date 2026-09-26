@@ -61,20 +61,29 @@ export const personaSlug = (name: string): string =>
         .replace(/^-+|-+$/g, ``)
         .slice(0, 60);
 
+// A bounding list copied so the form's edits never reach the persona; `undefined` (every id) stays undefined.
+const copiedIds = (ids: readonly string[] | undefined): string[] | undefined => (ids === undefined ? undefined : [...ids]);
+
 // Copies field by field, not via spread, so an unknown field from a newer persona shape cannot leak into the draft.
-export const powersDraftOf = (persona: Persona): PersonaPowersDraft => ({
-    files: persona.powers?.files ?? FULL_POWERS.files,
-    shell: persona.powers?.shell ?? FULL_POWERS.shell,
-    code: persona.powers?.code ?? FULL_POWERS.code,
-    web: persona.powers?.web ?? FULL_POWERS.web,
-    browser: persona.powers?.browser ?? FULL_POWERS.browser,
-    delegate: persona.powers?.delegate ?? FULL_POWERS.delegate,
-    sandbox: persona.powers?.sandbox ?? FULL_POWERS.sandbox,
-    connectors: persona.powers?.connectors === undefined ? undefined : [...persona.powers.connectors],
-    devices: persona.powers?.devices === undefined ? undefined : [...persona.powers.devices],
-    mcp: persona.powers?.mcp === undefined ? undefined : [...persona.powers.mcp],
-    extensions: persona.powers?.extensions === undefined ? undefined : [...persona.powers.extensions],
-});
+export const powersDraftOf = (persona: Persona): PersonaPowersDraft => {
+    const powers = persona.powers;
+    if (powers === undefined) {
+        return { ...FULL_POWERS };
+    }
+    return {
+        files: powers.files ?? FULL_POWERS.files,
+        shell: powers.shell ?? FULL_POWERS.shell,
+        code: powers.code ?? FULL_POWERS.code,
+        web: powers.web ?? FULL_POWERS.web,
+        browser: powers.browser ?? FULL_POWERS.browser,
+        delegate: powers.delegate ?? FULL_POWERS.delegate,
+        sandbox: powers.sandbox ?? FULL_POWERS.sandbox,
+        connectors: copiedIds(powers.connectors),
+        devices: copiedIds(powers.devices),
+        mcp: copiedIds(powers.mcp),
+        extensions: copiedIds(powers.extensions),
+    };
+};
 
 // Which preamble notes a persona drops, as a list the form can splice; empty covers both "drops none" and a persona written
 // before the question existed.
@@ -97,7 +106,7 @@ export const storedPowers = (draft: PersonaPowersDraft): PersonaPowers | undefin
     if (!bounded) {
         return undefined;
     }
-    return {
+    const stored: PersonaPowers = {
         files: draft.files,
         shell: draft.shell,
         code: draft.code,
@@ -105,11 +114,21 @@ export const storedPowers = (draft: PersonaPowersDraft): PersonaPowers | undefin
         browser: draft.browser,
         delegate: draft.delegate,
         sandbox: draft.sandbox,
-        ...(draft.connectors !== undefined ? { connectors: draft.connectors } : {}),
-        ...(draft.devices !== undefined ? { devices: draft.devices } : {}),
-        ...(draft.mcp !== undefined ? { mcp: draft.mcp } : {}),
-        ...(draft.extensions !== undefined ? { extensions: draft.extensions } : {}),
     };
+    // Each list only when bounding: an absent key is "every id", which an explicit `undefined` would not round-trip as.
+    if (draft.connectors !== undefined) {
+        stored.connectors = draft.connectors;
+    }
+    if (draft.devices !== undefined) {
+        stored.devices = draft.devices;
+    }
+    if (draft.mcp !== undefined) {
+        stored.mcp = draft.mcp;
+    }
+    if (draft.extensions !== undefined) {
+        stored.extensions = draft.extensions;
+    }
+    return stored;
 };
 
 // Personas whose `workspace.startIn` matches `dir` exactly; a persona that only carries the repo via `context.repos`

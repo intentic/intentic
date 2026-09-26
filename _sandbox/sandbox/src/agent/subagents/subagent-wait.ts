@@ -31,12 +31,12 @@ const UNTIL = z.enum(["blocked", "finished"]);
 const NOTHING_TO_WAIT_FOR =
     "Nothing to wait for: no child or background command of this conversation is still running under that id, or its ending was already reported.";
 
-const KEEP_ANSWERS: Readonly<Record<KeepOutcome, string>> = {
+const KEEP_ANSWERS = {
     kept: "Kept: it keeps running for the person after your turn ends. Give them its address in your reply.",
     unknown: "No background command of this conversation has that ID.",
     ended: "That command has already exited, so there is nothing to keep running.",
     stopped: "That command is being stopped, so it cannot be kept. Start it again and keep the new one.",
-};
+} as const satisfies Record<KeepOutcome, string>;
 
 // The tool's whole answer as one JSON text block, so the model can branch on `outcome` without parsing prose.
 const answer = (payload: Record<string, unknown>): { content: [{ type: "text"; text: string }] } => ({

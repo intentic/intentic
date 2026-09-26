@@ -69,6 +69,7 @@ test("keep answers not ok, with the reason, for an id that names none of the con
         subagentWaitServer({ conversationId: "parent", conversations: memoryFleet().conversations, signal: new AbortController().signal }),
     );
     const reply = await call("tools/call", { name: "keep", arguments: { target: "b-nobody", reason: "dev server" } });
+    // SAFETY: the tool answers one JSON text block; `unknown` only narrows JSON.parse's `any` for toEqual to compare.
     expect(reply.result?.content?.map((block) => JSON.parse(block.text) as unknown)).toEqual([
         { ok: false, message: "No background command of this conversation has that ID." },
     ]);
