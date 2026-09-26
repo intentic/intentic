@@ -121,7 +121,7 @@ const reportStoodDown = () => {
         byWhy.set(why, (byWhy.get(why) ?? 0) + 1);
     }
     const counted = [...byWhy].map(([why, count]) => `${count} for want of ${why}`).join(", ");
-    process.stderr.write(`\nsuites: ${lines.length} stood down on this machine (${counted}); CI runs them, and fails where it cannot\n`);
+    process.stderr.write(`\nsuites: ${lines.length} stood down on this machine (${counted}); CI runs them, and fails where it cannot unless the test declares CI goes without it (absentOnCi)\n`);
 };
 
 // `--isolate`: a fresh module registry per file, so a `jest.mock` one suite installs never reaches the next.

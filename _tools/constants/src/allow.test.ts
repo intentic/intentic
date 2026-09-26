@@ -25,10 +25,8 @@ describe("allowedAt", () => {
         expect(allowedAt(lines, 5, "module-state")).toBe(false);
     });
 
-    it("reads a legacy marker only where the caller names one", () => {
-        const old = ["// silent-catch: the old marker", "} catch {}"];
-        expect(allowedAt(old, 2, "silent-catch")).toBe(false);
-        expect(allowedAt(old, 2, "silent-catch", /silent-catch:\s*\S/)).toBe(true);
+    it("does not read the retired `// silent-catch: <reason>` marker", () => {
+        expect(allowedAt(["// silent-catch: the old marker", "} catch {}"], 2, "silent-catch")).toBe(false);
     });
 });
 

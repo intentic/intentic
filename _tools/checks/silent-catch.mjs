@@ -3,8 +3,7 @@
 // a literal. Each turns every failure (EACCES, a timeout, a bug's TypeError) into the same quiet "absent", so the one it
 // was written for and the ones nobody foresaw read alike. Narrow instead (`undefinedIfMissing` from @intentic/base/errors,
 // a status check) or log what failed. A discard that is right says why: `// allow(silent-catch): <reason>` in it, on its
-// line, or in the comment above it (lib/allow.mjs). The older `// silent-catch: <reason>` is still read, for branches
-// cut before the pragma; nothing new should spell it.
+// line, or in the comment above it (lib/allow.mjs).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { allowedAt, pragmaReason } from "./lib/allow.mjs";
@@ -34,10 +33,7 @@ const SHAPES = [
     },
 ];
 
-// The marker before `allow(silent-catch)`; an empty reason is no reason. Delete once no site spells it.
-const LEGACY = /(?:\/\/|\/\*|\*)\s*silent-catch:\s*\S/;
-const excused = (handler, lines, line) =>
-    pragmaReason(handler, `silent-catch`) !== undefined || LEGACY.test(handler) || allowedAt(lines, line, `silent-catch`, LEGACY);
+const excused = (handler, lines, line) => pragmaReason(handler, `silent-catch`) !== undefined || allowedAt(lines, line, `silent-catch`);
 
 const lineOf = (text, index) => text.slice(0, index).split(`\n`).length;
 

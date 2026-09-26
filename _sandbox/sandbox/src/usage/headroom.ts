@@ -204,9 +204,11 @@ export const createHeadroomService = (deps: {
         })()
             .catch(async (error: unknown) => {
                 deps.logger.warn({ err: error, account: target.key }, "headroom: read failed, the next trigger retries");
-                await readFailed(target, "the read failed").catch((markError: unknown) =>
-                    deps.logger.warn({ err: markError, account: target.key }, "headroom: could not mark the failed read on the snapshot"),
-                );
+                try {
+                    await readFailed(target, "the read failed");
+                } catch (markError) {
+                    deps.logger.warn({ err: markError, account: target.key }, "headroom: could not mark the failed read on the snapshot");
+                }
             })
             .finally(() => inFlight.delete(target.key));
         inFlight.set(target.key, read);

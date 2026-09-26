@@ -274,13 +274,16 @@ export const ipsecDriver: VpnDriver = {
     // charon not running, or the conn never loaded, leave nothing up; a failure that leaves an SA behind throws.
     disconnect: async (id) => {
         const conn = connName(id);
-        await exec("ipsec", ["down", conn]).catch(async (error: unknown) => {
+        try {
+            await exec("ipsec", ["down", conn]);
+        } catch (error) {
+            // A status that cannot be read is charon not running, which holds no SA up.
             const { stdout } = await exec("ipsec", ["statusall", conn]).catch(() => ({ stdout: "" }));
             const status = parseIpsecStatus(conn, stdout);
             if (status.established || status.negotiating) {
                 throw new Error(`strongSwan could not take ${id} down: ${errorMessage(error)}`, { cause: error });
             }
-        });
+        }
     },
     probe: async (id): Promise<VpnProbe> => {
         if (await toolMissing("ipsec", ["--version"])) {

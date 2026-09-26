@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { requires } from "@intentic/testing/requires";
 import { interpreterNear, runPythonDiag } from "./python-diagnostics.js";
 
 // Spawns ruff or pyright on real files, since only that proves the parsers match what the binaries actually print.
@@ -17,8 +18,9 @@ const installed = (binary: string): boolean => {
     }
 };
 
-const hasRuff = installed("ruff");
-const hasPyright = installed("pyright");
+const ABSENT_ON_CI = { absentOnCi: "the ci-base image carries no Python linters (_tools/ci-base/Dockerfile)" };
+const ruff = requires(installed("ruff"), "ruff on PATH", ABSENT_ON_CI);
+const pyright = requires(installed("pyright"), "pyright on PATH", ABSENT_ON_CI);
 
 const tempDirs: string[] = [];
 afterAll(async () => {
@@ -53,7 +55,7 @@ test("the nearest .venv above a file is what the type check is pointed at, and a
     expect(await interpreterNear(file)).toBe(interpreter);
 });
 
-test.skipIf(!hasRuff)("a file that does not parse comes back as a syntax error", async () => {
+test.skipIf(!ruff.runs)(ruff.title("a file that does not parse comes back as a syntax error"), async () => {
     const dir = await project({ "broken.py": "def f(:\n    return 1\n" });
     const answer = await check(join(dir, "broken.py"));
 
@@ -61,7 +63,7 @@ test.skipIf(!hasRuff)("a file that does not parse comes back as a syntax error",
     expect(answer.kind === "checked" ? answer.lines[0] : "").toContain(`${join(dir, "broken.py")}:1:7: error invalid-syntax:`);
 });
 
-test.skipIf(!hasRuff)("an undefined name is an error, and a file with nothing wrong with it has nothing said about it", async () => {
+test.skipIf(!ruff.runs)(ruff.title("an undefined name is an error, and a file with nothing wrong with it has nothing said about it"), async () => {
     const dir = await project({
         "undefined.py": "def f():\n    return missing_helper(1)\n",
         // Every shape that breaks a naive undefined-name check: a star import, a late global, a type-only name.
@@ -76,8 +78,8 @@ test.skipIf(!hasRuff)("an undefined name is an error, and a file with nothing wr
     expect(good.kind === "checked" ? good.lines : ["not checked"]).toEqual([]);
 });
 
-test.skipIf(!hasPyright)(
-    "with no environment, the file's own type errors are reported and its unresolved imports are not",
+test.skipIf(!pyright.runs)(
+    pyright.title("with no environment, the file's own type errors are reported and its unresolved imports are not"),
     async () => {
         const dir = await project({
             // `httpx` isn't installed near this file; `.upper()` on an int is wrong regardless.

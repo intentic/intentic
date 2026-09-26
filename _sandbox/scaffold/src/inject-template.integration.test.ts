@@ -4,16 +4,19 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { requires } from "@intentic/testing/requires";
 import { addAppsToMonorepo, injectApps, injectMonorepoShell } from "./inject-template.js";
 import { readTemplateManifest, type TemplateManifest } from "./template-manifest.js";
 
 // Runs against the real canonical template repo (the injector's whole job is to copy its packages into a repo),
 // so it only runs where that checkout is present: otherwise there is nothing to inject.
 const CANONICAL = process.env["INTENTIC_CANONICAL_DIR"] ?? "/home/radarsu/radarsu/repositories/00-canonical-repo";
-const hasCanonical = existsSync(join(CANONICAL, "templates.json"));
+const canonical = requires(existsSync(join(CANONICAL, "templates.json")), `the canonical template checkout at ${CANONICAL} (INTENTIC_CANONICAL_DIR)`, {
+    absentOnCi: "the canonical template repository is a separate checkout CI does not clone",
+});
 const readJson = async (path: string): Promise<{ name: string; scripts?: Record<string, string> }> => JSON.parse(await readFile(path, "utf8"));
 
-describe.skipIf(!hasCanonical)("monorepo scaffold + app injection", () => {
+describe.skipIf(!canonical.runs)(canonical.title("monorepo scaffold + app injection"), () => {
     let root: string;
     let repoDir: string;
     let manifest: TemplateManifest;

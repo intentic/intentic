@@ -21,10 +21,10 @@ export const pragmaReason = (text, check) => {
 
 /**
  * Whether the site on 1-based `line` of `lines` carries a pragma for `check`: on the line itself, or in the comment block
- * that ends on the line above it. `legacy` is an older marker a check still reads while its sites move to the pragma.
+ * that ends on the line above it.
  */
-export const allowedAt = (lines, line, check, legacy) => {
-    const says = (text) => pragmaReason(text, check) !== undefined || (legacy !== undefined && legacy.test(text));
+export const allowedAt = (lines, line, check) => {
+    const says = (text) => pragmaReason(text, check) !== undefined;
     if (says(lines[line - 1] ?? "")) {
         return true;
     }

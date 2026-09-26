@@ -3,6 +3,7 @@ import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { requires } from "@intentic/testing/requires";
 import { mergeHeavyRules } from "./heavy-rules.cjs";
 import { repoRoot } from "../node.mjs";
 
@@ -65,9 +66,13 @@ const underHook = async (script: string, args: readonly string[], heavy: string)
     return JSON.parse(stdout.trim().split("\n").at(-1) ?? "{}") as Record<string, unknown>;
 };
 
-const describeLinux = process.platform === "linux" && inherited < KLASS.oomScoreAdj ? describe : describe.skip;
+// Only a rank above what this process inherited can be seen to land, and procfs is Linux's.
+const kernel = requires(
+    process.platform === "linux" && inherited < KLASS.oomScoreAdj,
+    `Linux, with this process ranked below the class under test (it inherited oom_score_adj ${String(inherited)})`,
+);
 
-describeLinux("a node program under the hook", () => {
+describe.skipIf(!kernel.runs)(kernel.title("a node program under the hook"), () => {
     test("a heavy one is named by its package, classed before it runs, and handed to queue-run with its own argv", async () => {
         const queueRun = await standIn("queue-run");
         const report = await underHook(await publish("vitest"), ["run", "src"], spec({ queue: true, queueRun }));
@@ -106,7 +111,7 @@ describeLinux("a node program under the hook", () => {
     });
 });
 
-describeLinux("a native program behind its wrapper", () => {
+describe.skipIf(!kernel.runs)(kernel.title("a native program behind its wrapper"), () => {
     test("is judged by its own name and arguments, then becomes the real program found past the wrappers", async () => {
         const bin = join(dir, "real-bin");
         await mkdir(bin);

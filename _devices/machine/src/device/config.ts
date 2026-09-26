@@ -104,6 +104,19 @@ export const readDeviceConfig = async (): Promise<DeviceConfigFile> => {
 export const writeDeviceConfig = async (config: DeviceConfigFile): Promise<void> =>
     await writeSecretFile(configPath, baseDir, JSON.stringify(config, undefined, 2));
 
+const readForUpdate = async (recover: boolean): Promise<DeviceConfigFile> => {
+    try {
+        return await readDeviceConfig();
+    } catch (error) {
+        if (!recover || !(error instanceof SyntaxError)) {
+            throw error;
+        }
+        // The write below lands on this path, so content that could not be set aside must stop it.
+        await rename(configPath, `${configPath}.corrupt`).catch(undefinedIfMissing);
+        return { links: [] } satisfies DeviceConfigFile;
+    }
+};
+
 // Read-modify-write for every writer below, so none of them rebuild the file from `links` alone and drop another field.
 // A file this build cannot parse propagates: every mutation writes back what it read, and reading nothing wipes links.
 // Only a person re-adding a link (`recover`) may set such a file aside as `.corrupt` and start the list again.
@@ -111,15 +124,7 @@ const updateDeviceConfig = async (
     mutate: (config: DeviceConfigFile) => DeviceConfigFile,
     { recover = false }: { readonly recover?: boolean } = {},
 ): Promise<DeviceConfigFile> => {
-    const config = await readDeviceConfig().catch(async (error: unknown) => {
-        if (!recover || !(error instanceof SyntaxError)) {
-            throw error;
-        }
-        // The write below lands on this path, so content that could not be set aside must stop it.
-        await rename(configPath, `${configPath}.corrupt`).catch(undefinedIfMissing);
-        return { links: [] } satisfies DeviceConfigFile;
-    });
-    const next = mutate(config);
+    const next = mutate(await readForUpdate(recover));
     await writeDeviceConfig(next);
     return next;
 };

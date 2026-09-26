@@ -3,12 +3,14 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
+import { requires } from "@intentic/testing/requires";
 import { extractArchive, UnknownArchiveError } from "./workspace-extract.js";
 
 // Drives the real tar/gzip/unzip the daemon spawns, over real archives. The rules are covered with tar and gzip,
 // which every Debian base carries, so the suite guards them wherever it runs; the zip pair is asserted separately
 // because a CI image gains a new tool only after the image change lands (.github/workflows/ci.yml, the ci-base job).
-const ZIP_TOOLS = spawnSync(`sh`, [`-c`, `command -v zip && command -v unzip`]).status === 0;
+// ci-base carries zip and unzip (_tools/ci-base/Dockerfile), so CI always runs the zip case.
+const zipTools = requires(spawnSync(`sh`, [`-c`, `command -v zip && command -v unzip`]).status === 0, `zip and unzip on PATH`);
 
 const run = promisify(execFile);
 let root: string;
@@ -102,7 +104,7 @@ test("a corrupt archive leaves no half-written folder behind", async () => {
 });
 
 // The zip path is its own tool with its own argv, so it is asserted against a real zip rather than assumed from tar.
-test.skipIf(!ZIP_TOOLS)("a zip unpacks by the same rules", async () => {
+test.skipIf(!zipTools.runs)(zipTools.title("a zip unpacks by the same rules"), async () => {
     const archive = await archiveOf(`landing-page (2).zip`, { "landing-page/index.html": `<h1>hi</h1>`, "landing-page/src/app.ts": `export {};` });
     const landed = await extractArchive(archive);
     expect(basename(landed)).toBe(`landing-page (2)`);

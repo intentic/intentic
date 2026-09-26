@@ -374,9 +374,9 @@ const created = async (host: GitHost, name: string, owner: string | undefined): 
         return body.http_url_to_repo;
     }
     // github: an owner other than the authenticated user is an organization, with its own endpoint.
-    const login = await fetch(`${host.apiBase}/user`, { headers: githubHeaders(host.token) })
-        .then(async (response) => ((await response.json().catch(() => ({}))) as { login?: string }).login)
-        .catch(() => undefined);
+    // A token that cannot read its own user leaves the owner read as an organization, whose endpoint answers for itself.
+    const user = await fetch(`${host.apiBase}/user`, { headers: githubHeaders(host.token) });
+    const login = user.ok ? ((await user.json()) as { login?: string }).login : undefined;
     const path = owner === undefined || owner === login ? "/user/repos" : `/orgs/${encodeURIComponent(owner)}/repos`;
     const response = await fetch(`${host.apiBase}${path}`, {
         method: "POST",

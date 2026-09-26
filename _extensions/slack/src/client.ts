@@ -35,10 +35,13 @@ export const openSlackConnection = async (appToken: string, botToken: string): P
     const socket = new SocketModeClient({ appToken });
     // Resolves on `connected`, rejects on a refused handshake; past this point the client reconnects itself, so this is
     // the only place to catch a bad app token.
-    await socket.start().catch(async (error: unknown) => {
+    try {
+        await socket.start();
+    } catch (error) {
+        // allow(silent-catch): the refused handshake is the failure to report; closing is only tidying up after it.
         await socket.disconnect().catch(() => undefined);
         throw authFailure(error, "appToken", "xapp-");
-    });
+    }
     const connection: SlackConnection = { socket, web, selfUserId };
     connections.set(appToken, connection);
     return connection;

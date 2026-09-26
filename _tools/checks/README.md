@@ -47,7 +47,7 @@ A finding that is right where it stands is excused in one of two forms, each rea
 
 - `// allow(<check>): <reason>` at the site, on its line or in the comment block right above it. It sits on the
   declaration it excuses, so a rename carries it and a deletion takes it away. `silent-catch` and the editor's
-  `module-state` guard read it; `silent-catch` still reads its older `// silent-catch: <reason>` for one release.
+  `module-state` guard read it.
 - `Allow: <check> — <reason>` as a commit trailer, for a whole change: the check after a land (`land-tiers.mjs`) and the
   push (`verify-push.mjs`) accept what that range adds to a tidy check with that manifest id.
 

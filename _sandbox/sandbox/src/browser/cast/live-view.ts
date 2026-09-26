@@ -441,60 +441,61 @@ export const chordOf = (message: { readonly key: string; readonly ctrl?: boolean
     return [...held.filter((name) => name !== undefined), XKEYS[message.key] ?? message.key].join("+");
 };
 
-const startFramesView = (context: BrowserContext, sink: Sink, onError: (reason: string) => void): Promise<LiveView> =>
-    startScreencast(context, (frame) => sink.send(encodeFrame(frame))).then((cast: Screencast) => {
-        // Cursor shape is asked for here, since a compositor surface has none; reported as it changes.
-        const reportCursor = cursorReporter((cursor) => sink.send(JSON.stringify({ type: "cursor", cursor })));
-        sink.send(JSON.stringify({ type: "ready", kind: "frames", width: VIEW_WIDTH, height: VIEW_HEIGHT, scale: 1 } satisfies LiveReady));
-        // A pointer or keystroke to the page's CDP session, and what the surface owes after it.
-        const dispatch = async (message: ScreencastClientMessage): Promise<void> => {
-            const session = cast.attached();
-            if (session === undefined) {
-                return;
+const startFramesView = async (context: BrowserContext, sink: Sink, onError: (reason: string) => void): Promise<LiveView> => {
+    const cast: Screencast = await startScreencast(context, (frame) => sink.send(encodeFrame(frame)));
+    // Cursor shape is asked for here, since a compositor surface has none; reported as it changes.
+    const reportCursor = cursorReporter((cursor) => sink.send(JSON.stringify({ type: "cursor", cursor })));
+    sink.send(JSON.stringify({ type: "ready", kind: "frames", width: VIEW_WIDTH, height: VIEW_HEIGHT, scale: 1 } satisfies LiveReady));
+    // A pointer or keystroke to the page's CDP session, and what the surface owes after it.
+    const dispatch = async (message: ScreencastClientMessage): Promise<void> => {
+        const session = cast.attached();
+        if (session === undefined) {
+            return;
+        }
+        // Told before the dispatch, or the answering frame reads as a camera shake and gets dropped.
+        cast.noteInput();
+        await dispatchInput(session, message).catch((error: unknown) => onError(errorMessage(error)));
+        if (message.type !== "mouse") {
+            return;
+        }
+        if (message.action === "move") {
+            // Fire-and-forget and throttled, so the cursor shape never blocks the next input.
+            reportCursor(session, message.x, message.y);
+        } else if (message.action === "up") {
+            // A click may open a drop-down no frame shows, since Chromium draws it outside the page.
+            const page = cast.page();
+            // allow(silent-catch): a page that closed under the click has no drop-down to show, so none is sent.
+            const menu = page === undefined ? undefined : await readSelect(page).catch(() => undefined);
+            sink.send(JSON.stringify({ type: "select", menu: menu ?? null }));
+        }
+    };
+    return {
+        page: () => cast.page(),
+        bind: (page: Page) => cast.bind(page, true),
+        setPaused: (paused: boolean) => cast.setPaused(paused),
+        input: async (message: ScreencastClientMessage) => {
+            if (message.type === "newTab") {
+                await openTab(context, message.url);
+            } else if (isSteer(message)) {
+                steer(cast.page(), message);
+            } else if (message.type !== "resize") {
+                // A compositor surface is photographed at its fixed size, so a resize is nothing here.
+                await dispatch(message);
             }
-            // Told before the dispatch, or the answering frame reads as a camera shake and gets dropped.
-            cast.noteInput();
-            await dispatchInput(session, message).catch((error: unknown) => onError(errorMessage(error)));
-            if (message.type !== "mouse") {
-                return;
+        },
+        selection: async () => {
+            const page = cast.page();
+            return page === undefined ? "" : readSelection(page);
+        },
+        chooseOption: async (index: number) => {
+            const page = cast.page();
+            if (page !== undefined) {
+                await applySelect(page, index);
             }
-            if (message.action === "move") {
-                // Fire-and-forget and throttled, so the cursor shape never blocks the next input.
-                reportCursor(session, message.x, message.y);
-            } else if (message.action === "up") {
-                // A click may open a drop-down no frame shows, since Chromium draws it outside the page.
-                const page = cast.page();
-                const menu = page === undefined ? undefined : await readSelect(page).catch(() => undefined);
-                sink.send(JSON.stringify({ type: "select", menu: menu ?? null }));
-            }
-        };
-        return {
-            page: () => cast.page(),
-            bind: (page: Page) => cast.bind(page, true),
-            setPaused: (paused: boolean) => cast.setPaused(paused),
-            input: async (message: ScreencastClientMessage) => {
-                if (message.type === "newTab") {
-                    await openTab(context, message.url);
-                } else if (isSteer(message)) {
-                    steer(cast.page(), message);
-                } else if (message.type !== "resize") {
-                    // A compositor surface is photographed at its fixed size, so a resize is nothing here.
-                    await dispatch(message);
-                }
-            },
-            selection: async () => {
-                const page = cast.page();
-                return page === undefined ? "" : readSelection(page);
-            },
-            chooseOption: async (index: number) => {
-                const page = cast.page();
-                if (page !== undefined) {
-                    await applySelect(page, index);
-                }
-            },
-            stop: () => cast.stop(),
-        };
-    });
+        },
+        stop: () => cast.stop(),
+    };
+};
 
 // Shows `context` on `sink`, the best way its browser allows. `key` names the display it was allocated under; this only
 // asks whether one exists, since starting one now would put it on a display the browser isn't.

@@ -90,35 +90,37 @@ watch(
             if (source === undefined) {
                 continue;
             }
-            void sandboxBlob(source, undefined, at).then(
-                (blob) => {
-                    if (!isLatest()) {
-                        return;
-                    }
-                    const url = URL.createObjectURL(blob);
-                    created.push(url);
-                    loaded.value = { ...loaded.value, [side]: { url, size: blob.size, blob, loading: false } };
-                    // Natural size, fetched separately since decoding must not hold up drawing the picture.
-                    void imageSize(blob).then((natural) => {
-                        if (isLatest() && natural !== undefined) {
-                            loaded.value = { ...loaded.value, [side]: { ...loaded.value[side], natural } };
-                        }
-                    });
-                    // A text-fed viewer (an .svg) gets the markup, decoded once here rather than by each pane.
-                    if (viewer.value?.fetch === `text`) {
-                        void blob.text().then((text) => {
-                            if (isLatest()) {
-                                loaded.value = { ...loaded.value, [side]: { ...loaded.value[side], text } };
-                            }
-                        });
-                    }
-                },
-                (error: unknown) => {
+            void (async () => {
+                let blob: Blob;
+                try {
+                    blob = await sandboxBlob(source, undefined, at);
+                } catch (error) {
                     if (isLatest()) {
                         loaded.value = { ...loaded.value, [side]: { error: errorMessage(error, `Couldn't load this side.`), loading: false } };
                     }
-                },
-            );
+                    return;
+                }
+                if (!isLatest()) {
+                    return;
+                }
+                const url = URL.createObjectURL(blob);
+                created.push(url);
+                loaded.value = { ...loaded.value, [side]: { url, size: blob.size, blob, loading: false } };
+                // Natural size, fetched separately since decoding must not hold up drawing the picture.
+                void imageSize(blob).then((natural) => {
+                    if (isLatest() && natural !== undefined) {
+                        loaded.value = { ...loaded.value, [side]: { ...loaded.value[side], natural } };
+                    }
+                });
+                // A text-fed viewer (an .svg) gets the markup, decoded once here rather than by each pane.
+                if (viewer.value?.fetch === `text`) {
+                    void blob.text().then((text) => {
+                        if (isLatest()) {
+                            loaded.value = { ...loaded.value, [side]: { ...loaded.value[side], text } };
+                        }
+                    });
+                }
+            })();
         }
     },
     { immediate: true },

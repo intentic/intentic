@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
+import { requires } from "@intentic/testing/requires";
 import {
     ArchiveTooLargeError,
     archiveChildrenOf,
@@ -15,7 +16,8 @@ import {
 // Drives the real unzip/tar the daemon spawns, over real archives, since what a listing says about an archive is only
 // as true as the tool that unpacked it.
 // zip is asserted separately: a CI image gains a new tool only after the image change lands (ci.yml, the ci-base job).
-const ZIP_TOOLS = spawnSync(`sh`, [`-c`, `command -v zip && command -v unzip`]).status === 0;
+// ci-base carries zip and unzip (_tools/ci-base/Dockerfile), so CI always runs the zip case.
+const zipTools = requires(spawnSync(`sh`, [`-c`, `command -v zip && command -v unzip`]).status === 0, `zip and unzip on PATH`);
 
 const run = promisify(execFile);
 let root: string;
@@ -140,7 +142,7 @@ test("a folder named like an archive is a folder", async () => {
 });
 
 // The zip path is its own tool with its own argv, so it is asserted against a real zip rather than assumed from tar.
-test.skipIf(!ZIP_TOOLS)("a zip lists by the same rules", async () => {
+test.skipIf(!zipTools.runs)(zipTools.title("a zip lists by the same rules"), async () => {
     const archive = await archiveOf(`holiday.zip`, { "holiday/a.txt": `a`, "holiday/deep/b.txt": `b` });
     expect(await names(archive, `drop/holiday.zip`)).toEqual([`drop/holiday.zip/a.txt`, `drop/holiday.zip/deep`]);
 });

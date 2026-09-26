@@ -10,6 +10,7 @@ import { SHARED_STATE_PATHS } from "@intentic/sandbox-contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import type { Logger } from "pino";
 import { unstubbed } from "@intentic/testing";
+import { requires } from "@intentic/testing/requires";
 import {
     ANCHOR_READY,
     createTurnIsolation,
@@ -335,7 +336,7 @@ test("a nested repo's dirs belong to its own worktree, not the parent's", async 
 });
 
 // Verified against a real overlay: emptying a mirror root's lowerdir is safe, replacing it is fatal and unrecoverable
-// in the namespace. Needs CAP_SYS_ADMIN; skipped otherwise, guarded there by mirror-roots.mjs.
+// in the namespace. Needs CAP_SYS_ADMIN (`overlay` below), guarded there by mirror-roots.mjs.
 // One shell program, since the mount only exists inside the namespace that creates it: build the overlay, then run the
 // caller's assertions.
 const overlayShell = (dir: string, trailer: string): string =>
@@ -364,6 +365,9 @@ const overlayScratch = (): string | undefined => {
 };
 
 const OVERLAY_SCRATCH = overlayScratch();
+const overlay = requires(OVERLAY_SCRATCH !== undefined, `CAP_SYS_ADMIN (an overlay mount) and the history volume at ${HISTORY_ROOT}`, {
+    absentOnCi: "CI's containers are unprivileged and have no history volume; a sandbox has both",
+});
 const listing = (output: string, label: string): string[] =>
     (output.split("\n").find((line) => line.startsWith(`${label}:`)) ?? "")
         .slice(label.length + 1)
@@ -371,7 +375,7 @@ const listing = (output: string, label: string): string[] =>
         .filter(Boolean)
         .toSorted();
 
-test.skipIf(OVERLAY_SCRATCH === undefined)("emptying a mirror root keeps the turn's view of it; replacing it empties the turn's view", () => {
+test.skipIf(!overlay.runs)(overlay.title("emptying a mirror root keeps the turn's view of it; replacing it empties the turn's view"), () => {
     const dir = OVERLAY_SCRATCH as string;
     tempDirs.push(dir);
     const lower = `${dir}/lower/dist`;

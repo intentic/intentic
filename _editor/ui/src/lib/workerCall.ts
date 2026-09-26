@@ -94,12 +94,12 @@ export const createWorkerCall = <Args, Result>(
             waiting.reject(error);
         }
         pending.clear();
-        // silent-catch: a worker that never started has nothing to terminate.
+        // allow(silent-catch): a worker that never started has nothing to terminate.
         void closing?.then((port) => port?.terminate()).catch(() => undefined);
     };
 
     const call = async (args: Args): Promise<Result> => {
-        // silent-catch: a worker that cannot be built is the page's cue to run the call itself, right below.
+        // allow(silent-catch): a worker that cannot be built is the page's cue to run the call itself, right below.
         const port = await connect().catch(() => undefined);
         if (port === undefined) {
             return local(args);

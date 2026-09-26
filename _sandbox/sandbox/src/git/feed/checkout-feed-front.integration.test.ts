@@ -6,22 +6,27 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { repoRoot } from "@intentic/constants/node";
 import { observeGitCommands } from "@intentic/scaffold";
+import { requires } from "@intentic/testing/requires";
 import { connectFront, type FrontLink } from "../../front/front-link.js";
 import { statusPaths } from "../changes/changes.js";
 import { frontCheckoutFeed, useCheckoutFeed } from "./checkout-feed.js";
 
 // The daemon's reads against the real front's change feed: this test is the Node the front supervises, over the same
-// socket, and a status taken while the checkout's count stands still spawns no git. Skipped where the front is unbuilt.
+// socket, and a status taken while the checkout's count stands still spawns no git.
 
 const exec = promisify(execFile);
 const FRONT = join(repoRoot(import.meta.url), "_sandbox/front/target/debug/intentic-front");
+// CI's verify jobs build no Rust: the front's crates are checked by their own cargo job, which runs no Node suite.
+const built = requires(existsSync(FRONT), "the front's debug build (cargo build in _sandbox/front)", {
+    absentOnCi: "the verify jobs build no Rust; the front's own cargo job runs no Node suite",
+});
 
 let runDir: string;
 let front: ChildProcess;
 let link: FrontLink;
 
 beforeAll(async () => {
-    if (!existsSync(FRONT)) {
+    if (!built.runs) {
         return;
     }
     runDir = await mkdtemp(join(tmpdir(), "intentic-feed-front-"));
@@ -52,7 +57,7 @@ afterAll(async () => {
     }
 });
 
-test.skipIf(!existsSync(FRONT))("an unchanged checkout's status is read once, and a write makes the next read git again", async () => {
+test.skipIf(!built.runs)(built.title("an unchanged checkout's status is read once, and a write makes the next read git again"), async () => {
     const dir = await mkdtemp(join(tmpdir(), "intentic-feed-repo-"));
     try {
         await exec("git", ["-C", dir, "init", "-q"]);

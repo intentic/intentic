@@ -7,11 +7,13 @@ import { loadChunk } from "@intentic/ui/chunk";
  */
 export const importOrReload = <T>(load: () => Promise<T>, use: (module: T) => unknown): void => {
     void loadChunk(load).then(
-        (module) => {
+        async (module) => {
             // The module's own failure is a bug, not a redeploy, and must not be read as one.
-            void Promise.resolve(use(module)).catch((error: unknown) => {
+            try {
+                await use(module);
+            } catch (error) {
                 console.error(`late import failed after loading`, error);
-            });
+            }
         },
         (error: unknown) => {
             console.error(`late import failed`, error);

@@ -266,12 +266,18 @@ export const createAgentWorktrees = (
 
     // Drops a checkout from its repo's admin area; a dir already gone leaves only a stale admin entry, which prune drops.
     const removeCheckout = async (main: string, target: string): Promise<void> => {
-        await git(main, ["worktree", "remove", "--force", target]).catch(async (error: unknown) => {
+        try {
+            await git(main, ["worktree", "remove", "--force", target]);
+        } catch (error) {
             if (await pathExists(target)) {
                 logger.warn({ err: error, target }, "agents: worktree remove failed, the checkout is still on disk");
             }
-            await git(main, ["worktree", "prune"]).catch((pruneError: unknown) => logger.warn({ err: pruneError, main }, "agents: worktree prune failed"));
-        });
+            try {
+                await git(main, ["worktree", "prune"]);
+            } catch (pruneError) {
+                logger.warn({ err: pruneError, main }, "agents: worktree prune failed");
+            }
+        }
     };
 
     // Drops one mirror symlink, answering whether it went; what follows each call relies on the link being gone.

@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { requires } from "@intentic/testing/requires";
 import { archiveDeriver } from "./lib/derivers/archive.js";
 import { docxDeriver } from "./lib/derivers/docx.js";
 import { epubDeriver } from "./lib/derivers/epub.js";
@@ -115,7 +116,10 @@ describe("pdf", () => {
 
     /* The OCR tier, exercised for real where the image carries tesseract + poppler (an extension's layer). */
     const DEJAVU = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
-    test.skipIf(!ocrAvailable() || !existsSync(DEJAVU))("a scan is recognised by tesseract when the image carries it, and says so", async () => {
+    const ocr = requires(ocrAvailable() && existsSync(DEJAVU), `tesseract and pdftoppm on PATH, and the DejaVu font at ${DEJAVU}`, {
+        absentOnCi: "the ci-base image carries no OCR tools (_tools/ci-base/Dockerfile)",
+    });
+    test.skipIf(!ocr.runs)(ocr.title("a scan is recognised by tesseract when the image carries it, and says so"), async () => {
         const path = join(root, "receipt.pdf");
         execFileSync("python3", [
             "-c",

@@ -26,6 +26,19 @@ test("unmet on CI: a failing test naming the requirement is registered where it 
     expect(registered[0]?.body).toThrow("this machine lacks a built dist, which CI provides on purpose");
 });
 
+test("unmet on CI where CI goes without it on purpose: stands down, saying why CI lacks it", () => {
+    const needs = requirementOf(false, "ruff on PATH", { CI: "true" }, never, { absentOnCi: "the ci-base image carries no Python linters" });
+    expect({ runs: needs.runs, title: needs.title("lints") }).toEqual({
+        runs: false,
+        title: "lints (stood down: needs ruff on PATH, which CI lacks: the ci-base image carries no Python linters)",
+    });
+});
+
+test("declared absent on CI, a machine that has it still runs the tests", () => {
+    const needs = requirementOf(true, "ruff on PATH", { CI: "true" }, never, { absentOnCi: "the ci-base image carries no Python linters" });
+    expect(needs.runs).toBe(true);
+});
+
 test("each test that stands down is written for suites to count", () => {
     const dir = mkdtempSync(join(tmpdir(), "requires-"));
     try {

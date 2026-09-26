@@ -131,10 +131,9 @@
         // Dates, undefined and Maps — exactly the things these call sites are trying to drop.
         "unicorn/prefer-structured-clone": "off", // 3
 
-        // Aimed at `.then(() => p.then(...))`. What it actually flags here is `await rename(p).catch(() => undefined)`
-        // — one promise, one handler, the concise form of "try this and ignore failure". The remedy is a
-        // try/catch block around a single call, which is longer and says less.
-        "promise/no-nesting": "off", // 9
+        // A promise chained inside another's handler: `.then(() => p.then(...))`, or a `.catch(() => undefined)` tucked
+        // into one, where a failure is swallowed out of sight. Awaiting in a try/catch keeps both in view.
+        "promise/no-nesting": "error",
 
         // Debug residue and agent leftovers
         // console.warn/error are real product behaviour; console.log is something left behind.

@@ -1,7 +1,7 @@
-import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
+import { requires } from "@intentic/testing/requires";
 import { liveWindow, selectWindow } from "./terminal-help.js";
 import { captureScrollback } from "./terminal-session.js";
 
@@ -9,7 +9,8 @@ import { captureScrollback } from "./terminal-session.js";
 // since later commands leave dead panes behind it. All waits poll a condition rather than sleep.
 
 const execFileAsync = promisify(execFile);
-const HAS_TMUX = existsSync("/usr/bin/tmux");
+// ci-base carries tmux (_tools/ci-base/Dockerfile), so CI always runs these.
+const tmux = requires(spawnSync("sh", ["-c", "command -v tmux"]).status === 0, "tmux on PATH");
 // agent-shaped (the real derivation is agent- + 8 chars) and unique to this process.
 const SESSION = `agent-t${String(process.pid).slice(-7).padStart(7, "0")}`;
 
@@ -35,7 +36,7 @@ const addWindow = async (name: string, command: string, settled: "dead" | "waiti
     }, SETTLES);
 };
 
-test.skipIf(!HAS_TMUX)("the owner lands on the window still waiting, not on the newest one", async () => {
+test.skipIf(!tmux.runs)(tmux.title("the owner lands on the window still waiting, not on the newest one"), async () => {
     await kill();
     // Oldest to newest: finished, waiting, finished again, so newest and needs-a-person are different windows.
     await execFileAsync("tmux", ["new-session", "-d", "-s", SESSION, "-n", "install", finished("installed")]);
@@ -59,6 +60,6 @@ test.skipIf(!HAS_TMUX)("the owner lands on the window still waiting, not on the 
 });
 
 // No session at all, the first thing the tool asks on a fresh turn; answers nothing to hand over, not a throw.
-test.skipIf(!HAS_TMUX)("a session that does not exist has nothing to hand over", async () => {
+test.skipIf(!tmux.runs)(tmux.title("a session that does not exist has nothing to hand over"), async () => {
     expect(await liveWindow("agent-nosuchsession")).toBeUndefined();
 });

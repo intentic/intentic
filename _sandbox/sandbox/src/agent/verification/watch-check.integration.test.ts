@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
 import type { Logger } from "pino";
+import { requires } from "@intentic/testing/requires";
 import { createTurnIsolation } from "../../conversations/worktrees/isolation.js";
 import { watchCheck } from "./watch-check.js";
 
@@ -43,8 +44,11 @@ test("an isolated conversation whose worktree is gone is a broken check", async 
     expect(result.broken).toContain("worktree");
 });
 
-// Needs CAP_SYS_ADMIN and the history volume; skipped otherwise.
-const NAMESPACE = existsSync(HISTORY_ROOT) && spawnSync("unshare", ["--mount", "--propagation", "private", "true"], { timeout: 10_000 }).status === 0;
+const namespace = requires(
+    existsSync(HISTORY_ROOT) && spawnSync("unshare", ["--mount", "--propagation", "private", "true"], { timeout: 10_000 }).status === 0,
+    `CAP_SYS_ADMIN (unshare --mount) and the history volume at ${HISTORY_ROOT}`,
+    { absentOnCi: "CI's containers are unprivileged and have no history volume; a sandbox has both" },
+);
 
 interface World {
     readonly root: string;
@@ -70,7 +74,7 @@ const world = async (): Promise<World> => {
     return { root, worktree, neighbour, check: watchCheck(isolation), dispose: () => rm(base, { recursive: true, force: true }) };
 };
 
-test.skipIf(!NAMESPACE)("an isolated conversation's check sees the conversation's own tree at the workspace path", async () => {
+test.skipIf(!namespace.runs)(namespace.title("an isolated conversation's check sees the conversation's own tree at the workspace path"), async () => {
     const w = await world();
     try {
         const placement = { worktree: w.worktree, fenced: false };
@@ -82,7 +86,7 @@ test.skipIf(!NAMESPACE)("an isolated conversation's check sees the conversation'
     }
 });
 
-test.skipIf(!NAMESPACE)("starts in the workspace root as the turn saw it, so a relative path means what it meant there", async () => {
+test.skipIf(!namespace.runs)(namespace.title("starts in the workspace root as the turn saw it, so a relative path means what it meant there"), async () => {
     const w = await world();
     try {
         const result = await w.check("cat marker", { cwd: w.worktree, env: {}, placement: { worktree: w.worktree, fenced: false } });
@@ -92,7 +96,7 @@ test.skipIf(!NAMESPACE)("starts in the workspace root as the turn saw it, so a r
     }
 });
 
-test.skipIf(!NAMESPACE)("a fenced conversation's check cannot see what its fence hides", async () => {
+test.skipIf(!namespace.runs)(namespace.title("a fenced conversation's check cannot see what its fence hides"), async () => {
     const w = await world();
     try {
         const secret = join(w.neighbour, "secret");

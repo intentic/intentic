@@ -166,7 +166,7 @@ const holdLiveness = (name: string): (() => void) => {
                     drop = resolve;
                 }),
         )
-        // silent-catch: refused, the claim beats instead (claimFloating's fallback), which a lockless window does anyway.
+        // allow(silent-catch): refused, the claim beats instead (claimFloating's fallback), which a lockless window does anyway.
         .catch(() => undefined);
     return () => {
         dropped = true;

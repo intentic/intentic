@@ -82,6 +82,16 @@ const modeFor = (planning: boolean): "plan" | "agent" => (planning ? "plan" : "a
 // shape rather than through the Run type.
 type SteerableRun = { readonly steer?: (text: string) => Promise<"complete_delivered" | "revert_to_followup"> };
 
+// Best-effort: the phase ends on its own timer, so a cancel the SDK refuses is only worth a trace.
+const cancelRun = async (started: Promise<Run | undefined>, logger: Logger): Promise<void> => {
+    const handle = await started;
+    try {
+        await handle?.cancel();
+    } catch (error) {
+        logger.debug({ err: error }, "cursor: run cancel refused");
+    }
+};
+
 const steerInto = async (started: Promise<Run | undefined>, channel: SteeringChannel, logger: Logger): Promise<void> => {
     for await (const text of channel.steering) {
         const run = (await started) as SteerableRun | undefined;
@@ -152,14 +162,14 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
                 return;
             }
             stalled = true;
-            void started.then((handle) => handle?.cancel().catch(() => undefined));
+            void cancelRun(started, deps.logger);
             endPhase();
         }, FIRST_DELTA_MS);
         stall.unref();
 
         // Stop cancels the run instead of abandoning it, so Cursor unwinds tool calls and the transcript ends resolved.
         const onAbort = (): void => {
-            void started.then((handle) => handle?.cancel().catch(() => undefined));
+            void cancelRun(started, deps.logger);
             setTimeout(endPhase, CANCEL_GRACE_MS).unref();
         };
         // A pre-pull Stop hits an aborted signal no listener catches; unwatched, send starts a run nothing can cancel.
@@ -172,7 +182,8 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
 
         // Ends the phase when the run itself finishes, ending the drain below.
         let settled = false;
-        const finished = started.then(async (handle) => {
+        const finished = (async () => {
+            const handle = await started;
             if (handle === undefined) {
                 return undefined;
             }
@@ -183,7 +194,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
             settled = true;
             endPhase();
             return result;
-        });
+        })();
 
         let errored = false;
         try {

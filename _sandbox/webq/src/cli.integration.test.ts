@@ -1,3 +1,4 @@
+import { requires } from "@intentic/testing/requires";
 /* The CLI end to end against a loopback fixture site: fetch, cache, query filtering, crawl with robots and caps, budget clipping. */
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
@@ -166,10 +167,12 @@ describe("webq cache", () => {
     });
 });
 
-const hasChromium = await chromiumAvailable();
+const chromium = requires(await chromiumAvailable(), "Playwright's Chromium (playwright install chromium)", {
+    absentOnCi: "the ci-base image carries no browser, and the verify jobs install none",
+});
 
 describe("browser fallback", () => {
-    it.skipIf(!hasChromium)("renders an app-shell page through Chromium", async () => {
+    it.skipIf(!chromium.runs)(chromium.title("renders an app-shell page through Chromium"), async () => {
         const shellServer = createServer((_req, res) => {
             res.writeHead(200, { "content-type": "text/html" });
             res.end(
