@@ -107,6 +107,10 @@ done
 echo
 echo "$APP is serving build $EXPECTED"
 
+# AND IT SERVES THE DOOR THIS CHECKOUT'S FRONTS DIAL, which is what image publication asks of it next (ci.yml
+# images-merge, the release): an edge rolled from an image that somehow lacks it fails here, where the cause is.
+EDGE_HEALTH_URL="$HEALTH_URL" EDGE_DOOR_WAIT=0 bash "$ROOT/_tools/scripts/image/require-edge-door.sh"
+
 # TERMINATING TLS, THE EDGE MUST SAY SO. The build answering above proves the process is up behind the new services;
 # the declaration proves it bound the QUIC door those services send UDP to, which is what every front and editor now
 # goes by. Fly accepted the UDP service either way, so nothing else here would notice an edge that never listens on it.

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { FREE_TIER, type HostedShape, type HostedTierId } from "@intentic/constants";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
-import { ENV_INGRESS_URL, ENV_SANDBOX_GRANT } from "@intentic/sandbox-contract/ingress-contract";
+import { ENV_INGRESS_URL, ENV_SANDBOX_GRANT, verifyReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
 import { ENV_PLATFORM_PUBLIC_KEY, publicKeyPemOf } from "@intentic/sandbox-contract/owner-ticket";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { flyMachineConfig } from "@intentic/sandbox-run/fly";
@@ -21,6 +21,7 @@ import {
     FlyError,
     flySandboxRole,
     getMachine,
+    getMachineLaunch,
     isFlyCapacity,
     isFlyGone,
     listAppNames,
@@ -34,13 +35,13 @@ import { AT_CAPACITY_MESSAGE, HostedAtCapacity, hostedCapacity, noteProviderAtCa
 import { resolveHostedImage } from "./build/hosted-image.js";
 import { hostedSlotUse } from "./hosted-plan.js";
 import { assertHostedIdentity, HostedAlreadyProvisioned, HostedProvisionCancelled, lockHostedSandbox, withHostedApp } from "./hosted-cleanup.js";
-import { hostedShapeFor, volumeOptions } from "./hosted-shape.js";
+import { hostedShapeFor, shapeOfRow, volumeOptions } from "./hosted-shape.js";
 import { dropHostedMachine } from "./hosted-usage.js";
 
 // Hosted lane orchestration over fly.ts: one machine and one volume in one app per sandbox, named `<prefix>-<12-hex
-// tunnel id>` always. Reachability is a replay: the edge answers `sandbox-<id>` with `fly-replay: app=<prefix>-<id>`,
-// derived from the hostname with no lookup. The daemon's announce is the only up signal; the platform only flips power,
-// never dials the machine.
+// tunnel id>` always. The machine dials the edge's tunnel like every sandbox; until it has, the edge answers `sandbox-<id>`
+// with `fly-replay: app=<prefix>-<id>`, derived from the hostname with no lookup. The daemon's announce is the only up
+// signal; the platform only flips power and writes config, never dials the machine.
 
 // Both the Fly credential and the edge are required: hosted machines are reached only via the edge's replay under its
 // wildcard.
@@ -182,9 +183,68 @@ export interface HostedProvisioned {
     readonly warm: boolean;
 }
 
+// Whether a machine's environment carries the tunnel this platform would give it now: the edge's address, and a grant
+// the edge accepts for this sandbox (signed by today's key, naming the id its hostname carries).
+export const tunnelEnvCurrent = (config: Config, connectToken: string, env: Readonly<Record<string, string>>): boolean => {
+    const grant = env[ENV_SANDBOX_GRANT];
+    return (
+        env[ENV_INGRESS_URL] === config.ingress.url &&
+        grant !== undefined &&
+        verifyReachabilityGrant(publicKeyPemOf(config.ingress.signingKey), grant)?.sandboxId === sandboxIdFromToken(connectToken)
+    );
+};
+
+// A wake's machine, as its row holds it: enough to re-compose its config without changing what it runs on.
+export interface HostedWakeTarget {
+    readonly cpuKind: string;
+    readonly cpus: number;
+    readonly memoryMb: number;
+    readonly volumeGb: number;
+    readonly appName: string;
+    readonly machineId: string;
+    readonly volumeId: string;
+    readonly image?: string | null;
+    readonly environmentHash?: string | null;
+}
+
+// States a config replacement is safe from; anything mid-transition is left to the plain start and its own verdict.
+const HEALABLE_STATES = new Set([`stopped`, `suspended`, `started`]);
+
+/* A WAKE ALSO HEALS THE TUNNEL. A machine configured before hosted machines dialled the edge (71dbfb7145) carries
+ * neither SANDBOX_GRANT nor INGRESS_URL, and a stop/start never changes a config, so it would stay reachable only by
+ * replay, and not at all once the edge terminates TLS itself. So the wake reads the machine's environment first and,
+ * when the tunnel's pair is missing or no longer what this platform would write (a moved edge, a rotated key),
+ * re-applies the whole config the way a restart does, with the machine's own overlay and guest, then starts it and
+ * confirms. A stock machine moves onto today's stock digest, as a restart moves it: one that old most likely runs an
+ * image from before the front that dials (aa02061469 landed hours before 71dbfb7145), and a grant it cannot present
+ * would heal nothing. An overlay machine keeps its overlay, whose base is the owner's rebuild to move. `heal` is lazy
+ * because only this case needs the sandbox's identity. A read that fails is not a verdict: the plain start runs and the
+ * next wake asks again. Answers whether it healed. */
+export const wakeHosted = async (config: Config, hosted: HostedWakeTarget, heal?: () => HostedProvisionArgs): Promise<boolean> => {
+    if (heal !== undefined && ingressEnabled(config)) {
+        const launch = await getMachineLaunch(config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch(() => undefined);
+        if (launch?.env !== undefined && HEALABLE_STATES.has(launch.state)) {
+            const args = heal();
+            if (!tunnelEnvCurrent(config, args.connectToken, launch.env)) {
+                const overlay: HostedOverlay = { image: hosted.image ?? null, environmentHash: hosted.environmentHash ?? null };
+                await updateMachine(
+                    config.hosted.flyApiToken,
+                    hosted.appName,
+                    hosted.machineId,
+                    hostedMachineConfig(config, args, hosted.appName, hosted.volumeId, overlay, await resolveHostedImage(config), shapeOfRow(hosted)),
+                );
+                await startAfterUpdate(config, hosted);
+                return true;
+            }
+        }
+    }
+    await startHosted(config, hosted);
+    return false;
+};
+
 // Starts a stopped machine; Fly's refusal for one that's already live or mid-replace both read as success here — the
 // browser's own probe decides when the sandbox is truly back.
-export const wakeHosted = async (config: Config, hosted: { appName: string; machineId: string }): Promise<void> => {
+const startHosted = async (config: Config, hosted: { appName: string; machineId: string }): Promise<void> => {
     try {
         await startMachine(config.hosted.flyApiToken, hosted.appName, hosted.machineId);
     } catch (error) {

@@ -15,6 +15,10 @@ on:
       version:
         description: "The released version to put stable back onto, e.g. 1.200.0"
         required: true
+      door:
+        description: "Only for a version older than the 2026-09 directory overhaul: the tunnel door its front dials, e.g. /tunnel/v1"
+        required: false
+        default: ""
 
 # Serialized against itself only. Two rollbacks at once would race on the same three pointers and could leave
 # stable straddling two versions; a release is gated by its own lock upstream of this workflow.
@@ -50,3 +54,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
           ROLLBACK_VERSION: ${{ inputs.version }}
+          ROLLBACK_DOOR: ${{ inputs.door }}

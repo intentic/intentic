@@ -373,8 +373,8 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     # Was 120 when this job built installers and images itself; now it stages, uploads and stitches. The
-    # uploads are the slow part and they have never neared this.
-    timeout-minutes: 60
+    # uploads are the slow part and they have never neared 60; the other 30 are the edge-door gate's longest wait.
+    timeout-minutes: 90
     permissions:
       contents: write
       packages: write
@@ -446,6 +446,13 @@ jobs:
         with:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # NO RELEASE AHEAD OF THE EDGE. The release moves `stable`, which every hosted machine and every `ic sandbox
+      # update` pulls, and its front dials one tunnel door with no fallback. Asked before semantic-release rather
+      # than only inside release-images.sh so a refusal leaves no tag and no Release behind; it waits out the edge
+      # roll of the same push (require-edge-door.sh says how long), and release-images.sh asks again for the
+      # manual run.
+      - name: The live edge serves this front's tunnel door
+        run: bash _tools/scripts/image/require-edge-door.sh
       # THE RELEASE, AND WHETHER IT HAPPENED — which are two different facts, and everything below this step
       # depends on the second one.
       #

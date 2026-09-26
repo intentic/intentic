@@ -587,11 +587,12 @@ export const sandboxRoutes = {
                 id: input.sandboxId,
                 OR: [{ ownerId: user.id }, { members: { some: { email: user.email.toLowerCase(), acceptedAt: { not: null } } } }],
             },
-            include: { hosted: true },
+            include: { hosted: true, owner: { select: { email: true } } },
         });
         if (!sandbox || sandbox.hosted === null) {
             throw new ORPCError(`NOT_FOUND`, { message: `sandbox not found` });
         }
+        const { hosted } = sandbox;
         await requireHostedStanding(context, sandbox.ownerId);
         await settleHostedStretch(context.prisma, context.config, context.logger, { ...sandbox.hosted, ownerId: sandbox.ownerId });
         const budget = await hostedBudgetOf(context.prisma, context.config, {
@@ -604,7 +605,21 @@ export const sandboxRoutes = {
             throw paymentRequired(`this sandbox's ${budget.allowanceMinutes / 60} free hours are used up this month; upgrade or self-host`);
         }
         try {
-            await wakeHosted(context.config, sandbox.hosted);
+            // What a re-applied config is composed from, as a restart composes it; the owner's address and not the
+            // caller's, since a member may be the one waking it.
+            const healed = await wakeHosted(context.config, hosted, () => ({
+                sandboxId: sandbox.id,
+                connectToken: decryptSecret(context.config, sandbox.token),
+                ownerEmail: sandbox.owner.email.toLowerCase(),
+                region: hosted.region,
+                tier: hostedTier(hosted.tier).id,
+            }));
+            if (healed) {
+                context.logger.info(
+                    { app: hosted.appName, sandboxId: sandbox.id },
+                    `hosted wake: the machine's tunnel grant or edge address was missing or stale; its config was re-applied`,
+                );
+            }
         } catch (error) {
             // Fly saying the machine is gone is terminal, not a bad minute: this wake reflex is the only moment
             // anything asks about it, so the row and the sandbox's address are dropped here rather than left to the

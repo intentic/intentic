@@ -228,6 +228,9 @@ impl Edge {
                     "replay": self.hosted_app_prefix.is_some(),
                     "build": self.build,
                     "transports": self.transports.iter().map(|transport| transport.token()).collect::<Vec<_>>(),
+                    // Which tunnel doors this build serves, so nothing publishes a front ahead of the edge it dials
+                    // (require-edge-door.sh). Not `tunnels`, which has always been the count.
+                    "doors": [legacy::PATH, TUNNEL_PATH],
                 });
                 Response::builder()
                     .header(header::CONTENT_TYPE, "application/json")

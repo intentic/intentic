@@ -1,19 +1,22 @@
+import { generateKeyPairSync } from "node:crypto";
 import { FREE_TIER, type HostedTier, PAID_TIERS } from "@intentic/constants";
+import { FLY_VOLUME_PATH } from "@intentic/sandbox-run/fly";
 import { Prisma } from "@intentic/prisma";
 import { call, ORPCError } from "@orpc/server";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { OrpcContext } from "../../context.js";
-import type { Config } from "../../config.js";
+import { configSchema, type Config } from "../../config.js";
 import { sandboxRoutes } from "../sandbox.routes.js";
-import { verifyReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
+import { hostOwnerId, mintReachabilityGrant, verifyReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
 import { publicKeyPemOf } from "@intentic/sandbox-contract/owner-ticket";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
-import { hostedEnabled, hostedInstanceId, provisionHosted, reapHostedOrphans, startAfterUpdate, wakeHosted } from "./hosted.js";
+import { hostedEnabled, hostedInstanceId, provisionHosted, reapHostedOrphans, startAfterUpdate, wakeHosted, type HostedProvisionArgs } from "./hosted.js";
 import { HostedAlreadyProvisioned } from "./hosted-cleanup.js";
 import { hostedShapeFor } from "./hosted-shape.js";
 import { AT_CAPACITY_MESSAGE, forgetProviderCapacity, HostedAtCapacity } from "./hosted-capacity.js";
 import { forgetHostedImage } from "./build/hosted-image.js";
 import { fakeHostedAppLock, testIngressConfig } from "../../testing.js";
+import { createApp } from "../../app.js";
 import { RECOVERY_WINDOW_MS } from "../../durations.js";
 import * as timersPromisesOriginal from "node:timers/promises";
 
@@ -705,13 +708,84 @@ describe(`startAfterUpdate`, () => {
     });
 });
 
+// A hosted machine's row as the wake reads it: the free rung's guest, stock image, no overlay.
+const WAKE_TARGET = {
+    appName: `intentic-sbx-a`,
+    machineId: `m1`,
+    volumeId: `vol1`,
+    cpuKind: `shared`,
+    cpus: 2,
+    memoryMb: 4096,
+    volumeGb: 10,
+    image: null,
+    environmentHash: null,
+};
+const WAKE_TOKEN = `t0k3n`;
+const wakeArgs = (): HostedProvisionArgs => ({
+    sandboxId: `s1`,
+    connectToken: WAKE_TOKEN,
+    ownerEmail: `owner@example.com`,
+    region: `iad`,
+    tier: FREE_TIER.id,
+});
+// The digest the machine was provisioned on, and the one `stable` resolves to today.
+const PINNED = `ghcr.io/intentic/sandbox@sha256:${`a`.repeat(64)}`;
+const STABLE_DIGEST = `sha256:${`b`.repeat(64)}`;
+// The environment a hosted machine was given before 71dbfb7145: everything but the tunnel's pair.
+const PRE_TUNNEL_ENV = {
+    GOOGLE_CLIENT_ID: `gcid`,
+    CONNECT_TOKEN: WAKE_TOKEN,
+    OWNER_EMAIL: `owner@example.com`,
+    WEB_ORIGIN: `https://app.test`,
+    SANDBOX_PUBLIC_URL: `https://sandbox-${sandboxIdFromToken(WAKE_TOKEN)}.sbx.test`,
+    PLATFORM_URL: `https://api.test`,
+    IDLE_STOP_MINUTES: `20`,
+};
+const currentTunnelEnv = () => ({
+    ...PRE_TUNNEL_ENV,
+    INGRESS_URL: testIngressConfig.url,
+    SANDBOX_GRANT: mintReachabilityGrant(testIngressConfig.signingKey, sandboxIdFromToken(WAKE_TOKEN) ?? ``, Date.now()),
+});
+
+// A machine that answers its config until it is replaced, then settles and starts like settlingMachine.
+const configuredMachine = (env: Record<string, string>, state = `stopped`) => {
+    const settling = settlingMachine(`m1`);
+    let replaced = false;
+    return {
+        read: () => (replaced ? settling.read() : json({ id: `m1`, state, config: { image: PINNED, env } })),
+        replace: () => {
+            replaced = true;
+            return json({ id: `m1`, state: `replacing` });
+        },
+        start: () => (replaced ? settling.start() : json({ ok: true })),
+        get started() {
+            return settling.started;
+        },
+    };
+};
+const configuredFly = (machine: ReturnType<typeof configuredMachine>) =>
+    stubFetch([
+        {
+            match: (_method, url) => url.includes(`/v2/intentic/sandbox/manifests/`),
+            respond: () => new Response(null, { status: 200, headers: { "docker-content-digest": STABLE_DIGEST } }),
+        },
+        { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1/start`), respond: () => machine.start() },
+        { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1`), respond: () => machine.replace() },
+        { match: (method, url) => method === `GET` && url.endsWith(`/machines/m1`), respond: () => machine.read() },
+    ]);
+const updatesIn = (calls: { method: string; url: string; body?: unknown }[]) =>
+    calls.filter((entry) => entry.method === `POST` && entry.url.endsWith(`/machines/m1`));
+// SAFETY: every body read here is the JSON of an updateMachine call, whose shape fly.ts writes as `{ config }`.
+const envOf = (update: { body?: unknown } | undefined): Record<string, string> =>
+    (update?.body as { config: { env: Record<string, string> } } | undefined)?.config.env ?? {};
+
 describe(`wakeHosted`, () => {
     it(`treats "already running" as success, the browser's daemon probe is the real verdict`, async () => {
         stubFetch([
             { match: (method, url) => method === `POST` && url.endsWith(`/start`), respond: () => json({ error: `machine is started` }, 422) },
             { match: (method, url) => method === `GET` && url.includes(`/machines/`), respond: () => json({ id: `m1`, state: `started` }) },
         ]);
-        await expect(wakeHosted(config(), { appName: `intentic-sbx-a`, machineId: `m1` })).resolves.toBeUndefined();
+        await expect(wakeHosted(config(), WAKE_TARGET)).resolves.toBe(false);
     });
 
     it(`propagates a refusal on a machine that is genuinely not coming up`, async () => {
@@ -719,7 +793,81 @@ describe(`wakeHosted`, () => {
             { match: (method, url) => method === `POST` && url.endsWith(`/start`), respond: () => json({ error: `host unavailable` }, 500) },
             { match: (method, url) => method === `GET` && url.includes(`/machines/`), respond: () => json({ id: `m1`, state: `stopped` }) },
         ]);
-        await expect(wakeHosted(config(), { appName: `intentic-sbx-a`, machineId: `m1` })).rejects.toThrow(/host unavailable/);
+        await expect(wakeHosted(config(), WAKE_TARGET)).rejects.toThrow(/host unavailable/);
+    });
+
+    it(`starts a machine whose tunnel environment is current, and writes no config`, async () => {
+        const machine = configuredMachine(currentTunnelEnv());
+        const calls = configuredFly(machine);
+        await expect(wakeHosted(config(), WAKE_TARGET, wakeArgs)).resolves.toBe(false);
+        expect(updatesIn(calls)).toHaveLength(0);
+        expect(calls.filter((entry) => entry.url.endsWith(`/start`))).toHaveLength(1);
+    });
+
+    // The row's guest and volume stay; the image is today's stock digest, since one this old predates the front.
+    it(`re-applies the config of a machine missing the tunnel's pair, onto today's stock digest`, async () => {
+        const machine = configuredMachine(PRE_TUNNEL_ENV);
+        const calls = configuredFly(machine);
+        await expect(wakeHosted(config(), WAKE_TARGET, wakeArgs)).resolves.toBe(true);
+        const [update] = updatesIn(calls);
+        expect(update?.body).toMatchObject({
+            config: {
+                image: `ghcr.io/intentic/sandbox@${STABLE_DIGEST}`,
+                guest: { cpu_kind: `shared`, cpus: 2, memory_mb: 4096 },
+                mounts: [{ volume: `vol1`, path: FLY_VOLUME_PATH }],
+            },
+        });
+        const env = envOf(update);
+        expect(env[`INGRESS_URL`]).toBe(testIngressConfig.url);
+        expect(verifyReachabilityGrant(publicKeyPemOf(testIngressConfig.signingKey), env[`SANDBOX_GRANT`] ?? ``)?.sandboxId).toBe(
+            sandboxIdFromToken(WAKE_TOKEN),
+        );
+        expect(machine.started).toBe(true);
+    });
+
+    // Stale is as bad as missing: an edge that moved, or a grant signed by a key the edge no longer holds.
+    it.each([
+        [`an edge address that moved`, () => ({ ...currentTunnelEnv(), INGRESS_URL: `https://old-ingress.sbx.test` })],
+        [
+            `a grant another key signed`,
+            () => ({
+                ...currentTunnelEnv(),
+                SANDBOX_GRANT: mintReachabilityGrant(
+                    generateKeyPairSync(`ed25519`).privateKey.export({ type: `pkcs8`, format: `pem` }).toString(),
+                    sandboxIdFromToken(WAKE_TOKEN) ?? ``,
+                    Date.now(),
+                ),
+            }),
+        ],
+        [`a grant for another sandbox`, () => ({ ...currentTunnelEnv(), SANDBOX_GRANT: mintReachabilityGrant(testIngressConfig.signingKey, `0123456789ab`, Date.now()) })],
+    ])(`re-applies the config of a machine with %s`, async (_, env) => {
+        const calls = configuredFly(configuredMachine(env()));
+        await expect(wakeHosted(config(), WAKE_TARGET, wakeArgs)).resolves.toBe(true);
+        expect(envOf(updatesIn(calls)[0])[`INGRESS_URL`]).toBe(testIngressConfig.url);
+    });
+
+    // A running machine the browser cannot reach is the case this is for: the replacement restarts it with the tunnel.
+    it(`re-applies the config of a running machine that lacks the grant, and confirms it runs again`, async () => {
+        const machine = configuredMachine(PRE_TUNNEL_ENV, `started`);
+        const calls = configuredFly(machine);
+        await expect(wakeHosted(config(), WAKE_TARGET, wakeArgs)).resolves.toBe(true);
+        expect(updatesIn(calls)).toHaveLength(1);
+        expect(machine.started).toBe(true);
+    });
+
+    // An overlay is the owner's environment, built on a base only a rebuild moves; the heal gives it the tunnel as it is.
+    it(`keeps an overlay machine on its overlay`, async () => {
+        const calls = configuredFly(configuredMachine(PRE_TUNNEL_ENV));
+        const overlay = `registry.fly.io/intentic-sbx-a:env-1`;
+        await expect(wakeHosted(config(), { ...WAKE_TARGET, image: overlay, environmentHash: `h1` }, wakeArgs)).resolves.toBe(true);
+        expect(updatesIn(calls)[0]?.body).toMatchObject({ config: { image: overlay } });
+    });
+
+    // Mid-transition, a replacement would only earn a 412: the plain start answers, and the next wake asks again.
+    it(`leaves a machine mid-transition to the plain start`, async () => {
+        const calls = configuredFly(configuredMachine(PRE_TUNNEL_ENV, `replacing`));
+        await expect(wakeHosted(config(), WAKE_TARGET, wakeArgs)).resolves.toBe(false);
+        expect(updatesIn(calls)).toHaveLength(0);
     });
 });
 
@@ -1323,6 +1471,69 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         expect(result).toEqual({ ok: true });
         // Access query admits owner OR accepted member; the OR is the contract under test.
         expect(findFirst.mock.calls[0]?.[0]?.where?.OR).toHaveLength(2);
+    });
+
+    /* THE GO-LIVE'S STRANDING CASE. A machine configured before hosted machines dialled the edge (71dbfb7145) has no
+     * SANDBOX_GRANT and no INGRESS_URL, and once the edge terminates TLS itself there is no replay to reach it by. Its
+     * next wake must hand it the tunnel, meter the wake like any other, and leave it able to say it is reachable: the
+     * grant the edge will check names the id the edge reads off the machine's own address, and the daemon's report,
+     * authenticated by the token in that same environment, lands. Woken by a member, so the owner's address is kept. */
+    it(`a machine configured before 71dbfb7145 wakes, gets the grant, and reports reachable`, async () => {
+        const machine = configuredMachine(PRE_TUNNEL_ENV);
+        const calls = configuredFly(machine);
+        const row = {
+            id: `s1`,
+            ownerId: `u1`,
+            token: WAKE_TOKEN,
+            owner: { email: `Owner@Example.com` },
+            hosted: { id: `h1`, sandboxId: `s1`, region: `iad`, tier: FREE_TIER.id, wokeAt: null, ...WAKE_TARGET },
+        };
+        const stretch = jest.fn().mockResolvedValue({});
+        const prisma = fakePrisma({
+            sandbox: { findFirst: jest.fn().mockResolvedValue(row) },
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue({ wokeAt: null }), update: stretch },
+        });
+        const member = { id: `u2`, email: `member@example.com`, name: `Member`, image: null };
+        expect(await call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma, user: member }) })).toEqual({ ok: true });
+
+        const [update] = updatesIn(calls);
+        const env = envOf(update);
+        expect(env[`INGRESS_URL`]).toBe(testIngressConfig.url);
+        expect(env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
+        const grant = verifyReachabilityGrant(publicKeyPemOf(testIngressConfig.signingKey), env[`SANDBOX_GRANT`] ?? ``);
+        expect(grant?.sandboxId).toBe(hostOwnerId(new URL(env[`SANDBOX_PUBLIC_URL`] ?? ``).host));
+        expect(machine.started).toBe(true);
+        // Metered as a wake: the stretch opens on the row once the machine runs.
+        expect(stretch).toHaveBeenCalledWith(expect.objectContaining({ where: { id: `h1` }, data: expect.objectContaining({ wokeAt: expect.any(Date) }) }));
+
+        // The api the daemon reports to, as a whole app: the route authenticates by the connect token alone.
+        const appConfig = configSchema.parse({
+            database: { url: `postgres://x`, poolMax: 10 },
+            betterAuth: { secret: `s` },
+            secrets: { key: `` },
+            webOrigin: `https://app.test`,
+            google: { clientId: ``, clientSecret: `` },
+            email: { apiKey: ``, from: `` },
+            ingress: testIngressConfig,
+            api: { url: `https://api.test`, port: 6480, host: `127.0.0.1`, httpsKey: ``, httpsCert: `` },
+            log: { level: `silent`, pretty: `false` },
+        });
+        // SAFETY: the app reads only these four methods and `child` from its logger on this route.
+        const appLogger = { child: () => appLogger, info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } as never;
+        const reported = jest.fn().mockResolvedValue({ count: 1 });
+        const daemonSide = fakePrisma({
+            sandbox: { findUnique: jest.fn().mockResolvedValue({ id: `s1`, tokenDigest: sha256Hex(WAKE_TOKEN) }), updateMany: reported },
+        });
+        const answer = await createApp(appConfig, daemonSide, appLogger).app.request(`/sandbox/boot-report`, {
+            method: `POST`,
+            headers: { "content-type": `application/json`, "x-intentic-connect": env[`CONNECT_TOKEN`] ?? `` },
+            body: JSON.stringify({ reach: `reachable` }),
+        });
+        expect(answer.status).toBe(200);
+        expect(reported).toHaveBeenCalledWith({
+            where: { id: `s1`, tokenDigest: sha256Hex(WAKE_TOKEN) },
+            data: { bootReport: { reach: `reachable`, at: expect.any(String) } },
+        });
     });
 
     // A trash, a release or the idle sweep deleted the row between this wake's read and its start (specs/HostedStretch.tla).

@@ -85,3 +85,5 @@ export const ENV_SANDBOX_GRANT = "SANDBOX_GRANT";
 // - Routing: host maps via hostOwnerId to a registered tunnel; no tunnel answers 502 naming the sandbox label, with
 //   the verdict header and CORS of edge-verdict.ts, and admits the preflight of the request it is about to refuse.
 // - The tunnel door and any host without a sandbox id are served directly by the ingress, never routed.
+// - `/health` lists the tunnel doors the build serves (`"doors":["/tunnel/v1","/tunnel/v2"]`); a sandbox image moves
+//   onto a tag sandboxes pull only once the live edge lists INGRESS_TUNNEL_PATH (_tools/scripts/image/require-edge-door.sh).

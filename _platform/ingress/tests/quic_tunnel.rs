@@ -283,5 +283,9 @@ async fn the_edge_declares_what_it_serves_on_every_tunnels_answer_and_on_health(
         let health = get(port, &format!("ingress.{ZONE}"), "/health").await;
         let health: serde_json::Value = serde_json::from_str(&health.body).unwrap();
         assert_eq!(health["transports"], tokens);
+        assert_eq!(
+            health["doors"],
+            serde_json::json!(["/tunnel/v1", "/tunnel/v2"])
+        );
     }
 }

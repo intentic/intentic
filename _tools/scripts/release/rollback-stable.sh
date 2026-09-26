@@ -46,6 +46,24 @@ if [ "$TAG" = "$current" ]; then
   echo "stable is already ${TAG} — nothing to roll back"
   exit 0
 fi
+
+# NOT ONTO A FRONT THE LIVE EDGE CANNOT SERVE. The version rolled back onto dials the tunnel door ITS contract names,
+# which may be one the edge has since retired; asked before any pointer moves, and without waiting, since a rollback
+# is taken in a hurry and the edge will not change under it. The door is read from the tag itself; a version whose
+# contract is not at today's path (older than the 2026-09 directory overhaul) is named by hand with ROLLBACK_DOOR.
+door="${ROLLBACK_DOOR:-}"
+if [ -z "$door" ]; then
+  door="$(gh_api "https://api.github.com/repos/$REPO/contents/_shared/sandbox-contract/src/protocol/ingress-contract.ts?ref=$TAG" 2>/dev/null |
+    node -e 'let b = ""; process.stdin.on("data", (c) => (b += c)).on("end", () => {
+      try { const m = /^export const INGRESS_TUNNEL_PATH = "([^"]*)";$/m.exec(Buffer.from(JSON.parse(b).content, "base64").toString("utf8")); if (m) console.log(m[1]); } catch {}
+    })' || true)"
+fi
+if [ -z "$door" ]; then
+  echo "cannot read the tunnel door ${TAG}'s front dials from its contract; name it with ROLLBACK_DOOR (e.g. /tunnel/v1)" >&2
+  exit 1
+fi
+EDGE_DOOR_WAIT=0 bash "$DIR/../image/require-edge-door.sh" "$door"
+
 echo "==> rolling stable back to ${TAG} (from ${current:-none})"
 
 # 1. The flag, FIRST — stop serving the bad version before anything else.

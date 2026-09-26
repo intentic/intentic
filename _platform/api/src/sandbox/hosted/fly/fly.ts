@@ -351,6 +351,22 @@ export const getMachine = async (token: string, app: string, machineId: string):
     return { state: parsed.state, updatedAt: updatedAt !== undefined && !Number.isNaN(updatedAt.getTime()) ? updatedAt : undefined };
 };
 
+// What a machine launches with: the image its config names and its environment, both absent when the answer carries no
+// config. Read by the wake, which re-applies a config whose tunnel environment is missing or stale (hosted.ts).
+const machineLaunchSchema = z.object({
+    state: z.string(),
+    config: z.object({ image: z.string().optional(), env: z.record(z.string(), z.string()).optional() }).optional(),
+});
+export interface FlyMachineLaunch {
+    readonly state: string;
+    readonly image: string | undefined;
+    readonly env: Readonly<Record<string, string>> | undefined;
+}
+export const getMachineLaunch = async (token: string, app: string, machineId: string): Promise<FlyMachineLaunch> => {
+    const parsed = machineLaunchSchema.parse(await call(token, `GET`, `/apps/${encodeURIComponent(app)}/machines/${encodeURIComponent(machineId)}`));
+    return { state: parsed.state, image: parsed.config?.image, env: parsed.config === undefined ? undefined : (parsed.config.env ?? {}) };
+};
+
 // Every machine in an app, with what the orphan sweep judges it by: its metadata stamp and `created_at` (fresh signup
 // vs. leftover). Missing either field means the sweep leaves it alone.
 const machineListSchema = z.array(

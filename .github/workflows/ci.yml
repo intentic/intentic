@@ -1277,7 +1277,8 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-    timeout-minutes: 15
+    # 15 for the manifest calls, and up to 30 more for the gate below to wait out the edge roll of the same push.
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write
@@ -1292,6 +1293,10 @@ jobs:
         with:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # NOT AHEAD OF THE EDGE. A front dials one tunnel door and has no other way in, so `latest` moves only once the
+      # live edge declares that door on /health. Asked of the edge rather than of this workflow's job graph: the edge
+      # rolls in images-platform, which runs on a platform push only, and a `needs` on it would pass on the skip.
+      - run: bash _tools/scripts/image/require-edge-door.sh
       - run: bash _tools/scripts/image/merge-image-manifests.sh sandbox latest "sha-${GITHUB_SHA::8}" core-latest "core-sha-${GITHUB_SHA::8}"
         shell: bash
       # The single-arch half of the same promise: point dind-host's `latest` at the SHA tag the `images` job
