@@ -44,6 +44,19 @@
         { "host": "127.0.0.1:8788", "owner": null },
         { "host": "", "owner": null }
     ],
+    "bulk": [
+        "GET /diff/raw",
+        "GET /workspace/raw",
+        "GET /workspace/media",
+        "POST /workspace/upload",
+        "POST /workspace/upload-archive",
+        "GET /system/sync/ssh",
+        "GET /bundles/download",
+        "GET /extensions/{id}/bundle",
+        "GET /system/runners/git/{repo}/info/refs",
+        "POST /system/runners/git/{repo}/git-upload-pack",
+        "POST /system/runners/git/{repo}/git-receive-pack"
+    ],
     "lanes": [
         { "host": "sandbox-abcdef012345.sbx.example.test", "method": "GET", "path": "/workspace/media?path=a.mp4", "lane": "bulk" },
         { "host": "sandbox-abcdef012345.sbx.example.test", "method": "POST", "path": "/workspace/upload?path=a", "lane": "bulk" },

@@ -3,14 +3,14 @@
 
 /// Where a connection came in; each listener answers a different set of hosts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Lane {
+pub enum Listener {
     /// The daemon's own port: Node, whatever the host.
     Daemon,
     /// The preview port, which the tunnel and a hosted machine's front door also land on.
     Preview,
     /// The machine-published loopback port; `tls` is the certified `<id>.local.<zone>` name, which is never a preview.
     Loopback { tls: bool },
-    /// A stream arriving down the ingress tunnel.
+    /// A stream arriving down the ingress tunnel, whichever carrier brought it.
     Tunnel,
 }
 
@@ -20,19 +20,9 @@ pub enum Target {
     Preview,
 }
 
-/// The leftmost DNS label of a Host header, port stripped; empty when there is none.
-pub fn label_of(host: &str) -> &str {
-    host.split(':')
-        .next()
-        .unwrap_or("")
-        .split('.')
-        .next()
-        .unwrap_or("")
-}
-
 // With an id, the key must end in the exact `-<id>` suffix, so a key containing `-` stays unambiguous.
 fn key_from_host<'a>(prefix: &str, host: &'a str, sandbox_id: Option<&str>) -> Option<&'a str> {
-    let key = label_of(host).strip_prefix(prefix)?;
+    let key = relay::label_of(host).strip_prefix(prefix)?;
     match sandbox_id {
         None => (!key.is_empty()).then_some(key),
         Some(id) => {
@@ -62,16 +52,16 @@ pub fn is_preview_host(host: &str, sandbox_id: Option<&str>) -> bool {
 
 /// `sandbox-<id>`: the daemon's own name. Without an id nothing is the daemon's, and the preview side refuses it.
 pub fn is_daemon_host(host: &str, sandbox_id: Option<&str>) -> bool {
-    sandbox_id.is_some_and(|id| label_of(host).strip_prefix("sandbox-") == Some(id))
+    sandbox_id.is_some_and(|id| relay::label_of(host).strip_prefix("sandbox-") == Some(id))
 }
 
-pub fn target(lane: Lane, host: &str, sandbox_id: Option<&str>) -> Target {
-    match lane {
-        Lane::Daemon | Lane::Loopback { tls: true } => Target::Node,
-        Lane::Loopback { tls: false } if is_preview_host(host, sandbox_id) => Target::Preview,
-        Lane::Loopback { tls: false } => Target::Node,
-        Lane::Preview | Lane::Tunnel if is_daemon_host(host, sandbox_id) => Target::Node,
-        Lane::Preview | Lane::Tunnel => Target::Preview,
+pub fn target(listener: Listener, host: &str, sandbox_id: Option<&str>) -> Target {
+    match listener {
+        Listener::Daemon | Listener::Loopback { tls: true } => Target::Node,
+        Listener::Loopback { tls: false } if is_preview_host(host, sandbox_id) => Target::Preview,
+        Listener::Loopback { tls: false } => Target::Node,
+        Listener::Preview | Listener::Tunnel if is_daemon_host(host, sandbox_id) => Target::Node,
+        Listener::Preview | Listener::Tunnel => Target::Preview,
     }
 }
 
@@ -140,27 +130,35 @@ mod tests {
     }
 
     #[test]
-    fn each_lane_answers_its_own_hosts() {
+    fn each_listener_answers_its_own_hosts() {
         let id = Some("abcdef012345");
         let daemon = "sandbox-abcdef012345.sbx.example.test";
         let preview = "preview-web-abcdef012345.sbx.example.test";
-        assert_eq!(target(Lane::Daemon, preview, id), Target::Node);
-        assert_eq!(target(Lane::Tunnel, daemon, id), Target::Node);
-        assert_eq!(target(Lane::Tunnel, preview, id), Target::Preview);
+        assert_eq!(target(Listener::Daemon, preview, id), Target::Node);
+        assert_eq!(target(Listener::Tunnel, daemon, id), Target::Node);
+        assert_eq!(target(Listener::Tunnel, preview, id), Target::Preview);
         assert_eq!(
-            target(Lane::Preview, "stray.sbx.example.test", id),
+            target(Listener::Preview, "stray.sbx.example.test", id),
             Target::Preview
         );
         assert_eq!(
-            target(Lane::Loopback { tls: true }, "preview-web.localhost", None),
+            target(
+                Listener::Loopback { tls: true },
+                "preview-web.localhost",
+                None
+            ),
             Target::Node
         );
         assert_eq!(
-            target(Lane::Loopback { tls: false }, "preview-web.localhost", None),
+            target(
+                Listener::Loopback { tls: false },
+                "preview-web.localhost",
+                None
+            ),
             Target::Preview
         );
         assert_eq!(
-            target(Lane::Loopback { tls: false }, "127.0.0.1:28123", None),
+            target(Listener::Loopback { tls: false }, "127.0.0.1:28123", None),
             Target::Node
         );
     }

@@ -846,11 +846,11 @@ jobs:
 
   # The tunnel's two Rust ends. The sandbox's front (_sandbox/front) owns every port and the ingress tunnel and
   # supervises the daemon; the edge (_platform/ingress) holds the tunnels and routes browsers down them, building the
-  # front's tunnel crate by path. The ic gate again for both (fmt, clippy at -D warnings, tests, which run the real
-  # binaries on real sockets), each from its crate's own directory because cargo reads .cargo/config.toml from where it
-  # runs, not from the manifest: that config is where the wire crate's TypeScript lands, and the front's last step
-  # refuses a lane whose committed TypeScript is not what the Rust types emit, since Node and the front would then
-  # disagree about every frame. images-platform waits on this job, since the edge it rolls is only tested here.
+  # front's tunnel crate and the relay crate both share (_shared/relay) by path. The ic gate again for all three (fmt,
+  # clippy at -D warnings, tests, which run the real binaries on real sockets), each from its crate's own directory
+  # because cargo reads .cargo/config.toml from where it runs, not from the manifest: that config is where the wire
+  # crate's TypeScript lands, and the front's last step refuses a control socket whose committed TypeScript is not
+  # what the Rust types emit, since Node and the front would then disagree about every frame. images-platform waits on this job, since the edge it rolls is only tested here.
   front-check:
     needs: [changes, preflight, ci-base, ci-desktop]
     if: ${{ !cancelled() && needs.changes.outputs.front == 'true' && needs.preflight.result == 'success' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
@@ -884,6 +884,12 @@ jobs:
         working-directory: _platform/ingress
       - run: cargo test --locked
         working-directory: _platform/ingress
+      - run: cargo fmt --all --check
+        working-directory: _shared/relay
+      - run: cargo clippy --all-targets --locked -- -D warnings
+        working-directory: _shared/relay
+      - run: cargo test --locked
+        working-directory: _shared/relay
 
   # The desktop ARTIFACTS: build the Linux bundles exactly the way the release builds them, then verify what
   # came out. Two tiers, ordered by cost, each proving something the one before it cannot:

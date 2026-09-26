@@ -5,15 +5,16 @@ The edge every sandbox hostname points at: it carries browser traffic down tunne
 ```mermaid
 flowchart LR
     browser["Browser<br/>sandbox-id.sbx.intentic.dev"] --> ingress(["ingress"])
-    front["A sandbox's front"] -- "wss /tunnel/v1 per lane · QUIC<br/>signed grant" --> ingress
-    ingress -- "request down the tunnel" --> front
+    front["A sandbox's front"] -- "wss /tunnel/v2 · QUIC<br/>signed grant" --> ingress
+    ingress -- "a stream per request" --> front
     ingress -- "does it still exist?" --> api["api"]
     ingress -- "fly-replay" --> hosted["Hosted sandbox<br/>Fly app"]
     ingress -- "local miss" --> peer["Peer ingress machine"]
 ```
 
-- A Rust crate that builds the same [tunnel](../../_sandbox/front/crates/tunnel) crate as the sandbox's front, so both
-  ends of a tunnel are one implementation of the wire.
+- A Rust crate that builds the same [tunnel](../../_sandbox/front/crates/tunnel) and [relay](../../_shared/relay)
+  crates as the sandbox's front, so both ends of a tunnel are one implementation of the wire and of how HTTP crosses
+  it.
 - No database and nothing durable: the tunnel registry is an in-memory map, so a restart drops every tunnel and each
   front redials. The newest tunnel for an id displaces the older one.
 - Holds only the platform's Ed25519 public key, so it verifies grants and can never mint one. Revocation is a
@@ -24,9 +25,18 @@ flowchart LR
   (`INGRESS_QUIC_PORT`) is what makes it answer every tunnel's upgrade with `x-intentic-transports: quic, h3,
   webtransport` and list the same under `transports` on `/health`. Undeclared means not served, which is what every
   older edge says.
-- A front dials two WebSocket lanes, and a QUIC connection beside them once the edge's answer to a lane declares
-  `quic`. The lane a request rides comes from the daemon's routes (`tunnel-lanes.json`), so a transfer never queues a
-  keystroke; QUIC is preferred while held, each request a stream of its own.
+- A tunnel is a carrier of byte streams, and the edge opens one per request, carrying plain HTTP/1.1 so an upgrade is
+  itself (`session.rs`, `relay::exchange`). A front dials two WebSockets at `/tunnel/v2`, `interactive` and `bulk`,
+  each carrying yamux, and a QUIC connection beside them once the edge's answer declares `quic`; QUIC is preferred while
+  held, and there a stream that sends a megabyte without pausing yields to the others until it pauses.
+- Over TCP, streams on one connection still share its congestion window and its losses, so a transfer rides the bulk
+  socket: any preview's request, and a daemon route the front announced on its upgrade (`x-intentic-bulk`, the daemon's
+  RouteMeta `lane`). The edge compiles in no route table, so a route's socket follows the daemon that serves it.
+- Fronts that predate `/tunnel/v2` still dial `/tunnel/v1`, two lanes each an h2 session, an upgrade carried as a
+  CONNECT whose h1 head rides under `x-ingress-*`. [legacy.rs](src/legacy.rs) alone speaks it, reading those fronts'
+  transfer routes from the list frozen with the door, and goes once no front dials it.
+- The front pings its WebSockets every 15 s and the edge only listens; either end drops a peer silent for 45 s. A QUIC
+  connection's own keep-alive and idle timeout, on the same cadence, are its only liveness.
 - With the certificate held here (below), browsers get HTTP/3 on the same port, and the editor's terminals ride
   WebTransport where the platform relays the edge's declaration on the sandbox's row: a session opened at
   `/system/transport` on a sandbox's address, each stream served as one HTTP/1.1 connection to that address whatever
@@ -39,7 +49,7 @@ flowchart LR
 ## Key files
 
 - [src/edge.rs](src/edge.rs) — the tunnel door, the grant check, per-request Host routing, replays and verdicts.
-- [src/session.rs](src/session.rs) — one held tunnel: a request per stream, an upgrade as a CONNECT.
+- [src/session.rs](src/session.rs) — one held tunnel: a carrier of streams, each one HTTP/1.1 exchange.
 - [src/cluster.rs](src/cluster.rs) — which peer holds which tunnel, the holds protocol and the one-hop rule.
 - [src/quic.rs](src/quic.rs) — the UDP door: a front's QUIC tunnel or a browser's HTTP/3, told apart by ALPN.
 - [src/webtransport.rs](src/webtransport.rs) — a browser's session and its streams, pinned to the session's sandbox.
@@ -49,7 +59,7 @@ flowchart LR
 
 ```sh
 cargo test                                        # every suite, over real sockets
-pnpm --filter @intentic/ingress docker:release    # the image, the tunnel crate and lane table passed as build contexts
+pnpm --filter @intentic/ingress docker:release    # the image, the tunnel, browser-wire and relay crates as build contexts
 ```
 
 ## Deploying
@@ -79,8 +89,9 @@ fly orgs cross-network-replays status                      # must be on for host
 - The app must sit in the same Fly org as the hosted sandbox apps, and the org must allow cross-network replays:
   each hosted app gets its own private network (`createApp` in the api's `src/sandbox/hosted/fly/fly.ts`).
 - Never publish `INGRESS_INTERNAL_PORT` (8081): binding only the private address is the peer protocol's one lock.
-- Roll the edge before the sandboxes that dial it: an edge older than lanes reads a front's second dial as a newer
-  tunnel for the same sandbox, and the two lanes displace each other every minute.
+- An edge serves both doors, and a front dials only `/tunnel/v2`. CI rolls the edge on every push, ahead of any
+  sandbox image the same commit builds; a front that meets an edge older than that door is answered 404 and redials on
+  its backoff until the edge is redeployed.
 
 
 ### Terminating TLS at the edge
@@ -93,7 +104,7 @@ CI deploys `fly.toml` on every push, and `tests/fly_configs.rs` holds the two eq
 
 Run the steps in order, in one sitting from step 3 to step 6: between them, a push to main redeploys `fly.toml` with
 the staged secrets, which keeps everything reachable over TCP but declares a UDP door nothing routes to. Fronts and
-editors then retry QUIC and WebTransport on their normal backoff while the WebSocket lanes carry every request, so it
+editors then retry QUIC and WebTransport on their normal backoff while the WebSocket carries every request, so it
 is safe, only wasteful. The shell below assumes `FLY_API_TOKEN` for the org the edge runs in, and `FLY_ORG` for the
 org the hosted apps run in.
 

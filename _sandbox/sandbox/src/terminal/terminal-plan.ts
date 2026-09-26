@@ -19,12 +19,10 @@ export interface TerminalPlanDeps {
 
 export type TerminalAnswer = Extract<Answer, { answer: "terminal" }>;
 
-// `-A` lets one call both create a tab and reattach an existing one; `-c <dir>` sets the cwd only on creation. Panel,
-// agent and job sessions are attach-only: a missing one fails honestly, not as a bare shell in its place.
-const tmuxArgv = (session: string, dir: string): string[] =>
-    [PANEL_SESSION_PREFIX, AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX].some((prefix) => session.startsWith(prefix))
-        ? ["attach-session", "-t", `=${session}`]
-        : ["new-session", "-A", "-s", session, "-c", dir];
+// Panel, agent and job sessions are attach-only, so a missing one fails honestly, not as a bare shell in its place; any
+// other is created where the socket asked when it does not exist yet. The front composes the tmux command itself.
+const attachOnly = (session: string): boolean =>
+    [PANEL_SESSION_PREFIX, AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX].some((prefix) => session.startsWith(prefix));
 
 // `cwd` is workspace-relative; one that escapes the workspace or does not exist opens at the root instead.
 const directoryOf = (root: string, cwd: string | null): string => {
@@ -38,7 +36,7 @@ const planOf = (deps: TerminalPlanDeps, session: string, cwd: string | null): Te
         const path = deps.logPathOf(session.slice(SERVICE_SESSION_PREFIX.length));
         return path === undefined ? { plan: "exit", code: 0, reason: "no such service" } : { plan: "tail", path };
     }
-    return { plan: "tmux", session, argv: tmuxArgv(session, directoryOf(deps.root, cwd)) };
+    return attachOnly(session) ? { plan: "session", name: session } : { plan: "session", name: session, createIn: directoryOf(deps.root, cwd) };
 };
 
 export const planTerminal = (deps: TerminalPlanDeps, query: string): TerminalAnswer => {
@@ -53,7 +51,7 @@ export const planTerminal = (deps: TerminalPlanDeps, query: string): TerminalAns
         return { answer: "terminal", plan: { plan: "refused", code: 1008, reason: "unauthorized" } };
     }
     const session = params.get("session") ?? "";
-    // The name reaches a tmux argv: checked, so a name like `-C` is never read as a flag.
+    // The name reaches the front's tmux argv: checked, so a name like `-C` is never read as a flag.
     const plan: TerminalPlan = isValidSessionName(session)
         ? planOf(deps, session, params.get("cwd"))
         : { plan: "refused", code: 1008, reason: "invalid session" };

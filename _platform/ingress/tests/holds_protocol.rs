@@ -118,7 +118,7 @@ async fn register(
     let (closing, closed) = watch::channel(None);
     registry.register(
         id,
-        Slot::Interactive,
+        Slot::Socket,
         Held {
             session: session.clone(),
             closing,
@@ -204,13 +204,13 @@ async fn a_delta_add_displaces_a_local_tunnel_and_a_set_leaves_it_alone() {
         "{}",
         close.reason
     );
-    assert!(w.registry.lookup(X, Slot::Interactive).is_none());
+    assert!(w.registry.lookup(X, Slot::Socket).is_none());
     assert_eq!(w.cluster.holder(X), Some(w.a.peer.clone()));
 
     let (held, closed, _pipe) = register(&w.registry, Y).await;
     w.cluster.receive(w.a.from(Op::Set, &[Y]));
     assert!(closed.borrow().is_none());
-    assert!(w.registry.lookup(Y, Slot::Interactive).unwrap().same(&held));
+    assert!(w.registry.lookup(Y, Slot::Socket).unwrap().same(&held));
     // A set replaces the peer's entries whole: the X it added before is gone.
     assert_eq!(w.cluster.holder(X), None);
     assert_eq!(w.cluster.holder(Y), Some(w.a.peer.clone()));
@@ -234,7 +234,7 @@ async fn an_entry_expires_when_its_peer_stops_refreshing_it() {
 async fn every_peer_hears_a_local_arrival_and_departure_and_a_tick_pushes_the_whole_list() {
     let w = world(&[], &[], this(), REMOTE_TTL).await;
     let (session, _, _pipe) = register(&w.registry, X).await;
-    w.registry.unregister(X, Slot::Interactive, &session);
+    w.registry.unregister(X, Slot::Socket, &session);
     wait_for("both peers to hear both changes", || {
         w.a.heard().len() == 2 && w.b.heard().len() == 2
     })
@@ -469,14 +469,9 @@ async fn pair(keys: &Keys) -> (Machine, Machine) {
 async fn the_machine_not_dialled_learns_the_holder_and_hands_it_every_kind_of_request() {
     let keys = Keys::default();
     let (a, b) = pair(&keys).await;
-    let sandbox = dial(
-        a.this.port,
-        &keys.grant(SANDBOX_ID),
-        None,
-        serving("served"),
-    )
-    .await
-    .unwrap();
+    let sandbox = dial(a.this.port, &keys.grant(SANDBOX_ID), serving("served"))
+        .await
+        .unwrap();
     wait_for("b to learn the holder", || {
         b.cluster.holder(SANDBOX_ID).is_some()
     })
@@ -596,21 +591,16 @@ async fn a_miss_is_final_once_hop_marked_and_a_holder_is_forgotten_only_when_unr
 async fn a_redial_on_the_other_machine_displaces_the_first_which_then_forwards() {
     let keys = Keys::default();
     let (a, b) = pair(&keys).await;
-    let first = dial(a.this.port, &keys.grant(SANDBOX_ID), None, serving("first"))
+    let first = dial(a.this.port, &keys.grant(SANDBOX_ID), serving("first"))
         .await
         .unwrap();
     wait_for("b to learn a holds it", || {
         b.cluster.holder(SANDBOX_ID).is_some()
     })
     .await;
-    let _second = dial(
-        b.this.port,
-        &keys.grant(SANDBOX_ID),
-        None,
-        serving("second"),
-    )
-    .await
-    .unwrap();
+    let _second = dial(b.this.port, &keys.grant(SANDBOX_ID), serving("second"))
+        .await
+        .unwrap();
     assert_eq!(
         first.ended.await.unwrap(),
         Ended::Closed(Some(DISPLACED_CODE))

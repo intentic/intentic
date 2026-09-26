@@ -4,8 +4,7 @@
 # job needs a toolchain. docker-release.sh passes the three sibling trees it compiles from as named contexts: `tunnel`
 # (_sandbox/front/crates/tunnel, the wire both ends of a tunnel speak), `browser-wire`
 # (_sandbox/front/crates/browser-wire, what a browser sees of the edge: the verdict header, the WebTransport path) and
-# `contract` (_shared/sandbox-contract/src/protocol, whose lane table the binary embeds), so the context stays this
-# directory.
+# `relay` (_shared/relay, how both ends relay HTTP over a stream), so the context stays this directory.
 #
 # THERE IS NO BOOT CHAIN HERE: no migrations to apply, no schema to prove, no database to reach. The process holds
 # live connections and nothing else, so "started" and "ready" are the same moment, which is also what makes it safe
@@ -40,7 +39,7 @@
 FROM rust:1.98.1-slim-trixie@sha256:f47a8de237dcbb0b0ce1099901e60a89728e3d51f24e664b40e947171538ade7 AS build
 COPY --from=tunnel . /src/_sandbox/front/crates/tunnel
 COPY --from=browser-wire . /src/_sandbox/front/crates/browser-wire
-COPY --from=contract tunnel-lanes.json ingress-contract.fixture.json /src/_shared/sandbox-contract/src/protocol/
+COPY --from=relay . /src/_shared/relay
 WORKDIR /src/_platform/ingress
 COPY . .
 # Cache mounts keep the registry and the incremental build across runs on the same builder.

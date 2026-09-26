@@ -35,13 +35,16 @@ async fn answers_its_own_health_and_404s_a_stray_subdomain() {
         get(edge.port, &format!("nothing.{ZONE}"), "/").await.status,
         404
     );
-    // The door exists but takes only a WebSocket, so a misconfigured client does not look like a wrong address.
-    assert_eq!(
-        get(edge.port, &format!("ingress.{ZONE}"), "/tunnel/v1")
-            .await
-            .status,
-        426
-    );
+    // Both doors exist but take only a WebSocket, so a misconfigured client does not look like a wrong address.
+    for door in ["/tunnel/v2", "/tunnel/v1"] {
+        assert_eq!(
+            get(edge.port, &format!("ingress.{ZONE}"), door)
+                .await
+                .status,
+            426,
+            "{door}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -99,13 +102,10 @@ async fn a_sandbox_with_no_tunnel_is_a_502_a_browser_can_read() {
 async fn a_tunnel_without_a_valid_grant_is_refused() {
     let keys = Keys::default();
     let edge = start(lone(&keys)).await;
-    assert_eq!(
-        dial(edge.port, "", None, serving("x")).await.err(),
-        Some(401)
-    );
+    assert_eq!(dial(edge.port, "", serving("x")).await.err(), Some(401));
     let stranger = Keys::default();
     assert_eq!(
-        dial(edge.port, &stranger.grant(SANDBOX_ID), None, serving("x"))
+        dial(edge.port, &stranger.grant(SANDBOX_ID), serving("x"))
             .await
             .err(),
         Some(401)
@@ -117,7 +117,7 @@ async fn a_tunnel_without_a_valid_grant_is_refused() {
 async fn a_validly_signed_tunnel_carries_its_sandboxs_names_and_no_others() {
     let keys = Keys::default();
     let edge = start(lone(&keys)).await;
-    let sandbox = dial(edge.port, &keys.grant(SANDBOX_ID), None, serving("served"))
+    let sandbox = dial(edge.port, &keys.grant(SANDBOX_ID), serving("served"))
         .await
         .unwrap();
     wait_for("the tunnel to register", || {
@@ -163,7 +163,7 @@ async fn a_request_body_and_a_long_answer_stream_through_whole() {
         }
         Response::new(body::full(vec![b'x'; 8 * 1024 * 1024]))
     });
-    let _sandbox = dial(edge.port, &keys.grant(SANDBOX_ID), None, answering)
+    let _sandbox = dial(edge.port, &keys.grant(SANDBOX_ID), answering)
         .await
         .unwrap();
     wait_for("the tunnel to register", || {
@@ -203,7 +203,7 @@ async fn a_browser_that_goes_away_stops_the_daemons_answer() {
         });
         Response::new(StreamBody::new(frames).boxed_unsync())
     });
-    let _sandbox = dial(edge.port, &keys.grant(SANDBOX_ID), None, answering)
+    let _sandbox = dial(edge.port, &keys.grant(SANDBOX_ID), answering)
         .await
         .unwrap();
     wait_for("the tunnel to register", || {
@@ -245,7 +245,7 @@ impl Drop for Guard {
 async fn an_upgrade_rides_the_tunnel_and_is_spliced_to_the_browser() {
     let keys = Keys::default();
     let edge = start(lone(&keys)).await;
-    let sandbox = dial(edge.port, &keys.grant(SANDBOX_ID), None, serving("served"))
+    let sandbox = dial(edge.port, &keys.grant(SANDBOX_ID), serving("served"))
         .await
         .unwrap();
     wait_for("the tunnel to register", || {
@@ -263,7 +263,7 @@ async fn an_upgrade_rides_the_tunnel_and_is_spliced_to_the_browser() {
     let mut echoed = [0_u8; 4];
     socket.read_exact(&mut echoed).await.unwrap();
     assert_eq!(&echoed, b"ping");
-    // The browser's own head crossed whole: its upgrade headers ride the envelope that h2 would otherwise refuse.
+    // The browser's own head crossed whole, its upgrade headers restated for the stream it crossed on.
     let seen = sandbox.last_seen();
     assert_eq!(seen["upgrade"], "echo");
     assert_eq!(seen["host"], daemon_host(SANDBOX_ID).as_str());
@@ -283,11 +283,11 @@ async fn an_upgrade_rides_the_tunnel_and_is_spliced_to_the_browser() {
 async fn a_second_tunnel_displaces_the_first_with_the_displacement_code() {
     let keys = Keys::default();
     let edge = start(lone(&keys)).await;
-    let first = dial(edge.port, &keys.grant(SANDBOX_ID), None, serving("first"))
+    let first = dial(edge.port, &keys.grant(SANDBOX_ID), serving("first"))
         .await
         .unwrap();
     wait_for("the first tunnel", || edge.edge.registry().size() == 1).await;
-    let _second = dial(edge.port, &keys.grant(SANDBOX_ID), None, serving("second"))
+    let _second = dial(edge.port, &keys.grant(SANDBOX_ID), serving("second"))
         .await
         .unwrap();
     assert_eq!(
@@ -304,7 +304,7 @@ async fn a_second_tunnel_displaces_the_first_with_the_displacement_code() {
 async fn a_tunnel_that_closes_is_forgotten() {
     let keys = Keys::default();
     let edge = start(lone(&keys)).await;
-    let sandbox = dial(edge.port, &keys.grant(SANDBOX_ID), None, serving("served"))
+    let sandbox = dial(edge.port, &keys.grant(SANDBOX_ID), serving("served"))
         .await
         .unwrap();
     wait_for("the tunnel to register", || {
@@ -334,13 +334,13 @@ async fn a_tunnel_for_a_sandbox_the_platform_deleted_is_refused() {
     options.revocation = Revocation::new(&platform.url);
     let edge = start(options).await;
     assert_eq!(
-        dial(edge.port, &keys.grant(SANDBOX_ID), None, serving("x"))
+        dial(edge.port, &keys.grant(SANDBOX_ID), serving("x"))
             .await
             .err(),
         Some(403)
     );
     assert!(
-        dial(edge.port, &keys.grant(OTHER_ID), None, serving("x"))
+        dial(edge.port, &keys.grant(OTHER_ID), serving("x"))
             .await
             .is_ok()
     );
@@ -481,15 +481,123 @@ mod replay {
     }
 }
 
-// Two tunnels per sandbox: a transfer rides the bulk one when this machine holds it, and the interactive one otherwise.
+// Over TCP a front holds two sockets, and a request rides the bulk one when the daemon announced its route as a transfer
+// (or it is a preview's) and the bulk socket is held here, the interactive one otherwise.
 mod lanes {
     use super::*;
+    use support::dial_lane;
+
+    use intentic_ingress::registry::Slot;
+    use tunnel::Lane;
+
+    const ANNOUNCED: [&str; 2] = ["GET /workspace/media", "POST /extensions/{id}/bundle"];
+
+    #[tokio::test]
+    async fn an_announced_transfer_and_a_previews_dev_server_ride_bulk_and_a_call_stays_interactive()
+     {
+        let keys = Keys::default();
+        let edge = start(lone(&keys)).await;
+        let grant = keys.grant(SANDBOX_ID);
+        let _interactive = dial_lane(
+            edge.port,
+            &grant,
+            Lane::Interactive,
+            &ANNOUNCED,
+            serving("interactive"),
+        )
+        .await
+        .unwrap();
+        let _bulk = dial_lane(edge.port, &grant, Lane::Bulk, &ANNOUNCED, serving("bulk"))
+            .await
+            .unwrap();
+        wait_for("both sockets", || {
+            edge.edge
+                .registry()
+                .lookup(SANDBOX_ID, Slot::Bulk)
+                .is_some()
+                && edge.edge.registry().size() == 1
+        })
+        .await;
+        let host = daemon_host(SANDBOX_ID);
+        assert!(
+            get(edge.port, &host, "/workspace/media?path=a.mp4")
+                .await
+                .body
+                .starts_with("bulk ")
+        );
+        let upload = send(
+            edge.port,
+            Method::POST,
+            &host,
+            "/extensions/acme/bundle",
+            &[],
+            Bytes::new(),
+        )
+        .await;
+        assert!(upload.body.starts_with("bulk "), "{}", upload.body);
+        assert!(
+            get(
+                edge.port,
+                &format!("preview-web-{SANDBOX_ID}.{ZONE}"),
+                "/src/main.ts"
+            )
+            .await
+            .body
+            .starts_with("bulk ")
+        );
+        // What the daemon did not announce is no transfer, whatever an older edge's build thought.
+        assert!(
+            get(edge.port, &host, "/workspace/raw?path=a.bin")
+                .await
+                .body
+                .starts_with("interactive ")
+        );
+        assert!(
+            get(edge.port, &host, "/agents")
+                .await
+                .body
+                .starts_with("interactive ")
+        );
+        assert_eq!(edge.edge.registry().ids(), [SANDBOX_ID]);
+    }
+
+    #[tokio::test]
+    async fn a_transfer_rides_the_interactive_socket_while_no_bulk_one_is_held() {
+        let keys = Keys::default();
+        let edge = start(lone(&keys)).await;
+        let _interactive = dial_lane(
+            edge.port,
+            &keys.grant(SANDBOX_ID),
+            Lane::Interactive,
+            &ANNOUNCED,
+            serving("interactive"),
+        )
+        .await
+        .unwrap();
+        wait_for("the tunnel", || edge.edge.registry().size() == 1).await;
+        let answer = get(
+            edge.port,
+            &daemon_host(SANDBOX_ID),
+            "/workspace/media?path=a.mp4",
+        )
+        .await;
+        assert!(answer.body.starts_with("interactive "), "{}", answer.body);
+    }
+}
+
+// A front that predates `/tunnel/v2` dials `/tunnel/v1` on two lanes, and is served as it always was: a transfer rides
+// the bulk lane when this machine holds it, the interactive one otherwise, and an upgrade crosses its h2 session.
+mod legacy {
+    use super::*;
+    use support::dial_legacy;
+
+    use intentic_ingress::registry::Slot;
 
     #[tokio::test]
     async fn a_transfer_and_a_previews_dev_server_ride_bulk_and_a_call_stays_interactive() {
         let keys = Keys::default();
         let edge = start(lone(&keys)).await;
-        let _interactive = dial(
+        let _interactive = dial_legacy(
             edge.port,
             &keys.grant(SANDBOX_ID),
             None,
@@ -497,7 +605,7 @@ mod lanes {
         )
         .await
         .unwrap();
-        let _bulk = dial(
+        let _bulk = dial_legacy(
             edge.port,
             &keys.grant(SANDBOX_ID),
             Some("bulk"),
@@ -508,7 +616,7 @@ mod lanes {
         wait_for("both lanes", || {
             edge.edge
                 .registry()
-                .lookup(SANDBOX_ID, intentic_ingress::registry::Slot::Bulk)
+                .lookup(SANDBOX_ID, Slot::Bulk)
                 .is_some()
                 && edge.edge.registry().size() == 1
         })
@@ -540,10 +648,11 @@ mod lanes {
     }
 
     #[tokio::test]
-    async fn a_transfer_rides_the_interactive_tunnel_while_no_bulk_one_is_held() {
+    async fn a_transfer_rides_the_interactive_lane_while_no_bulk_one_is_held_and_an_upgrade_crosses_it()
+     {
         let keys = Keys::default();
         let edge = start(lone(&keys)).await;
-        let _interactive = dial(
+        let sandbox = dial_legacy(
             edge.port,
             &keys.grant(SANDBOX_ID),
             None,
@@ -552,13 +661,73 @@ mod lanes {
         .await
         .unwrap();
         wait_for("the tunnel", || edge.edge.registry().size() == 1).await;
-        let answer = get(
+        let host = daemon_host(SANDBOX_ID);
+        let answer = get(edge.port, &host, "/workspace/media?path=a.mp4").await;
+        assert!(answer.body.starts_with("interactive "), "{}", answer.body);
+
+        let (head, mut stream) = upgrade(edge.port, &host, "/ws", "echo").await;
+        assert!(head.starts_with("HTTP/1.1 101"), "{head}");
+        stream.write_all(b"ping").await.unwrap();
+        let mut echoed = [0_u8; 4];
+        stream.read_exact(&mut echoed).await.unwrap();
+        assert_eq!(&echoed, b"ping");
+        assert_eq!(sandbox.last_seen()["upgrade"], "echo");
+
+        let (head, _) = upgrade(
             edge.port,
-            &daemon_host(SANDBOX_ID),
-            "/workspace/media?path=a.mp4",
+            &format!("nobody-{SANDBOX_ID}.{ZONE}"),
+            "/ws",
+            "echo",
         )
         .await;
-        assert!(answer.body.starts_with("interactive "), "{}", answer.body);
+        assert!(head.starts_with("HTTP/1.1 502"), "{head}");
+    }
+
+    // Both doors take the one socket slot, so a front that upgrades mid-flight displaces its own older tunnel either way,
+    // and a v2 tunnel carries every request whatever lane a legacy one left behind.
+    #[tokio::test]
+    async fn a_v2_tunnel_displaces_a_legacy_interactive_lane_and_carries_the_transfers_too() {
+        let keys = Keys::default();
+        let edge = start(lone(&keys)).await;
+        let older = dial_legacy(edge.port, &keys.grant(SANDBOX_ID), None, serving("v1"))
+            .await
+            .unwrap();
+        let _bulk = dial_legacy(
+            edge.port,
+            &keys.grant(SANDBOX_ID),
+            Some("bulk"),
+            serving("v1-bulk"),
+        )
+        .await
+        .unwrap();
+        wait_for("both lanes", || {
+            edge.edge
+                .registry()
+                .lookup(SANDBOX_ID, Slot::Bulk)
+                .is_some()
+                && edge.edge.registry().size() == 1
+        })
+        .await;
+        let _newer = dial(edge.port, &keys.grant(SANDBOX_ID), serving("v2"))
+            .await
+            .unwrap();
+        assert_eq!(
+            older.ended.await.unwrap(),
+            Ended::Closed(Some(DISPLACED_CODE))
+        );
+        let host = daemon_host(SANDBOX_ID);
+        assert!(
+            get(edge.port, &host, "/workspace/media?path=a.mp4")
+                .await
+                .body
+                .starts_with("v2 ")
+        );
+        assert!(
+            get(edge.port, &host, "/agents")
+                .await
+                .body
+                .starts_with("v2 ")
+        );
     }
 }
 
@@ -574,7 +743,7 @@ async fn stopping_cuts_a_browser_still_holding_a_stream_and_closes_every_tunnel(
         .chain(futures_util::stream::pending());
         Response::new(StreamBody::new(frames).boxed_unsync())
     });
-    let sandbox = dial(running.port, &keys.grant(SANDBOX_ID), None, answering)
+    let sandbox = dial(running.port, &keys.grant(SANDBOX_ID), answering)
         .await
         .unwrap();
     wait_for("the tunnel to register", || {

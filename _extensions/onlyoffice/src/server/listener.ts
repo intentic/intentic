@@ -1,6 +1,6 @@
 import http from "node:http";
 import type { Readable } from "node:stream";
-import { relayUpgrade } from "@intentic/sandbox-contract/upgrade-relay";
+import { relayUpgrade } from "./upgrade-relay.js";
 import { endedPage } from "./host-page.js";
 import { bearerOf, verifyJwt } from "./jwt.js";
 import type { FileStat, Session, Sessions } from "./sessions.js";

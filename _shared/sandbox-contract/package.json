@@ -84,17 +84,6 @@
                 "default": "./dist/protocol/peer-dial.js"
             }
         },
-        "./upgrade-relay": {
-            "types": "./dist/protocol/upgrade-relay.d.ts",
-            "import": {
-                "@intentic/src": "./src/protocol/upgrade-relay.ts",
-                "default": "./dist/protocol/upgrade-relay.js"
-            },
-            "require": {
-                "@intentic/src": "./src/protocol/upgrade-relay.ts",
-                "default": "./dist/protocol/upgrade-relay.js"
-            }
-        },
         "./peer-mcp-server": {
             "types": "./dist/protocol/peer-mcp-server.d.ts",
             "import": {
@@ -173,14 +162,14 @@
             }
         },
         "./front-wire": {
-            "types": "./dist/front/generated/wire.d.ts",
+            "types": "./dist/front/front-wire.d.ts",
             "import": {
-                "@intentic/src": "./src/front/generated/wire.ts",
-                "default": "./dist/front/generated/wire.js"
+                "@intentic/src": "./src/front/front-wire.ts",
+                "default": "./dist/front/front-wire.js"
             },
             "require": {
-                "@intentic/src": "./src/front/generated/wire.ts",
-                "default": "./dist/front/generated/wire.js"
+                "@intentic/src": "./src/front/front-wire.ts",
+                "default": "./dist/front/front-wire.js"
             }
         },
         "./browser-wire": {
@@ -267,8 +256,7 @@
         "watch": "tsgo --build --watch",
         "test": "suites",
         "test:watch": "suites --watch",
-        "lock": "tsgo -b && node scripts/write-lock.mjs",
-        "lanes": "tsgo -b && node scripts/write-lanes.mjs"
+        "lock": "tsgo -b && node scripts/write-lock.mjs"
     },
     "dependencies": {
         "@intentic/base": "workspace:*",

@@ -4,12 +4,8 @@
     "displaced": 4001,
     "refused": 4003
   },
-  "envelope": {
-    "headerPrefix": "x-ingress-h-",
-    "method": "x-ingress-method",
-    "path": "x-ingress-path"
-  },
   "headers": {
+    "bulk": "x-intentic-bulk",
     "grant": "x-intentic-grant",
     "lane": "x-intentic-lane",
     "transports": "x-intentic-transports"
@@ -18,14 +14,20 @@
     "interactive",
     "bulk"
   ],
-  "path": "/tunnel/v1",
+  "liveness": {
+    "deadAfterMs": 45000,
+    "pingEveryMs": 15000
+  },
+  "mux": "yamux",
+  "path": "/tunnel/v2",
   "quic": {
     "alpn": "intentic-tunnel/1",
     "hello": {
       "gone": 2,
       "held": 0,
       "refused": 1
-    }
+    },
+    "yieldAfterBytes": 1048576
   },
   "transports": [
     "quic",

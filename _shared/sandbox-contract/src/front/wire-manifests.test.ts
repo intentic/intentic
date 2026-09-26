@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { EDGE_VERDICT_HEADER, edgeVerdictOf } from "../protocol/edge-verdict.js";
 import { INGRESS_GRANT_HEADER, INGRESS_TUNNEL_PATH } from "../protocol/ingress-contract.js";
-import { INGRESS_LANE_HEADER } from "../protocol/tunnel-lanes.js";
 import { EDGE_TRANSPORTS, TERMINAL_PATH, WEBTRANSPORT_PATH } from "./browser-wire.js";
+import { ASK_PATIENCE_MS, FRAME_LENGTH_BYTES, FRONT_SOCKET_ENV, NODE_SOCKET_ENV } from "./front-wire.js";
 
 // The manifests `cargo test` writes from the Rust crates that define this wire: every value TypeScript restates is read
 // back against them, so the two languages cannot drift and contract.lock.json pins what both agree on.
@@ -11,8 +11,14 @@ const manifest = (name: string): Record<string, unknown> =>
 
 const tunnel = manifest("tunnel") as {
     path: string;
-    headers: { grant: string; lane: string; transports: string };
+    headers: { grant: string; transports: string };
     transports: string[];
+};
+// SAFETY: front-wire's own test writes this manifest with exactly these keys, and the lock pins them.
+const socket = manifest("front-wire") as {
+    env: { frontSocket: string; nodeSocket: string };
+    askPatienceMs: number;
+    frame: { lengthBytes: number };
 };
 const browser = manifest("browser-wire") as {
     edge: { verdictHeader: string; verdicts: { oneOf: { const: string }[] } };
@@ -22,10 +28,18 @@ const browser = manifest("browser-wire") as {
 
 describe("the wire outside oRPC, as the Rust crates define it", () => {
     it("names the tunnel door and its headers as the tunnel crate does", () => {
-        expect({ path: INGRESS_TUNNEL_PATH, grant: INGRESS_GRANT_HEADER, lane: INGRESS_LANE_HEADER }).toEqual({
+        expect({ path: INGRESS_TUNNEL_PATH, grant: INGRESS_GRANT_HEADER }).toEqual({
             path: tunnel.path,
             grant: tunnel.headers.grant,
-            lane: tunnel.headers.lane,
+        });
+    });
+
+    it("names the control socket's env vars, its patience and its framing as front-wire does", () => {
+        expect({ front: FRONT_SOCKET_ENV, node: NODE_SOCKET_ENV, patience: ASK_PATIENCE_MS, length: FRAME_LENGTH_BYTES }).toEqual({
+            front: socket.env.frontSocket,
+            node: socket.env.nodeSocket,
+            patience: socket.askPatienceMs,
+            length: socket.frame.lengthBytes,
         });
     });
 

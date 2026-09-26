@@ -1,6 +1,7 @@
-//! One server, two jobs: an upgrade to the tunnel door is a sandbox registering, found by path since the edge's own name
-//! carries no id; anything else is a browser, routed by its Host per request, never per connection, since h2 coalesces
-//! names. A request rides its sandbox's tunnel here, else goes to the peer holding it, else is replayed, else refused.
+//! One server, two jobs: an upgrade to a tunnel door (`/tunnel/v2`, or the legacy `/tunnel/v1`) is a sandbox
+//! registering, found by path since the edge's own name carries no id; anything else is a browser, routed by its host
+//! per request, never per connection, since h2 coalesces names. A request rides its sandbox's tunnel here, else goes to
+//! the peer holding it, else is replayed, else refused.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -9,23 +10,25 @@ use std::time::Duration;
 pub use browser_wire::{EdgeVerdict as Verdict, VERDICT_HEADER};
 use http::header::{self, HeaderValue};
 use http::uri::PathAndQuery;
-use http::{Method, Request, Response, StatusCode, Version};
+use http::{Method, Request, Response, StatusCode};
 use hyper::upgrade::Upgraded;
 use hyper_util::rt::{TokioExecutor, TokioIo};
+use relay::{host_of, is_upgrade, label_of};
 use tokio::sync::watch;
+use tokio::task::JoinHandle;
 use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::handshake::derive_accept_key;
 use tokio_tungstenite::tungstenite::protocol::Role;
 use tunnel::{
-    CONNECTION_WINDOW, Ended, GRANT_HEADER, LANE_HEADER, Lane, STREAM_WINDOW, TRANSPORTS_HEADER,
-    TUNNEL_PATH, Transport, host_owner_id, label_of,
+    BULK_HEADER, BulkRoutes, CONNECTION_WINDOW, Ended, GRANT_HEADER, LANE_HEADER, Lane, Liveness,
+    STREAM_WINDOW, TRANSPORTS_HEADER, TUNNEL_PATH, Transport, host_owner_id, mux,
 };
 
 use crate::body::{self, Body};
 use crate::cluster::{Cluster, HOP_HEADER};
 use crate::forward::{ForwardError, Forwarder};
 use crate::grant::GrantKey;
-use crate::lanes;
+use crate::legacy;
 use crate::peers::Peers;
 use crate::registry::{Held, Registry, Slot};
 use crate::revocation::{Reach, Revocation};
@@ -102,9 +105,9 @@ impl Edge {
         remote: SocketAddr,
         via: Via,
     ) -> Response<Body> {
-        let upgrade = is_upgrade(&request);
-        if upgrade && request.uri().path() == TUNNEL_PATH {
-            return self.accept_tunnel(request, remote).await;
+        let upgrade = is_upgrade(request.headers(), request.version());
+        if upgrade && let Some(door) = Door::at(&request) {
+            return self.accept_tunnel(request, door, remote).await;
         }
         let host = host_of(&request);
         let Some(id) = host_owner_id(&host).map(str::to_owned) else {
@@ -114,21 +117,16 @@ impl Edge {
             return self.serve_own(&request);
         };
         let hop = request.headers().contains_key(HOP_HEADER);
-        if let Some((session, bulk)) = self.session_for(&id, &host, &request) {
+        if let Some(session) = self.session_for(&id, &host, &request) {
             let mut request = request;
             request.headers_mut().remove(HOP_HEADER);
-            if upgrade {
-                return session.upgrade(request, &host).await.unwrap_or_else(|dropped| {
-                    tracing::debug!(sandbox = %id, why = %dropped.0, "an upgrade through a held tunnel failed");
-                    refused_upgrade(
-                        Verdict::Dropped,
-                        &format!("{} dropped the connection.", label_of(&host)),
-                    )
-                });
-            }
-            return session.request(request, &host, bulk).await.unwrap_or_else(|dropped| {
-                tracing::debug!(sandbox = %id, why = %dropped.0, "a request through a held tunnel failed");
-                unreachable(&host, Verdict::Dropped)
+            return session.exchange(request, &host).await.unwrap_or_else(|dropped| {
+                tracing::debug!(sandbox = %id, upgrade, why = %dropped.0, "an exchange through a held tunnel failed");
+                if upgrade {
+                    refused_upgrade(Verdict::Dropped, &format!("{} dropped the connection.", label_of(&host)))
+                } else {
+                    unreachable(&host, Verdict::Dropped)
+                }
             });
         }
         let holder = if hop {
@@ -176,25 +174,26 @@ impl Edge {
         unreachable(&host, verdict)
     }
 
-    // The QUIC connection while it holds, whose streams never queue behind each other; else the lane the request belongs
-    // on when this machine holds it, else the interactive tunnel every sandbox dials first. Answers whether it is bulk.
-    fn session_for(
-        &self,
-        id: &str,
-        host: &str,
-        request: &Request<Body>,
-    ) -> Option<(Session, bool)> {
+    // The QUIC connection while it holds, whose streams never queue behind each other; else the interactive socket, unless
+    // the daemon announced the request as a transfer (or it is a preview's) and the bulk socket is held.
+    fn session_for(&self, id: &str, host: &str, request: &Request<Body>) -> Option<Session> {
+        if let Some(quic) = self.registry.lookup(id, Slot::Quic) {
+            return Some(quic);
+        }
+        let socket = self.registry.lookup(id, Slot::Socket);
+        let bulk = self.registry.lookup(id, Slot::Bulk);
         let path = request
             .uri()
             .path_and_query()
             .map_or("/", PathAndQuery::as_str);
-        let bulk = lanes::lane_of(host, request.method().as_str(), path) == Lane::Bulk;
-        let session = self
-            .registry
-            .lookup(id, Slot::Quic)
-            .or_else(|| bulk.then(|| self.registry.lookup(id, Slot::Bulk)).flatten())
-            .or_else(|| self.registry.lookup(id, Slot::Interactive))?;
-        Some((session, bulk))
+        let transfer = socket
+            .as_ref()
+            .or(bulk.as_ref())
+            .is_some_and(|held| held.carries_bulk(host, request.method().as_str(), path));
+        if transfer && bulk.is_some() {
+            return bulk;
+        }
+        socket
     }
 
     // What a miss answers: a hosted sandbox replays to its app, unless `unreplayable`: a hop-marked miss, since the peer
@@ -236,7 +235,7 @@ impl Edge {
                     .body(body::full(health.to_string()))
                     .expect("the health answer builds")
             }
-            TUNNEL_PATH => {
+            TUNNEL_PATH | legacy::PATH => {
                 let mut response = text(
                     StatusCode::UPGRADE_REQUIRED,
                     "the tunnel door takes a websocket upgrade",
@@ -255,6 +254,7 @@ impl Edge {
     async fn accept_tunnel(
         self: Arc<Self>,
         mut request: Request<Body>,
+        door: Door,
         remote: SocketAddr,
     ) -> Response<Body> {
         let grant = request
@@ -279,17 +279,11 @@ impl Edge {
                 "the tunnel door takes a websocket upgrade",
             );
         };
-        let lane = Lane::named(
-            request
-                .headers()
-                .get(LANE_HEADER)
-                .and_then(|value| value.to_str().ok()),
-        );
         let upgrading = hyper::upgrade::on(&mut request);
         let edge = self.clone();
         tokio::spawn(async move {
             match upgrading.await {
-                Ok(upgraded) => edge.hold(claim.sandbox_id, lane, upgraded).await,
+                Ok(upgraded) => edge.hold(claim.sandbox_id, door, upgraded).await,
                 Err(error) => tracing::debug!(%error, "a tunnel's upgrade never completed"),
             }
         });
@@ -363,7 +357,7 @@ impl Edge {
 
     // Holds a registered tunnel for as long as its WebSocket lives; every way it can end (a close, a silent peer, a
     // displacement, the session failing) ends the pump, and one teardown follows, so the registry never keeps a dead one.
-    async fn hold(self: Arc<Self>, id: String, lane: Lane, upgraded: Upgraded) {
+    async fn hold(self: Arc<Self>, id: String, door: Door, upgraded: Upgraded) {
         let socket = WebSocketStream::from_raw_socket(
             TokioIo::new(upgraded),
             Role::Server,
@@ -371,41 +365,129 @@ impl Edge {
         )
         .await;
         let (closing, closed) = watch::channel(None);
-        let (session_side, mut pumping) = tunnel::pump(socket, closed);
-        let opened = hyper::client::conn::http2::Builder::new(TokioExecutor::new())
-            .initial_stream_window_size(STREAM_WINDOW)
-            .initial_connection_window_size(CONNECTION_WINDOW)
-            .handshake(TokioIo::new(session_side))
-            .await;
-        let (sender, connection) = match opened {
-            Ok(opened) => opened,
-            Err(error) => {
-                tracing::warn!(sandbox = %id, %error, "tunnel failed to open a session");
-                return;
+        let (session_side, mut pumping) = tunnel::pump(socket, Liveness::Listens, closed);
+        let (session, mut driving) = match &door {
+            Door::Mux(_, routes) => {
+                let (opener, driving) = mux::client(session_side);
+                (Session::mux(opener, routes.clone()), Driving::Mux(driving))
+            }
+            Door::Legacy(_) => {
+                let opened = hyper::client::conn::http2::Builder::new(TokioExecutor::new())
+                    .initial_stream_window_size(STREAM_WINDOW)
+                    .initial_connection_window_size(CONNECTION_WINDOW)
+                    .handshake(TokioIo::new(session_side))
+                    .await;
+                match opened {
+                    Ok((sender, connection)) => (
+                        Session::legacy(sender),
+                        Driving::H2(tokio::spawn(connection)),
+                    ),
+                    Err(error) => {
+                        tracing::warn!(sandbox = %id, %error, "a legacy tunnel failed to open a session");
+                        return;
+                    }
+                }
             }
         };
-        let mut driving = tokio::spawn(connection);
-        let session = Session::h2(sender);
+        let slot = door.slot();
         let displaced = self.registry.register(
             &id,
-            lane.into(),
+            slot,
             Held {
                 session: session.clone(),
                 closing,
             },
         );
-        tracing::info!(sandbox = %id, lane = lane.name(), displaced, tunnels = self.registry.size(), "tunnel registered");
+        tracing::info!(sandbox = %id, door = door.name(), displaced, tunnels = self.registry.size(), "tunnel registered");
         let ended = tokio::select! {
             ended = pumping.ended() => ended,
-            driven = &mut driving => Ended::Dropped(match driven {
+            why = driving.ended() => Ended::Dropped(why),
+        };
+        driving.abort();
+        self.registry.unregister(&id, slot, &session);
+        tracing::info!(sandbox = %id, door = door.name(), ?ended, tunnels = self.registry.size(), "tunnel closed");
+    }
+}
+
+/// Which tunnel door an upgrade knocked on, and on which lane.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Door {
+    /// `/tunnel/v2`: a WebSocket carrying yamux, and the transfer routes its front announced.
+    Mux(Lane, BulkRoutes),
+    /// `/tunnel/v1`: a legacy front's lane, an h2 session.
+    Legacy(Lane),
+}
+
+impl Door {
+    fn at(request: &Request<Body>) -> Option<Self> {
+        let header = |name| {
+            request
+                .headers()
+                .get(name)
+                .and_then(|value| value.to_str().ok())
+        };
+        let lane = Lane::named(header(LANE_HEADER));
+        match request.uri().path() {
+            TUNNEL_PATH => Some(Self::Mux(
+                lane,
+                BulkRoutes::parse(header(BULK_HEADER).unwrap_or("")),
+            )),
+            legacy::PATH => Some(Self::Legacy(lane)),
+            _ => None,
+        }
+    }
+
+    fn lane(&self) -> Lane {
+        match self {
+            Self::Mux(lane, _) | Self::Legacy(lane) => *lane,
+        }
+    }
+
+    // Either door's interactive lane is the sandbox's home, so a front moving between doors displaces its own older one.
+    fn slot(&self) -> Slot {
+        match self.lane() {
+            Lane::Interactive => Slot::Socket,
+            Lane::Bulk => Slot::Bulk,
+        }
+    }
+
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Mux(Lane::Interactive, _) => "v2 interactive",
+            Self::Mux(Lane::Bulk, _) => "v2 bulk",
+            Self::Legacy(Lane::Interactive) => "v1 interactive",
+            Self::Legacy(Lane::Bulk) => "v1 bulk",
+        }
+    }
+}
+
+// The task running a held tunnel's session, and how it ended.
+enum Driving {
+    Mux(mux::Driving),
+    H2(JoinHandle<hyper::Result<()>>),
+}
+
+impl Driving {
+    async fn ended(&mut self) -> String {
+        match self {
+            Self::Mux(driving) => match driving.await {
+                Ok(Ok(())) => "the session ended".into(),
+                Ok(Err(error)) => format!("the session failed: {error}"),
+                Err(error) => error.to_string(),
+            },
+            Self::H2(driving) => match driving.await {
                 Ok(Ok(())) => "the h2 session ended".into(),
                 Ok(Err(error)) => format!("the h2 session failed: {error}"),
                 Err(error) => error.to_string(),
-            }),
-        };
-        driving.abort();
-        self.registry.unregister(&id, lane.into(), &session);
-        tracing::info!(sandbox = %id, lane = lane.name(), ?ended, tunnels = self.registry.size(), "tunnel closed");
+            },
+        }
+    }
+
+    fn abort(&self) {
+        match self {
+            Self::Mux(driving) => driving.abort(),
+            Self::H2(driving) => driving.abort(),
+        }
     }
 }
 
@@ -418,34 +500,6 @@ pub fn advertise(mut response: Response<Body>, alt_svc: Option<&HeaderValue>) ->
             .or_insert_with(|| alt_svc.clone());
     }
     response
-}
-
-fn is_upgrade(request: &Request<Body>) -> bool {
-    request.version() <= Version::HTTP_11
-        && request.headers().contains_key(header::UPGRADE)
-        && request
-            .headers()
-            .get_all(header::CONNECTION)
-            .iter()
-            .filter_map(|value| value.to_str().ok())
-            .flat_map(|value| value.split(','))
-            .any(|token| token.trim().eq_ignore_ascii_case("upgrade"))
-}
-
-// The Host an h1 request names, or the authority an h2 one carries it in.
-fn host_of(request: &Request<Body>) -> String {
-    request
-        .headers()
-        .get(header::HOST)
-        .and_then(|value| value.to_str().ok())
-        .map(str::to_owned)
-        .or_else(|| {
-            request
-                .uri()
-                .authority()
-                .map(|authority| authority.as_str().to_owned())
-        })
-        .unwrap_or_default()
 }
 
 fn websocket_accept(request: &Request<Body>) -> Option<String> {

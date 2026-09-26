@@ -71,7 +71,7 @@
           "type": "object"
         },
         {
-          "description": "The browser's keepalive against an idle tunnel; answered `pong`.",
+          "description": "The client's liveness, the socket's only one: the editor sends one every 30 s and calls the socket stale after\n90 s without a frame. The front answers `pong`, sends a WebSocket ping only to a client silent for 45 s, and closes\none silent for 90.",
           "properties": {
             "type": {
               "const": "ping",

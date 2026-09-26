@@ -122,6 +122,7 @@ export * from "./protocol/sse.js";
 export * from "./protocol/routes.js";
 export type { ControlReach, RouteMeta } from "./protocol/route-meta.js";
 export { RAW_ROUTE_LIST, RAW_ROUTES, type RawRouteKey, rawRoutePath } from "./protocol/raw-routes.js";
+export { tunnelBulkRoutes } from "./protocol/tunnel-bulk.js";
 export type { SandboxCallInput, SandboxGroup, SandboxHandlerInput, SandboxHandlerOutput, SandboxProcedure } from "./protocol/procedure-types.js";
 export * from "./policy/control-scopes.js";
 // The container's directory layout, re-exported since extensions can't import @intentic/constants directly.

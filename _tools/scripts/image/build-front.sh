@@ -7,6 +7,8 @@ set -euo pipefail
 cd "$(repo_root)"
 
 out="${1:-.image-out/front}"
-docker buildx build --file _sandbox/front/build.Dockerfile --output "type=local,dest=$out" _sandbox/front
+# `relay` (_shared/relay) is the one tree outside the front it compiles from, passed as a named context.
+docker buildx build --file _sandbox/front/build.Dockerfile --build-context relay=_shared/relay \
+    --output "type=local,dest=$out" _sandbox/front
 [ -x "$out/intentic-front" ] || { echo "$out/intentic-front was not produced" >&2; exit 1; }
 echo "front built at $out/intentic-front"

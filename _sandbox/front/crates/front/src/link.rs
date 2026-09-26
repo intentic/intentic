@@ -1,5 +1,6 @@
-//! The front's half of the control lane: accepts Node's connection, reads what it sends, asks it questions. One Node
-//! at a time; a new connection (a restarted Node) replaces the old, and every question in flight on the old fails.
+//! The front's half of the control socket: accepts Node's connection, reads what it sends, asks it questions and answers
+//! its. One Node at a time; a new connection (a restarted Node) replaces the old, and every question in flight on the
+//! old fails.
 
 use std::collections::HashMap;
 use std::io;
@@ -9,7 +10,10 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
 use anyhow::{Context, anyhow};
-use front_wire::{Answer, FromNode, LENGTH_BYTES, MAX_FRAME_BYTES, Question, ToNode, frame};
+use front_wire::{
+    ASK_PATIENCE, Answer, FromNode, FrontAnswer, FrontQuestion, LENGTH_BYTES, MAX_FRAME_BYTES,
+    Question, ToNode, frame,
+};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
 use tokio::net::unix::OwnedReadHalf;
@@ -30,10 +34,10 @@ pub enum Pushed {
     Revoke(Option<String>),
     Watch(front_wire::WatchedCheckout),
     Unwatch(String),
-    /// Answer with each checkout's generation, as `ToNode::Synced` carrying this id.
-    Sync {
+    /// A question Node asked; whoever applies it answers with `Link::answer` and this id.
+    Asked {
         id: u32,
-        dirs: Vec<String>,
+        question: FrontQuestion,
     },
 }
 
@@ -71,8 +75,9 @@ impl Link {
             .is_ok_and(|seen| seen.is_ok())
     }
 
-    /// Asks Node and waits for its answer; fails at once when no Node is connected.
-    pub async fn ask(&self, question: Question, patience: Duration) -> anyhow::Result<Answer> {
+    /// Asks Node and waits `ASK_PATIENCE` for its answer; fails at once when no Node is connected.
+    pub async fn ask(&self, question: Question) -> anyhow::Result<Answer> {
+        let patience = ASK_PATIENCE;
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let (answered, answer) = oneshot::channel();
         self.pending
@@ -92,6 +97,14 @@ impl Link {
                 Err(anyhow!("the daemon did not answer within {patience:?}"))
             }
         }
+    }
+
+    /// Answers a question Node asked, or refuses it with why.
+    pub fn answer(&self, id: u32, answer: Result<FrontAnswer, String>) {
+        let _ = self.tell(&match answer {
+            Ok(answer) => ToNode::Answer { id, answer },
+            Err(message) => ToNode::Refused { id, message },
+        });
     }
 
     /// Sends a message to the current Node; false when there is none to send it to.
@@ -124,7 +137,7 @@ impl Link {
             });
             tokio::spawn(async move {
                 if let Err(error) = self.read(generation, reader).await {
-                    tracing::warn!(%error, "the control lane closed on an unreadable frame");
+                    tracing::warn!(%error, "the control socket closed on an unreadable frame");
                 }
                 self.lost(generation);
             });
@@ -193,8 +206,8 @@ impl Link {
             FromNode::Unwatch { dir } => {
                 let _ = self.pushed.send(Pushed::Unwatch(dir));
             }
-            FromNode::Sync { id, dirs } => {
-                let _ = self.pushed.send(Pushed::Sync { id, dirs });
+            FromNode::Ask { id, question } => {
+                let _ = self.pushed.send(Pushed::Asked { id, question });
             }
             FromNode::Answer { id, answer } => self.settle(id, Ok(answer)),
             FromNode::Refused { id, message } => self.settle(id, Err(message)),
@@ -220,7 +233,7 @@ pub async fn read_frame<R: AsyncReadExt + Unpin>(reader: &mut R) -> io::Result<O
     if length > MAX_FRAME_BYTES {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("a {length}-byte frame is past the lane's limit"),
+            format!("a {length}-byte frame is past the socket's limit"),
         ));
     }
     let mut bytes = vec![0; length];
@@ -266,12 +279,10 @@ mod tests {
         assert!(matches!(received.recv().await, Some(Pushed::Hello)));
 
         let asked = tokio::spawn(async move {
-            link.ask(
-                Question::Preview {
-                    host: "preview-web.localhost".into(),
-                },
-                Duration::from_secs(2),
-            )
+            link.ask(Question::Preview {
+                host: "preview-web.localhost".into(),
+                probe: false,
+            })
             .await
         });
         let question: ToNode =
@@ -280,7 +291,7 @@ mod tests {
             panic!("expected a question, got {question:?}")
         };
         let answer = Answer::Preview {
-            route: PreviewRoute::Node,
+            route: PreviewRoute::Outbox,
         };
         writer
             .write_all(
@@ -301,6 +312,66 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn node_asks_the_front_under_the_same_envelope_and_hears_the_answer_by_its_id() {
+        let dir = std::env::temp_dir().join(format!("front-link-asked-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("front.sock");
+        let (pushed, mut received) = mpsc::unbounded_channel();
+        let link: &'static Link = Box::leak(Box::new(Link::new(pushed)));
+        let served = path.clone();
+        tokio::spawn(async move { link.serve(&served).await });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let (mut reader, mut writer) = node_side(&path).await;
+        let asked = FromNode::Ask {
+            id: 41,
+            question: FrontQuestion::Sync {
+                dirs: vec!["/workspace".into()],
+            },
+        };
+        writer.write_all(&frame(&asked).unwrap()).await.unwrap();
+        let Some(Pushed::Asked { id, question }) = received.recv().await else {
+            panic!("Node's question reaches whoever answers it");
+        };
+        assert_eq!(
+            (id, question),
+            (
+                41,
+                FrontQuestion::Sync {
+                    dirs: vec!["/workspace".into()]
+                }
+            )
+        );
+        link.answer(
+            id,
+            Ok(FrontAnswer::Sync {
+                generations: vec![Some(9)],
+            }),
+        );
+        link.answer(42, Err("no feed".into()));
+        let answered: ToNode =
+            serde_json::from_slice(&read_frame(&mut reader).await.unwrap().unwrap()).unwrap();
+        assert_eq!(
+            answered,
+            ToNode::Answer {
+                id: 41,
+                answer: FrontAnswer::Sync {
+                    generations: vec![Some(9)]
+                }
+            }
+        );
+        let refused: ToNode =
+            serde_json::from_slice(&read_frame(&mut reader).await.unwrap().unwrap()).unwrap();
+        assert_eq!(
+            refused,
+            ToNode::Refused {
+                id: 42,
+                message: "no feed".into()
+            }
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

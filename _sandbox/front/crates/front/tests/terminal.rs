@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use front_wire::{Endpoint, FromNode, ListenConfig, PreviewRoute, TerminalPlan};
+use front_wire::{Endpoint, FromNode, ListenConfig, TerminalPlan};
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::Message;
@@ -142,13 +142,9 @@ fn planner() -> Planner {
         let asked = query(raw);
         let value = |key: &str| asked.get(key).cloned().unwrap_or_default();
         let plan = match value("plan").as_str() {
-            "tmux" => TerminalPlan::Tmux {
-                session: value("session"),
-                argv: vec![
-                    "attach-session".into(),
-                    "-t".into(),
-                    format!("={}", value("session")),
-                ],
+            "tmux" => TerminalPlan::Session {
+                name: value("session"),
+                create_in: None,
             },
             "tail" => TerminalPlan::Tail {
                 path: value("path"),
@@ -169,7 +165,7 @@ fn planner() -> Planner {
 async fn started(name: &str, server: &Server) -> (Harness, u16) {
     let harness = Harness::launch(
         name,
-        Arc::new(|_: &str| PreviewRoute::Node),
+        Arc::new(|_: &str, _| support::nothing_here()),
         planner(),
         Some(server.bin()),
         &[],

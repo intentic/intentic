@@ -34,7 +34,7 @@ const checkoutIn = async (parent: string, name: string): Promise<string> => {
     return dir;
 };
 
-// The front's end of the lane: what it was told, the syncs it was asked, answered from `counts`.
+// The front's end of the socket: what it was told, the syncs it was asked, answered from `counts`.
 const standIn = (counts: Map<string, number>) => {
     const told: FromNode[] = [];
     const asked: string[][] = [];

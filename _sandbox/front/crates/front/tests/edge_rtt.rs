@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use base64::Engine;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use bytes::Bytes;
-use front_wire::{Endpoint, FromNode, ListenConfig, PreviewRoute, TunnelConfig};
+use front_wire::{Endpoint, FromNode, ListenConfig, TunnelConfig};
 use http_body_util::{BodyExt, Empty};
 use hyper::Request;
 use hyper_util::rt::TokioIo;
@@ -63,7 +63,7 @@ async fn round_trips_through_a_real_edge() {
         .unwrap();
     bound(port).await;
 
-    let harness = Harness::start("edge-rtt", Arc::new(|_: &str| PreviewRoute::Node)).await;
+    let harness = Harness::start("edge-rtt", Arc::new(|_: &str, _| support::nothing_here())).await;
     let daemon = free_port();
     harness
         .send(&FromNode::Listen {
@@ -83,8 +83,9 @@ async fn round_trips_through_a_real_edge() {
     harness
         .send(&FromNode::Tunnel {
             tunnel: Some(TunnelConfig {
-                url: format!("ws://127.0.0.1:{port}/tunnel/v1"),
+                url: format!("ws://127.0.0.1:{port}/tunnel/v2"),
                 grant,
+                bulk: vec![],
             }),
         })
         .await;

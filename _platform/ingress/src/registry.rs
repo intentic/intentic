@@ -1,12 +1,12 @@
 //! Which tunnel serves which sandbox on this machine, per slot, and nothing else. A newer tunnel for an id and slot takes
-//! it and closes the older with `DISPLACED_CODE`, whose teardown then cannot evict it. Only the interactive lane is the
+//! it and closes the older with `DISPLACED_CODE`, whose teardown then cannot evict it. Only the socket slot is the
 //! sandbox's home in the cluster, so only its arrivals and departures are the cluster's news.
 
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
 use tokio::sync::watch;
-use tunnel::{Close, DISPLACED_CODE, Lane};
+use tunnel::{Close, DISPLACED_CODE};
 
 use crate::session::Session;
 
@@ -16,22 +16,14 @@ pub struct Held {
     pub closing: watch::Sender<Option<Close>>,
 }
 
-/// Where a tunnel is held: one of the two WebSocket lanes, or the QUIC connection that carries every request while it
-/// lasts. Only the interactive lane is the sandbox's home in the cluster.
+/// Where a tunnel is held: the interactive socket every front dials first (`/tunnel/v2`, or a legacy front's interactive
+/// lane, either one the sandbox's home in the cluster), the bulk socket beside it, or the QUIC connection that carries
+/// every request while it lasts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Slot {
-    Interactive,
+    Socket,
     Bulk,
     Quic,
-}
-
-impl From<Lane> for Slot {
-    fn from(lane: Lane) -> Self {
-        match lane {
-            Lane::Interactive => Self::Interactive,
-            Lane::Bulk => Self::Bulk,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,21 +36,21 @@ type Listener = Box<dyn Fn(&str, Change) + Send + Sync>;
 
 #[derive(Default)]
 pub struct Registry {
-    held: Mutex<Lanes>,
+    held: Mutex<Slots>,
     listener: OnceLock<Listener>,
 }
 
 #[derive(Default)]
-struct Lanes {
-    interactive: HashMap<String, Held>,
+struct Slots {
+    socket: HashMap<String, Held>,
     bulk: HashMap<String, Held>,
     quic: HashMap<String, Held>,
 }
 
-impl Lanes {
+impl Slots {
     fn of(&mut self, slot: Slot) -> &mut HashMap<String, Held> {
         match slot {
-            Slot::Interactive => &mut self.interactive,
+            Slot::Socket => &mut self.socket,
             Slot::Bulk => &mut self.bulk,
             Slot::Quic => &mut self.quic,
         }
@@ -70,7 +62,7 @@ impl Registry {
         Self::default()
     }
 
-    /// Who hears an interactive tunnel arrive or leave; set once, before the first tunnel registers.
+    /// Who hears a socket tunnel arrive or leave; set once, before the first tunnel registers.
     pub fn on_change(&self, listener: impl Fn(&str, Change) + Send + Sync + 'static) {
         let _ = self.listener.set(Box::new(listener));
     }
@@ -85,7 +77,7 @@ impl Registry {
                 reason: "displaced by a newer tunnel".into(),
             }));
         }
-        if slot == Slot::Interactive {
+        if slot == Slot::Socket {
             self.tell(id, Change::Arrived);
         }
         previous.is_some()
@@ -95,20 +87,20 @@ impl Registry {
     /// the id.
     pub fn unregister(&self, id: &str, slot: Slot, session: &Session) {
         let removed = {
-            let mut lanes = self.lock();
-            let held = lanes.of(slot);
+            let mut slots = self.lock();
+            let held = slots.of(slot);
             let still = held.get(id).is_some_and(|held| held.session.same(session));
             still.then(|| held.remove(id)).flatten()
         };
-        if removed.is_some() && slot == Slot::Interactive {
+        if removed.is_some() && slot == Slot::Socket {
             self.tell(id, Change::Left);
         }
     }
 
-    /// Closes and drops the interactive tunnel a peer's newer registration claimed, raising no change: the id moved, it
+    /// Closes and drops the socket tunnel a peer's newer registration claimed, raising no change: the id moved, it
     /// did not leave the cluster. Answers whether one was held.
     pub fn displace(&self, id: &str, reason: String) -> bool {
-        let Some(held) = self.lock().interactive.remove(id) else {
+        let Some(held) = self.lock().socket.remove(id) else {
             return false;
         };
         held.closing.send_replace(Some(Close {
@@ -125,32 +117,32 @@ impl Registry {
             .map(|held| held.session.clone())
     }
 
-    /// Sandboxes with an interactive tunnel here.
+    /// Sandboxes with a socket tunnel here.
     pub fn size(&self) -> usize {
-        self.lock().interactive.len()
+        self.lock().socket.len()
     }
 
     pub fn ids(&self) -> Vec<String> {
-        self.lock().interactive.keys().cloned().collect()
+        self.lock().socket.keys().cloned().collect()
     }
 
     /// Asks every tunnel in every slot to close, as this process stops.
     pub fn close_all(&self, close: &Close) {
-        let mut lanes = self.lock();
-        for held in lanes
-            .interactive
+        let mut slots = self.lock();
+        for held in slots
+            .socket
             .values()
-            .chain(lanes.bulk.values())
-            .chain(lanes.quic.values())
+            .chain(slots.bulk.values())
+            .chain(slots.quic.values())
         {
             held.closing.send_replace(Some(close.clone()));
         }
-        lanes.interactive.clear();
-        lanes.bulk.clear();
-        lanes.quic.clear();
+        slots.socket.clear();
+        slots.bulk.clear();
+        slots.quic.clear();
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, Lanes> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, Slots> {
         self.held.lock().expect("the registry is never poisoned")
     }
 
@@ -179,7 +171,7 @@ mod tests {
             hyper::client::conn::http2::handshake(TokioExecutor::new(), TokioIo::new(near))
                 .await
                 .unwrap();
-        let session = Session::h2(sender);
+        let session = Session::legacy(sender);
         let (closing, closed) = watch::channel(None);
         (
             Held {
@@ -203,14 +195,9 @@ mod tests {
     async fn routes_a_sandbox_to_the_tunnel_that_registered_it() {
         let registry = Registry::new();
         let (first, session, _, _pipe1) = held().await;
-        assert!(!registry.register(ID, Slot::Interactive, first));
-        assert!(
-            registry
-                .lookup(ID, Slot::Interactive)
-                .unwrap()
-                .same(&session)
-        );
-        assert!(registry.lookup("000000000000", Slot::Interactive).is_none());
+        assert!(!registry.register(ID, Slot::Socket, first));
+        assert!(registry.lookup(ID, Slot::Socket).unwrap().same(&session));
+        assert!(registry.lookup("000000000000", Slot::Socket).is_none());
         assert_eq!(registry.size(), 1);
         assert_eq!(registry.ids(), [ID]);
     }
@@ -220,15 +207,15 @@ mod tests {
         let registry = Registry::new();
         let (older, _, older_closed, _pipe2) = held().await;
         let (newer, newer_session, _, _pipe3) = held().await;
-        registry.register(ID, Slot::Interactive, older);
-        assert!(registry.register(ID, Slot::Interactive, newer));
+        registry.register(ID, Slot::Socket, older);
+        assert!(registry.register(ID, Slot::Socket, newer));
         assert_eq!(
             closed_with(&older_closed),
             Some((DISPLACED_CODE, "displaced by a newer tunnel".into()))
         );
         assert!(
             registry
-                .lookup(ID, Slot::Interactive)
+                .lookup(ID, Slot::Socket)
                 .unwrap()
                 .same(&newer_session)
         );
@@ -236,13 +223,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_bulk_lane_is_held_beside_the_interactive_tunnel_and_displaces_only_its_own_kind() {
+    async fn a_bulk_lane_is_held_beside_the_socket_tunnel_and_displaces_only_its_own_kind() {
         let changes = Arc::new(Mutex::new(Vec::new()));
         let registry = Registry::new();
         let heard = changes.clone();
         registry.on_change(move |id, change| heard.lock().unwrap().push((id.to_owned(), change)));
         let (interactive, interactive_session, interactive_closed, _pipe4) = held().await;
-        registry.register(ID, Slot::Interactive, interactive);
+        registry.register(ID, Slot::Socket, interactive);
         changes.lock().unwrap().clear();
 
         let (older, older_session, older_closed, _pipe5) = held().await;
@@ -262,7 +249,7 @@ mod tests {
         );
         assert!(
             registry
-                .lookup(ID, Slot::Interactive)
+                .lookup(ID, Slot::Socket)
                 .unwrap()
                 .same(&interactive_session)
         );
@@ -278,7 +265,7 @@ mod tests {
         );
         registry.unregister(ID, Slot::Bulk, &newer_session);
         assert!(registry.lookup(ID, Slot::Bulk).is_none());
-        assert!(registry.lookup(ID, Slot::Interactive).is_some());
+        assert!(registry.lookup(ID, Slot::Socket).is_some());
     }
 
     #[tokio::test]
@@ -286,17 +273,17 @@ mod tests {
         let registry = Registry::new();
         let (older, older_session, _, _pipe7) = held().await;
         let (newer, newer_session, _, _pipe8) = held().await;
-        registry.register(ID, Slot::Interactive, older);
-        registry.register(ID, Slot::Interactive, newer);
-        registry.unregister(ID, Slot::Interactive, &older_session);
+        registry.register(ID, Slot::Socket, older);
+        registry.register(ID, Slot::Socket, newer);
+        registry.unregister(ID, Slot::Socket, &older_session);
         assert!(
             registry
-                .lookup(ID, Slot::Interactive)
+                .lookup(ID, Slot::Socket)
                 .unwrap()
                 .same(&newer_session)
         );
-        registry.unregister(ID, Slot::Interactive, &newer_session);
-        assert!(registry.lookup(ID, Slot::Interactive).is_none());
+        registry.unregister(ID, Slot::Socket, &newer_session);
+        assert!(registry.lookup(ID, Slot::Socket).is_none());
         assert_eq!(registry.size(), 0);
     }
 
@@ -307,8 +294,8 @@ mod tests {
         let heard = changes.clone();
         registry.on_change(move |id, change| heard.lock().unwrap().push((id.to_owned(), change)));
         let (only, only_session, _, _pipe9) = held().await;
-        registry.register(ID, Slot::Interactive, only);
-        registry.unregister(ID, Slot::Interactive, &only_session);
+        registry.register(ID, Slot::Socket, only);
+        registry.unregister(ID, Slot::Socket, &only_session);
         assert_eq!(
             *changes.lock().unwrap(),
             [
@@ -318,7 +305,7 @@ mod tests {
         );
 
         let (again, again_session, again_closed, _pipe10) = held().await;
-        registry.register(ID, Slot::Interactive, again);
+        registry.register(ID, Slot::Socket, again);
         changes.lock().unwrap().clear();
         assert!(registry.displace(ID, "displaced by a newer tunnel on peer-b".into()));
         assert_eq!(
@@ -328,8 +315,8 @@ mod tests {
                 "displaced by a newer tunnel on peer-b".into()
             ))
         );
-        assert!(registry.lookup(ID, Slot::Interactive).is_none());
-        registry.unregister(ID, Slot::Interactive, &again_session);
+        assert!(registry.lookup(ID, Slot::Socket).is_none());
+        registry.unregister(ID, Slot::Socket, &again_session);
         assert!(changes.lock().unwrap().is_empty());
         assert!(!registry.displace(ID, "again".into()));
     }

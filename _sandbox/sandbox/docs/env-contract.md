@@ -34,8 +34,8 @@ when the daemon runs from a checkout), the process environment, then command-lin
 - The image bakes the asset paths and ports ([Dockerfile](../Dockerfile) `ENV` lines).
 - The host's creation flow sets identity, reachability and the owner's resource asks. `REPLAY_ENV` in
   [`@intentic/sandbox-run`](../../../_shared/sandbox-run/src/index.ts) lists every variable a recreate carries over.
-- `intentic-front` sets `INTENTIC_FRONT_SOCKET` and `INTENTIC_NODE_SOCKET` for the daemon it spawns
-  ([src/front/front-link.ts](../src/front/front-link.ts)).
+- `intentic-front` sets `INTENTIC_FRONT_SOCKET` and `INTENTIC_NODE_SOCKET` for the daemon it spawns, both named once
+  in the front's `front-wire` crate and read by [src/bootstrap/front-door.ts](../src/bootstrap/front-door.ts).
 - A runner container gets `RUNNER_PARENT_URL` and `RUNNER_PAIR_TOKEN`, both or neither
   ([src/runners/runner-mode.ts](../src/runners/runner-mode.ts)).
 - The daemon sets `INTENTIC_LOG_DIR`, `INTENTIC_TERMINAL_LOGS_DIR` and `INTENTIC_AGENT_TMUX` for its own children

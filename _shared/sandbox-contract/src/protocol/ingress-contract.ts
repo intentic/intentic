@@ -63,8 +63,9 @@ export const hostOwnerId = (host: string): string | undefined => {
 
 // Wire constants
 
-// Tunnel door on the ingress; versioned so a v2 session shape adds a new path instead of replacing this one.
-export const INGRESS_TUNNEL_PATH = "/tunnel/v1";
+// Tunnel door on the ingress (the tunnel crate's TUNNEL_PATH); versioned, so a new session shape adds a path. `/tunnel/v1`
+// is the edge's alone to answer now, for fronts that predate this one.
+export const INGRESS_TUNNEL_PATH = "/tunnel/v2";
 
 // Grant travels as a header on the tunnel upgrade; this connection is never a browser's.
 export const INGRESS_GRANT_HEADER = "x-intentic-grant";
@@ -77,9 +78,10 @@ export const ENV_SANDBOX_GRANT = "SANDBOX_GRANT";
 // - Register: verify the grant offline; if PLATFORM_URL is set, check the sandbox exists (GET /api/reachability/<id>)
 //   and cache the answer, failing open if the platform doesn't respond. A 404 refuses the tunnel.
 // - Displacement: a new tunnel for an id closes the old session (code 4001) and takes the registration.
-// - Lanes: a tunnel naming the bulk lane (tunnel-lanes.ts) is held beside the interactive one and displaces only its
-//   own kind; only the interactive lane is the sandbox's home in the cluster.
-// - Liveness: WebSocket ping every 15s; a peer silent for 45s is unregistered.
+// - Streams: every exchange is a stream of its own carrying HTTP/1.1 (yamux over a WebSocket, or QUIC). Over TCP a
+//   transfer rides the bulk socket: a preview's request, or a route the front announced (tunnel-bulk.ts); over QUIC a
+//   stream that sends a megabyte without pausing yields to the others.
+// - Liveness: the front pings every 15s; a peer silent for 45s is unregistered.
 // - Routing: host maps via hostOwnerId to a registered tunnel; no tunnel answers 502 naming the sandbox label, with
 //   the verdict header and CORS of edge-verdict.ts, and admits the preflight of the request it is about to refuse.
 // - The tunnel door and any host without a sandbox id are served directly by the ingress, never routed.

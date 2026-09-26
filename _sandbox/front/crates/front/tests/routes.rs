@@ -7,7 +7,9 @@ use std::convert::Infallible;
 use std::sync::Arc;
 
 use bytes::Bytes;
-use front_wire::{Certificate, Endpoint, FromNode, ListenConfig, PreviewRoute, Scheme, Upstream};
+use front_wire::{
+    Certificate, Endpoint, FromNode, ListenConfig, Page, PreviewRoute, Scheme, Upstream,
+};
 use http_body_util::{BodyExt, Empty, Full};
 use hyper::body::Incoming;
 use hyper::service::service_fn;
@@ -116,8 +118,18 @@ fn config(daemon: u16, preview: u16, loopback: u16) -> ListenConfig {
 }
 
 async fn started(name: &str, upstream_port: u16) -> (Harness, u16, u16, u16) {
-    let route = Arc::new(move |host: &str| {
-        if host.starts_with("preview-web-") {
+    let route = Arc::new(move |host: &str, probe: bool| {
+        if probe {
+            PreviewRoute::Page {
+                page: Page {
+                    status: 200,
+                    headers: [("access-control-allow-origin".to_owned(), "*".to_owned())].into(),
+                    body: format!("probed {host}"),
+                },
+            }
+        } else if host.starts_with("public-") {
+            PreviewRoute::Outbox
+        } else if host.starts_with("preview-web-") {
             PreviewRoute::Upstream {
                 upstream: Upstream {
                     host: "127.0.0.1".into(),
@@ -128,7 +140,7 @@ async fn started(name: &str, upstream_port: u16) -> (Harness, u16, u16, u16) {
                 },
             }
         } else {
-            PreviewRoute::Node
+            support::nothing_here()
         }
     });
     let harness = Harness::start(name, route).await;
@@ -146,8 +158,8 @@ async fn started(name: &str, upstream_port: u16) -> (Harness, u16, u16, u16) {
 }
 
 #[tokio::test]
-async fn each_lane_reaches_what_its_host_names() {
-    let (_harness, daemon, preview, loopback) = started("lanes", upstream().await).await;
+async fn each_listener_reaches_what_its_host_names() {
+    let (_harness, daemon, preview, loopback) = started("listeners", upstream().await).await;
     let own = format!("sandbox-{SANDBOX_ID}.sbx.test");
     let web = format!("preview-web-{SANDBOX_ID}.sbx.test");
 
@@ -163,16 +175,28 @@ async fn each_lane_reaches_what_its_host_names() {
         get(preview, &own, "/fleet", &[]).await.body,
         format!("node saw {own} /fleet mark=-")
     );
+    // What Node decided is what the front does, asked once: a page it rendered is written as it stands, the probe too
+    // (whatever a cached upstream says), and only the outbox is handed back to Node, marked as what it is.
     let stray = "port-zz-0123456789ab.sbx.test";
+    let refused = get(preview, stray, "/", &[]).await;
     assert_eq!(
-        get(preview, stray, "/", &[]).await.body,
-        format!("node saw {stray} / mark=answer")
+        (refused.status, refused.body.as_str()),
+        (404, "no preview here")
     );
-    assert_eq!(
-        get(preview, &web, "/__intentic/preview-probe", &[])
+    assert_eq!(refused.headers["content-type"], "text/plain");
+    assert!(
+        get(preview, &web, "/app.js", &[])
             .await
-            .body,
-        format!("node saw {web} /__intentic/preview-probe mark=probe")
+            .body
+            .starts_with("upstream saw")
+    );
+    let probed = get(preview, &web, "/__intentic/preview-probe", &[]).await;
+    assert_eq!((probed.status, probed.body), (200, format!("probed {web}")));
+    assert_eq!(probed.headers["access-control-allow-origin"], "*");
+    let outbox = format!("public-salt-{SANDBOX_ID}.sbx.test");
+    assert_eq!(
+        get(preview, &outbox, "/report.pdf", &[]).await.body,
+        format!("node saw {outbox} /report.pdf mark=outbox")
     );
     assert_eq!(
         get(loopback, "127.0.0.1:28123", "/agents", &[]).await.body,
@@ -224,7 +248,7 @@ async fn a_forged_front_header_never_reaches_node() {
         &own,
         "/",
         &[
-            ("x-intentic-preview", "answer"),
+            ("x-intentic-preview", "outbox"),
             ("x-intentic-preview-unreachable", "1"),
         ],
     )

@@ -1,7 +1,6 @@
 //! intentic-front: the sandbox's network edge and the Node daemon's supervisor. Owns every port and the ingress
 //! tunnel, relays what Node answers over a Unix socket, and keeps all of it open across a Node restart.
 
-mod body;
 mod cgroup;
 mod connect;
 mod feed;
@@ -21,6 +20,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 
+use front_wire::{FRONT_SOCKET_ENV, FrontAnswer, FrontQuestion, NODE_SOCKET_ENV};
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::{Mutex, mpsc, watch};
 use tracing_subscriber::EnvFilter;
@@ -35,10 +35,6 @@ use crate::tls::CertificateSlot;
 use crate::tunnel::Tunnel;
 
 const USAGE: &str = "usage: intentic-front [--run-dir DIR] -- NODE_COMMAND [ARGS...]";
-
-// The daemon reads these to find the front: where to dial the control lane, where to serve HTTP.
-const CONTROL_SOCKET_ENV: &str = "INTENTIC_FRONT_SOCKET";
-const HTTP_SOCKET_ENV: &str = "INTENTIC_NODE_SOCKET";
 
 fn main() -> ExitCode {
     tracing_subscriber::fmt()
@@ -91,7 +87,7 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
     let serving = control.clone();
     tokio::spawn(async move {
         if let Err(error) = link.serve(&serving).await {
-            tracing::error!(%error, "the control lane stopped");
+            tracing::error!(%error, "the control socket stopped");
         }
     });
 
@@ -148,14 +144,17 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
                         feed.unwatch(&dir);
                     }
                 }
-                Pushed::Sync { id, dirs } => {
+                Pushed::Asked {
+                    id,
+                    question: FrontQuestion::Sync { dirs },
+                } => {
                     let feed = feed.clone();
                     tokio::spawn(async move {
                         let generations = match feed {
                             Some(feed) => feed.sync(&dirs).await,
                             None => vec![None; dirs.len()],
                         };
-                        link.tell(&front_wire::ToNode::Synced { id, generations });
+                        link.answer(id, Ok(FrontAnswer::Sync { generations }));
                     });
                 }
             }
@@ -182,8 +181,8 @@ async fn run(run_dir: PathBuf, program: OsString, args: Vec<OsString>) -> i32 {
         program,
         args,
         env: vec![
-            (CONTROL_SOCKET_ENV.into(), control.into_os_string()),
-            (HTTP_SOCKET_ENV.into(), http.into_os_string()),
+            (FRONT_SOCKET_ENV.into(), control.into_os_string()),
+            (NODE_SOCKET_ENV.into(), http.into_os_string()),
         ],
     };
     let code = supervise::supervise(command, node_pid, stopping).await;

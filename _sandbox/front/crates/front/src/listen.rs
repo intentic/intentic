@@ -17,7 +17,7 @@ use tokio::task::JoinHandle;
 use tokio_rustls::TlsAcceptor;
 
 use crate::proxy::Front;
-use crate::route::Lane;
+use crate::route::Listener;
 use crate::tls::CertificateSlot;
 
 // TLS record ContentType "handshake": no HTTP method starts with this byte, which is the whole disambiguation.
@@ -105,8 +105,8 @@ impl Listeners {
                 let acceptor = acceptor.clone();
                 tokio::spawn(async move {
                     match port {
-                        Port::Daemon => serve(front, Lane::Daemon, stream).await,
-                        Port::Preview => serve(front, Lane::Preview, stream).await,
+                        Port::Daemon => serve(front, Listener::Daemon, stream).await,
+                        Port::Preview => serve(front, Listener::Preview, stream).await,
                         Port::Loopback => {
                             loopback(front, certificates, acceptor, stream, peer).await
                         }
@@ -134,7 +134,7 @@ async fn loopback(
         return;
     }
     if first[0] != TLS_HANDSHAKE_BYTE {
-        serve(front, Lane::Loopback { tls: false }, stream).await;
+        serve(front, Listener::Loopback { tls: false }, stream).await;
         return;
     }
     // A hello with no certificate to answer it: closing lets the browser fall to its next candidate.
@@ -142,18 +142,18 @@ async fn loopback(
         return;
     }
     match acceptor.accept(stream).await {
-        Ok(tls) => serve(front, Lane::Loopback { tls: true }, tls).await,
+        Ok(tls) => serve(front, Listener::Loopback { tls: true }, tls).await,
         Err(error) => tracing::debug!(%error, %peer, "a loopback TLS handshake failed"),
     }
 }
 
-async fn serve<S>(front: Arc<Front>, lane: Lane, stream: S)
+async fn serve<S>(front: Arc<Front>, listener: Listener, stream: S)
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let service = service_fn(move |request| {
         let front = front.clone();
-        async move { Ok::<_, Infallible>(front.handle(lane, request).await) }
+        async move { Ok::<_, Infallible>(front.handle(listener, request).await) }
     });
     let _ = auto::Builder::new(TokioExecutor::new())
         .serve_connection_with_upgrades(TokioIo::new(stream), service)

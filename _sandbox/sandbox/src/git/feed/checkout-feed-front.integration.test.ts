@@ -11,7 +11,7 @@ import { statusPaths } from "../changes/changes.js";
 import { frontCheckoutFeed, useCheckoutFeed } from "./checkout-feed.js";
 
 // The daemon's reads against the real front's change feed: this test is the Node the front supervises, over the same
-// lane, and a status taken while the checkout's count stands still spawns no git. Skipped where the front is unbuilt.
+// socket, and a status taken while the checkout's count stands still spawns no git. Skipped where the front is unbuilt.
 
 const exec = promisify(execFile);
 const FRONT = join(repoRoot(import.meta.url), "_sandbox/front/target/debug/intentic-front");

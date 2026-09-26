@@ -23,6 +23,7 @@ inotify.workspace = true
 libc.workspace = true
 memchr.workspace = true
 pin-project-lite.workspace = true
+relay.workspace = true
 quinn.workspace = true
 rustls.workspace = true
 serde.workspace = true

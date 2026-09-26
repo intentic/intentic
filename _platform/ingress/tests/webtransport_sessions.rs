@@ -64,15 +64,14 @@ async fn over_stream(
 async fn each_stream_reaches_the_sessions_sandbox_as_http_1_upgrades_included() {
     let keys = Keys::default();
     let door = door(&keys).await;
-    let _lanes = dial(
+    let _socket = dial(
         door.running.port,
         &keys.grant(SANDBOX_ID),
-        None,
         serving("websocket"),
     )
     .await
     .unwrap();
-    wait_for("the lane", || door.running.edge.registry().size() == 1).await;
+    wait_for("the socket", || door.running.edge.registry().size() == 1).await;
     let session = session(&door, &daemon_host(SANDBOX_ID), PATH)
         .await
         .unwrap();

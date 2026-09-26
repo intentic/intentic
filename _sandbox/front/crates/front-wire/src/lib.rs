@@ -1,9 +1,25 @@
-//! The control lane between intentic-front and the Node daemon: length-prefixed JSON frames over one Unix socket. Nothing
-//! here is ever seen by a browser (that is `browser-wire`). These types are the lane's only definition; `cargo test -p
-//! front-wire` writes their TypeScript, and the manifest the contract's lock pins, into the contract.
+//! The control socket between intentic-front and the Node daemon: length-prefixed JSON frames over one Unix socket, the
+//! front owning every socket and byte and Node every decision about them. Nothing here is ever seen by a browser (that
+//! is `browser-wire`). These types are the socket's only definition; `cargo test -p front-wire` writes their
+//! TypeScript, and the manifest the contract's lock pins, into the contract.
+//!
+//! Either side may ask the other a question: an `Ask` carrying an id, answered by an `Answer` or a `Refused` carrying the
+//! same one, which the asker waits `ASK_PATIENCE` for. Everything else is told and never answered.
+
+use std::collections::BTreeMap;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
+
+/// Where the front tells the daemon it spawns to dial the control socket.
+pub const FRONT_SOCKET_ENV: &str = "INTENTIC_FRONT_SOCKET";
+
+/// Where the front tells the daemon it spawns to serve HTTP, the only listener the daemon has.
+pub const NODE_SOCKET_ENV: &str = "INTENTIC_NODE_SOCKET";
+
+/// How long either side waits for the answer to a question it asked before giving up on it.
+pub const ASK_PATIENCE: Duration = Duration::from_secs(5);
 
 /// A frame is this many bytes of big-endian length, then that many bytes of JSON.
 pub const LENGTH_BYTES: usize = 4;
@@ -27,7 +43,7 @@ pub fn frame<T: Serialize>(message: &T) -> serde_json::Result<Vec<u8>> {
 #[cfg_attr(test, derive(schemars::JsonSchema))]
 #[ts(export, export_to = "wire.ts")]
 pub enum FrontHeader {
-    /// A preview request Node answers itself: a refusal page, the probe, or the outbox.
+    /// A preview request handed back for Node to answer, the value naming what Node already decided: `outbox`.
     #[serde(rename = "x-intentic-preview")]
     Preview,
     /// A preview request whose upstream refused the connection; the value is that upstream's port.
@@ -87,13 +103,16 @@ pub struct Certificate {
     pub private_key: String,
 }
 
-/// The ingress tunnel's door and the reachability grant it presents there.
+/// The ingress tunnel's door, the reachability grant it presents there, and the daemon's transfer routes it announces
+/// (`METHOD /path` each, as the daemon names them), which the edge sends down the bulk socket.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
 #[ts(export, export_to = "wire.ts")]
 pub struct TunnelConfig {
     pub url: String,
     pub grant: String,
+    #[serde(default)]
+    pub bulk: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -119,17 +138,28 @@ pub struct Upstream {
     pub frameable: bool,
 }
 
-/// Where a preview host's requests go, as Node resolved it.
+/// An answer Node renders whole when asked, for the front to write as it stands: a refusal page, or the probe's report.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[ts(export, export_to = "wire.ts")]
+pub struct Page {
+    pub status: u16,
+    pub headers: BTreeMap<String, String>,
+    pub body: String,
+}
+
+/// What becomes of a preview host's request, decided by Node once, when asked.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(tag = "to", rename_all = "camelCase")]
 #[ts(export, export_to = "wire.ts")]
 pub enum PreviewRoute {
-    Upstream {
-        upstream: Upstream,
-    },
-    /// Node answers the request itself: a refusal page or the outbox.
-    Node,
+    /// The front relays it to this upstream.
+    Upstream { upstream: Upstream },
+    /// The front answers it with this page.
+    Page { page: Page },
+    /// The sandbox's outbox: handed back to Node marked `outbox`, which serves the file it names.
+    Outbox,
 }
 
 /// What a terminal socket opens onto, as Node decided from its ticket, session name and working directory.
@@ -137,9 +167,17 @@ pub enum PreviewRoute {
 #[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(tag = "plan", rename_all = "camelCase")]
 #[ts(export, export_to = "wire.ts")]
+#[serde(rename_all_fields = "camelCase")]
 pub enum TerminalPlan {
-    /// The tmux session `session`; `argv` follows `tmux -C` to attach when no control client holds it yet.
-    Tmux { session: String, argv: Vec<String> },
+    /// The tmux session `name`, created in `create_in` when it does not exist yet; without a directory it is only ever
+    /// attached, so a session that is gone fails as itself rather than as a bare shell in its place. The front composes
+    /// the command.
+    Session {
+        name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        create_in: Option<String>,
+    },
     /// A service's log, followed from its first line.
     Tail { path: String },
     /// Opens only to end at once: the session names nothing there is to show.
@@ -148,19 +186,20 @@ pub enum TerminalPlan {
     Refused { code: u16, reason: String },
 }
 
-/// A question the front asks Node; the answer carries the same id.
+/// A question the front asks Node.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[cfg_attr(test, derive(schemars::JsonSchema))]
 #[serde(tag = "question", rename_all = "camelCase")]
 #[ts(export, export_to = "wire.ts")]
 pub enum Question {
+    /// What becomes of a request to a preview host; `probe` when it asks the preview probe's path.
     Preview {
         host: String,
+        #[serde(default)]
+        probe: bool,
     },
     /// A terminal socket asking to open, its query string as the browser sent it.
-    Terminal {
-        query: String,
-    },
+    Terminal { query: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -177,6 +216,30 @@ pub enum Answer {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         member: Option<String>,
+    },
+}
+
+/// A question Node asks the front.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(tag = "question", rename_all = "camelCase")]
+#[ts(export, export_to = "wire.ts")]
+pub enum FrontQuestion {
+    /// Where each checkout's count stands, once every write that finished before this was sent is counted.
+    Sync { dirs: Vec<String> },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(test, derive(schemars::JsonSchema))]
+#[serde(tag = "answer", rename_all = "camelCase")]
+#[ts(export, export_to = "wire.ts")]
+pub enum FrontAnswer {
+    /// Each asked checkout's generation, in the order asked: a number that moves whenever anything a `git status` there
+    /// reads may have changed, and null for a checkout the front is not counting.
+    Sync {
+        // A JSON number: far below 2^53 for any checkout's lifetime of events.
+        #[ts(type = "Array<number | null>")]
+        generations: Vec<Option<u64>>,
     },
 }
 
@@ -216,6 +279,10 @@ pub enum FromNode {
         #[ts(optional)]
         tunnel: Option<TunnelConfig>,
     },
+    Ask {
+        id: u32,
+        question: FrontQuestion,
+    },
     Answer {
         id: u32,
         answer: Answer,
@@ -238,11 +305,6 @@ pub enum FromNode {
     Unwatch {
         dir: String,
     },
-    /// Asks where each checkout's count stands, once every write that finished before this was sent is counted.
-    Sync {
-        id: u32,
-        dirs: Vec<String>,
-    },
 }
 
 /// Everything the front sends Node.
@@ -251,21 +313,10 @@ pub enum FromNode {
 #[serde(tag = "kind", rename_all = "camelCase")]
 #[ts(export, export_to = "wire.ts")]
 pub enum ToNode {
-    Ask {
-        id: u32,
-        question: Question,
-    },
-    Tunnel {
-        connected: bool,
-    },
-    /// Each asked checkout's generation, in the order asked: a number that moves whenever anything a `git status`
-    /// there reads may have changed, and null for a checkout the front is not counting.
-    Synced {
-        id: u32,
-        // A JSON number: far below 2^53 for any checkout's lifetime of events.
-        #[ts(type = "Array<number | null>")]
-        generations: Vec<Option<u64>>,
-    },
+    Ask { id: u32, question: Question },
+    Answer { id: u32, answer: FrontAnswer },
+    Refused { id: u32, message: String },
+    Tunnel { connected: bool },
 }
 
 #[cfg(test)]
@@ -279,12 +330,17 @@ mod tests {
         schema
     }
 
-    // THE LANE AS THE CONTRACT'S LOCK PINS IT (`contract-lock.ts`), written beside the TypeScript ts-rs writes: a message,
-    // field or header that changes or goes away is a removal the lock flags, so an older Node and a newer front, which
-    // meet on every sandbox mid-upgrade, cannot silently disagree.
+    // THE SOCKET AS THE CONTRACT'S LOCK PINS IT (`contract-lock.ts`), written beside the TypeScript ts-rs writes: a
+    // message, field or header that changes or goes away is a removal the lock flags, so a Node and a front that disagree
+    // are caught before they meet.
     #[test]
-    fn the_lane_is_written_where_the_contract_locks_it() {
+    fn the_socket_is_written_where_the_contract_locks_it() {
         let manifest = serde_json::json!({
+            "env": {
+                "frontSocket": FRONT_SOCKET_ENV,
+                "nodeSocket": NODE_SOCKET_ENV,
+            },
+            "askPatienceMs": ASK_PATIENCE.as_millis(),
             "frame": {
                 "lengthBytes": LENGTH_BYTES,
                 "maxBytes": MAX_FRAME_BYTES,
@@ -315,21 +371,87 @@ mod tests {
     }
 
     #[test]
-    fn a_sync_answer_reads_as_node_parses_it() {
-        let json = serde_json::to_string(&ToNode::Synced {
+    fn a_question_either_side_asks_is_answered_under_its_id() {
+        let json = serde_json::to_string(&ToNode::Answer {
             id: 7,
-            generations: vec![Some(3), None],
+            answer: FrontAnswer::Sync {
+                generations: vec![Some(3), None],
+            },
         })
         .unwrap();
-        assert_eq!(json, r#"{"kind":"synced","id":7,"generations":[3,null]}"#);
-        let asked: FromNode =
-            serde_json::from_str(r#"{"kind":"sync","id":7,"dirs":["/a"]}"#).unwrap();
+        assert_eq!(
+            json,
+            r#"{"kind":"answer","id":7,"answer":{"answer":"sync","generations":[3,null]}}"#
+        );
+        let asked: FromNode = serde_json::from_str(
+            r#"{"kind":"ask","id":7,"question":{"question":"sync","dirs":["/a"]}}"#,
+        )
+        .unwrap();
         assert_eq!(
             asked,
-            FromNode::Sync {
+            FromNode::Ask {
                 id: 7,
-                dirs: vec!["/a".into()]
+                question: FrontQuestion::Sync {
+                    dirs: vec!["/a".into()]
+                },
             }
+        );
+        let refused = serde_json::to_string(&ToNode::Refused {
+            id: 8,
+            message: "no feed".into(),
+        })
+        .unwrap();
+        assert_eq!(refused, r#"{"kind":"refused","id":8,"message":"no feed"}"#);
+    }
+
+    #[test]
+    fn a_terminal_is_planned_by_intent() {
+        let plan: TerminalPlan =
+            serde_json::from_str(r#"{"plan":"session","name":"main","createIn":"/workspace"}"#)
+                .unwrap();
+        assert_eq!(
+            plan,
+            TerminalPlan::Session {
+                name: "main".into(),
+                create_in: Some("/workspace".into())
+            }
+        );
+        assert_eq!(
+            serde_json::to_string(&TerminalPlan::Session {
+                name: "agent-1".into(),
+                create_in: None
+            })
+            .unwrap(),
+            r#"{"plan":"session","name":"agent-1"}"#
+        );
+    }
+
+    #[test]
+    fn a_preview_question_is_a_plain_one_unless_it_says_probe() {
+        let asked: Question =
+            serde_json::from_str(r#"{"question":"preview","host":"preview-web.localhost"}"#)
+                .unwrap();
+        assert_eq!(
+            asked,
+            Question::Preview {
+                host: "preview-web.localhost".into(),
+                probe: false
+            }
+        );
+        let page: PreviewRoute = serde_json::from_str(
+            r#"{"to":"page","page":{"status":502,"headers":{"content-type":"text/html; charset=utf-8"},"body":"<p>no</p>"}}"#,
+        )
+        .unwrap();
+        let PreviewRoute::Page { page } = page else {
+            panic!("a page reads as one");
+        };
+        assert_eq!(
+            (page.status, page.headers["content-type"].as_str()),
+            (502, "text/html; charset=utf-8")
+        );
+        assert_eq!(
+            serde_json::to_string(&PreviewRoute::Outbox).unwrap(),
+            r#"{"to":"outbox"}"#
         );
     }
 

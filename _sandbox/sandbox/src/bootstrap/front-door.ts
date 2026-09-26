@@ -2,12 +2,13 @@ import { once } from "node:events";
 import { rmSync } from "node:fs";
 import { createServer as createHttpServer, type RequestListener } from "node:http";
 import { createAdaptorServer, type WebSocketServerLike } from "@hono/node-server";
-import type { Answer, FromNode, ListenConfig, Question } from "@intentic/sandbox-contract/front-wire";
+import { type Answer, type FromNode, FRONT_SOCKET_ENV, type ListenConfig, NODE_SOCKET_ENV, type Question } from "@intentic/sandbox-contract/front-wire";
+import { tunnelBulkRoutes } from "@intentic/sandbox-contract";
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Logger } from "pino";
 import { WebSocketServer } from "ws";
 import { createApp } from "../app.js";
-import { CONTROL_SOCKET_ENV, connectFront, HTTP_SOCKET_ENV, type FrontLink } from "../front/front-link.js";
+import { connectFront, type FrontLink } from "../front/front-link.js";
 import { frontCheckoutFeed, useCheckoutFeed } from "../git/feed/checkout-feed.js";
 import { answerPreview, isHandedBackPreview, PREVIEW_PROBE_PATH, type PreviewDeps, previewRoute } from "../panels/preview-routes.js";
 import { type ReachPosture, reachPosture, tunnelUrl } from "../system/listeners/reach-posture.js";
@@ -19,7 +20,8 @@ import { buildId } from "../version.js";
 import type { BootPhase } from "./boot-phase.js";
 
 // The daemon behind intentic-front (_sandbox/front): HTTP on a Unix socket only the front dials, and every port, the
-// loopback certificate and the ingress tunnel handed to the front over its control lane. Node decides; the front binds.
+// loopback certificate and the ingress tunnel handed to the front over its control socket. Node decides; the front
+// binds.
 
 const previewDepsOf = ({ config, services }: BootPhase): PreviewDeps => ({
     panelOf: services.panelUpstreamOf,
@@ -79,7 +81,7 @@ const handCertificate = (phase: BootPhase, link: FrontLink): void => {
 const handTunnel = ({ config, logger, traits }: BootPhase, link: FrontLink): ReachPosture => {
     const reach = reachPosture({ url: config.ingress.url, grant: config.sandbox.grant, frontDoor: traits.extraListeners });
     if (reach.by === "tunnel") {
-        link.tell({ kind: "tunnel", tunnel: { url: tunnelUrl(config.ingress.url), grant: config.sandbox.grant } });
+        link.tell({ kind: "tunnel", tunnel: { url: tunnelUrl(config.ingress.url), grant: config.sandbox.grant, bulk: tunnelBulkRoutes() } });
         return reach;
     }
     link.tell({ kind: "tunnel" });
@@ -113,12 +115,12 @@ export const frontDoorServer =
 
 export const startFrontDoor = async (phase: BootPhase, host: string): Promise<ReachPosture> => {
     const { logger, services, shutdown } = phase;
-    const controlPath = process.env[CONTROL_SOCKET_ENV];
-    const httpPath = process.env[HTTP_SOCKET_ENV];
+    const controlPath = process.env[FRONT_SOCKET_ENV];
+    const httpPath = process.env[NODE_SOCKET_ENV];
     if (controlPath === undefined || controlPath === "" || httpPath === undefined || httpPath === "") {
         // Before the logger's file: must be legible in `docker logs` whatever else is wrong.
         process.stderr.write(
-            `FATAL: the daemon serves only behind intentic-front, which sets ${CONTROL_SOCKET_ENV} and ${HTTP_SOCKET_ENV}: ` +
+            `FATAL: the daemon serves only behind intentic-front, which sets ${FRONT_SOCKET_ENV} and ${NODE_SOCKET_ENV}: ` +
                 "run it as `intentic-front -- node dist/main.js`.\n",
         );
         process.exit(78); // EX_CONFIG
@@ -133,7 +135,7 @@ export const startFrontDoor = async (phase: BootPhase, host: string): Promise<Re
         answer: async (question: Question): Promise<Answer> => {
             switch (question.question) {
                 case "preview":
-                    return { answer: "preview", route: await previewRoute(question.host, preview) };
+                    return { answer: "preview", route: await previewRoute(question.host, question.probe, preview) };
                 case "terminal":
                     return planTerminal(terminal, question.query);
             }
@@ -144,10 +146,10 @@ export const startFrontDoor = async (phase: BootPhase, host: string): Promise<Re
             }
             tunnelUp = connected;
         },
-        // The front is this process's parent: its lane closing unasked means the box is going down around it.
+        // The front is this process's parent: its control socket closing unasked means the box is going down around it.
         onClose: () => {
             if (!stopping) {
-                logger.error("intentic-front closed the control lane; stopping");
+                logger.error("intentic-front closed the control socket; stopping");
                 process.kill(process.pid, "SIGTERM");
             }
         },

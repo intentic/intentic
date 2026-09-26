@@ -92,14 +92,9 @@ async fn a_browser_reaches_a_tunnel_over_the_edges_own_tls_in_h2_and_in_http_1_1
         },
     )
     .unwrap();
-    let _sandbox = dial(
-        running.port,
-        &keys.grant(SANDBOX_ID),
-        None,
-        serving("served"),
-    )
-    .await
-    .unwrap();
+    let _sandbox = dial(running.port, &keys.grant(SANDBOX_ID), serving("served"))
+        .await
+        .unwrap();
     wait_for("the tunnel to register", || {
         running.edge.registry().size() == 1
     })
@@ -326,14 +321,9 @@ async fn a_hosted_sandbox_replays_only_behind_the_proxy_and_is_tunnelled_on_the_
     assert!(direct.headers().get("fly-replay").is_none());
     assert_eq!(direct.headers()[VERDICT_HEADER], "no-tunnel");
 
-    let _hosted = dial(
-        running.port,
-        &keys.grant(HOSTED_ID),
-        None,
-        serving("hosted"),
-    )
-    .await
-    .unwrap();
+    let _hosted = dial(running.port, &keys.grant(HOSTED_ID), serving("hosted"))
+        .await
+        .unwrap();
     wait_for("the hosted machine's tunnel", || {
         running.edge.registry().size() == 1
     })

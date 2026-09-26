@@ -25,7 +25,7 @@ test(
 test("the lock flags a change to the wire no oRPC route carries", () => {
     const base = currentLock() as Record<string, Record<string, unknown>>;
     const moved = structuredClone(base);
-    (moved["wire:tunnel"] as { path: string }).path = "/tunnel/v2";
+    (moved["wire:tunnel"] as { path: string }).path = "/tunnel/v3";
     delete (moved["wire:browser-wire"] as { webTransport?: unknown }).webTransport;
     expect(shrunkSurfaces(base, moved)).toEqual(["wire:browser-wire.webTransport", "wire:tunnel.path"]);
     expect(shrunkSurfaces(moved, base)).toEqual(["wire:tunnel.path"]);

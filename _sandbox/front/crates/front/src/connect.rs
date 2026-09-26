@@ -1,5 +1,6 @@
 //! Where forwarded requests go: Node's Unix socket, or a preview's local upstream over TCP or TLS. Ordinary requests
-//! ride pooled connections; an upgrade dials one of its own, since an upgraded connection never returns to a pool.
+//! ride pooled connections; an upgrade dials one of its own through the same connector, since an upgraded connection
+//! never returns to a pool.
 
 use std::future::Future;
 use std::io;
@@ -9,9 +10,8 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use hyper::body::Incoming;
+use hyper::Uri;
 use hyper::rt::{Read, ReadBufCursor, Write};
-use hyper::{Request, Response, Uri};
 use hyper_util::client::legacy::Client;
 use hyper_util::client::legacy::connect::{Connected, Connection};
 use hyper_util::rt::{TokioExecutor, TokioIo};
@@ -25,7 +25,7 @@ use tokio_rustls::TlsConnector;
 use tokio_rustls::client::TlsStream;
 use tower_service::Service;
 
-use crate::body::Body;
+use relay::body::Body;
 
 pin_project! {
     #[project = IoProjection]
@@ -240,16 +240,4 @@ where
     Client::builder(TokioExecutor::new())
         .pool_idle_timeout(Duration::from_secs(4))
         .build(connector)
-}
-
-/// Sends an upgrade request over a connection of its own; the answer's upgrade resolves once it is a 101.
-pub async fn send_upgrade(
-    io: Io,
-    request: Request<Body>,
-) -> Result<Response<Incoming>, hyper::Error> {
-    let (mut sender, connection) = hyper::client::conn::http1::handshake(io).await?;
-    tokio::spawn(async move {
-        let _ = connection.with_upgrades().await;
-    });
-    sender.send_request(request).await
 }

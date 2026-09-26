@@ -179,7 +179,7 @@ impl Cluster {
                 let mut remote = self.remote();
                 remote.retain(|_, (peer, _)| peer.key() != from);
                 for id in holds.ids {
-                    if self.registry.lookup(&id, Slot::Interactive).is_some() {
+                    if self.registry.lookup(&id, Slot::Socket).is_some() {
                         tracing::warn!(sandbox = %id, peer = %from, "a peer also holds a tunnel this machine holds");
                     }
                     remote.insert(id, (holds.from.clone(), at));

@@ -1,4 +1,4 @@
-//! The one body type every answer and forwarded request is carried in, whatever produced it.
+//! The one body type every answer and relayed request is carried in, whatever produced it.
 
 use bytes::Bytes;
 use http_body_util::{BodyExt, Empty, Full, combinators::UnsyncBoxBody};

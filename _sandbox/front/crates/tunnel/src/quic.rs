@@ -2,11 +2,15 @@
 //! request carrying plain HTTP/1.1, so a body or an upgrade needs nothing of its own and a lost packet stalls only its
 //! own stream. The front's first stream is the hello: its grant, answered with one byte.
 
+use std::io;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
+use std::time::{Duration, Instant};
 
 use quinn::congestion::BbrConfig;
 use quinn::{Connection, RecvStream, SendStream, TransportConfig, VarInt};
-use tokio::io::Join;
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::{DEAD_AFTER, DISPLACED_CODE, MAX_STREAMS, PING_EVERY, STREAM_WINDOW};
 
@@ -28,13 +32,13 @@ pub enum Hello {
     Gone = 2,
 }
 
-/// The application close codes, as the WebSocket lanes spell them, and one for a hello the edge refused.
+/// The application close codes, as the WebSocket spells them, and one for a hello the edge refused.
 pub const DISPLACED: VarInt = VarInt::from_u32(DISPLACED_CODE as u32);
 pub const AWAY: VarInt = VarInt::from_u32(1001);
 pub const REFUSED: VarInt = VarInt::from_u32(4003);
 
-/// One connection's streams and liveness: streams sized as the TCP lanes' are, the keep-alive and silence the WebSocket
-/// ping's, and BBR, which paces to the path rather than filling a bottleneck's queue ahead of a keystroke.
+/// One connection's streams and liveness: streams sized as the WebSocket session's are, QUIC's own keep-alive and idle
+/// timeout on the WebSocket ping's cadence and dead window (the connection's only liveness), and BBR, which paces to the path rather than filling a bottleneck's queue ahead of a keystroke.
 pub fn transport() -> Arc<TransportConfig> {
     let mut transport = TransportConfig::default();
     transport
@@ -51,11 +55,103 @@ pub fn transport() -> Arc<TransportConfig> {
     Arc::new(transport)
 }
 
-/// A request's stream as one byte stream, for HTTP/1.1 on either end.
-pub type Stream = Join<RecvStream, SendStream>;
+/// A stream that sends this much without pausing is a transfer, and yields to every stream that is not.
+pub const YIELD_AFTER: u64 = 1024 * 1024;
+
+/// A pause this long ends a burst: the stream is back at the ordinary priority for its next one.
+pub const PAUSE: Duration = Duration::from_secs(1);
+
+// Below the default 0, where every exchange starts.
+const YIELDED: i32 = -1;
+
+/// A request's stream as one byte stream, for HTTP/1.1 on either end. Its sender ranks it by what it is doing, not by
+/// what the request was for: a burst past `YIELD_AFTER` yields to every other stream on the connection until it pauses,
+/// so a download or an upload never holds a keystroke, a call or an event frame behind it, on either end.
+pub struct Stream {
+    recv: RecvStream,
+    send: SendStream,
+    burst: Burst,
+}
 
 pub fn stream(send: SendStream, recv: RecvStream) -> Stream {
-    tokio::io::join(recv, send)
+    Stream {
+        recv,
+        send,
+        burst: Burst::default(),
+    }
+}
+
+impl Stream {
+    /// Whether the stream is ranked below the others right now.
+    pub fn yielded(&self) -> bool {
+        self.burst.yielded
+    }
+}
+
+// What a stream has sent since it last paused, and whether that made it yield.
+#[derive(Debug, Default)]
+struct Burst {
+    bytes: u64,
+    last_sent: Option<Instant>,
+    yielded: bool,
+}
+
+impl Burst {
+    // Counts `bytes` sent at `now`, answering the priority to take when the burst crossed the mark or ended.
+    fn sent(&mut self, bytes: usize, now: Instant) -> Option<i32> {
+        let mut rank = None;
+        if self
+            .last_sent
+            .is_some_and(|last| now.duration_since(last) >= PAUSE)
+        {
+            self.bytes = 0;
+            if self.yielded {
+                self.yielded = false;
+                rank = Some(0);
+            }
+        }
+        self.last_sent = Some(now);
+        self.bytes += bytes as u64;
+        if !self.yielded && self.bytes > YIELD_AFTER {
+            self.yielded = true;
+            rank = Some(YIELDED);
+        }
+        rank
+    }
+}
+
+impl AsyncRead for Stream {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        AsyncRead::poll_read(Pin::new(&mut self.recv), cx, buf)
+    }
+}
+
+impl AsyncWrite for Stream {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        let written = AsyncWrite::poll_write(Pin::new(&mut self.send), cx, buf);
+        if let Poll::Ready(Ok(bytes)) = written
+            && let Some(rank) = self.burst.sent(bytes, Instant::now())
+        {
+            let _ = self.send.set_priority(rank);
+        }
+        written
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        AsyncWrite::poll_flush(Pin::new(&mut self.send), cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        AsyncWrite::poll_shutdown(Pin::new(&mut self.send), cx)
+    }
 }
 
 /// The front's side of the hello: the grant, then the edge's answer.
@@ -97,4 +193,39 @@ pub async fn answer(mut send: SendStream, hello: Hello) -> anyhow::Result<()> {
         send.stopped().await?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_burst_past_the_mark_yields_until_the_stream_pauses() {
+        let start = Instant::now();
+        let mut burst = Burst::default();
+        let chunk = 64 * 1024;
+        let chunks = usize::try_from(YIELD_AFTER).unwrap() / chunk;
+        for sent in 0..chunks {
+            let at = start + Duration::from_millis(sent as u64);
+            assert_eq!(burst.sent(chunk, at), None, "chunk {sent}");
+        }
+        assert_eq!(
+            burst.sent(1, start + Duration::from_millis(100)),
+            Some(YIELDED)
+        );
+        assert_eq!(burst.sent(chunk, start + Duration::from_millis(200)), None);
+        let paused = start + Duration::from_millis(200) + PAUSE;
+        assert_eq!(burst.sent(1, paused), Some(0));
+        assert!(!burst.yielded);
+    }
+
+    #[test]
+    fn small_exchanges_never_yield_however_many_there_are() {
+        let start = Instant::now();
+        let mut burst = Burst::default();
+        for sent in 0..1000_u64 {
+            let at = start + PAUSE * u32::try_from(sent).unwrap();
+            assert_eq!(burst.sent(16 * 1024, at), None);
+        }
+    }
 }

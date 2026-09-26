@@ -1,48 +1,51 @@
 //! The ingress tunnel's wire, as both of its ends speak it: the edge that holds a sandbox's tunnels
-//! (`_platform/ingress`) and the front that dials them (`_sandbox/front`). A tunnel is one WebSocket carrying one HTTP/2
-//! session, the edge the client; an upgrade rides a CONNECT stream whose headers carry the browser's h1 head.
+//! (`_platform/ingress`) and the front that dials them (`_sandbox/front`). A tunnel is a carrier of byte streams, one
+//! per exchange, each carrying plain HTTP/1.1 so that a body or an upgrade needs nothing of its own: a QUIC connection
+//! where the edge declares one (`quic`), and two WebSockets carrying yamux beside it (`mux`), which carry every exchange
+//! while QUIC is not held, a transfer on the bulk one (`bulk`). The edge opens the streams, the front serves them.
 
-mod envelope;
+mod bulk;
+pub mod mux;
 mod pump;
 pub mod quic;
 
 use std::time::Duration;
 
-pub use envelope::{HOP_BY_HOP, unwrap_envelope, wrap_envelope};
-pub use pump::{Close, Ended, pump, raised};
+pub use bulk::{BULK_HEADER, BulkRoutes, LANE_HEADER, Lane};
+pub use pump::{Close, Ended, Liveness, pump, raised};
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 
-/// The tunnel door on the edge, versioned so a new session shape takes a new path.
-pub const TUNNEL_PATH: &str = "/tunnel/v1";
+/// The tunnel door on the edge, versioned so a new session shape takes a new path. `/tunnel/v1`, an h2 session over
+/// two WebSocket lanes, is the edge's alone to answer now, for fronts that predate this one.
+pub const TUNNEL_PATH: &str = "/tunnel/v2";
 
 /// The reachability grant rides this header on the tunnel's upgrade.
 pub const GRANT_HEADER: &str = "x-intentic-grant";
 
-/// Names a tunnel's lane on its upgrade; a tunnel naming none is the interactive one.
-pub const LANE_HEADER: &str = "x-intentic-lane";
-
-/// What the edge declares it serves besides the WebSocket lanes, on its answer to a tunnel's upgrade and on `/health`: the
+/// What the edge declares it serves besides its WebSockets, on its answer to a tunnel's upgrade and on `/health`: the
 /// tokens of [`Transport`], comma-separated. An edge that names none serves none, which is every edge older than this.
 pub const TRANSPORTS_HEADER: &str = "x-intentic-transports";
 
 /// The upgrade a tunnel opens with, and the one a terminal opens with wherever it rides.
 pub const WEBSOCKET_UPGRADE: &str = "websocket";
 
-/// The close code of a tunnel a newer one for the same sandbox and lane displaced.
+/// The close code of a tunnel a newer one for the same sandbox and slot displaced.
 pub const DISPLACED_CODE: u16 = 4001;
 
-/// Both ends ping this often, and forget a peer silent this long: a path that died without a FIN reports nothing else.
+/// The front pings this often, and both ends forget a peer silent this long: a path that died without a FIN reports
+/// nothing else. QUIC's keep-alive and idle timeout run on the same two.
 pub const PING_EVERY: Duration = Duration::from_secs(15);
 pub const DEAD_AFTER: Duration = Duration::from_secs(45);
 
-/// Per-stream receive window: the session crosses the internet, where h2's 64 KiB default starves a transfer.
+/// Per-stream receive window on QUIC and the legacy h2 session: the session crosses the internet, where h2's 64 KiB
+/// default starves a transfer.
 pub const STREAM_WINDOW: u32 = 1024 * 1024;
 
 /// Session receive window, twice a stream's and near the bandwidth-delay product, since a larger one queues a keystroke
 /// behind a download on a slow link.
 pub const CONNECTION_WINDOW: u32 = 2 * STREAM_WINDOW;
 
-/// Streams one session carries at once; many stay open a session's whole life.
+/// Streams one carrier holds at once; many (a terminal, an event stream) stay open its whole life.
 pub const MAX_STREAMS: u32 = 1024;
 
 // Bytes a tunnel's socket reads into at once, allocated up front for each one: an edge holds thousands of mostly idle
@@ -54,37 +57,11 @@ pub fn socket_config() -> WebSocketConfig {
     WebSocketConfig::default().read_buffer_size(READ_BUFFER)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Lane {
-    Interactive,
-    Bulk,
-}
-
-impl Lane {
-    pub const ALL: [Self; 2] = [Self::Interactive, Self::Bulk];
-
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::Interactive => "interactive",
-            Self::Bulk => "bulk",
-        }
-    }
-
-    /// The lane a tunnel's upgrade names.
-    pub fn named(header: Option<&str>) -> Self {
-        if header == Some(Self::Bulk.name()) {
-            Self::Bulk
-        } else {
-            Self::Interactive
-        }
-    }
-}
-
 /// What an edge may serve beyond HTTPS over TCP, each only because its own configuration binds it: a front dials QUIC
 /// and an editor opens WebTransport only where the edge declared it, never to find out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Transport {
-    /// The tunnel over QUIC (`quic::ALPN`), beside the WebSocket lanes.
+    /// The tunnel over QUIC (`quic::ALPN`), beside the WebSocket.
     Quic,
     /// A browser's HTTP/3 on the same UDP port.
     H3,
@@ -126,19 +103,9 @@ impl Transport {
     }
 }
 
-/// The leftmost DNS label of a Host, port stripped; empty when there is none.
-pub fn label_of(host: &str) -> &str {
-    host.split(':')
-        .next()
-        .unwrap_or("")
-        .split('.')
-        .next()
-        .unwrap_or("")
-}
-
 /// The sandbox a Host belongs to: its leftmost label ends in `-<12 hex>`. Ownership is a parse, never a registry.
 pub fn host_owner_id(host: &str) -> Option<&str> {
-    let label = label_of(host);
+    let label = relay::label_of(host);
     let (_, id) = label.rsplit_once('-')?;
     (id.len() == 12
         && id
@@ -162,22 +129,24 @@ mod tests {
             "headers": {
                 "grant": GRANT_HEADER,
                 "lane": LANE_HEADER,
+                "bulk": BULK_HEADER,
                 "transports": TRANSPORTS_HEADER,
             },
             "lanes": Lane::ALL.map(Lane::name),
+            "mux": mux::PROTOCOL,
             "transports": Transport::ALL.map(Transport::token),
             "close": {
                 "displaced": DISPLACED_CODE,
                 "away": quic::AWAY.into_inner(),
                 "refused": quic::REFUSED.into_inner(),
             },
-            "envelope": {
-                "method": envelope::METHOD_HEADER,
-                "path": envelope::PATH_HEADER,
-                "headerPrefix": envelope::HEADER_PREFIX,
+            "liveness": {
+                "pingEveryMs": PING_EVERY.as_millis(),
+                "deadAfterMs": DEAD_AFTER.as_millis(),
             },
             "quic": {
                 "alpn": std::str::from_utf8(quic::ALPN).unwrap(),
+                "yieldAfterBytes": quic::YIELD_AFTER,
                 "hello": {
                     "held": quic::Hello::Held as u8,
                     "refused": quic::Hello::Refused as u8,
@@ -234,13 +203,5 @@ mod tests {
         for Owned { host, owner } in fixture.owners {
             assert_eq!(host_owner_id(&host), owner.as_deref(), "owner of {host:?}");
         }
-    }
-
-    #[test]
-    fn a_tunnel_is_interactive_unless_it_names_the_bulk_lane() {
-        assert_eq!(Lane::named(Some("bulk")), Lane::Bulk);
-        assert_eq!(Lane::named(Some("interactive")), Lane::Interactive);
-        assert_eq!(Lane::named(Some("anything")), Lane::Interactive);
-        assert_eq!(Lane::named(None), Lane::Interactive);
     }
 }

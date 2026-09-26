@@ -1,4 +1,4 @@
-//! A stand-in for the Node daemon: plays Node's end of the control lane and serves HTTP on the front's Node socket, so
+//! A stand-in for the Node daemon: plays Node's end of the control socket and serves HTTP on the front's Node socket, so
 //! the real binary is driven exactly as the daemon drives it. The process the front supervises is a bare `sleep`.
 
 // Each test crate compiles this module whole and uses its own part of it.
@@ -13,7 +13,8 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use front_wire::{
-    Answer, FromNode, LENGTH_BYTES, PreviewRoute, Question, TerminalPlan, ToNode, frame,
+    Answer, FromNode, FrontAnswer, FrontQuestion, LENGTH_BYTES, Page, PreviewRoute, Question,
+    TerminalPlan, ToNode, frame,
 };
 use http_body_util::Full;
 use hyper::body::Incoming;
@@ -36,7 +37,19 @@ pub fn free_port() -> u16 {
         .port()
 }
 
-pub type Router = Arc<dyn Fn(&str) -> PreviewRoute + Send + Sync>;
+/// Node's answer to where a preview host's request goes: its host, and whether it asks the probe's path.
+pub type Router = Arc<dyn Fn(&str, bool) -> PreviewRoute + Send + Sync>;
+
+/// The page Node renders for a host it has no preview for.
+pub fn nothing_here() -> PreviewRoute {
+    PreviewRoute::Page {
+        page: Page {
+            status: 404,
+            headers: [("content-type".to_owned(), "text/plain".to_owned())].into(),
+            body: "no preview here".into(),
+        },
+    }
+}
 
 /// Node's answer to a terminal's query string: its plan, and the member it opens for.
 pub type Planner = Arc<dyn Fn(&str) -> (TerminalPlan, Option<String>) + Send + Sync>;
@@ -55,7 +68,7 @@ fn no_terminals() -> Planner {
 
 pub struct Harness {
     pub dir: PathBuf,
-    lane: Arc<Mutex<OwnedWriteHalf>>,
+    socket: Arc<Mutex<OwnedWriteHalf>>,
     pub tunnel: watch::Receiver<Option<bool>>,
     synced: Mutex<mpsc::UnboundedReceiver<(u32, Vec<Option<u64>>)>>,
     _front: Child,
@@ -91,13 +104,13 @@ impl Harness {
         }
         let front = command.spawn().unwrap();
         serve_node_http(dir.join("node.sock")).await;
-        let lane = loop {
+        let socket = loop {
             match UnixStream::connect(dir.join("front.sock")).await {
-                Ok(lane) => break lane,
+                Ok(socket) => break socket,
                 Err(_) => tokio::time::sleep(Duration::from_millis(20)).await,
             }
         };
-        let (mut reader, writer) = lane.into_split();
+        let (mut reader, writer) = socket.into_split();
         let writer = Arc::new(Mutex::new(writer));
         let (tunnel_sender, tunnel) = watch::channel(None);
         let (synced_sender, synced) = mpsc::unbounded_channel();
@@ -113,12 +126,12 @@ impl Harness {
                 match serde_json::from_slice::<ToNode>(&bytes).unwrap() {
                     ToNode::Ask {
                         id,
-                        question: Question::Preview { host },
+                        question: Question::Preview { host, probe },
                     } => {
                         let answer = FromNode::Answer {
                             id,
                             answer: Answer::Preview {
-                                route: route(&host),
+                                route: route(&host, probe),
                             },
                         };
                         answering
@@ -147,15 +160,21 @@ impl Harness {
                     ToNode::Tunnel { connected } => {
                         tunnel_sender.send_replace(Some(connected));
                     }
-                    ToNode::Synced { id, generations } => {
+                    ToNode::Answer {
+                        id,
+                        answer: FrontAnswer::Sync { generations },
+                    } => {
                         let _ = synced_sender.send((id, generations));
+                    }
+                    ToNode::Refused { id, message } => {
+                        panic!("the front refused question {id}: {message}")
                     }
                 }
             }
         });
         Self {
             dir,
-            lane: writer,
+            socket: writer,
             tunnel,
             synced: Mutex::new(synced),
             _front: front,
@@ -163,7 +182,7 @@ impl Harness {
     }
 
     pub async fn send(&self, message: &FromNode) {
-        self.lane
+        self.socket
             .lock()
             .await
             .write_all(&frame(message).unwrap())
@@ -173,9 +192,11 @@ impl Harness {
 
     /// Asks the front where each checkout's count stands, as Node does, and waits for that answer.
     pub async fn sync(&self, id: u32, dirs: &[&str]) -> Vec<Option<u64>> {
-        self.send(&FromNode::Sync {
+        self.send(&FromNode::Ask {
             id,
-            dirs: dirs.iter().map(|dir| (*dir).to_owned()).collect(),
+            question: FrontQuestion::Sync {
+                dirs: dirs.iter().map(|dir| (*dir).to_owned()).collect(),
+            },
         })
         .await;
         let mut synced = self.synced.lock().await;
@@ -184,7 +205,7 @@ impl Harness {
                 tokio::time::timeout(Duration::from_secs(5), synced.recv())
                     .await
                     .expect("the front answers a sync")
-                    .expect("the lane stays open");
+                    .expect("the socket stays open");
             if answered == id {
                 return generations;
             }

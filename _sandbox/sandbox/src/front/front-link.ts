@@ -1,22 +1,26 @@
 import { connect, type Socket } from "node:net";
 import { errorMessage } from "@intentic/base/errors";
-import type { Answer, FromNode, Question, ToNode } from "@intentic/sandbox-contract/front-wire";
+import {
+    ASK_PATIENCE_MS,
+    FRAME_LENGTH_BYTES,
+    type Answer,
+    type FromNode,
+    type FrontAnswer,
+    type FrontQuestion,
+    type Question,
+    type ToNode,
+} from "@intentic/sandbox-contract/front-wire";
 
-// Node's half of the control lane to intentic-front (the front's half is _sandbox/front, link.rs): one Unix socket,
+// Node's half of the control socket to intentic-front (the front's half is _sandbox/front, link.rs): one Unix socket,
 // each frame a 4-byte big-endian length then that many bytes of JSON, the types generated from the front's own crate.
-
-// front-wire's LENGTH_BYTES; the golden frame in front-link.test.ts pins the same bytes the Rust test does.
-const LENGTH_BYTES = 4;
-
-// Set by intentic-front on the daemon it spawns: where to dial the lane, and where to serve HTTP.
-export const CONTROL_SOCKET_ENV = "INTENTIC_FRONT_SOCKET";
-export const HTTP_SOCKET_ENV = "INTENTIC_NODE_SOCKET";
+// Either side may ask the other: an `ask` carrying an id, answered by an `answer` or a `refused` carrying the same one,
+// waited for ASK_PATIENCE_MS.
 
 export interface FrontLink {
-    // Sends one message; the lane keeps order, so the front applies them as sent.
+    // Sends one message; the socket keeps order, so the front applies them as sent.
     readonly tell: (message: FromNode) => void;
     // Each checkout's change count, in the order asked: null for one the front does not count, and for every one when
-    // the lane closes first.
+    // the front does not answer.
     readonly sync: (dirs: readonly string[]) => Promise<(number | null)[]>;
     readonly tunnelConnected: () => boolean;
     readonly close: () => void;
@@ -28,13 +32,15 @@ export interface FrontLinkOptions {
     readonly answer: (question: Question) => Promise<Answer>;
     readonly onTunnel: (connected: boolean) => void;
     readonly onClose: () => void;
+    // How long a question of Node's waits for the front; ASK_PATIENCE_MS unless a test says otherwise.
+    readonly patienceMs?: number;
 }
 
 export const frameOf = (message: FromNode): Buffer => {
     const json = Buffer.from(JSON.stringify(message), "utf8");
-    const frame = Buffer.allocUnsafe(LENGTH_BYTES + json.length);
+    const frame = Buffer.allocUnsafe(FRAME_LENGTH_BYTES + json.length);
     frame.writeUInt32BE(json.length, 0);
-    json.copy(frame, LENGTH_BYTES);
+    json.copy(frame, FRAME_LENGTH_BYTES);
     return frame;
 };
 
@@ -42,16 +48,21 @@ export const frameOf = (message: FromNode): Buffer => {
 export const takeFrames = (buffered: Buffer): { readonly frames: Buffer[]; readonly rest: Buffer } => {
     const frames: Buffer[] = [];
     let offset = 0;
-    while (buffered.length - offset >= LENGTH_BYTES) {
+    while (buffered.length - offset >= FRAME_LENGTH_BYTES) {
         const length = buffered.readUInt32BE(offset);
-        if (buffered.length - offset - LENGTH_BYTES < length) {
+        if (buffered.length - offset - FRAME_LENGTH_BYTES < length) {
             break;
         }
-        frames.push(buffered.subarray(offset + LENGTH_BYTES, offset + LENGTH_BYTES + length));
-        offset += LENGTH_BYTES + length;
+        frames.push(buffered.subarray(offset + FRAME_LENGTH_BYTES, offset + FRAME_LENGTH_BYTES + length));
+        offset += FRAME_LENGTH_BYTES + length;
     }
     return { frames, rest: buffered.subarray(offset) };
 };
+
+interface Waiting {
+    readonly settle: (answer: FrontAnswer | Error) => void;
+    readonly timer: NodeJS.Timeout;
+}
 
 export const connectFront = async (options: FrontLinkOptions): Promise<FrontLink> => {
     const socket = await new Promise<Socket>((resolve, reject) => {
@@ -59,39 +70,63 @@ export const connectFront = async (options: FrontLinkOptions): Promise<FrontLink
         dialed.once("connect", () => resolve(dialed));
         dialed.once("error", reject);
     });
+    const patienceMs = options.patienceMs ?? ASK_PATIENCE_MS;
     let tunnel = false;
     let buffered = Buffer.alloc(0);
-    let nextSync = 0;
-    const syncing = new Map<number, { readonly dirs: number; readonly resolve: (generations: (number | null)[]) => void }>();
+    let nextId = 0;
+    const waiting = new Map<number, Waiting>();
     const tell = (message: FromNode): void => {
         socket.write(frameOf(message));
     };
-    const sync = (dirs: readonly string[]): Promise<(number | null)[]> =>
-        new Promise((resolve) => {
+    const settle = (id: number, answer: FrontAnswer | Error): void => {
+        const waiter = waiting.get(id);
+        waiting.delete(id);
+        if (waiter !== undefined) {
+            clearTimeout(waiter.timer);
+            waiter.settle(answer);
+        }
+    };
+    // Rejects when the front refuses, does not answer in time, or the socket closes first.
+    const ask = (question: FrontQuestion): Promise<FrontAnswer> =>
+        new Promise((resolve, reject) => {
             if (socket.destroyed) {
-                resolve(dirs.map(() => null));
+                reject(new Error("the front is not connected"));
                 return;
             }
-            nextSync = (nextSync + 1) % 2 ** 32;
-            syncing.set(nextSync, { dirs: dirs.length, resolve });
-            tell({ kind: "sync", id: nextSync, dirs: [...dirs] });
+            nextId = (nextId + 1) % 2 ** 32;
+            const id = nextId;
+            const timer = setTimeout(() => settle(id, new Error(`the front did not answer within ${patienceMs} ms`)), patienceMs);
+            waiting.set(id, { settle: (answer) => (answer instanceof Error ? reject(answer) : resolve(answer)), timer });
+            tell({ kind: "ask", id, question });
         });
+    const sync = async (dirs: readonly string[]): Promise<(number | null)[]> => {
+        try {
+            const answer = await ask({ question: "sync", dirs: [...dirs] });
+            return answer.generations;
+        } catch {
+            return dirs.map(() => null);
+        }
+    };
     const receive = (message: ToNode): void => {
-        if (message.kind === "tunnel") {
-            tunnel = message.connected;
-            options.onTunnel(message.connected);
-            return;
+        switch (message.kind) {
+            case "tunnel":
+                tunnel = message.connected;
+                options.onTunnel(message.connected);
+                return;
+            case "answer":
+                settle(message.id, message.answer);
+                return;
+            case "refused":
+                settle(message.id, new Error(`the front refused: ${message.message}`));
+                return;
+            case "ask": {
+                const { id, question } = message;
+                options.answer(question).then(
+                    (answer) => tell({ kind: "answer", id, answer }),
+                    (error: unknown) => tell({ kind: "refused", id, message: errorMessage(error) }),
+                );
+            }
         }
-        if (message.kind === "synced") {
-            syncing.get(message.id)?.resolve(message.generations);
-            syncing.delete(message.id);
-            return;
-        }
-        const { id, question } = message;
-        options.answer(question).then(
-            (answer) => tell({ kind: "answer", id, answer }),
-            (error: unknown) => tell({ kind: "refused", id, message: errorMessage(error) }),
-        );
     };
     socket.on("data", (chunk: Buffer) => {
         const { frames, rest } = takeFrames(buffered.length === 0 ? chunk : Buffer.concat([buffered, chunk]));
@@ -101,12 +136,12 @@ export const connectFront = async (options: FrontLinkOptions): Promise<FrontLink
             receive(JSON.parse(frame.toString("utf8")) as ToNode);
         }
     });
-    // The front is this process's parent: its lane closing means the sandbox is going down around it.
+    // The front is this process's parent: its socket closing means the sandbox is going down around it.
     socket.on("close", () => {
-        for (const waiting of syncing.values()) {
-            waiting.resolve(Array.from({ length: waiting.dirs }, () => null));
+        // Deleting the entry being visited is safe in a Map's own iteration.
+        for (const id of waiting.keys()) {
+            settle(id, new Error("the front went away before answering"));
         }
-        syncing.clear();
         options.onClose();
     });
     socket.on("error", () => socket.destroy());

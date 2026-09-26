@@ -50,14 +50,14 @@ test("answers the front's question under its id and reports the tunnel", async (
     const tunnels: boolean[] = [];
     const link = await connectFront({
         path: join(dir, "front.sock"),
-        answer: () => Promise.resolve({ answer: "preview", route: { to: "node" } }),
+        answer: () => Promise.resolve({ answer: "preview", route: { to: "outbox" } }),
         onTunnel: (connected) => tunnels.push(connected),
         onClose: () => undefined,
     });
     const socket = await front;
     const answered = nextMessage(socket);
-    socket.write(toNode({ kind: "ask", id: 41, question: { question: "preview", host: "preview-web.localhost" } }));
-    expect(await answered).toEqual({ kind: "answer", id: 41, answer: { answer: "preview", route: { to: "node" } } });
+    socket.write(toNode({ kind: "ask", id: 41, question: { question: "preview", host: "preview-web.localhost", probe: false } }));
+    expect(await answered).toEqual({ kind: "answer", id: 41, answer: { answer: "preview", route: { to: "outbox" } } });
 
     socket.write(toNode({ kind: "tunnel", connected: true }));
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -75,18 +75,18 @@ test("a throwing answer goes back as a refusal carrying its message", async () =
     });
     const socket = await front;
     const refused = nextMessage(socket);
-    socket.write(toNode({ kind: "ask", id: 7, question: { question: "preview", host: "preview-x.localhost" } }));
+    socket.write(toNode({ kind: "ask", id: 7, question: { question: "preview", host: "preview-x.localhost", probe: false } }));
     expect(await refused).toEqual({ kind: "refused", id: 7, message: "no such panel" });
     link.close();
 });
 
-// The same JSON the front's lane test pins (front-wire, `a_sync_answer_reads_as_node_parses_it`).
-const RUST_SYNCED_JSON = `{"kind":"synced","id":7,"generations":[3,null]}`;
+// The same JSON the front's socket test pins (front-wire, `a_question_either_side_asks_is_answered_under_its_id`).
+const RUST_ANSWER_JSON = `{"kind":"answer","id":7,"answer":{"answer":"sync","generations":[3,null]}}`;
 
-test("a sync is answered by its id, and answers null for every checkout when the lane closes first", async () => {
+test("a sync is Node's question under the same envelope, answered by its id, and null for every checkout when the socket closes first", async () => {
     const link = await connectFront({
         path: join(dir, "front.sock"),
-        answer: () => Promise.resolve({ answer: "preview", route: { to: "node" } }),
+        answer: () => Promise.resolve({ answer: "preview", route: { to: "outbox" } }),
         onTunnel: () => undefined,
         onClose: () => undefined,
     });
@@ -94,9 +94,12 @@ test("a sync is answered by its id, and answers null for every checkout when the
     const asked = nextMessage(socket);
     const answer = link.sync(["/a", "/b"]);
     const sent = await asked;
-    expect(sent).toMatchObject({ kind: "sync", dirs: ["/a", "/b"] });
-    const golden = JSON.parse(RUST_SYNCED_JSON) as Extract<ToNode, { kind: "synced" }>;
-    socket.write(toNode({ ...golden, id: (sent as Extract<FromNode, { kind: "sync" }>).id }));
+    if (sent.kind !== "ask") {
+        throw new Error(`a sync is asked, not sent as ${sent.kind}`);
+    }
+    expect(sent.question).toEqual({ question: "sync", dirs: ["/a", "/b"] });
+    const golden = JSON.parse(RUST_ANSWER_JSON) as Extract<ToNode, { kind: "answer" }>;
+    socket.write(toNode({ ...golden, id: sent.id }));
     expect(await answer).toEqual([3, null]);
 
     const unanswered = nextMessage(socket);
@@ -104,4 +107,27 @@ test("a sync is answered by its id, and answers null for every checkout when the
     await unanswered;
     socket.destroy();
     expect(await pending).toEqual([null]);
+});
+
+test("a question of Node's the front refuses or never answers settles as nulls, within its patience", async () => {
+    const link = await connectFront({
+        path: join(dir, "front.sock"),
+        answer: () => Promise.resolve({ answer: "preview", route: { to: "outbox" } }),
+        onTunnel: () => undefined,
+        onClose: () => undefined,
+        patienceMs: 100,
+    });
+    const socket = await front;
+    const asked = nextMessage(socket);
+    const refused = link.sync(["/a"]);
+    const sent = await asked;
+    if (sent.kind !== "ask") {
+        throw new Error(`a sync is asked, not sent as ${sent.kind}`);
+    }
+    socket.write(toNode({ kind: "refused", id: sent.id, message: "no feed" }));
+    expect(await refused).toEqual([null]);
+    const started = Date.now();
+    expect(await link.sync(["/b", "/c"])).toEqual([null, null]);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(90);
+    link.close();
 });

@@ -36,6 +36,7 @@ webpki-roots = "1"
 browser-wire = { path = "crates/browser-wire" }
 front-wire = { path = "crates/front-wire" }
 tunnel = { path = "crates/tunnel" }
+relay = { path = "../../_shared/relay" }
 
 # Thin LTO + strip: the same size/build-time trade the ic crate settled on; unwind keeps a panicking task from taking
 # the process (and every socket it holds) down with it.

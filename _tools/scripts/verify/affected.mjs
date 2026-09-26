@@ -88,9 +88,9 @@ const LOOSE = {
     desktop:
         /^(_sandbox\/ic\/|_site\/site\/public\/scripts\/|_tools\/ci-desktop\/|_tools\/scripts\/(desktop\/|build\/build-ic\.sh|lib\/desktop-artifacts\.sh)|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|nightly|release|windows-smoke)\.yml))/,
     ic: /^(_sandbox\/ic\/|_devices\/win-launcher\/|_site\/site\/public\/scripts\/)/,
-    front: /^(_sandbox\/front\/|_platform\/ingress\/|_shared\/sandbox-contract\/src\/(front\/|ids\/hostnames\.fixture\.json|protocol\/(ingress-contract\.(fixture\.json|ts)|tunnel-lanes\.json))|\.github\/workflows\/ci\.yml)/,
-    images: /^(_sandbox\/sandbox\/(Dockerfile|packs\/)|_sandbox\/front\/|_tools\/scripts\/image\/|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
-    platform: /^(_tools\/scripts\/platform\/|_sandbox\/front\/crates\/(tunnel|browser-wire)\/|_shared\/sandbox-contract\/src\/protocol\/tunnel-lanes\.json|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
+    front: /^(_sandbox\/front\/|_platform\/ingress\/|_shared\/relay\/|_shared\/sandbox-contract\/src\/(front\/|ids\/hostnames\.fixture\.json|protocol\/ingress-contract\.(fixture\.json|ts))|\.github\/workflows\/ci\.yml)/,
+    images: /^(_sandbox\/sandbox\/(Dockerfile|packs\/)|_sandbox\/front\/|_shared\/relay\/|_tools\/scripts\/image\/|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
+    platform: /^(_tools\/scripts\/platform\/|_sandbox\/front\/crates\/(tunnel|browser-wire)\/|_shared\/relay\/|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
     "perf-instr": /^\.github\/workflows\/ci\.yml/,
     "perf-browser": /^\.github\/workflows\/ci\.yml/,
     "ci-base-changed": /^_tools\/ci-base\//,

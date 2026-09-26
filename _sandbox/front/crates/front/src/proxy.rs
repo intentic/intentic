@@ -1,29 +1,35 @@
-//! Every listener and the tunnel hand their requests here. Each resolves once to a destination (Node's Unix socket, or a
-//! preview's upstream) and is relayed as it stands; an upgrade becomes a byte splice once the far side answers 101.
+//! Every listener and every tunnel stream hand their requests here. Each resolves once to a destination (Node's Unix
+//! socket, a preview's upstream, or a page Node rendered when asked) and is relayed as it stands; an upgrade becomes a
+//! byte splice once the far side answers 101, whichever carrier brought it.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use std::convert::Infallible;
+
 use front_wire::{
-    Answer, FrontHeader, ListenConfig, PreviewRoute, Question, Scheme, TerminalPlan, Upstream,
+    Answer, FrontHeader, ListenConfig, Page, PreviewRoute, Question, Scheme, TerminalPlan, Upstream,
 };
 use http::header::{self, HeaderMap, HeaderName, HeaderValue};
 use http::request::Parts;
 use http::{Method, Request, Response, StatusCode, Uri, Version};
-use http_body_util::BodyExt;
 use hyper::body::Incoming;
-use hyper::upgrade::OnUpgrade;
+use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
-use tokio::io::AsyncWriteExt;
+use relay::body::{self, Body};
+use relay::{for_next_hop, host_of, is_upgrade, strip_hop_by_hop};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::watch;
 use tower_service::Service;
 
-use crate::body::{self, Body};
 use crate::connect::{self, Io, NodeConnector, Pool, UpstreamConnector};
 use crate::link::Link;
-use crate::route::{self, Lane, Target};
+use crate::route::{self, Listener, Target};
 use crate::term::{self, Terminals};
+
+// The one disposition Node serves itself, named on the request it is handed back.
+const OUTBOX: &str = "outbox";
 
 // A restarting Node is waited for this long before a request is answered 503; its sockets stay open meanwhile.
 const NODE_PATIENCE: Duration = Duration::from_secs(30);
@@ -38,25 +44,7 @@ const PREVIEW_ROUTE_STALE: Duration = Duration::from_secs(60);
 // Past this many hosts the cache sheds what has gone stale; only hosts Node resolved to an upstream are ever held.
 const PREVIEW_ROUTE_ROOM: usize = 256;
 
-const ASK_PATIENCE: Duration = Duration::from_secs(5);
-
 const TERMINAL_UPGRADES: &str = "a terminal opens as a WebSocket";
-
-// Never cross a hop: HTTP/1.1 connection management, and h2 refuses to carry them at all.
-const HOP_BY_HOP: [&str; 9] = [
-    "connection",
-    "keep-alive",
-    "proxy-authenticate",
-    "proxy-authorization",
-    "proxy-connection",
-    "te",
-    "trailer",
-    "transfer-encoding",
-    "upgrade",
-];
-
-// A declined upgrade's answer is re-framed onto the tunnel stream: its body is already de-chunked and ends at close.
-const DECLINED_UPGRADE_DROP: [&str; 3] = ["connection", "keep-alive", "transfer-encoding"];
 
 pub struct Front {
     link: &'static Link,
@@ -71,9 +59,9 @@ pub struct Front {
 }
 
 enum Destination {
+    /// Node's socket; `outbox` hands a preview request back marked as the outbox Node decided it is.
     Node {
-        mark: Option<FrontHeader>,
-        value: HeaderValue,
+        outbox: bool,
     },
     Upstream {
         upstream: Upstream,
@@ -81,6 +69,8 @@ enum Destination {
         proto: &'static str,
         ancestors: Vec<String>,
     },
+    /// Node's own answer, rendered when the front asked where the request goes.
+    Page(Page),
     Unavailable,
 }
 
@@ -108,26 +98,31 @@ impl Front {
 
     pub async fn handle(
         self: &Arc<Self>,
-        lane: Lane,
+        listener: Listener,
         mut request: Request<Incoming>,
     ) -> Response<Body> {
         strip_front_headers(request.headers_mut());
         let host = host_of(&request);
-        let destination = self.destination(lane, &host, request.uri().path()).await;
-        if matches!(destination, Destination::Unavailable) {
-            return unavailable();
+        let destination = self
+            .destination(listener, &host, request.uri().path())
+            .await;
+        match destination {
+            Destination::Unavailable => return unavailable(),
+            Destination::Page(page) => return answer_page(page),
+            _ => {}
         }
         if is_front_route(&destination, request.method(), request.uri().path()) {
             return self.terminal(request).await;
         }
         let upgrade = is_upgrade(request.headers(), request.version());
-        let client = upgrade.then(|| hyper::upgrade::on(&mut request));
         let (mut parts, incoming) = request.into_parts();
         outbound(&destination, &mut parts, upgrade);
         let outbound = Request::from_parts(parts, body::incoming(incoming));
-        if let Some(client) = client {
-            return match self.dial_upgrade(&destination, outbound).await {
-                Ok(answer) => relay_upgrade(answer, client),
+        if upgrade {
+            return match self.dial(&destination, outbound.uri().clone()).await {
+                Ok(io) => relay::exchange(io, outbound)
+                    .await
+                    .unwrap_or_else(|error| bad_gateway(&error.to_string())),
                 Err(error) => bad_gateway(&error.to_string()),
             };
         }
@@ -160,73 +155,21 @@ impl Front {
         }
     }
 
-    /// A request down the ingress tunnel: a CONNECT carries a WebSocket upgrade's h1 head under `x-ingress-*`.
-    pub async fn tunnel(self: &Arc<Self>, request: Request<Incoming>) -> Response<Body> {
-        if request.method() == Method::CONNECT {
-            return self.tunnel_upgrade(request).await;
-        }
-        self.handle(Lane::Tunnel, request).await
-    }
-
-    // Answered 200 at once on the h2 stream; the far side's own answer then travels as raw h1 bytes on it.
-    async fn tunnel_upgrade(self: &Arc<Self>, mut request: Request<Incoming>) -> Response<Body> {
-        let stream = hyper::upgrade::on(&mut request);
-        let Some(inner) = unwrap_envelope(request.headers()) else {
-            return bad_request("an upgrade envelope names an unreadable method or header");
-        };
-        let host = host_of(&inner);
-        let destination = self
-            .destination(Lane::Tunnel, &host, inner.uri().path())
-            .await;
-        if matches!(destination, Destination::Unavailable) {
-            return unavailable();
-        }
-        if is_front_route(&destination, inner.method(), inner.uri().path()) {
-            let handshake = term::Handshake::of(inner.headers());
-            let query = inner.uri().query().unwrap_or_default().to_owned();
-            return self.tunnel_terminal(stream, handshake, query).await;
-        }
-        let (mut parts, empty) = inner.into_parts();
-        outbound(&destination, &mut parts, true);
-        let mut answer = match self
-            .dial_upgrade(&destination, Request::from_parts(parts, empty))
-            .await
-        {
-            Ok(answer) => answer,
-            Err(error) => return bad_gateway(&error.to_string()),
-        };
-        let switching = answer.status() == StatusCode::SWITCHING_PROTOCOLS;
-        let head = serialize_head(&answer, switching);
-        let far = switching.then(|| hyper::upgrade::on(&mut answer));
-        tokio::spawn(async move {
-            let Ok(stream) = stream.await else {
-                return;
-            };
-            let mut stream = TokioIo::new(stream);
-            if stream.write_all(&head).await.is_err() {
-                return;
-            }
-            match far {
-                Some(far) => {
-                    if let Ok(far) = far.await {
-                        let _ = tokio::io::copy_bidirectional(&mut stream, &mut TokioIo::new(far))
-                            .await;
-                    }
-                }
-                None => {
-                    let mut body = answer.into_body();
-                    while let Some(Ok(frame)) = body.frame().await {
-                        if let Ok(data) = frame.into_data()
-                            && stream.write_all(&data).await.is_err()
-                        {
-                            return;
-                        }
-                    }
-                    let _ = stream.shutdown().await;
-                }
-            }
+    /// Serves one stream a tunnel carrier brought (a QUIC stream, or a `/tunnel/v2` yamux one) as the HTTP/1.1
+    /// connection it is: every request on it routed like any listener's, and an upgrade itself.
+    pub async fn serve_stream<S>(self: &Arc<Self>, stream: S)
+    where
+        S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
+        let front = self.clone();
+        let service = service_fn(move |request| {
+            let front = front.clone();
+            async move { Ok::<_, Infallible>(front.handle(Listener::Tunnel, request).await) }
         });
-        Response::new(body::empty())
+        let _ = hyper::server::conn::http1::Builder::new()
+            .serve_connection(TokioIo::new(stream), service)
+            .with_upgrades()
+            .await;
     }
 
     async fn terminal(self: &Arc<Self>, mut request: Request<Incoming>) -> Response<Body> {
@@ -255,33 +198,6 @@ impl Front {
         switching
     }
 
-    // The CONNECT stream is answered 200 at once; the 101 the browser reads then travels on it as raw h1.
-    async fn tunnel_terminal(
-        self: &Arc<Self>,
-        stream: OnUpgrade,
-        handshake: Option<term::Handshake>,
-        query: String,
-    ) -> Response<Body> {
-        let Some(handshake) = handshake else {
-            return bad_request(TERMINAL_UPGRADES);
-        };
-        let (plan, member) = match self.terminal_plan(&query).await {
-            Ok(planned) => planned,
-            Err(refusal) => return *refusal,
-        };
-        let terminals = self.terminals.clone();
-        tokio::spawn(async move {
-            let Ok(stream) = stream.await else {
-                return;
-            };
-            let mut stream = TokioIo::new(stream);
-            if stream.write_all(&handshake.switching_head()).await.is_ok() {
-                terminals.serve(stream, plan, member, &query).await;
-            }
-        });
-        Response::new(body::empty())
-    }
-
     // Asked before the socket opens, so a daemon that cannot answer fails the upgrade and the browser retries.
     async fn terminal_plan(
         &self,
@@ -289,12 +205,9 @@ impl Front {
     ) -> Result<(TerminalPlan, Option<String>), Box<Response<Body>>> {
         let asked = self
             .link
-            .ask(
-                Question::Terminal {
-                    query: query.to_owned(),
-                },
-                ASK_PATIENCE,
-            )
+            .ask(Question::Terminal {
+                query: query.to_owned(),
+            })
             .await;
         match asked {
             Ok(Answer::Terminal { plan, member }) => Ok((plan, member)),
@@ -314,46 +227,41 @@ impl Front {
         }
     }
 
-    async fn destination(self: &Arc<Self>, lane: Lane, host: &str, path: &str) -> Destination {
+    async fn destination(
+        self: &Arc<Self>,
+        listener: Listener,
+        host: &str,
+        path: &str,
+    ) -> Destination {
         let config = self.config.borrow().clone();
         let sandbox_id = config
             .as_deref()
             .and_then(|config| config.sandbox_id.as_deref());
-        match route::target(lane, host, sandbox_id) {
-            Target::Node => {
-                self.node_destination(None, HeaderValue::from_static(""))
-                    .await
-            }
+        match route::target(listener, host, sandbox_id) {
+            Target::Node => self.node_destination(false).await,
             Target::Preview => {
                 let Some(config) = config else {
                     return Destination::Unavailable;
                 };
-                if path == config.preview_probe_path {
-                    return self
-                        .node_destination(
-                            Some(FrontHeader::Preview),
-                            HeaderValue::from_static("probe"),
-                        )
-                        .await;
-                }
-                match self.preview_route(host).await {
-                    Ok(Some(upstream)) => Destination::Upstream {
+                // The probe reports the preview's state whatever it resolves to, so a cached upstream never answers it.
+                let routed = if path == config.preview_probe_path {
+                    self.resolve(host, true).await
+                } else {
+                    self.preview_route(host).await
+                };
+                match routed {
+                    Ok(PreviewRoute::Upstream { upstream }) => Destination::Upstream {
                         upstream,
                         host: host.to_owned(),
-                        proto: if lane == Lane::Tunnel {
+                        proto: if listener == Listener::Tunnel {
                             "https"
                         } else {
                             "http"
                         },
                         ancestors: config.frame_ancestors.clone(),
                     },
-                    Ok(None) => {
-                        self.node_destination(
-                            Some(FrontHeader::Preview),
-                            HeaderValue::from_static("answer"),
-                        )
-                        .await
-                    }
+                    Ok(PreviewRoute::Page { page }) => Destination::Page(page),
+                    Ok(PreviewRoute::Outbox) => self.node_destination(true).await,
                     Err(error) => {
                         tracing::warn!(%error, host, "could not resolve a preview host");
                         Destination::Unavailable
@@ -363,15 +271,15 @@ impl Front {
         }
     }
 
-    async fn node_destination(&self, mark: Option<FrontHeader>, value: HeaderValue) -> Destination {
+    async fn node_destination(&self, outbox: bool) -> Destination {
         if self.link.ready(NODE_PATIENCE).await {
-            Destination::Node { mark, value }
+            Destination::Node { outbox }
         } else {
             Destination::Unavailable
         }
     }
 
-    async fn preview_route(self: &Arc<Self>, host: &str) -> anyhow::Result<Option<Upstream>> {
+    async fn preview_route(self: &Arc<Self>, host: &str) -> anyhow::Result<PreviewRoute> {
         let cached = self
             .previews
             .lock()
@@ -383,10 +291,10 @@ impl Front {
                 self.refresh(host);
             }
             if at.elapsed() < PREVIEW_ROUTE_STALE {
-                return Ok(Some(upstream));
+                return Ok(PreviewRoute::Upstream { upstream });
             }
         }
-        self.resolve(host).await
+        self.resolve(host, false).await
     }
 
     // One background question per host at a time; its answer replaces the stale route for everyone after it.
@@ -402,7 +310,7 @@ impl Front {
         let front = self.clone();
         let host = host.to_owned();
         tokio::spawn(async move {
-            if let Err(error) = front.resolve(&host).await {
+            if let Err(error) = front.resolve(&host, false).await {
                 tracing::debug!(%error, host, "a background preview refresh failed; the stale route stands");
             }
             front
@@ -413,58 +321,43 @@ impl Front {
         });
     }
 
-    async fn resolve(&self, host: &str) -> anyhow::Result<Option<Upstream>> {
+    // Node decides once what becomes of the request; only an upstream is remembered, since a page is of its moment.
+    async fn resolve(&self, host: &str, probe: bool) -> anyhow::Result<PreviewRoute> {
         if !self.link.ready(NODE_PATIENCE).await {
             anyhow::bail!("the daemon is not up to resolve {host}");
         }
         let answer = self
             .link
-            .ask(
-                Question::Preview {
-                    host: host.to_owned(),
-                },
-                ASK_PATIENCE,
-            )
+            .ask(Question::Preview {
+                host: host.to_owned(),
+                probe,
+            })
             .await?;
         let Answer::Preview { route } = answer else {
             anyhow::bail!("the daemon answered {host}'s route with {answer:?}");
         };
         let mut previews = self.previews.lock().expect("preview cache poisoned");
-        match route {
-            PreviewRoute::Upstream { upstream } => {
+        match &route {
+            PreviewRoute::Upstream { upstream } if !probe => {
                 if previews.len() >= PREVIEW_ROUTE_ROOM {
                     previews.retain(|_, (at, _)| at.elapsed() < PREVIEW_ROUTE_STALE);
                 }
                 previews.insert(host.to_owned(), (Instant::now(), upstream.clone()));
-                Ok(Some(upstream))
             }
-            PreviewRoute::Node => {
+            PreviewRoute::Upstream { .. } => {}
+            PreviewRoute::Page { .. } | PreviewRoute::Outbox => {
                 previews.remove(host);
-                Ok(None)
             }
         }
+        Ok(route)
     }
 
-    async fn dial_upgrade(
-        &self,
-        destination: &Destination,
-        request: Request<Body>,
-    ) -> anyhow::Result<Response<Incoming>> {
-        let io: Io = match destination {
-            Destination::Node { .. } => {
-                self.node_connector
-                    .clone()
-                    .call(request.uri().clone())
-                    .await?
-            }
-            _ => {
-                self.upstream_connector
-                    .clone()
-                    .call(request.uri().clone())
-                    .await?
-            }
-        };
-        Ok(connect::send_upgrade(io, request).await?)
+    // An upgrade dials a connection of its own, since an upgraded one never returns to a pool.
+    async fn dial(&self, destination: &Destination, uri: Uri) -> std::io::Result<Io> {
+        match destination {
+            Destination::Node { .. } => self.node_connector.clone().call(uri).await,
+            _ => self.upstream_connector.clone().call(uri).await,
+        }
     }
 
     // The request was consumed by the failed attempt, so Node is asked for the page with a request of its own.
@@ -484,58 +377,12 @@ impl Front {
 
 // A route the front answers itself is the daemon's own: a preview's app may have a path of the same name.
 fn is_front_route(destination: &Destination, method: &Method, path: &str) -> bool {
-    matches!(destination, Destination::Node { mark: None, .. }) && term::serves(method, path)
-}
-
-fn host_of<B>(request: &Request<B>) -> String {
-    request
-        .uri()
-        .authority()
-        .map(|authority| authority.as_str().to_owned())
-        .or_else(|| {
-            request
-                .headers()
-                .get(header::HOST)
-                .and_then(|value| value.to_str().ok())
-                .map(str::to_owned)
-        })
-        .unwrap_or_default()
+    matches!(destination, Destination::Node { outbox: false }) && term::serves(method, path)
 }
 
 fn strip_front_headers(headers: &mut HeaderMap) {
     for front in FrontHeader::ALL {
         headers.remove(front.name());
-    }
-}
-
-fn is_upgrade(headers: &HeaderMap, version: Version) -> bool {
-    version <= Version::HTTP_11
-        && headers.contains_key(header::UPGRADE)
-        && headers
-            .get_all(header::CONNECTION)
-            .iter()
-            .filter_map(|value| value.to_str().ok())
-            .any(|value| {
-                value
-                    .split(',')
-                    .any(|token| token.trim().eq_ignore_ascii_case("upgrade"))
-            })
-}
-
-// Also drops every header the Connection header names, as RFC 9110 asks of a proxy.
-fn strip_hop_by_hop(headers: &mut HeaderMap) {
-    let named: Vec<HeaderName> = headers
-        .get_all(header::CONNECTION)
-        .iter()
-        .filter_map(|value| value.to_str().ok())
-        .flat_map(|value| value.split(','))
-        .filter_map(|token| HeaderName::from_bytes(token.trim().as_bytes()).ok())
-        .collect();
-    for name in named {
-        headers.remove(name);
-    }
-    for name in HOP_BY_HOP {
-        headers.remove(name);
     }
 }
 
@@ -549,23 +396,19 @@ fn outbound(destination: &Destination, parts: &mut Parts, upgrade: bool) {
     {
         parts.headers.insert(header::HOST, authority);
     }
-    let upgrade_to = parts.headers.get(header::UPGRADE).cloned();
-    strip_hop_by_hop(&mut parts.headers);
-    if let (true, Some(upgrade_to)) = (upgrade, upgrade_to) {
-        parts
-            .headers
-            .insert(header::CONNECTION, HeaderValue::from_static("upgrade"));
-        parts.headers.insert(header::UPGRADE, upgrade_to);
-    }
+    for_next_hop(&mut parts.headers, upgrade);
     let path = parts
         .uri
         .path_and_query()
         .map_or("/", |path| path.as_str())
         .to_owned();
     let base = match destination {
-        Destination::Node { mark, value } => {
-            if let Some(mark) = mark {
-                parts.headers.insert(mark.name(), value.clone());
+        Destination::Node { outbox } => {
+            if *outbox {
+                parts.headers.insert(
+                    FrontHeader::Preview.name(),
+                    HeaderValue::from_static(OUTBOX),
+                );
             }
             "http://node".to_owned()
         }
@@ -597,8 +440,10 @@ fn outbound(destination: &Destination, parts: &mut Parts, upgrade: bool) {
             }
             format!("{scheme}://{}:{}", uri_host(&upstream.host), upstream.port)
         }
-        Destination::Unavailable => {
-            unreachable!("an unavailable destination is answered before it is rewritten for")
+        Destination::Page(_) | Destination::Unavailable => {
+            unreachable!(
+                "a page and an unavailable destination are answered before a request is rewritten for them"
+            )
         }
     };
     parts.uri = format!("{base}{path}")
@@ -676,51 +521,16 @@ fn with_frame_ancestors(policy: &str, sources: &str) -> String {
         .join("; ")
 }
 
-fn relay_upgrade(mut answer: Response<Incoming>, client: OnUpgrade) -> Response<Body> {
-    if answer.status() != StatusCode::SWITCHING_PROTOCOLS {
-        return from_far_side(answer, None);
-    }
-    let far = hyper::upgrade::on(&mut answer);
-    tokio::spawn(async move {
-        if let (Ok(client), Ok(far)) = tokio::join!(client, far) {
-            let _ =
-                tokio::io::copy_bidirectional(&mut TokioIo::new(client), &mut TokioIo::new(far))
-                    .await;
+// Node's page as it rendered it: its status, its headers and its body, nothing added.
+fn answer_page(page: Page) -> Response<Body> {
+    let mut response = Response::new(body::full(page.body));
+    *response.status_mut() = StatusCode::from_u16(page.status).unwrap_or(StatusCode::BAD_GATEWAY);
+    for (name, value) in page.headers {
+        if let (Ok(name), Ok(value)) = (HeaderName::try_from(name), HeaderValue::try_from(value)) {
+            response.headers_mut().append(name, value);
         }
-    });
-    let (parts, _) = answer.into_parts();
-    Response::from_parts(parts, body::empty())
-}
-
-fn unwrap_envelope(headers: &HeaderMap) -> Option<Request<Body>> {
-    let mut request = tunnel::unwrap_envelope(headers)?.map(|()| body::empty());
-    strip_front_headers(request.headers_mut());
-    Some(request)
-}
-
-// Written raw onto the browser's socket; header values are opaque octets, not UTF-8 text.
-fn serialize_head(answer: &Response<Incoming>, switching: bool) -> Vec<u8> {
-    let status = answer.status();
-    let mut head = format!(
-        "HTTP/1.1 {} {}\r\n",
-        status.as_u16(),
-        status.canonical_reason().unwrap_or("")
-    )
-    .into_bytes();
-    for (name, value) in answer.headers() {
-        if !switching && DECLINED_UPGRADE_DROP.contains(&name.as_str()) {
-            continue;
-        }
-        head.extend_from_slice(name.as_str().as_bytes());
-        head.extend_from_slice(b": ");
-        head.extend_from_slice(value.as_bytes());
-        head.extend_from_slice(b"\r\n");
     }
-    if !switching {
-        head.extend_from_slice(b"connection: close\r\n");
-    }
-    head.extend_from_slice(b"\r\n");
-    head
+    response
 }
 
 // hyper-util's error names only the stage it failed in ("client error (SendRequest)"); the cause is its sources.
@@ -756,10 +566,6 @@ fn unavailable() -> Response<Body> {
 
 fn bad_gateway(message: &str) -> Response<Body> {
     plain(StatusCode::BAD_GATEWAY, message)
-}
-
-fn bad_request(message: &str) -> Response<Body> {
-    plain(StatusCode::BAD_REQUEST, message)
 }
 
 #[cfg(test)]
@@ -825,49 +631,25 @@ mod tests {
     }
 
     #[test]
-    fn hop_by_hop_headers_and_the_ones_connection_names_are_dropped() {
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            header::CONNECTION,
-            HeaderValue::from_static("keep-alive, x-private"),
-        );
-        headers.insert("x-private", HeaderValue::from_static("1"));
-        headers.insert("keep-alive", HeaderValue::from_static("timeout=5"));
-        headers.insert("x-kept", HeaderValue::from_static("1"));
-        strip_hop_by_hop(&mut headers);
+    fn a_page_is_written_as_node_rendered_it() {
+        let page = Page {
+            status: 404,
+            headers: [
+                (
+                    "content-type".to_owned(),
+                    "text/html; charset=utf-8".to_owned(),
+                ),
+                ("bad name".to_owned(), "dropped".to_owned()),
+            ]
+            .into(),
+            body: "<p>No preview here</p>".into(),
+        };
+        let response = answer_page(page);
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
         assert_eq!(
-            headers.keys().map(HeaderName::as_str).collect::<Vec<_>>(),
-            vec!["x-kept"]
+            response.headers()[header::CONTENT_TYPE],
+            "text/html; charset=utf-8"
         );
-    }
-
-    #[test]
-    fn an_envelope_rebuilds_the_h1_head_it_carried() {
-        let mut headers = HeaderMap::new();
-        headers.insert("x-ingress-method", HeaderValue::from_static("GET"));
-        headers.insert(
-            "x-ingress-path",
-            HeaderValue::from_static("/system/terminal?ticket=t"),
-        );
-        headers.insert(
-            "x-ingress-h-host",
-            HeaderValue::from_static("sandbox-abcdef012345.sbx.example.test"),
-        );
-        headers.insert("x-ingress-h-upgrade", HeaderValue::from_static("websocket"));
-        headers.insert(
-            "x-ingress-h-connection",
-            HeaderValue::from_static("Upgrade"),
-        );
-        headers.insert(
-            "x-ingress-h-x-intentic-preview",
-            HeaderValue::from_static("forged"),
-        );
-        headers.insert("x-unrelated", HeaderValue::from_static("dropped"));
-        let request = unwrap_envelope(&headers).unwrap();
-        assert_eq!(request.uri(), "/system/terminal?ticket=t");
-        assert_eq!(host_of(&request), "sandbox-abcdef012345.sbx.example.test");
-        assert!(is_upgrade(request.headers(), request.version()));
-        assert!(!request.headers().contains_key("x-unrelated"));
-        assert!(!request.headers().contains_key(FrontHeader::Preview.name()));
+        assert_eq!(response.headers().len(), 1);
     }
 }

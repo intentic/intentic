@@ -1,42 +1,47 @@
-//! The tunnel against a stand-in edge speaking what `_platform/ingress` speaks: the grant and the lane on each WebSocket
-//! upgrade, h2 over binary frames, and a WebSocket upgrade carried as a CONNECT whose h1 head rides under `x-ingress-*`.
+//! The tunnel against a stand-in edge speaking what `_platform/ingress` speaks at `/tunnel/v2`: the grant on the
+//! WebSocket's upgrade, then yamux over its binary frames, the edge opening a stream per exchange and every stream one
+//! HTTP/1.1 connection, where an upgrade (a terminal's included) is itself.
 
 mod support;
 
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use bytes::Bytes;
-use front_wire::{Endpoint, FromNode, ListenConfig, PreviewRoute, TunnelConfig};
-use futures_util::{SinkExt, StreamExt};
+use front_wire::{Endpoint, FromNode, ListenConfig, TunnelConfig};
+use futures_util::StreamExt;
 use http_body_util::{BodyExt, Empty};
-use hyper::{Method, Request};
-use hyper_util::rt::{TokioExecutor, TokioIo};
-use tokio::io::{AsyncReadExt, AsyncWriteExt, DuplexStream};
+use hyper::Request;
+use hyper::client::conn::http1::SendRequest;
+use hyper_util::rt::TokioIo;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
-use tokio_tungstenite::WebSocketStream;
+use tokio::sync::watch;
 use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::tungstenite::handshake::derive_accept_key;
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::handshake::server::{
     ErrorResponse, Request as Upgrade, Response as Upgraded,
 };
-use tokio_tungstenite::tungstenite::protocol::Role;
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+use tunnel::{Liveness, mux};
 
 use support::{Harness, SANDBOX_ID, bound, free_port};
 
 const GRANT: &str = "ig1.test-grant";
 
-// One dial as the edge saw it: the grant and lane its upgrade presented, and its binary frames as a byte stream.
+// One dial as the edge saw it: the path, grant, lane and transfer routes its upgrade presented, and the session to open
+// streams on.
 struct Dial {
+    path: String,
     grant: String,
-    session: DuplexStream,
+    lane: String,
+    bulk: String,
+    opener: mux::Opener,
 }
 
-// Accepts the front's dials, one per lane, keyed by the lane each names.
+// Accepts the front's dials as the edge does: the socket pumped without pinging, yamux run as the side that opens.
 // The handshake callback's signature, large error included, is tungstenite's to fix.
 #[allow(clippy::result_large_err)]
-async fn edge() -> (u16, tokio::sync::mpsc::UnboundedReceiver<(String, Dial)>) {
+async fn edge() -> (u16, tokio::sync::mpsc::UnboundedReceiver<Dial>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let (accepted, arrivals) = tokio::sync::mpsc::unbounded_channel();
@@ -44,77 +49,64 @@ async fn edge() -> (u16, tokio::sync::mpsc::UnboundedReceiver<(String, Dial)>) {
         while let Ok((stream, _)) = listener.accept().await {
             let accepted = accepted.clone();
             tokio::spawn(async move {
-                let (lane, dial) = accept(stream).await;
-                let _ = accepted.send((lane, dial));
+                let heard = Arc::new(Mutex::new(Vec::new()));
+                let seen = heard.clone();
+                let socket = tokio_tungstenite::accept_hdr_async(
+                    stream,
+                    move |request: &Upgrade,
+                          response: Upgraded|
+                          -> Result<Upgraded, ErrorResponse> {
+                        let header = |name: &str| {
+                            request
+                                .headers()
+                                .get(name)
+                                .map(|value| value.to_str().unwrap().to_owned())
+                                .unwrap_or_default()
+                        };
+                        *seen.lock().unwrap() = vec![
+                            request.uri().path().to_owned(),
+                            header("x-intentic-grant"),
+                            header("x-intentic-lane"),
+                            header("x-intentic-bulk"),
+                        ];
+                        Ok(response)
+                    },
+                )
+                .await
+                .unwrap();
+                let (closing, closed) = watch::channel(None);
+                let (session, mut pumping) = tunnel::pump(socket, Liveness::Listens, closed);
+                let (opener, _driving) = mux::client(session);
+                let heard = heard.lock().unwrap().clone();
+                let [path, grant, lane, bulk] = <[String; 4]>::try_from(heard).unwrap();
+                let _ = accepted.send(Dial {
+                    path,
+                    grant,
+                    lane,
+                    bulk,
+                    opener,
+                });
+                let _held = closing;
+                pumping.ended().await;
             });
         }
     });
     (port, arrivals)
 }
 
-#[allow(clippy::result_large_err)]
-async fn accept(stream: tokio::net::TcpStream) -> (String, Dial) {
-    let heard = Arc::new(Mutex::new((String::new(), String::new())));
-    let seen = heard.clone();
-    let header = |request: &Upgrade, name: &str| {
-        request
-            .headers()
-            .get(name)
-            .map(|value| value.to_str().unwrap().to_owned())
-            .unwrap_or_default()
-    };
-    {
-        let socket = tokio_tungstenite::accept_hdr_async(
-            stream,
-            move |request: &Upgrade, response: Upgraded| -> Result<Upgraded, ErrorResponse> {
-                *seen.lock().unwrap() = (
-                    header(request, "x-intentic-grant"),
-                    header(request, "x-intentic-lane"),
-                );
-                Ok(response)
-            },
-        )
+// A stream the edge opened, as an HTTP/1.1 client connection.
+async fn exchange(opener: &mux::Opener) -> SendRequest<Empty<Bytes>> {
+    let stream = opener.open().await.unwrap();
+    let (sender, connection) = hyper::client::conn::http1::handshake(TokioIo::new(stream))
         .await
         .unwrap();
-        let (edge_side, pump_side) = tokio::io::duplex(256 * 1024);
-        let (mut from_session, mut into_session) = tokio::io::split(pump_side);
-        let (mut sink, mut frames) = socket.split();
-        tokio::spawn(async move {
-            while let Some(Ok(frame)) = frames.next().await {
-                if let Message::Binary(bytes) = frame
-                    && into_session.write_all(&bytes).await.is_err()
-                {
-                    return;
-                }
-            }
-        });
-        tokio::spawn(async move {
-            let mut buffer = vec![0_u8; 64 * 1024];
-            while let Ok(read) = from_session.read(&mut buffer).await {
-                if read == 0
-                    || sink
-                        .send(Message::Binary(Bytes::copy_from_slice(&buffer[..read])))
-                        .await
-                        .is_err()
-                {
-                    return;
-                }
-            }
-        });
-        let (grant, lane) = heard.lock().unwrap().clone();
-        (
-            lane,
-            Dial {
-                grant,
-                session: edge_side,
-            },
-        )
-    }
+    tokio::spawn(connection.with_upgrades());
+    sender
 }
 
 #[tokio::test]
 async fn the_edge_reaches_node_and_upgrades_through_the_tunnel() {
-    let harness = Harness::start("tunnel", Arc::new(|_: &str| PreviewRoute::Node)).await;
+    let harness = Harness::start("tunnel", Arc::new(|_: &str, _| support::nothing_here())).await;
     let daemon = free_port();
     harness
         .send(&FromNode::Listen {
@@ -132,149 +124,95 @@ async fn the_edge_reaches_node_and_upgrades_through_the_tunnel() {
         })
         .await;
     let (edge_port, mut arrivals) = edge().await;
+    // An older daemon names the legacy door; the front dials the one it speaks.
     harness
         .send(&FromNode::Tunnel {
             tunnel: Some(TunnelConfig {
                 url: format!("ws://127.0.0.1:{edge_port}/tunnel/v1"),
                 grant: GRANT.into(),
+                bulk: vec![
+                    "GET /workspace/media".into(),
+                    "POST /extensions/{id}/bundle".into(),
+                ],
             }),
         })
         .await;
     harness.hello().await;
     bound(daemon).await;
 
-    let mut lanes = HashMap::new();
-    while lanes.len() < 2 {
-        let (lane, dial) = arrivals.recv().await.unwrap();
-        assert_eq!(dial.grant, GRANT);
-        lanes.insert(lane, dial.session);
-    }
-    let mut named: Vec<&String> = lanes.keys().collect();
-    named.sort();
-    assert_eq!(named, ["bulk", "interactive"]);
-    let session = lanes.remove("interactive").unwrap();
-    let bulk = lanes.remove("bulk").unwrap();
+    // Two sockets, each naming its lane and announcing the daemon's transfers, on the door this front speaks.
+    let mut dials = vec![
+        arrivals.recv().await.unwrap(),
+        arrivals.recv().await.unwrap(),
+    ];
+    dials.sort_by(|a, b| a.lane.cmp(&b.lane));
+    let lanes: Vec<(&str, &str, &str, &str)> = dials
+        .iter()
+        .map(|dial| {
+            (
+                dial.path.as_str(),
+                dial.grant.as_str(),
+                dial.lane.as_str(),
+                dial.bulk.as_str(),
+            )
+        })
+        .collect();
+    let announced = "GET /workspace/media, POST /extensions/{id}/bundle";
+    assert_eq!(
+        lanes,
+        [
+            ("/tunnel/v2", GRANT, "bulk", announced),
+            ("/tunnel/v2", GRANT, "interactive", announced)
+        ]
+    );
+    let dial = dials.pop().unwrap();
     let mut tunnel = harness.tunnel.clone();
     tunnel
         .wait_for(|connected| *connected == Some(true))
         .await
         .unwrap();
-
-    let (mut sender, connection) =
-        hyper::client::conn::http2::handshake(TokioExecutor::new(), TokioIo::new(session))
-            .await
-            .unwrap();
-    tokio::spawn(connection);
     let own = format!("sandbox-{SANDBOX_ID}.sbx.test");
 
-    let request = Request::builder()
-        .uri(format!("https://{own}/health"))
-        .body(Empty::<Bytes>::new())
-        .unwrap();
-    let response = sender.send_request(request).await.unwrap();
-    let body = String::from_utf8(
-        response
-            .into_body()
-            .collect()
-            .await
-            .unwrap()
-            .to_bytes()
-            .to_vec(),
-    )
-    .unwrap();
-    assert_eq!(body, format!("node saw {own} /health mark=-"));
-
-    // The bulk lane serves the same routes: which lane a request rides is the edge's choice, not a different daemon.
-    let (mut bulk_sender, bulk_connection) =
-        hyper::client::conn::http2::handshake(TokioExecutor::new(), TokioIo::new(bulk))
-            .await
+    // Every exchange a stream of its own, a transfer and a call alike, so nothing is routed by what it is for.
+    for path in ["/health", "/workspace/media?path=a.mp4"] {
+        let mut sender = exchange(&dial.opener).await;
+        let request = Request::builder()
+            .uri(path)
+            .header("host", own.as_str())
+            .body(Empty::<Bytes>::new())
             .unwrap();
-    tokio::spawn(bulk_connection);
-    let request = Request::builder()
-        .uri(format!("https://{own}/workspace/media?path=a.mp4"))
-        .body(Empty::<Bytes>::new())
-        .unwrap();
-    let response = bulk_sender.send_request(request).await.unwrap();
-    let body = String::from_utf8(
-        response
-            .into_body()
-            .collect()
-            .await
-            .unwrap()
-            .to_bytes()
-            .to_vec(),
-    )
-    .unwrap();
-    assert_eq!(
-        body,
-        format!("node saw {own} /workspace/media?path=a.mp4 mark=-")
-    );
-
-    let connect = Request::builder()
-        .method(Method::CONNECT)
-        .uri(format!("{own}:443"))
-        .header("x-ingress-method", "GET")
-        .header("x-ingress-path", "/ws")
-        .header("x-ingress-h-host", own.as_str())
-        .header("x-ingress-h-connection", "Upgrade")
-        .header("x-ingress-h-upgrade", "echo")
-        .body(Empty::<Bytes>::new())
-        .unwrap();
-    let mut response = sender.send_request(connect).await.unwrap();
-    assert_eq!(response.status(), 200);
-    let mut stream = TokioIo::new(hyper::upgrade::on(&mut response).await.unwrap());
-    let mut head = Vec::new();
-    let mut byte = [0_u8; 1];
-    while !head.ends_with(b"\r\n\r\n") {
-        stream.read_exact(&mut byte).await.unwrap();
-        head.push(byte[0]);
+        let response = sender.send_request(request).await.unwrap();
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(
+            String::from_utf8_lossy(&body),
+            format!("node saw {own} {path} mark=-")
+        );
     }
-    let head = String::from_utf8(head).unwrap();
-    assert!(
-        head.starts_with("HTTP/1.1 101 Switching Protocols\r\n"),
-        "{head}"
-    );
-    assert!(head.contains("upgrade: echo\r\n"), "{head}");
-    stream.write_all(b"ping").await.unwrap();
+
+    let mut sender = exchange(&dial.opener).await;
+    let request = Request::builder()
+        .uri("/ws")
+        .header("host", own.as_str())
+        .header("connection", "Upgrade")
+        .header("upgrade", "echo")
+        .body(Empty::<Bytes>::new())
+        .unwrap();
+    let mut response = sender.send_request(request).await.unwrap();
+    assert_eq!(response.status(), 101);
+    let mut echoing = TokioIo::new(hyper::upgrade::on(&mut response).await.unwrap());
+    echoing.write_all(b"ping").await.unwrap();
     let mut echoed = [0_u8; 4];
-    stream.read_exact(&mut echoed).await.unwrap();
+    echoing.read_exact(&mut echoed).await.unwrap();
     assert_eq!(&echoed, b"ping");
 
     // A terminal is the front's own: it asks Node, answers the 101 itself, and speaks the WebSocket on the stream.
-    let key = "dGhlIHNhbXBsZSBub25jZQ==";
-    let connect = Request::builder()
-        .method(Method::CONNECT)
-        .uri(format!("{own}:443"))
-        .header("x-ingress-method", "GET")
-        .header("x-ingress-path", "/system/terminal?ticket=t&session=main")
-        .header("x-ingress-h-host", own.as_str())
-        .header("x-ingress-h-connection", "Upgrade")
-        .header("x-ingress-h-upgrade", "websocket")
-        .header("x-ingress-h-sec-websocket-version", "13")
-        .header("x-ingress-h-sec-websocket-key", key)
-        .body(Empty::<Bytes>::new())
+    let stream = dial.opener.open().await.unwrap();
+    let request = format!("ws://{own}/system/terminal?ticket=t&session=main")
+        .into_client_request()
         .unwrap();
-    let mut response = sender.send_request(connect).await.unwrap();
-    assert_eq!(response.status(), 200);
-    let mut stream = TokioIo::new(hyper::upgrade::on(&mut response).await.unwrap());
-    let mut head = Vec::new();
-    while !head.ends_with(b"\r\n\r\n") {
-        stream.read_exact(&mut byte).await.unwrap();
-        head.push(byte[0]);
-    }
-    let head = String::from_utf8(head).unwrap();
-    assert!(
-        head.starts_with("HTTP/1.1 101 Switching Protocols\r\n"),
-        "{head}"
-    );
-    assert!(
-        head.contains(&format!(
-            "sec-websocket-accept: {}\r\n",
-            derive_accept_key(key.as_bytes())
-        )),
-        "{head}"
-    );
-    let mut terminal = WebSocketStream::from_raw_socket(stream, Role::Client, None).await;
+    let (mut terminal, _) = tokio_tungstenite::client_async(request, stream)
+        .await
+        .unwrap();
     let Some(Ok(Message::Close(Some(frame)))) = terminal.next().await else {
         panic!("the harness's Node refuses every terminal");
     };
@@ -283,19 +221,17 @@ async fn the_edge_reaches_node_and_upgrades_through_the_tunnel() {
         (CloseCode::Policy, "no terminals here")
     );
 
-    // The length-framed upgrade an earlier editor spoke on a WebTransport stream is refused as no terminal at all, with no
-    // edge verdict, which sends that editor to its WebSocket; today's editor speaks a WebSocket on the stream itself.
-    let connect = Request::builder()
-        .method(Method::CONNECT)
-        .uri(format!("{own}:443"))
-        .header("x-ingress-method", "GET")
-        .header("x-ingress-path", "/system/terminal?ticket=t&session=main")
-        .header("x-ingress-h-host", own.as_str())
-        .header("x-ingress-h-connection", "Upgrade")
-        .header("x-ingress-h-upgrade", "intentic-terminal")
+    // The length-framed upgrade an earlier editor spoke on a WebTransport stream is no terminal at all, refused with no
+    // edge verdict, which sends that editor to its WebSocket.
+    let mut sender = exchange(&dial.opener).await;
+    let request = Request::builder()
+        .uri("/system/terminal?ticket=t&session=main")
+        .header("host", own.as_str())
+        .header("connection", "Upgrade")
+        .header("upgrade", "intentic-terminal")
         .body(Empty::<Bytes>::new())
         .unwrap();
-    let response = sender.send_request(connect).await.unwrap();
-    assert_eq!(response.status(), 400);
+    let response = sender.send_request(request).await.unwrap();
+    assert_eq!(response.status(), 426);
     assert!(response.headers().get("x-intentic-edge").is_none());
 }

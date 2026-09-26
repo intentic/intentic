@@ -5,15 +5,17 @@ use std::ffi::OsString;
 use std::process::ExitStatus;
 use std::time::{Duration, Instant};
 
+use relay::Backoff;
 use tokio::process::{Child, Command};
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::watch;
 
-const BACKOFF_FLOOR: Duration = Duration::from_secs(1);
-const BACKOFF_CAP: Duration = Duration::from_secs(30);
-
-// A run this long counts as working: the next crash restarts from the floor rather than climbing on.
-const STABLE_AFTER: Duration = Duration::from_secs(60);
+// Restarts climb from a second to thirty; a run of a minute counts as working, and the next crash starts from the floor.
+const BACKOFF: Backoff = Backoff::new(
+    Duration::from_secs(1),
+    Duration::from_secs(30),
+    Duration::from_secs(60),
+);
 
 // Node's own SIGTERM handler disposes every subsystem; past this it is killed outright.
 const STOP_GRACE: Duration = Duration::from_secs(25);
@@ -33,17 +35,16 @@ pub async fn supervise(
     pid: watch::Sender<Option<u32>>,
     mut stop: watch::Receiver<bool>,
 ) -> i32 {
-    let mut backoff = BACKOFF_FLOOR;
+    let mut backoff = BACKOFF;
     loop {
         let started = Instant::now();
         let mut child = match spawn(&command) {
             Ok(child) => child,
             Err(error) => {
                 tracing::error!(%error, "could not start the daemon");
-                if wait_or_stop(backoff, &mut stop).await {
+                if wait_or_stop(backoff.after(started.elapsed()), &mut stop).await {
                     return 1;
                 }
-                backoff = (backoff * 2).min(BACKOFF_CAP);
                 continue;
             }
         };
@@ -60,13 +61,9 @@ pub async fn supervise(
             return code;
         }
         tracing::error!(code, ran = ?started.elapsed(), "the daemon crashed; restarting it");
-        if started.elapsed() >= STABLE_AFTER {
-            backoff = BACKOFF_FLOOR;
-        }
-        if wait_or_stop(backoff, &mut stop).await {
+        if wait_or_stop(backoff.after(started.elapsed()), &mut stop).await {
             return code;
         }
-        backoff = (backoff * 2).min(BACKOFF_CAP);
     }
 }
 

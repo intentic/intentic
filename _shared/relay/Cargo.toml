@@ -1,0 +1,20 @@
+# What both of the tunnel's Rust ends relay HTTP with: the edge (_platform/ingress) and the sandbox's front
+# (_sandbox/front) build it by path. Its own workspace, so it builds and tests apart from either.
+[package]
+name = "relay"
+edition = "2024"
+version = "0.0.0"
+publish = false
+
+[workspace]
+
+[dependencies]
+bytes = "1"
+http = "1"
+http-body-util = "0.1"
+hyper = { version = "1", features = ["client", "server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+tokio = { version = "1", features = ["io-util", "macros", "rt", "time"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }

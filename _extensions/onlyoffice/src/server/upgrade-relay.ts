@@ -1,6 +1,9 @@
 import type { ClientRequest } from "node:http";
 import type { Duplex } from "node:stream";
 
+// The listener's own splice for the document server's WebSocket, which it proxies onto this origin (listener.ts). The
+// daemon never relays an upgrade itself: intentic-front owns every socket the daemon serves.
+
 // `upstream` is the client's handshake replayed; a 101 is echoed and bytes flow raw, any other answer ends the socket.
 export const relayUpgrade = (upstream: ClientRequest, socket: Duplex, head: Buffer): void => {
     upstream.on("error", () => socket.destroy());

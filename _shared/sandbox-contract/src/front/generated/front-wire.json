@@ -1,4 +1,9 @@
 {
+  "askPatienceMs": 5000,
+  "env": {
+    "frontSocket": "INTENTIC_FRONT_SOCKET",
+    "nodeSocket": "INTENTIC_NODE_SOCKET"
+  },
   "frame": {
     "lengthBytes": 4,
     "maxBytes": 67108864
@@ -82,6 +87,31 @@
         ],
         "type": "object"
       },
+      "FrontQuestion": {
+        "description": "A question Node asks the front.",
+        "oneOf": [
+          {
+            "description": "Where each checkout's count stands, once every write that finished before this was sent is counted.",
+            "properties": {
+              "dirs": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "question": {
+                "const": "sync",
+                "type": "string"
+              }
+            },
+            "required": [
+              "question",
+              "dirs"
+            ],
+            "type": "object"
+          }
+        ]
+      },
       "ListenConfig": {
         "description": "Every port the front binds, as Node's config names them; an absent one is not bound.",
         "properties": {
@@ -134,10 +164,37 @@
         ],
         "type": "object"
       },
+      "Page": {
+        "description": "An answer Node renders whole when asked, for the front to write as it stands: a refusal page, or the probe's report.",
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "status": {
+            "format": "uint16",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status",
+          "headers",
+          "body"
+        ],
+        "type": "object"
+      },
       "PreviewRoute": {
-        "description": "Where a preview host's requests go, as Node resolved it.",
+        "description": "What becomes of a preview host's request, decided by Node once, when asked.",
         "oneOf": [
           {
+            "description": "The front relays it to this upstream.",
             "properties": {
               "to": {
                 "const": "upstream",
@@ -154,10 +211,27 @@
             "type": "object"
           },
           {
-            "description": "Node answers the request itself: a refusal page or the outbox.",
+            "description": "The front answers it with this page.",
+            "properties": {
+              "page": {
+                "$ref": "#/$defs/Page"
+              },
+              "to": {
+                "const": "page",
+                "type": "string"
+              }
+            },
+            "required": [
+              "to",
+              "page"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The sandbox's outbox: handed back to Node marked `outbox`, which serves the file it names.",
             "properties": {
               "to": {
-                "const": "node",
+                "const": "outbox",
                 "type": "string"
               }
             },
@@ -179,26 +253,25 @@
         "description": "What a terminal socket opens onto, as Node decided from its ticket, session name and working directory.",
         "oneOf": [
           {
-            "description": "The tmux session `session`; `argv` follows `tmux -C` to attach when no control client holds it yet.",
+            "description": "The tmux session `name`, created in `create_in` when it does not exist yet; without a directory it is only ever\nattached, so a session that is gone fails as itself rather than as a bare shell in its place. The front composes\nthe command.",
             "properties": {
-              "argv": {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
+              "createIn": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
-              "plan": {
-                "const": "tmux",
+              "name": {
                 "type": "string"
               },
-              "session": {
+              "plan": {
+                "const": "session",
                 "type": "string"
               }
             },
             "required": [
               "plan",
-              "session",
-              "argv"
+              "name"
             ],
             "type": "object"
           },
@@ -268,8 +341,15 @@
         ]
       },
       "TunnelConfig": {
-        "description": "The ingress tunnel's door and the reachability grant it presents there.",
+        "description": "The ingress tunnel's door, the reachability grant it presents there, and the daemon's transfer routes it announces\n(`METHOD /path` each, as the daemon names them), which the edge sends down the bulk socket.",
         "properties": {
+          "bulk": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "grant": {
             "type": "string"
           },
@@ -424,6 +504,28 @@
       },
       {
         "properties": {
+          "id": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "kind": {
+            "const": "ask",
+            "type": "string"
+          },
+          "question": {
+            "$ref": "#/$defs/FrontQuestion"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "question"
+        ],
+        "type": "object"
+      },
+      {
+        "properties": {
           "answer": {
             "$ref": "#/$defs/Answer"
           },
@@ -518,32 +620,6 @@
           "dir"
         ],
         "type": "object"
-      },
-      {
-        "description": "Asks where each checkout's count stands, once every write that finished before this was sent is counted.",
-        "properties": {
-          "dirs": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "id": {
-            "format": "uint32",
-            "minimum": 0,
-            "type": "integer"
-          },
-          "kind": {
-            "const": "sync",
-            "type": "string"
-          }
-        },
-        "required": [
-          "kind",
-          "id",
-          "dirs"
-        ],
-        "type": "object"
       }
     ],
     "title": "FromNode"
@@ -554,13 +630,47 @@
   ],
   "toNode": {
     "$defs": {
-      "Question": {
-        "description": "A question the front asks Node; the answer carries the same id.",
+      "FrontAnswer": {
         "oneOf": [
           {
+            "description": "Each asked checkout's generation, in the order asked: a number that moves whenever anything a `git status` there\nreads may have changed, and null for a checkout the front is not counting.",
+            "properties": {
+              "answer": {
+                "const": "sync",
+                "type": "string"
+              },
+              "generations": {
+                "items": {
+                  "format": "uint64",
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "answer",
+              "generations"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Question": {
+        "description": "A question the front asks Node.",
+        "oneOf": [
+          {
+            "description": "What becomes of a request to a preview host; `probe` when it asks the preview probe's path.",
             "properties": {
               "host": {
                 "type": "string"
+              },
+              "probe": {
+                "default": false,
+                "type": "boolean"
               },
               "question": {
                 "const": "preview",
@@ -619,6 +729,50 @@
       },
       {
         "properties": {
+          "answer": {
+            "$ref": "#/$defs/FrontAnswer"
+          },
+          "id": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "kind": {
+            "const": "answer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "answer"
+        ],
+        "type": "object"
+      },
+      {
+        "properties": {
+          "id": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "kind": {
+            "const": "refused",
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "message"
+        ],
+        "type": "object"
+      },
+      {
+        "properties": {
           "connected": {
             "type": "boolean"
           },
@@ -630,37 +784,6 @@
         "required": [
           "kind",
           "connected"
-        ],
-        "type": "object"
-      },
-      {
-        "description": "Each asked checkout's generation, in the order asked: a number that moves whenever anything a `git status`\nthere reads may have changed, and null for a checkout the front is not counting.",
-        "properties": {
-          "generations": {
-            "items": {
-              "format": "uint64",
-              "minimum": 0,
-              "type": [
-                "integer",
-                "null"
-              ]
-            },
-            "type": "array"
-          },
-          "id": {
-            "format": "uint32",
-            "minimum": 0,
-            "type": "integer"
-          },
-          "kind": {
-            "const": "synced",
-            "type": "string"
-          }
-        },
-        "required": [
-          "kind",
-          "id",
-          "generations"
         ],
         "type": "object"
       }

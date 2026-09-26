@@ -1,5 +1,5 @@
 //! Round trips through the real edge in a network namespace whose link to this front drops and delays packets, the edge
-//! reached by QUIC or by the TCP lanes alone. A measurement needing root, so ignored: with EDGE_BIN naming the edge,
+//! reached by QUIC or by its one WebSocket alone. A measurement needing root, so ignored: with EDGE_BIN naming the edge,
 //! `cargo test --release --test edge_loss -- --ignored --nocapture --test-threads=1`; LOSS and DELAY_MS shape the link.
 
 mod support;
@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use base64::Engine;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use bytes::Bytes;
-use front_wire::{Endpoint, FromNode, ListenConfig, PreviewRoute, TerminalPlan, TunnelConfig};
+use front_wire::{Endpoint, FromNode, ListenConfig, TerminalPlan, TunnelConfig};
 use http_body_util::{BodyExt, Empty};
 use hyper::Request;
 use hyper_util::rt::TokioIo;
@@ -104,14 +104,17 @@ struct Measured {
     download: f64,
 }
 
-async fn measure(quic: bool, bulk: bool) -> Measured {
+async fn measure(quic: bool, announced: bool) -> Measured {
     let loss = std::env::var("LOSS").unwrap_or_else(|_| "2%".into());
     let delay_ms: u32 = std::env::var("DELAY_MS")
         .ok()
         .and_then(|value| value.parse().ok())
         .unwrap_or(20);
     let _link = Link::up(&loss, delay_ms);
-    let dir = std::env::temp_dir().join(format!("front-loss-{}-{quic}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!(
+        "front-loss-{}-{quic}-{announced}",
+        std::process::id()
+    ));
     std::fs::create_dir_all(&dir).unwrap();
     let issued = rcgen::generate_simple_self_signed(vec![TUNNEL_EDGE.to_owned()]).unwrap();
     std::fs::write(dir.join("chain.pem"), issued.cert.pem()).unwrap();
@@ -155,8 +158,8 @@ async fn measure(quic: bool, bulk: bool) -> Measured {
 
     let ca = dir.join("chain.pem");
     let harness = Harness::launch(
-        &format!("loss-{quic}"),
-        Arc::new(|_: &str| PreviewRoute::Node),
+        &format!("loss-{quic}-{announced}"),
+        Arc::new(|_: &str, _| support::nothing_here()),
         Arc::new(|_: &str| {
             (
                 TerminalPlan::Refused {
@@ -189,8 +192,13 @@ async fn measure(quic: bool, bulk: bool) -> Measured {
     harness
         .send(&FromNode::Tunnel {
             tunnel: Some(TunnelConfig {
-                url: format!("wss://{TUNNEL_EDGE}:{EDGE_TLS}/tunnel/v1"),
+                url: format!("wss://{TUNNEL_EDGE}:{EDGE_TLS}/tunnel/v2"),
                 grant: grant_for(&pair),
+                bulk: if announced {
+                    vec!["GET /bench/bytes/{size}".into()]
+                } else {
+                    vec![]
+                },
             }),
         })
         .await;
@@ -201,7 +209,7 @@ async fn measure(quic: bool, bulk: bool) -> Measured {
         .wait_for(|connected| *connected == Some(true))
         .await
         .unwrap();
-    // Long enough for the QUIC dial beside the lanes to finish its handshake and hello across the lossy link.
+    // Long enough for the QUIC dial beside the socket to finish its handshake and hello across the lossy link.
     tokio::time::sleep(Duration::from_secs(3)).await;
     let host = format!("sandbox-{SANDBOX_ID}.sbx.test");
 
@@ -211,12 +219,8 @@ async fn measure(quic: bool, bulk: bool) -> Measured {
     }
     let idle = timed(&mut sender, &host).await;
 
-    // A raw workspace read is a bulk route, which the TCP lanes keep off the calls' connection.
-    let download = if bulk {
-        format!("/workspace/raw?bench={DOWNLOAD}")
-    } else {
-        format!("/bench/bytes/{DOWNLOAD}")
-    };
+    // Over TCP it rides the bulk socket when the daemon announced it as a transfer; over QUIC it yields by its size.
+    let download = format!("/bench/bytes/{DOWNLOAD}");
     let stop = Arc::new(AtomicBool::new(false));
     let downloading = {
         let host = host.clone();
@@ -331,13 +335,17 @@ fn at(took: &[Duration], share: f64) -> u128 {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore = "a measurement needing root: run with --ignored and EDGE_BIN set"]
-async fn round_trips_across_a_lossy_link_by_quic_and_by_the_tcp_lanes() {
-    for (shape, quic, bulk) in [
-        ("TCP, download on the calls' lane", false, false),
-        ("TCP, download on the bulk lane", false, true),
-        ("QUIC", true, true),
+async fn round_trips_across_a_lossy_link_by_quic_and_by_the_websocket() {
+    for (shape, quic, announced) in [
+        ("TCP, download announced: on the bulk socket", false, true),
+        (
+            "TCP, download unannounced: on the calls' socket",
+            false,
+            false,
+        ),
+        ("QUIC, nothing announced", true, false),
     ] {
-        let measured = measure(quic, bulk).await;
+        let measured = measure(quic, announced).await;
         println!(
             "{shape}: call p50 {} ms, p99 {}; during a download p50 {}, p99 {}; keystroke echo p50 {}, p99 {}; download {:.1} MB/s",
             at(&measured.idle, 0.5),

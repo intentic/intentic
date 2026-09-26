@@ -1,4 +1,4 @@
-//! What the edge process holds idle and with a thousand tunnels, each a real WebSocket with an h2 session down it. A
+//! What the edge process holds idle and with a thousand tunnels, each a real WebSocket with a yamux session down it. A
 //! measurement, so ignored: `cargo build --release`, then with EDGE_BIN=$PWD/target/release/intentic-ingress,
 //! `cargo test --release --test footprint -- --ignored --nocapture`.
 
@@ -62,11 +62,7 @@ async fn memory_held_per_tunnel() {
     let mut sandboxes = Vec::with_capacity(TUNNELS);
     for index in 0..TUNNELS {
         let id = format!("{index:012x}");
-        sandboxes.push(
-            dial(port, &keys.grant(&id), None, serving("held"))
-                .await
-                .unwrap(),
-        );
+        sandboxes.push(dial(port, &keys.grant(&id), serving("held")).await.unwrap());
     }
     tokio::time::sleep(Duration::from_millis(500)).await;
     for index in (0..TUNNELS).step_by(100) {

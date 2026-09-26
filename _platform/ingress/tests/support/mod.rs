@@ -31,7 +31,7 @@ use tokio::net::TcpStream;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
-use tunnel::{Close, Ended, GRANT_HEADER, LANE_HEADER, unwrap_envelope};
+use tunnel::{BULK_HEADER, BulkRoutes, Close, Ended, GRANT_HEADER, LANE_HEADER, Lane, Liveness};
 
 pub const SANDBOX_ID: &str = "abcdef012345";
 pub const OTHER_ID: &str = "0123456789ab";
@@ -185,8 +185,8 @@ pub fn serving(name: &'static str) -> Answering {
     })
 }
 
-/// A sandbox holding one tunnel: its daemon answers down the h2 session, and an upgrade whose envelope names a host
-/// starting `nobody` is declined, any other answered 101 and echoed.
+/// A sandbox holding one tunnel: its daemon answers every stream as HTTP/1.1 (every h2 stream, on a legacy session), and
+/// an upgrade to a host starting `nobody` is declined, any other answered 101 and echoed.
 pub struct Sandbox {
     closing: watch::Sender<Option<Close>>,
     pub ended: JoinHandle<Ended>,
@@ -208,14 +208,52 @@ impl Sandbox {
     }
 }
 
-/// Dials the tunnel door; `Err` carries the status of a refused upgrade.
-pub async fn dial(
-    port: u16,
-    grant: &str,
-    lane: Option<&str>,
+// Upgrades are answered here whichever carrier brought them: a declined one with a 502, an accepted one echoed.
+fn daemon(
     answering: Answering,
-) -> Result<Sandbox, u16> {
-    let mut request = format!("ws://127.0.0.1:{port}/tunnel/v1")
+    seen: Arc<Mutex<Vec<HeaderMap>>>,
+    mut request: Request<Incoming>,
+) -> Response<Body> {
+    seen.lock().unwrap().push(request.headers().clone());
+    if request.headers().get(header::UPGRADE).is_none() {
+        return answering(&request);
+    }
+    let declined = request
+        .headers()
+        .get(header::HOST)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|host| host.starts_with("nobody"));
+    if declined {
+        let mut refused = Response::new(body::full("nope"));
+        *refused.status_mut() = StatusCode::BAD_GATEWAY;
+        return refused;
+    }
+    let upgrading = hyper::upgrade::on(&mut request);
+    tokio::spawn(async move {
+        let mut stream = TokioIo::new(upgrading.await.unwrap());
+        let mut buffer = [0_u8; 4096];
+        while let Ok(read) = stream.read(&mut buffer).await {
+            if read == 0 || stream.write_all(&buffer[..read]).await.is_err() {
+                return;
+            }
+        }
+    });
+    Response::builder()
+        .status(StatusCode::SWITCHING_PROTOCOLS)
+        .header(header::CONNECTION, "Upgrade")
+        .header(header::UPGRADE, "echo")
+        .body(body::empty())
+        .unwrap()
+}
+
+// Opens a tunnel's WebSocket at `path`; `Err` carries the status of a refused upgrade.
+async fn open(
+    port: u16,
+    path: &str,
+    grant: &str,
+    headers: &[(&'static str, String)],
+) -> Result<tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<TcpStream>>, u16> {
+    let mut request = format!("ws://127.0.0.1:{port}{path}")
         .into_client_request()
         .unwrap();
     if !grant.is_empty() {
@@ -223,20 +261,89 @@ pub async fn dial(
             .headers_mut()
             .insert(GRANT_HEADER, HeaderValue::from_str(grant).unwrap());
     }
-    if let Some(lane) = lane {
+    for (name, value) in headers {
         request
             .headers_mut()
-            .insert(LANE_HEADER, HeaderValue::from_str(lane).unwrap());
+            .insert(*name, HeaderValue::from_str(value).unwrap());
     }
-    let (socket, _) = match tokio_tungstenite::connect_async(request).await {
-        Ok(opened) => opened,
+    match tokio_tungstenite::connect_async(request).await {
+        Ok((socket, _)) => Ok(socket),
         Err(tokio_tungstenite::tungstenite::Error::Http(response)) => {
-            return Err(response.status().as_u16());
+            Err(response.status().as_u16())
         }
         Err(error) => panic!("the dial failed: {error}"),
-    };
+    }
+}
+
+/// Dials the tunnel door as today's front does (`/tunnel/v2`), its interactive socket announcing no transfers: a
+/// WebSocket carrying yamux, each stream the edge opens served as one HTTP/1.1 connection. `Err` carries the status of a
+/// refused upgrade.
+pub async fn dial(port: u16, grant: &str, answering: Answering) -> Result<Sandbox, u16> {
+    dial_lane(port, grant, Lane::Interactive, &[], answering).await
+}
+
+/// Dials one of a front's two `/tunnel/v2` sockets, announcing `bulk` as its daemon's transfer routes.
+pub async fn dial_lane(
+    port: u16,
+    grant: &str,
+    lane: Lane,
+    bulk: &[&str],
+    answering: Answering,
+) -> Result<Sandbox, u16> {
+    let announced: Vec<String> = bulk.iter().map(|route| (*route).to_owned()).collect();
+    let headers = [
+        (LANE_HEADER, lane.name().to_owned()),
+        (BULK_HEADER, BulkRoutes::announce(&announced)),
+    ];
+    let socket = open(port, tunnel::TUNNEL_PATH, grant, &headers).await?;
     let (closing, closed) = watch::channel(None);
-    let (session_side, mut pumping) = tunnel::pump(socket, closed);
+    let (session_side, mut pumping) = tunnel::pump(socket, Liveness::Pings, closed);
+    let (mut streams, driving) = tunnel::mux::server(session_side);
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let seeing = seen.clone();
+    let serving = tokio::spawn(async move {
+        while let Some(stream) = streams.recv().await {
+            let answering = answering.clone();
+            let seen = seeing.clone();
+            let service = service_fn(move |request: Request<Incoming>| {
+                let answered = daemon(answering.clone(), seen.clone(), request);
+                async move { Ok::<_, Infallible>(answered) }
+            });
+            tokio::spawn(
+                hyper::server::conn::http1::Builder::new()
+                    .serve_connection(TokioIo::new(stream), service)
+                    .with_upgrades(),
+            );
+        }
+    });
+    let ended = tokio::spawn(async move {
+        let ended = pumping.ended().await;
+        serving.abort();
+        driving.abort();
+        ended
+    });
+    Ok(Sandbox {
+        closing,
+        ended,
+        seen,
+    })
+}
+
+/// Dials the legacy door as a front that predates `/tunnel/v2` does: `/tunnel/v1` on the lane named, an h2 session on
+/// it, and an upgrade carried as a CONNECT whose h1 head rides under `x-ingress-*`.
+pub async fn dial_legacy(
+    port: u16,
+    grant: &str,
+    lane: Option<&str>,
+    answering: Answering,
+) -> Result<Sandbox, u16> {
+    let headers: Vec<(&'static str, String)> = lane
+        .map(|lane| (LANE_HEADER, lane.to_owned()))
+        .into_iter()
+        .collect();
+    let socket = open(port, "/tunnel/v1", grant, &headers).await?;
+    let (closing, closed) = watch::channel(None);
+    let (session_side, mut pumping) = tunnel::pump(socket, Liveness::Pings, closed);
     let seen = Arc::new(Mutex::new(Vec::new()));
     let seeing = seen.clone();
     let service = service_fn(move |mut request: Request<Incoming>| {
@@ -247,10 +354,9 @@ pub async fn dial(
                 seen.lock().unwrap().push(request.headers().clone());
                 return Ok::<_, Infallible>(answering(&request));
             }
-            let head = unwrap_envelope(request.headers()).unwrap();
-            seen.lock().unwrap().push(head.headers().clone());
+            let head = unwrap_envelope(request.headers());
+            seen.lock().unwrap().push(head.clone());
             let declined = head
-                .headers()
                 .get(header::HOST)
                 .and_then(|value| value.to_str().ok())
                 .is_some_and(|host| host.starts_with("nobody"));
@@ -295,6 +401,20 @@ pub async fn dial(
         ended,
         seen,
     })
+}
+
+// The h1 head a legacy CONNECT's envelope carried: every `x-ingress-h-` header, unprefixed.
+fn unwrap_envelope(envelope: &HeaderMap) -> HeaderMap {
+    let mut head = HeaderMap::new();
+    for (name, value) in envelope {
+        if let Some(original) = name.as_str().strip_prefix("x-ingress-h-") {
+            head.append(
+                http::header::HeaderName::from_bytes(original.as_bytes()).unwrap(),
+                value.clone(),
+            );
+        }
+    }
+    head
 }
 
 pub struct Answer {
@@ -410,9 +530,9 @@ pub fn empty_request(uri: &str) -> Request<Empty<Bytes>> {
 /// A session over a pipe nothing answers, for a registry entry that is never asked anything; keep the pipe alive.
 pub async fn idle_session() -> (intentic_ingress::session::Session, tokio::io::DuplexStream) {
     let (near, far) = tokio::io::duplex(1 << 16);
-    let (sender, _) =
-        hyper::client::conn::http2::handshake(TokioExecutor::new(), TokioIo::new(near))
-            .await
-            .unwrap();
-    (intentic_ingress::session::Session::h2(sender), far)
+    let (opener, _driving) = tunnel::mux::client(near);
+    (
+        intentic_ingress::session::Session::mux(opener, BulkRoutes::default()),
+        far,
+    )
 }

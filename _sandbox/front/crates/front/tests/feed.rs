@@ -1,4 +1,4 @@
-//! The change feed through the real binary: Node names a checkout on the control lane, and each sync answers where its
+//! The change feed through the real binary: Node names a checkout on the control socket, and each sync answers where its
 //! count stands, moved by any write that finished before it.
 
 mod support;
@@ -7,7 +7,7 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
 
-use front_wire::{FromNode, PreviewRoute, WatchedCheckout};
+use front_wire::{FromNode, WatchedCheckout};
 use support::Harness;
 
 fn git(dir: &Path, args: &[&str]) {
@@ -23,7 +23,7 @@ fn git(dir: &Path, args: &[&str]) {
 
 #[tokio::test]
 async fn a_watched_checkout_counts_its_writes_until_it_is_unwatched() {
-    let harness = Harness::start("feed", Arc::new(|_: &str| PreviewRoute::Node)).await;
+    let harness = Harness::start("feed", Arc::new(|_: &str, _| support::nothing_here())).await;
     harness.hello().await;
     let repo = harness.dir.join("repo");
     std::fs::create_dir_all(&repo).unwrap();
@@ -44,7 +44,7 @@ async fn a_watched_checkout_counts_its_writes_until_it_is_unwatched() {
             },
         })
         .await;
-    // The watch lands off the lane's reader, so the first count may still be arriving.
+    // The watch lands off the socket's reader, so the first count may still be arriving.
     let mut first = None;
     for id in 2..100 {
         first = harness.sync(id, &[dir]).await[0];

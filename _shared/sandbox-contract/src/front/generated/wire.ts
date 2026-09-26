@@ -16,13 +16,20 @@ export type Endpoint = { host: string, port: number, };
 /**
  * Everything Node sends the front.
  */
-export type FromNode = { "kind": "hello", build: string, pid: number, } | { "kind": "listen", config: ListenConfig, } | { "kind": "certificate", certificate?: Certificate, } | { "kind": "tunnel", tunnel?: TunnelConfig, } | { "kind": "answer", id: number, answer: Answer, } | { "kind": "refused", id: number, message: string, } | { "kind": "revoke", member?: string, } | { "kind": "watch", checkout: WatchedCheckout, } | { "kind": "unwatch", dir: string, } | { "kind": "sync", id: number, dirs: Array<string>, };
+export type FromNode = { "kind": "hello", build: string, pid: number, } | { "kind": "listen", config: ListenConfig, } | { "kind": "certificate", certificate?: Certificate, } | { "kind": "tunnel", tunnel?: TunnelConfig, } | { "kind": "ask", id: number, question: FrontQuestion, } | { "kind": "answer", id: number, answer: Answer, } | { "kind": "refused", id: number, message: string, } | { "kind": "revoke", member?: string, } | { "kind": "watch", checkout: WatchedCheckout, } | { "kind": "unwatch", dir: string, };
+
+export type FrontAnswer = { "answer": "sync", generations: Array<number | null>, };
 
 /**
  * Request headers only the front sets on what it forwards to Node; it strips them from everything arriving outside.
  * Exported as a literal type, so a Node constant naming one that drifts from this spelling fails to compile.
  */
 export type FrontHeader = "x-intentic-preview" | "x-intentic-preview-unreachable";
+
+/**
+ * A question Node asks the front.
+ */
+export type FrontQuestion = { "question": "sync", dirs: Array<string>, };
 
 /**
  * Every port the front binds, as Node's config names them; an absent one is not bound.
@@ -42,31 +49,37 @@ frameAncestors: Array<string>,
 previewProbePath: string, };
 
 /**
- * Where a preview host's requests go, as Node resolved it.
+ * An answer Node renders whole when asked, for the front to write as it stands: a refusal page, or the probe's report.
  */
-export type PreviewRoute = { "to": "upstream", upstream: Upstream, } | { "to": "node" };
+export type Page = { status: number, headers: { [key in string]: string }, body: string, };
 
 /**
- * A question the front asks Node; the answer carries the same id.
+ * What becomes of a preview host's request, decided by Node once, when asked.
  */
-export type Question = { "question": "preview", host: string, } | { "question": "terminal", query: string, };
+export type PreviewRoute = { "to": "upstream", upstream: Upstream, } | { "to": "page", page: Page, } | { "to": "outbox" };
+
+/**
+ * A question the front asks Node.
+ */
+export type Question = { "question": "preview", host: string, probe: boolean, } | { "question": "terminal", query: string, };
 
 export type Scheme = "http" | "https";
 
 /**
  * What a terminal socket opens onto, as Node decided from its ticket, session name and working directory.
  */
-export type TerminalPlan = { "plan": "tmux", session: string, argv: Array<string>, } | { "plan": "tail", path: string, } | { "plan": "exit", code: number, reason: string, } | { "plan": "refused", code: number, reason: string, };
+export type TerminalPlan = { "plan": "session", name: string, createIn?: string, } | { "plan": "tail", path: string, } | { "plan": "exit", code: number, reason: string, } | { "plan": "refused", code: number, reason: string, };
 
 /**
  * Everything the front sends Node.
  */
-export type ToNode = { "kind": "ask", id: number, question: Question, } | { "kind": "tunnel", connected: boolean, } | { "kind": "synced", id: number, generations: Array<number | null>, };
+export type ToNode = { "kind": "ask", id: number, question: Question, } | { "kind": "answer", id: number, answer: FrontAnswer, } | { "kind": "refused", id: number, message: string, } | { "kind": "tunnel", connected: boolean, };
 
 /**
- * The ingress tunnel's door and the reachability grant it presents there.
+ * The ingress tunnel's door, the reachability grant it presents there, and the daemon's transfer routes it announces
+ * (`METHOD /path` each, as the daemon names them), which the edge sends down the bulk socket.
  */
-export type TunnelConfig = { url: string, grant: string, };
+export type TunnelConfig = { url: string, grant: string, bulk: Array<string>, };
 
 /**
  * A local upstream a preview host relays to.

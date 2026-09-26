@@ -1,26 +1,26 @@
-//! The tunnel over QUIC, dialled only once the edge has declared it serves one (its answer to a lane's upgrade names
-//! `quic`), and held beside the WebSocket lanes rather than instead of them: the edge sends every request down it while
-//! it lasts, and the lanes already standing carry everything the moment it goes. Each stream the edge opens is one
-//! HTTP/1.1 exchange, served like any request the tunnel brings. A network that carries no UDP to a declaring edge is
-//! retried on the lanes' own backoff, never probed for.
+//! The tunnel over QUIC, dialled only once the edge has declared it serves one (its answer to the socket's upgrade names
+//! `quic`), and held beside the WebSocket rather than instead of it: the edge sends every request down it while it
+//! lasts, and the socket already standing carries everything the moment it goes. Each stream the edge opens is one
+//! HTTP/1.1 connection, served as the socket's streams are (`Front::serve_stream`). A network that carries no UDP to a
+//! declaring edge is retried on the socket's own ladder, never probed for.
 
-use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use front_wire::TunnelConfig;
 use http::Uri;
-use hyper::service::service_fn;
-use hyper_util::rt::TokioIo;
 use quinn::crypto::rustls::QuicClientConfig;
-use quinn::{ConnectionError, Endpoint, RecvStream, SendStream, VarInt};
+use quinn::{ConnectionError, Endpoint, VarInt};
 use tokio::sync::watch;
 use tunnel::Close;
 use tunnel::quic::{DISPLACED, Hello, REFUSED};
 
 use crate::proxy::Front;
-use crate::tunnel::{BACKOFF_CAP, BACKOFF_FLOOR, DISPLACED_WAIT, STABLE_AFTER, jitter, trusted};
+use crate::tunnel::{DISPLACED_WAIT, REDIAL, trusted};
+
+// A connection held this long counts as working: the next failure is news again.
+const STABLE_AFTER: Duration = Duration::from_secs(60);
 
 // A handshake or hello not answered by now is UDP that does not reach the edge.
 const HANDSHAKE_PATIENCE: Duration = Duration::from_secs(5);
@@ -38,7 +38,7 @@ pub async fn run(
     mut declared: watch::Receiver<bool>,
     mut closed: watch::Receiver<Option<Close>>,
 ) {
-    let mut rung = BACKOFF_FLOOR;
+    let mut backoff = REDIAL;
     // Said once per run of failures, so a network without UDP is one line, not one every backoff.
     let mut told = false;
     loop {
@@ -50,8 +50,8 @@ pub async fn run(
         }
         let started = Instant::now();
         let ended = dial_once(&front, &config, closed.clone()).await;
-        if started.elapsed() >= STABLE_AFTER {
-            rung = BACKOFF_FLOOR;
+        let lived = started.elapsed();
+        if lived >= STABLE_AFTER {
             told = false;
         }
         let wait = match ended {
@@ -64,12 +64,10 @@ pub async fn run(
                 if told {
                     tracing::debug!(%why, "the QUIC tunnel is still not held");
                 } else {
-                    tracing::info!(%why, "the edge declares QUIC and it is not held; the WebSocket lanes carry the tunnel meanwhile");
+                    tracing::info!(%why, "the edge declares QUIC and it is not held; the WebSocket carries the tunnel meanwhile");
                     told = true;
                 }
-                let ceiling = (rung * 2).min(BACKOFF_CAP);
-                rung = ceiling;
-                BACKOFF_FLOOR + (ceiling - BACKOFF_FLOOR).mul_f64(jitter())
+                backoff.after(lived)
             }
         };
         tokio::select! {
@@ -139,7 +137,8 @@ async fn dial_once(
     let front = front.clone();
     let accepting = tokio::spawn(async move {
         while let Ok((send, recv)) = serving.accept_bi().await {
-            tokio::spawn(serve(front.clone(), send, recv));
+            let front = front.clone();
+            tokio::spawn(async move { front.serve_stream(tunnel::quic::stream(send, recv)).await });
         }
     });
     let ended = tokio::select! {
@@ -158,18 +157,6 @@ async fn dial_once(
     accepting.abort();
     let _ = tokio::time::timeout(Duration::from_secs(1), endpoint.wait_idle()).await;
     ended
-}
-
-// One exchange the edge opened: plain HTTP/1.1, where an upgrade is itself.
-async fn serve(front: Arc<Front>, send: SendStream, recv: RecvStream) {
-    let service = service_fn(move |request| {
-        let front = front.clone();
-        async move { Ok::<_, Infallible>(front.tunnel(request).await) }
-    });
-    let _ = hyper::server::conn::http1::Builder::new()
-        .serve_connection(TokioIo::new(tunnel::quic::stream(send, recv)), service)
-        .with_upgrades()
-        .await;
 }
 
 // The edge's name and port, as the tunnel URL spells them; `wss` defaults to 443, which UDP shares.
@@ -206,15 +193,15 @@ mod tests {
     #[test]
     fn the_edge_is_the_tunnel_urls_host_on_its_port_or_443() {
         assert_eq!(
-            edge_address("wss://ingress.sbx.example.test/tunnel/v1"),
+            edge_address("wss://ingress.sbx.example.test/tunnel/v2"),
             Some(("ingress.sbx.example.test".into(), 443))
         );
         assert_eq!(
-            edge_address("wss://127.0.0.1:8443/tunnel/v1"),
+            edge_address("wss://127.0.0.1:8443/tunnel/v2"),
             Some(("127.0.0.1".into(), 8443))
         );
         assert_eq!(
-            edge_address("wss://[::1]:8443/tunnel/v1"),
+            edge_address("wss://[::1]:8443/tunnel/v2"),
             Some(("::1".into(), 8443))
         );
     }

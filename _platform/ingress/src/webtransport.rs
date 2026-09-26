@@ -12,7 +12,8 @@ use h3::server::RequestStream;
 use h3_webtransport::server::{AcceptedBi, WebTransportSession};
 use h3_webtransport::stream::BidiStream;
 use http::header::HOST;
-use http::{HeaderValue, Method, Request, Response, StatusCode};
+use http::uri::PathAndQuery;
+use http::{HeaderValue, Method, Request, Response, StatusCode, Uri};
 use hyper::body::Incoming;
 use hyper::service::service_fn;
 use hyper_util::rt::{TokioIo, TokioTimer};
@@ -87,7 +88,8 @@ pub async fn serve(
     }
 }
 
-// One stream as an HTTP/1.1 connection: whatever Host it writes, it reaches only the address its session was opened for.
+// One stream as an HTTP/1.1 connection: whatever Host or absolute target it writes, it reaches only the address its
+// session was opened for, since a target's authority outranks a Host header wherever the host is read.
 async fn exchange(
     edge: Arc<Edge>,
     stream: BidiStream<h3_quinn::BidiStream<Bytes>, Bytes>,
@@ -99,7 +101,7 @@ async fn exchange(
     };
     let service = service_fn(move |mut request: Request<Incoming>| {
         let edge = edge.clone();
-        request.headers_mut().insert(HOST, pinned.clone());
+        pin(&mut request, &pinned);
         async move {
             Ok::<_, Infallible>(
                 edge.handle(request.map(body::incoming), remote, Via::Direct)
@@ -113,4 +115,32 @@ async fn exchange(
         .serve_connection(TokioIo::new(stream), service)
         .with_upgrades()
         .await;
+}
+
+// Origin form, and the session's own host.
+fn pin<B>(request: &mut Request<B>, host: &HeaderValue) {
+    let path = request
+        .uri()
+        .path_and_query()
+        .map_or("/", PathAndQuery::as_str);
+    *request.uri_mut() = path.parse().unwrap_or_else(|_| Uri::from_static("/"));
+    request.headers_mut().insert(HOST, host.clone());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_stream_reaches_only_its_sessions_host_whatever_target_it_writes() {
+        let pinned = HeaderValue::from_static("sandbox-abcdef012345.sbx.test");
+        let mut absolute = Request::builder()
+            .uri("https://sandbox-0123456789ab.sbx.test/system/terminal?x=1")
+            .header(HOST, "sandbox-0123456789ab.sbx.test")
+            .body(())
+            .unwrap();
+        pin(&mut absolute, &pinned);
+        assert_eq!(absolute.uri(), "/system/terminal?x=1");
+        assert_eq!(relay::host_of(&absolute), "sandbox-abcdef012345.sbx.test");
+    }
 }

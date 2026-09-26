@@ -27,15 +27,15 @@ const deps = (overrides: { readonly auth?: unknown; readonly logPathOf?: Termina
 
 test("a web tab creates or reattaches its session in the directory it asked for, inside the workspace only", () => {
     const opened = planTerminal(deps(), "session=web-1&cwd=app&cols=80");
-    expect(opened).toEqual({ answer: "terminal", plan: { plan: "tmux", session: "web-1", argv: ["new-session", "-A", "-s", "web-1", "-c", join(root, "app")] } });
+    expect(opened).toEqual({ answer: "terminal", plan: { plan: "session", name: "web-1", createIn: join(root, "app") } });
     for (const cwd of ["../etc", "missing", ""]) {
-        expect(planTerminal(deps(), `session=web-1&cwd=${cwd}`).plan).toMatchObject({ argv: ["new-session", "-A", "-s", "web-1", "-c", root] });
+        expect(planTerminal(deps(), `session=web-1&cwd=${cwd}`).plan).toEqual({ plan: "session", name: "web-1", createIn: root });
     }
 });
 
 test("panel, agent and job sessions attach only, so a missing one ends rather than opening a bare shell", () => {
     for (const session of ["panel-web", "agent-abc", "job-checks"]) {
-        expect(planTerminal(deps(), `session=${session}`).plan).toEqual({ plan: "tmux", session, argv: ["attach-session", "-t", `=${session}`] });
+        expect(planTerminal(deps(), `session=${session}`).plan).toEqual({ plan: "session", name: session });
     }
 });
 
@@ -54,7 +54,7 @@ test("a session name tmux could read as a flag is refused", () => {
 test("with auth, a maintainer's ticket opens for that member, and anything less is refused and logged", () => {
     const withAuth = deps({ auth: {} });
     const ticket = withAuth.wsTickets.mint({ email: "Maintainer@Example.com", role: "maintainer" });
-    expect(planTerminal(withAuth, `ticket=${ticket}&session=web-1`)).toMatchObject({ member: "maintainer@example.com", plan: { plan: "tmux" } });
+    expect(planTerminal(withAuth, `ticket=${ticket}&session=web-1`)).toMatchObject({ member: "maintainer@example.com", plan: { plan: "session", name: "web-1" } });
     // Spent: the same ticket never opens a second socket.
     expect(planTerminal(withAuth, `ticket=${ticket}&session=web-1`).plan).toEqual({ plan: "refused", code: 1008, reason: "unauthorized" });
     const collaborator = withAuth.wsTickets.mint({ email: "c@example.com", role: "collaborator" });

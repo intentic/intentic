@@ -62,7 +62,9 @@ pub enum TerminalClientMessage {
         cols: u16,
         rows: u16,
     },
-    /// The browser's keepalive against an idle tunnel; answered `pong`.
+    /// The client's liveness, the socket's only one: the editor sends one every 30 s and calls the socket stale after
+    /// 90 s without a frame. The front answers `pong`, sends a WebSocket ping only to a client silent for 45 s, and closes
+    /// one silent for 90.
     Ping,
 }
 

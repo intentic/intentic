@@ -119,7 +119,7 @@ if [ "$TLS_MODE" = true ]; then
                 echo >&2 "error: $APP terminates TLS under $(basename "$CONFIG") but its /health declares [${declared}], not $transport."
                 echo >&2 "  The edge declares what it binds: INGRESS_QUIC_PORT (8443) and INGRESS_QUIC_HOST=fly-global-services"
                 echo >&2 "  must be set on it ('flyctl secrets list -a $APP'). Until they are, fronts dial no QUIC and editors open"
-                echo >&2 "  no WebTransport; the WebSocket lanes still carry everything. ingress/README.md has the runbook."
+                echo >&2 "  no WebTransport; the WebSocket still carries everything. ingress/README.md has the runbook."
                 exit 1
                 ;;
         esac

@@ -1,24 +1,28 @@
-//! A tunnel's WebSocket as the byte stream its h2 session runs on. Two tasks, one per direction, since a session that
-//! cannot write while its reader is parked on a full buffer deadlocks; either ending ends the tunnel.
+//! A tunnel's WebSocket as the byte stream its session runs on (yamux on `/tunnel/v2`, h2 on the edge's legacy door).
+//! Two tasks, one per direction, since a session that cannot write while its reader is parked on a full buffer
+//! deadlocks; either ending ends the tunnel. The socket's liveness is the tunnel's only one: the front pings, and both
+//! ends drop a peer silent past `DEAD_AFTER`, since a path that died without a FIN reports nothing else.
 
 use std::borrow::Cow;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use bytes::Bytes;
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, DuplexStream};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
+use tokio::time::Instant;
 use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
 
 use crate::{DEAD_AFTER, PING_EVERY};
 
-// Bytes in flight between the WebSocket and the session, each way; past it the reader simply waits.
-const PIPE_BYTES: usize = 256 * 1024;
+// Bytes in flight between the WebSocket and the session, each way; past it the reader simply waits. Small, since every
+// stream's frames queue here in the order the session wrote them: a keystroke waits behind at most this much.
+const PIPE_BYTES: usize = 64 * 1024;
 
 // One WebSocket message's worth of what the session wrote.
 const READ_CHUNK: usize = 64 * 1024;
@@ -42,6 +46,15 @@ impl Close {
     };
 }
 
+/// What this end does for the socket's liveness. Either way it drops a peer silent past `DEAD_AFTER`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Liveness {
+    /// Pings every `PING_EVERY`: the front, which dials, so an edge holding thousands of tunnels sends none itself.
+    Pings,
+    /// Only listens, the far end's pings and their answers being frames like any other: the edge.
+    Listens,
+}
+
 /// How a tunnel ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ended {
@@ -55,6 +68,7 @@ pub enum Ended {
 /// `closing` sends a close frame and ends the tunnel once it holds one.
 pub fn pump<S>(
     socket: WebSocketStream<S>,
+    liveness: Liveness,
     mut closing: watch::Receiver<Option<Close>>,
 ) -> (DuplexStream, Pumping)
 where
@@ -110,7 +124,7 @@ where
                     if silent > DEAD_AFTER {
                         return Outbound::Ended(Ended::Dropped(format!("no frame from the far end in {silent:?}")));
                     }
-                    if sink.send(Message::Ping(Bytes::new())).await.is_err() {
+                    if liveness == Liveness::Pings && sink.send(Message::Ping(Bytes::new())).await.is_err() {
                         return Outbound::Refused("the tunnel socket refused a ping");
                     }
                 }
@@ -198,8 +212,8 @@ mod tests {
         let (near, far) = pair().await;
         let (_near_close, near_closing) = watch::channel(None);
         let (far_close, far_closing) = watch::channel(None);
-        let (mut near_session, mut near_pumping) = pump(near, near_closing);
-        let (mut far_session, mut far_pumping) = pump(far, far_closing);
+        let (mut near_session, mut near_pumping) = pump(near, Liveness::Pings, near_closing);
+        let (mut far_session, mut far_pumping) = pump(far, Liveness::Listens, far_closing);
 
         near_session.write_all(b"hello from near").await.unwrap();
         let mut read = vec![0_u8; 15];
@@ -225,8 +239,8 @@ mod tests {
             let (near, far) = pair().await;
             let (_near_close, near_closing) = watch::channel(None);
             let (far_close, far_closing) = watch::channel(None);
-            let (mut near_session, mut near_pumping) = pump(near, near_closing);
-            let (_far_session, _far_pumping) = pump(far, far_closing);
+            let (mut near_session, mut near_pumping) = pump(near, Liveness::Pings, near_closing);
+            let (_far_session, _far_pumping) = pump(far, Liveness::Listens, far_closing);
             let writing = tokio::spawn(async move {
                 while near_session.write_all(&[7_u8; 4096]).await.is_ok() {}
             });
@@ -245,12 +259,46 @@ mod tests {
         let (near, far) = pair().await;
         let (_near_close, near_closing) = watch::channel(None);
         let (_far_close, far_closing) = watch::channel(None);
-        let (near_session, mut near_pumping) = pump(near, near_closing);
-        let (_far_session, _far_pumping) = pump(far, far_closing);
+        let (near_session, mut near_pumping) = pump(near, Liveness::Pings, near_closing);
+        let (_far_session, _far_pumping) = pump(far, Liveness::Listens, far_closing);
         drop(near_session);
         assert_eq!(
             near_pumping.ended().await,
             Ended::Dropped("the session ended".into())
         );
+    }
+
+    // Only the front pings; the edge hears those pings and its own answers to them as the front's frames, the front hears
+    // the answers as the edge's, so a quiet tunnel outlives any number of dead windows on both ends.
+    #[tokio::test(start_paused = true)]
+    async fn one_end_pinging_keeps_both_ends_of_a_quiet_tunnel() {
+        let (near, far) = pair().await;
+        let (_near_close, near_closing) = watch::channel(None);
+        let (_far_close, far_closing) = watch::channel(None);
+        let (_near_session, mut near_pumping) = pump(near, Liveness::Pings, near_closing);
+        let (_far_session, mut far_pumping) = pump(far, Liveness::Listens, far_closing);
+        let quiet = DEAD_AFTER * 5;
+        tokio::select! {
+            ended = near_pumping.ended() => panic!("the pinging end ended: {ended:?}"),
+            ended = far_pumping.ended() => panic!("the listening end ended: {ended:?}"),
+            () = tokio::time::sleep(quiet) => {}
+        }
+    }
+
+    // Two ends that both only listen hear nothing, and each drops the other once the dead window passes.
+    #[tokio::test(start_paused = true)]
+    async fn a_silent_peer_is_dropped_after_the_dead_window() {
+        let (near, far) = pair().await;
+        let (_near_close, near_closing) = watch::channel(None);
+        let (_far_close, far_closing) = watch::channel(None);
+        let (_near_session, mut near_pumping) = pump(near, Liveness::Listens, near_closing);
+        let (_far_session, _far_pumping) = pump(far, Liveness::Listens, far_closing);
+        let started = Instant::now();
+        let Ended::Dropped(why) = near_pumping.ended().await else {
+            panic!("a silent peer is dropped, not closed");
+        };
+        assert!(why.starts_with("no frame from the far end"), "{why}");
+        assert!(started.elapsed() > DEAD_AFTER);
+        assert!(started.elapsed() <= DEAD_AFTER + PING_EVERY);
     }
 }

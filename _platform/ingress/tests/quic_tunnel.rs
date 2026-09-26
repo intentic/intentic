@@ -1,6 +1,6 @@
 //! The tunnel over QUIC against a front speaking it: the hello's grant is checked as a WebSocket's is, every request and
-//! upgrade is a stream of its own carrying HTTP/1.1, QUIC is preferred while held and the WebSocket lanes take over
-//! when it goes, and a newer connection displaces an older one.
+//! upgrade is a stream of its own carrying HTTP/1.1, QUIC is preferred while held and the WebSocket takes over when
+//! it goes, and a newer connection displaces an older one.
 
 mod support;
 
@@ -90,10 +90,9 @@ async fn dial_quic(door: &Door, grant: &str, name: &'static str) -> (Hello, Conn
 async fn a_front_over_quic_carries_requests_and_upgrades_and_is_preferred_while_held() {
     let keys = Keys::default();
     let door = door(&keys).await;
-    let _lanes = dial(
+    let _socket = dial(
         door.running.port,
         &keys.grant(SANDBOX_ID),
-        None,
         serving("websocket"),
     )
     .await
@@ -130,7 +129,7 @@ async fn a_front_over_quic_carries_requests_and_upgrades_and_is_preferred_while_
     socket.read_exact(&mut echoed).await.unwrap();
     assert_eq!(&echoed, b"ping");
 
-    // The WebSocket lanes were held all along, so the moment QUIC goes they carry everything.
+    // The WebSocket was held all along, so the moment QUIC goes it carries everything.
     connection.close(0_u32.into(), b"gone");
     wait_for("the QUIC carrier to be dropped", || {
         door.running
@@ -178,20 +177,19 @@ async fn a_hello_without_a_valid_grant_is_refused_and_a_newer_connection_displac
     assert!(answer.body.starts_with("second "), "{}", answer.body);
 }
 
-// A browser speaking HTTP/3 to the same endpoint reaches the sandbox down whatever tunnel holds it, here a WebSocket lane.
+// A browser speaking HTTP/3 to the same endpoint reaches the sandbox down whatever tunnel holds it, here the WebSocket.
 #[tokio::test]
 async fn a_browser_over_http_3_reaches_a_sandbox_down_its_tunnel() {
     let keys = Keys::default();
     let door = door(&keys).await;
-    let _lanes = dial(
+    let _socket = dial(
         door.running.port,
         &keys.grant(SANDBOX_ID),
-        None,
         serving("websocket"),
     )
     .await
     .unwrap();
-    wait_for("the lane", || door.running.edge.registry().size() == 1).await;
+    wait_for("the socket", || door.running.edge.registry().size() == 1).await;
 
     let mut roots = rustls::RootCertStore::empty();
     roots.add(door.trust.clone()).unwrap();
@@ -266,20 +264,22 @@ async fn the_edge_declares_what_it_serves_on_every_tunnels_answer_and_on_health(
         ),
         (silent.port, None, serde_json::json!([])),
     ] {
-        let mut request = format!("ws://127.0.0.1:{port}/tunnel/v1")
-            .into_client_request()
-            .unwrap();
-        request
-            .headers_mut()
-            .insert(GRANT_HEADER, keys.grant(SANDBOX_ID).parse().unwrap());
-        let (_socket, answer) = tokio_tungstenite::connect_async(request).await.unwrap();
-        assert_eq!(
-            answer
-                .headers()
-                .get(TRANSPORTS_HEADER)
-                .map(|value| value.to_str().unwrap()),
-            declared
-        );
+        for door in ["/tunnel/v2", "/tunnel/v1"] {
+            let mut request = format!("ws://127.0.0.1:{port}{door}")
+                .into_client_request()
+                .unwrap();
+            request
+                .headers_mut()
+                .insert(GRANT_HEADER, keys.grant(SANDBOX_ID).parse().unwrap());
+            let (_socket, answer) = tokio_tungstenite::connect_async(request).await.unwrap();
+            assert_eq!(
+                answer
+                    .headers()
+                    .get(TRANSPORTS_HEADER)
+                    .map(|value| value.to_str().unwrap()),
+                declared
+            );
+        }
         let health = get(port, &format!("ingress.{ZONE}"), "/health").await;
         let health: serde_json::Value = serde_json::from_str(&health.body).unwrap();
         assert_eq!(health["transports"], tokens);

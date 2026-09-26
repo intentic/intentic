@@ -9,7 +9,7 @@ mod screen;
 
 use std::collections::HashMap;
 use std::process::Stdio;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -30,9 +30,9 @@ use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::{CloseFrame, Role, WebSocketConfig};
 use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
 
-use crate::body::{self, Body};
 use hub::{Controls, Outbox, Taken};
 pub use hub::{Hubs, Tmux};
+use relay::body::{self, Body};
 
 /// Every route the front answers itself; the contract marks each `front` (raw-routes.ts), and a test holds them equal.
 pub const ROUTES: [(&str, &str); 1] = [("GET", TERMINAL_PATH)];
@@ -40,8 +40,16 @@ pub const ROUTES: [(&str, &str); 1] = [("GET", TERMINAL_PATH)];
 // A per-sandbox bound, not a quota; 1013 sends the browser to its usual backoff.
 const MAX_TERMINALS: usize = 32;
 
-// A ping unanswered this long means the peer is gone, as a half-open TCP connection never says.
-const LIVENESS: Duration = Duration::from_secs(30);
+// The socket's liveness is the client's: the editor pings every 30 s (`TerminalClientMessage::Ping`) and calls the socket
+// stale after 90 s without a frame. The front answers and listens: a client silent this long is sent a WebSocket ping,
+// which any client's stack answers by itself, so one that never pings (not the editor) is still heard from...
+const QUIET: Duration = Duration::from_secs(45);
+
+// ...and one silent this long is gone, as a half-open TCP connection never says.
+const SILENT: Duration = Duration::from_secs(90);
+
+// How often the silence is looked at.
+const LISTEN_EVERY: Duration = Duration::from_secs(15);
 
 // What a closing socket's last frames get to leave before the stream is dropped under them.
 const CLOSE_PATIENCE: Duration = Duration::from_secs(1);
@@ -102,15 +110,6 @@ impl Handshake {
             .header(SEC_WEBSOCKET_ACCEPT, self.accept.as_str())
             .body(body::empty())
             .expect("a switching response always builds")
-    }
-
-    /// The same answer as raw h1, for a socket that arrived down the tunnel as a CONNECT stream.
-    pub fn switching_head(&self) -> Vec<u8> {
-        format!(
-            "HTTP/1.1 101 Switching Protocols\r\nupgrade: {TERMINAL_UPGRADE}\r\nconnection: Upgrade\r\nsec-websocket-accept: {}\r\n\r\n",
-            self.accept
-        )
-        .into_bytes()
     }
 }
 
@@ -230,7 +229,10 @@ impl Terminals {
                 let _ = socket.feed(exit(code, reason)).await;
                 return close(&mut socket, CloseCode::Normal, "").await;
             }
-            TerminalPlan::Tmux { session, argv } => Feed::Session { session, argv },
+            TerminalPlan::Session { name, create_in } => Feed::Session {
+                argv: tmux_argv(&name, create_in.as_deref()),
+                session: name,
+            },
             TerminalPlan::Tail { path } => Feed::Log { path },
         };
         let Some(seat) = self.seat(member) else {
@@ -259,6 +261,17 @@ impl Terminals {
 enum Feed {
     Session { session: String, argv: Vec<String> },
     Log { path: String },
+}
+
+// What follows `tmux -C` for a session: `new-session -A` both creates it and reattaches one that exists, `-c` setting the
+// working directory only on creation; a session with nowhere to be created in is only attached, `=` naming it exactly.
+fn tmux_argv(name: &str, create_in: Option<&str>) -> Vec<String> {
+    match create_in {
+        Some(dir) => ["new-session", "-A", "-s", name, "-c", dir]
+            .map(str::to_owned)
+            .to_vec(),
+        None => vec!["attach-session".into(), "-t".into(), format!("={name}")],
+    }
 }
 
 fn text(message: &TerminalServerMessage) -> Message {
@@ -302,9 +315,10 @@ async fn pump<T, E>(
 {
     let (mut sink, stream) = socket.split();
     let (replies, mut answering) = mpsc::unbounded_channel();
-    let alive = Arc::new(AtomicBool::new(true));
-    let reader = tokio::spawn(read(stream, controls, replies, alive.clone()));
-    let mut liveness = tokio::time::interval_at(tokio::time::Instant::now() + LIVENESS, LIVENESS);
+    let heard = Heard::now();
+    let reader = tokio::spawn(read(stream, controls, replies, heard.clone()));
+    let mut listening =
+        tokio::time::interval_at(tokio::time::Instant::now() + LISTEN_EVERY, LISTEN_EVERY);
     loop {
         match outbox.take(FRAME_MAX) {
             Taken::Bytes(bytes) => {
@@ -337,8 +351,12 @@ async fn pump<T, E>(
                     break;
                 }
             }
-            _ = liveness.tick() => {
-                if !alive.swap(false, Ordering::Relaxed) || sink.send(Message::Ping(Bytes::new())).await.is_err() {
+            _ = listening.tick() => {
+                let silent = heard.silent();
+                if silent >= SILENT {
+                    break;
+                }
+                if silent >= QUIET && sink.send(Message::Ping(Bytes::new())).await.is_err() {
                     break;
                 }
             }
@@ -355,17 +373,44 @@ async fn pump<T, E>(
     let _ = tokio::time::timeout(CLOSE_PATIENCE, sink.close()).await;
 }
 
+// When the client was last heard from: any frame, its ping, a keystroke or the answer to a ping of the front's.
+#[derive(Clone)]
+struct Heard {
+    since: tokio::time::Instant,
+    millis: Arc<AtomicU64>,
+}
+
+impl Heard {
+    fn now() -> Self {
+        Self {
+            since: tokio::time::Instant::now(),
+            millis: Arc::new(AtomicU64::new(0)),
+        }
+    }
+
+    fn hear(&self) {
+        let millis = u64::try_from(self.since.elapsed().as_millis()).unwrap_or(u64::MAX);
+        self.millis.store(millis, Ordering::Relaxed);
+    }
+
+    fn silent(&self) -> Duration {
+        self.since
+            .elapsed()
+            .saturating_sub(Duration::from_millis(self.millis.load(Ordering::Relaxed)))
+    }
+}
+
 // Ends when the browser closes or goes silent, and its end ends the pump: it drops the only sender of `replies`.
 async fn read<R, E>(
     mut stream: R,
     controls: Option<Controls>,
     replies: mpsc::UnboundedSender<Message>,
-    alive: Arc<AtomicBool>,
+    heard: Heard,
 ) where
     R: Stream<Item = Result<Message, E>> + Unpin,
 {
     while let Some(Ok(message)) = stream.next().await {
-        alive.store(true, Ordering::Relaxed);
+        heard.hear();
         let payload = match message {
             Message::Text(payload) => payload,
             Message::Close(_) => return,
@@ -460,6 +505,18 @@ mod tests {
     }
 
     #[test]
+    fn a_session_is_created_where_node_says_and_otherwise_only_attached() {
+        assert_eq!(
+            tmux_argv("main", Some("/workspace/app")),
+            ["new-session", "-A", "-s", "main", "-c", "/workspace/app"]
+        );
+        assert_eq!(
+            tmux_argv("agent-7", None),
+            ["attach-session", "-t", "=agent-7"]
+        );
+    }
+
+    #[test]
     fn the_grid_is_read_from_the_query_and_defaults_where_unreadable() {
         assert_eq!(size_of("ticket=t&cols=120&rows=40"), (120, 40));
         assert_eq!(size_of("cols=0&rows=x"), (80, 24));
@@ -478,10 +535,11 @@ mod tests {
             SEC_WEBSOCKET_KEY,
             "dGhlIHNhbXBsZSBub25jZQ==".parse().unwrap(),
         );
-        let handshake = Handshake::of(&headers).unwrap();
+        let switching = Handshake::of(&headers).unwrap().switching();
+        assert_eq!(switching.status(), StatusCode::SWITCHING_PROTOCOLS);
         assert_eq!(
-            String::from_utf8(handshake.switching_head()).unwrap(),
-            "HTTP/1.1 101 Switching Protocols\r\nupgrade: websocket\r\nconnection: Upgrade\r\nsec-websocket-accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\r\n"
+            switching.headers()[SEC_WEBSOCKET_ACCEPT],
+            "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="
         );
         // The framing an earlier editor spoke on a WebTransport stream is no terminal any more: it is refused, and that
         // editor's own fallback takes the WebSocket.

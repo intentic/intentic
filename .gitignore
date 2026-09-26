@@ -41,6 +41,7 @@ _site/site/public/desktop
 _sandbox/ic/target
 _sandbox/front/target
 _platform/ingress/target
+_shared/relay/target
 _devices/win-launcher/target
 /tmp
 **/tmp
