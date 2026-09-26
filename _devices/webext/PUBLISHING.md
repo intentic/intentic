@@ -15,6 +15,12 @@ Every release tag builds the extension and submits it to the Chrome Web Store fr
    `CHROME_WEBSTORE_REFRESH_TOKEN`, and the variables `CHROME_WEBSTORE_PUBLISHER_ID` and `CHROME_WEBSTORE_ITEM_ID`
    from the dashboard. Until all five exist, the publish step logs a warning and skips.
 
+Before releasing a version that adds a manifest permission, update the item's **Privacy practices** tab in the
+Developer Dashboard with the matching justification from [STORE-LISTING.md](STORE-LISTING.md). Uploading the package
+through the API does not fill those fields. The store can accept the upload and then reject `:publish` with HTTP 400,
+"Your submission does not meet the requirements to be published in the store." Check every dashboard tab for incomplete
+fields before retrying; the API response does not name the missing field.
+
 ## Each release
 
 1. `release.yml` runs `dispatch-publish.sh`, which starts
