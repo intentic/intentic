@@ -1489,7 +1489,6 @@
         "pickerAccounts": {
             "allAccounts": "Wszystkie konta ({count})",
             "filterSubscriptionAccounts": "Filtruj konta subskrypcyjne",
-            "headroom": "Zapas",
             "noAccountsMatch": "Żadne konto nie pasuje.",
             "reMeasureEveryAccounts": "Zmierz teraz ponownie limity planu każdego konta",
             "session": "Sesja {provider}",

@@ -5,6 +5,16 @@ import { formatPercent, setFormatLocale } from "@intentic/ui/format";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, type Component, computed, createApp, h, nextTick } from "vue";
 
+const opened = jest.fn((_conversationId: string, _title?: string) => undefined);
+// Two of the reading's conversations are on the board, under their titles; the rest are named by their ids.
+jest.mock("../fleet/useAgents", () => ({
+    useAgents: () => ({
+        agentById: (id: string) =>
+            id === `a1` ? { title: `Wire the checkout`, status: `running` } : id === `b2` ? { title: `Translate the notes`, status: `running` } : undefined,
+    }),
+}));
+jest.mock("../mainline/openLanded", () => ({ openLandConversation: opened }));
+
 const { default: SessionMetrics } = await import("./SessionMetrics.vue");
 const { default: SandboxMetricsSummary } = await import("./SandboxMetricsSummary.vue");
 const { default: SandboxMetricsDetails } = await import("./SandboxMetricsDetails.vue");
@@ -46,7 +56,11 @@ const mount = (component: Component, props: Record<string, unknown>, provided?: 
     document.body.append(el);
     app = createApp({ render: () => h(component, props) });
     app.component(`Icon`, IconStub);
-    app.directive(`tooltip`, {});
+    // What a hover would say, kept on the element so a test can read it.
+    const tip = (element: HTMLElement, binding: { readonly value: unknown }): void => {
+        element.dataset[`tip`] = String(binding.value);
+    };
+    app.directive(`tooltip`, { mounted: tip, updated: tip });
     if (provided !== undefined) {
         app.provide(
             LIVE_METRICS_KEY,
@@ -61,6 +75,7 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
+    opened.mockClear();
 });
 
 // Each figure as the reader meets it: its words, in the order the line or the panel draws them.
@@ -80,13 +95,34 @@ const termsOf = (el: HTMLElement): string[] =>
         (term) => `${term.textContent?.trim()}: ${term.nextElementSibling?.textContent?.trim()}`,
     );
 
-describe("a card's line", () => {
-    it("says what the conversation's processes use", () => {
-        expect(mount(SessionMetrics, { conversationId: `a1` }, reading()).textContent?.trim()).toBe(`37% CPU · 412 MB · 12 processes`);
+describe("a card's figure", () => {
+    // One figure in the card's stats row, memory first since memory is what runs out; the whole reading is its hover.
+    it("says what the conversation's processes hold and use, with the whole reading on hover", () => {
+        const figure = mount(SessionMetrics, { conversationId: `a1` }, reading()).querySelector<HTMLElement>(`[data-session-metrics]`)!;
+        expect(figure.textContent?.trim()).toBe(`412 MB · 37%`);
+        expect(figure.dataset[`tip`]).toBe(
+            `37% CPU · 412 MB · 12 processes. What this conversation's processes are using: CPU over the last few seconds, where 100% is one full core, and resident memory.`,
+        );
+        expect(figure.classList.contains(`text-warning`)).toBe(false);
     });
 
     it("leaves CPU out of a first reading rather than guessing it", () => {
-        expect(mount(SessionMetrics, { conversationId: `fresh` }, reading()).textContent?.trim()).toBe(`40 MB · 1 process`);
+        const figure = mount(SessionMetrics, { conversationId: `fresh` }, reading()).querySelector<HTMLElement>(`[data-session-metrics]`)!;
+        expect(figure.textContent?.trim()).toBe(`40 MB`);
+        expect(figure.dataset[`tip`]?.startsWith(`40 MB · 1 process. `)).toBe(true);
+    });
+
+    // A quarter of a 16 GB limit is 4 GB: the boundary itself tints, a byte under it does not.
+    it("tints a conversation holding a quarter of the sandbox's memory, and none holding less", () => {
+        const holding = (rssBytes: number): boolean => {
+            const metrics = { ...reading(), sessions: { a1: { processes: 3, rssBytes, cpuPercent: 80 } } };
+            const tinted = mount(SessionMetrics, { conversationId: `a1` }, metrics).querySelector(`[data-session-metrics]`)!.classList.contains(`text-warning`);
+            app?.unmount();
+            app = undefined;
+            document.body.innerHTML = ``;
+            return tinted;
+        };
+        expect([holding(4 * GIB), holding(4 * GIB - 1)]).toEqual([true, false]);
     });
 
     it("draws nothing for a conversation with nothing running, or on a card the board did not provide a reading to", () => {
@@ -186,6 +222,63 @@ describe("the sandbox panel", () => {
         expect(figuresOf(el, `gauges`)[0]).toBe(`CPU 16 cores`);
         expect(termsOf(el)).toContain(`Swap: 3.0 GB`);
         expect(termsOf(el)).toContain(`Pressure: CPU 2.0% · memory 13% · I/O 0.0%`);
+    });
+
+    it("lists where the memory went by session, heaviest first, each as its card names it, and opens one on a press", async () => {
+        const el = mount(SandboxMetricsDetails, {
+            metrics: {
+                ...reading(),
+                sessions: {
+                    fresh: { processes: 1, rssBytes: 40 * MIB },
+                    a1: { processes: 12, rssBytes: 412 * MIB, cpuPercent: 37.2 },
+                    b2: { processes: 27, rssBytes: 1.3 * GIB, cpuPercent: 179 },
+                },
+            },
+        });
+        expect(wordsOf(el.querySelector(`[data-section="sessions"] h4`)!)).toBe(`By session`);
+        expect(figuresOf(el, `sessions`)).toEqual([`Translate the notes 1.3 GB 179%`, `Wire the checkout 412 MB 37%`, `fresh 40 MB –`]);
+        const rows = [...el.querySelectorAll<HTMLElement>(`[data-section="sessions"] [data-figure]`)];
+        expect(rows[0]!.querySelector<HTMLElement>(`button`)!.dataset[`tip`]).toBe(`179% CPU · 1.3 GB · 27 processes`);
+
+        rows[1]!.querySelector<HTMLButtonElement>(`button`)!.click();
+        await nextTick();
+        expect(opened).toHaveBeenCalledWith(`a1`, `Wire the checkout`);
+        // One the board carries no card for opens by its id alone, with no title to guess.
+        rows[2]!.querySelector<HTMLButtonElement>(`button`)!.click();
+        expect(opened).toHaveBeenLastCalledWith(`fresh`, undefined);
+    });
+
+    it("tints a session holding a quarter of the sandbox's memory in the list too", () => {
+        const el = mount(SandboxMetricsDetails, {
+            metrics: { ...reading(), sessions: { b2: { processes: 30, rssBytes: 5 * GIB, cpuPercent: 250 }, a1: { processes: 12, rssBytes: 412 * MIB } } },
+        });
+        const values = [...el.querySelectorAll(`[data-section="sessions"] [data-figure]`)].map((row) => row.querySelector(`.text-warning`)?.textContent?.trim());
+        expect(values).toEqual([`5.0 GB`, undefined]);
+    });
+
+    it("folds the sessions past the heaviest five behind one line that sums them, and unfolds them on a click", async () => {
+        const sessions = Object.fromEntries(
+            Array.from({ length: 7 }, (_, at) => [`s${at + 1}`, { processes: 2, rssBytes: (700 - at * 100) * MIB, cpuPercent: 10 }]),
+        );
+        const el = mount(SandboxMetricsDetails, { metrics: { ...reading(), sessions } });
+        expect(figuresOf(el, `sessions`).map((row) => row.split(` `)[0])).toEqual([`s1`, `s2`, `s3`, `s4`, `s5`]);
+        const fold = el.querySelector<HTMLButtonElement>(`[data-small-sessions]`)!;
+        expect(wordsOf(fold)).toBe(`2 more sessions · 300 MB`);
+        fold.click();
+        await nextTick();
+        expect(figuresOf(el, `sessions`)).toHaveLength(7);
+        expect(fold.getAttribute(`aria-expanded`)).toBe(`true`);
+    });
+
+    it("folds nothing when only one session would go, and draws no list while nothing runs", () => {
+        const six = Object.fromEntries(Array.from({ length: 6 }, (_, at) => [`s${at + 1}`, { processes: 2, rssBytes: (700 - at * 100) * MIB }]));
+        const el = mount(SandboxMetricsDetails, { metrics: { ...reading(), sessions: six } });
+        expect(figuresOf(el, `sessions`)).toHaveLength(6);
+        expect(el.querySelector(`[data-small-sessions]`)).toBeNull();
+        app?.unmount();
+
+        const idle = mount(SandboxMetricsDetails, { metrics: { ...reading(), sessions: {} } });
+        expect(idle.querySelector(`[data-section="sessions"]`)).toBeNull();
     });
 
     it("tints only the figures near their limit", () => {

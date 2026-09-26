@@ -1,12 +1,13 @@
 import { PROCESS_ROLES, type SandboxMetrics } from "@intentic/sandbox-contract";
 import { formatBytes, formatFixed, formatPercent } from "@intentic/ui/format";
-import { useT } from "@intentic/ui/i18n";
+import { type TypedT, useT } from "@intentic/ui/i18n";
 import { computed, type ComputedRef } from "vue";
-import { heaviestRoles, NEAR_LIMIT, PRESSURE_STALLING, PRESSURE_WORTH_SHOWING } from "./liveMetrics";
+import { heaviestRoles, heaviestSessions, NEAR_LIMIT, PRESSURE_STALLING, PRESSURE_WORTH_SHOWING, sessionHeavy } from "./liveMetrics";
 
-// The board's geek metrics as the two places that draw them read them: three gauges (CPU, memory, disk: the figures
-// that run out) for the quiet bar at the foot of the board, and every other figure for the panel it opens. A figure
-// near its limit is flagged, so the bar can raise it without the reader opening anything.
+// The board's geek metrics as the places that draw them read them: three gauges (CPU, memory, disk: the figures that run
+// out) for the quiet bar at the foot of the board, every other figure for the panel it opens, and one conversation's
+// share for its card and the panel's list of them. A figure near its limit is flagged, so the bar can raise it without
+// the reader opening anything.
 
 export interface Gauge {
     readonly key: `cpu` | `memory` | `disk`;
@@ -38,6 +39,20 @@ export interface RoleRow {
     readonly share: number;
 }
 
+export interface SessionRow {
+    // The conversation's id, which its title is looked up by where the row is drawn.
+    readonly key: string;
+    // Its memory, "1.3 GB", and its CPU, "179%", undefined on a first reading.
+    readonly value: string;
+    readonly cpu: string | undefined;
+    readonly bytes: number;
+    // Share of the heaviest conversation, so the longest bar is always full and the rest read against it.
+    readonly share: number;
+    readonly heavy: boolean;
+    // The whole reading in words, for a hover: "37% CPU · 412 MB · 12 processes".
+    readonly line: string;
+}
+
 export interface SandboxReadout {
     readonly gauges: readonly Gauge[];
     readonly figures: readonly Figure[];
@@ -45,6 +60,10 @@ export interface SandboxReadout {
     readonly roles: readonly RoleRow[];
     readonly smallRoles: readonly RoleRow[];
     readonly smallRolesBytes: number;
+    // The conversations holding the most memory, heaviest first; past the first few they fold away (smallSessions).
+    readonly sessions: readonly SessionRow[];
+    readonly smallSessions: readonly SessionRow[];
+    readonly smallSessionsBytes: number;
     // Figures past a limit, besides the gauges: what the bar names on its own so nobody has to open the panel to see it.
     readonly alerts: readonly Figure[];
 }
@@ -79,6 +98,25 @@ export const splitRoles = <Row extends { readonly bytes: number }>(rows: readonl
     const at = firstSmall === -1 ? rows.length : Math.max(ROLES_ALWAYS_SHOWN, firstSmall);
     return rows.length - at < 2 ? [[...rows], []] : [rows.slice(0, at), rows.slice(at)];
 };
+
+// The conversations always shown; the rest fold behind one line, since the list answers where the memory went and its
+// tail answers least. Folded only when that hides more than one, as with the kinds.
+const SESSIONS_SHOWN = 5;
+
+export const splitSessions = <Row>(rows: readonly Row[]): [Row[], Row[]] =>
+    rows.length - SESSIONS_SHOWN < 2 ? [[...rows], []] : [rows.slice(0, SESSIONS_SHOWN), rows.slice(SESSIONS_SHOWN)];
+
+// One conversation's reading in words, as its card's hover and the panel's row say it: CPU where there is a reading of
+// it, where 100% is one full core, then memory, then how many processes. In the words of the caller's own `t`.
+export const sessionLine = (
+    t: TypedT,
+    session: { readonly cpuPercent?: number | undefined; readonly rssBytes: number; readonly processes: number },
+): string =>
+    [
+        ...(session.cpuPercent === undefined ? [] : [t(`agents.liveMetrics.cpu`, { percent: formatPercent(session.cpuPercent) })]),
+        formatBytes(session.rssBytes),
+        t(`agents.liveMetrics.processes`, { count: session.processes }, session.processes),
+    ].join(` · `);
 
 // Warned exactly when the daemon would hold a person's turn: the same figures and the same thresholds, read off one
 // reading. A daemon that predates `memoryRoom` sends neither, and its gauge falls back to how full it is.
@@ -221,16 +259,34 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
         }));
     };
 
+    const sessionsOf = ({ sessions, sandbox }: SandboxMetrics): SessionRow[] => {
+        const held = heaviestSessions(sessions);
+        const heaviest = held[0]?.rssBytes ?? 0;
+        return held.map((session) => ({
+            key: session.id,
+            value: formatBytes(session.rssBytes),
+            cpu: session.cpuPercent === undefined ? undefined : formatPercent(session.cpuPercent),
+            bytes: session.rssBytes,
+            share: heaviest === 0 ? 0 : session.rssBytes / heaviest,
+            heavy: sessionHeavy(session.rssBytes, sandbox),
+            line: sessionLine(t, session),
+        }));
+    };
+
     return computed(() => {
         const reading = metrics();
         const figures = figuresOf(reading);
         const [roles, smallRoles] = splitRoles(rolesOf(reading));
+        const [sessions, smallSessions] = splitSessions(sessionsOf(reading));
         return {
             gauges: gaugesOf(reading),
             figures,
             roles,
             smallRoles,
             smallRolesBytes: smallRoles.reduce((sum, role) => sum + role.bytes, 0),
+            sessions,
+            smallSessions,
+            smallSessionsBytes: smallSessions.reduce((sum, session) => sum + session.bytes, 0),
             alerts: figures.filter((figure) => figure.warn),
         };
     });

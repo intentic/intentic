@@ -48,6 +48,29 @@ export const heaviestRoles = (roles: SandboxMetrics[`roles`], limit: number): Ro
         .toSorted((left, right) => right.rssBytes - left.rssBytes)
         .slice(0, limit);
 
+// One conversation's processes, the agent's own and everything it started, as the reading names them.
+export interface SessionShare {
+    readonly id: string;
+    readonly rssBytes: number;
+    readonly cpuPercent: number | undefined;
+    readonly processes: number;
+}
+
+// The conversations holding the most memory, heaviest first, the busier on CPU first where two hold the same: what
+// "By session" lists, which answers where the memory went in one look instead of a scan across three lanes of cards.
+export const heaviestSessions = (sessions: SandboxMetrics[`sessions`]): SessionShare[] =>
+    Object.entries(sessions)
+        .map(([id, session]) => ({ id, rssBytes: session.rssBytes, cpuPercent: session.cpuPercent, processes: session.processes }))
+        .toSorted((left, right) => right.rssBytes - left.rssBytes || (right.cpuPercent ?? 0) - (left.cpuPercent ?? 0));
+
+// A conversation holding this share of the sandbox's memory limit is heavy: its figure is tinted on its card and in the
+// panel. Memory, not CPU, since memory is what runs out (the gate that holds a turn and the kernel's OOM killer both
+// read it), while a busy CPU only makes work queue.
+export const HEAVY_SESSION_SHARE = 0.25;
+
+export const sessionHeavy = (rssBytes: number, sandbox: SandboxMetrics[`sandbox`]): boolean =>
+    sandbox.memoryLimitBytes > 0 && rssBytes >= HEAVY_SESSION_SHARE * sandbox.memoryLimitBytes;
+
 // Past this share of a limit, a figure is worth the reader's attention before the kernel decides for them.
 export const NEAR_LIMIT = 0.9;
 // Pressure, in percent of the last ten seconds, worth a place on the line at all: below it nothing is waiting.

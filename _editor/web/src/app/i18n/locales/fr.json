@@ -1481,7 +1481,6 @@
         "pickerAccounts": {
             "allAccounts": "Les {count} comptes",
             "filterSubscriptionAccounts": "Filtrer les comptes d'abonnement",
-            "headroom": "Marge",
             "noAccountsMatch": "Aucun compte ne correspond.",
             "reMeasureEveryAccounts": "Remesurer maintenant les limites d'offre de chaque compte",
             "session": "Session {provider}",

@@ -6,6 +6,7 @@ import {
     findingGist,
     fixTone,
     leftSince,
+    mainlineBadge,
     mainlineSummary,
     pushDebtOf,
     redsOf,
@@ -14,6 +15,7 @@ import {
     timelineOf,
     usualBranch,
 } from "./mainlineView";
+import { mainlineTileBadge, shellMainline } from "./mainlineTile";
 
 // No mocks: the main line's readout is a pure projection over the status the daemon serves, like landCheck beside it.
 const NOW = 1_700_000_000_000;
@@ -441,5 +443,61 @@ describe(`leftSince`, () => {
             { settled: [`lint`] },
         );
         expect([leftSince(pushed, NOW - 1), leftSince(pushed, NOW), leftSince(pushed, NOW + 1), leftSince(undefined, 0)]).toEqual([3, 1, 0, 0]);
+    });
+});
+
+// THE RAIL'S TILE: the bar's two answers in the rail's shape, a danger count for health and a running note for activity.
+describe(`mainlineBadge`, () => {
+    const checking = { command: `pnpm verify`, startedAt: NOW - 5_000, lands: [land(`b`, NOW - 6_000)] };
+
+    it(`says nothing while main passes and nothing moves, whatever pushes left`, () => {
+        expect(mainlineBadge(undefined)).toBeUndefined();
+        expect(mainlineBadge(mainlineSummary(status([project({ last: run() })], [run()])))).toBeUndefined();
+        // What a push left waits for the owner; a count kept for days would hold the tile on the rail for nothing.
+        expect(mainlineBadge(mainlineSummary(pushStatus([push(`a`, NOW, [finding(`paths`)])], { lastAt: NOW - MINUTE })))).toBeUndefined();
+    });
+
+    it(`turns while a check runs, naming the project and the lands queued behind it, and the machine it was sent to`, () => {
+        const waiting = [land(`c`, NOW - 2_000), land(`d`, NOW - 1_000)];
+        expect(mainlineBadge(mainlineSummary(status([project({ running: checking, queued: waiting, last: run() })])))).toEqual({
+            running: `checking web · 2 queued`,
+        });
+        expect(mainlineBadge(mainlineSummary(status([project({ running: { ...checking, on: `omen` } })])))).toEqual({
+            running: `checking web on omen`,
+        });
+        // Lands waiting with nothing picked up yet are still work in flight behind the tile.
+        expect(mainlineBadge(mainlineSummary(status([project({ queued: waiting, last: run() })])))).toEqual({ running: `2 queued` });
+    });
+
+    it(`counts a red in the rail's danger tone, with who has it when there is one to say it of`, () => {
+        const broken = red({ routing: { kind: `fix-up`, conversationId: `fixer`, at: NOW - MINUTE } });
+        const fixing = redProject(broken);
+        expect(mainlineBadge(mainlineSummary(status([{ ...fixing, red: { ...fixing.red!, fixer: broken.routing } }], [broken])))).toEqual({
+            count: 1,
+            tone: `danger`,
+            tooltip: `web failing · fixing`,
+        });
+        // Still deciding: no word for who has it yet, so the tile says only that it fails.
+        expect(mainlineBadge(mainlineSummary(status([redProject(red())], [red()])))).toEqual({ count: 1, tone: `danger`, tooltip: `web failing` });
+    });
+
+    it(`counts the projects failing when there is more than one, and keeps turning while another check runs`, () => {
+        const api = red({ project: `api`, at: NOW - 9 * MINUTE });
+        const web = red({ at: NOW - 3 * MINUTE });
+        expect(
+            mainlineBadge(mainlineSummary(status([{ ...redProject(api), running: checking }, redProject(web)], [web, api]))),
+        ).toEqual({ count: 2, tone: `danger`, tooltip: `2 projects failing`, running: `checking api` });
+    });
+});
+
+describe(`the Main line tile`, () => {
+    afterEach(() => {
+        shellMainline.value = undefined;
+    });
+
+    it(`badges from what the shell last read, and from nothing before it answers`, () => {
+        expect(mainlineTileBadge.value).toBeUndefined();
+        shellMainline.value = status([redProject(red())], [red()]);
+        expect(mainlineTileBadge.value).toEqual({ count: 1, tone: `danger`, tooltip: `web failing` });
     });
 });

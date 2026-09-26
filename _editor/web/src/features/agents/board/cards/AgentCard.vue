@@ -799,9 +799,6 @@ const grab = (event: PointerEvent): void => {
                 </template>
             </div>
 
-            <!-- Opt-in geek metrics: draws only when the board provides a reading naming this conversation, so never for another box's card. -->
-            <SessionMetrics v-if="localOnly" :conversation-id="agent.id" :class="dense ? 'w-full' : ''" />
-
             <!-- The closing summary line: counted stats, then the drill-in and time held to the line's right (see `summary`). -->
             <div
                 v-if="summary"
@@ -817,6 +814,8 @@ const grab = (event: PointerEvent): void => {
                 </span>
                 <!-- Lifetime cost total, read-only here. -->
                 <span v-if="agent.costUsd !== undefined">{{ formatCost(agent.costUsd) }}</span>
+                <!-- Opt-in geek metrics, beside what it cost: what its processes hold now. Draws only when the board provides a reading naming this conversation, so never for another box's card. -->
+                <SessionMetrics v-if="localOnly" :conversation-id="agent.id" />
                 <!-- Counts this agent's own children, live-of-total while any are running and settling to the lifetime total once none are. -->
                 <!-- A real link (underlines on hover, tints live), so Ctrl/Cmd-click opens the list in its own tab. -->
                 <!-- Plain text for a guest, whose subagent list the daemon refuses: the count is still its own run's. -->

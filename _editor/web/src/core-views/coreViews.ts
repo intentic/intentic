@@ -1,13 +1,25 @@
 import type { ViewRegistration } from "@intentic/extension-api";
 import { t } from "@intentic/ui/i18n";
+import { MAINLINE_VIEW_ID, mainlineTileBadge } from "../features/agents/mainline/mainlineTile";
 
 // Stay in-app rather than move to `_extensions/*`: each touches privileged internals a clean extension can't reach.
+// - mainline: the fleet's roster (who landed what, who is fixing it) and the check's own work terminals.
 // - infrastructure + live-status: platform (Cloudflare provisioning), build environment, secret management.
 // - directory-ui: DirectoryUiHost's sandboxed-iframe bridge, shared with the workspace file-open path.
 // - codebase-health: the index the daemon builds for the workspace, and the tab store it opens files through.
 // Everything else separable has moved to a package, via extension-host/builtins.ts.
 
 export const coreViews = (): readonly ViewRegistration[] => [
+    {
+        id: MAINLINE_VIEW_ID,
+        label: t(`agents.mainline.title`),
+        surface: `rail`,
+        // Every sandbox's work lands and is checked, so there is no evidence to wait for; the tile holds a place on the
+        // rail only while its badge says something (registry.ts, `signal`), and the view says when nothing was checked.
+        detect: () => [{ key: MAINLINE_VIEW_ID, title: t(`agents.mainline.title`), icon: `mainline` }],
+        badge: () => mainlineTileBadge.value,
+        view: async () => (await import(`../features/agents/mainline/Mainline.vue`)).default,
+    },
     {
         id: `infrastructure`,
         label: t(`views.words.infrastructure`),

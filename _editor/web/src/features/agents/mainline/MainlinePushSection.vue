@@ -28,8 +28,8 @@ const props = defineProps<{
 
 const { say, warn } = useNotifications();
 
-// As many as a dock's short panel shows without scrolling past the actions; the rest open in place.
-const SHOWN = 6;
+// As many as sit above the actions without pushing them past a laptop's first screen of the view; the rest open in place.
+const SHOWN = 12;
 const SEP = ` · `;
 
 const project = computed(() => props.debt.project);

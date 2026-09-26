@@ -9,13 +9,15 @@ import type {
     MainlineStatus,
     Red,
 } from "@intentic/sandbox-contract";
+import type { ViewBadge } from "@intentic/extension-api";
 import type { IconName } from "@intentic/ui";
 import { formatClock, formatDate, formatDayMonthTime } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 
 // THE MAIN LINE AS ONE READOUT: what the main tree's own check says, in the order and the words a reader takes it in.
-// Pure over the status the daemon serves (workspace.mainline); the status bar draws it, and a card's mark borrows its
-// words for what became of a red run, so the rail, the board and the dock never name one decision two ways.
+// Pure over the status the daemon serves (workspace.mainline); the Main line view and the board's status bar draw it,
+// the view's rail tile badges from it, and a card's mark borrows its words for what became of a red run, so the rail,
+// the board and the view never name one decision two ways.
 //
 // Two questions are kept apart everywhere it is drawn, because one sentence answering both is what made it unreadable:
 // HEALTH (is main passing, and if not, who has it) and ACTIVITY (what the check is doing now, and what queues for it).
@@ -332,3 +334,36 @@ export const brokeLabel = (failures: number, routing: MainlineRoutingKind | unde
 
 // The ink a decision is said in: only one that waits for the reader asks for their eye.
 export const fixTone = (state: FixState): string => (state === `needs-you` ? `text-warning` : state === `fixed` ? `text-success` : `text-muted`);
+
+// WHAT THE RAIL'S TILE SAYS: the bar's two answers in the rail's shape. Health is a danger count of the projects failing,
+// the way CI's tile counts its red branches, with who has it in one or two words when there is one red to say it of.
+// Activity is the tile's running mark: the check running and the lands queued behind it. What a push left never badges:
+// it waits for the owner whenever they get to it, and a count kept for days would hold the tile on the rail for nothing.
+// Undefined while main passes and nothing moves, so the tile stands down.
+export const mainlineBadge = (summary: MainlineSummary | undefined): ViewBadge | undefined => {
+    if (summary === undefined) {
+        return undefined;
+    }
+    const { running: check, queued, reds } = summary;
+    const activity = [
+        ...(check === undefined
+            ? []
+            : [
+                  check.on === undefined
+                      ? t(`agents.mainline.rail.checking`, { project: projectName(check.project) })
+                      : t(`agents.mainline.rail.checkingOn`, { project: projectName(check.project), machine: check.on }),
+              ]),
+        ...(queued > 0 ? [t(`agents.mainline.queued`, { count: queued })] : []),
+    ];
+    const running = activity.length === 0 ? undefined : activity.join(` · `);
+    const [worst] = reds;
+    if (worst === undefined) {
+        return running === undefined ? undefined : { running };
+    }
+    const count = reds.length;
+    const failing =
+        count === 1 ? t(`agents.mainline.projectFailing`, { project: projectName(worst.project) }) : t(`agents.mainline.projectsFailing`, { count }, count);
+    const short = count === 1 ? routingMeta(worst.fixer?.kind).short : undefined;
+    const tooltip = short === undefined ? failing : `${failing} · ${short}`;
+    return running === undefined ? { count, tone: `danger`, tooltip } : { count, tone: `danger`, tooltip, running };
+};

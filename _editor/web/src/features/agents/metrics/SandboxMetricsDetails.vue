@@ -4,14 +4,18 @@ import { Meter, ui } from "@intentic/ui";
 import { formatBytes } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
+import { agentDisplayTitle } from "../fleet/agentStatus";
+import { useAgents } from "../fleet/useAgents";
+import { openLandConversation as openConversation } from "../mainline/openLanded";
 import { useSandboxReadout } from "./sandboxFigures";
 
 // The panel the board's metrics segment opens above its status bar: every figure the bar leaves out, grouped by
 // what it answers. The gauges again with their capacity, then the machine's other readings, then which kinds of process
 // hold the memory, one kind a row with the small ones folded (sandboxFigures.ts decides which), since a row of
-// side-by-side kinds reads as a puzzle rather than a list. Every figure explains itself on hover, since "load" or
-// "pressure" is a number only a reader who already knows it can read bare. Its heading is the status bar panel's header
-// (BoardStatusBar.vue).
+// side-by-side kinds reads as a puzzle rather than a list. Last, which conversations hold it, heaviest first: where the
+// memory went, in one look rather than a scan across every card, and each row opens its conversation, so the one eating
+// the box is a press from being stopped. Every figure explains itself on hover, since "load" or "pressure" is a number
+// only a reader who already knows it can read bare. Its heading is the status bar panel's header (BoardStatusBar.vue).
 
 const t = useT();
 
@@ -24,6 +28,21 @@ const readout = useSandboxReadout(() => props.metrics);
 // Folded until asked for, and for as long as the panel stays open.
 const smallOpen = ref(false);
 const shownRoles = computed(() => (smallOpen.value ? [...readout.value.roles, ...readout.value.smallRoles] : readout.value.roles));
+const moreSessionsOpen = ref(false);
+const shownSessions = computed(() =>
+    moreSessionsOpen.value ? [...readout.value.sessions, ...readout.value.smallSessions] : readout.value.sessions,
+);
+
+// A conversation as its card names it; one the board carries no card for (archived, another reader's) by its id.
+const { agentById } = useAgents();
+const titleOf = (id: string): string => {
+    const agent = agentById(id);
+    return agent === undefined ? id : agentDisplayTitle(agent);
+};
+const open = (id: string): void => {
+    const agent = agentById(id);
+    openConversation(id, agent === undefined ? undefined : agentDisplayTitle(agent));
+};
 </script>
 
 <template>
@@ -87,6 +106,54 @@ const shownRoles = computed(() => (smallOpen.value ? [...readout.value.roles, ..
                               `agents.liveMetrics.smallRoles`,
                               { count: readout.smallRoles.length, size: formatBytes(readout.smallRolesBytes) },
                               readout.smallRoles.length,
+                          )
+                }}
+            </button>
+        </div>
+
+        <!-- One conversation a row, its memory against the heaviest's and its CPU beside it; tinted when it holds a
+             quarter of the box. Its title opens it; its whole reading is on hover. -->
+        <div v-if="readout.sessions.length > 0" role="group" data-section="sessions" class="flex w-80 shrink-0 flex-col gap-1.5">
+            <h4 v-tooltip.left="t(`agents.liveMetrics.sessionsHint`)" :class="ui.sectionLabelSm(`cursor-help self-start`)">
+                {{ t(`agents.liveMetrics.sessionsLabel`) }}
+            </h4>
+            <div
+                v-for="session in shownSessions"
+                :key="session.key"
+                data-figure
+                class="grid grid-cols-[minmax(0,1fr)_minmax(1.5rem,3rem)_4.5rem_3rem] items-center gap-2 text-2xs"
+            >
+                <!-- The text's own height, not the recipe's tap target, so these rows keep the kinds' pitch beside them. -->
+                <button
+                    type="button"
+                    :class="ui.textAction(`my-0 min-h-0 min-w-0 max-w-full text-2xs`)"
+                    v-tooltip.top="session.line"
+                    @click="open(session.key)"
+                >
+                    <span class="truncate">{{ titleOf(session.key) }}</span>
+                </button>
+                <Meter :value="session.share" :tone="session.heavy ? `warning` : `accent`" />
+                <span class="text-right whitespace-nowrap tabular-nums" :class="session.heavy ? `text-warning` : `text-content`">{{
+                    session.value
+                }}</span>
+                <span class="text-right whitespace-nowrap tabular-nums text-muted">{{ session.cpu ?? `–` }}</span>
+            </div>
+            <button
+                v-if="readout.smallSessions.length > 0"
+                type="button"
+                data-small-sessions
+                :class="ui.textAction(`flex items-center gap-1 self-start text-2xs text-subtle`)"
+                :aria-expanded="moreSessionsOpen"
+                @click="moreSessionsOpen = !moreSessionsOpen"
+            >
+                <Icon :name="moreSessionsOpen ? `chevron-down` : `chevron-right`" class="shrink-0 text-2xs" />
+                {{
+                    moreSessionsOpen
+                        ? t(`agents.liveMetrics.smallSessionsHide`)
+                        : t(
+                              `agents.liveMetrics.smallSessions`,
+                              { count: readout.smallSessions.length, size: formatBytes(readout.smallSessionsBytes) },
+                              readout.smallSessions.length,
                           )
                 }}
             </button>

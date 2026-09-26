@@ -9,7 +9,7 @@ import {
     runPickOf,
 } from "@intentic/sandbox-contract";
 import type { AgentRunChoice } from "@intentic/ui";
-import { computed, type ComputedRef, inject, type InjectionKey, type MaybeRefOrGetter, provide, toValue } from "vue";
+import { computed, type ComputedRef, inject, type InjectionKey, type MaybeRefOrGetter, provide, toValue, watch } from "vue";
 import { rpcKey } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
 import { rpcQuery } from "../../sandbox/client/rpcQuery";
@@ -17,10 +17,12 @@ import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
 import { registry } from "../fleet/useAgents-registry";
+import { shellMainline } from "./mainlineTile";
 
 // The main tree's own check (GET /workspace/mainline): what it is measuring, what waits for it, what it last said and
-// who took a red one, and what pushes left behind. Read ONCE per surface that draws it — the chat rail and the agents
-// board — and handed to that surface's cards, so a lane of fifty rows is one read and not fifty. The daemon's `mainline`
+// who took a red one, and what pushes left behind. Read ONCE per surface that draws it — the chat rail, the agents board,
+// the Main line view, and the shell for the view's rail tile — and handed to that surface's cards, so a lane of fifty
+// rows is one read and not fifty. All of them are one query, so the surfaces share a single request. The daemon's `mainline`
 // push keeps it current. A daemon that does not serve it, or a read that failed, answers nothing, and every mark drawn
 // from it then draws nothing rather than a guess.
 
@@ -42,6 +44,20 @@ export const provideMainline = (): ComputedRef<MainlineStatus | undefined> => {
 
 // What a card reads; nothing outside a host that provides it, so a card drawn anywhere else never starts a read.
 export const injectMainline = (): ComputedRef<MainlineStatus | undefined> | undefined => inject(MAINLINE_KEY, undefined);
+
+// The shell's own read, for the Main line's rail tile (mainlineTile.ts), which has to badge from any view. Called once
+// from the shared shell, so desktop and phone share it; it is the same query the board and the chat rail read, so it
+// costs no second request.
+export const watchMainline = (): void => {
+    const status = useMainline();
+    watch(
+        status,
+        (value) => {
+            shellMainline.value = value;
+        },
+        { immediate: true },
+    );
+};
 
 // THE OWNER'S HANDS ON WHAT A PUSH LEFT. Each press is answered by the daemon changing the status, and the daemon's
 // `mainline` push would bring that back on its own; asking again here as well means the press is seen to land in the

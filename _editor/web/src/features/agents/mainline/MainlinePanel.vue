@@ -33,7 +33,8 @@ import { openLandConversation, useLandTitle } from "./openLanded";
 // through: past the road because it is past a land (the owner's push), and never a column of it, since none of it is
 // main failing and all of it waits for whenever the owner gets to it. It explains nothing on hover: a title opens its conversation, "Logs"
 // opens the check's terminal, and a red says in one line who has it.
-// Nothing here closes the panel: opening a conversation or a terminal from it leaves it standing, to go on watching.
+// The body of the Main line view (Mainline.vue): opening a conversation or a terminal from it leaves it standing, to
+// go on watching.
 
 const t = useT();
 
@@ -44,9 +45,10 @@ const props = defineProps<{
 
 const landTitle = useLandTitle();
 
-// How much of a red run and of the record the panel lists before the terminal is the better place to read.
-const FAILURES_SHOWN = 3;
-const RECENT_SHOWN = 8;
+// How much of a red run the panel lists before the terminal is the better place to read (the daemon sends thirty), and
+// how much of the record: all of it, since the daemon keeps forty runs and a page has the room a drawer did not.
+const FAILURES_SHOWN = 10;
+const RECENT_SHOWN = 40;
 
 const HEADING = ui.sectionLabelSm(`flex h-5 items-center gap-1.5`);
 // A land's title, which opens its conversation: the whole row is the press.
@@ -135,8 +137,8 @@ const eventKey = (event: MainlineEvent): string => (event.kind === `land` ? `lan
     <div class="@container">
         <!-- A sandbox too old for this panel: said once, above the road, which then shows only what it did serve. -->
         <SandboxOutdatedNotice v-if="summary.outdated" :missing="t(`agents.mainline.outdatedMissing`)" class="mb-4" />
-        <!-- Four columns when the dock is wide. Narrower, the two short ones stack beside the result, so what main's state is
-             stays in view, and the record goes under them. -->
+        <!-- Four columns when the view is wide. Narrower (the chat docked beside it, a phone), the two short ones stack beside
+             the result, so what main's state is stays in view, and the record goes under them. -->
         <div
             class="grid grid-cols-1 gap-x-8 gap-y-5 pt-1 @xl:grid-cols-2 @4xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1.2fr)]"
         >

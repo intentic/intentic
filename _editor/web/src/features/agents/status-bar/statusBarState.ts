@@ -1,12 +1,13 @@
 import { definePreference } from "@intentic/ui/preference";
 import { computed, ref } from "vue";
 
-// THE BOARD'S STATUS BAR, REMEMBERED. Which panel the reader left open and how tall they made it, so a panel opened to
-// watch something is still open after a reload, a trip to another view, or a click anywhere else. Nothing is open until
-// the reader opens it: the bar says enough at rest.
+// THE BOARD'S STATUS BAR, REMEMBERED. Whether the reader left the metrics panel open and how tall they made it, so a
+// panel opened to watch something is still open after a reload, a trip to another view, or a click anywhere else.
+// Nothing is open until the reader opens it: the bar says enough at rest.
 
-// The bar's two segments, which are also the two panels it can open.
-export type StatusSegment = `mainline` | `metrics`;
+// The one segment that opens a panel above the bar. The main line's leads to a view of its own (Mainline.vue) and
+// opens nothing here, so a panel left open under its name before it moved reads back as closed.
+export type StatusSegment = `metrics`;
 
 export const PANEL_MIN_HEIGHT = 96;
 export const PANEL_DEFAULT_HEIGHT = 240;
@@ -25,10 +26,10 @@ export const panelMaxHeight = computed(() => Math.max(PANEL_MIN_HEIGHT, Math.min
 
 const clampHeight = (px: number): number => Math.min(PANEL_CEILING, Math.max(PANEL_MIN_HEIGHT, Math.round(px)));
 
-// The one panel open, if any: the bar's segments work as tabs.
+// The panel open, if any. Still stored under the dock's old key: renaming it would close every reader's open panel.
 export const openPanel = definePreference<StatusSegment | undefined>({
     key: `ui-board-dock-open`,
-    read: (raw) => (raw === `mainline` || raw === `metrics` ? raw : undefined),
+    read: (raw) => (raw === `metrics` ? raw : undefined),
     write: (id) => id ?? null,
 });
 

@@ -536,8 +536,9 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
             </div>
         </div>
         <!-- The board's status bar: the main line whenever a land has been checked (work lands without waiting for it, so
-             this is where its verdict is seen), and the opt-in geek metrics (Settings ▸ Appearance). At the foot, since
-             the header is the board's own; a segment's panel docks above it and stays until the reader closes it. -->
+             its verdict is glanced at here and read in full in the Main line view the segment leads to), and the opt-in
+             geek metrics (Settings ▸ Appearance). At the foot, since the header is the board's own; the metrics' panel
+             docks above it and stays until the reader closes it. -->
         <BoardStatusBar :mainline="mainline" :metrics="liveMetrics" />
         <!-- Discard is destructive and has no lane of its own, so it only exists while a card is actually being dragged. -->
         <div

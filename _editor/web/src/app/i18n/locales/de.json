@@ -1480,7 +1480,6 @@
         "pickerAccounts": {
             "allAccounts": "Alle {count} Konten",
             "filterSubscriptionAccounts": "Abo-Konten filtern",
-            "headroom": "Spielraum",
             "noAccountsMatch": "Keine Konten passen.",
             "reMeasureEveryAccounts": "Die Tarifgrenzen jedes Kontos jetzt neu messen",
             "session": "{provider}-Session",

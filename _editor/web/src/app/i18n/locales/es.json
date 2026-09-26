@@ -1489,7 +1489,6 @@
         "pickerAccounts": {
             "allAccounts": "Las {count} cuentas",
             "filterSubscriptionAccounts": "Filtrar cuentas de suscripción",
-            "headroom": "Margen",
             "noAccountsMatch": "Ninguna cuenta coincide.",
             "reMeasureEveryAccounts": "Volver a medir ahora los límites de plan de cada cuenta",
             "session": "Sesión de {provider}",

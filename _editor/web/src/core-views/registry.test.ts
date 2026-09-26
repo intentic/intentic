@@ -24,6 +24,7 @@ import {
     tabBarIds,
 } from "./registry";
 import { badgeChip } from "./viewBadge";
+import { shellMainline } from "../features/agents/mainline/mainlineTile";
 
 // Registers packaged extensions' detects against the same registry the shell composes, so cross-extension
 // rules (claiming, fallback) are exercised for real. `commands`/`viewers` stubs just keep activate() from throwing.
@@ -274,9 +275,16 @@ describe(`rail order`, () => {
     it(`tiles configuration below everything that lights up`, () => {
         // Workflows never badges; it held the third tile only by being filed beside Agents.
         expect(railRank(`workflows`)).toBe(railRank(`automations`) - 1);
-        for (const summons of [`approvals`, `acceptance`, `pipelines`, `deployments`, `maintenance`]) {
+        for (const summons of [`approvals`, `acceptance`, `mainline`, `pipelines`, `deployments`, `maintenance`]) {
             expect(railRank(summons)).toBeLessThan(railRank(`workflows`));
         }
+    });
+
+    // Down the road a change travels: checked on the main tree once it lands, by CI once it is pushed, then deployed.
+    it(`puts the Main line directly above Pipelines, a tile that holds its place only while it has news`, () => {
+        expect(railRank(`mainline`)).toBe(railRank(`acceptance`) + 1);
+        expect(railRank(`pipelines`)).toBe(railRank(`mainline`) + 1);
+        expect(railPolicy(`mainline`)).toBe(`signal`);
     });
 
     it(`heads the decisions band with Approvals, the only one where nothing moves until the owner acts`, () => {
@@ -440,6 +448,39 @@ describe(`what a badge says`, () => {
         expect(badgeChip({ count: 2 })).toBe(true);
         expect(badgeChip({ mark: `arrow-up` })).toBe(true);
         expect(badgeChip({ count: 0, running: `2 running` })).toBe(false);
+    });
+});
+
+// The Main line is a core view: always detected, since every sandbox's work is checked, and badged from the shell's own
+// read of the main tree's check (mainlineTile.ts), which this suite sets by hand.
+describe(`the Main line tile`, () => {
+    const tile = () => detectActivations([], []).find(({ extension }) => extension.id === `mainline`);
+
+    afterEach(() => {
+        shellMainline.value = undefined;
+    });
+
+    it(`is on offer with no repository or capability to detect, and leads to its own view`, () => {
+        expect(tile()?.activation).toEqual({ key: `mainline`, title: `Main line`, icon: `mainline` });
+    });
+
+    it(`badges a red as the rail's danger count and a running check as its turning mark, and stands down otherwise`, () => {
+        const found = tile()!;
+        expect(activationBadge(found)).toBeUndefined();
+        shellMainline.value = {
+            projects: [
+                {
+                    project: `web`,
+                    queued: [],
+                    running: { command: `pnpm verify`, startedAt: 1, lands: [] },
+                    last: { project: `web`, command: `pnpm verify`, status: `red`, startedAt: 0, at: 1, lands: [], failures: [], failureCount: 0, attempt: 1 },
+                    red: { since: 1, cause: [], named: false },
+                },
+            ],
+            recent: [],
+            reds: [],
+        };
+        expect(activationBadge(found)).toEqual({ count: 1, tone: `danger`, tooltip: `web failing`, running: `checking web` });
     });
 });
 
