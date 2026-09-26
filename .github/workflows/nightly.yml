@@ -360,6 +360,13 @@ jobs:
         run: |
           bash _tools/scripts/build/build-ic.sh linux-x64
           echo "IC_BIN=$GITHUB_WORKSPACE/_sandbox/ic/dist-bin/ic-linux-amd64" >> "$GITHUB_ENV"
+      # THE LIBRARIES THE SUITE IMPORTS, BUILT. Playwright resolves @intentic/base, /constants and /prisma through
+      # their `dist/`, and `pnpm --filter` below skips the `^build` that every turbo e2e task depends on. So
+      # without this step the suite runs against whatever dist an earlier run left in this `clean: false`
+      # workspace, and fails on the first export added since then (run 36229039140:
+      # `Cannot find module …/@intentic/base/dist/node/fs.js`).
+      - name: Build the workspace libraries the suite imports
+        run: pnpm turbo run build --filter='@intentic/onboarding^...' --ui=stream
       # DOCKER_HOST in the suite's own shell: the tier reads it out of process.env (docker.ts) and passes it
       # down to every docker it shells out to (shell.ts's PASS_THROUGH), so this one line is what puts the whole
       # journey on the daemon this job started rather than the runner's.
