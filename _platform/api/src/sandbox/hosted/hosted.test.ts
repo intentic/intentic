@@ -10,12 +10,21 @@ import { sandboxRoutes } from "../sandbox.routes.js";
 import { hostOwnerId, mintReachabilityGrant, verifyReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
 import { publicKeyPemOf } from "@intentic/sandbox-contract/owner-ticket";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
-import { hostedEnabled, hostedInstanceId, provisionHosted, reapHostedOrphans, startAfterUpdate, wakeHosted, type HostedProvisionArgs } from "./hosted.js";
+import {
+    hostedEnabled,
+    hostedInstanceId,
+    provisionHosted,
+    reapHostedOrphans,
+    refreshHosted,
+    startAfterUpdate,
+    wakeHosted,
+    type HostedProvisionArgs,
+} from "./hosted.js";
 import { HostedAlreadyProvisioned } from "./hosted-cleanup.js";
 import { hostedShapeFor } from "./hosted-shape.js";
 import { AT_CAPACITY_MESSAGE, forgetProviderCapacity, HostedAtCapacity } from "./hosted-capacity.js";
 import { forgetHostedImage } from "./build/hosted-image.js";
-import { STATE_PROBE_ENV } from "./gate/state-gate.js";
+import { HostedImageKept, HostedMachineBusy, STATE_PROBE_ENV } from "./gate/state-gate.js";
 import { CLEAR_STATE_PLAN, type FakeFly, type FakeFlyCall, type FakeFlyMachine, installFakeFly } from "@intentic/testing/fly-fake";
 import { fakeHostedAppLock, testIngressConfig } from "../../testing.js";
 import { createApp } from "../../app.js";
@@ -897,6 +906,32 @@ describe(`wakeHosted`, () => {
         expect(finalConfigOf(fly).image).toBe(`ghcr.io/intentic/sandbox@${STABLE_DIGEST}`);
         expect(finalConfigOf(fly).env[STATE_PROBE_ENV]).toBeUndefined();
         expect(runningIn(fly)).toBe(true);
+    });
+
+    /* A WAKE DURING A RESTART'S PROBE. The browser wakes whatever it cannot reach, and a machine mid-probe is exactly
+     * that: its heal would start a second gate, replace the first one's probe under its exec, and the first gate would
+     * read "no plan" and go ahead over its own refusal. The wake answers busy instead, and the refusal stands. */
+    it(`answers busy while a restart is mid-probe, and the restart's refusal stands`, async () => {
+        const fly = configuredFly(currentTunnelEnv(), `started`);
+        let wake: Promise<unknown> | undefined;
+        fly.commands.answer = () => {
+            wake ??= wakeHosted(config(), WAKE_TARGET, wakeArgs).catch((error: unknown) => error);
+            return { exit_code: 0, stdout: JSON.stringify({ ...CLEAR_STATE_PLAN, ok: false, failures: [{ document: `a.json`, detail: `no` }] }), stderr: `` };
+        };
+        await expect(refreshHosted(config(), wakeArgs(), { ...WAKE_TARGET, volumeId: `vol_1` }, logger)).rejects.toBeInstanceOf(HostedImageKept);
+        expect(await wake).toBeInstanceOf(HostedMachineBusy);
+        expect(fly.called(`POST`, `/machines/m1/exec`)).toHaveLength(1);
+        expect(finalConfigOf(fly).image).toBe(PINNED);
+        expect(finalConfigOf(fly).env[STATE_PROBE_ENV]).toBeUndefined();
+        expect(runningIn(fly)).toBe(true);
+    });
+
+    // A probe caught starting or stopping is a gate at work: never started as if it were the sandbox.
+    it(`answers busy for a probe caught mid-transition, and starts nothing`, async () => {
+        const fly = configuredFly({ [STATE_PROBE_ENV]: PINNED }, `replacing`);
+        await expect(wakeHosted(config(), WAKE_TARGET, wakeArgs)).rejects.toBeInstanceOf(HostedMachineBusy);
+        expect(fly.called(`POST`, `/machines/m1/start`)).toEqual([]);
+        expect(updatesIn(fly)).toHaveLength(0);
     });
 });
 

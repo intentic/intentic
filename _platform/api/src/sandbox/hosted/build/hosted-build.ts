@@ -183,7 +183,7 @@ const applyHostedBuild = async (prisma: PrismaClient, config: Config, logger: Lo
         config,
         machine,
         hostedMachineConfig(config, provisionArgsOf(config, machine), machine.appName, machine.volumeId, { image, environmentHash: build.hash }),
-        { start: running, logger },
+        { start: running, stranding: { prisma, hostedMachineId: machine.id }, logger },
     );
     await prisma.hostedMachine.update({
         where: { id: machine.id },

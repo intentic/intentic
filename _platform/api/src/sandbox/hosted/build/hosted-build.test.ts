@@ -3,7 +3,7 @@ import type { PrismaClient } from "@intentic/prisma";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { CLEAR_STATE_PLAN, type FakeFlyCall, installFakeFly } from "@intentic/testing/fly-fake";
 import type { Config } from "../../../config.js";
-import { testIngressConfig } from "../../../testing.js";
+import { fakeHostedAppLock, testIngressConfig } from "../../../testing.js";
 import { BUILD_ENV, BUILD_PATHS } from "./hosted-build-script.js";
 import {
     buildStateOf,
@@ -18,6 +18,9 @@ import {
 import { hostedInstanceId } from "../hosted.js";
 import { STATE_PROBE_ENV } from "../gate/state-gate.js";
 import * as timersPromisesOriginal from "node:timers/promises";
+
+// The state gate holds the app's lock around a swap; the in-process one stands in for Postgres's.
+jest.mock(`../hosted-app-lock.js`, () => ({ withHostedAppLock: fakeHostedAppLock }));
 
 /* The settle between a machine's config update and its start (hosted.ts SETTLE_MS) is half a second of real time in production, polled up to sixty times. */
 jest.mock("node:timers/promises", () => ({
@@ -211,13 +214,19 @@ const graphqlRoute = () => ({
 const STOCK = `ghcr.io/intentic/sandbox@sha256:${`a`.repeat(64)}`;
 const sandboxFly = (state: `started` | `stopped`) => {
     const graphql = graphqlRoute();
+    // Every GraphQL body sent, in order: the mint and the revoke are only visible here.
+    const sent: { query: string; variables?: unknown }[] = [];
     const fly = installFakeFly((name, value) => stubGlobal(name, value), {
-        passThrough: (_input, init) => Promise.resolve(graphql.respond(JSON.parse(String(init?.body ?? `{}`)) as unknown)),
+        passThrough: (_input, init) => {
+            const body = JSON.parse(String(init?.body ?? `{}`)) as { query: string; variables?: unknown };
+            sent.push(body);
+            return Promise.resolve(graphql.respond(body));
+        },
     });
     fly.apps.add(`intentic-sbx-abc`);
     const at = new Date().toISOString();
     fly.machines.set(`m1`, { id: `m1`, app: `intentic-sbx-abc`, region: `iad`, state, config: { image: STOCK, env: {} }, createdAt: at, updatedAt: at });
-    return fly;
+    return Object.assign(fly, { graphql: sent });
 };
 // SAFETY: the fake holds the config fly.ts last wrote, which is a FlyMachineConfig.
 const configOf = (fly: ReturnType<typeof sandboxFly>) => fly.machines.get(`m1`)?.config as { image: string; env: Record<string, string> };
@@ -451,6 +460,10 @@ describe(`the builder's report`, () => {
         );
         expect(fly.called(`DELETE`, `/machines/mb1`)).toHaveLength(1);
         expect(fly.called(`DELETE`, `/machines/mb1`)[0]?.url).toMatch(/\?force=true$/u);
+        // The builder's deploy token is revoked by its id, and the row forgets it.
+        const revoke = fly.graphql.find((body) => body.query.includes(`deleteLimitedAccessToken`));
+        expect(revoke?.variables).toEqual({ input: { id: `lat-1` } });
+        expect(prisma.hostedBuild.update).toHaveBeenCalledWith({ where: { id: `b1` }, data: { tokenId: null } });
         expect(prisma.hostedMachine.updateMany).toHaveBeenCalledWith({ where: { id: `h1`, buildingId: `b1` }, data: { buildingId: null } });
         const applied = configOf(fly);
         expect(applied.image).toBe(`registry.fly.io/intentic-sbx-abc@${DIGEST}`);

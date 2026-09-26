@@ -62,6 +62,9 @@ export interface FakeFlyFaults {
     /** A start of a machine whose config names this image is accepted and leaves it stopped: a new version that
      * will not boot, while the one before it still does. */
     readonly imageWontStart?: string;
+    /** A start that takes leaves the machine `starting` for this many reads of it before it reads `started`; with
+     * `Infinity` it never does. What a slow boot looks like to anything that needs `started` rather than a start. */
+    readonly startingReads?: number;
     /** Every request answers this status with Fly's error envelope; for the "provider is down" branches. */
     readonly status?: number;
 }
@@ -163,6 +166,8 @@ export const installFakeFly = (
     const volumes = new Map<string, FakeFlyVolume>();
     const snapshots = new Map<string, FakeFlySnapshot>();
     let faults: FakeFlyFaults = options.faults ?? {};
+    // Reads left before a machine that is `starting` reads `started` (faults.startingReads).
+    const startingLeft = new Map<string, number>();
     const commands: FakeFlyCommands = { answer: clearPlanAnswer };
     const passThrough = options.passThrough ?? globalThis.fetch;
 
@@ -374,7 +379,18 @@ export const installFakeFly = (
         {
             method: "GET",
             pattern: /^\/v1\/apps\/[^/]+\/machines\/([^/]+)$/u,
-            handle: (match) => found(machines, match[1] as string, "Machine", (machine) => json(wireMachine(machine))),
+            handle: (match) =>
+                found(machines, match[1] as string, "Machine", (machine) => {
+                    const left = startingLeft.get(machine.id);
+                    if (machine.state === "starting" && left !== undefined) {
+                        startingLeft.set(machine.id, left - 1);
+                        if (left - 1 <= 0) {
+                            startingLeft.delete(machine.id);
+                            machine.state = "started";
+                        }
+                    }
+                    return json(wireMachine(machine));
+                }),
         },
         {
             method: "POST",
@@ -402,7 +418,12 @@ export const installFakeFly = (
             handle: (match) =>
                 found(machines, match[1] as string, "Machine", (machine) => {
                     const wont = faults.machineWontStart === true || (faults.imageWontStart !== undefined && machine.config["image"] === faults.imageWontStart);
+                    const reads = wont ? 0 : (faults.startingReads ?? 0);
                     machine.state = wont ? "stopped" : "started";
+                    if (reads > 0) {
+                        machine.state = "starting";
+                        startingLeft.set(machine.id, reads);
+                    }
                     machine.updatedAt = now();
                     return json({ ok: true });
                 }),

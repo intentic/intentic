@@ -37,7 +37,7 @@ import { assertHostedIdentity, HostedAlreadyProvisioned, HostedProvisionCancelle
 import { hostedShapeFor, shapeOfRow, volumeOptions } from "./hosted-shape.js";
 import { dropHostedMachine } from "./hosted-usage.js";
 import { startAfterUpdate } from "./gate/start-after-update.js";
-import { HostedImageKept, STATE_PROBE_ENV, switchHostedImage } from "./gate/state-gate.js";
+import { HostedImageKept, HostedMachineBusy, type HostedStrandingRecord, STATE_PROBE_ENV, switchHostedImage } from "./gate/state-gate.js";
 
 // Where every caller has always found it; it lives beside the gate that starts machines too.
 export { startAfterUpdate } from "./gate/start-after-update.js";
@@ -215,12 +215,19 @@ export interface HostedWakeTarget {
 const HEALABLE_STATES = new Set([`stopped`, `suspended`, `started`]);
 
 // The wake's config replacement, under the state gate. A machine kept on its version and running there is a woken
-// machine, which is what was asked for; anything else is the wake's failure.
-const healHosted = async (config: Config, hosted: HostedWakeTarget, args: HostedProvisionArgs, logger: Logger | undefined): Promise<void> => {
+// machine, which is what was asked for; anything else is the wake's failure. It does not wait for another change to
+// this machine (a restart mid-probe): HostedMachineBusy, and the browser's next wake finds it done.
+const healHosted = async (
+    config: Config,
+    hosted: HostedWakeTarget,
+    args: HostedProvisionArgs,
+    logger: Logger | undefined,
+    stranding: HostedStrandingRecord | undefined,
+): Promise<void> => {
     const overlay: HostedOverlay = { image: hosted.image ?? null, environmentHash: hosted.environmentHash ?? null };
     const target = hostedMachineConfig(config, args, hosted.appName, hosted.volumeId, overlay, await resolveHostedImage(config), shapeOfRow(hosted));
     try {
-        await switchHostedImage(config, hosted, target, { start: true, keepImage: true, logger });
+        await switchHostedImage(config, hosted, target, { start: true, keepImage: true, busy: `refuse`, stranding, logger });
     } catch (error) {
         if (!(error instanceof HostedImageKept && error.running)) {
             throw error;
@@ -240,18 +247,28 @@ const healHosted = async (config: Config, hosted: HostedWakeTarget, args: Hosted
  * target that does not start is put back, so the wake is never the thing that leaves a machine unable to boot. A
  * config a dead gate left mid-probe (its marker in the environment) is re-applied the same way. An overlay machine
  * keeps its overlay, whose base is the owner's rebuild to move. `heal` is lazy because only this case needs the
- * sandbox's identity. A read that fails is not a verdict: the plain start runs and the next wake asks again. Answers
- * whether it healed. */
-export const wakeHosted = async (config: Config, hosted: HostedWakeTarget, heal?: () => HostedProvisionArgs, logger?: Logger): Promise<boolean> => {
+ * sandbox's identity. A read that fails is not a verdict: the plain start runs and the next wake asks again. A probe
+ * caught mid-transition is a gate at work, never a machine to start: HostedMachineBusy, as when the heal meets the
+ * app's lock held. Answers whether it healed. */
+export const wakeHosted = async (
+    config: Config,
+    hosted: HostedWakeTarget,
+    heal?: () => HostedProvisionArgs,
+    logger?: Logger,
+    stranding?: HostedStrandingRecord,
+): Promise<boolean> => {
     if (heal !== undefined && ingressEnabled(config)) {
         // allow(silent-catch): a read that fails is not a verdict; the plain start below runs and the next wake asks again
         const launch = await getMachineLaunch(config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch(() => undefined);
+        const probing = launch?.env?.[STATE_PROBE_ENV] !== undefined;
         if (launch?.env !== undefined && HEALABLE_STATES.has(launch.state)) {
             const args = heal();
-            if (!tunnelEnvCurrent(config, args.connectToken, launch.env) || launch.env[STATE_PROBE_ENV] !== undefined) {
-                await healHosted(config, hosted, args, logger);
+            if (!tunnelEnvCurrent(config, args.connectToken, launch.env) || probing) {
+                await healHosted(config, hosted, args, logger, stranding);
                 return true;
             }
+        } else if (probing) {
+            throw new HostedMachineBusy(`this sandbox is being changed right now; try again in a moment`);
         }
     }
     await startHosted(config, hosted);
@@ -460,18 +477,20 @@ export const provisionHosted = async (
 // so this replaces the full config while stopped, then wakes it as one metered transition. A stock machine moves onto
 // today's stock digest, under the state gate (gate/state-gate.ts): a target that cannot convert this sandbox's state
 // leaves it on its version with the fresh config, and one that does not start is put back; both throw HostedImageKept.
+// It waits its turn behind any other change to this machine (the gate's lock).
 export const refreshHosted = async (
     config: Config,
     args: HostedProvisionArgs,
     hosted: { appName: string; machineId: string; volumeId: string; image?: string | null; environmentHash?: string | null },
     logger?: Logger,
+    stranding?: HostedStrandingRecord,
 ): Promise<void> => {
     // Keeps the machine's existing overlay; a moved base image is a rebuild's job (hosted-build.ts), not this call's.
     const overlay: HostedOverlay = { image: hosted.image ?? null, environmentHash: hosted.environmentHash ?? null };
     // Resolved to a digest, so a restart on the digest the machine already runs converts nothing and asks nothing.
     const stockImage = overlay.image === null ? await resolveHostedImage(config, logger) : config.hosted.image;
     const target = hostedMachineConfig(config, args, hosted.appName, hosted.volumeId, overlay, stockImage);
-    await switchHostedImage(config, hosted, target, { start: true, keepImage: true, logger });
+    await switchHostedImage(config, hosted, target, { start: true, keepImage: true, stranding, logger });
 };
 
 // Tears the app down (machines and volume go with it); 404-tolerant by fly.ts's contract.

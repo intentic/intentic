@@ -30,7 +30,7 @@ import {
     requestHostedBuild,
 } from "./hosted/build/hosted-build.js";
 import { HostedAtCapacity, hostedCapacity } from "./hosted/hosted-capacity.js";
-import { HostedImageKept } from "./hosted/gate/state-gate.js";
+import { HostedImageKept, HostedMachineBusy } from "./hosted/gate/state-gate.js";
 import { kickHostedPool } from "./hosted/hosted-pool.js";
 import {
     assertHostedIdentity,
@@ -134,7 +134,7 @@ const restartOrRebuild = async (
     ownerId: string,
 ): Promise<boolean> => {
     try {
-        await refreshHosted(context.config, args, hosted, context.logger);
+        await refreshHosted(context.config, args, hosted, context.logger, { prisma: context.prisma, hostedMachineId: hosted.id });
         return false;
     } catch (error) {
         if (!isFlyGone(error)) {
@@ -636,6 +636,7 @@ export const sandboxRoutes = {
                     tier: hostedTier(hosted.tier).id,
                 }),
                 context.logger,
+                { prisma: context.prisma, hostedMachineId: hosted.id },
             );
             if (healed) {
                 context.logger.info(
@@ -656,6 +657,10 @@ export const sandboxRoutes = {
                 throw new ORPCError(`NOT_FOUND`, {
                     message: `the machine this sandbox ran on no longer exists; give it a new one from setup`,
                 });
+            }
+            // A restart or rebuild holds the machine: nothing was started or billed, and the browser's next wake finds it done.
+            if (error instanceof HostedMachineBusy) {
+                throw new ORPCError(`CONFLICT`, { message: error.message });
             }
             throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `waking the machine failed` });
         }

@@ -284,6 +284,11 @@ model HostedMachine {
     migratingId String?
     migrations  HostedMigration[]
     ooms        HostedOom[]
+    /* When an image change could not put this machine back after its new version failed to start, and what it was
+     * doing (api gate/state-gate.ts). Hosted health reports it until the sandbox checks in after this stamp; nothing
+     * clears it, since a later check-in is what says the machine runs again. */
+    strandedAt     DateTime?
+    strandedDetail String?
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 

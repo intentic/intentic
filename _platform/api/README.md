@@ -24,11 +24,23 @@ flowchart LR
 - A hosted image change goes through the state gate (`src/sandbox/hosted/gate/state-gate.ts`), the hosted half of
   the stored-state promise in [COMPATIBILITY.md](../../COMPATIBILITY.md#stored-data). A restart, a rebuild, or a wake
   that heals a stale tunnel first runs the target image's planner (`state-plan.js`) over the machine's own volume. It
-  runs in a probe: the same machine with its daemon replaced by a sleep, asked through Fly's exec. A plan that says a
-  conversion would fail keeps the machine on its version and answers the owner in the refusal's words (a restart's
-  `CONFLICT`, a build's error). A missing or unreadable plan lets the change go ahead as before the gate. A new
-  version that does not start is put back on the config and digest the machine had, and started there. A resize, a
-  move and a restore from the trash keep the running digest, so they have nothing to convert.
+  runs in a probe: the same machine with its daemon replaced by a sleep and none of the platform's credentials in its
+  environment, asked through Fly's exec once it reads `started`. Fly has no read-only volume mount and no machine
+  without a network, so unlike `ic`'s probe (`:ro`, `--network none`) this one mounts the volume read-write and can
+  reach the internet; the planner it runs has no write mode, and it is the only command the probe runs. A target named
+  by a tag is pinned to a digest first (the registry's, else the one Fly resolved for the probe), so the probe and the
+  switch run the same image. A plan that says a conversion would fail keeps the machine on its version and answers the
+  owner in the refusal's words (a restart's `CONFLICT`, a build's error). A missing or unreadable plan, or a probe that
+  never comes up, lets the change go ahead as before the gate. The whole gate holds the app's advisory lock
+  (`hosted-app-lock.ts`): a restart or rebuild waits for another change to the machine, and a wake that meets one
+  answers `CONFLICT` and is retried by the browser. A resize, a move and a restore from the trash keep the running
+  digest, so they have nothing to convert.
+- The rollback after an image change is narrower than it sounds. It covers one case: the machine was asked to run, and
+  Fly does not read it `starting` or `started` on the new version. Then it goes back to the config and digest it had,
+  and is started there. It does not wait for the daemon's `/health` or its state journal, so a version that starts and
+  then fails to boot is not undone here. A rebuild applied to a stopped machine is not started, so it is never judged
+  and has no rollback. A rollback that fails is logged at error with both images and stamped on the machine's row
+  (`strandedAt`), and the health sweep reports and mails it until the sandbox checks in again.
 - `src/config.ts` is the one config schema; each field is an env var in SCREAMING_SNAKE. A lane whose credential is
   unset (Stripe, APNs, trial keys, Fly) is switched off rather than failing the boot.
 - Bun runs the TypeScript source; there is no build. The image applies migrations and then refuses to start if the

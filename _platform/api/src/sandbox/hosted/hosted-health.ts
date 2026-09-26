@@ -8,13 +8,14 @@ import { hostedFleet } from "./hosted-fleet.js";
 import { hostedEnabled, type OrphanSkip, sortUnknownApps } from "./hosted.js";
 import { HOUR_MS } from "../../durations.js";
 
-// Watches the rows-vs-Fly gap other sweeps act on but never report; read-only, fixes nothing. Six shapes:
+// Watches the rows-vs-Fly gap other sweeps act on but never report; read-only, fixes nothing. Seven shapes:
 // - edge: whether the edge in front of the lane is a build that can actually serve it
 // - lane: whether the sandboxes that booted could be reached at their own addresses
 // - missing: a row whose Fly app is gone (several at once is another deployment's reaper eating this fleet)
 // - strangers: apps under our prefix running another deployment's machine; the only orphan shape that mails anybody
 // - litter: our-prefix apps with no row, the reaper's ordinary work; reported, never mailed
 // - stock: warm machines against the pool target, per region
+// - stranded: machines an image change could not put back on their previous version (gate/state-gate.ts)
 // Litter must never be counted as a stranger: that conflation is what made this watch stop being read.
 
 // One alert per window per problem shape; the log line still writes every tick.
@@ -113,6 +114,23 @@ const laneReading = async (prisma: PrismaClient, now: () => number): Promise<Lan
     return { reachable, unreachable, fault: laneFault(reachable, unreachable) };
 };
 
+// A machine the state gate left on neither version, still silent since: its row carries the stamp, and a check-in after
+// it is the only thing that says the machine runs again.
+export interface StrandedMachine {
+    readonly appName: string;
+    readonly detail: string;
+}
+
+const strandedMachines = async (prisma: PrismaClient): Promise<StrandedMachine[]> => {
+    const rows = await prisma.hostedMachine.findMany({
+        where: { strandedAt: { not: null } },
+        select: { appName: true, strandedAt: true, strandedDetail: true, sandbox: { select: { lastSeenAt: true } } },
+    });
+    return rows
+        .filter((row) => row.strandedAt !== null && (row.sandbox.lastSeenAt === null || row.sandbox.lastSeenAt < row.strandedAt))
+        .map((row) => ({ appName: row.appName, detail: row.strandedDetail ?? `` }));
+};
+
 export interface HostedHealth {
     // The edge in front of the lane; undefined when this platform has no ingress configured to ask.
     readonly edge: EdgeReading | undefined;
@@ -136,6 +154,8 @@ export interface HostedHealth {
     readonly litter: string[];
     // Warm stock per region against the configured target.
     readonly stock: { region: string; warm: number; target: number }[];
+    // Machines a failed rollback left on neither version; each needs a person.
+    readonly stranded: StrandedMachine[];
     readonly healthy: boolean;
 }
 
@@ -143,11 +163,12 @@ export interface HostedHealth {
 const configuredRegions = (config: Config): string[] => [...new Set([config.hosted.region, config.hosted.regionEu].filter((region) => region !== ``))];
 
 export const hostedHealth = async (prisma: PrismaClient, config: Config, now: () => number = Date.now): Promise<HostedHealth> => {
-    const [fleet, capacity, edge, lane] = await Promise.all([
+    const [fleet, capacity, edge, lane, stranded] = await Promise.all([
         hostedFleet(prisma, config),
         hostedCapacity(prisma, config),
         edgeReading(config),
         laneReading(prisma, now),
+        strandedMachines(prisma),
     ]);
     const missing = fleet.filter((entry) => entry.missing).map((entry) => entry.appName);
     // `orphan` says an app has no row, not whose; the reaper's classifier answers that, skipped when nothing to ask.
@@ -169,6 +190,7 @@ export const hostedHealth = async (prisma: PrismaClient, config: Config, now: ()
         strangers,
         litter,
         stock,
+        stranded,
         // An edge that cannot serve the lane, or a lane no sandbox got through, outranks every row-level
         // reading: the fleet can be perfect and still reach nobody.
         healthy:
@@ -177,6 +199,7 @@ export const hostedHealth = async (prisma: PrismaClient, config: Config, now: ()
             !capacity.full &&
             missing.length === 0 &&
             strangers.length === 0 &&
+            stranded.length === 0 &&
             stock.every((r) => r.warm >= r.target),
     };
 };
@@ -222,6 +245,7 @@ const alertSubject = (health: HostedHealth): string => {
             : ``,
         health.missing.length > 0 ? `${health.missing.length} machine(s) gone` : ``,
         health.strangers.length > 0 ? `${health.strangers.length} app(s) another deployment is running` : ``,
+        health.stranded.length > 0 ? `${health.stranded.length} machine(s) stranded by a failed rollback` : ``,
     ].filter((part) => part !== ``);
     return `intentic hosted: ${said.join(`, `)}`;
 };
@@ -231,6 +255,9 @@ const alertHeading = (health: HostedHealth): string => {
     if (health.edge?.fault !== undefined || health.lane.fault !== undefined) {
         return `Hosted sandboxes cannot be reached at their addresses`;
     }
+    if (health.stranded.length > 0) {
+        return `A hosted update left machines on neither version`;
+    }
     if (!health.capacity.full) {
         return `The hosted fleet and the database disagree`;
     }
@@ -238,6 +265,10 @@ const alertHeading = (health: HostedHealth): string => {
     const refusing = health.capacity.refusals.map((refusal) => refusal.region);
     return refusing.length === 0 ? `The hosted lane has run out of machines` : `The hosted lane has run out of machines in ${andList(refusing)}`;
 };
+
+// Each machine with what the gate was doing, so the reader knows which image to put it back on.
+const strandedLine = (stranded: readonly StrandedMachine[]): string =>
+    `${stranded.length} sandbox machine(s) did not start on a new version, and putting the previous version back failed too, so they are on neither and their owners cannot use them: ${stranded.map((entry) => `${entry.appName} (${entry.detail})`).join(`; `)}. Put each back on the previous image with fly machine update, then have its owner restart it.`;
 
 const alertMail = (config: Config, health: HostedHealth) => ({
     subject: alertSubject(health),
@@ -255,6 +286,7 @@ const alertMail = (config: Config, health: HostedHealth) => ({
             health.strangers.length > 0
                 ? `${health.strangers.length} app(s) under this platform's prefix are running machines stamped by a DIFFERENT deployment: ${health.strangers.join(`, `)}. Another deployment is sharing this Fly org and credential, which is how a fleet gets destroyed out from under its rows.`
                 : ``,
+            health.stranded.length > 0 ? strandedLine(health.stranded) : ``,
             ...health.stock
                 .filter((entry) => entry.warm < entry.target)
                 .map((entry) => `The ${entry.region} warm pool is at ${entry.warm} of ${entry.target}.`),
@@ -284,6 +316,9 @@ const faultLine = (health: HostedHealth): string => {
     if (health.lane.fault !== undefined) {
         return `hosted health: ${health.lane.fault}`;
     }
+    if (health.stranded.length > 0) {
+        return `hosted health: ${health.stranded.length} machine(s) stranded by a failed rollback; each needs a person`;
+    }
     if (!health.capacity.full) {
         return `hosted health: the fleet and the database disagree`;
     }
@@ -306,7 +341,8 @@ const worthMailing = (health: HostedHealth): boolean =>
     health.lane.fault !== undefined ||
     health.capacity.full ||
     health.missing.length > 0 ||
-    health.strangers.length > 0;
+    health.strangers.length > 0 ||
+    health.stranded.length > 0;
 
 // One pass: read, log, and mail at most every ALERT_EVERY_MS. Errors are the caller's to swallow; a health check that
 // takes the process down would be worse than the fault it watches for.
@@ -343,6 +379,7 @@ export const sweepHostedHealth = async (
             strangers: health.strangers,
             litter: health.litter,
             stock: health.stock,
+            stranded: health.stranded,
         },
         faultLine(health),
     );

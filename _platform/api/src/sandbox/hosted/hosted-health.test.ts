@@ -69,14 +69,20 @@ const flyMachine = (platform: string, ageMinutes = 120) => ({
 type Reach = { reachable: number; unreachable: number };
 
 // Counts mirror the same rows as the listings; pool count is asked twice (whole pool, then claimable).
-const prismaWith = (machines: unknown[], pooled: unknown[], reach: Reach = { reachable: 0, unreachable: 0 }) =>
+// `stranded` is what the rows a failed rollback stamped answer (gate/state-gate.ts); none by default.
+const prismaWith = (machines: unknown[], pooled: unknown[], reach: Reach = { reachable: 0, unreachable: 0 }, stranded: unknown[] = []) =>
     ({
         sandbox: {
             count: jest.fn().mockImplementation((args: { where: { bootReport: { equals: string } } }) =>
                 Promise.resolve(args.where.bootReport.equals === `reachable` ? reach.reachable : reach.unreachable),
             ),
         },
-        hostedMachine: { findMany: jest.fn().mockResolvedValue(machines), count: jest.fn().mockResolvedValue(machines.length) },
+        hostedMachine: {
+            findMany: jest.fn().mockImplementation((args?: { where?: Record<string, unknown> }) =>
+                Promise.resolve(args?.where?.[`strandedAt`] === undefined ? machines : stranded),
+            ),
+            count: jest.fn().mockResolvedValue(machines.length),
+        },
         hostedPoolMachine: {
             findMany: jest.fn().mockResolvedValue(pooled),
             count: jest.fn().mockImplementation((args?: { where?: Record<string, unknown> }) =>
@@ -130,6 +136,36 @@ describe(`hosted health`, () => {
         expect(health?.strangers).toEqual([]);
         // healthy gates whether the alert mail fires.
         expect(health?.healthy).toBe(true);
+    });
+
+    /* A MACHINE ON NEITHER VERSION. The gate stamped its row when the rollback failed; until the sandbox checks in after
+     * that stamp, the sweep names it, mails it, and says what the gate was doing. */
+    it(`names and mails a machine a failed rollback stranded, until it checks in again`, async () => {
+        const sent: string[] = [];
+        stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
+            const target = String(url);
+            if (target.startsWith(`https://api.resend.com`)) {
+                sent.push(String(init?.body ?? ``));
+                return Promise.resolve(new Response(JSON.stringify({ id: `sent` })));
+            }
+            return Promise.resolve(edgeAnswer(target, EDGE_OK) ?? new Response(JSON.stringify({ apps: [{ name: `intentic-sbx-a` }, { name: `intentic-sbx-b` }] })));
+        });
+        const strandedAt = new Date(Date.now() - 60_000);
+        const detail = `moving ghcr.io/intentic/sandbox@sha256:aaa to ghcr.io/intentic/sandbox@sha256:bbb, putting the previous version back failed: boom`;
+        const stranded = [
+            { appName: `intentic-sbx-a`, strandedAt, strandedDetail: detail, sandbox: { lastSeenAt: new Date(strandedAt.getTime() - 60_000) } },
+            // Checked in since: running again, whatever the stamp says.
+            { appName: `intentic-sbx-b`, strandedAt, strandedDetail: detail, sandbox: { lastSeenAt: new Date() } },
+        ];
+        // SAFETY: the sweep reads only these fields of the config; the fixture's own, with mail switched on.
+        const mailed: Config = { ...config({ poolSize: 0, regionEu: `` }), admin: { emails: `ops@test` }, email: { apiKey: `k`, from: `i@test` } } as never;
+        const prisma = prismaWith([taken(`intentic-sbx-a`), taken(`intentic-sbx-b`)], [], undefined, stranded);
+        const health = await sweepHostedHealth(prisma, mailed, logger);
+        expect(health?.stranded).toEqual([{ appName: `intentic-sbx-a`, detail }]);
+        expect(health?.healthy).toBe(false);
+        expect(sent).toHaveLength(1);
+        expect(sent[0]).toContain(`intentic-sbx-a (${detail})`);
+        expect(sent[0]).not.toContain(`intentic-sbx-b`);
     });
 
     it(`counts warm stock per region against the target, because a pool that never fills is a cold boot for everybody`, async () => {
