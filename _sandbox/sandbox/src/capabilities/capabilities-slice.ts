@@ -1,8 +1,7 @@
 import type { AgentTool } from "../agent/tools/agent-tools.js";
-import type { composeEnvironment } from "../environment/environment.js";
-import type { CapabilitiesStore, vaultManifestSecrets } from "./capabilities-store.js";
+import type { CapabilitiesStore } from "./capabilities-store.js";
 import type { DismissalsStore } from "./offers/dismissals-store.js";
-import type { OpenAccountInput, openBrowserAccount } from "./open-account.js";
+import type { OpenAccountInput } from "./open-account.js";
 
 // The capability manifest as turns and routes read it, its vaulted secrets, and the tools every turn carries.
 export interface CapabilitiesSlice {

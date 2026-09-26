@@ -69,7 +69,7 @@ const stepsOf = (composed: ConversationWorktree, runs: WorktreeRun[], bases: unk
         return body([{ kind: "done" }])();
     },
     settleLanding: () => {},
-    // A test repository ships no fixers of its own; the fixers are worktree-fixers.test.ts's.
+    // A test repository ships no fixers of its own; the fixers are worktree-fixers.integration.test.ts's.
     fix: async () => [],
 });
 

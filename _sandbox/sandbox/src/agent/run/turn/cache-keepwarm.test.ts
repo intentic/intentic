@@ -169,7 +169,7 @@ describe("arming", () => {
     test("leaves a spawned child's turn, or a runtime that cannot keep a cache, with nothing to keep", async () => {
         const { deps } = harness([]);
         const turn = { input: INPUT, request: lastRequest(), account: "acct", sessionId: "s-1", fingerprint: PRINT, spawned: false };
-        expect(keepableOf(deps, turn)).toBeDefined();
+        expect(keepableOf(deps, turn)).toMatchObject({ provider: "claude", harness: "native", account: "acct", sessionId: "s-1", fingerprint: PRINT });
         expect(keepableOf(deps, { ...turn, spawned: true })).toBeUndefined();
         expect(keepableOf(deps, { ...turn, input: { ...INPUT, agent: "codex" } })).toBeUndefined();
     });

@@ -11,10 +11,9 @@ import type { ObservedLimitStore } from "../../usage/observed-limits.js";
 import type { ProviderRefusalStore } from "../../usage/provider-refusals.js";
 import type { UsageStore } from "../../usage/usage-store.js";
 import type { HarnessRequest } from "../run/agent.js";
-import type { JudgeFacts, judgeCommand } from "../tools/command-judge.js";
+import type { JudgeFacts } from "../tools/command-judge.js";
 import type { AgentRequest, ContainerCredential } from "./agent-request.js";
 import type { ProviderCatalog, ProviderModule } from "./provider-module.js";
-import type { providerReadiness } from "./provider-registry.js";
 import type { CliProxyClient } from "./translator.js";
 
 // Model providers: their modules, catalogs and readiness, the runtimes' adapters, and what each account has left.

@@ -1,4 +1,3 @@
-import type { queueWhole } from "../../agent/tools/agent-terminals.js";
 import type { HeavyCommandsStore } from "../../system/resources/heavy-commands.js";
 import type { PushChecks } from "./push-checks.js";
 import type { DependencyCoordinator } from "./reconcile-deps.js";

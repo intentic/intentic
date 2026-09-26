@@ -1,7 +1,5 @@
-import type { vaultManifestSecrets } from "../capabilities/capabilities-store.js";
 import type { SecretVault } from "../capabilities/credentials/secret-vault.js";
 import type { ExtensionBackend } from "./backend/backend-supervisor.js";
-import type { vaultExtensionSettingSecrets } from "./extension-settings.js";
 
 // The extension backend host and the vault its secret settings live in.
 export interface ExtensionsSlice {

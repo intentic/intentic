@@ -10,34 +10,11 @@ import type {
     StashEntry,
 } from "@intentic/sandbox-contract";
 import type { GitCloneOptions, GitStatus, GitSyncResult } from "@intentic/scaffold";
-import type {
-    ActionResult,
-    checkoutRef,
-    cherryPick,
-    commitChanges,
-    commitLog,
-    createBranchAt,
-    createTagAt,
-    deleteTag,
-    dropCommit,
-    mergeCommit,
-    pushTag,
-    rebaseOnto,
-    resetTo,
-    revertCommit,
-} from "./changes/changes-commits.js";
-import type { commitFileDiff, conflictedFileDiff, refFileDiff, stagedFileDiff, unstagedFileDiff } from "./changes/changes-diff.js";
-import type { commitIndex, discardPaths, stageAll, stagePaths, unstagePaths } from "./changes/changes-index.js";
-import type { changedFiles } from "./changes/changes.js";
-import type { scratchOf, ScratchScope } from "./changes/scratch.js";
-import type { createBranch, deleteBranch, listBranches, listRemoteBranches } from "./ops/branches.js";
-import type { collectRepoDiff, CommitScope, RepoDiff } from "./ops/commit-message.js";
-import type { abortOperation, GitOperation, operationInProgress } from "./ops/operation.js";
-import type { publishFile } from "./ops/publish-file.js";
-import type { stashApply, stashChanges, stashDrop, stashList, stashPush } from "./ops/stash.js";
-import type { UndoableAction, undoableAction, undoLastAction } from "./ops/undo.js";
-import type { remoteProjectOf } from "./remote/remote-urls.js";
-import type { fetchRemote, pullRemote, remoteState } from "./remote/remote.js";
+import type { ActionResult } from "./changes/changes-commits.js";
+import type { ScratchScope } from "./changes/scratch.js";
+import type { CommitScope, RepoDiff } from "./ops/commit-message.js";
+import type { GitOperation } from "./ops/operation.js";
+import type { UndoableAction } from "./ops/undo.js";
 
 // Git as the daemon runs it on the workspace's repositories: status, history, changes, branches and remotes.
 export interface GitSlice {

@@ -1,8 +1,6 @@
 import type { ResidentEngine } from "@intentic/iq-engine";
 import type { DerivedSide, SidecarStatus, WorkspaceChildren, WorkspaceDerived, WorkspaceTree } from "@intentic/sandbox-contract";
-import type { BlobSource, deriveBytes } from "../derived/derived-blob.js";
-import type { workspaceArrivedEmpty } from "../scaffold/starter-site.js";
-import type { version } from "../version.js";
+import type { BlobSource } from "../derived/derived-blob.js";
 import type { WorkspaceTrash } from "./files/trash/workspace-trash.js";
 import type { OpenedWorkspaceFile, WorkspaceFileWindow } from "./files/workspace-files.js";
 import type { WorkspacePaths } from "./workspace.js";

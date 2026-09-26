@@ -2,7 +2,7 @@ import type { AgentOrigin } from "@intentic/sandbox-contract";
 import type { IssuesStore } from "../issues/issues-store.js";
 import type { ThreadSessionsStore } from "../sessions/thread-sessions.js";
 import type { InstallsStore } from "../store/installs.js";
-import type { OutboxSink, outboxStreamFor, WebchatOutbox } from "../webchat/webchat-outbox.js";
+import type { OutboxSink, WebchatOutbox } from "../webchat/webchat-outbox.js";
 import type { AutomationsStore } from "./automations-store.js";
 import type { HeldWakesStore } from "./held-wakes-store.js";
 import type { SendersStore } from "./senders-store.js";

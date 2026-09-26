@@ -1,8 +1,6 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-// Naming `jest` takes the module's globals off the table, so `test` and `expect` come from it too.
-import { expect, jest, test } from "bun:test";
 import { advanceTimersByTimeAsync, realSleep, SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Logger } from "pino";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";

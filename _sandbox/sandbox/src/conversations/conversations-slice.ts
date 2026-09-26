@@ -1,10 +1,9 @@
 import type { TurnCheckpoints } from "../agent/checkpoints/turn-checkpoints.js";
 import type { PromptRecord } from "../agent/prompt/prompt-record.js";
-import type { streamAgent } from "../agent/run/stream-agent.js";
 import type { TurnJournal } from "../agent/run/turn/turn-journal.js";
 import type { WatchJournal } from "../agent/verification/watch-journal.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
-import type { ConversationUnits, conversationUnits } from "../store/conversation-units.js";
+import type { ConversationUnits } from "../store/conversation-units.js";
 import type { ConversationsDb } from "../store/conversations-db.js";
 import type { WorkspaceScopeDeps } from "../workspace/layout/workspace-scope.js";
 import type { ConversationActors } from "./actor/conversation-actors.js";
