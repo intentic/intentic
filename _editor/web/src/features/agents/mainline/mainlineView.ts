@@ -15,7 +15,7 @@ import { formatClock, formatDate, formatDayMonthTime } from "@intentic/ui/format
 import { t } from "@intentic/ui/i18n";
 
 // THE MAIN LINE AS ONE READOUT: what the main tree's own check says, in the order and the words a reader takes it in.
-// Pure over the status the daemon serves (workspace.mainline); the Main line view and the board's status bar draw it,
+// Pure over the status the daemon serves (workspace.mainline); the Main line view draws it (its header and its lanes),
 // the view's rail tile badges from it, and a card's mark borrows its words for what became of a red run, so the rail,
 // the board and the view never name one decision two ways.
 //
@@ -69,6 +69,22 @@ export const queuedLands = (status: MainlineStatus): { readonly land: MainlineLa
         }),
     );
 };
+
+// ONE PROJECT'S QUEUE, as the board's Queued lane draws it: the lands waiting for that project's next check, which
+// measures them together. A land that touches two projects waits in both, so it is drawn in both; the lane's count is
+// queuedLands', which counts it once.
+export interface MainlineQueue {
+    readonly project: string;
+    readonly lands: readonly MainlineLand[];
+}
+
+// In the order the daemon lists the projects; a project with nothing waiting has no queue to draw. Newest land first,
+// the way every lane of the fleet board reads, so the one just landed is in sight while an older queue folds under it:
+// the order changes nothing about the check, which measures them all together.
+export const queuesOf = (status: MainlineStatus): MainlineQueue[] =>
+    status.projects.flatMap((project) =>
+        project.queued.length === 0 ? [] : [{ project: project.project, lands: project.queued.toSorted((left, right) => right.at - left.at) }],
+    );
 
 // The check running now: one at a time across the whole tree, so at most one project carries it.
 export interface MainlineRunning {
@@ -141,9 +157,9 @@ export const pushDebtOf = (status: MainlineStatus | undefined): PushDebt[] => {
         .toSorted((left, right) => right.open.length - left.open.length);
 };
 
-// WHAT THE STATUS BAR SAYS AT REST: health (every red, or passing once anything was checked), activity (the check
+// WHAT THE VIEW'S HEADER SAYS AT REST: health (every red, or passing once anything was checked), activity (the check
 // running now, how many lands queue behind it), and what pushes left behind. What a push left is the owner's to pick up
-// whenever they choose, so it never takes "passing" off the bar: the two are about different trees (the one landed on,
+// whenever they choose, so it never takes "passing" off the header: the two are about different trees (the one landed on,
 // and the one that left). Undefined while nothing was ever checked, run, queued or pushed, so a sandbox that never
 // landed or pushed anything carries no main line at all.
 export interface MainlineSummary {
@@ -156,7 +172,7 @@ export interface MainlineSummary {
     // What the push reds owe across every project (pushDebtOf).
     readonly leftAtPush: number;
     // The sandbox is too old to say who has a red or what a push left (daemonOutdated), so `reds` and `leftAtPush` are
-    // empty for want of an answer, not because main is clean: the bar says so instead of "passing".
+    // empty for want of an answer, not because main is clean: the header says so instead of "passing".
     readonly outdated: boolean;
 }
 
@@ -235,7 +251,7 @@ export interface MainlineResult {
     readonly red: MainlineRed | undefined;
 }
 
-// Every project that has been checked, the reds first in the bar's order, then the rest in folder order.
+// Every project that has been checked, the reds first in the header's order, then the rest in folder order.
 export const resultsOf = (status: MainlineStatus): MainlineResult[] => {
     const reds = redsOf(status);
     const rest = status.projects.flatMap((project): MainlineResult[] =>
@@ -244,6 +260,16 @@ export const resultsOf = (status: MainlineStatus): MainlineResult[] => {
             : [{ project: project.project, run: project.last, red: undefined }],
     );
     return [...reds.map((red) => ({ project: red.project, run: red.run, red })), ...rest];
+};
+
+// The Result lane's dot, the board's health at a glance the way the fleet board's lanes wear theirs: red while a project's
+// last check failed, green once something was checked and nothing is, the finished lane's grey before anything was.
+// Read off the runs rather than the reds, so an older sandbox that lays no reds still shows a failing run in red.
+export const resultDot = (results: readonly MainlineResult[]): string => {
+    if (results.some((result) => result.run.status === `red`)) {
+        return `bg-danger`;
+    }
+    return results.length > 0 ? `bg-success` : `bg-line-strong`;
 };
 
 // A failure as a reader scans it: a failing test by its name, with the file it sits in after, since a whole location
@@ -275,7 +301,7 @@ export interface RoutingMeta {
     readonly icon: IconName;
     // The whole clause: the panel's line under a red, a card's hover.
     readonly words: string;
-    // One or two words: beside a red in the status bar, beside "Broke 2" on a card. Undefined while still deciding.
+    // One or two words: beside a red in the view's header, beside "Broke 2" on a card. Undefined while still deciding.
     readonly short: string | undefined;
     // The clause a conversation's title follows in the panel, for a decision that names one: "Being fixed in …".
     readonly lead: string | undefined;
@@ -335,7 +361,7 @@ export const brokeLabel = (failures: number, routing: MainlineRoutingKind | unde
 // The ink a decision is said in: only one that waits for the reader asks for their eye.
 export const fixTone = (state: FixState): string => (state === `needs-you` ? `text-warning` : state === `fixed` ? `text-success` : `text-muted`);
 
-// WHAT THE RAIL'S TILE SAYS: the bar's two answers in the rail's shape. Health is a danger count of the projects failing,
+// WHAT THE RAIL'S TILE SAYS: the header's two answers in the rail's shape. Health is a danger count of the projects failing,
 // the way CI's tile counts its red branches, with who has it in one or two words when there is one red to say it of.
 // Activity is the tile's running mark: the check running and the lands queued behind it. What a push left never badges:
 // it waits for the owner whenever they get to it, and a count kept for days would hold the tile on the rail for nothing.

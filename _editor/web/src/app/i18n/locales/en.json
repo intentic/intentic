@@ -439,8 +439,7 @@
         },
         "statusBar": {
             "label": "Board status",
-            "close": "Close {title}",
-            "openMainline": "Open the Main line"
+            "close": "Close {title}"
         },
         "mainline": {
             "title": "Main line",
@@ -456,12 +455,10 @@
             "columnResult": "Result",
             "columnHistory": "History",
             "nothingQueued": "Nothing queued",
-            "idle": "Idle",
             "noResults": "No results yet",
             "outdatedMissing": "Until it updates, this panel can't say who a failing check is laid at or who is fixing it, open a check's logs, or show what your pushes left behind.",
             "passing": "passing",
             "failing": "failing",
-            "failingSince": "failing since {time}",
             "logs": "Logs",
             "moreFailures": "+{count} more",
             "noFailureList": "No failures listed",
@@ -486,7 +483,6 @@
             "shortFixed": "fixed",
             "shortDismissed": "set aside",
             "push": {
-                "title": "Left at push",
                 "explain": "The push went; its check let these through. Each waits here until a later measurement no longer finds it or you dismiss it. Nobody is sent after them unless you hand them over.",
                 "bar": "{count} left at push | {count} left at push",
                 "commits": "{count} commit | {count} commits",
@@ -508,8 +504,6 @@
                 "handHint": "Opens an isolated conversation with every open finding here, the command that shows each again and the commits that brought it.",
                 "handFailed": "Couldn't hand these to an agent",
                 "attempt": "Attempt {count}",
-                "row": "push {sha}",
-                "rowBranch": "push {sha} to {branch}",
                 "left": "{count} left | {count} left",
                 "clean": "clean",
                 "handled": "handled"
@@ -521,6 +515,20 @@
             "rail": {
                 "checking": "checking {project}",
                 "checkingOn": "checking {project} on {machine}"
+            },
+            "board": {
+                "summary": "Main line status",
+                "idle": "No check running",
+                "waiting": "{count} land waits for the next check | {count} lands wait for the next check",
+                "measuring": "Measuring {count} land | Measuring {count} lands",
+                "on": "on {machine}",
+                "queuedLands": "Lands waiting in {project}",
+                "measuredLands": "Lands the check on {project} is measuring",
+                "failingSince": "Failing since {time}",
+                "more": "+{count} more",
+                "backToResults": "Back to the results",
+                "openHistory": "Open the history ({count})",
+                "historyHint": "Every check and push, newest first"
             }
         },
         "landCheck": {
@@ -940,6 +948,7 @@
         "accountFix": {
             "admin": "no seat",
             "reconnect": "needs connecting again",
+            "verify": "waiting to be verified",
             "wait": "benched for now"
         },
         "cardStatus": {
@@ -1001,7 +1010,8 @@
             "planHeadroom": "Plan headroom",
             "reconnectOnAgentTab": "reconnect on the Agent tab",
             "seatFromAdmin": "ask an org admin for a seat",
-            "unavailable": "Unavailable"
+            "unavailable": "Unavailable",
+            "verifyOnAgentTab": "verify on the Agent tab"
         },
         "chatChooseModelButton": {
             "chooseModel": "Choose a model"
@@ -2152,6 +2162,8 @@
             "account": "{managedLabel} account",
             "addAnotherAccount": "Add another account",
             "aiAccount": "AI account",
+            "allowanceUsedUp": "Allowance used up.",
+            "allowanceUsedUpReopens": "Allowance used up, reopens {when}.",
             "chatgptSubscription": "ChatGPT subscription",
             "connectionsUnavailable": "Connections unavailable",
             "couldntReachAiAccounts": "Couldn't reach your AI accounts.",
@@ -2159,10 +2171,14 @@
             "googleAccount": "Google account",
             "kimiCodeSubscription": "Kimi Code subscription",
             "plan": "Which {managedLabel} plan",
+            "restingFor": "Resting: {reason}.",
+            "restingUntil": "Resting until {when}: {reason}.",
             "sandboxOfflineAccountsCant": "Your sandbox is offline: its accounts can't be read or changed from here.",
             "showMoreAccounts": "Show {collapsedCount} more accounts",
             "signedOutReconnectTo": "Signed out, reconnect to keep using it.",
-            "underClaudeCode": "Under Claude Code"
+            "underClaudeCode": "Under Claude Code",
+            "verify": "Verify",
+            "verifyThisAccount": "Google wants its owner to confirm this account before it takes turns again: press Verify, sign in as {label}, and it rejoins the rotation on the next retry."
         },
         "arrivalPanel": {
             "alreadyHere": "already here",
@@ -2899,6 +2915,7 @@
             "resets": "resets {resetsAt}",
             "seatFromAdmin": "ask an org admin to assign it a seat | ask an org admin to assign them seats",
             "showingMostConstrained": "showing the {max_bars} most constrained of {count}",
+            "verifyEachLink": "open its name to verify it | open each name to verify them",
             "viewAccounts": "View accounts"
         },
         "repoCheckRow": {

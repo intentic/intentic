@@ -117,7 +117,13 @@ const plural = (count: number): string => `${count} ${count === 1 ? `account` : 
 const blockedDetail = (entry: CapacityBlocked): string =>
     [
         ...entry.labels,
-        entry.fix === `reconnect` ? t(`chat.chatCapacityRail.reconnectOnAgentTab`) : entry.fix === `admin` ? t(`chat.chatCapacityRail.seatFromAdmin`) : undefined,
+        entry.fix === `reconnect`
+            ? t(`chat.chatCapacityRail.reconnectOnAgentTab`)
+            : entry.fix === `verify`
+              ? t(`chat.chatCapacityRail.verifyOnAgentTab`)
+              : entry.fix === `admin`
+                ? t(`chat.chatCapacityRail.seatFromAdmin`)
+                : undefined,
     ]
         .filter((part) => part !== undefined)
         .join(` · `);

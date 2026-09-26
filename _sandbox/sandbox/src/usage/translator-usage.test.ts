@@ -257,17 +257,46 @@ test("reads the translator's bench of a credential, and nothing for one it is ro
 });
 
 // What the proxy actually stamps on a rate-limited Google credential: the upstream 429 body, pretty-printed, ~700
-// characters of it. It is a bench either way, and the row that prints the reason has to be left with nothing rather
-// than with that.
-test("keeps the proxy's words only where they are a sentence, never a pasted upstream body", () => {
-    const body = JSON.stringify({ error: { code: 429, message: "Individual quota reached. Please try again later." } }, undefined, 2);
+// characters of it. The row that prints the reason gets the body's own sentence, never the body, and never a countdown
+// that is stale the moment it is stored (the bench's `until` says when).
+test("lifts the sentence out of a pasted upstream body, never the body itself", () => {
+    const body = JSON.stringify({ error: { code: 429, message: "Individual quota reached. Please try again later. Resets in 70h35m49s." } }, undefined, 2);
     expect(authFileCooling({ name: "a.json", unavailable: true, status_message: body, next_retry_after: "2027-01-15T08:10:00Z" })).toEqual({
         until: Date.parse("2027-01-15T08:10:00Z") / 1000,
+        reason: "Individual quota reached. Please try again later.",
     });
-    // A one-line sentence survives; a benched file with nothing printable still says it was the operator's switch.
-    expect(authFileCooling({ name: "a.json", disabled: true, status_message: body })).toEqual({ reason: "disabled in the translator" });
+    // A body with no sentence in it leaves nothing, and the operator's switch still says what it is.
+    const wordless = JSON.stringify({ error: { code: 500 } });
+    expect(authFileCooling({ name: "a.json", disabled: true, status_message: wordless })).toEqual({ reason: "disabled in the translator" });
     expect(authFileCooling({ name: "a.json", unavailable: true, status_message: " quota exceeded \nstack trace" })).toEqual({
         reason: "quota exceeded",
+    });
+});
+
+// Google's 403 for an account it wants its owner to confirm, as the proxy stamps it: the page to do that on rides in
+// the ErrorInfo. The proxy's retry instant is dropped, since its retry fails until somebody verifies.
+test("a credential Google wants verified carries the page to verify it on, and no wait", () => {
+    const body = JSON.stringify(
+        {
+            error: {
+                code: 403,
+                message: "Verify your account to continue.",
+                status: "PERMISSION_DENIED",
+                details: [
+                    {
+                        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                        reason: "VALIDATION_REQUIRED",
+                        metadata: { validation_url: "https://accounts.google.com/signin/continue?sarp=1" },
+                    },
+                ],
+            },
+        },
+        undefined,
+        2,
+    );
+    expect(authFileCooling({ name: "a.json", unavailable: true, status_message: body, next_retry_after: "2027-01-15T08:10:00Z" })).toEqual({
+        reason: "Verify your account to continue.",
+        verify: "https://accounts.google.com/signin/continue?sarp=1",
     });
 });
 

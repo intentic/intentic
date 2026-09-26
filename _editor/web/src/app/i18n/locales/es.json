@@ -440,12 +440,10 @@
             "columnResult": "Resultado",
             "columnHistory": "Historial",
             "nothingQueued": "Nada en cola",
-            "idle": "Inactivo",
             "noResults": "Aún no hay resultados",
             "outdatedMissing": "Hasta que se actualice, este panel no puede decir a quién se atribuye una comprobación fallida ni quién la está arreglando, abrir los registros de una comprobación ni mostrar lo que dejaron tus pushes.",
             "passing": "sin fallos",
             "failing": "con fallos",
-            "failingSince": "con fallos desde {time}",
             "logs": "Registros",
             "moreFailures": "+{count} más",
             "noFailureList": "No se listaron fallos",
@@ -470,7 +468,6 @@
             "shortFixed": "arreglado",
             "shortDismissed": "apartado",
             "push": {
-                "title": "Pendiente del push",
                 "explain": "El push se hizo; su comprobación dejó pasar esto. Cada hallazgo espera aquí hasta que una medición posterior ya no lo encuentre o lo descartes. Nadie se pone con ellos a menos que los entregues.",
                 "bar": "{count} pendiente del push | {count} pendientes del push",
                 "commits": "{count} commit | {count} commits",
@@ -492,11 +489,23 @@
                 "handHint": "Abre una conversación aislada con cada hallazgo abierto de aquí, el comando que lo vuelve a mostrar y los commits que lo trajeron.",
                 "handFailed": "No se pudieron entregar a un agente",
                 "attempt": "Intento {count}",
-                "row": "push {sha}",
-                "rowBranch": "push {sha} a {branch}",
                 "left": "{count} pendiente | {count} pendientes",
                 "clean": "limpio",
                 "handled": "atendido"
+            },
+            "board": {
+                "summary": "Estado de la línea principal",
+                "idle": "Ninguna comprobación en curso",
+                "waiting": "{count} integración espera la próxima comprobación | {count} integraciones esperan la próxima comprobación",
+                "measuring": "Midiendo {count} integración | Midiendo {count} integraciones",
+                "on": "en {machine}",
+                "queuedLands": "Integraciones en espera en {project}",
+                "measuredLands": "Integraciones que mide la comprobación de {project}",
+                "failingSince": "Con fallos desde {time}",
+                "more": "+{count} más",
+                "backToResults": "Volver a los resultados",
+                "openHistory": "Abrir el historial ({count})",
+                "historyHint": "Cada comprobación y cada push, lo más reciente primero"
             }
         },
         "landCheck": {
@@ -905,6 +914,7 @@
         "accountFix": {
             "admin": "sin puesto",
             "reconnect": "hay que volver a conectarla",
+            "verify": "pendiente de verificar",
             "wait": "en pausa por ahora"
         },
         "cardStatus": {
@@ -961,7 +971,8 @@
             "planHeadroom": "Margen del plan",
             "reconnectOnAgentTab": "vuelve a conectar en la pestaña Agente",
             "seatFromAdmin": "pide un puesto a un admin de la organización",
-            "unavailable": "No disponible"
+            "unavailable": "No disponible",
+            "verifyOnAgentTab": "verifícala en la pestaña Agente"
         },
         "chatChooseModelButton": {
             "chooseModel": "Elige un modelo"
@@ -1961,6 +1972,8 @@
             "account": "Cuenta de {managedLabel}",
             "addAnotherAccount": "Añadir otra cuenta",
             "aiAccount": "Cuenta de IA",
+            "allowanceUsedUp": "Cuota agotada.",
+            "allowanceUsedUpReopens": "Cuota agotada, se reabre {when}.",
             "chatgptSubscription": "Suscripción de ChatGPT",
             "connectionsUnavailable": "Conexiones no disponibles",
             "couldntReachAiAccounts": "No se pudo llegar a tus cuentas de IA.",
@@ -1968,10 +1981,14 @@
             "googleAccount": "Cuenta de Google",
             "kimiCodeSubscription": "Suscripción de Kimi Code",
             "plan": "Qué plan de {managedLabel}",
+            "restingFor": "En pausa: {reason}.",
+            "restingUntil": "En pausa hasta {when}: {reason}.",
             "sandboxOfflineAccountsCant": "Tu sandbox está desconectado: sus cuentas no se pueden leer ni cambiar desde aquí.",
             "showMoreAccounts": "Mostrar {collapsedCount} cuentas más",
             "signedOutReconnectTo": "Sesión cerrada; vuelve a conectarla para seguir usándola.",
-            "underClaudeCode": "En Claude Code"
+            "underClaudeCode": "En Claude Code",
+            "verify": "Verificar",
+            "verifyThisAccount": "Google quiere que su titular confirme esta cuenta antes de que vuelva a atender turnos: pulsa Verificar, inicia sesión como {label} y volverá a la rotación en el siguiente reintento."
         },
         "arrivalPanel": {
             "alreadyHere": "ya aquí",
@@ -2687,6 +2704,7 @@
             "resets": "se reinicia {resetsAt}",
             "seatFromAdmin": "pide a un admin de la organización que le asigne un puesto | pide a un admin de la organización que les asigne puestos",
             "showingMostConstrained": "mostrando las {max_bars} más ajustadas de {count}",
+            "verifyEachLink": "abre su nombre para verificarla | abre cada nombre para verificarlas",
             "viewAccounts": "Ver cuentas"
         },
         "repoCheckRow": {

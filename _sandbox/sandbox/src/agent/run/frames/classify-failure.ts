@@ -81,6 +81,8 @@ export interface FailureQueries {
     readonly limitWay: (params: Parameters<typeof limitWayOf>[1]) => Promise<LimitWay | undefined>;
     // How many rungs the stop ladder has spent, and when its next would fire (undefined once it is spent).
     readonly stopLadder: (conversationId: string) => { readonly made: number; readonly nextAt: number | undefined };
+    // The sign-ins of a routed provider's accounts benched until their owner verifies them on the provider's page.
+    readonly awaitingVerification: (provider: AgentProvider) => Promise<readonly string[]>;
 }
 
 // A record a classification files; the turn performs each fire-and-forget, with its own named failure line.
@@ -377,9 +379,44 @@ const dress = async (event: ErrorFrame, context: FailureContext, queries: Failur
     return event.code === undefined ? dressDeath(event, context, conversationId, queries) : bare(event);
 };
 
+// Google's sentence for an account it stopped serving until its owner verifies it (403, VALIDATION_REQUIRED).
+const ASKS_VERIFICATION = /^verify your account to continue\.?$/i;
+
+// How many sign-ins the sentence names before it counts the rest: enough to recognise, short enough to read.
+const NAMED_ACCOUNTS = 3;
+
+// "a@x, b@y and 4 more": the names a reader recognises, then how many are left.
+const accountList = (labels: readonly string[]): string => {
+    const shown = labels.slice(0, NAMED_ACCOUNTS);
+    const rest = labels.length - shown.length;
+    if (rest > 0) {
+        return `${shown.join(", ")} and ${String(rest)} more`;
+    }
+    return shown.length === 1 ? (shown[0] ?? "") : `${shown.slice(0, -1).join(", ")} and ${shown.at(-1) ?? ""}`;
+};
+
+// Google's "Verify your account to continue." names no account, and on a routed turn the proxy picked it: the reader
+// is told which accounts are waiting on them and where each one's verify link is. The provider's sentence stays when
+// the translator has not benched any yet, since then there is nothing more true to say.
+const namedVerification = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries): Promise<ErrorFrame> => {
+    if (!ASKS_VERIFICATION.test(event.message.trim()) || !KeyedProviderSchema.safeParse(context.provider).success) {
+        return event;
+    }
+    const labels = await queries.awaitingVerification(context.provider).catch(() => [] as readonly string[]);
+    if (labels.length === 0) {
+        return event;
+    }
+    const subject = labels.length === 1 ? "an account" : `${String(labels.length)} accounts`;
+    return {
+        ...event,
+        message: `Google wants ${subject} verified before ${labels.length === 1 ? "it takes" : "they take"} turns again: ${accountList(labels)}. Open Sandbox ▸ Agent and follow the Verify link on ${labels.length === 1 ? "its row" : "each row"}.`,
+    };
+};
+
 export const classifyFailure = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries): Promise<FailurePlan> => {
-    const filed = filedWrites(event, context);
+    const asked = await namedVerification(event, context, queries);
+    const filed = filedWrites(asked, context);
     const log = logOf(event, context);
-    const { frame, held, writes } = await dress(event, context, queries);
+    const { frame, held, writes } = await dress(asked, context, queries);
     return { frame, writes: [...filed, ...writes], log, held };
 };

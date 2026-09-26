@@ -7,29 +7,29 @@ import { computed, ref } from "vue";
 import { useNotifications } from "../../../shell/notifications/notifications";
 import { shellModelPicking } from "../../chat/models/shellModelPicking";
 import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
+import MainlineCard from "./MainlineCard.vue";
 import { findingGist, type PushDebt, projectName, shortSha, sinceWhen } from "./mainlineView";
 import { openLandConversation } from "./openLanded";
 import { dismissPushFindings, handPushFindings, recheckPushFindings, usePushFixAttempt } from "./useMainline";
 
-// WHAT ONE PROJECT'S PUSHES LEFT BEHIND, as a column of the Main line panel: what its push Red owes. The hook never
-// refused them, so none of this is a failure of anyone's: it waits, in amber, until a later measurement no longer prints
-// it or the owner dismisses it, and the owner picks it up when they choose. Nothing here raises a card or calls for attention; the only
-// words it puts up of its own are the receipts of the owner's own presses.
+// WHAT ONE PROJECT'S PUSHES LEFT BEHIND, as a card in the Main line board's Result lane: what its push Red owes. The hook
+// never refused them, so none of this is a failure of anyone's: it waits, in amber, until a later measurement no longer
+// prints it or the owner dismisses it, and the owner picks it up when they choose. Nothing here raises a notice or calls
+// for attention; the only words it puts up of its own are the receipts of the owner's own presses.
 
 const t = useT();
 
 const props = defineProps<{
     // The project's push red, which the hand-over's id is derived from (contract, pushFixBase), and what brought it.
     debt: PushDebt;
-    // The minute the panel reads, so every column dates itself on the same tick.
+    // The minute the board reads, so every card dates itself on the same tick.
     minute: number;
 }>();
 
-
 const { say, warn } = useNotifications();
 
-// As many as sit above the actions without pushing them past a laptop's first screen of the view; the rest open in place.
-const SHOWN = 12;
+// As many as keep the card a card in its lane, the actions under them still in view; the rest open in place.
+const SHOWN = 8;
 const SEP = ` · `;
 
 const project = computed(() => props.debt.project);
@@ -58,7 +58,7 @@ const pushLine = computed(() => {
 });
 const earlier = computed(() => Math.max(0, props.debt.pushes.length - 1));
 
-// The check's own tone, never red: a `code` gate fails the tree whoever caused it, so it wears the column's amber; a
+// The check's own tone, never red: a `code` gate fails the tree whoever caused it, so it wears the card's amber; a
 // `tidy` line is only something the push added, and reads as the quietest thing here.
 const sourceTone = (finding: Finding): string => (finding.gate === `code` ? `text-warning` : finding.gate === `tidy` ? `text-subtle` : `text-muted`);
 
@@ -76,7 +76,7 @@ const openNamed = (conversationId: string): void => {
     openLandConversation(conversationId);
 };
 
-// Measured again over the main tree: whatever it no longer prints resolves, and the column redraws from the status.
+// Measured again over the main tree: whatever it no longer prints resolves, and the card redraws from the status.
 const rechecking = ref(false);
 const recheck = async (): Promise<void> => {
     if (rechecking.value) {
@@ -163,16 +163,18 @@ const handOver = async (): Promise<void> => {
 </script>
 
 <template>
-    <!-- One project's block in the panel's band under the road (MainlinePanel), drawn the way a Result row is: the project,
-         what it stands at, and its one action at the end of the line; then what it holds. -->
-    <section :data-section="`push-${debt.project}`" class="flex min-w-0 flex-col text-2xs">
-        <div class="flex h-6 min-w-0 items-center gap-2 text-xs">
-            <Icon name="arrow-up-right" class="shrink-0 text-2xs text-warning" />
-            <span class="min-w-0 truncate font-medium text-content" v-tooltip.top="t(`agents.mainline.push.explain`)">{{ name }}</span>
-            <span class="shrink-0 text-warning">{{ t(`agents.mainline.push.left`, { count: standing.length }, standing.length) }}</span>
+    <!-- One project's card, drawn the way a failing project's is: its name, what it stands at under it, and its one
+         measuring press at the end of that row; then what it holds, and the owner's hands on it at its foot. -->
+    <MainlineCard :data-section="`push-${debt.project}`" :title="name" icon="arrow-up-right" tone="warning" live edge>
+        <template #meta>
+            <span class="min-w-0 truncate text-warning" v-tooltip.top="t(`agents.mainline.push.explain`)">{{
+                t(`agents.mainline.push.bar`, { count: standing.length }, standing.length)
+            }}</span>
+        </template>
+        <template #trailing>
             <button
                 type="button"
-                :class="ui.iconButton(`ml-auto hover:bg-content/10`)"
+                :class="ui.iconButton(`hover:bg-content/10`)"
                 :disabled="rechecking"
                 v-tooltip.top="t(`agents.mainline.push.recheck`)"
                 :aria-label="t(`agents.mainline.push.recheck`)"
@@ -180,44 +182,52 @@ const handOver = async (): Promise<void> => {
             >
                 <Icon name="refresh" :spin="rechecking" class="text-2xs" />
             </button>
-        </div>
-        <p v-if="pushLine !== undefined" class="truncate pl-4 text-subtle">
+        </template>
+        <p v-if="pushLine !== undefined" data-push-line class="truncate text-2xs text-subtle">
             <span class="font-mono">{{ pushLine }}</span>
             <template v-if="earlier > 0">{{ SEP }}{{ t(`agents.mainline.push.earlier`, { count: earlier }, earlier) }}</template>
         </p>
-        <ul class="flex min-w-0 flex-col pt-1 pl-4">
-            <li v-for="finding in shown" :key="finding.id" data-finding class="group -mr-1 flex min-w-0 items-center gap-2 rounded-md pr-1 hover:bg-overlay">
-                <span class="max-w-[45%] shrink-0 truncate font-mono" :class="sourceTone(finding)">{{ finding.source }}</span>
-                <span class="min-w-0 flex-1 truncate font-mono text-muted" v-tooltip.bottom="findingHint(finding)">{{ findingGist(finding.text) }}</span>
-                <button
-                    type="button"
-                    :class="ui.iconButton(`h-4 w-4 opacity-0 group-hover:opacity-100 hover:bg-content/10 focus-visible:opacity-100`)"
-                    v-tooltip.top="t(`agents.mainline.push.dismissHint`)"
-                    :aria-label="t(`agents.mainline.push.dismissOne`, { source: finding.source })"
-                    @click="dismiss([finding.id])"
+        <!-- What it found, set in from the card like a terminal's excerpt: the check that printed each, then its line. -->
+        <div class="flex min-w-0 flex-col rounded-lg bg-content/5 px-1.5 py-1.5 text-2xs">
+            <ul class="flex min-w-0 flex-col">
+                <li
+                    v-for="finding in shown"
+                    :key="finding.id"
+                    data-finding
+                    class="group flex min-h-6 min-w-0 items-center gap-2 rounded-md pl-1 hover:bg-overlay"
                 >
-                    <Icon name="times" class="text-2xs" />
-                </button>
-            </li>
-        </ul>
-        <button
-            v-if="hidden > 0"
-            type="button"
-            :class="ui.textAction(`min-h-7 pl-4 text-2xs text-subtle`)"
-            :aria-expanded="expanded"
-            @click="expanded = !expanded"
-        >
-            {{ expanded ? t(`agents.mainline.push.fewer`) : t(`agents.mainline.push.more`, { count: hidden }, hidden) }}
-        </button>
+                    <span class="max-w-[45%] shrink-0 truncate font-mono" :class="sourceTone(finding)">{{ finding.source }}</span>
+                    <span class="min-w-0 flex-1 truncate font-mono text-muted" v-tooltip.bottom="findingHint(finding)">{{ findingGist(finding.text) }}</span>
+                    <button
+                        type="button"
+                        :class="ui.iconButton(`h-5 w-5 opacity-0 group-hover:opacity-100 hover:bg-content/10 focus-visible:opacity-100`)"
+                        v-tooltip.top="t(`agents.mainline.push.dismissHint`)"
+                        :aria-label="t(`agents.mainline.push.dismissOne`, { source: finding.source })"
+                        @click="dismiss([finding.id])"
+                    >
+                        <Icon name="times" class="text-2xs" />
+                    </button>
+                </li>
+            </ul>
+            <button
+                v-if="hidden > 0"
+                type="button"
+                :class="ui.textAction(`min-h-7 pl-1 text-2xs text-subtle`)"
+                :aria-expanded="expanded"
+                @click="expanded = !expanded"
+            >
+                {{ expanded ? t(`agents.mainline.push.fewer`) : t(`agents.mainline.push.more`, { count: hidden }, hidden) }}
+            </button>
+        </div>
         <!-- Who has them, said the way a failing project's fixer is: the attempt's state, then its conversation by title. -->
-        <div v-if="attempt !== undefined && look !== undefined" data-attempt class="flex min-w-0 items-center gap-1.5 pt-1 pl-4 text-xs">
+        <div v-if="attempt !== undefined && look !== undefined" data-attempt class="flex min-w-0 items-center gap-1.5 text-xs">
             <Icon :name="look.icon" :spin="look.spin" class="shrink-0 text-2xs" :class="look.ink" />
             <span class="shrink-0 text-muted" v-tooltip.top="attempt.stance.hint">{{ attempt.stance.label }}</span>
             <button type="button" :class="ui.linkButton(`min-w-0 text-xs`)" @click="openNamed(attempt.agent.id)">
                 <span class="truncate">{{ attempt.agent.title ?? attempt.agent.id }}</span>
             </button>
         </div>
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1.5 pl-4">
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
             <AgentRunButton
                 v-if="!inPlay"
                 :label="attempt === undefined ? t(`agents.mainline.push.handOver`) : t(`agents.mainline.push.continue`)"
@@ -231,5 +241,5 @@ const handOver = async (): Promise<void> => {
                 {{ t(`agents.mainline.push.dismissAll`) }}
             </button>
         </div>
-    </section>
+    </MainlineCard>
 </template>

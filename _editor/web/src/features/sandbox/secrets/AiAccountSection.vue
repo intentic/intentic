@@ -23,6 +23,7 @@ import {
     type AccountFacts,
     accountFacts,
     accountState,
+    formatReset,
     liveUsage,
     type PlanHeadroom,
     planHeadroom,
@@ -172,9 +173,11 @@ interface AccountRow<T> {
     exhausted: boolean;
 }
 
-// Decorates and sorts active-before-spent in one pass; an account with no reading counts as active (unknown is
-// not exhausted). Order within each group follows the daemon's.
+// Decorates and sorts in one pass: rows a person has to act on first (they are why a reader is sent here, and a
+// collapsed list must not hide them), then active, then spent; an account with no reading counts as active (unknown
+// is not exhausted). Order within each group follows the daemon's.
 const rowsOf = <T,>(provider: AgentProvider, accounts: readonly T[], factsOf: (account: T) => AccountFacts): AccountRow<T>[] => {
+    const attention: AccountRow<T>[] = [];
     const active: AccountRow<T>[] = [];
     const spent: AccountRow<T>[] = [];
     for (const account of accounts) {
@@ -183,48 +186,86 @@ const rowsOf = <T,>(provider: AgentProvider, accounts: readonly T[], factsOf: (a
         const state = accountState(provider, facts);
         const waiting = state.kind === `spent` || (state.kind === `blocked` && state.fix === `wait`);
         const row = { account, headroom: planHeadroom(liveUsage(provider, facts.account)), state, exhausted: waiting };
-        (row.exhausted ? spent : active).push(row);
+        (row.exhausted ? spent : state.kind === `blocked` ? attention : active).push(row);
     }
-    return [...active, ...spent];
+    return [...attention, ...active, ...spent];
 };
 
 const accountRows = computed<readonly AccountRow<OauthAccount>[]>(() =>
     rowsOf(managedProvider.value, managedAccounts.value, accountFacts),
 );
 
-// What to do about a benched credential, where there is anything to do: only Google's own onboarding can give an
-// account the project its channel bills every turn to, so that one names the door. Any other bench is the proxy's own
-// and says all it can in the reason.
-const blockedFix = (provider: KeyedProvider, reason: string): string =>
-    provider === `gemini`
-        ? `${reason}. Disconnect it, open antigravity.google.com with that account to finish Google's setup, then connect it again.`
-        : reason;
+// What to do about a benched credential, where there is anything to do. A verification is the account owner's, on the
+// provider's page (the row's Verify button). A Google account with no project needs Google's own onboarding, the one
+// thing that gives it the project its channel bills every turn to, so that one names the door. Any other bench is the
+// proxy's own and says all it can in the reason.
+const blockedFix = (provider: KeyedProvider, state: AccountState, label: string): string | undefined => {
+    if (state.kind !== `blocked` || state.fix === `wait`) {
+        return undefined;
+    }
+    if (state.fix === `verify`) {
+        return t(`sandbox.aiAccountSection.verifyThisAccount`, { label });
+    }
+    return provider === `gemini` && state.fix === `reconnect`
+        ? `${state.reason}. Disconnect it, open antigravity.google.com with that account to finish Google's setup, then connect it again.`
+        : state.reason;
+};
 
-// The row's dot by who can fix it: signing in again (`reauth`), or somebody this sandbox cannot reach (`blocked`: an
-// organisation's admin handing a seat back). Never a seat refusal drawn as a reconnect.
+// Why a dimmed row is dimmed: a spent allowance and when it reopens, or a bench that lifts by itself and when. Said on
+// the row, since a dimmed name with nothing beside it reads as broken, not as waiting.
+const waitingLine = (state: AccountState): string | undefined => {
+    if (state.kind === `spent`) {
+        return state.reopensAt === undefined
+            ? t(`sandbox.aiAccountSection.allowanceUsedUp`)
+            : t(`sandbox.aiAccountSection.allowanceUsedUpReopens`, { when: formatReset(state.reopensAt) });
+    }
+    if (state.kind === `blocked` && state.fix === `wait`) {
+        // The sentence's own stop is the template's to put, so a provider's full stop never doubles it.
+        const reason = state.reason.replace(/[.!\s]+$/, ``);
+        return state.until === undefined
+            ? t(`sandbox.aiAccountSection.restingFor`, { reason })
+            : t(`sandbox.aiAccountSection.restingUntil`, { reason, when: formatReset(state.until) });
+    }
+    return undefined;
+};
+
+// The row's dot by who can fix it: the person here (`reauth`: signing in again, or verifying the account on the
+// provider's page), or somebody this sandbox cannot reach (`blocked`: an organisation's admin handing a seat back).
+// Never a seat refusal drawn as a reconnect.
 const connectionState = (state: AccountState): `connected` | `reauth` | `blocked` =>
-    state.kind !== `blocked` || state.fix === `wait` ? `connected` : state.fix === `reconnect` ? `reauth` : `blocked`;
+    state.kind !== `blocked` || state.fix === `wait` ? `connected` : state.fix === `admin` ? `blocked` : `reauth`;
+
+// The provider's page where the account's owner lifts a verification bench.
+const verifyUrl = (state: AccountState): string | undefined => (state.kind === `blocked` && state.fix === `verify` ? state.url : undefined);
+
+// Opened in a new tab: the person signs in there as that account, and this tab keeps its place.
+const openVerify = (url: string): void => {
+    window.open(url, `_blank`, `noopener,noreferrer`);
+};
 
 const needsReconnect = (state: AccountState): boolean => state.kind === `blocked` && state.fix === `reconnect`;
 
 // Why no turn runs on it, in the provider's words; an expired sign-in that gave none says what to do instead.
 const blockedLine = (account: OauthAccount, state: AccountState): string | undefined => {
     if (state.kind !== `blocked` || state.fix === `wait`) {
-        return undefined;
+        return waitingLine(state);
     }
     return account.needsReauth === true && account.detail === undefined ? t(`sandbox.aiAccountSection.signedOutReconnectTo`) : state.reason;
 };
 
-const translatorRows = computed(() =>
-    routedProvider.value === undefined
+const translatorRows = computed(() => {
+    const provider = routedProvider.value;
+    return provider === undefined
         ? []
-        : rowsOf(routedProvider.value, translatorAccounts.value[routedProvider.value], routedAccountFacts).map((row) => ({
+        : rowsOf(provider, translatorAccounts.value[provider], routedAccountFacts).map((row) => ({
               ...row,
               // What a person has to do before it serves again: this is the tab a reader is sent to when one can serve
-              // nothing, so it has to say which row that was. A bench that lifts by itself is only dimmed.
-              blocked: row.state.kind === `blocked` && row.state.fix !== `wait` ? row.state.reason : undefined,
-          })),
-);
+              // nothing, so it has to say which row that was. A row waiting on a clock says what it waits for, and until when.
+              blocked: blockedFix(provider, row.state, row.account.label),
+              waiting: waitingLine(row.state),
+              verify: verifyUrl(row.state),
+          }));
+});
 
 // Collapses beyond COLLAPSE_THRESHOLD total rows (native + routed combined, not either list alone) to keep the
 // card from pushing the rest of the page off screen.
@@ -452,17 +493,21 @@ watch(() => route.query[`connect`], focusConnect);
             <!-- Subscription rows (translator): the primary control for Codex/Kimi/Gemini, secondary under Grok's native account. -->
             <template v-if="routedProvider">
                 <ConnectionRow
-                    v-for="{ account, headroom, exhausted, blocked, state } in translatorRows.slice(0, visibleRoutedLimit)"
+                    v-for="{ account, headroom, exhausted, blocked, waiting, verify, state } in translatorRows.slice(0, visibleRoutedLimit)"
                     :key="account.name"
                     :title="ROUTED_ROW[routedProvider].title"
                     :state="connectionState(state)"
                     :tone="blocked === undefined ? `default` : `warning`"
                     :note="account.label"
-                    :description="blocked === undefined ? undefined : blockedFix(routedProvider, blocked)"
+                    :description="blocked ?? waiting"
                     :headroom="headroom"
                     :exhausted="exhausted"
                 >
                     <template #control>
+                        <!-- The fix is the account owner's, on the provider's page: the one action this row wants. -->
+                        <Button v-if="verify !== undefined" :label="t(`sandbox.aiAccountSection.verify`)" size="small" @click="openVerify(verify)">
+                            <template #icon><Icon name="external-link" /></template>
+                        </Button>
                         <Button
                             :label="t(`ui.action.disconnect`)"
                             size="small"

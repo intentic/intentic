@@ -58,8 +58,9 @@ const { archived, archiveLoading, archiveFailure, archive, restore, notice, dism
 // Read only while this board is mounted and the reader opted in (liveMetrics.ts); the cards take theirs from here.
 const liveMetrics = useLiveMetrics();
 provide(LIVE_METRICS_KEY, liveMetrics);
-// The main tree's own check: one read for the board, drawn in its status bar and on every card from here.
-const mainline = provideMainline();
+// The main tree's own check: one read for the board, drawn on every card from here (CardSeal). Its own board is the Main
+// line view, on the rail.
+provideMainline();
 const drag = useAgentDrag();
 const { dragged, dragging, draggedId, over, action, accepts, ghostStyle, pendingResolve, confirmResolve, cancelResolve } = drag;
 const { resolveNow, landNow, relandNow, unwatchNow } = drag;
@@ -535,11 +536,9 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                 </section>
             </div>
         </div>
-        <!-- The board's status bar: the main line whenever a land has been checked (work lands without waiting for it, so
-             its verdict is glanced at here and read in full in the Main line view the segment leads to), and the opt-in
-             geek metrics (Settings ▸ Appearance). At the foot, since the header is the board's own; the metrics' panel
-             docks above it and stays until the reader closes it. -->
-        <BoardStatusBar :mainline="mainline" :metrics="liveMetrics" />
+        <!-- The board's status bar: the opt-in geek metrics (Settings ▸ Appearance). At the foot, since the header is the
+             board's own; their panel docks above it and stays until the reader closes it. -->
+        <BoardStatusBar :metrics="liveMetrics" />
         <!-- Discard is destructive and has no lane of its own, so it only exists while a card is actually being dragged. -->
         <div
             v-if="dragging"

@@ -440,12 +440,10 @@
             "columnResult": "Wynik",
             "columnHistory": "Historia",
             "nothingQueued": "Kolejka jest pusta",
-            "idle": "Bezczynne",
             "noResults": "Brak wyników",
             "outdatedMissing": "Do czasu aktualizacji ten panel nie powie, komu przypisano nieudane sprawdzenie ani kto je naprawia, nie otworzy logów sprawdzenia i nie pokaże, co zostawiły twoje pushe.",
             "passing": "przechodzi",
             "failing": "nie przechodzi",
-            "failingSince": "nie przechodzi od {time}",
             "logs": "Logi",
             "moreFailures": "+{count} więcej",
             "noFailureList": "Brak listy błędów",
@@ -470,7 +468,6 @@
             "shortFixed": "naprawione",
             "shortDismissed": "odłożone",
             "push": {
-                "title": "Zostało po pushu",
                 "explain": "Push poszedł; jego sprawdzenie przepuściło to, co tu widać. Każde znalezisko czeka tu, aż późniejszy pomiar go nie znajdzie albo je odrzucisz. Nikt się tym nie zajmie, dopóki go nie przekażesz.",
                 "bar": "{count} zostało po pushu | {count} zostały po pushu | {count} zostało po pushu",
                 "commits": "{count} commit | {count} commity | {count} commitów",
@@ -492,11 +489,23 @@
                 "handHint": "Otwiera odizolowaną rozmowę z każdym otwartym znaleziskiem stąd, poleceniem, które pokazuje je ponownie, i commitami, które je wniosły.",
                 "handFailed": "Nie udało się przekazać ich agentowi",
                 "attempt": "Próba {count}",
-                "row": "push {sha}",
-                "rowBranch": "push {sha} do {branch}",
                 "left": "zostało {count} | zostały {count} | zostało {count}",
                 "clean": "czysto",
                 "handled": "załatwione"
+            },
+            "board": {
+                "summary": "Stan głównej linii",
+                "idle": "Żadne sprawdzenie nie trwa",
+                "waiting": "{count} scalenie czeka na następne sprawdzenie | {count} scalenia czekają na następne sprawdzenie | {count} scaleń czeka na następne sprawdzenie",
+                "measuring": "Mierzy {count} scalenie | Mierzy {count} scalenia | Mierzy {count} scaleń",
+                "on": "na {machine}",
+                "queuedLands": "Scalenia czekające w {project}",
+                "measuredLands": "Scalenia mierzone przez sprawdzenie {project}",
+                "failingSince": "Nie przechodzi od {time}",
+                "more": "+{count} więcej",
+                "backToResults": "Wróć do wyników",
+                "openHistory": "Otwórz historię ({count})",
+                "historyHint": "Każde sprawdzenie i każdy push, od najnowszych"
             }
         },
         "landCheck": {
@@ -906,6 +915,7 @@
         "accountFix": {
             "admin": "brak stanowiska",
             "reconnect": "wymaga ponownego połączenia",
+            "verify": "czeka na weryfikację",
             "wait": "chwilowo wstrzymane"
         },
         "cardStatus": {
@@ -963,7 +973,8 @@
             "planHeadroom": "Zapas planu",
             "reconnectOnAgentTab": "połącz ponownie w zakładce Agent",
             "seatFromAdmin": "poproś admina organizacji o stanowisko",
-            "unavailable": "Niedostępne"
+            "unavailable": "Niedostępne",
+            "verifyOnAgentTab": "zweryfikuj w zakładce Agent"
         },
         "chatChooseModelButton": {
             "chooseModel": "Wybierz model"
@@ -1961,6 +1972,8 @@
             "account": "Konto {managedLabel}",
             "addAnotherAccount": "Dodaj kolejne konto",
             "aiAccount": "Konto AI",
+            "allowanceUsedUp": "Limit wyczerpany.",
+            "allowanceUsedUpReopens": "Limit wyczerpany, odnawia się {when}.",
             "chatgptSubscription": "Subskrypcja ChatGPT",
             "connectionsUnavailable": "Połączenia niedostępne",
             "couldntReachAiAccounts": "Nie udało się sięgnąć do Twoich kont AI.",
@@ -1968,10 +1981,14 @@
             "googleAccount": "Konto Google",
             "kimiCodeSubscription": "Subskrypcja Kimi Code",
             "plan": "Który plan {managedLabel}",
+            "restingFor": "Wstrzymane: {reason}.",
+            "restingUntil": "Wstrzymane do {when}: {reason}.",
             "sandboxOfflineAccountsCant": "Twój sandbox jest offline: jego kont nie da się stąd odczytać ani zmienić.",
             "showMoreAccounts": "Pokaż więcej kont ({collapsedCount})",
             "signedOutReconnectTo": "Wylogowane, połącz ponownie, żeby dalej z niego korzystać.",
-            "underClaudeCode": "W Claude Code"
+            "underClaudeCode": "W Claude Code",
+            "verify": "Zweryfikuj",
+            "verifyThisAccount": "Google chce, żeby właściciel potwierdził to konto, zanim znów przyjmie tury: naciśnij Zweryfikuj, zaloguj się jako {label}, a konto wróci do rotacji przy następnej próbie."
         },
         "arrivalPanel": {
             "alreadyHere": "już tutaj",
@@ -2686,6 +2703,7 @@
             "resets": "reset {resetsAt}",
             "seatFromAdmin": "poproś admina organizacji o przypisanie mu stanowiska | poproś admina organizacji o przypisanie im stanowisk | poproś admina organizacji o przypisanie im stanowisk",
             "showingMostConstrained": "pokazujemy {max_bars} najbardziej ograniczonych z {count}",
+            "verifyEachLink": "otwórz jego nazwę, żeby je zweryfikować | otwórz każdą nazwę, żeby je zweryfikować | otwórz każdą nazwę, żeby je zweryfikować",
             "viewAccounts": "Zobacz konta"
         },
         "repoCheckRow": {

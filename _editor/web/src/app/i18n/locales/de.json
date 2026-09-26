@@ -435,12 +435,10 @@
             "columnResult": "Ergebnis",
             "columnHistory": "Verlauf",
             "nothingQueued": "Nichts in der Warteschlange",
-            "idle": "Leerlauf",
             "noResults": "Noch keine Ergebnisse",
             "outdatedMissing": "Bis zum Update kann dieses Panel nicht sagen, wem eine fehlschlagende Prüfung zugeschrieben wird oder wer sie behebt, keine Logs einer Prüfung öffnen und nicht zeigen, was deine Pushes hinterlassen haben.",
             "passing": "besteht",
             "failing": "schlägt fehl",
-            "failingSince": "schlägt fehl seit {time}",
             "logs": "Logs",
             "moreFailures": "+{count} weitere",
             "noFailureList": "Keine Fehler aufgeführt",
@@ -465,7 +463,6 @@
             "shortFixed": "behoben",
             "shortDismissed": "zurückgestellt",
             "push": {
-                "title": "Vom Push übrig",
                 "explain": "Der Push ist durch; seine Prüfung hat diese Befunde durchgelassen. Jeder wartet hier, bis eine spätere Messung ihn nicht mehr findet oder du ihn verwirfst. Niemand wird darauf angesetzt, außer du übergibst sie.",
                 "bar": "{count} vom Push übrig | {count} vom Push übrig",
                 "commits": "{count} Commit | {count} Commits",
@@ -487,11 +484,23 @@
                 "handHint": "Öffnet eine isolierte Unterhaltung mit jedem offenen Befund von hier, dem Befehl, der ihn wieder zeigt, und den Commits, die ihn gebracht haben.",
                 "handFailed": "Die Befunde konnten keinem Agenten übergeben werden",
                 "attempt": "Versuch {count}",
-                "row": "Push {sha}",
-                "rowBranch": "Push {sha} nach {branch}",
                 "left": "{count} übrig | {count} übrig",
                 "clean": "sauber",
                 "handled": "erledigt"
+            },
+            "board": {
+                "summary": "Status der Hauptlinie",
+                "idle": "Keine Prüfung läuft",
+                "waiting": "{count} Landung wartet auf die nächste Prüfung | {count} Landungen warten auf die nächste Prüfung",
+                "measuring": "Misst {count} Landung | Misst {count} Landungen",
+                "on": "auf {machine}",
+                "queuedLands": "Wartende Landungen in {project}",
+                "measuredLands": "Landungen, die die Prüfung von {project} misst",
+                "failingSince": "Schlägt fehl seit {time}",
+                "more": "+{count} weitere",
+                "backToResults": "Zurück zu den Ergebnissen",
+                "openHistory": "Verlauf öffnen ({count})",
+                "historyHint": "Jede Prüfung und jeder Push, neueste zuerst"
             }
         },
         "landCheck": {
@@ -895,6 +904,7 @@
         "accountFix": {
             "admin": "kein Sitz",
             "reconnect": "muss neu verbunden werden",
+            "verify": "wartet auf Bestätigung",
             "wait": "vorerst pausiert"
         },
         "cardStatus": {
@@ -952,7 +962,8 @@
             "planHeadroom": "Tarif-Spielraum",
             "reconnectOnAgentTab": "auf dem Agenten-Tab neu verbinden",
             "seatFromAdmin": "einen Org-Admin um einen Sitz bitten",
-            "unavailable": "Nicht verfügbar"
+            "unavailable": "Nicht verfügbar",
+            "verifyOnAgentTab": "auf dem Agenten-Tab bestätigen"
         },
         "chatChooseModelButton": {
             "chooseModel": "Ein Modell wählen"
@@ -1951,6 +1962,8 @@
             "account": "{managedLabel}-Konto",
             "addAnotherAccount": "Ein weiteres Konto hinzufügen",
             "aiAccount": "KI-Konto",
+            "allowanceUsedUp": "Kontingent aufgebraucht.",
+            "allowanceUsedUpReopens": "Kontingent aufgebraucht, wieder frei {when}.",
             "chatgptSubscription": "ChatGPT-Abo",
             "connectionsUnavailable": "Verbindungen nicht verfügbar",
             "couldntReachAiAccounts": "Ihre KI-Konten waren nicht erreichbar.",
@@ -1958,10 +1971,14 @@
             "googleAccount": "Google-Konto",
             "kimiCodeSubscription": "Kimi-Code-Abo",
             "plan": "Welcher {managedLabel}-Tarif",
+            "restingFor": "Pausiert: {reason}.",
+            "restingUntil": "Pausiert bis {when}: {reason}.",
             "sandboxOfflineAccountsCant": "Ihre Sandbox ist offline: ihre Konten lassen sich von hier aus nicht lesen oder ändern.",
             "showMoreAccounts": "{collapsedCount} weitere Konten zeigen",
             "signedOutReconnectTo": "Abgemeldet, verbinden Sie neu, um es weiter zu nutzen.",
-            "underClaudeCode": "Unter Claude Code"
+            "underClaudeCode": "Unter Claude Code",
+            "verify": "Bestätigen",
+            "verifyThisAccount": "Google verlangt, dass der Inhaber dieses Konto bestätigt, bevor es wieder Züge übernimmt: Drücken Sie „Bestätigen“, melden Sie sich als {label} an, und es kommt beim nächsten Versuch zurück in die Rotation."
         },
         "arrivalPanel": {
             "alreadyHere": "schon hier",
@@ -2674,6 +2691,7 @@
             "resets": "setzt sich zurück {resetsAt}",
             "seatFromAdmin": "bitten Sie einen Org-Admin, ihm einen Sitz zuzuweisen | bitten Sie einen Org-Admin, ihnen Sitze zuzuweisen",
             "showingMostConstrained": "es werden die {max_bars} engsten von {count} gezeigt",
+            "verifyEachLink": "öffnen Sie den Namen, um es zu bestätigen | öffnen Sie jeden Namen, um sie zu bestätigen",
             "viewAccounts": "Konten ansehen"
         },
         "repoCheckRow": {

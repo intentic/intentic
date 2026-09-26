@@ -40,7 +40,8 @@ const {
     headroom?: PlanHeadroom;
     // Spend on this connection, shown in the ring's card, not the row; omitted with no ring (Cursor, Grok).
     activity?: string;
-    // Whether this account is waiting to reopen (spent, or benched until an instant). Dims the row so active accounts stand out.
+    // Whether this account is waiting to reopen (spent, or benched until an instant). Dims the name so active accounts
+    // stand out; the description stays legible, since it is what says why the row is dimmed.
     exhausted?: boolean;
 }>();
 
@@ -55,10 +56,10 @@ const DOT_TONE: Record<string, string> = {
 </script>
 
 <template>
-    <Row :interactive="interactive" :class="[tone === `warning` ? `bg-warning/10` : ``, exhausted ? `opacity-50` : ``]">
+    <Row :interactive="interactive" :class="tone === `warning` ? `bg-warning/10` : ``">
         <template #title>
             <!-- Wraps, not truncates: the connection kind stays first so a Grok subscription row can't read as native. -->
-            <span class="flex min-w-0 flex-wrap items-center gap-x-2.5" :class="state === `add` ? `text-muted` : ``">
+            <span class="flex min-w-0 flex-wrap items-center gap-x-2.5" :class="[state === `add` ? `text-muted` : ``, exhausted ? `opacity-50` : ``]">
                 <span class="flex w-[1.125rem] shrink-0 justify-center">
                     <Icon v-if="state === `add`" name="plus" class="text-2xs" />
                     <!-- Meter replaces the dot when headroom is known, using the same green/yellow/red system. -->
@@ -87,7 +88,7 @@ const DOT_TONE: Record<string, string> = {
             <span v-if="descriptionPending" class="flex min-h-[1lh] items-center pl-7" aria-hidden="true">
                 <span class="skeleton block h-2.5 w-56" />
             </span>
-            <span v-else class="block pl-7" :class="tone === `warning` ? `text-warning` : ``">{{ description }}</span>
+            <span v-else class="block pl-7" :class="tone === `warning` ? `text-warning` : exhausted ? `text-subtle` : ``">{{ description }}</span>
         </template>
         <template v-if="$slots[`control`]" #control><slot name="control" /></template>
         <template v-if="$slots[`below`]" #below><slot name="below" /></template>

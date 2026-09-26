@@ -687,6 +687,8 @@ export const accountFixLabel = (fix: AccountFix): string => {
             return t(`chat.accountFix.reconnect`);
         case `admin`:
             return t(`chat.accountFix.admin`);
+        case `verify`:
+            return t(`chat.accountFix.verify`);
         case `wait`:
             return t(`chat.accountFix.wait`);
     }
@@ -702,7 +704,7 @@ export interface PlanLimitAttention {
     readonly reasons: readonly string[];
 }
 
-const FIX_ORDER: readonly AccountFix[] = [`reconnect`, `admin`];
+const FIX_ORDER: readonly AccountFix[] = [`reconnect`, `verify`, `admin`];
 
 // Most accounts first, so the condition holding the most of the fleet back leads.
 export const attentionGroups = (rows: readonly PlanLimitRow[]): PlanLimitAttention[] =>

@@ -5,6 +5,7 @@ import {
     type AgentTurn,
     capabilitiesOf,
     type ContextTrim,
+    KeyedProviderSchema,
     type PromptFingerprint,
     type SnapshotTurn,
     type TranscriptRow,
@@ -611,6 +612,13 @@ const failureQueries = (services: Services): FailureQueries => ({
     stopLadder: (conversationId) => {
         const made = services.conversations.state(conversationId)?.resume.stopTries ?? 0;
         return { made, nextAt: stopResumeAt(made) };
+    },
+    awaitingVerification: async (provider) => {
+        const keyed = KeyedProviderSchema.safeParse(provider);
+        if (!keyed.success) {
+            return [];
+        }
+        return (await services.cliProxy.accounts())[keyed.data].flatMap((account) => (account.cooling?.verify === undefined ? [] : [account.label]));
     },
 });
 

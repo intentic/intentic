@@ -8,10 +8,9 @@ import { mainlineBadge, mainlineSummary } from "./mainlineView";
 // suite that runs without a DOM, and the query machinery is not something it can load. Per sandbox, like every badge's
 // state: a switch empties it until the next box's read answers.
 
-// The view's id on the rail, and where its tile and the board's status bar lead: a singleton view's path, which names
-// no key (registry.ts, extensionPath).
+// The view's id on the rail, where its tile leads: a singleton view's path (`/ext/mainline`), which names no key
+// (registry.ts, extensionPath).
 export const MAINLINE_VIEW_ID = `mainline`;
-export const MAINLINE_PATH = `/ext/${MAINLINE_VIEW_ID}`;
 
 // The status as the shell last read it; undefined until it answers, and from a daemon that does not serve it.
 export const shellMainline = sandboxShallowRef<MainlineStatus | undefined>(() => undefined);

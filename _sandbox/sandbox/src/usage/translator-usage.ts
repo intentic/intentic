@@ -29,21 +29,59 @@ export interface TranslatorAuthFile {
 // reader cannot act on.
 const REASON_MAX_CHARS = 120;
 
-// The proxy's sentence where it gave one worth printing: first line only, never a pasted payload.
+// The proxy's sentence where it gave one worth printing: first line only, never a pasted payload. Where the proxy
+// pasted the upstream body (it does for every Google refusal), the body's own `error.message` is the sentence, minus
+// a "Resets in 70h35m" countdown that is stale the moment it is stored: the bench's `until` says that instead.
 const coolingReason = (message: string | undefined): string | undefined => {
-    const line = message?.trim().split("\n")[0]?.trim();
-    return line === undefined || line === "" || line.length > REASON_MAX_CHARS || line.startsWith("{") ? undefined : line;
+    const trimmed = message?.trim();
+    if (trimmed?.startsWith("{") === true) {
+        const lifted = readFailure(0, trimmed).replace(/\s*Resets in [\dhms]+\.?$/, "");
+        return lifted === "HTTP 0" || lifted === "" ? undefined : lifted;
+    }
+    const line = trimmed?.split("\n")[0]?.trim();
+    return line === undefined || line === "" || line.length > REASON_MAX_CHARS ? undefined : line;
+};
+
+// Where Google sends a person to confirm an account it has stopped serving (403 PERMISSION_DENIED, reason
+// VALIDATION_REQUIRED): its ErrorInfo carries the page as `validation_url`, and a Help link repeats it. No wait lifts
+// this, and neither does signing in to this sandbox again: only the account's owner, on that page.
+const verificationUrl = (message: string | undefined): string | undefined => {
+    const trimmed = message?.trim();
+    if (trimmed?.startsWith("{") !== true) {
+        return undefined;
+    }
+    const details = ((): unknown => {
+        try {
+            return asRecord(asRecord(JSON.parse(trimmed) as unknown)?.[`error`])?.[`details`];
+        } catch {
+            // allow(silent-catch): a body that is not JSON names no verification page, and the bench still stands.
+            return undefined;
+        }
+    })();
+    for (const detail of Array.isArray(details) ? details : []) {
+        const info = asRecord(detail);
+        if (info?.[`reason`] !== `VALIDATION_REQUIRED`) {
+            continue;
+        }
+        const url = asString(asRecord(info[`metadata`])?.[`validation_url`]);
+        if (url?.startsWith(`https://`) === true) {
+            return url;
+        }
+    }
+    return undefined;
 };
 
 // Whether the proxy is currently routing around this file (TranslatorAccount.cooling); a bench with no retry instant is
-// still a bench, and the one a wait will not lift.
-export const authFileCooling = (file: TranslatorAuthFile): { until?: number; reason?: string } | undefined => {
+// still a bench, and the one a wait will not lift. A bench Google wants a person for carries the page (`verify`) and
+// drops the proxy's retry instant: the proxy retries on its clock, but the retry fails until somebody verifies.
+export const authFileCooling = (file: TranslatorAuthFile): { until?: number; reason?: string; verify?: string } | undefined => {
     if (file.unavailable !== true && file.disabled !== true) {
         return undefined;
     }
-    const until = resetFromIso(file.next_retry_after);
-    const reason = coolingReason(asString(file.status_message)) ?? (file.disabled === true ? "disabled in the translator" : undefined);
-    return { ...(until === undefined ? {} : { until }), ...(reason === undefined ? {} : { reason }) };
+    const verify = file.disabled === true ? undefined : verificationUrl(file.status_message);
+    const until = verify === undefined ? resetFromIso(file.next_retry_after) : undefined;
+    const reason = coolingReason(file.status_message) ?? (file.disabled === true ? "disabled in the translator" : undefined);
+    return { ...(until === undefined ? {} : { until }), ...(reason === undefined ? {} : { reason }), ...(verify === undefined ? {} : { verify }) };
 };
 
 interface ApiCallResult {

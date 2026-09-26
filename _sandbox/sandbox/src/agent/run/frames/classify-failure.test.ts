@@ -44,6 +44,7 @@ const answering = (
         readonly way?: LimitWay;
         readonly made?: number;
         readonly rung?: number;
+        readonly verifying?: readonly string[];
     } = {},
 ): FailureQueries & { readonly asked: unknown[][] } => {
     const asked: unknown[][] = [];
@@ -64,6 +65,10 @@ const answering = (
         stopLadder: (conversationId) => {
             asked.push(["stopLadder", conversationId]);
             return { made: answers.made ?? 0, nextAt: answers.rung };
+        },
+        awaitingVerification: async (provider) => {
+            asked.push(["awaitingVerification", provider]);
+            return answers.verifying ?? [];
         },
     };
 };
@@ -532,4 +537,36 @@ test.each([
     ["an uncoded death with no conversation", undefined, died, { turn: { agent: "claude", harness: "native", prompt: "ship it" } }],
 ] as const)("%s is held as %s", async (_case, reason, event, change) => {
     expect((await classifyFailure(event, context(change), answering({ way }))).held?.reason).toBe(reason);
+});
+
+// Google's "Verify your account to continue." names no account, and on a routed turn the proxy chose it: the frame
+// says which accounts wait on their owner and where the fix is, and keeps Google's sentence when none is benched yet.
+describe("a routed turn Google refused until an account is verified", () => {
+    const verify: ErrorFrame = { kind: "error", message: "Verify your account to continue." };
+    const routed = context({ provider: "gemini", turn: { agent: "gemini", harness: "native", prompt: "p" }, account: undefined });
+
+    test("names the one account waiting", async () => {
+        const plan = await classifyFailure(verify, routed, answering({ verifying: ["a@example.com"] }));
+        expect(plan.frame.message).toBe(
+            "Google wants an account verified before it takes turns again: a@example.com. Open Sandbox ▸ Agent and follow the Verify link on its row.",
+        );
+        // The log keeps the provider's own words, which is what a search for the failure finds.
+        expect(plan.log.fields["reason"]).toBe("Verify your account to continue.");
+    });
+
+    test("names the first few of many and counts the rest", async () => {
+        const plan = await classifyFailure(verify, routed, answering({ verifying: ["a@x", "b@x", "c@x", "d@x", "e@x"] }));
+        expect(plan.frame.message).toBe(
+            "Google wants 5 accounts verified before they take turns again: a@x, b@x, c@x and 2 more. Open Sandbox ▸ Agent and follow the Verify link on each row.",
+        );
+    });
+
+    test("keeps Google's sentence when nothing is benched for it yet, and never asks about a native provider", async () => {
+        expect((await classifyFailure(verify, routed, answering())).frame.message).toBe("Verify your account to continue.");
+        const native = answering({ verifying: ["a@x"] });
+        expect((await classifyFailure(verify, context(), native)).frame.message).toBe(
+            "Verify your account to continue.",
+        );
+        expect(native.asked.some(([question]) => question === "awaitingVerification")).toBe(false);
+    });
 });

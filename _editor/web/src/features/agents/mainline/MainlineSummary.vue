@@ -5,13 +5,13 @@ import { computed } from "vue";
 import { formatElapsed } from "../fleet/agentStatus";
 import { fixTone, type MainlineSummary, projectName, routingMeta } from "./mainlineView";
 
-// THE MAIN LINE AT REST, inside its status-bar segment: two short answers side by side and nothing else. Health first
-// (the red project and who has it, how many are red, or that main passes), then activity (the check running and for
-// how long, and how many lands queue behind it). What a check runs, whose work it measures and why a red waits are the
-// panel's to say; the bar is read at a glance, so it never carries a sentence. Last, in amber, how many findings pushes
-// left behind: a count, since none of it is urgent and it waits for the owner whenever they get to it.
-// A sandbox too old to lay its reds has no health to give, so the bar says it needs an update where health would be:
-// "passing" for want of a red would be a guess, and the panel's note says what the update brings and how.
+// THE MAIN LINE AT REST, in the Main line view's header, above its lanes: two short answers side by side and nothing
+// else. Health first (the red project and who has it, how many are red, or that main passes), then activity (the check
+// running and for how long, and how many lands queue behind it). What a check runs, whose work it measures and why a red
+// waits are the lanes' to say; the header is read at a glance, so it never carries a sentence. Last, in amber, how many
+// findings pushes left behind: a count, since none of it is urgent and it waits for the owner whenever they get to it.
+// A sandbox too old to lay its reds has no health to give, so the header says it needs an update where health would be:
+// "passing" for want of a red would be a guess, and the view's note says what the update brings and how.
 
 const t = useT();
 

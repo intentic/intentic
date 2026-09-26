@@ -147,8 +147,7 @@ over a window you choose. They cannot write, and nothing in this playbook restar
 - A turn changed code and ran no check after its last edit, or its last check failed →
   `mcp__diagnostics__turns` with `only: "unproven"`. That is the turn's own record, since nothing checks a turn
   when it ends. Whether the work passed once it landed is the main-line check's answer: the **Main line** view
-  (its rail tile, also summarized in the Agents board's status bar), and each project's last log in
-  `/work/.intentic/local/verify/`.
+  (its rail tile), and each project's last log in `/work/.intentic/local/verify/`.
 - Something errored in the daemon (an automation, a sync, a land, a refused provider) →
   `mcp__diagnostics__errors` (`sinceMinutes`; `contains` a conversation id, route or code; `level`).
 - The editor white-screened, stalled or felt slow → `mcp__diagnostics__errors` with `source: "browser"`.
@@ -177,14 +176,16 @@ rebuild, a daemon restart from the host). Say plainly that nothing was changed.
   payment approvals render here. Each session card shows its land's status (checking, waiting, passed, or
   broke N and who is fixing it) and a badge for what its last turn showed of its own work.
 - **Agents** (`/agents`): the fleet board, every conversation as an agent with its branch and status.
-  **Land** applies a conversation's delta to the main tree; a conflict card names the paths. The board's status
-  bar says in one line whether main passes (or which project fails, and whether someone is fixing it, it is on
-  hold, or it needs you) and what the check is doing; pressing it opens the Main line view. With geek metrics on
-  (Settings ▸ Appearance), its far end carries the sandbox's CPU, memory and disk, and opens a panel with every
-  figure, memory by kind of process, and memory and CPU by session; each card shows its own conversation's.
+  **Land** applies a conversation's delta to the main tree; a conflict card names the paths. With geek metrics
+  on (Settings ▸ Appearance), the board's status bar carries the sandbox's CPU, memory and disk, and opens a
+  panel with every figure, memory by kind of process, and memory and CPU by session; each card shows its own
+  conversation's.
 - **Main line** (`/ext/mainline`, a rail tile that counts a failing project and turns while a check runs): the
-  check main gets after every land. It reads left to right as the road a land travels: Queued → Checking →
-  Result, then History, and under the road what the last push left behind.
+  check main gets after every land, laid out as a board like Agents. Its header says in one line whether main
+  passes (or which project fails, and whether someone is fixing it, it is on hold, or it needs you) and what the
+  check is doing. Its lanes read left to right as the road a land travels: Queued (each project's lands, waiting)
+  → Checking (the running check, with the lands it measures under it) → Result (a failing project with who has it
+  and what failed, what the last push left behind, then the passing ones). The Result lane's header opens History.
 - **Capabilities** (`/capabilities`): the connections; each card is a connector, account, device or service.
 - **Sandbox** (`/sandbox/<tab>`): Overview, Status (running turns), Usage, Environment, Secrets, Agent (the
   settings above), Extensions, Discover, Access, Personas, Devices.

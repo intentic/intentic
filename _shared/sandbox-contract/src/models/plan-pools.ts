@@ -145,7 +145,7 @@ export interface ServiceFacts {
     // Why the sign-in needs renewing, where the provider said.
     readonly detail?: string | undefined;
     readonly seatRefusal?: string | undefined;
-    readonly cooling?: { readonly until?: number | undefined; readonly reason?: string | undefined } | undefined;
+    readonly cooling?: { readonly until?: number | undefined; readonly reason?: string | undefined; readonly verify?: string | undefined } | undefined;
     readonly usage?: AccountUsage | undefined;
 }
 
@@ -240,6 +240,11 @@ export const serviceState = (facts: ServiceFacts, refusal?: ProviderRefusal, mod
         return { kind: "blocked", fix: "admin", reason: refusal.message };
     }
     const cooling = facts.cooling;
+    // A bench the provider wants a person for: the account's owner confirms it on the provider's page, and no wait or
+    // reconnect here lifts it. Outranks the retry instant, which is only when the proxy will ask again.
+    if (cooling?.verify !== undefined) {
+        return { kind: "blocked", fix: "verify", reason: cooling.reason ?? "the provider wants this account verified", url: cooling.verify };
+    }
     // A bench with no instant is one no wait lifts (a Google account with no project): somebody has to connect again.
     if (cooling !== undefined && cooling.until === undefined) {
         return { kind: "blocked", fix: "reconnect", reason: cooling.reason ?? "benched by the translator" };

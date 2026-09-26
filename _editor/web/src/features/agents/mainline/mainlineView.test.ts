@@ -9,7 +9,9 @@ import {
     mainlineBadge,
     mainlineSummary,
     pushDebtOf,
+    queuesOf,
     redsOf,
+    resultDot,
     resultsOf,
     routingMeta,
     timelineOf,
@@ -90,7 +92,7 @@ describe(`mainlineSummary`, () => {
         });
     });
 
-    // Nothing is rebuilt from an older sandbox's runs: its red project is a red no one could lay, so the bar is told the
+    // Nothing is rebuilt from an older sandbox's runs: its red project is a red no one could lay, so the header is told the
     // sandbox is out of date rather than drawing a guess at who has it, or "passing" for want of a red.
     it(`lays no red for a sandbox too old to serve one, and says it is out of date`, () => {
         const broken = red({ at: NOW - 9 * MINUTE, suspects: [`mine`] });
@@ -125,6 +127,34 @@ describe(`resultsOf`, () => {
             [`docs`, `line`],
         ]);
         expect(results.map((result) => result.run)).toEqual([webRed, apiRed, docs]);
+    });
+});
+
+// THE BOARD'S QUEUED LANE: a card per project with lands waiting, each drawn in every queue it waits in.
+describe(`queuesOf`, () => {
+    it(`is each project's waiting lands, newest first, in the order the projects are listed, and none for an empty queue`, () => {
+        const early = land(`early`, NOW - 9 * MINUTE);
+        const late = land(`late`, NOW - MINUTE);
+        const both = land(`both`, NOW - 5 * MINUTE);
+        const queues = queuesOf(
+            status([project({ project: `web`, queued: [early, both, late] }), project({ project: `docs`, last: run({ project: `docs` }) }), project({ project: `api`, queued: [both] })]),
+        );
+        expect(queues).toEqual([
+            { project: `web`, lands: [late, both, early] },
+            { project: `api`, lands: [both] },
+        ]);
+    });
+});
+
+// THE RESULT LANE'S DOT: the board's health at a glance, the way the fleet board's lanes wear theirs.
+describe(`resultDot`, () => {
+    it(`is red while any project's last check failed, green once something passed and nothing failed, grey before anything was checked`, () => {
+        const failing = status([redProject(red({ project: `api` })), project({ project: `web`, last: run() })]);
+        expect(resultDot(resultsOf(failing))).toBe(`bg-danger`);
+        expect(resultDot(resultsOf(status([project({ last: run() })])))).toBe(`bg-success`);
+        expect(resultDot(resultsOf(status([project({ queued: [land(`q`, NOW)] })])))).toBe(`bg-line-strong`);
+        // An older sandbox lays no reds, and its failing run is still read as failing.
+        expect(resultDot(resultsOf(olderStatus([project({ last: red() })])))).toBe(`bg-danger`);
     });
 });
 
@@ -351,7 +381,7 @@ describe(`mainlineSummary with pushes`, () => {
         expect(summary).toEqual({ running: undefined, reds: [], queued: 0, checked: true, leftAtPush: 3, outdated: false });
     });
 
-    it(`keeps main passing on the bar when what pushes left is the only other news`, () => {
+    it(`keeps main passing in the header when what pushes left is the only other news`, () => {
         expect(mainlineSummary(pushStatus([push(`a`, NOW, [finding(`paths`)])], { lastAt: NOW - MINUTE }))).toEqual({
             running: undefined,
             reds: [],
@@ -383,7 +413,7 @@ describe(`mainlineSummary with pushes`, () => {
         expect(mainlineSummary(pushStatus(undefined))).toBeUndefined();
     });
 
-    // v1.312 files pushes without the reds that say what of them is owed: the bar stands to say it needs an update, and
+    // v1.312 files pushes without the reds that say what of them is owed: the header stands to say it needs an update, and
     // counts nothing it cannot know.
     it(`stands for an older sandbox that pushed, counting nothing it cannot say is owed`, () => {
         const older: MainlineStatus = { projects: [], recent: [], pushed: [push(`a`, NOW, [finding(`paths`)])] };
@@ -446,7 +476,7 @@ describe(`leftSince`, () => {
     });
 });
 
-// THE RAIL'S TILE: the bar's two answers in the rail's shape, a danger count for health and a running note for activity.
+// THE RAIL'S TILE: the header's two answers in the rail's shape, a danger count for health and a running note for activity.
 describe(`mainlineBadge`, () => {
     const checking = { command: `pnpm verify`, startedAt: NOW - 5_000, lands: [land(`b`, NOW - 6_000)] };
 

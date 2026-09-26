@@ -47,7 +47,7 @@ export const AccountUsageSchema = z.object({
 export type AccountUsage = z.infer<typeof AccountUsageSchema>;
 // Who has to act for a blocked account, which is the only thing a surface chooses its instruction by: the reason is the
 // words for a person, never a key.
-export const AccountFixSchema = z.enum(["reconnect", "admin", "wait"]);
+export const AccountFixSchema = z.enum(["reconnect", "admin", "verify", "wait"]);
 export type AccountFix = z.infer<typeof AccountFixSchema>;
 // Whether an account can serve a turn, decided once by the daemon (models/plan-pools.ts `serviceState`) from every fact
 // it holds about it: a revoked sign-in, a lost seat, a translator bench, a refusal still standing, and its plan limits.
@@ -69,10 +69,11 @@ export const AccountStateSchema = z.discriminatedUnion("kind", [
     z.object({
         kind: z.literal("blocked"),
         fix: AccountFixSchema.describe(
-            "Who can make it serve again: `reconnect` (sign in again on this sandbox), `admin` (an organisation admin hands the seat back), or `wait` (it lifts by itself, at `until` where known).",
+            "Who can make it serve again: `reconnect` (sign in again on this sandbox), `admin` (an organisation admin hands the seat back), `verify` (the account's owner confirms it on the provider's page, at `url`), or `wait` (it lifts by itself, at `until` where known).",
         ),
         reason: z.string().describe("Why, in words a person can act on: the provider's own sentence where it gave one."),
         until: z.number().optional().describe("When waiting lifts it, in epoch seconds, for `wait` only."),
+        url: z.string().optional().describe("The provider's page where the account's owner lifts it, for `verify` only."),
     }),
     z.object({ kind: z.literal("unknown").describe("Nothing blocks it and nothing has been measured: usable, never read as room.") }),
 ]);
@@ -151,6 +152,9 @@ export const TranslatorAccountSchema = z.object({
             // Why, in the words of what is missing: the proxy's own sentence where it gave one short enough to print,
             // else this sandbox's. Never a pasted upstream body.
             reason: z.string().optional(),
+            // The provider's page where the account's owner confirms it (Google's VALIDATION_REQUIRED). Present means
+            // a person has to act there: the proxy's retry fails until they do.
+            verify: z.string().optional(),
         })
         .optional(),
     state: AccountStateSchema.optional().describe(

@@ -1,38 +1,28 @@
 <script setup lang="ts">
-import type { MainlineStatus, SandboxMetrics } from "@intentic/sandbox-contract";
+import type { SandboxMetrics } from "@intentic/sandbox-contract";
 import { ResizeSeam, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, useId } from "vue";
-import { RouterLink } from "vue-router";
-import MainlineSummary from "../mainline/MainlineSummary.vue";
-import { MAINLINE_PATH } from "../mainline/mainlineTile";
-import { mainlineSummary } from "../mainline/mainlineView";
 import SandboxMetricsDetails from "../metrics/SandboxMetricsDetails.vue";
 import SandboxMetricsSummary from "../metrics/SandboxMetricsSummary.vue";
 import { openPanel, PANEL_DEFAULT_HEIGHT, PANEL_MIN_HEIGHT, panelHeight, panelMaxHeight } from "./statusBarState";
 
-// THE BOARD'S STATUS BAR: the main tree's own check and the sandbox's geek metrics, as two segments of one bar at the
-// board's foot. Each says at rest what a reader most needs from it (what is running, what is red, how full the box is).
+// THE BOARD'S STATUS BAR: the sandbox's geek metrics at the board's foot, saying at rest how full the box is. The main
+// tree's check is not here: it has a board of its own (the Main line view, the rail's Main line tile), whose tile badges
+// a red and turns while a check runs, so the board's foot carries only what is read while the agents above it work.
 //
-// The main line's segment leads to its own view (Mainline.vue, the rail's Main line tile). What it opens onto is a
-// page's reading, diagnosis and a to-do list, read instead of the board rather than beside it: a drawer under the board
-// showed only a slice of it while taking the board's height.
-//
-// The metrics' segment opens its panel above the bar, in the layout rather than over it, so the board moves up instead
-// of being covered, and nothing but the reader closes it again (its segment, its ×, or Escape inside it). It stays: its
-// figures are few and live, watched while the agents above them work. The reader sets its height on the seam above it,
-// and both are remembered (statusBarState.ts). Opaque, so a skin's backdrop does not show through. Absent while
-// neither segment has anything to say.
+// The segment opens its panel above the bar, in the layout rather than over it, so the board moves up instead of being
+// covered, and nothing but the reader closes it again (its segment, its ×, or Escape inside it). It stays: its figures
+// are few and live, watched while the agents above them work. The reader sets its height on the seam above it, and both
+// are remembered (statusBarState.ts). Opaque, so a skin's backdrop does not show through. Absent while the metrics are
+// off (Settings ▸ Appearance).
 
 const t = useT();
 
 const props = defineProps<{
-    mainline: MainlineStatus | undefined;
     // Only the board reads them (useLiveMetrics), and only while the reader opted in.
     metrics?: SandboxMetrics | undefined;
 }>();
-
-const summary = computed(() => mainlineSummary(props.mainline));
 
 const uid = useId();
 const panelId = `${uid}-panel-metrics`;
@@ -56,13 +46,8 @@ const close = (): void => {
 </script>
 
 <template>
-    <div
-        v-if="summary !== undefined || metrics !== undefined"
-        role="region"
-        :aria-label="t(`agents.statusBar.label`)"
-        class="flex shrink-0 flex-col border-t border-line bg-canvas text-2xs"
-    >
-        <div v-if="open && metrics !== undefined" data-status-panel class="relative flex min-h-0" :style="{ height: `${drawnHeight}px` }">
+    <div v-if="metrics !== undefined" role="region" :aria-label="t(`agents.statusBar.label`)" class="flex shrink-0 flex-col border-t border-line bg-canvas text-2xs">
+        <div v-if="open" data-status-panel class="relative flex min-h-0" :style="{ height: `${drawnHeight}px` }">
             <ResizeSeam
                 v-model="panelHeight"
                 axis="y"
@@ -93,20 +78,8 @@ const close = (): void => {
             </section>
         </div>
         <div class="flex min-h-7 flex-wrap items-center gap-x-1 gap-y-0.5 px-1.5 py-0.5" :class="open ? `border-t border-line-subtle` : ``">
-            <!-- The main line leads; the arrow, not a chevron, says it goes somewhere rather than opening here. -->
-            <RouterLink
-                v-if="summary !== undefined"
-                :to="MAINLINE_PATH"
-                data-segment="mainline"
-                v-tooltip.top="t(`agents.statusBar.openMainline`)"
-                class="flex h-6 min-w-0 items-center gap-2 overflow-hidden rounded-md px-1.5 text-muted transition-colors hover:bg-content/5 hover:text-content"
-            >
-                <MainlineSummary :summary="summary" />
-                <Icon name="arrow-right" class="shrink-0 text-2xs text-subtle" />
-            </RouterLink>
             <!-- The metrics sit at the bar's far end. -->
             <button
-                v-if="metrics !== undefined"
                 :id="segmentId"
                 type="button"
                 data-segment="metrics"

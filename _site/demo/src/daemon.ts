@@ -1008,7 +1008,28 @@ const DEMO_TRANSLATOR_ACCOUNTS: TranslatorAccounts = {
     codex: [{ name: `chatgpt-ada`, label: `ChatGPT Pro · ada@acme.dev`, state: { kind: `unknown` } }],
     grok: [],
     kimi: [],
-    gemini: [],
+    // One of every state a Google row can be in, so the Agent tab shows what each says: serving, waiting on its owner
+    // to verify it, its allowance spent, and benched by the proxy until an instant.
+    gemini: [
+        { name: `antigravity-ada.json`, label: `ada@acme.dev`, state: { kind: `ready`, room: 64 } },
+        {
+            name: `antigravity-lin.json`,
+            label: `lin@acme.dev`,
+            cooling: { reason: `Verify your account to continue.`, verify: `https://accounts.google.com/signin/continue` },
+            state: { kind: `blocked`, fix: `verify`, reason: `Verify your account to continue.`, url: `https://accounts.google.com/signin/continue` },
+        },
+        {
+            name: `antigravity-grace.json`,
+            label: `grace@acme.dev`,
+            state: { kind: `spent`, reopensAt: Math.round(STARTED_AT / 1000) + 3 * 24 * 3600 },
+        },
+        {
+            name: `antigravity-alan.json`,
+            label: `alan@acme.dev`,
+            cooling: { until: Math.round(STARTED_AT / 1000) + 40 * 60, reason: `Resource has been exhausted.` },
+            state: { kind: `blocked`, fix: `wait`, reason: `Resource has been exhausted.`, until: Math.round(STARTED_AT / 1000) + 40 * 60 },
+        },
+    ],
 };
 
 const CLAUDE_MODELS: Model[] = [

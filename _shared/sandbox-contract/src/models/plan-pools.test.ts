@@ -167,6 +167,13 @@ test("a revoked sign-in outranks a lost seat, which outranks a bench, whatever t
         reason: "cooling down",
         until: 2_000,
     });
+    // One Google wants its owner to verify: neither waiting nor reconnecting lifts it, and the row carries the page.
+    expect(serviceState({ ...facts, cooling: { reason: "Verify your account to continue.", verify: "https://accounts.google.com/v" } })).toEqual({
+        kind: "blocked",
+        fix: "verify",
+        reason: "Verify your account to continue.",
+        url: "https://accounts.google.com/v",
+    });
     // A bench whose instant has passed is over.
     expect(serviceState({ ...facts, cooling: { until: 999 } }, undefined, undefined, 1_000_000)).toEqual({ kind: "ready", room: 100 });
 });

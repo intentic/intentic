@@ -1405,6 +1405,7 @@ describe("a child whose allowance runs out", () => {
                     reopensAt: async () => undefined,
                     limitWay: async () => undefined,
                     stopLadder: () => ({ made: 0, nextAt: undefined }),
+                    awaitingVerification: async () => [],
                 },
             );
             yield frame;

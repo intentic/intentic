@@ -100,9 +100,10 @@ const WEB_GREEN = (now: number): MainlineRun => ({
     attempt: 0,
 });
 
+// `reds` as a current daemon always sends it, empty or not: without it the view reads the sandbox as too old to lay a red.
 const greenLine = (now: number): MainlineStatus => {
     const green = WEB_GREEN(now);
-    return { projects: [{ project: `web`, queued: [], session: `panel-web--verify`, last: green }], recent: [green, WEB_RECHECK(now)] };
+    return { projects: [{ project: `web`, queued: [], session: `panel-web--verify`, last: green }], recent: [green, WEB_RECHECK(now)], reds: [] };
 };
 
 // The checkout run landed its last turn a moment before the page opened, and `web`'s check is measuring it now.

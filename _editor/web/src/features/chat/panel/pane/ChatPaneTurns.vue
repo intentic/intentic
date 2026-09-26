@@ -11,6 +11,7 @@ import ChatTurnStatus from "../../transcript/ChatTurnStatus.vue";
 import ChatSystemPrompt from "../../transcript/prompt/ChatSystemPrompt.vue";
 import ChatShotViewer from "../../transcript/shots/ChatShotViewer.vue";
 import ChatTurnShots from "../../transcript/shots/ChatTurnShots.vue";
+import { unsaidError } from "../../transcript/transcript";
 import { useShotViewer } from "../../transcript/shots/useShotViewer";
 import { usePaneTranscript } from "./paneTranscript";
 import { viewingIn } from "./paneSurface";
@@ -33,6 +34,8 @@ const { turns, turnShots, repeatedChecklists, isStreaming, showTurnStatus, strip
         conversationId: computed(() => conversation.value.conversationId),
     });
 const doomed = computed(() => conversation.value.transcript.doomed.value);
+// The red line only where it adds to the transcript: the daemon's notice already says a turn's failure.
+const error = computed(() => unsaidError(conversation.value.error.value, messages.value));
 const viewer = useShotViewer(turns, turnShots);
 provide(CHAT_SURFACE, viewingIn(useChatSurface(), viewer));
 </script>
@@ -111,7 +114,7 @@ provide(CHAT_SURFACE, viewingIn(useChatSurface(), viewer));
         <slot v-else name="empty" />
         <!-- The live turn before it's written anything (showTurnStatus); outside the turn sections since it belongs to no message yet. -->
         <ChatTurnStatus v-if="showTurnStatus" />
-        <p v-if="conversation.error.value" class="text-xs text-danger">{{ conversation.error.value }}</p>
+        <p v-if="error !== undefined" class="text-xs text-danger">{{ error }}</p>
         <!-- Mounted only while open, so a chat nobody is looking through pictures in computes none of its filmstrip. -->
         <ChatShotViewer
             v-if="viewer.open.value"

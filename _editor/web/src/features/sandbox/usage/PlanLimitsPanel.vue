@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { providerLabel } from "@intentic/sandbox-contract";
+import { type AccountFix, providerLabel } from "@intentic/sandbox-contract";
 import { RowGroup, RowNote, SearchBar, ui } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
 import ProviderLogo from "../../chat/accounts/ProviderLogo.vue";
@@ -117,10 +117,12 @@ const barTooltip = (row: PlanLimitRow): string =>
 const ATTENTION_SHOWN = 12;
 const attentionExpanded = ref(false);
 const attentionTotal = computed(() => summary.value.attention.reduce((count, group) => count + group.rows.length, 0));
-// Split by who can fix it (the verdict's `fix`): a lost seat is handed back by the organisation, the rest by signing in again.
-const fixTotal = (fix: `reconnect` | `admin`): number => summary.value.attention.find((group) => group.fix === fix)?.rows.length ?? 0;
+// Split by who can fix it (the verdict's `fix`): a lost seat is handed back by the organisation, a verification by the
+// account's owner on the provider's page, the rest by signing in again.
+const fixTotal = (fix: Exclude<AccountFix, `wait`>): number => summary.value.attention.find((group) => group.fix === fix)?.rows.length ?? 0;
 const seatTotal = computed(() => fixTotal(`admin`));
 const reconnectTotal = computed(() => fixTotal(`reconnect`));
+const verifyTotal = computed(() => fixTotal(`verify`));
 const attentionShown = computed(() =>
     summary.value.attention.map((group) => ({
         fix: group.fix,
@@ -341,6 +343,9 @@ const roster = computed(() => {
                     <span v-if="reconnectTotal > 0" class="text-2xs text-subtle">
                         {{ t(`sandbox.planLimitsPanel.reconnectOnAgentTab`, { count: reconnectTotal }, reconnectTotal) }}
                     </span>
+                    <span v-if="verifyTotal > 0" class="text-2xs text-subtle">
+                        {{ t(`sandbox.planLimitsPanel.verifyEachLink`, { count: verifyTotal }, verifyTotal) }}
+                    </span>
                     <span v-if="seatTotal > 0" class="text-2xs text-subtle">
                         {{ t(`sandbox.planLimitsPanel.seatFromAdmin`, { count: seatTotal }, seatTotal) }}
                     </span>
@@ -357,7 +362,16 @@ const roster = computed(() => {
                             class="flex min-w-0 items-center gap-1.5 text-2xs"
                         >
                             <ProviderLogo :provider="row.provider" class="shrink-0 text-muted" />
-                            <span class="min-w-0 truncate text-muted">{{ row.label }}</span>
+                            <!-- A verification is done by the account's owner on the provider's own page: the name is that door. -->
+                            <a
+                                v-if="row.state.url !== undefined"
+                                :href="row.state.url"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="min-w-0 truncate text-link hover:underline"
+                                >{{ row.label }}</a
+                            >
+                            <span v-else class="min-w-0 truncate text-muted">{{ row.label }}</span>
                         </span>
                         <!-- Never a silent cap, and never a dead end: the rest are one click away, in place. -->
                         <button

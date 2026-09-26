@@ -548,7 +548,7 @@ export const createCliProxyClient = (params: {
     // What keeps this credential from serving a turn, if anything. A missing project outranks the proxy's own verdict:
     // the proxy reports such a file as active, and a bench with no instant is exactly what it is, since no wait fixes
     // it. No `until`, so fleet-limit counts it spent forever rather than promising a reopen.
-    const benched = (provider: KeyedProvider, file: TranslatorAuthFile): { until?: number; reason?: string } | undefined =>
+    const benched = (provider: KeyedProvider, file: TranslatorAuthFile): { until?: number; reason?: string; verify?: string } | undefined =>
         projectless(provider, file) ? { reason: NO_PROJECT_REASON } : authFileCooling(file);
 
     // Read from recorded snapshots, not the refusal itself, since CLIProxyAPI's 429 is only the fleet's last word,

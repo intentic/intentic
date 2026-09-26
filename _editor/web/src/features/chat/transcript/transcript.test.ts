@@ -10,6 +10,7 @@ import {
     recordedRows,
     repeatedChecklistIds,
     turnsOf,
+    unsaidError,
 } from "./transcript";
 
 const questions = [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }];
@@ -209,4 +210,22 @@ describe(`currentChecklist`, () => {
         const nudged: ChatMessage[] = [...TURN, { id: 6, role: `user`, text: `continue` }, { id: 7, role: `assistant`, text: `Carrying on.` }];
         expect(currentChecklist(nudged)).toBe(SNAPSHOTS[3]);
     });
+});
+
+// The reproduction: Google's "Verify your account to continue." drawn once as the daemon's notice and again, word for
+// word, as the window's red line under it.
+it(`draws a failure once: the red line gives way to the notice that already says it, not to one that says less`, () => {
+    const said = `Verify your account to continue.`;
+    const rows: ChatMessage[] = [
+        { id: 1, role: `user`, text: `hi` },
+        { id: 2, role: `notice`, text: said },
+    ];
+    expect(unsaidError(said, rows)).toBeUndefined();
+    // The notice may carry a clause of the daemon's own after the sentence.
+    expect(unsaidError(said, [...rows.slice(0, 1), { id: 2, role: `notice`, text: `${said} Retried 3 of 3 times by itself.` }])).toBeUndefined();
+    // A red line with words the notice lacks, or with no notice under the turn, still shows.
+    const more = `${said} Install a newer engine under Sandbox ▸ Environment.`;
+    expect(unsaidError(more, rows)).toBe(more);
+    expect(unsaidError(said, rows.slice(0, 1))).toBe(said);
+    expect(unsaidError(null, rows)).toBeUndefined();
 });
