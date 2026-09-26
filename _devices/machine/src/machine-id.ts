@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { MachineIdSchema } from "@intentic/sandbox-contract";
 import { baseDir } from "./config.js";
 
@@ -16,11 +17,12 @@ export const MACHINE_ID_ENV = "INTENTIC_MACHINE_ID";
 
 const valid = (value: string | undefined): string | undefined => MachineIdSchema.safeParse(value?.trim()).data;
 
+// No file yet is no id; an unreadable one throws rather than being minted over.
 const read = (path: string): string | undefined => {
     try {
         return valid(readFileSync(path, "utf8"));
-    } catch {
-        return undefined;
+    } catch (error) {
+        return undefinedIfMissing(error);
     }
 };
 

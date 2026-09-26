@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { packageRoot } from "@intentic/constants/node";
 import { STATE_PLAN_FORMAT, type StatePlan, StatePlanSchema, type StateStatus, StateStatusSchema } from "./state-plan.js";
 
@@ -20,12 +21,12 @@ const clear: StatePlan = {
     failures: [],
     steps: [
         { document: "conversations-db-schema", change: "upgrades the conversations database schema" },
-        { document: ".intentic/config/personas.json", change: "moves it from .intentic/identities.json" },
+        { document: `${STATE_DIR}/config/personas.json`, change: `moves it from ${STATE_DIR}/identities.json` },
     ],
     converts: [
-        { document: ".intentic/config/settings.json", change: "converts personaRouting from its old values", detail: '"suggest" became true' },
+        { document: `${STATE_DIR}/config/settings.json`, change: "converts personaRouting from its old values", detail: '"suggest" became true' },
     ],
-    files: [".intentic/config/personas.json"],
+    files: [`${STATE_DIR}/config/personas.json`],
 };
 
 const refused: StatePlan = {
@@ -35,7 +36,7 @@ const refused: StatePlan = {
     digest: "c8cff51cab20a2b5",
     ok: false,
     downgrade: true,
-    failures: [{ document: ".intentic/config/automations.json", detail: 'conversion "converts numbered kinds" failed: no such kind' }],
+    failures: [{ document: `${STATE_DIR}/config/automations.json`, detail: 'conversion "converts numbered kinds" failed: no such kind' }],
     steps: [],
     converts: [],
     files: [],

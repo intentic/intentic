@@ -5,7 +5,7 @@
 # or without node, it is the real program at once. Every name in this directory is this same file.
 here=$(cd "$(dirname "$0")" && pwd)
 name=$(basename "$0")
-exec_js=${INTENTIC_HEAVY_EXEC:-/opt/sandbox/node_modules/@intentic/constants/src/heavy-exec.cjs}
+exec_js=${INTENTIC_HEAVY_EXEC:-/opt/sandbox/node_modules/@intentic/constants/src/heavy/heavy-exec.cjs}
 if [ -n "${INTENTIC_HEAVY:-}" ] && [ -z "${INTENTIC_HEAVY_HELD:-}${INTENTIC_QUEUE_SLOT:-}" ] && [ -f "$exec_js" ] && command -v node >/dev/null 2>&1; then
     exec node "$exec_js" "$here" "$name" "$@"
 fi

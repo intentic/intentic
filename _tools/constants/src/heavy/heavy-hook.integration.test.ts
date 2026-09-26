@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { mergeHeavyRules } from "./heavy-rules.cjs";
+import { repoRoot } from "../node.mjs";
 
 /* Real node processes started under the hook, the way an agent's command starts them: the heavy one is named by the
    package that publishes it, put in its class before it runs a line of its own, and handed to queue-run (or
@@ -15,7 +16,7 @@ const run = promisify(execFile);
 const NODE = "node";
 const HOOK = join(import.meta.dirname, "heavy-hook.cjs");
 const EXEC = join(import.meta.dirname, "heavy-exec.cjs");
-const SHIMS = join(import.meta.dirname, "../../../_sandbox/sandbox/bin/heavy-shims");
+const SHIMS = join(repoRoot(import.meta.url), "_sandbox/sandbox/bin/heavy-shims");
 
 let dir: string;
 

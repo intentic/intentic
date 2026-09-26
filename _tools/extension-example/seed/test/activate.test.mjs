@@ -157,6 +157,6 @@ test(`the tools the backend serves write the file the view watches, and refuse a
         [`second`],
     );
     await assert.rejects(call(`add_note`, { text: ` ` }), /needs some text/);
-    assert.equal(JSON.parse(await readFile(join(root, `.intentic`, `example-notes.json`), `utf8`)).notes.length, 2);
+    assert.equal(JSON.parse(await readFile(join(root, declaredFiles[0]), `utf8`)).notes.length, 2);
     await rm(root, { recursive: true, force: true });
 });
