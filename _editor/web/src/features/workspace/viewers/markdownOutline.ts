@@ -53,8 +53,23 @@ export const matchHeadings = (headings: readonly OutlineHeading[], query: string
     return needle === `` ? all : all.filter((row) => row.heading.text.toLowerCase().includes(needle));
 };
 
+// Source syntax the editable document keeps in its DOM (`## `, `**`, backticks, a link's `](url)`); it navigates
+// nothing, so the outline shows a heading's words only, as the rendered preview does.
+const MARKER = `.md-marker`;
+
+// Text of `node` minus any marker spans inside it.
+const wordsOf = (node: Node): string => {
+    if (node.nodeType === Node.TEXT_NODE) {
+        return node.textContent ?? ``;
+    }
+    if (node instanceof Element && node.matches(MARKER)) {
+        return ``;
+    }
+    return [...node.childNodes].map(wordsOf).join(``);
+};
+
 // A heading's own words as a single line, collapsing inline markup and source line-wraps.
-const headingText = (node: Element): string => (node.textContent ?? ``).replaceAll(/\s+/gu, ` `).trim();
+const headingText = (node: Element): string => wordsOf(node).replaceAll(/\s+/gu, ` `).trim();
 
 // Heading elements in document order. One with no text (a bare `#`, or streamed-in content not arrived yet) is skipped.
 const headingNodes = (view: ParentNode): HTMLElement[] =>

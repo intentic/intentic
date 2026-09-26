@@ -23,6 +23,18 @@ describe(`readHeadings`, () => {
         expect(readHeadings(view)).toEqual([{ level: 2, text: `api.views — the surfaces` }]);
     });
 
+    it(`drops the source syntax the editable document keeps as marker spans`, () => {
+        const view = container(
+            `<h2><span class="md-marker md-marker-gutter">## </span>Ship <strong><span class="md-marker">**</span>fast<span class="md-marker">**</span></strong> via <a><span class="md-marker">[</span>docs<span class="md-marker">](x.md)</span></a></h2>`,
+        );
+        expect(readHeadings(view)).toEqual([{ level: 2, text: `Ship fast via docs` }]);
+    });
+
+    it(`skips a heading that is only its marker`, () => {
+        const view = container(`<h1><span class="md-marker md-marker-gutter"># </span></h1><h2>Real</h2>`);
+        expect(readHeadings(view)).toEqual([{ level: 2, text: `Real` }]);
+    });
+
     it(`skips headings with no words in them`, () => {
         const view = container(`<h1></h1><h2>  </h2><h3>Real</h3>`);
         expect(readHeadings(view)).toEqual([{ level: 3, text: `Real` }]);
