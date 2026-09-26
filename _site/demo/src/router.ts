@@ -1,7 +1,6 @@
 import {
     RAW_ROUTES,
     type RawRouteKey,
-    SANDBOX_ROUTE_NAMES,
     sandboxContract,
     sandboxRouteFor,
     type SandboxGroup,
@@ -118,10 +117,18 @@ const answerOf = async (procedures: FixtureRouter, raw: RawRoutes, request: Requ
     return answer instanceof Frames ? eventStream(request, answer.start) : json(answer);
 };
 
+// The console line for a request nothing answered, carrying the reason when `unserved` lists its route.
+const unansweredLine = (request: Request, url: URL, unserved: Readonly<Record<string, string>>): string => {
+    const reason = unserved[sandboxRouteFor(request.method, url.pathname)?.name ?? ``];
+    return reason === undefined
+        ? `[demo] no fixture route for ${request.method} ${url.pathname}`
+        : `[demo] ${request.method} ${url.pathname} is left out of the demo: ${reason}`;
+};
+
 // The fixture daemon as a fetch handler. Anything it does not serve answers 404 and logs one line naming the method and
-// path, which is how every served route was found.
+// path, with the reason `unserved` gives when the request is a contract route it lists.
 export const serve =
-    (procedures: FixtureRouter, raw: RawRoutes) =>
+    (procedures: FixtureRouter, raw: RawRoutes, unserved: Readonly<Record<string, string>>) =>
     async (request: Request, url: URL): Promise<Response> => {
         try {
             const answer = await answerOf(procedures, raw, request, url);
@@ -134,16 +141,10 @@ export const serve =
             }
             throw error;
         }
-        console.info(`[demo] no fixture route for ${request.method} ${url.pathname}`);
+        console.info(unansweredLine(request, url, unserved));
         return json({ error: `The demo fixture doesn't serve ${request.method} ${url.pathname}.` }, 404);
     };
 
 // Every procedure a router serves, by the contract's name for it (`git.log`).
 export const servedProcedures = (procedures: FixtureRouter): string[] =>
     Object.entries(procedures).flatMap(([group, handlers]) => Object.keys(handlers ?? {}).map((name) => `${group}.${name}`));
-
-// How much of the real daemon a router stands in for: the procedures it serves against every one the contract declares.
-export const coverageOf = (procedures: FixtureRouter): { served: number; contract: number } => ({
-    served: servedProcedures(procedures).length,
-    contract: SANDBOX_ROUTE_NAMES.length,
-});

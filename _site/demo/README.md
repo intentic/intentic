@@ -14,7 +14,8 @@ flowchart LR
 ```
 
 - Runs entirely in the visitor's browser. `main.ts` swaps `fetch`, `XMLHttpRequest` and `WebSocket` for handlers bound to `*.demo.invalid` origins, and answers a `WebTransport` session there as one that never opens, so terminals take the socket shim, seeds a session and open chat tabs into the storage keys the app already reads, then imports the app's own `main.ts`. No app module knows the demo exists, and a request that escapes the handlers dies on the reserved `.invalid` TLD.
-- The fixture daemon is typed by `@intentic/sandbox-contract`. `router.ts` resolves a request with the contract's own route matcher and parses its input, so a contract change breaks this package's typecheck before it breaks the landing page. Anything unserved answers 404, and the console boot line reports how many procedures are covered.
+- The fixture daemon is typed by `@intentic/sandbox-contract`. `router.ts` resolves a request with the contract's own route matcher and parses its input, so a contract change breaks this package's typecheck before it breaks the landing page.
+- `unserved.ts` lists every contract route the fixture doesn't answer, each with its reason: not an editor call, real sign-in or real infrastructure, or not simulated yet (the gaps a visitor can reach). The typecheck holds it to the contract both ways, so a new route fails here by name until it is served or listed, and a listed route the fixture starts serving fails as an unknown key. An unanswered request answers 404 and logs its reason, and the console boot line reports how many routes are served.
 - The switcher chrome picks a mode: `Minimal`, `Curated`, `Everything` or `Desk`, a documents-instead-of-code workspace (`?mode=minimal|default|full|desk`). `?as=maintainer|collaborator|viewer|guest` shows the app as a lesser grant. Both stick per tab, and switching reloads.
 - `vite.config.ts` reuses the app's `vite.shared.ts` and builds into `_site/site/public/demo/` (gitignored), so the demo ships same-origin with the site. The marketing screenshots (`_tools/e2e/shots/capture.mts`) and the promo recording (`_tools/e2e/promo/record.mjs`) are taken from the demo.
 
@@ -22,10 +23,10 @@ flowchart LR
 
 - [src/main.ts](src/main.ts) — boot order: transports, seeded storage, switcher, then the app.
 - [src/transport.ts](src/transport.ts) — which requests the demo claims and which pass through.
-- [src/daemon.ts](src/daemon.ts) — every served procedure and raw route, plus the live state `/events` re-broadcasts.
+- [src/daemon.ts](src/daemon.ts) — every served procedure, raw route and recorded socket, plus the live state `/events` re-broadcasts.
+- [src/unserved.ts](src/unserved.ts) — every route the demo leaves unanswered, and why: its real coverage.
 - [src/router.ts](src/router.ts) — the dispatcher standing in for the daemon's OpenAPI handler.
 - [src/mode.ts](src/mode.ts) — the modes, the viewer tier and the extension override.
-- [vite.config.ts](vite.config.ts) — shared app build, base path, port and output directory.
 
 ## Layout
 
@@ -37,6 +38,7 @@ flowchart LR
 | `src/terminal.ts`, `src/browser.ts` | Recorded terminal and browser-view sockets |
 | `src/switcher.ts` | The mode buttons, plain DOM, mounted before the app |
 | `src/fixture/` | The data: files, repos, fleet, transcripts, automations, the desk workspace |
+| `vite.config.ts` | Shared app build, base path, port and output directory |
 | `scripts/smoke-daemon.ts` | One request per served procedure, answers parsed by the contract schemas |
 | `vendor/` | [Pinned first-party extensions](vendor) the demo runs |
 

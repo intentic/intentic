@@ -1,11 +1,11 @@
-import { browserSession } from "./browser";
-import { coverage, daemon } from "./daemon";
+import { type RawRouteKey, rawRoutePath } from "@intentic/sandbox-contract";
+import { daemon, sockets } from "./daemon";
 import { openTabSnapshot } from "./fixture/openChats";
 import { demoMode } from "./mode";
 import { DEMO_SANDBOX, DEMO_USER, platform } from "./platform";
 import { installSwitcher } from "./switcher";
-import { terminalSession } from "./terminal";
 import { installFetch, installWebSocket, installWebTransport, installXhr } from "./transport";
+import { coverage } from "./unserved";
 
 // Everything that must be true before the real app's entry runs. Transports and credentials must be in place first,
 // hence the dynamic import at the bottom. Credentials are seeded into the real localStorage `sandboxSession` reads,
@@ -34,10 +34,7 @@ const seedOpenChats = (): void => {
     localStorage.setItem(CHAT_TABS_KEY, blob);
 };
 
-const SOCKETS: Record<string, typeof terminalSession> = {
-    "/system/terminal": terminalSession,
-    "/system/browser-view": browserSession,
-};
+const SOCKETS = new Map(Object.entries(sockets).map(([key, session]) => [rawRoutePath(key as RawRouteKey), session]));
 
 // Redirects the bare base URL to the fleet board (what the app is for) before boot, so there's no wrong first paint or
 // Back-able history entry. Any other address is left alone.
@@ -50,7 +47,7 @@ const openOnFleet = (): void => {
 
 installFetch({ platform, daemon });
 installXhr({ platform, daemon });
-installWebSocket((url) => SOCKETS[url.pathname]);
+installWebSocket((url) => SOCKETS.get(url.pathname));
 installWebTransport();
 seedCredentials();
 seedOpenChats();
@@ -60,7 +57,7 @@ installSwitcher();
 
 const served = coverage();
 console.info(
-    `[demo] ${demoMode.id}: fixture daemon serving ${served.served} of the contract's ${served.contract} procedures; anything else answers 404 and logs here.`,
+    `[demo] ${demoMode.id}: fixture daemon serving ${served.served} of the contract's ${served.contract} routes; anything else answers 404 and logs here, with the reason unserved.ts gives for it.`,
 );
 
 await import("@intentic/web/main");

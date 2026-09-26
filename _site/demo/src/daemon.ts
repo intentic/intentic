@@ -11,6 +11,7 @@ import {
     type Model,
     type OauthAccount,
     type PresenceUser,
+    type RawRouteKey,
     REPO_CHECKS_FILE,
     type RepoChecksList,
     type SandboxHandlerInput,
@@ -22,7 +23,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { KNOWLEDGE_BASE } from "../vendor/knowledge/wire-types";
-import { BROWSER_SESSIONS } from "./browser";
+import { BROWSER_SESSIONS, browserSession } from "./browser";
 import { type DemoGrant, grantAccess, grants, revokeAccess } from "./fixture/access";
 import { automationApprovals, automationCatalog, automationsList, deleteAutomation, resolveApproval, saveAutomation } from "./fixture/automations";
 import { demoDevices, forgetDemoLinks, removeDemoSandbox, setDemoSandboxRunning } from "./fixture/devices";
@@ -79,9 +80,11 @@ import {
     writeFile,
 } from "./fixture/workspace";
 import { demoMode, deskEdition } from "./mode";
-import { coverageOf, type FixtureRouter, Frames, type RawContext, type RawRoutes, refuse, serve } from "./router";
+import { type FixtureRouter, Frames, type RawContext, type RawRoutes, refuse, serve } from "./router";
+import { terminalSession } from "./terminal";
 import { featuredRun, type Run, visitorRun } from "./turn";
-import { json } from "./transport";
+import { type DemoSession, json } from "./transport";
+import { UNSERVED } from "./unserved";
 
 // The daemon the demo stands in for, as a typed fixture router (router.ts): every procedure it serves answers in its
 // contract's types, so a shape that drifts from the wire is a build error, and every other route the app reaches is a
@@ -858,7 +861,7 @@ const knowledge: Readonly<Record<string, (context: RawContext) => Response | Pro
 };
 
 // The routes the daemon serves outside oRPC that the app reaches here, keyed as the contract declares them.
-const raw: RawRoutes = {
+export const raw = {
     // No loopback shortcut here; the demo daemon is only ever at its own origin.
     "GET /health": () => json({ error: `The demo has no local daemon to shortcut to.` }, 404),
     // A WebSocket can't carry a bearer header, so this ticket stands in for one per upgrade.
@@ -968,7 +971,13 @@ const raw: RawRoutes = {
         }),
     // An extension backend's namespace: only the knowledge extension's is fixtured.
     "ALL /x/*": (context) => knowledge[`${context.request.method} ${context.url.pathname}`]?.(context),
-};
+} satisfies RawRoutes;
+
+// The raw routes that upgrade to a WebSocket, answered by a recorded session instead of through fetch.
+export const sockets = {
+    "GET /system/terminal": terminalSession,
+    "GET /system/browser-view": browserSession,
+} satisfies { readonly [K in RawRouteKey]?: DemoSession };
 
 const DEMO_COMMANDS = [
     { name: `plan`, description: `Think a change through before touching anything` },
@@ -1195,7 +1204,4 @@ const DEMO_SAVINGS: SavingsReport = {
     },
 };
 
-export const daemon = serve(procedures, raw);
-
-/** How much of the real daemon this fixture stands in for, reported once at boot, so the gap is visible. */
-export const coverage = (): { served: number; contract: number } => coverageOf(procedures);
+export const daemon = serve(procedures, raw, UNSERVED);
