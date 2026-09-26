@@ -5,6 +5,7 @@ import type {
     AgentReply,
     AgentTurn,
     EditorContext,
+    LimitPolicy,
     MessageReceipt,
     MessageVoice,
     QueuedMessageRef,
@@ -40,6 +41,12 @@ export type TurnInput = AgentTurn & {
     readonly unseenRuns?: readonly string[];
     // Which re-run this turn is, set where the re-run is made; its prompt opens with the matching note for the model.
     readonly resume?: ResumeReason | undefined;
+    // Whose words `title` is when they are not a head cut from the prompt: `model`, a name an agent chose (a parent's
+    // description of the child it spawns), which the naming pass keeps. Read only by the turn that opens the conversation.
+    readonly titleSource?: "model";
+    // The conversation's own answers to the sandbox-wide defaults it opens with: a spawned child's to a spent allowance.
+    // Read only by the turn that opens the conversation, so no later turn overwrites an answer its owner gave since.
+    readonly postures?: { readonly limit?: LimitPolicy };
 };
 
 // A turn as the engine takes it: provider and loop named, by the port it came in through (withRuntimeDefaults), so

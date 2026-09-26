@@ -4,16 +4,26 @@ import type { IconName } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { activityLine, agentDisplayTitle, agentStatusMeta, formatElapsed, laneOf, turnWorking, watching } from "../../fleet/agentStatus";
+import {
+    activityLine,
+    agentDisplayTitle,
+    agentStatusMeta,
+    attentionReason,
+    formatElapsed,
+    laneOf,
+    limited,
+    onlyOwnerCanAnswer,
+    turnWorking,
+    watching,
+} from "../../fleet/agentStatus";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
 import { relativeTime } from "../../../chat/models/catalog";
 import { markSegments } from "../../review/markSegments";
-import type { IdMatch } from "../idMatch";
 
 // One child riding under its parent's card (childFold): how it stands, what it is called, and how long it has worked
 // or when it settled. Everything else it has — the model, the branch, the cost, the diff — is its own chat's to say,
-// one press away; a row carries only what tells the children apart at a glance. Nothing here asks for anything, since
-// a child that asks keeps a card of its own, so the row has one press, and it opens the child.
+// one press away; a row carries only what tells the children apart at a glance. A child asking what only the reader can
+// give wears its ask, in the card's own pill, and the row's one press opens its chat, where the ask is answered.
 
 const props = defineProps<{
     agent: FleetAgent;
@@ -23,16 +33,17 @@ const props = defineProps<{
     provider: AgentProvider;
     needle: string;
     matchCase: boolean;
-    // The filter named this child by its id, or a piece of it (idMatch.ts), as a card's `idMatch` means it.
-    idMatch?: IdMatch;
 }>();
 const emit = defineEmits<{ open: [event: MouseEvent]; review: []; menu: [event: MouseEvent] }>();
 
 const t = useT();
 
 const working = computed(() => turnWorking(props.agent));
-// Settled rows take the ledger's ink, a step quieter than a receipt card's, since they sit under one.
-const settled = computed(() => laneOf(props.agent) === `finished`);
+// What it asks of the reader, in the card chip's word; never in the archive, where every press waits for a restore.
+const ask = computed(() => (props.agent.archivedAt === undefined && onlyOwnerCanAnswer(props.agent) ? attentionReason(props.agent) : undefined));
+// Settled or stopped rows take the ledger's ink, a step quieter than a receipt card's, since they sit under one; a row
+// that asks, or works, keeps the content's.
+const quiet = computed(() => ask.value === undefined && laneOf(props.agent) !== `active`);
 // Ticks only while it works; a settled row shares the clock without re-ticking.
 const now = useNow(() => working.value);
 const glyph = computed<{ icon: IconName; spin?: boolean; label: string; class: string }>(() => {
@@ -40,17 +51,16 @@ const glyph = computed<{ icon: IconName; spin?: boolean; label: string; class: s
     if (!working.value && watching(props.agent)) {
         return { icon: `eye`, label: t(`agents.childRows.watching`), class: `text-link` };
     }
+    // A spent allowance is nothing broken: the clock it waits on, in muted ink, not the error's triangle.
+    if (limited(props.agent)) {
+        return { icon: `clock`, label: t(`agents.agentStatus.usageLimit`), class: `text-subtle` };
+    }
     const meta = agentStatusMeta(props.agent.status);
-    return settled.value ? { ...meta, class: `text-subtle` } : meta;
+    return laneOf(props.agent) === `finished` ? { ...meta, class: `text-subtle` } : meta;
 });
 const title = computed(() => agentDisplayTitle(props.agent));
 const titleRuns = computed(() =>
     markSegments(title.value, props.matchCase ? props.needle : props.needle.toLowerCase(), props.matchCase),
-);
-// The piece of its id the filter matched, drawn after the title, since nothing else on a row says why it is there. Named
-// whole, the row wears the halo instead: a row has no room to spend on an id the reader just typed out in full.
-const idRuns = computed(() =>
-    props.idMatch === undefined || props.idMatch.exact ? undefined : markSegments(props.idMatch.text, props.idMatch.mark),
 );
 // What it is doing right now, the card's own sentence, in the hover of the clock that says for how long.
 const doing = computed(() => activityLine(props.agent) ?? t(`ui.status.working`));
@@ -61,7 +71,7 @@ const elsewhere = computed(() => (props.agent.provider === props.provider ? unde
     <button
         type="button"
         class="ui-row-select flex min-h-7 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left max-md:min-h-10"
-        :class="{ 'ui-row-select-on': selected, 'outline-2 outline-offset-1 outline-primary-500/60': idMatch?.exact === true }"
+        :class="{ 'ui-row-select-on': selected }"
         @click="emit(`open`, $event)"
         @dblclick="emit(`review`)"
         @contextmenu.prevent.stop="emit(`menu`, $event)"
@@ -71,21 +81,19 @@ const elsewhere = computed(() => (props.agent.provider === props.provider ? unde
             :spin="glyph.spin"
             role="img"
             :aria-label="glyph.label"
-            v-tooltip.top="glyph.label"
+            v-tooltip.top="agent.failure ?? glyph.label"
             class="shrink-0 text-xs"
             :class="glyph.class"
         />
-        <!-- Keeps a few characters of itself however much the row carries after it: a row that is only an id and a clock says nothing. -->
-        <span class="min-w-10 flex-1 truncate text-xs" :class="settled ? 'text-muted' : 'text-content'">
+        <span class="min-w-0 flex-1 truncate text-xs" :class="quiet ? 'text-muted' : 'text-content'">
             <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{ run.text }}</span>
         </span>
-        <span v-if="idRuns !== undefined" class="min-w-0 max-w-2/5 truncate font-mono text-2xs text-muted">
-            <span v-for="(run, at) in idRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{ run.text }}</span>
-        </span>
         <span v-if="elsewhere !== undefined" class="shrink-0 text-2xs text-subtle">{{ elsewhere }}</span>
+        <!-- The card's own pill and tone for an ask, so the reader meets the same word here as on any card that asks. -->
+        <span v-if="ask !== undefined" class="ui-status-pill shrink-0 bg-warning/15 text-2xs font-semibold text-warning">{{ ask }}</span>
         <span v-if="working && agent.startedAt !== undefined" v-tooltip.top="doing" class="shrink-0 text-2xs font-medium tabular-nums text-link">{{
             formatElapsed(agent.startedAt, now)
         }}</span>
-        <span v-else-if="agent.updatedAt > 0" class="shrink-0 text-2xs text-subtle">{{ relativeTime(agent.updatedAt) }}</span>
+        <span v-else-if="ask === undefined && agent.updatedAt > 0" class="shrink-0 text-2xs text-subtle">{{ relativeTime(agent.updatedAt) }}</span>
     </button>
 </template>

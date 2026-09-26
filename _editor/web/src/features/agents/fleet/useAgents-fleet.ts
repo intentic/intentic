@@ -1,7 +1,7 @@
 import { sandboxValue } from "@intentic/extension-api";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
-import { awaitingUser, blocked, type ClientAgentStatus, type FleetLane, laneOf, NO_ATTENTION, turnInFlight, unregistered } from "./agentStatus";
+import { attentionCards, awaitingUser, blocked, type ClientAgentStatus, type FleetLane, laneOf, NO_ATTENTION, turnInFlight, unregistered } from "./agentStatus";
 import { closedDrafts } from "../../chat/drafts/closedDrafts";
 import { type TabFacts, unasked } from "../../chat/tabs/tabFacts";
 import type { StoredTab } from "../../chat/tabs/tabSnapshot";
@@ -247,9 +247,10 @@ export const withKeptWords = (agent: FleetAgent): FleetAgent =>
 // Two headline counts, kept apart since the header renders both: blocked-on-user vs. merely unread.
 export const blocking = computed(() => fleet.value.filter(blocked).length);
 export const unread = computed(() => fleet.value.filter((agent) => agent.unread).length);
-// The rail badge names the Attention lane. Unread updates in Active or Finished keep their card chip, but do not
-// claim the reader is needed; a held wake has no agent card yet and leads that lane on its own.
-export const attention = computed(() => lanes.value.attention.length + heldWakes.value.length);
+// The rail badge names the Attention lane, as the board draws it (agentStatus.attentionCards): unread updates in Active
+// or Finished keep their card chip but do not claim the reader is needed, a child agent counts only through its
+// family's one card, and a held wake has no agent card yet and leads that lane on its own.
+export const attention = computed(() => attentionCards(fleet.value) + heldWakes.value.length);
 
 // Marks the focused conversation seen the moment it updates, but only while this window is on screen and watching
 // it; otherwise it stays unread for the badge.
@@ -343,10 +344,21 @@ export const canArchive = (agent: Pick<FleetAgent, "status" | "attention" | "arc
 // at work. That child rides in its parent's tray as the parent's history (board/view/childFold.ts), and filing it alone
 // would strip the tray and leave the child loose in the archive; the family goes together once the parent is done.
 export const clearableOf = (grouped: Record<FleetLane, readonly FleetAgent[]>): FleetAgent[] => {
-    const live = new Set([...grouped.attention, ...grouped.active].map((agent) => agent.id));
+    const liveAgents = [...grouped.attention, ...grouped.active];
+    const live = new Set(liveAgents.map((agent) => agent.id));
+    // Nor a finished parent with anything under it still live: the board draws its card in that live lane, not in
+    // Finished (childFold lifts a family to the lane its children need), and filing it would leave them loose. Walked up
+    // every generation, stopping at an id already met so a record naming its own descendant ends the walk.
+    const startedBy = new Map([...liveAgents, ...grouped.finished].map((agent) => [agent.id, agent.startedBy] as const));
+    const liveFamilies = new Set<string>();
+    for (const agent of liveAgents) {
+        for (let id = parentOf(agent.startedBy); id !== undefined && !liveFamilies.has(id); id = parentOf(startedBy.get(id))) {
+            liveFamilies.add(id);
+        }
+    }
     return grouped.finished.filter((agent) => {
         const parent = parentOf(agent.startedBy);
-        return canArchive(agent) && (parent === undefined || !live.has(parent));
+        return canArchive(agent) && (parent === undefined || !live.has(parent)) && !liveFamilies.has(agent.id);
     });
 };
 
@@ -361,6 +373,13 @@ const byId = (a: FleetAgent, b: FleetAgent): number => (a.id < b.id ? -1 : a.id 
 export const finishedLaneOrder = (a: FleetAgent, b: FleetAgent): number =>
     Number(b.unsent) - Number(a.unsent) || finishedRecency(b) - finishedRecency(a) || byId(a, b);
 
+// Fresh drafts lead, then by startedAt (fixed for a turn's life) so a running agent won't jump every tick.
+export const activeLaneOrder = (a: FleetAgent, b: FleetAgent): number =>
+    Number(b.status === `draft`) - Number(a.status === `draft`) || (a.startedAt ?? a.updatedAt) - (b.startedAt ?? b.updatedAt) || byId(a, b);
+
+// Newest news first.
+export const attentionLaneOrder = (a: FleetAgent, b: FleetAgent): number => b.updatedAt - a.updatedAt || byId(a, b);
+
 // Splits a flat list into the board's three lanes, factored out of `fleet` so the all-sandboxes board can apply
 // the same rule to a wider list (this fleet plus other boxes' summaries) without duplicating the sort.
 export const laneGroups = (agents: readonly FleetAgent[]): Record<FleetLane, FleetAgent[]> => {
@@ -368,12 +387,8 @@ export const laneGroups = (agents: readonly FleetAgent[]): Record<FleetLane, Fle
     for (const agent of agents) {
         grouped[laneOf(agent)].push(agent);
     }
-    // Fresh drafts lead, then by startedAt (fixed for a turn's life) so a running agent won't jump every tick.
-    grouped.active.sort(
-        (a, b) =>
-            Number(b.status === `draft`) - Number(a.status === `draft`) || (a.startedAt ?? a.updatedAt) - (b.startedAt ?? b.updatedAt) || byId(a, b),
-    );
-    grouped.attention.sort((a, b) => b.updatedAt - a.updatedAt || byId(a, b));
+    grouped.active.sort(activeLaneOrder);
+    grouped.attention.sort(attentionLaneOrder);
     grouped.finished.sort(finishedLaneOrder);
     return grouped;
 };

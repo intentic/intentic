@@ -14,7 +14,7 @@ import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { useAuth } from "../../auth/useAuth";
 import { useSandboxSharedAccess } from "../../sandbox/access/useSandboxSharedAccess";
 import { useAgents } from "../fleet/useAgents";
-import { agentDisplayTitle, laneOf } from "../fleet/agentStatus";
+import { agentDisplayTitle } from "../fleet/agentStatus";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
 import { pendingOn } from "../fleet/useAgents-provisional";
 import { fleetScope, scopeOffered } from "../fleet/fleetScope";
@@ -83,7 +83,7 @@ const ring = useCardRing({ mobile, strip: chatStrip, wide: chatWide, runs: workf
 const { highlightId, inPane, peeked } = ring;
 const lanes = useBoardLanes({ view, scope, filter, drag, agents, selected: highlightId });
 const { cardsFor, runsFor, needingYou, archivedCards, archiveSize, archiveHidden, hiddenFinished, archivedHits, laneDropClass } = lanes;
-const { childrenOf, familyOf, familyIds } = lanes;
+const { childrenOf, callOf, familyOf, familyIds } = lanes;
 const { beyondVisible, beyondLabel, matchTally, noMatches, clearable, screen } = lanes;
 const { setCardEl, isMovingLane, revealCard } = useLaneMotion({ lanes: scope.boardLanes, filtering, drag });
 const focus = useCardFocus({
@@ -390,6 +390,8 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                                 narrow,
                                 draggedId === agent.id && dragging,
                                 familyOf(agent).length,
+                                callOf(agent),
+                                lane.key,
                                 pendingFor(agent),
                                 agent.id === highlightId || inPane(agent.id),
                                 snippetOf(agent),
@@ -416,6 +418,8 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                                     :query="needle"
                                     :match-case="matchCase"
                                     :family="familyOf(agent).length"
+                                    :placed="lane.key"
+                                    :call="callOf(agent)"
                                     @open="(event) => focusAgent(agent, event)"
                                     @keep="keepAgent(agent)"
                                     @review="reviewAgent(agent)"
@@ -431,7 +435,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                                 />
                                 <ChildRows
                                     :agent="agent"
-                                    :live="!narrow && laneOf(agent) !== `finished`"
+                                    :live="!narrow && lane.key !== `finished`"
                                     :class="draggedId === agent.id && dragging ? `opacity-40` : ``"
                                 />
                             </div>

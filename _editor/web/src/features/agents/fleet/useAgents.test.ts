@@ -278,6 +278,7 @@ describe("canArchive", () => {
     });
 });
 
+
 // An open tab follows the roster's title: seed-once ownership broke once the daemon could promote a title itself,
 // or another device could rename it.
 describe("roster titles", () => {

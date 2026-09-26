@@ -1,9 +1,10 @@
 // The children an agent started, through the real board: they hang under its card as rows instead of standing as
-// cards, working ones in sight and settled ones behind a count, while a child that asks something keeps its card and
-// says whose it is. The fold's rules are view/childFold.test.ts; this pins the board's wiring of them.
+// cards, working ones in sight and settled ones behind a count, and a child asking what only the reader can give moves
+// its parent's card to Attention, wearing the ask there and on its own row. The fold's rules are
+// view/childFold.test.ts; this pins the board's wiring of them.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import { type AgentSummary, providerLabel } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import PrimeVue from "primevue/config";
@@ -81,24 +82,36 @@ const rows = (board: HTMLElement): string[] =>
     [...(tray(board)?.querySelectorAll(`button:not([aria-expanded])`) ?? [])].map((row) => row.textContent?.replace(/\s+/g, ` `).trim() ?? ``);
 const fold = (board: HTMLElement): HTMLButtonElement | null => tray(board)?.querySelector<HTMLButtonElement>(`button[aria-expanded]`) ?? null;
 
-it(`hangs the children under their parent's card, working ones in sight and settled ones behind a count`, async () => {
+it(`hangs the children under their parent's card, the asking and working ones in sight and settled ones behind a count`, async () => {
     setAgents(family, 100);
     const board = await mountBoard();
 
-    expect(cards(board).toSorted()).toEqual([`Focus agent: rotate the keys`, `Focus agent: ship the release`]);
-    expect(rows(board)).toHaveLength(1);
-    expect(rows(board)[0]).toContain(`port the parser`);
+    expect(cards(board)).toEqual([`Focus agent: ship the release`]);
+    expect(rows(board)).toEqual([expect.stringMatching(/^rotate the keys/), expect.stringMatching(/^port the parser/)]);
     expect(fold(board)?.textContent?.trim()).toBe(t(`agents.childRows.finished`, { count: 2 }));
     expect(fold(board)?.getAttribute(`aria-expanded`)).toBe(`false`);
 });
 
-it(`says whose a child asking something is, on the card it keeps`, async () => {
+it(`carries a child's ask to Attention on its parent's card, and names the ask on the child's own row`, async () => {
     setAgents(family, 100);
     const board = await mountBoard();
 
-    const asking = board.querySelector(`[aria-label="Focus agent: rotate the keys"]`);
-    const mark = asking?.querySelector(`a[aria-label="${t(`agents.parentMark.startedBy`, { title: `ship the release` })}"]`);
-    expect(mark?.textContent?.trim()).toBe(`ship the release`);
+    const attention = board.querySelector(`[data-lane="attention"]`);
+    const parent = attention?.querySelector(`[aria-label="Focus agent: ship the release"]`);
+    expect(parent?.textContent).toContain(t(`agents.agentStatus.permission`));
+    expect(board.querySelector(`[data-lane="active"] [aria-label="Focus agent: ship the release"]`)).toBeNull();
+    expect(rows(board)[0]).toContain(t(`agents.agentStatus.permission`));
+});
+
+it(`keeps Attention empty for children stopped under a parent still at work, one row per thing they stopped on`, async () => {
+    const spent = (id: string): AgentSummary => helper(id, { title: `batch ${id}`, status: `error`, failureCode: `rate_limit`, provider: `codex` });
+    setAgents([lead, ...[`b1`, `b2`, `b3`].map(spent), helper(`port`, { title: `port the parser`, status: `running`, startedAt: 2 })], 100);
+    const board = await mountBoard();
+
+    expect(board.querySelector(`[data-lane="attention"] [role="button"]`)).toBeNull();
+    const groups = [...(tray(board)?.querySelectorAll(`button[aria-expanded]`) ?? [])].map((row) => row.textContent?.replace(/\s+/g, ` `).trim());
+    expect(groups).toEqual([t(`agents.childRows.limitGroup`, { count: 3, provider: providerLabel(`codex`) })]);
+    expect(rows(board)).toEqual([expect.stringMatching(/^port the parser/)]);
 });
 
 it(`unfolds the settled children on the count, and points the chat at a child from its row`, async () => {
@@ -108,8 +121,13 @@ it(`unfolds the settled children on the count, and points the chat at a child fr
     fold(board)?.click();
     await settle();
     expect(fold(board)?.getAttribute(`aria-expanded`)).toBe(`true`);
-    // Each row is its title, then how long it worked or when it settled.
-    expect(rows(board)).toEqual([expect.stringMatching(/^port the parser/), expect.stringMatching(/^write the notes/), expect.stringMatching(/^audit the deps/)]);
+    // Each row is its title, then its ask, how long it worked or when it settled.
+    expect(rows(board)).toEqual([
+        expect.stringMatching(/^rotate the keys/),
+        expect.stringMatching(/^port the parser/),
+        expect.stringMatching(/^write the notes/),
+        expect.stringMatching(/^audit the deps/),
+    ]);
 
     [...(tray(board)?.querySelectorAll<HTMLButtonElement>(`button:not([aria-expanded])`) ?? [])].find((row) => row.textContent?.includes(`audit the deps`))?.click();
     await settle();

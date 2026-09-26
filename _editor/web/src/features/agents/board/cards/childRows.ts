@@ -9,9 +9,11 @@ import type { TrayState } from "../view/childFold";
 export interface ChildRowsBoard {
     // The children riding under a card (childFold), one steady list per card while its members stand still.
     readonly childrenOf: (card: FleetAgent) => readonly FleetAgent[];
-    // The fold, the filter and the ring, as they bear on this card's tray.
+    // The folds, the filter and the ring, as they bear on this card's tray.
     readonly stateOf: (card: FleetAgent) => TrayState;
-    readonly toggle: (card: FleetAgent) => void;
+    // Opens or shuts one of the card's folds: its settled children by default, or a group of children stopped on one
+    // thing, named by what they stopped on (childFold.stopOf).
+    readonly toggle: (card: FleetAgent, fold?: string) => void;
     // This child's chat is on screen, in the docked panel or one of several panes.
     readonly selected: (id: string) => boolean;
     readonly needle: Readonly<Ref<string>>;

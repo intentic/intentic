@@ -61,6 +61,7 @@ const boardOf = (
         boardLanes,
         boardChildren: shallowRef(folded.children),
         boardHosts: shallowRef(folded.hosts),
+        boardCalls: shallowRef(folded.calls),
         boardRunRows: shallowRef(over.runs ?? []),
         archivedRunRows: shallowRef(over.archivedRuns ?? []),
         ledgerRunIds: shallowRef<ReadonlySet<string>>(new Set(runIds(runs))),
@@ -304,6 +305,19 @@ describe(`children riding under their parent`, () => {
         const done = card(`done`);
         const { lanes } = boardOf([parent, helper(`h1`), done, card(`d1`, { startedBy: `agent:done` })]);
         expect(lanes.clearable.value).toBe(2);
+    });
+
+    it(`leaves out of Clear a finished parent its family lifted out of Finished, however far down the live one is`, () => {
+        const { lanes } = boardOf([
+            card(`done`),
+            card(`mid`, { startedBy: `agent:done` }),
+            card(`busy`, { startedBy: `agent:mid`, status: `running`, startedAt: 2 }),
+            card(`spent`, { startedBy: `agent:other`, status: `error`, failureCode: `rate_limit` }),
+            card(`other`),
+        ]);
+        expect(ids(lanes.cardsFor(`active`))).toEqual([`done`]);
+        expect(ids(lanes.cardsFor(`attention`))).toEqual([`other`]);
+        expect(lanes.clearable.value).toBe(0);
     });
 
     it(`hangs filed children under their filed parent in the archive, one row for the family`, () => {

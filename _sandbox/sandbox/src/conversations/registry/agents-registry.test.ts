@@ -496,6 +496,37 @@ describe("agents registry", () => {
         expect(registry.entry("c1")?.postures.outage).toBeUndefined();
     });
 
+    // A spawned child opens with its own answer to a spent allowance (children.ts). Only the opening turn's is read, so
+    // what the owner answers since, a cleared override included, is never overwritten by a later turn carrying it again.
+    it("opens with the answers its opening turn gives, and no later turn's replaces what the owner answered since", async () => {
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+        await registry.init();
+        const opening = turn({ postures: { limit: "resend" } });
+        await beginTurn(conversations, opening, 1_000);
+        expect(registry.entry("c1")?.postures).toEqual({ limit: "resend" });
+        expect(registry.get("c1")?.limitPolicy).toBe("resend");
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+
+        await registry.setBreakPolicy("c1", "limit", "wait");
+        await beginTurn(conversations, opening, 3_000);
+        expect(registry.entry("c1")?.postures).toEqual({ limit: "wait" });
+        await conversations.send("c1", { kind: "settle" }, 4_000).settled;
+
+        // Cleared is an answer too: the conversation inherits the sandbox's, and a turn carrying one does not arm it.
+        await registry.setBreakPolicy("c1", "limit", null);
+        await beginTurn(conversations, opening, 5_000);
+        expect(registry.entry("c1")?.postures).toEqual({});
+        expect(registry.get("c1")?.limitPolicy).toBeUndefined();
+    });
+
+    it("opens a conversation whose opening turn gives no answers inheriting every one of them", async () => {
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+        await registry.init();
+        await beginTurn(conversations, turn(), 1_000);
+        expect(registry.entry("c1")?.postures).toEqual({});
+        expect(registry.get("c1")?.limitPolicy).toBeUndefined();
+    });
+
     it("begin is a mutex: a second concurrent turn is refused until finish", async () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
@@ -530,6 +561,37 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.title).toBe("My renamed draft");
         await beginTurn(conversations, turn({ conversationId: "c2", title: "   " }), 2_000);
         expect(registry.get("c2")?.title).toBe("Fix the login bug");
+    });
+
+    // A parent's description of its child is a name an agent chose, not a head cut from a prompt: the naming pass must
+    // not rename it (six children once all read "testaudit picks"), and a person still can.
+    it("keeps a title an agent chose as a model name, which the naming pass may only give an action", async () => {
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+        await registry.init();
+        await beginTurn(conversations, turn({ title: "Test audit reviewer, batch 24", titleSource: "model" }), 1_000);
+        expect(registry.entry("c1")?.social.title).toEqual({ text: "Test audit reviewer, batch 24", source: "model" });
+
+        // The naming pass's own words are a sideways move, refused; its work word on the same words lands.
+        await registry.setTitle("c1", "testaudit picks", "model", "audit");
+        expect(registry.entry("c1")?.social.title).toEqual({ text: "Test audit reviewer, batch 24", source: "model" });
+        expect(await registry.setTitle("c1", "Test audit reviewer, batch 24", "model", "audit")).toMatchObject({
+            title: "Test audit reviewer, batch 24",
+            titleAction: "audit",
+        });
+        // Only a missing action is filled in; one already there is not replaced by another reading.
+        await registry.setTitle("c1", "Test audit reviewer, batch 24", "model", "review");
+        expect(registry.get("c1")?.titleAction).toBe("audit");
+
+        expect((await registry.setTitle("c1", "Batch 24", "user"))?.title).toBe("Batch 24");
+    });
+
+    // Only the turn's own words can carry that authority: a title it failed to give falls back to the prompt's head, which
+    // is still the naming pass's to replace.
+    it("files a title an agent chose that sanitizes to nothing as the prompt's derived head", async () => {
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+        await registry.init();
+        await beginTurn(conversations, turn({ title: "   ", titleSource: "model" }), 1_000);
+        expect(registry.entry("c1")?.social.title).toEqual({ text: "Fix the login bug", source: "derived" });
     });
 
     it("setTitle persists, broadcasts, keeps updatedAt, and survives a running turn's finish", async () => {

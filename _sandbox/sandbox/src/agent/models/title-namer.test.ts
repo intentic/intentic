@@ -2,7 +2,7 @@ import type { Mock } from "bun:test";
 import type { Services } from "../../composition.js";
 import { unstubbed } from "@intentic/testing";
 import type { Social } from "../../conversations/registry/agents-store.js";
-import { conversationEntry } from "../../testing.js";
+import { conversationAfter } from "../../testing.js";
 import { cleanSessionTitle, nameAgentTitle, splitTitleAction } from "./title-namer.js";
 
 const ask = jest.fn<() => Promise<{ value: string }>>();
@@ -78,9 +78,10 @@ const STOLEN_TITLES = [
     "I am Claude",
 ];
 
-const servicesWith = (title: Social["title"], setTitle: Mock<Services["agents"]["setTitle"]>): Services =>
+// `turns` is how many turns the conversation finished before the one this pass runs at; 0 is its opening turn.
+const servicesWith = (title: Social["title"], setTitle: Mock<Services["agents"]["setTitle"]>, turns = 0): Services =>
     unstubbed<Services>("services", {
-        agents: unstubbed<Services["agents"]>("agents", { entry: () => conversationEntry({ social: { title, reactions: [] } }), setTitle }),
+        agents: unstubbed<Services["agents"]>("agents", { entry: () => conversationAfter(turns, { social: { title, reactions: [] } }), setTitle }),
     });
 
 beforeEach(() => {
@@ -113,6 +114,23 @@ test("leaves a conversation that already answers to a better name alone", async 
     // titleSource `plan` outranks a model name, skipping the call rather than paying for promoteTitle to reject it.
     const setTitle = jest.fn<Services["agents"]["setTitle"]>();
     await nameAgentTitle(servicesWith({ text: "Session titles · rethink", source: "plan" }, setTitle), "c1", "rethink session titles");
+    expect(ask).not.toHaveBeenCalled();
+    expect(setTitle).not.toHaveBeenCalled();
+});
+
+// A parent's description of its child opens as a `model` name (children.ts). Renaming it is how six children of one
+// parent all came to read "testaudit picks"; the card still gets the work word it is tinted by.
+test("keeps the words of a name an agent chose as the conversation opened, and gives it only its action", async () => {
+    const setTitle = jest.fn<Services["agents"]["setTitle"]>();
+    ask.mockResolvedValue({ value: "testaudit picks · audit" });
+    await nameAgentTitle(servicesWith({ text: "Test audit reviewer, batch 24", source: "model" }, setTitle), "sub-1", "Review the test audit, batch 24");
+    expect(setTitle).toHaveBeenCalledWith("sub-1", "Test audit reviewer, batch 24", "model", "audit");
+});
+
+test("asks nothing about a model name past the opening turn, nor about one that already has its action", async () => {
+    const setTitle = jest.fn<Services["agents"]["setTitle"]>();
+    await nameAgentTitle(servicesWith({ text: "Test audit reviewer, batch 24", source: "model" }, setTitle, 1), "sub-1", "and the next batch");
+    await nameAgentTitle(servicesWith({ text: "Test audit reviewer", source: "model", action: "audit" }, setTitle), "sub-1", "review it");
     expect(ask).not.toHaveBeenCalled();
     expect(setTitle).not.toHaveBeenCalled();
 });

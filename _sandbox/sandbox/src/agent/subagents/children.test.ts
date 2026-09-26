@@ -1,15 +1,28 @@
-import type { AgentEvent, AgentTurn, SubagentSession } from "@intentic/sandbox-contract";
+import {
+    type AgentEvent,
+    type AgentTurn,
+    agentWordsOf,
+    type LimitPolicy,
+    type SandboxSettings,
+    type SubagentSession,
+    withRuntimeDefaults,
+} from "@intentic/sandbox-contract";
 import type { MemoryReading } from "@intentic/constants/memory-room";
-import { listSubagentSessions, resetSubagents, waitForSubagent } from "./subagents.js";
+import { listSubagentSessions, resetSubagents, type SubagentWaitOutcome, waitForSubagent } from "./subagents.js";
 import type { Services } from "../../composition.js";
 import { spawnServices } from "../../harness/spawn-services.testing.js";
 import { startTurnRun } from "../run/turn/turn-runs.js";
+import { classifyFailure } from "../run/frames/classify-failure.js";
+import { conversationIdentity, mainTreePlacement, placedTurn } from "../run/placement/turn-placement.js";
+import { breakPolicyFor } from "../run/turn/turn-resume.js";
 import { clearTurnTaint, conversationTaintSource, createTurnTaint, publishTurnTaint } from "../../guard/turn-taint.js";
 import { unstubbed } from "@intentic/testing";
+import { reportChildTurn } from "./child-report.js";
 import {
     adoptChildTurn,
     answerChild,
     armSupervisor,
+    type ChildSpawnSpec,
     pendingQuestionOf,
     resetChildrenForTest,
     sendToChild,
@@ -19,9 +32,11 @@ import {
 } from "./children.js";
 import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
-import { createDomainEvents } from "../../seams/domain-events.js";
-import type { TurnStarter } from "../../seams/turn-starter.js";
-import { conversationEntry, drivenBy, memoryFleet } from "../../testing.js";
+import type { Fleet } from "../../conversations/registry/agents-registry.js";
+import { conversationProfile, type Postures } from "../../conversations/registry/agents-store.js";
+import { createDomainEvents, type DomainEventMap } from "../../seams/domain-events.js";
+import type { RoutedTurn, TurnInput, TurnStarter } from "../../seams/turn-starter.js";
+import { beginTurn, conversationEntry, drivenBy, fakeTurns, memoryFleet } from "../../testing.js";
 
 // One fleet's actors for every spawn here, and the cards parked in them: what a parent's own wait and answer read.
 const actors = memoryFleet().conversations;
@@ -32,9 +47,9 @@ const cards = parkedCards(actors);
 
 // `turns` collects what the pump was asked to run; `events` is what the child says back. The generator ending settles
 // the record.
-const fakeTurn = (turns: AgentTurn[], events: AgentEvent[] = [{ kind: "done" }]): TurnStarter["stream"] =>
+const fakeTurn = (turns: TurnInput[], events: AgentEvent[] = [{ kind: "done" }]): TurnStarter["stream"] =>
     // eslint-disable-next-line require-yield
-    async function* fake(input: AgentTurn) {
+    async function* fake(input: TurnInput) {
         turns.push(input);
         yield* events;
     };
@@ -44,6 +59,30 @@ const parent = { conversationId: "conv-parent", cwd: "/work" };
 // Uses the parent's own wait primitive, the only observation surface a real parent has.
 const settled = (id: string): Promise<unknown> =>
     waitForSubagent(actors, parent.conversationId, { target: id, until: ["finished"], timeoutMs: 5_000 });
+
+// A runtime that says nothing and ends.
+async function* doneAtOnce(): AsyncGenerator<AgentEvent> {
+    yield { kind: "done" };
+}
+
+// The conversation's side of a child's turn as the daemon's own turn body takes it (stream-agent.ts), for the suites
+// that read what a child's conversation opened with: the turn opens it on the registry, every frame its runtime says
+// folds into the conversation's actor, and it settles.
+const conversationTurn =
+    (fleet: Fleet, runtime: (input: RoutedTurn) => AsyncIterable<AgentEvent> = doneAtOnce): TurnStarter["stream"] =>
+    async function* opened(input) {
+        const conversationId = input.conversationId ?? "";
+        await beginTurn(fleet.conversations, conversationIdentity(input, conversationId, { isolated: true, runner: undefined }), Date.now());
+        yield* placedTurn(fleet.conversations, conversationId, mainTreePlacement(() => runtime(withRuntimeDefaults(input))));
+    };
+
+// The daemon a spawn sees, over a real fleet: its children's conversations open on the fleet's registry, in its actors.
+const fleetServices = (fleet: Fleet, over: Partial<SandboxSettings>, body: TurnStarter["stream"]): Services =>
+    drivenBy(unstubbed<Services>("services", { ...spawnServices(over, [], fleet.conversations), agents: fleet.agents }), body);
+
+// The parent's wait on one child of a fleet's, as a real parent reads it.
+const finishedIn = (fleet: Fleet, id: string): Promise<SubagentWaitOutcome> =>
+    waitForSubagent(fleet.conversations, parent.conversationId, { target: id, until: ["finished"], timeoutMs: 5_000 });
 
 beforeEach(() => {
     resetSubagents(actors);
@@ -94,6 +133,76 @@ describe("what a child is", () => {
             description: "Port the parser",
             spawnDepth: 1,
             background: true,
+        });
+    });
+});
+
+// Read off the registry the child's first turn opens its conversation on, which is what the card and the resume pass
+// both read. Nobody watches a child while its parent waits on it, so a spent allowance must not park it for a person's
+// press: under a sandbox that waits, the child's own conversation answers that ending by sending the turn again.
+describe("what a child's conversation opens with", () => {
+    const opened = async (over: Partial<SandboxSettings>, spec: ChildSpawnSpec) => {
+        const fleet = memoryFleet();
+        await fleet.agents.init();
+        const result = await spawnChild(fleetServices(fleet, over, conversationTurn(fleet)), parent, spec);
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await finishedIn(fleet, result.id);
+        return { entry: fleet.agents.entry(result.id), summary: fleet.agents.get(result.id) };
+    };
+    const go = { prompt: "Review the audit of batch 24", provider: "codex", model: "gpt-5.1-codex" } as const;
+
+    // Under `resend` or `move` it inherits, so the card shows the sandbox's answer and follows the owner changing it.
+    const answers: [LimitPolicy, string, Postures, LimitPolicy | undefined][] = [
+        ["wait", "a re-run of its own", { limit: "resend" }, "resend"],
+        ["resend", "nothing of its own", {}, undefined],
+        ["move", "nothing of its own", {}, undefined],
+    ];
+    it.each(answers)("under a sandbox answering a spent allowance with %s, it opens answering with %s", async (limitPolicy, _said, postures, shown) => {
+        const { entry, summary } = await opened({ limitPolicy }, go);
+        expect(entry?.postures).toEqual(postures);
+        expect(summary?.limitPolicy).toBe(shown);
+    });
+
+    // Six children of one parent once all read "testaudit picks": the naming pass had renamed the parent's own words.
+    it("is titled by the parent's description as a name the naming pass keeps, else by its prompt's head for that pass to name", async () => {
+        expect((await opened({}, { ...go, description: "Test audit reviewer, batch 24" })).entry?.social.title).toEqual({
+            text: "Test audit reviewer, batch 24",
+            source: "model",
+        });
+        expect((await opened({}, go)).entry?.social.title).toEqual({ text: "Review the audit of batch 24", source: "derived" });
+    });
+
+    // A first turn can end before it opens its conversation (a runner nobody paired refuses it there); the follow-up that
+    // opens it then opens it as the spawn would have.
+    it("opens as the spawn would have when a follow-up is the turn that opens it", async () => {
+        const fleet = memoryFleet();
+        await fleet.agents.init();
+        const opening = conversationTurn(fleet);
+        let calls = 0;
+        const body: TurnStarter["stream"] = async function* firstRefused(input, signal) {
+            calls += 1;
+            if (calls === 1) {
+                yield { kind: "error", message: 'No runner named "rig" is paired with this sandbox.' };
+                yield { kind: "done" };
+                return;
+            }
+            yield* opening(input, signal);
+        };
+        const services = fleetServices(fleet, {}, body);
+        const result = await spawnChild(services, parent, { ...go, description: "Test audit reviewer, batch 24" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await finishedIn(fleet, result.id);
+        expect(fleet.agents.entry(result.id)).toBeUndefined();
+
+        expect(await sendToChild(services, parent, result.id, "Try it here instead.")).toMatchObject({ ok: true });
+        await finishedIn(fleet, result.id);
+        expect(fleet.agents.entry(result.id)).toMatchObject({
+            postures: { limit: "resend" },
+            social: { title: { text: "Test audit reviewer, batch 24", source: "model" } },
         });
     });
 });
@@ -872,6 +981,29 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
         }
     });
 
+    // The turn the owner lets start is the one that opens the child's conversation, so it opens it as an unheld start
+    // would: named by the parent's words, and answering a spent allowance itself under a sandbox that waits for a press.
+    it("a start the owner allows opens the child's conversation as a start nobody held would", async () => {
+        const live = liveParent();
+        try {
+            const turns: TurnInput[] = [];
+            const result = await spawnChild(heldServices(HOLD, fakeTurn(turns)), parent, {
+                prompt: "go",
+                description: "Port the parser",
+                provider: "claude",
+                model: "claude-sonnet-4-6",
+            });
+            if (!result.ok) {
+                throw new Error(result.message);
+            }
+            cards.resolve({ kind: "permission", requestId: await cardOn(), decision: "once" });
+            await settled(result.id);
+            expect(turns[0]).toMatchObject({ title: "Port the parser", titleSource: "model", postures: { limit: "resend" } });
+        } finally {
+            live.release();
+        }
+    });
+
     it("a denial ends the waiting child as failed, never run, and tells the model not to retry", async () => {
         const live = liveParent();
         try {
@@ -1233,6 +1365,128 @@ describe("a turn the child did not get from its parent", () => {
             status: "failed",
             error: "You've hit your usage limit. The sandbox runs this same turn again by itself at 15:38 UTC, and its report reaches you when that ends: do not send it the task again or give the task to another agent meanwhile.",
         });
+    });
+});
+
+// From the spawn to the parent's news, over the real registry and the daemon's own classification of the refusal. Fifteen
+// children once sat in the owner's Attention lane after a spent allowance, each waiting for a press, while their parent
+// armed a watch of its own to resume them: a child's own answer books the re-run at the reset instead.
+describe("a child whose allowance runs out", () => {
+    const RESETS_AT = Date.UTC(2026, 8, 26, 15, 38) / 1000;
+    const BOOKED =
+        "The sandbox runs this same turn again by itself at 15:38 UTC, and its report reaches you when that ends: do not send it the task again or give the task to another agent meanwhile.";
+
+    // The provider's refusal with a known reset, classified as the daemon's turn classifies it (stream-agent.ts), asking
+    // the conversation's own answer to the ending where the daemon asks it; the rest is a turn that ran and left nothing.
+    const refusedAsked =
+        (answers: Pick<Services, "agents" | "sandboxSettings">) =>
+        async function* refused(input: RoutedTurn): AsyncGenerator<AgentEvent> {
+            const { frame } = await classifyFailure(
+                { kind: "error", code: "rate_limit", message: "You've hit your usage limit.", resetsAt: RESETS_AT },
+                {
+                    turn: input,
+                    turnId: "t-1",
+                    provider: input.agent,
+                    model: input.model,
+                    account: undefined,
+                    attribution: {},
+                    sessionId: undefined,
+                    answered: true,
+                    remint: undefined,
+                    limitReset: undefined,
+                    outage: undefined,
+                    standing: { state: "no-code", paths: [], check: undefined },
+                    checklist: undefined,
+                    contextTokens: undefined,
+                    now: Date.now(),
+                },
+                {
+                    breakPolicy: (conversationId, ending) => breakPolicyFor(answers, conversationId, ending),
+                    reopensAt: async () => undefined,
+                    limitWay: async () => undefined,
+                    stopLadder: () => ({ made: 0, nextAt: undefined }),
+                },
+            );
+            yield frame;
+            yield { kind: "done" };
+        };
+
+    // A sandbox whose standing answer waits for a person's press, as it does by default, over a real fleet.
+    const refusingFleet = async () => {
+        const fleet = memoryFleet();
+        await fleet.agents.init();
+        const base = spawnServices({ limitPolicy: "wait" }, [], fleet.conversations);
+        const services = drivenBy(
+            unstubbed<Services>("services", { ...base, agents: fleet.agents }),
+            conversationTurn(fleet, refusedAsked({ agents: fleet.agents, sandboxSettings: base.sandboxSettings })),
+        );
+        return { fleet, services };
+    };
+
+    it("books its own re-run at the reset, and its parent hears it is coming from its report and its wait", async () => {
+        const { fleet, services } = await refusingFleet();
+        // The parent is a conversation on the same fleet, which its child's report is delivered to.
+        await beginTurn(fleet.conversations, { conversationId: parent.conversationId, isolated: false, prompt: "Audit the tests", profile: {} }, 1_000);
+        await fleet.conversations.send(parent.conversationId, { kind: "settle" }, 2_000).settled;
+        const ended = new Promise<DomainEventMap["run.settled"]>((resolve) => services.events.subscribe("run.settled", resolve));
+
+        const result = await spawnChild(services, parent, {
+            prompt: "Review the audit of batch 24",
+            description: "Test audit reviewer, batch 24",
+            provider: "codex",
+            model: "gpt-5.1-codex",
+        });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        const settledRun = await ended;
+
+        // Booked at the reset, which is what keeps the card out of the Attention lane.
+        expect(fleet.agents.get(result.id)).toMatchObject({
+            title: "Test audit reviewer, batch 24",
+            limitPolicy: "resend",
+            failureCode: "rate_limit",
+            limitResetsAt: RESETS_AT,
+            limitHeld: true,
+            limitScheduled: true,
+        });
+        expect(settledRun.rerun).toEqual({ at: RESETS_AT });
+
+        // Delivered as boot-schedulers.ts wires the report, before any wait of the parent's takes the ending.
+        const parentTurns = fakeTurns();
+        await reportChildTurn(
+            {
+                doors: { turns: parentTurns.turns, sessionIdOf: () => undefined },
+                logger: services.logger,
+                conversations: fleet.conversations,
+                entryOf: (conversationId) => {
+                    const entry = fleet.agents.entry(conversationId);
+                    return entry === undefined ? undefined : { startedBy: entry.identity.startedBy, title: entry.social.title?.text };
+                },
+                profileOf: (conversationId) => {
+                    const entry = fleet.agents.entry(conversationId);
+                    return entry === undefined ? undefined : conversationProfile(entry);
+                },
+                killNote: async () => undefined,
+            },
+            settledRun,
+        );
+        const report = parentTurns.started[0]?.prompt ?? "";
+        expect(agentWordsOf(report)).toMatchObject({ kind: "child", from: result.id, title: "Test audit reviewer, batch 24", failed: true });
+        expect(report).toContain(`The turn failed: You've hit your usage limit.\n\n${BOOKED}`);
+        expect((await finishedIn(fleet, result.id)).matched).toMatchObject({ status: "failed", error: `You've hit your usage limit. ${BOOKED}` });
+    });
+
+    // Only a spawned child answers for itself: the same refusal on a conversation a person opened keeps the sandbox's
+    // answer, and is only offered to its reader.
+    it("leaves a conversation nobody spawned to the sandbox's answer, which waits for a press", async () => {
+        const { fleet, services } = await refusingFleet();
+        const run = services.turns.run({ conversationId: "top-1", prompt: "Review the audit of batch 24", agent: "codex", model: "gpt-5.1-codex" });
+        expect(run).toMatchObject({ id: expect.any(String) });
+        await turnRunOf(fleet.conversations, "top-1")?.waitUntilFinished();
+        const summary = fleet.agents.get("top-1");
+        expect(summary).toMatchObject({ failureCode: "rate_limit", limitResetsAt: RESETS_AT, limitHeld: true });
+        expect([summary?.limitPolicy, summary?.limitScheduled]).toEqual([undefined, undefined]);
     });
 });
 

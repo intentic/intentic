@@ -3,6 +3,7 @@ import { briefDuration } from "@intentic/base/format";
 import { formatWeekdayTime } from "@intentic/ui/format";
 import { type AgentAttention, type AgentOrigin, type AgentStatus, type AgentSummary, type AgentWatch, awaitsWake, type LandConflictReason, type LoopState } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
+import { parentOf } from "../board/ownership";
 
 // Every projection of a fleet agent's state (lane, attention label, drill-in verb, glyphs). Nothing else may
 // derive these from `status` alone: a parked turn is `idle` with an attention flag raised. Pure functions over
@@ -206,6 +207,27 @@ export const blocked = (agent: AgentStanding): boolean =>
 export const awaitingUser = (agent: AgentStanding): boolean =>
     agent.attention.plan || agent.attention.question || agent.attention.permission || agent.attention.capability || agent.status === `awaiting`;
 
+// An ask only the owner may answer: a plan to approve, a permission, a setup, a credential release, a hand-off to a
+// browser or terminal (a bare `awaiting`), or a refused land only their own commit clears. The parent a child agent
+// works for can answer its question (subagents/children.ts) and hears how its turns end, but none of these, so these
+// are what reach the reader from a child whatever its parent is doing (callsOwner).
+export const onlyOwnerCanAnswer = (agent: AgentStanding): boolean =>
+    agent.attention.plan ||
+    agent.attention.permission ||
+    agent.attention.capability ||
+    agent.attention.credential ||
+    (agent.status === `awaiting` && !agent.attention.question) ||
+    ((agent.attention.conflict || agent.status === `conflict`) && conflictIsYours(agent));
+
+// Whether what a child agent stopped on is the reader's to answer rather than its parent's, given the lanes both stand
+// in. An ask only the owner can answer always is; anything else it stopped on (a spent allowance, a failure, a stop, a
+// question, a land conflict) is its parent's news while the parent supervises, and the reader's once it no longer
+// does: nothing running there to hear it and nothing armed to wake it, which is a parent out of Active. The sandbox
+// draws the same line for a child's land news (subagents/child-lands.ts): the parent's while it has a live turn, the
+// owner's after.
+export const callsOwner = (child: AgentStanding, lanes: { readonly child: FleetLane; readonly parent: FleetLane }): boolean =>
+    onlyOwnerCanAnswer(child) || (lanes.child === `attention` && lanes.parent !== `active`);
+
 // One table for the chip word and drill-in verb per attention flag, in display rank order, so the two can't drift
 // apart as they did before. `satisfies Record<keyof AgentAttention, …>` makes a new wire flag a build error until
 // both words exist. Kept short: the chip is `shrink-0` beside the title, so every character taken grows at the
@@ -351,6 +373,46 @@ export const laneOf = (agent: AgentStanding): FleetLane => {
     // finished rather than attention since nothing is failing. `resumed` lands here too: nothing running, nothing
     // owed.
     return `finished`;
+};
+
+// How many cards the board's Attention lane draws for one fleet, as the board folds child agents under their parents
+// (board/view/childFold.ts): an agent in Attention is a card of its own, except a child agent whose parent is in the
+// fleet, which rides under its family's one card and lifts that card to Attention only when it calls the reader
+// (callsOwner). A family counts once however many of its children call, and not again when its own card is in
+// Attention already; a child with words left in its composer keeps a card of its own, as on the board. The rail
+// badge's count, for this sandbox's fleet and another's alike, so the badge cannot disagree with the lane it names.
+export const attentionCards = (
+    agents: readonly (AgentStanding & { readonly id: string; readonly startedBy?: string | undefined; readonly unsent?: boolean | undefined })[],
+): number => {
+    type Standing = (typeof agents)[number];
+    const byId = new Map(agents.map((agent) => [agent.id, agent] as const));
+    const parentIn = (agent: Standing): Standing | undefined => {
+        const id = parentOf(agent.startedBy);
+        return id === undefined ? undefined : byId.get(id);
+    };
+    // The card a child rides under: its eldest ancestor in this fleet, walked with a guard against a record naming its
+    // own descendant as its parent.
+    const familyOf = (agent: Standing): string => {
+        const seen = new Set([agent.id]);
+        let top = agent;
+        for (let above = parentIn(top); above !== undefined && !seen.has(above.id); above = parentIn(top)) {
+            seen.add(above.id);
+            top = above;
+        }
+        return top.id;
+    };
+    const cards = new Set<string>();
+    for (const agent of agents) {
+        const parent = parentIn(agent);
+        if (parent === undefined || agent.unsent === true) {
+            if (laneOf(agent) === `attention`) {
+                cards.add(agent.id);
+            }
+        } else if (callsOwner(agent, { child: laneOf(agent), parent: laneOf(parent) })) {
+            cards.add(familyOf(agent));
+        }
+    }
+    return cards.size;
 };
 
 // What the card says when landed work is no longer in the workspace, in whole or in part. A land arrives as
@@ -535,6 +597,31 @@ export const standingChip = (agent: AgentStanding & { readonly unread: boolean; 
         return undefined;
     }
     return { label: badge.label, tone: UNREAD_TONE, ...(badge.seenAt === undefined ? {} : { seenAt: badge.seenAt }) };
+};
+
+// Children a family chip's hover names before counting the rest.
+const CALLS_NAMED = 3;
+
+// The corner a card wears for the children calling the reader through it (callsOwner): the one child's own word, or how
+// many call, tinted as an ask (a spent allowance's muted tint when that is all they stopped on); its hover names them.
+// The card's own reason outranks it, since that is the ask the card's own presses answer (AgentCard), and it outranks
+// the card's unread mark, as any reason does.
+export const familyChip = (
+    calls: readonly (AgentStanding & { readonly title?: string })[],
+): (StandingChip & { readonly hint: string }) | undefined => {
+    const first = calls[0];
+    if (first === undefined) {
+        return undefined;
+    }
+    const why = (child: AgentStanding): string => attentionReason(child) ?? t(`shared.needs`);
+    const named = calls.slice(0, CALLS_NAMED).map((child) => `${agentDisplayTitle(child)} (${why(child)})`);
+    const rest = calls.length - CALLS_NAMED;
+    const list = rest > 0 ? [...named, t(`agents.childRows.callsMore`, { count: rest })] : named;
+    return {
+        label: calls.length === 1 ? why(first) : t(`agents.childRows.needYou`, { count: calls.length }, calls.length),
+        tone: calls.every(limited) ? LIMIT_TONE : REASON_TONE,
+        hint: t(`agents.childRows.callsHint`, { list: list.join(`, `) }),
+    };
 };
 
 // The concrete step a turn is on: the tool with what it reached for, else the checklist item it is working through.

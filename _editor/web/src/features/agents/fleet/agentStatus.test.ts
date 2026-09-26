@@ -2,13 +2,16 @@ import type { AgentStatus, AgentWatch } from "@intentic/sandbox-contract";
 import {
     type AgentStanding,
     agentStatusMeta,
+    attentionCards,
     attentionReason,
     awaitingUser,
     blocked,
+    callsOwner,
     type ClientAgentStatus,
     conflictIsYours,
     laneOf,
     limitCountdown,
+    onlyOwnerCanAnswer,
     type RimAgent,
     reviewAction,
     tileRim,
@@ -544,5 +547,64 @@ describe(`tileRim`, () => {
             filled: 4,
             hint: `3 of 3 steps done`,
         });
+    });
+});
+
+// A child agent's stop is its parent's news while the parent supervises; only what the owner alone can answer reaches
+// the reader whatever the parent does.
+describe("what a child agent asks of the reader", () => {
+    const standing = (over: Partial<AgentStanding> = {}): AgentStanding => ({ status: `idle`, attention: none, ...over });
+
+    it("names the asks only the owner can answer, and leaves a question to the parent", () => {
+        expect(onlyOwnerCanAnswer(standing({ status: `awaiting`, attention: { ...none, permission: true } }))).toBe(true);
+        expect(onlyOwnerCanAnswer(standing({ status: `awaiting`, attention: { ...none, plan: true } }))).toBe(true);
+        expect(onlyOwnerCanAnswer(standing({ status: `awaiting` }))).toBe(true);
+        expect(onlyOwnerCanAnswer(standing({ status: `conflict`, attention: { ...none, conflict: true }, conflictCauses: [`workspace`] }))).toBe(true);
+        expect(onlyOwnerCanAnswer(standing({ status: `awaiting`, attention: { ...none, question: true } }))).toBe(false);
+        expect(onlyOwnerCanAnswer(standing({ status: `error`, failureCode: `rate_limit` }))).toBe(false);
+    });
+
+    it("hands a stop to the reader only once its parent stops supervising", () => {
+        const spent = standing({ status: `error`, failureCode: `rate_limit` });
+        expect(callsOwner(spent, { child: `attention`, parent: `active` })).toBe(false);
+        expect(callsOwner(spent, { child: `attention`, parent: `finished` })).toBe(true);
+        expect(callsOwner(spent, { child: `attention`, parent: `attention` })).toBe(true);
+    });
+});
+
+// The rail badge names the Attention lane as the board draws it, children folded under their parents.
+describe("attentionCards", () => {
+    const agent = (id: string, over: Partial<AgentStanding> & { startedBy?: string; unsent?: boolean } = {}) => ({
+        id,
+        status: `landed` as AgentStatus,
+        attention: none,
+        ...over,
+    });
+    const child = (id: string, parent: string, over: Partial<AgentStanding> & { unsent?: boolean } = {}) => agent(id, { startedBy: `agent:${parent}`, ...over });
+    const spent = { status: `error`, failureCode: `rate_limit` } as const;
+
+    it("counts nothing for children stopped under a parent still at work, however many", () => {
+        const fleet = [agent(`p`, { status: `running` }), ...Array.from({ length: 15 }, (_unused, index) => child(`c${index}`, `p`, spent))];
+        expect(attentionCards(fleet)).toBe(0);
+    });
+
+    it("counts a family once however many of its children ask what only the reader can give", () => {
+        const fleet = [
+            agent(`p`, { status: `running` }),
+            child(`a`, `p`, { status: `awaiting`, attention: { ...none, permission: true } }),
+            child(`b`, `p`, { status: `awaiting`, attention: { ...none, plan: true } }),
+            child(`g`, `a`, { status: `awaiting`, attention: { ...none, capability: true } }),
+        ];
+        expect(attentionCards(fleet)).toBe(1);
+    });
+
+    it("counts a stopped parent's stuck children as its one card, and not again for its own stop", () => {
+        expect(attentionCards([agent(`p`, spent), child(`a`, `p`, spent), child(`b`, `p`, { status: `stopped` })])).toBe(1);
+        expect(attentionCards([agent(`p`), child(`a`, `p`, spent)])).toBe(1);
+    });
+
+    it("counts a child as a card of its own when its parent is not here, or its composer holds words", () => {
+        expect(attentionCards([child(`orphan`, `gone`, spent), agent(`else`, { status: `awaiting` }), agent(`done`)])).toBe(2);
+        expect(attentionCards([agent(`p`, { status: `running` }), child(`words`, `p`, { ...spent, unsent: true })])).toBe(1);
     });
 });

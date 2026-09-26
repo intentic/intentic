@@ -62,6 +62,7 @@ export interface LanesHost {
         readonly boardLanes: Readonly<Ref<Record<FleetLane, FleetAgent[]>>>;
         readonly boardChildren: Readonly<Ref<ReadonlyMap<string, readonly FleetAgent[]>>>;
         readonly boardHosts: Readonly<Ref<ReadonlyMap<string, FleetAgent>>>;
+        readonly boardCalls: Readonly<Ref<ReadonlyMap<string, readonly FleetAgent[]>>>;
         readonly boardRunRows: Readonly<Ref<readonly WorkflowRun[]>>;
         readonly archivedRunRows: Readonly<Ref<readonly WorkflowRun[]>>;
         readonly ledgerRunIds: Readonly<Ref<ReadonlySet<string>>>;
@@ -198,6 +199,7 @@ export const useBoardLanes = (host: LanesHost) => {
         cardsFor,
         childrenOf: trays.childrenOf,
         cardOf: trays.cardOf,
+        callOf: trays.callOf,
         trayFor: trays.trayFor,
         trayState: trays.trayState,
         toggleTray: trays.toggleTray,

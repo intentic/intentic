@@ -88,6 +88,11 @@ const outranksTitle = (title: Social["title"], clean: string, source: AgentTitle
     return TITLE_RANK[source] > currentRank;
 };
 
+// The one automatic write that is not a rename: the same words from the same source, adding the work word they lacked.
+// A parent's description of its child opens as a `model` name, and the naming pass gives it only the board's category.
+const addsAction = (title: Social["title"], clean: string, source: AgentTitleSource, action: string | undefined): boolean =>
+    title !== undefined && title.text === clean && title.source === source && title.action === undefined && action !== undefined;
+
 // One-line scrub on its own limit (MAX_NOTE_LENGTH), never the title's 80-character card width: sharing that ceiling
 // once truncated changelog entries mid-word. A backstop; the drafter clips on a word boundary before this is reached.
 const sanitizeNote = (note: string): string | undefined => sanitizeLine(note, MAX_NOTE_LENGTH);
@@ -294,20 +299,30 @@ const ownerOf = (
     return opener === undefined ? {} : { owner: { email: opener.email, ...opt("name", opener.name), since: now } };
 };
 
+// The title a conversation opens with: the turn's own, else its prompt cut to a line the way the browser would. Either
+// is `derived`, which the naming pass replaces, unless the turn says its title is a name an agent chose (a parent's
+// description of the child it spawned), which keeps that authority; a head cut from the prompt never does.
+const openingTitle = (turn: BeginTurn): Social["title"] => {
+    const named = turn.title === undefined ? undefined : sanitizeTitle(turn.title);
+    if (named !== undefined) {
+        return { text: named, source: turn.titleSource ?? "derived" };
+    }
+    const derived = sanitizeTitle(deriveTitle(turn.prompt));
+    return derived === undefined ? undefined : { text: derived, source: "derived" };
+};
+
 // An authored title, a browser derivation, or a mid-turn rename all stand as written; a turn naming none is titled the
 // way the browser would derive it. A held title keeps its source and action with it.
-const socialOf = (held: PersistedAgent, turn: BeginTurn, entryOf: (id: string) => PersistedAgent | undefined, now: number): Social => {
-    const text = (turn.title === undefined ? undefined : sanitizeTitle(turn.title)) ?? sanitizeTitle(deriveTitle(turn.prompt));
-    return {
-        ...held.social,
-        ...opt("title", held.social.title ?? (text === undefined ? undefined : { text, source: "derived" as const })),
-        ...ownerOf(held, turn, entryOf, now),
-    };
-};
+const socialOf = (held: PersistedAgent, turn: BeginTurn, entryOf: (id: string) => PersistedAgent | undefined, now: number): Social => ({
+    ...held.social,
+    ...opt("title", held.social.title ?? openingTitle(turn)),
+    ...ownerOf(held, turn, entryOf, now),
+});
 
 // What a conversation's first turn starts from. Placement latches with identity from here on: a later turn keeps its
 // workspace or worktree, and its runner, whatever a stale request says; a runner implies a worktree, since a remote
-// conversation is isolated by construction.
+// conversation is isolated by construction. So do the answers to the sandbox-wide defaults it opens with (a spawned
+// child's to a spent allowance): a later turn's are never read, so an answer its owner gives or clears since stands.
 const freshEntry = (turn: BeginTurn, now: number): PersistedAgent => ({
     id: turn.conversationId,
     placement:
@@ -317,7 +332,7 @@ const freshEntry = (turn: BeginTurn, now: number): PersistedAgent => ({
     identity: {},
     profile: { provider: "claude", harness: "native" },
     ending: { kind: "interrupted" },
-    postures: {},
+    postures: { ...turn.postures },
     landing: {},
     social: { reactions: [] },
     totals: { costUsd: 0, inputTokens: 0, outputTokens: 0, turns: 0, toolUses: 0, subagents: 0 },
@@ -482,8 +497,9 @@ export interface AgentsRegistry {
     // decides the rest.
     readonly dropRepos: (repos: readonly string[]) => Promise<string[]>;
     // Sets the title per the source ranking (AgentTitleSource): a rename always lands, an automatic source only moves
-    // it up. A rejected promotion still returns the entry's current summary, not `undefined`.
-    // `action` is the naming pass's one work word, stored beside the title and never shown; any other source clears it.
+    // it up, or adds the action its own words lacked. A rejected promotion still returns the entry's current summary,
+    // not `undefined`. `action` is the naming pass's one work word, stored beside the title and never shown; any other
+    // source clears it.
     readonly setTitle: (id: string, title: string, source: AgentTitleSource, action?: string) => Promise<AgentSummary | undefined>;
     // Records what the landed work did, as a commit subject; no ranking, the newest land simply describes the most
     // current claim. Broadcast so the Changes panel picks it up immediately.
@@ -635,7 +651,7 @@ export const createFleet = (
     };
 
     // The one place the title-rank comparison is applied, so every caller agrees on who may rename what. A rename
-    // always lands, even a second one; anything else must strictly outrank what's there.
+    // always lands, even a second one; anything else must strictly outrank what's there, or only add its action.
     const promoteTitle = (id: string, title: string | undefined, source: AgentTitleSource, action?: string): boolean => {
         const entry = entryOf(id);
         const clean = title === undefined ? undefined : sanitizeTitle(title);
@@ -643,7 +659,7 @@ export const createFleet = (
             return false;
         }
         const held = entry.social.title;
-        if (source !== "user" && !outranksTitle(held, clean, source)) {
+        if (source !== "user" && !outranksTitle(held, clean, source) && !addsAction(held, clean, source, action)) {
             return false;
         }
         if (held?.text === clean && held.source === source && held.action === action) {

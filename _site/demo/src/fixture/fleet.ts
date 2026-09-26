@@ -2,8 +2,9 @@ import { type AgentSummary, nextDayStartIn, UTC } from "@intentic/sandbox-contra
 
 // One afternoon across two repos, with a card in every lane `laneOf` distinguishes: attention (awaiting a parked
 // question, conflict from a land overlap), active (running, one delegating to subagents), finished (ready, landed,
-// idle). Times are relative to page load. Two of them have spawned child agents (spawnedChildren), which the board
-// hangs under their cards unless one asks something of the reader or works on after its parent finished.
+// idle). Times are relative to page load. Three of them have spawned child agents (spawnedChildren, auditFamily), which
+// the board hangs under their cards, moving a card to the lane its children need: Attention for an ask only the reader
+// can answer, Active for work still in flight under a finished parent.
 
 // Conversation id shared by the roster, transcript route and attach stream (turn.ts supplies the script).
 export const FEATURED_AGENT_ID = `cnv_checkout_stripe`;
@@ -67,8 +68,9 @@ const spawned = (parent: string, id: string, over: Omit<Partial<AgentSummary>, `
 });
 
 // The checkout agent's helpers, one of each standing: two at work (one on another provider), two settled, and one parked
-// on a permission, which keeps a card of its own in Attention. Then the release notes' helpers: settled ones ride under
-// its finished card, and the one still translating stands in Active, since Finished is no place for work in flight.
+// on a permission, which carries the checkout card into Attention. Then the release notes' helpers: settled ones ride
+// under its finished card, and the one still translating lifts that card into Active, since Finished is no place for
+// work in flight.
 const spawnedChildren = (now: number): AgentSummary[] => [
     spawned(FEATURED_AGENT_ID, `sub-brisk-otter-4k2m`, {
         title: `Write the webhook handler tests`,
@@ -138,6 +140,90 @@ const spawnedChildren = (now: number): AgentSummary[] => [
         updatedAt: now - 2_100,
     }),
 ];
+
+// Epoch seconds, the unit a limit's reset travels in.
+const seconds = (at: number): number => Math.round(at / 1000);
+
+// An orchestrator fanned out over one batch each, as a test audit does: most of its Codex batches refused by the same
+// spent allowance, two Gemini batches that never started, one still working and a few done. Every stop is its parent's
+// news while it works, so the whole family is one card in Active with a tray of a handful of rows, not a dozen cards in
+// Attention.
+export const AUDIT_AGENT_ID = `cnv_test_audit`;
+const auditFamily = (now: number): AgentSummary[] => {
+    const resetsAt = seconds(now + minutes(21));
+    const batch = (at: number): string => `Test audit, batch ${String(at).padStart(2, `0`)}`;
+    const codex = { provider: `codex`, harness: `native`, model: `gpt-5.2-codex` } as const;
+    return [
+        {
+            id: AUDIT_AGENT_ID,
+            startIn: `web`,
+            sessionId: `ses_01j9testaudit`,
+            title: `Audit the test suite and prune the weakest tests`,
+            status: `running`,
+            provider: `claude`,
+            harness: `claude-code`,
+            model: `claude-opus-5`,
+            effort: `high`,
+            account: `acc_claude_demo`,
+            branch: `agent/test-audit`,
+            base: `4f1c8ab`,
+            costUsd: 1.84,
+            activity: { tool: `Bash`, target: `agents wait any`, todo: `Resume the Codex batches when the allowance reopens` },
+            startedAt: now - minutes(38),
+            updatedAt: now - 2_400,
+            seenAt: now - minutes(30),
+            attention: NO_ATTENTION,
+            turns: 2,
+            toolUses: 212,
+            subagents: { running: 1, total: 12 },
+        },
+        spawned(AUDIT_AGENT_ID, `sub-lean-cedar-7h2k`, {
+            title: batch(14),
+            status: `running`,
+            provider: `cursor`,
+            harness: `native`,
+            model: `composer-2.5`,
+            activity: { tool: `Read`, target: `web/src/pricing/plans.test.ts`, todo: `Score each case against the rubric` },
+            startedAt: now - minutes(6),
+            updatedAt: now - 900,
+        }),
+        ...[3, 4, 5, 6, 7, 8].map((at, index) =>
+            spawned(AUDIT_AGENT_ID, `sub-codex-batch-${at}`, {
+                ...codex,
+                title: batch(at),
+                status: `error`,
+                failureCode: `rate_limit`,
+                failure: `exceeded retry limit, last status: 429 Too Many Requests`,
+                limitResetsAt: resetsAt,
+                limitHeld: true,
+                updatedAt: now - minutes(9) - index * 20_000,
+                seenAt: now - minutes(12),
+            }),
+        ),
+        ...[11, 12].map((at, index) =>
+            spawned(AUDIT_AGENT_ID, `sub-gemini-batch-${at}`, {
+                provider: `gemini`,
+                harness: `native`,
+                model: `gemini-3-pro`,
+                title: batch(at),
+                status: `error`,
+                failure: `Verify your account to continue.`,
+                updatedAt: now - minutes(11) - index * 15_000,
+                seenAt: now - minutes(12),
+            }),
+        ),
+        ...[1, 2, 9].map((at, index) =>
+            spawned(AUDIT_AGENT_ID, `sub-done-batch-${at}`, {
+                ...codex,
+                title: batch(at),
+                status: `landed`,
+                updatedAt: now - minutes(20) - index * minutes(2),
+                seenAt: now - minutes(20) - index * minutes(2),
+                costUsd: 0.12,
+            }),
+        ),
+    ];
+};
 
 // The two people on this demo sandbox, the same pair the presence roster draws (daemon.ts): the reader is Ada, so a
 // chip carrying her reads as one of her own and a chip carrying only Grace is one to press.
@@ -439,4 +525,5 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         diff: { files: 1, insertions: 6, deletions: 4 },
     },
     ...spawnedChildren(now),
+    ...auditFamily(now),
 ];

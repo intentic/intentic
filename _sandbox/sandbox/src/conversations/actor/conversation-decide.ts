@@ -6,6 +6,7 @@ import {
     type AgentWatch,
     type ForkedFrom,
     type KeepWarmEnd,
+    type LimitPolicy,
     PARK_KINDS,
     type ParkKind,
     type ResumeRouting,
@@ -50,7 +51,8 @@ import {
 // beyond the state (the entry, the roster broadcast, the transcript index) leaves as data for the runner.
 
 // What `begin` records for a turn: its profile whole, and what only a conversation's opening turn decides (title,
-// origin, start folder, starter, owner, fence), each latched on the first turn and ignored on every later one.
+// origin, start folder, starter, owner, fence, its own answers to the sandbox-wide defaults), each latched on the first
+// turn and ignored on every later one.
 export interface BeginTurn {
     readonly conversationId: string;
     readonly prompt: string;
@@ -60,6 +62,10 @@ export interface BeginTurn {
     // Latched like `isolated`; only a conversation never seen before takes the request's runner.
     readonly runner?: string;
     readonly title?: string;
+    // `model` when the title is a name an agent chose rather than a head cut from a prompt (seams/turn-starter.ts).
+    readonly titleSource?: "model";
+    // A spawned child's own answer to a spent allowance, which it opens with.
+    readonly postures?: { readonly limit?: LimitPolicy };
     readonly origin?: AgentOrigin;
     readonly startIn?: string;
     // Who asked for this turn, as the daemon verified it.

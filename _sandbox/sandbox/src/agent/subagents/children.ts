@@ -1,7 +1,18 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { WorkPlace } from "../../workload/resource-budget.js";
 import { worktreeOf } from "../../conversations/registry/agents-store.js";
-import type { AgentEvent, AgentHarness, AgentProvider, AskQuestion, ChildAgentAsk, ChildMove, ChildRun, ResumeReason, TurnProfile } from "@intentic/sandbox-contract";
+import type {
+    AgentEvent,
+    AgentHarness,
+    AgentProvider,
+    AskQuestion,
+    ChildAgentAsk,
+    ChildMove,
+    ChildRun,
+    LimitPolicy,
+    ResumeReason,
+    TurnProfile,
+} from "@intentic/sandbox-contract";
 import { capabilitiesOf, childRunOf, DEFAULT_HARNESS, newConversationId, PROVIDERS, sameChildRun } from "@intentic/sandbox-contract";
 import { cardDeps, raiseRequest } from "../../conversations/actor/card-offers.js";
 import { type Holding, type LiveRun, liveRunOf } from "../../conversations/actor/conversation-holdings.js";
@@ -51,7 +62,8 @@ const REPORT_KEPT = 2_000;
 
 export interface ChildSpawnSpec {
     readonly prompt: string;
-    // Shown on the roster row and as the child's title; falls back to the prompt's head if omitted.
+    // Shown on the roster row and as the child's title, which the naming pass keeps; falls back to the prompt's head,
+    // which it names, if omitted.
     readonly description?: string;
     // Required with `model`, taken verbatim; spawn-catalog.ts is advisory, not a gate.
     readonly provider: AgentProvider;
@@ -666,11 +678,15 @@ const composeRuntimeFloor = (parent: string, provider: AgentProvider, harness: A
 };
 
 // Reads and reserves the live/lifetime budget in one synchronous step so two concurrent spawns cannot both pass the
-// same check. `release` refunds only a reservation whose turn never started.
+// same check. `release` refunds only a reservation whose turn never started. `limitPolicy` is the sandbox's standing
+// answer to a spent allowance, from the same read, which the admitted turn opens by (childOpening): no second read
+// comes between the seat and the turn that takes it.
 const admitChildTurn = async (
     services: Services,
     parent: string,
-): Promise<{ readonly ok: true; readonly release: () => void } | { readonly ok: false; readonly message: string }> => {
+): Promise<
+    { readonly ok: true; readonly release: () => void; readonly limitPolicy: LimitPolicy } | { readonly ok: false; readonly message: string }
+> => {
     const settings = await services.sandboxSettings.get();
     const seats = services.conversations.holdings(SEATS);
     const ledger = seats.get(parent) ?? { live: 0, total: 0 };
@@ -683,6 +699,7 @@ const admitChildTurn = async (
     seats.hold(parent, parent, { live: ledger.live + 1, total: ledger.total + 1 });
     return {
         ok: true,
+        limitPolicy: settings.limitPolicy,
         release: (): void => {
             const now = seats.get(parent);
             if (now !== undefined) {
@@ -769,6 +786,17 @@ export const repointedNote = (asked: ChildRun, run: ChildRun): string =>
 // A child's task in one line, as its roster row and the gate's card both show it.
 const taskLine = (spec: Pick<ChildSpawnSpec, "prompt" | "description">): string =>
     (spec.description ?? spec.prompt).replaceAll(/\s+/gu, " ").trim().slice(0, 200);
+
+// What the turn that opens a child's conversation says of it beyond its task, which the registry reads off that turn
+// alone. Its title is the parent's own words when the parent described it, a name the naming pass keeps, else the
+// prompt's head for that pass to name. And nobody watches a child while its parent waits on it, so where the sandbox's
+// standing answer to a spent allowance is to wait for a person's press, the child answers that ending itself: its turn
+// goes again once the allowance reopens. A sandbox already answering `resend` or `move` is inherited as it stands.
+const childOpening = (spec: ChildSpawnSpec, sandboxLimit: LimitPolicy): Pick<TurnInput, "title" | "titleSource" | "postures"> => ({
+    title: taskLine(spec).slice(0, 80),
+    ...opt("titleSource", spec.description === undefined ? undefined : ("model" as const)),
+    ...opt("postures", sandboxLimit === "wait" ? { limit: "resend" as const } : undefined),
+});
 
 // What the gate's card says about a child: its run, task and machine off the call's spec or the child's own record,
 // never the parent's prose about them.
@@ -873,7 +901,8 @@ const startChild = async (
         const turn: TurnInput & { conversationId: string } = {
             prompt: spec.prompt,
             conversationId: id,
-            title: taskLine(spec).slice(0, 80),
+            // By the settings as it starts, which for a start the owner allowed later is when they allowed it.
+            ...childOpening(spec, admitted.limitPolicy),
             // Its starter is the parent, which is also how it inherits the parent's owner (agents-registry.ts).
             ...spokenBy({ kind: "agent", conversationId: parent.conversationId }),
             ...opt("placement", placement === undefined ? undefined : { kind: "runner" as const, id: placement }),
@@ -991,6 +1020,9 @@ const followUp = async (services: Services, parent: ChildParent, kid: ChildRecor
         const turn: TurnInput & { conversationId: string } = {
             prompt: message,
             conversationId: childId,
+            // Ignored by a conversation already open. When the first turn never opened it (refused for memory, turned
+            // away, or ended before it got that far), this one does, and opens it as the spawn would have.
+            ...childOpening(kid.spec, admitted.limitPolicy),
             // Its parent asked, as for the spawn: the settled turn reports back to that parent (child-report.ts).
             ...spokenBy({ kind: "agent", conversationId: parent.conversationId }),
             ...kid.profile,

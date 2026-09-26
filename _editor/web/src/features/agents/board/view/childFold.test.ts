@@ -1,10 +1,12 @@
 import { NO_ATTENTION } from "../../fleet/agentStatus";
 import { type FleetAgent, laneGroups } from "../../fleet/useAgents-fleet";
-import { cardKey, foldChildren, standsAlone, steadyFold, type TrayState, trayOf, trayRows } from "./childFold";
+import { ARCHIVE_RULES, cardKey, FINISHED_FOLD, foldChildren, standsAlone, steadyFold, stopOf, type TrayState, trayOf, trayRows } from "./childFold";
 
-// Pins which children ride under their parent's card and which keep a card of their own: a child asking something of
-// the reader never rides, a child never rides in a lane quieter than its own, and a grandchild rides with its parent.
-// Then what a tray draws: working children always, settled ones behind the fold, a filter's matches unfolded.
+// Pins which children ride under their parent's card and which keep a card of their own: every child rides while its
+// parent is on the board, save one owing a press a row cannot carry; a child calling the reader moves its family's card
+// to Attention instead of standing there itself; a grandchild rides with its parent. Then what a tray draws: asks and
+// working children always, stopped ones one row per thing they stopped on, settled ones behind the fold, a filter's
+// matches unfolded.
 
 const card = (id: string, over: Partial<FleetAgent> = {}): FleetAgent => ({
     id,
@@ -21,6 +23,9 @@ const card = (id: string, over: Partial<FleetAgent> = {}): FleetAgent => ({
 });
 const child = (id: string, parent: string, over: Partial<FleetAgent> = {}): FleetAgent => card(id, { startedBy: `agent:${parent}`, ...over });
 const working = (id: string, over: Partial<FleetAgent> = {}): FleetAgent => card(id, { status: `running`, startedAt: 1_000, ...over });
+const limited = (id: string, parent: string, over: Partial<FleetAgent> = {}): FleetAgent =>
+    child(id, parent, { status: `error`, failureCode: `rate_limit`, provider: `codex`, ...over });
+const permission = { ...NO_ATTENTION, permission: true };
 const ids = (agents: readonly FleetAgent[] | undefined): string[] => (agents ?? []).map((agent) => agent.id);
 const folded = (...fleet: FleetAgent[]) => foldChildren(laneGroups(fleet));
 
@@ -44,7 +49,39 @@ describe(`which children ride under their parent`, () => {
         expect(ids(fold.children.get(`p`))).toEqual([`early`, `late`, `new`, `old`]);
     });
 
-    it(`keeps a card for a child that asks something of the reader, even under a parent that asks too`, () => {
+    it(`keeps Attention quiet for children stopped under a parent still supervising them: they are its news`, () => {
+        const fold = folded(
+            working(`p`),
+            ...Array.from({ length: 15 }, (_unused, at) => limited(`c${at}`, `p`)),
+            child(`broke`, `p`, { status: `error` }),
+            child(`asked`, `p`, { status: `awaiting`, attention: { ...NO_ATTENTION, question: true } }),
+        );
+        expect(fold.lanes.attention).toEqual([]);
+        expect(ids(fold.lanes.active)).toEqual([`p`]);
+        expect(fold.children.get(`p`)).toHaveLength(17);
+        expect(fold.calls.get(`p`)).toBeUndefined();
+    });
+
+    it(`moves the family's card to Attention for a child asking what only the reader can give, however busy the parent`, () => {
+        const fold = folded(
+            working(`p`),
+            child(`keys`, `p`, { status: `awaiting`, attention: permission }),
+            working(`port`, { startedBy: `agent:p` }),
+        );
+        expect(ids(fold.lanes.attention)).toEqual([`p`]);
+        expect(fold.lanes.active).toEqual([]);
+        expect(ids(fold.children.get(`p`))).toEqual([`keys`, `port`]);
+        expect(ids(fold.calls.get(`p`))).toEqual([`keys`]);
+    });
+
+    it(`hands a stopped child to the reader through its parent's card once the parent stops supervising`, () => {
+        const fold = folded(card(`p`), limited(`a`, `p`), child(`b`, `p`, { status: `stopped` }), child(`done`, `p`));
+        expect(ids(fold.lanes.attention)).toEqual([`p`]);
+        expect(ids(fold.calls.get(`p`)).toSorted()).toEqual([`a`, `b`]);
+        expect(ids(fold.children.get(`p`))).toContain(`done`);
+    });
+
+    it(`keeps a card only for a child owing a press a row cannot carry, and lets one asking the reader ride`, () => {
         const question = { ...NO_ATTENTION, question: true };
         const fold = folded(
             card(`p`, { status: `awaiting`, attention: question }),
@@ -55,15 +92,34 @@ describe(`which children ride under their parent`, () => {
             child(`words`, `p`, { unsent: true }),
             child(`quiet`, `p`),
         );
-        expect(ids(fold.lanes.attention).toSorted()).toEqual([`asks`, `p`]);
+        expect(ids(fold.lanes.attention)).toEqual([`p`]);
         expect(ids(fold.lanes.finished).toSorted()).toEqual([`gone`, `landing`, `ready`, `words`]);
-        expect(ids(fold.children.get(`p`))).toEqual([`quiet`]);
+        expect(ids(fold.children.get(`p`))).toEqual([`asks`, `quiet`]);
+        expect(ids(fold.calls.get(`p`))).toEqual([`asks`]);
     });
 
-    it(`never hangs a working child under a finished parent, where the ledger and its window would bury it`, () => {
+    it(`lifts a finished parent into Active while a child still works, rather than burying the work in the ledger`, () => {
         const fold = folded(card(`p`), working(`busy`, { startedBy: `agent:p` }), child(`done`, `p`));
-        expect(ids(fold.lanes.active)).toEqual([`busy`]);
-        expect(ids(fold.children.get(`p`))).toEqual([`done`]);
+        expect(ids(fold.lanes.active)).toEqual([`p`]);
+        expect(fold.lanes.finished).toEqual([]);
+        expect(ids(fold.children.get(`p`))).toEqual([`busy`, `done`]);
+    });
+
+    it(`puts a lifted card where its lane's own order would: Attention by the newest call, Active by the earliest work`, () => {
+        const calls = folded(
+            card(`other`, { status: `error`, updatedAt: 5_000 }),
+            card(`late`),
+            child(`late-ask`, `late`, { status: `awaiting`, attention: permission, updatedAt: 9_000 }),
+            card(`early`),
+            child(`early-ask`, `early`, { status: `awaiting`, attention: permission, updatedAt: 2_000 }),
+        );
+        expect(ids(calls.lanes.attention)).toEqual([`late`, `other`, `early`]);
+        const work = folded(
+            working(`mid`, { startedAt: 5_000 }),
+            card(`p`, { startedAt: 9_000 }),
+            working(`kid`, { startedBy: `agent:p`, startedAt: 2_000 }),
+        );
+        expect(ids(work.lanes.active)).toEqual([`p`, `mid`]);
     });
 
     it(`leaves a child standing when its parent is not on the board`, () => {
@@ -72,17 +128,21 @@ describe(`which children ride under their parent`, () => {
         expect(fold.children.size).toBe(0);
     });
 
-    it(`hangs a grandchild under the card its parent rides under`, () => {
-        const fold = folded(working(`root`), working(`mid`, { startedBy: `agent:root` }), child(`leaf`, `mid`));
-        expect(ids(fold.lanes.active)).toEqual([`root`]);
-        expect(ids(fold.children.get(`root`))).toEqual([`mid`, `leaf`]);
+    it(`hangs a grandchild under the card its parent rides under, and lets it call the reader through that card`, () => {
+        const fold = folded(
+            working(`root`),
+            working(`mid`, { startedBy: `agent:root` }),
+            child(`leaf`, `mid`, { status: `awaiting`, attention: permission }),
+        );
+        expect(ids(fold.lanes.attention)).toEqual([`root`]);
+        expect(ids(fold.children.get(`root`))).toEqual([`leaf`, `mid`]);
         expect(fold.hosts.get(`leaf`)?.id).toBe(`root`);
+        expect(ids(fold.calls.get(`root`))).toEqual([`leaf`]);
     });
 
     it(`hangs a grandchild under its parent's own card when its parent stands apart`, () => {
-        const permission = { ...NO_ATTENTION, permission: true };
-        const fold = folded(working(`root`), child(`mid`, `root`, { status: `awaiting`, attention: permission }), child(`leaf`, `mid`));
-        expect(ids(fold.lanes.attention)).toEqual([`mid`]);
+        const fold = folded(working(`root`), child(`mid`, `root`, { status: `ready` }), child(`leaf`, `mid`));
+        expect(ids(fold.lanes.finished)).toEqual([`mid`]);
         expect(ids(fold.children.get(`mid`))).toEqual([`leaf`]);
         expect(fold.children.get(`root`)).toBeUndefined();
     });
@@ -104,16 +164,18 @@ describe(`which children ride under their parent`, () => {
         expect(foldChildren(lanes).lanes).toBe(lanes);
     });
 
-    it(`hangs every filed child under its filed parent in the archive, where nothing asks for a press`, () => {
-        const filed = [card(`p`), child(`ready`, `p`, { status: `ready` }), child(`words`, `p`, { unsent: true })];
-        const fold = foldChildren({ attention: [], active: [], finished: filed }, () => false);
+    it(`hangs every filed child under its filed parent in the archive, where nothing asks and nothing moves`, () => {
+        const filed = [card(`p`), child(`ready`, `p`, { status: `ready` }), child(`words`, `p`, { unsent: true }), limited(`spent`, `p`)];
+        const fold = foldChildren({ attention: [], active: [], finished: filed }, ARCHIVE_RULES);
         expect(ids(fold.lanes.finished)).toEqual([`p`]);
-        expect(ids(fold.children.get(`p`))).toEqual([`ready`, `words`]);
+        expect(ids(fold.children.get(`p`))).toEqual([`ready`, `words`, `spent`]);
+        expect(fold.calls.size).toBe(0);
     });
 
-    it(`says a draft never rides: it has no record to ride with`, () => {
+    it(`says a draft never rides, and a child asking the reader does`, () => {
         expect(standsAlone(child(`draft`, `p`, { status: `draft` }))).toBe(true);
         expect(standsAlone(child(`quiet`, `p`))).toBe(false);
+        expect(standsAlone(child(`asks`, `p`, { status: `awaiting`, attention: permission }))).toBe(false);
     });
 });
 
@@ -129,30 +191,39 @@ describe(`a steady fold`, () => {
     });
 
     it(`hands back the last answer whole when nothing moved`, () => {
-        const fleet = [working(`p`), child(`c1`, `p`), card(`other`)];
+        const fleet = [working(`p`), child(`c1`, `p`), card(`other`), child(`asks`, `p`, { status: `awaiting`, attention: permission })];
         const first = folded(...fleet);
         expect(steadyFold(first, folded(...fleet))).toBe(first);
     });
 
-    it(`hands a changed tray a new list`, () => {
-        const first = folded(working(`p`), child(`c1`, `p`));
-        const next = steadyFold(first, folded(working(`p`), child(`c1`, `p`), child(`c2`, `p`)));
-        expect(ids(next.children.get(`p`))).toEqual([`c1`, `c2`]);
+    it(`hands a changed tray a new list, and keeps the calls it did not change`, () => {
+        const asks = child(`asks`, `p`, { status: `awaiting`, attention: permission });
+        const first = folded(working(`p`), child(`c1`, `p`), asks);
+        const next = steadyFold(first, folded(working(`p`), child(`c1`, `p`), child(`c2`, `p`), asks));
+        expect(ids(next.children.get(`p`))).toEqual([`asks`, `c1`, `c2`]);
         expect(next.children.get(`p`)).not.toBe(first.children.get(`p`));
+        expect(next.calls).toBe(first.calls);
     });
 });
 
 describe(`what a tray draws`, () => {
     const [w1, w2, s1, s2] = [working(`w1`), working(`w2`), card(`s1`, { updatedAt: 9_000 }), card(`s2`, { updatedAt: 8_000 })];
     const brood = [w1, w2, s1, s2];
-    const at = (over: Partial<TrayState> = {}): TrayState => ({ open: false, filtering: false, matches: () => true, selected: undefined, ...over });
+    const at = (over: Partial<TrayState> = {}): TrayState => ({
+        opened: new Set(),
+        asking: true,
+        filtering: false,
+        matches: () => true,
+        selected: undefined,
+        ...over,
+    });
 
     it(`shows every working child and folds the settled ones behind a count`, () => {
-        expect(trayOf(brood, at())).toEqual({ lead: [w1, w2], folded: 2, open: false, tail: [] });
+        expect(trayOf(brood, at())).toEqual({ asks: [], lead: [w1, w2], groups: [], folded: 2, open: false, tail: [] });
     });
 
     it(`unfolds the settled ones under the toggle`, () => {
-        const tray = trayOf(brood, at({ open: true }));
+        const tray = trayOf(brood, at({ opened: new Set([FINISHED_FOLD]) }));
         expect(ids(tray?.tail)).toEqual([`s1`, `s2`]);
         expect(ids(trayRows(tray))).toEqual([`w1`, `w2`, `s1`, `s2`]);
     });
@@ -163,9 +234,37 @@ describe(`what a tray draws`, () => {
         expect(ids(tray?.tail)).toEqual([`s2`]);
     });
 
+    it(`leads with a child asking what only the reader can give, and never asks from the archive`, () => {
+        const asks = child(`asks`, `p`, { status: `awaiting`, attention: permission });
+        expect(ids(trayOf([w1, asks], at())?.asks)).toEqual([`asks`]);
+        expect(trayOf([w1, asks], at({ asking: false }))?.asks).toEqual([]);
+    });
+
+    it(`draws children stopped on one thing as one row, a spent allowance by its provider, shut until opened`, () => {
+        const spent = Array.from({ length: 3 }, (_unused, index) => limited(`c${index}`, `p`));
+        const other = limited(`k`, `p`, { provider: `kimi` });
+        const broke = [child(`e1`, `p`, { status: `error` }), child(`e2`, `p`, { status: `error` })];
+        const tray = trayOf([w1, ...broke, ...spent, other, s1], at());
+        expect(tray?.groups.map((group) => [group.key, ids(group.members), ids(group.shown)])).toEqual([
+            [`limit:codex`, [`c0`, `c1`, `c2`], []],
+            [`limit:kimi`, [`k`], [`k`]],
+            [`error`, [`e1`, `e2`], []],
+        ]);
+        expect(ids(trayRows(tray))).toEqual([`w1`, `k`]);
+        const opened = trayOf([w1, ...broke, ...spent, other, s1], at({ opened: new Set([`error`]), selected: `c1` }));
+        expect(ids(trayRows(opened))).toEqual([`w1`, `c1`, `k`, `e1`, `e2`]);
+    });
+
+    it(`names what a child stopped on`, () => {
+        expect(stopOf(limited(`a`, `p`))).toBe(`limit:codex`);
+        expect(stopOf(child(`b`, `p`, { status: `awaiting`, attention: { ...NO_ATTENTION, question: true } }))).toBe(`question`);
+        expect(stopOf(child(`c`, `p`, { status: `conflict`, attention: { ...NO_ATTENTION, conflict: true } }))).toBe(`conflict`);
+        expect(stopOf(child(`d`, `p`, { status: `stopped` }))).toBe(`stopped`);
+    });
+
     it(`lists only a filter's matches, and folds none of them away`, () => {
         const tray = trayOf(brood, at({ filtering: true, matches: (agent) => agent.id === `s2` || agent.id === `w1` }));
-        expect(tray).toEqual({ lead: [w1, s2], folded: 0, open: false, tail: [] });
+        expect(tray).toEqual({ asks: [], lead: [w1, s2], groups: [], folded: 0, open: false, tail: [] });
     });
 
     it(`draws nothing for a card with no children, or none the filter kept`, () => {

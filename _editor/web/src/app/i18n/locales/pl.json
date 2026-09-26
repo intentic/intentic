@@ -283,7 +283,18 @@
         "childRows": {
             "finished": "Skończone: {count}",
             "startedBy": "Agenty uruchomione przez „{title}”",
-            "watching": "Wypatruje"
+            "watching": "Wypatruje",
+            "needYou": "{count} potrzebuje Cię | {count} potrzebują Cię | {count} potrzebuje Cię",
+            "callsHint": "Uruchomione przez niego agenty potrzebują Cię: {list}",
+            "callsMore": "jeszcze {count}",
+            "limitGroup": "Na limicie {provider}: {count}",
+            "failedGroup": "Nieudane: {count}",
+            "stoppedGroup": "Zatrzymane: {count}",
+            "interruptedGroup": "Przerwane: {count}",
+            "questionGroup": "Czekają na jego odpowiedź: {count}",
+            "conflictGroup": "Z konfliktem przy scalaniu: {count}",
+            "otherGroup": "{reason}: {count}",
+            "groupHint": "„{title}” dostał informację. Trafią do Ciebie tylko wtedy, gdy przestanie pracować."
         },
         "liveMetrics": {
             "coresValue": "{cores} rdzeń | {cores} rdzenie | {cores} rdzeni",

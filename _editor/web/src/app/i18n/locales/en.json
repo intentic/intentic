@@ -341,7 +341,18 @@
         "childRows": {
             "finished": "{count} finished",
             "startedBy": "Agents {title} started",
-            "watching": "Watching"
+            "watching": "Watching",
+            "needYou": "{count} needs you | {count} need you",
+            "callsHint": "Agents it started need you: {list}",
+            "callsMore": "{count} more",
+            "limitGroup": "{count} at the {provider} limit",
+            "failedGroup": "{count} failed",
+            "stoppedGroup": "{count} stopped",
+            "interruptedGroup": "{count} interrupted",
+            "questionGroup": "{count} waiting on its answer",
+            "conflictGroup": "{count} with a land conflict",
+            "otherGroup": "{count}: {reason}",
+            "groupHint": "“{title}” was told. These reach you only if it stops working."
         },
         "ownerMark": {
             "ownedBy": "Owned by {name}",

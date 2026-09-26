@@ -1,11 +1,13 @@
 import type { Services } from "../../composition.js";
+import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
 import { isFailureSentence, isSelfIdentityAnswer, isToolCallStandIn } from "../providers/failure-sentences.js";
 import { sentenceAnswer } from "./role-answer.js";
 import { askRoleModel, roleModelIsSet } from "./role-model.js";
 import { BULLET, FENCE } from "@intentic/sandbox-contract";
 
 // Writes a name for a conversation at turn start, where the contract's title.ts can only derive one by cutting a
-// sentence. Runs only while the title is still `derived`, so a name never overwrites a better one already set.
+// sentence. Runs only while the title is still `derived`, so a name never overwrites a better one already set; a name
+// an agent chose as the conversation opened is kept word for word, and gets only its action from here.
 
 // Enough of the prompt to name the job without paying for a pasted stack trace; opening messages front-load the ask.
 const EXCERPT_CAP = 4_000;
@@ -92,6 +94,15 @@ const TITLE_MAX_WORDS = 12;
 // Session-title role's answer contract: unwrap plus this pass's word ceiling; built once, it holds no state.
 const titleAnswer = sentenceAnswer(`a session title`, cleanSessionTitle, TITLE_MAX_WORDS);
 
+// The words of a name an agent chose as the conversation opened (a parent's description of the child it spawned, which
+// the registry files as `model`), kept as they are: the pass adds only the action the board tints the card by. Asked
+// only before any turn of the conversation has finished; after that, a `model` name without an action is one this pass
+// wrote, which would otherwise cost a question every turn.
+const chosenName = (entry: PersistedAgent): string | undefined => {
+    const held = entry.social.title;
+    return held?.source === "model" && held.action === undefined && entry.totals.turns === 0 ? held.text : undefined;
+};
+
 // No-ops whenever there is nothing to do, including no model set for this role, which is the job switched off. Throws
 // only what askRoleModel throws; the caller logs it and leaves the derived title standing for the next turn to retry.
 export const nameAgentTitle = async (services: Services, conversationId: string, prompt: string): Promise<void> => {
@@ -102,7 +113,8 @@ export const nameAgentTitle = async (services: Services, conversationId: string,
     // A stolen title (failure sentence, tool-call stand-in, self-identity reply) counts as no name and heals here.
     const held = entry.social.title;
     const poisoned = held !== undefined && (isFailureSentence(held.text) || isToolCallStandIn(held.text) || isSelfIdentityAnswer(held.text));
-    if (held !== undefined && held.source !== "derived" && !poisoned) {
+    const chosen = poisoned ? undefined : chosenName(entry);
+    if (held !== undefined && held.source !== "derived" && !poisoned && chosen === undefined) {
         return;
     }
     const { value: named } = await askRoleModel(
@@ -112,5 +124,5 @@ export const nameAgentTitle = async (services: Services, conversationId: string,
         new AbortController().signal,
     );
     const { title, action } = splitTitleAction(named);
-    await services.agents.setTitle(conversationId, title, "model", action);
+    await services.agents.setTitle(conversationId, chosen ?? title, "model", action);
 };

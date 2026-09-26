@@ -282,7 +282,18 @@
         "childRows": {
             "finished": "Terminados: {count}",
             "startedBy": "Agentes que inició «{title}»",
-            "watching": "Vigilando"
+            "watching": "Vigilando",
+            "needYou": "{count} te necesita | {count} te necesitan",
+            "callsHint": "Agentes que inició te necesitan: {list}",
+            "callsMore": "{count} más",
+            "limitGroup": "En el límite de {provider}: {count}",
+            "failedGroup": "Fallidos: {count}",
+            "stoppedGroup": "Detenidos: {count}",
+            "interruptedGroup": "Interrumpidos: {count}",
+            "questionGroup": "Esperan su respuesta: {count}",
+            "conflictGroup": "Con conflicto de integración: {count}",
+            "otherGroup": "{reason}: {count}",
+            "groupHint": "Se avisó a «{title}». Solo te llegan si deja de trabajar."
         },
         "liveMetrics": {
             "coresValue": "{cores} núcleo | {cores} núcleos",

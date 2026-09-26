@@ -103,6 +103,8 @@ export const conversationIdentity = (
     prompt: input.prompt,
     profile: profileOf(input),
     ...opt("title", input.title),
+    ...opt("titleSource", input.titleSource),
+    ...opt("postures", input.postures),
     ...opt("origin", input.origin),
     ...opt("startedBy", input.actor),
     ...opt("owner", input.owner),

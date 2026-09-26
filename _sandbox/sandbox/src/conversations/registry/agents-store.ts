@@ -25,8 +25,9 @@ import { TurnQueueSchema } from "../actor/conversation-queue.js";
 // whose invariants are their types. Runtime-only state (status, attention, activity) lives in the conversation's actor,
 // rebuilt from turn frames. Stored as the `conversation` row, its checkout's repos as `conversation_repo` rows.
 
-// Authority ladder over the title: `derived` (prompt cut to a line), `model` (naming helper wrote it), `plan` (the
-// agent's own heading), `user` (a rename, outranks all).
+// Authority ladder over the title: `derived` (prompt cut to a line), `model` (a model chose it: the naming helper, or
+// the parent agent that described the child it spawned), `plan` (the agent's own heading), `user` (a rename, outranks
+// all).
 const AgentTitleSourceSchema = z.enum(["derived", "model", "plan", "user"]);
 export type AgentTitleSource = z.infer<typeof AgentTitleSourceSchema>;
 

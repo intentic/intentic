@@ -144,11 +144,13 @@ export const useBoardScope = (host: ScopeHost) => {
             ? laneGroups(scopedFleet.value)
             : agents.lanes.value,
     );
-    // The cards, less every run step and every child riding under its parent's card; the children the fold took, by card.
+    // The cards, less every run step and every child riding under its parent's card; the children the fold took, by card,
+    // and the ones calling the reader through it.
     const folded = computed<ChildFold>((previous) => steadyFold(previous, foldChildren(withoutSteps(scopedLanes.value, ledgerRunIds.value))));
     const boardLanes = computed(() => folded.value.lanes);
     const boardChildren = computed(() => folded.value.children);
     const boardHosts = computed(() => folded.value.hosts);
+    const boardCalls = computed(() => folded.value.calls);
     watch(host.sharedAccess, (shared) => {
         if (!shared) {
             ownerFilter.value = undefined;
@@ -177,6 +179,7 @@ export const useBoardScope = (host: ScopeHost) => {
         boardLanes,
         boardChildren,
         boardHosts,
+        boardCalls,
         ownerOptions,
         ownerScope,
         scopeOptions,

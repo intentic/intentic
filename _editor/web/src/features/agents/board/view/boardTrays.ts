@@ -1,17 +1,20 @@
 import { computed, type Ref, shallowRef } from "vue";
+import { familyChip, type StandingChip } from "../../fleet/agentStatus";
 import { canArchive, type FleetAgent, withKeptWords } from "../../fleet/useAgents-fleet";
 import { insideRun } from "../../fleet/useWorkflowRuns";
-import { cardKey, type ChildFold, foldChildren, steadyFold, type Tray, trayOf, type TrayState } from "./childFold";
+import { ARCHIVE_RULES, cardKey, type ChildFold, FINISHED_FOLD, foldChildren, steadyFold, type Tray, trayOf, type TrayState } from "./childFold";
 
 // The children riding under the board's cards (childFold), as the lanes read them: whose tray a child is in, what a tray
-// draws against the board's filter, ring and folds, and the archive's own fold, whose filed children ride under their
-// filed parent exactly as live ones do on the board.
+// draws against the board's filter, ring and folds, what a card says for the children calling the reader through it,
+// and the archive's own fold, whose filed children ride under their filed parent exactly as live ones do on the board.
 
 export interface TraysHost {
-    // What the scope folded (boardScope): the children under each card, and the card each child is under.
+    // What the scope folded (boardScope): the children under each card, the card each child is under, and the children
+    // calling the reader through each card.
     readonly scope: {
         readonly boardChildren: Readonly<Ref<ReadonlyMap<string, readonly FleetAgent[]>>>;
         readonly boardHosts: Readonly<Ref<ReadonlyMap<string, FleetAgent>>>;
+        readonly boardCalls: Readonly<Ref<ReadonlyMap<string, readonly FleetAgent[]>>>;
         readonly ledgerRunIds: Readonly<Ref<ReadonlySet<string>>>;
     };
     // The store's archive, as read so far.
@@ -24,13 +27,15 @@ export interface TraysHost {
     readonly selected: Readonly<Ref<string | undefined>>;
 }
 
+const NONE_OPEN: ReadonlySet<string> = new Set<string>();
+
 export const useBoardTrays = (host: TraysHost) => {
     const { scope, filter } = host;
     // A run's steps are filed away with the run, or the archive would show one run row plus its five conversations. A
     // parent's children ride under its card there too, every one of them: nothing in the archive asks for a press.
     const archiveFold = computed<ChildFold>((previous) => {
         const filed = host.archived.value.filter((agent) => !insideRun(agent, scope.ledgerRunIds.value)).map(withKeptWords);
-        return steadyFold(previous, foldChildren({ attention: [], active: [], finished: filed }, () => false));
+        return steadyFold(previous, foldChildren({ attention: [], active: [], finished: filed }, ARCHIVE_RULES));
     });
     const archivedCards = computed(() => archiveFold.value.lanes.finished);
     // What rides under a card: the archive's own fold for a filed card, the board's for one on it.
@@ -39,6 +44,20 @@ export const useBoardTrays = (host: TraysHost) => {
     // The card a child is drawn under, if it rides under one; a card stands for itself.
     const cardOf = (agent: FleetAgent): FleetAgent =>
         (agent.archivedAt === undefined ? scope.boardHosts.value : archiveFold.value.hosts).get(cardKey(agent)) ?? agent;
+    // What a card says for the children calling the reader through it, one chip per calling list: the fold keeps a list
+    // while its members stand still (steadyFold), so the chip, and the card memoised on it, stay put with it.
+    const callChips = computed(() => {
+        const chips = new Map<string, StandingChip & { readonly hint: string }>();
+        for (const [key, calls] of scope.boardCalls.value) {
+            const chip = familyChip(calls);
+            if (chip !== undefined) {
+                chips.set(key, chip);
+            }
+        }
+        return chips;
+    });
+    const callOf = (card: FleetAgent): (StandingChip & { readonly hint: string }) | undefined =>
+        card.archivedAt === undefined ? callChips.value.get(cardKey(card)) : undefined;
     // A card stays under a query when it or anything riding under it matched, as a run answers for its steps: a child
     // has no card of its own to answer with, and its parent's is where the reader goes looking for it.
     const answers = (card: FleetAgent): boolean => filter.matches(card) || childrenOf(card).some(filter.matches);
@@ -47,20 +66,28 @@ export const useBoardTrays = (host: TraysHost) => {
         const id = host.selected.value;
         return id === undefined ? undefined : (scope.boardHosts.value.get(id)?.id ?? id);
     });
-    // The trays whose settled children the reader unfolded, by card. The board's own, not remembered: a fold reopened
-    // after a visit elsewhere would bury the lane under a list the reader had finished with.
-    const openTrays = shallowRef<ReadonlySet<string>>(new Set());
-    const toggleTray = (card: FleetAgent): void => {
-        const next = new Set(openTrays.value);
+    // The folds the reader opened, by card: its settled children, or a group of children stopped on one thing. The
+    // board's own, not remembered: a fold reopened after a visit elsewhere would bury the lane under a list the reader
+    // had finished with.
+    const openTrays = shallowRef<ReadonlyMap<string, ReadonlySet<string>>>(new Map());
+    const toggleTray = (card: FleetAgent, fold: string = FINISHED_FOLD): void => {
         const key = cardKey(card);
-        if (!next.delete(key)) {
-            next.add(key);
+        const opened = new Set(openTrays.value.get(key));
+        if (!opened.delete(fold)) {
+            opened.add(fold);
+        }
+        const next = new Map(openTrays.value);
+        if (opened.size === 0) {
+            next.delete(key);
+        } else {
+            next.set(key, opened);
         }
         openTrays.value = next;
     };
-    // The fold, the filter and the ring, as they bear on one card's tray.
+    // The folds, the filter and the ring, as they bear on one card's tray.
     const trayState = (card: FleetAgent): TrayState => ({
-        open: openTrays.value.has(cardKey(card)),
+        opened: openTrays.value.get(cardKey(card)) ?? NONE_OPEN,
+        asking: card.archivedAt === undefined,
         filtering: filter.active.value,
         matches: filter.matches,
         selected: host.selected.value,
@@ -83,5 +110,5 @@ export const useBoardTrays = (host: TraysHost) => {
             }),
         ),
     ];
-    return { archivedCards, childrenOf, cardOf, answers, selectedCard, toggleTray, trayState, trayFor, familyOf, familyIds, withFamilies };
+    return { archivedCards, childrenOf, cardOf, callOf, answers, selectedCard, toggleTray, trayState, trayFor, familyOf, familyIds, withFamilies };
 };

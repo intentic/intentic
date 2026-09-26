@@ -25,13 +25,16 @@ import {
     activityLine,
     agentDisplayTitle,
     agentStatusMeta,
+    attentionReason,
     conflictIsYours,
+    type FleetLane,
     formatCost,
     landedAway,
     laneOf,
     limited,
     loopMeta,
     reviewAction,
+    type StandingChip,
     standingChip,
     tileRim,
     turnInFlight,
@@ -90,6 +93,11 @@ const props = defineProps<{
     matchCase?: boolean;
     // Children riding under this card that its archive or restore takes along (childFold), so the press says so.
     family?: number;
+    // The lane the board drew this card in, when its family moved it above its own (childFold): a child calling the reader
+    // through it, or still working under it after it finished. The card wears that lane's weight and tint.
+    placed?: FleetLane;
+    // What the children calling the reader through this card say in its corner (agentStatus.familyChip).
+    call?: StandingChip & { readonly hint: string };
 }>();
 const emit = defineEmits<{
     // The click that opened it, if any; a modified click asks for a pane instead of focus.
@@ -121,7 +129,7 @@ const takesFamily = computed(() => (props.family ?? 0) > 0);
 const meta = computed(() => agentStatusMeta(props.agent.status));
 // Identity tile's category, undefined for an unreadable title; read here too since the tooltip is this card's.
 const category = computed(() => sessionCategory(props.agent.title, props.agent.titleAction));
-const lane = computed(() => laneOf(props.agent));
+const lane = computed(() => props.placed ?? laneOf(props.agent));
 // Sandbox chip contents, or nothing when this is the box the app is already pointed at.
 // Read live from the roster rather than passed in, since the owner can rename or re-image a sandbox at any time.
 const box = computed(() =>
@@ -130,8 +138,11 @@ const box = computed(() =>
         : { name: boxNameOf.value.get(props.agent.sandboxId) ?? `Another sandbox`, image: boxImageOf.value.get(props.agent.sandboxId) },
 );
 // The corner's word and tint, from the projection the rails read too (agentStatus.standingChip): why it needs you,
-// else that it worked since you last looked, else nothing and the resting glyph keeps the corner.
-const chip = computed(() => standingChip(props.agent));
+// else why the agents it started do (their mark rides along, so their ask never reads as this card's own), else that it
+// worked since you last looked, else nothing and the resting glyph keeps the corner.
+const chip = computed<(StandingChip & { readonly hint?: string; readonly family?: true }) | undefined>(() =>
+    props.call !== undefined && attentionReason(props.agent) === undefined ? { ...props.call, family: true } : standingChip(props.agent),
+);
 // Shared with agentStatus.activityLine so the rail and board never narrate the same turn differently.
 const activityText = computed(() => activityLine(props.agent));
 // Archive appears wherever it means something (not just the Finished lane, see canArchive), including in Attention,
@@ -365,7 +376,7 @@ const titleRuns = computed(() => markSegments(displayTitle.value, needle.value, 
 const idRuns = computed(() => (props.idMatch === undefined ? [] : markSegments(props.idMatch.text, props.idMatch.mark)));
 // "New" already says unopened; "Updated" hides when you last looked, so only that one earns a hover hint. The
 // sentence is the rails' own (agentStatus.unreadHint); only the clock is this card's.
-const chipHint = computed(() => (chip.value?.seenAt === undefined ? undefined : unreadHint(relativeTime(chip.value.seenAt))));
+const chipHint = computed(() => chip.value?.hint ?? (chip.value?.seenAt === undefined ? undefined : unreadHint(relativeTime(chip.value.seenAt))));
 
 const edit = createInlineRename(
     () => props.agent.title,
@@ -587,9 +598,13 @@ const grab = (event: PointerEvent): void => {
                 </button>
             </template>
             <!-- Same pill, same tones, same precedence as a rail row's corner (RailCard): one standing, one reading. -->
-            <span v-if="chip !== undefined" v-tooltip.top="chipHint" class="ui-status-pill shrink-0 text-2xs font-semibold" :class="chip.tone">{{
-                chip.label
-            }}</span>
+            <span
+                v-if="chip !== undefined"
+                v-tooltip.top="chipHint"
+                class="ui-status-pill shrink-0 gap-1 text-2xs font-semibold"
+                :class="chip.tone"
+                ><Icon v-if="chip.family" name="subagents" class="shrink-0 text-2xs" />{{ chip.label }}</span
+            >
             <!-- The resting standing for a card with no reason or unread mark; carries meta.label as a word in its hover, not just a glyph. -->
             <!-- What the last turn left open is the tile rim's to say (tileRim): the checklist it drew here twice was one fact with two marks. -->
             <Icon
