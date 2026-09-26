@@ -2,9 +2,11 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { packageRoot } from "@intentic/constants/node";
 import { HISTORY_STATE_FILES } from "@intentic/sandbox-contract";
+import { stateDocuments } from "../bootstrap/state-registry.js";
 
 // Same guard as workspace-state-coverage but for /history: scans daemon source for every historyRoot-based path and
-// fails if it is not declared in HISTORY_STATE_FILES.
+// fails if it is not declared in HISTORY_STATE_FILES. A stored document names its path once, on its spec, and every
+// store opens it from there: those are read off the registry, not the source.
 
 // Matched by expression, not string, so a `join(someOtherRoot, …)` call is excluded by construction.
 const ROOT_EXPRESSIONS = new Set(["historyRoot", "config.historyRoot"]);
@@ -44,6 +46,9 @@ const declaredPaths = async (): Promise<{ path: string; source: string }[]> => {
             }
             found.push({ path: segments.join("/"), source: file.slice(SOURCE_ROOT.length + 1) });
         }
+    }
+    for (const spec of stateDocuments().filter((candidate) => candidate.root === "history")) {
+        found.push({ path: spec.directory ? `${spec.path}/` : spec.path, source: "bootstrap/state-registry.ts" });
     }
     return found;
 };

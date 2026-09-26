@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
-import { jsonFile } from "../store/json-file.js";
+import { openDocument } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
 
 // Ties a stream of inbound messages (a support chat, a tagged bot) to one conversation and provider session, so repeats
@@ -61,11 +61,7 @@ export const liveThread = (record: ThreadSession | undefined, ttlMs: number, now
     record !== undefined && now - record.lastAt <= ttlMs && !archived(record.conversationId) ? record : undefined;
 
 export const fileThreadSessionsStore = (path: string, archived: ArchivedConversation): ThreadSessionsStore => {
-    const file = jsonFile<SessionsFile>(path, {
-        parse: (raw) => FileSchema.safeParse(raw).data,
-        fallback: () => ({}),
-        document: threadSessionsDocument,
-    });
+    const file = openDocument(threadSessionsDocument, path, { fallback: (): SessionsFile => ({}) });
 
     return {
         get: async (key, ttlMs, now) => liveThread((await file.read())[key], ttlMs, now, archived),

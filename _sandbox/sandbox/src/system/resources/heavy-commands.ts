@@ -15,7 +15,7 @@ import { shellQuote } from "@intentic/sandbox-run/quote";
 import { z } from "zod";
 import { drop, isJsonObject, transform } from "../../store/evolution/conversions.js";
 import { defineDocument } from "../../store/evolution/documents.js";
-import { jsonFile } from "../../store/json-file.js";
+import { openDocument } from "../../store/open-document.js";
 import type { ManifestProblem } from "../../store/manifest-problems.js";
 import { stateRelPath } from "../../state-paths.js";
 import { priorityOf } from "../../workload/workload-class.js";
@@ -88,8 +88,10 @@ const reportBadPatterns = (config: HeavyCommands, report: (problem: ManifestProb
 };
 
 export const fileHeavyCommandsStore = (path: string, onInvalid?: (detail: string) => void): HeavyCommandsStore => {
-    const file = jsonFile<HeavyCommandOverrides>(path, {
-        parse: (raw, report) => {
+    const file = openDocument<typeof heavyCommandsDocument, HeavyCommandOverrides>(heavyCommandsDocument, path, {
+        // A file the schema refuses reads as no overrides, named to `onInvalid`, rather than as unreadable: the built-in
+        // rules stand either way.
+        lenient: (raw, report) => {
             const parsed = HeavyCommandOverridesSchema.safeParse(raw);
             if (parsed.success) {
                 reportBadPatterns(mergeHeavyRules(parsed.data), report);
@@ -99,7 +101,6 @@ export const fileHeavyCommandsStore = (path: string, onInvalid?: (detail: string
             return {};
         },
         fallback: () => ({}),
-        document: heavyCommandsDocument,
     });
     return { read: async () => mergeHeavyRules(await file.read()) };
 };

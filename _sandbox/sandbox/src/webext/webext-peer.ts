@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
 import { type Capability,type webextContract,WEBEXT_HEARTBEAT_MS,type WebExtFacts,type WebExtHello,WebExtHelloSchema,type WebExtScopes,type WebExtSummary } from "@intentic/sandbox-contract";
 import type { ContractRouterClient } from "@orpc/contract";
@@ -7,6 +6,7 @@ import { PEER_BRIDGES, type PeerDoor } from "../peers/peer.js";
 import type { PeerHub } from "../peers/peer-hub.js";
 import { createPeerRoutes } from "../peers/peer-routes.js";
 import type { PeerStore } from "../peers/peer-store.js";
+import { webextEnrollmentsDocument, webextPairConsumedDocument } from "../peers/enrollment.js";
 
 // The user's own browser as a peer door, through the extension that dials this sandbox and serves `webextContract`.
 // Heartbeat stays under an MV3 service worker's 30s idle kill, and facts are re-asked per read since allowed sites and
@@ -28,7 +28,7 @@ export const WEBEXT_PEER: PeerDoor<WebExtHello, WebExtAnnounced, Record<never, n
     noun: "browser",
     listKey: "browsers",
     store: {
-        files: (historyRoot) => ({ enrollments: join(historyRoot, "webext-enrollments.json"), consumed: join(historyRoot, "webext-pair-consumed.json") }),
+        documents: { enrollments: webextEnrollmentsDocument, consumed: webextPairConsumedDocument },
         key: "browsers", prefix: "iwx_", extra: {}
     },
     hub: {

@@ -1,7 +1,7 @@
 import { type ListenerMessage, type SenderSeen, SenderSeenSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
-import { jsonFile } from "../store/json-file.js";
+import { openDocument } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
 
 // Who has written to each listener source (.intentic/records/senders.json): the roster the sender rules picker offers
@@ -34,7 +34,7 @@ const evict = (roster: SendersFile[string]): SendersFile[string] => {
 };
 
 export const fileSendersStore = (path: string): SendersStore => {
-    const file = jsonFile<SendersFile>(path, { parse: (raw) => FileSchema.safeParse(raw).data, fallback: () => ({}), document: sendersDocument });
+    const file = openDocument(sendersDocument, path, { fallback: (): SendersFile => ({}) });
     return {
         list: async (provider) =>
             Object.entries((await file.read())[provider] ?? {})

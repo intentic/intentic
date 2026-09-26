@@ -5,19 +5,16 @@ import { join } from "node:path";
 import { z } from "zod";
 import { filePeerStore, type PeerStore } from "./peer-store.js";
 import { RUNNER_PAIR_TTL_MS, RUNNER_PEER } from "../runners/runner-peer.js";
+import { runnerEnrollmentsDocument, runnerPairConsumedDocument, webextEnrollmentsDocument, webextPairConsumedDocument } from "./enrollment.js";
 
-// The two files a door keeps on /history, spelled the way the doors spell them.
-const peerFiles =
-    (stem: string) =>
-    (root: string): { enrollments: string; consumed: string } => ({
-        enrollments: join(root, `${stem}-enrollments.json`),
-        consumed: join(root, `${stem}-pair-consumed.json`),
-    });
+// A door's two documents on /history: a browser's, whose records carry nothing beside the digest, and a runner's.
+const BROWSER_DOCUMENTS = { enrollments: webextEnrollmentsDocument, consumed: webextPairConsumedDocument };
+const RUNNER_DOCUMENTS = { enrollments: runnerEnrollmentsDocument, consumed: runnerPairConsumedDocument };
 
 // Credential half of a peer door: one enrollment per peer, rotated by re-pairing, dropped on revoke; the file holds
 // only digests. The last two tests cover what a door can vary: extra fields, and burn-every-pairing.
 
-const spec = { files: peerFiles("host"), key: "hosts", prefix: "iht_", extra: {} };
+const spec = { documents: BROWSER_DOCUMENTS, key: "browsers", prefix: "iht_", extra: {} };
 
 const tempStore = (): { store: PeerStore<Record<never, never>>; root: string } => {
     const root = mkdtempSync(join(tmpdir(), "peers-"));
@@ -79,9 +76,9 @@ test("an empty token never verifies: a missing credential must not read as a mat
 test("the enrollment file stores no usable credential", async () => {
     const { store, root } = tempStore();
     const enrolled = await store.enroll(store.mintPairing("laptop").token);
-    const written = await readFile(join(root, "host-enrollments.json"), "utf8");
+    const written = await readFile(join(root, webextEnrollmentsDocument.path), "utf8");
     expect(written).not.toContain(enrolled?.token);
-    expect(JSON.parse(written)).toMatchObject({ hosts: [{ id: "laptop", hash: expect.stringMatching(/^[0-9a-f]{64}$/) }] });
+    expect(JSON.parse(written)).toMatchObject({ browsers: [{ id: "laptop", hash: expect.stringMatching(/^[0-9a-f]{64}$/) }] });
 });
 
 test("a seeded pairing enrolls the peer the setup named", async () => {
@@ -124,14 +121,14 @@ test("a second setup's token arms even though the first one is burned, and an em
 test("only a seeded redemption is recorded; a minted one at an ordinary door leaves no trace", async () => {
     const { store, root } = tempStore();
     await store.enroll(store.mintPairing("laptop").token);
-    const written = await readFile(join(root, "host-pair-consumed.json"), "utf8").catch(() => `{"digests":[]}`);
+    const written = await readFile(join(root, webextPairConsumedDocument.path), "utf8").catch(() => `{"digests":[]}`);
     expect(JSON.parse(written)).toEqual({ digests: [] });
 });
 
 // Burn survives even a fresh mint for the same id; the digest is what's checked, not the id.
 test("a replayable door burns every redeemed pairing, so a restart refuses the replayed copy", async () => {
     const root = mkdtempSync(join(tmpdir(), "peers-"));
-    const runners = { files: peerFiles("runner"), key: "runners", prefix: "irt_", extra: { host: z.string().optional() }, replayable: true };
+    const runners = { documents: RUNNER_DOCUMENTS, key: "runners", prefix: "irt_", extra: { host: z.string().optional() }, replayable: true };
     const store = filePeerStore(root, runners);
     const { token } = store.mintPairing("rog-runner");
     expect(await store.enroll(token)).not.toBeUndefined();
@@ -147,7 +144,7 @@ test("a replayable door burns every redeemed pairing, so a restart refuses the r
 // supply them.
 test("a door's extra record travels from the pairing to the enrollment", async () => {
     const store = filePeerStore(mkdtempSync(join(tmpdir(), "peers-")), {
-        files: peerFiles("runner"),
+        documents: RUNNER_DOCUMENTS,
         key: "runners",
         prefix: "irt_",
         extra: { host: z.string().optional() },

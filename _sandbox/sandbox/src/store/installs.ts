@@ -1,8 +1,7 @@
 import { z } from "zod";
-import { opt } from "../opt.js";
 import { stateRelPath } from "../state-paths.js";
 import { defineDocument } from "./evolution/documents.js";
-import { jsonFile } from "./json-file.js";
+import { openDocument } from "./open-document.js";
 
 // Tracks whether an embed snippet is actually loading, per origin, to tell an unconfigured automation apart from one
 // whose origin isn't allowlisted. Shared by the Visitor chat widget and the bug-reporter SDK, one file per caller since
@@ -18,20 +17,13 @@ const ProbeSchema = z.object({
 export type InstallProbe = z.infer<typeof ProbeSchema> & { origin: string };
 
 const OriginsSchema = z.record(z.string(), ProbeSchema);
-const FileSchema = z.record(z.string(), OriginsSchema);
-type InstallsFile = z.infer<typeof FileSchema>;
+type InstallsFile = Record<string, z.infer<typeof OriginsSchema>>;
 
-// One document per caller's file, the same shape under two names; the store picks the one its path names.
-export const webchatInstallsDocument = defineDocument({
-    path: stateRelPath(".intentic/records/webchat-installs.json"),
-    schema: OriginsSchema,
-    granularity: "record",
-});
-export const issueInstallsDocument = defineDocument({
-    path: stateRelPath(".intentic/records/issue-installs.json"),
-    schema: OriginsSchema,
-    granularity: "record",
-});
+// One document per caller's file, one family: the same shape under two names.
+const installsFile = (path: string) => ({ path, schema: OriginsSchema, granularity: "record" as const });
+export const webchatInstallsDocument = defineDocument(installsFile(stateRelPath(".intentic/records/webchat-installs.json")));
+export const issueInstallsDocument = defineDocument(installsFile(stateRelPath(".intentic/records/issue-installs.json")));
+export type InstallsDocument = typeof issueInstallsDocument;
 
 // Diagnostic counts are flushed on this timer instead of per write; a crash loses at most this many seconds of counts.
 const FLUSH_MS = 30_000;
@@ -48,14 +40,9 @@ export interface InstallsStore {
     readonly flush: () => Promise<void>;
 }
 
-export const fileInstallsStore = (path: string): InstallsStore => {
-    // A path naming neither file (a test's own) runs no conversions.
-    const document = [webchatInstallsDocument, issueInstallsDocument].find((spec) => path.endsWith(`/${spec.path}`));
-    const file = jsonFile<InstallsFile>(path, {
-        parse: (raw) => FileSchema.safeParse(raw).data,
-        fallback: () => ({}),
-        ...opt("document", document),
-    });
+// `document` says which caller's file this is; `path` where it is (under the workspace, or a test's own).
+export const fileInstallsStore = (document: InstallsDocument, path: string): InstallsStore => {
+    const file = openDocument(document, path, { fallback: (): InstallsFile => ({}) });
 
     // Undefined until the first read or record pulls the file in, so an automation nobody visits never touches this
     // file.

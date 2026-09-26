@@ -6,9 +6,10 @@ import { type DeviceReport, environmentOf } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { tokenEquals } from "../auth/auth.js";
-import type { Presented } from "../peers/enrollment.js";
+import { type Burns, burnsAt, type Presented, syncPairConsumedDocument } from "../peers/enrollment.js";
 import { defineDocument } from "../store/evolution/documents.js";
-import { type JsonFile, jsonEntries } from "../store/json-file.js";
+import type { JsonFile } from "../store/json-file.js";
+import { openEntries } from "../store/open-document.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 
 // Desktop enrollment for Mutagen: an ed25519 key lands here via a pairing token, then rides SSH for file sync of /work
@@ -21,7 +22,7 @@ export type SyncMode = "sync" | "mirror";
 
 // Pairing carries the mode, trusted over anything the agent claims, since mint is the only point the requester's role
 // is known. The setup-time token is armed (not minted) and replayable, which is why this door keeps a burn file.
-export const syncPairBurnPath = (historyRoot: string): string => join(historyRoot, "sync-pair-consumed.json");
+export const syncPairBurns = (historyRoot: string): Burns => burnsAt(syncPairConsumedDocument, historyRoot);
 
 // Store of every machine's key/token/mode, on /history: outside /work (agent can't read it) and outside the container
 // fs (survives a rebuild). authorized_keys is derived from it and re-derived at boot, never stored alongside it.
@@ -43,31 +44,17 @@ const SyncEnrollmentSchema = z.object({
 });
 type SyncEnrollment = z.infer<typeof SyncEnrollmentSchema>;
 
-const enrollmentsPath = (historyRoot: string): string => join(historyRoot, "sync-enrollments.json");
+const enrollmentsPath = (historyRoot: string): string => join(historyRoot, syncEnrollmentsDocument.path);
 
 export const syncEnrollmentsDocument = defineDocument({ root: "history", path: "sync-enrollments.json", schema: SyncEnrollmentSchema, granularity: "entries" });
 // HOME is the home directory of record, read per call so a test can point it at a temp dir.
 const authorizedKeysPath = (): string => join(process.env["HOME"] ?? homedir(), ".ssh", "authorized_keys");
 const machineOf = (key: string): string => key.trim().split(" ")[2] ?? "unknown";
 
-// Backed by store/json-file.ts: atomic writes and a per-file update queue, so a redeem racing a heartbeat stamp can't
-// lose an update. One instance per path, since the queue lives on the object; 0o600, since the file holds token
-// digests.
-const files = new Map<string, JsonFile<SyncEnrollment[]>>();
-const enrollmentsFile = (historyRoot: string): JsonFile<SyncEnrollment[]> => {
-    const path = enrollmentsPath(historyRoot);
-    let file = files.get(path);
-    if (file === undefined) {
-        file = jsonEntries<SyncEnrollment>(path, {
-            entry: (raw) => SyncEnrollmentSchema.safeParse(raw).data,
-            mode: 0o600,
-            document: syncEnrollmentsDocument,
-            idKeys: ["key"],
-        });
-        files.set(path, file);
-    }
-    return file;
-};
+// Atomic writes and a per-path update queue (store/json-file.ts), so a redeem racing a heartbeat stamp can't lose an
+// update; 0o600, since the file holds token digests.
+const enrollmentsFile = (historyRoot: string): JsonFile<SyncEnrollment[]> =>
+    openEntries(syncEnrollmentsDocument, enrollmentsPath(historyRoot), { mode: 0o600, idKeys: ["key"] });
 
 const readEnrollments = (historyRoot: string): Promise<SyncEnrollment[]> => enrollmentsFile(historyRoot).read();
 

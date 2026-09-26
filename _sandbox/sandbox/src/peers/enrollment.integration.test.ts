@@ -4,13 +4,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { HOST_CARD_RULE } from "../hosts/host-peer.js";
-import { enrollments, HostEnrollmentFieldsSchema, pairings } from "./enrollment.js";
+import { defineDocument } from "../store/evolution/documents.js";
+import { type Burns, enrollments, HostEnrollmentFieldsSchema, hostEnrollmentsDocument, pairings, syncPairConsumedDocument } from "./enrollment.js";
 
 // Pins the shared mechanic four doors use, not any one door's specifics: which pairings get written down at all, and
 // that an enrollment file never holds a usable credential.
 
 const root = (): string => mkdtempSync(join(tmpdir(), "enrollment-"));
-const burnsIn = (historyRoot: string): string => join(historyRoot, "pair-consumed.json");
+const burnsIn = (historyRoot: string): Burns => ({ document: syncPairConsumedDocument, path: join(historyRoot, "pair-consumed.json") });
+// A door of the test's own, laid out by the same family as every real one.
+const thingsDocument = defineDocument({
+    root: "history",
+    path: "enrollments.json",
+    schema: z.object({ things: z.array(z.object({ id: z.string(), hash: z.string(), enrolledAt: z.number(), host: z.string().optional() })) }),
+});
 
 describe("pairings", () => {
     // `replayable` is a parameter, not a convention: a token that only ever lived in this process is unreplayable once
@@ -22,7 +29,7 @@ describe("pairings", () => {
 
         expect(await pending.redeem(token)).toBe("laptop");
         expect(await pending.redeem(token)).toBeUndefined();
-        expect(existsSync(burnsIn(historyRoot))).toBe(false);
+        expect(existsSync(burnsIn(historyRoot).path)).toBe(false);
     });
 
     // A token written somewhere immortal (env, `docker inspect`, replayed into every rebuild) needs its digest on
@@ -33,11 +40,11 @@ describe("pairings", () => {
         const { token } = pending.mint("rig", { replayable: true });
 
         expect(await pending.redeem(token)).toBe("rig");
-        const written = JSON.parse(await readFile(burnsIn(historyRoot), "utf8")) as { digests: string[] };
+        const written = JSON.parse(await readFile(burnsIn(historyRoot).path, "utf8")) as { digests: string[] };
         expect(written.digests).toHaveLength(1);
         // Store digests without tokens so enrollment evidence cannot spend again.
         expect(written.digests[0]).toMatch(/^[0-9a-f]{64}$/);
-        expect(await readFile(burnsIn(historyRoot), "utf8")).not.toContain(token);
+        expect(await readFile(burnsIn(historyRoot).path, "utf8")).not.toContain(token);
 
         expect(await pairings<string>(burnsIn(historyRoot)).arm(token, "rig")).toBe(false);
     });
@@ -77,7 +84,7 @@ describe("pairings", () => {
 
 describe("enrollments", () => {
     const store = (historyRoot: string) =>
-        enrollments({ path: join(historyRoot, "enrollments.json"), key: "things", prefix: "itk_", extra: { host: z.string().optional() } });
+        enrollments({ document: thingsDocument, path: join(historyRoot, "enrollments.json"), key: "things", prefix: "itk_", extra: { host: z.string().optional() } });
 
     it("writes digests, never the token it hands back", async () => {
         const historyRoot = root();
@@ -155,7 +162,14 @@ describe("enrollments", () => {
 describe("host enrollments", () => {
     const HOSTS_FILE = "host-enrollments.json";
     const hosts = (historyRoot: string) =>
-        enrollments({ path: join(historyRoot, HOSTS_FILE), key: "hosts", prefix: "iht_", extra: HostEnrollmentFieldsSchema.shape, card: HOST_CARD_RULE });
+        enrollments({
+            document: hostEnrollmentsDocument,
+            path: join(historyRoot, HOSTS_FILE),
+            key: "hosts",
+            prefix: "iht_",
+            extra: HostEnrollmentFieldsSchema.shape,
+            card: HOST_CARD_RULE,
+        });
     // Whether an act rewrote the file: 1 or 0, since one act is at most one write here.
     const writes = async (historyRoot: string, act: () => Promise<unknown>): Promise<number> => {
         const before = await readFile(join(historyRoot, HOSTS_FILE), "utf8");

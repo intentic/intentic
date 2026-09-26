@@ -1,7 +1,8 @@
+import { join } from "node:path";
 import type { Context } from "hono";
 import type { z } from "zod";
 import { bearerFrom } from "../auth/auth.js";
-import { enrollments, pairings, type Presented } from "./enrollment.js";
+import { burnsAt, enrollments, pairings, type Presented } from "./enrollment.js";
 import type { PeerStoreSpec } from "./peer.js";
 
 // The bearer doors' half of the rule the socket is held to (peer-routes.ts): a token nobody holds is the caller's
@@ -53,9 +54,9 @@ export const filePeerStore = <Shape extends z.ZodRawShape>(
     spec: PeerStoreSpec<Shape>,
 ): PeerStore<z.infer<z.ZodObject<Shape>>> => {
     type Extra = z.infer<z.ZodObject<Shape>>;
-    const files = spec.files(historyRoot);
-    const pending = pairings<Pairing<Extra>>(files.consumed, spec.pairTtlMs);
-    const records = enrollments({ path: files.enrollments, key: spec.key, prefix: spec.prefix, extra: spec.extra, card: spec.card });
+    const { enrollments: document, consumed } = spec.documents;
+    const pending = pairings<Pairing<Extra>>(burnsAt(consumed, historyRoot), spec.pairTtlMs);
+    const records = enrollments({ document, path: join(historyRoot, document.path), key: spec.key, prefix: spec.prefix, extra: spec.extra, card: spec.card });
     const replayable = spec.replayable === true;
     // What a pairing for `id` records beside it: the door's own card rule, under whatever a caller passed explicitly.
     const pairingExtra = (id: string, extra: Extra | undefined): Extra => ({ ...spec.card?.pairing(id), ...extra }) as Extra;

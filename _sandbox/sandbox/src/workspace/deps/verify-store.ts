@@ -2,8 +2,8 @@ import { type MainlineRouting, MainlineRunSchema, type MainlineRun, nextStreak, 
 import { z } from "zod";
 import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 import { defineDocument } from "../../store/evolution/documents.js";
-import { type JsonFile, jsonFile } from "../../store/json-file.js";
-import { objectParse } from "../../store/unknown-keys.js";
+import type { JsonFile } from "../../store/json-file.js";
+import { openDocument } from "../../store/open-document.js";
 import { stateRelPath } from "../../state-paths.js";
 
 // The main-line check's memory (<workspace>/.intentic/records/verify.json): last check outcome per project and its
@@ -253,10 +253,9 @@ export const verifyStoreOver = (file: Pick<JsonFile<VerifyState>, "read" | "upda
 
 export const fileVerifyStore = (path: string): VerifyStore =>
     verifyStoreOver(
-        jsonFile<VerifyState>(path, {
-            parse: objectParse(VerifyStateSchema),
+        openDocument<typeof verifyDocument, VerifyState>(verifyDocument, path, {
+            unknownKeys: true,
             fallback: () => ({ projects: {}, runs: [], lands: {}, streaks: {} }),
-            document: verifyDocument,
         }),
     );
 

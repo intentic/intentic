@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
-import { boundedLog, jsonEntries } from "../store/json-file.js";
+import { boundedLog } from "../store/json-file.js";
+import { openEntries } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
 
 // One row per moment a stored secret actually left (resolved into a command, typed into a browser field), joined onto
@@ -32,7 +33,7 @@ export interface SecretUsesStore {
 }
 
 export const fileSecretUses = (path: string): SecretUsesStore => {
-    const file = jsonEntries<SecretUse>(path, { entry: (raw) => SecretUseSchema.safeParse(raw).data, mode: 0o600, document: secretUsesDocument });
+    const file = openEntries(secretUsesDocument, path, { mode: 0o600 });
     const log = boundedLog(file, USE_CAP);
     return { record: (use) => log.append(use), all: () => log.read() };
 };

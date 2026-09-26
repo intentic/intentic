@@ -3,7 +3,7 @@ import { type Automation, type AutomationRun, AutomationRunSchema, AutomationSch
 import { z } from "zod";
 import { drop, fold, isJsonObject, type JsonObject, nested } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
-import { jsonEntries, jsonFile } from "../store/json-file.js";
+import { openDocument, openEntries } from "../store/open-document.js";
 import { defineStep } from "../store/evolution/state-steps.js";
 import { stateRelPath } from "../state-paths.js";
 
@@ -148,15 +148,11 @@ export interface AutomationsStore {
 // Two JSON file stores, used in production at <workspace>/.intentic/config/automations.json and its runs sibling.
 export const fileAutomationsStore = (path: string, runsPath: string): AutomationsStore => {
     // One entry at a time: a single automation this build cannot read is skipped and kept, never the whole manifest.
-    const file = jsonEntries<Automation>(path, { entry: (raw) => AutomationSchema.safeParse(raw).data, document: automationsDocument });
+    const file = openEntries(automationsDocument, path);
     // Unreadable runs fall back to no history rather than reading as an absent manifest, which would silently stop
     // every automation.
     // Rebuild unreadable run history only from the next recorded run.
-    const ledger = jsonFile<RunLedger>(runsPath, {
-        parse: (raw) => RunLedgerSchema.safeParse(raw).data,
-        fallback: () => ({}),
-        document: automationRunsDocument,
-    });
+    const ledger = openDocument(automationRunsDocument, runsPath, { fallback: (): RunLedger => ({}) });
     return {
         list: async () => withRuns(await file.read(), await ledger.read()),
         get: async (id) => {

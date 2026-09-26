@@ -5,7 +5,7 @@ import { isOwnerTicket, verifyOwnerTicket } from "@intentic/sandbox-contract/own
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
-import { jsonFile } from "../store/json-file.js";
+import { openDocument } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
 
 // The sandbox authenticates the end user directly against Google; the platform never holds this credential.
@@ -62,12 +62,7 @@ export const ownerDocument = defineDocument({ path: stateRelPath(".intentic/iden
 // An atomic rename prevents a read landing mid-write from seeing an empty owner and treating the next identity as
 // first; an owner file that exists but cannot be read throws, since "no owner" would let the next identity bind.
 export const fileOwnerStore = (path: string): OwnerStore => {
-    const file = jsonFile<{ readonly email?: string }>(path, {
-        parse: (raw) => OwnerFileSchema.safeParse(raw).data,
-        fallback: () => ({}),
-        onUnreadable: "refuse",
-        document: ownerDocument,
-    });
+    const file = openDocument<typeof ownerDocument, { readonly email?: string }>(ownerDocument, path, { fallback: () => ({}), onUnreadable: "refuse" });
     return {
         read: async () => {
             const state = await file.state();
@@ -144,8 +139,8 @@ export const memberRow = (email: string, grant: MemberGrant): Member => ({
 // one erasing the other.
 // One malformed entry is skipped so the rest keep access; a file that isn't a members file at all reads as nobody.
 export const fileMembersStore = (path: string): MembersStore => {
-    const file = jsonFile<{ readonly members: readonly Member[] }>(path, {
-        parse: (raw) => {
+    const file = openDocument<typeof membersDocument, { readonly members: readonly Member[] }>(membersDocument, path, {
+        lenient: (raw) => {
             const parsed = MembersFileSchema.safeParse(raw);
             if (!parsed.success) {
                 return undefined;
@@ -153,12 +148,11 @@ export const fileMembersStore = (path: string): MembersStore => {
             return {
                 members: parsed.data.members.flatMap((entry) => {
                     const member = MemberSchema.safeParse(entry).data;
-                    return member === undefined ? [] : [memberRow(member.email, member)];
+                    return member === undefined ? [] : [member];
                 }),
             };
         },
         fallback: () => ({ members: [] }),
-        document: membersDocument,
     });
     return {
         list: async () => [...(await file.read()).members],

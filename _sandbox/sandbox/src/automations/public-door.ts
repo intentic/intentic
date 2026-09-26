@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import type { PowChallenge } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { antiBotAccepted, mintChallenge, type AntiBotAnswer } from "../auth/antibot.js";
@@ -6,7 +7,7 @@ import type { AppEnv } from "../app-env.js";
 import { threadKey } from "../sessions/thread-sessions.js";
 import { dailyBudget } from "../store/daily-budget.js";
 import { rateWindow } from "../store/rate-window.js";
-import { fileInstallsStore, type InstallsStore } from "../store/installs.js";
+import { fileInstallsStore, type InstallsDocument, type InstallsStore } from "../store/installs.js";
 import type { AutomationRecord } from "./automations-store.js";
 import { fireAutomation, type FireOptions, type FireOutcome } from "./scheduler.js";
 
@@ -33,7 +34,8 @@ export interface PublicDoorSpec<Config> {
     // The query parameter the challenge route reads the caller's id from, so a solution cannot be moved.
     readonly challengeParam: string;
     // This door's install probes are kept separately per door, so automation ids across doors can't collide.
-    readonly installs: (root: string) => string;
+    // Which caller's install-probe document this door records into.
+    readonly installs: InstallsDocument;
     // Prefix of sandbox conversations this door opens, so a thread is recognizable on the board and worktree name.
     readonly conversationPrefix: string;
 }
@@ -89,7 +91,7 @@ const admission = <Config>(spec: PublicDoorSpec<Config>, automation: AutomationR
 export const createPublicDoor = <Config>(
     services: Pick<Services, "agents" | "automations" | "threadSessions" | "workspace" | "doorTokens">,
     spec: PublicDoorSpec<Config>,
-    installs: InstallsStore = fileInstallsStore(spec.installs(services.workspace.root)),
+    installs: InstallsStore = fileInstallsStore(spec.installs, join(services.workspace.root, spec.installs.path)),
 ): PublicDoor<Config> => {
     const window = rateWindow(RATE_WINDOW_MS);
     const daily = dailyBudget();

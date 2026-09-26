@@ -1,7 +1,7 @@
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
 import { unrankedCatalog } from "../../agent/models/model-discovery.js";
 import type { Config } from "../../env.config.js";
-import { jsonFile } from "../../store/json-file.js";
+import { cacheFile } from "../../store/open-document.js";
 import { discoverGeminiModels, type GeminiModel, SEED_GEMINI_MODELS } from "./gemini-models.js";
 
 // Google-channel model catalog on the shared ladder; account-only, no API-key fallback, so the SEED_GEMINI_MODELS floor
@@ -33,7 +33,7 @@ export const createGeminiCatalog = (config: Config, persistPath: string, fetchIm
                 ? discoverGeminiModels(config.translator.url, config.translator.token, fetchImpl).catch((): GeminiModel[] => [])
                 : Promise.resolve<GeminiModel[]>([]),
         idOf: (model) => model.id,
-        store: jsonFile<GeminiModel[]>(persistPath, {
+        store: cacheFile<GeminiModel[]>(persistPath, {
             parse: (raw) => (Array.isArray(raw) ? raw.filter(isGeminiModel) : undefined),
             fallback: () => [],
         }),

@@ -7,14 +7,14 @@ import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { testConfig } from "../testing.js";
 import { extensionDir } from "../capabilities/extension-dirs.js";
-import { fileSecretVault, type SecretVault } from "../capabilities/credentials/secret-vault.js";
+import { extensionSecretsDocument, fileSecretVault, type SecretVault } from "../capabilities/credentials/secret-vault.js";
 import { readWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { extensionEnvOf } from "./extension-env.js";
 import { writeExtensionSettings } from "./extension-settings.js";
 
 // Vault sits off the workspace root under AGENT_AUTH_DIR, matching production.
 // Tests assert the round trip a secret setting takes: split out, rehydrated, then handed to the shell as env.
-const newVault = (): SecretVault => fileSecretVault(join(mkdtempSync(join(tmpdir(), "ext-vault-")), "extension-secrets.json"));
+const newVault = (): SecretVault => fileSecretVault(extensionSecretsDocument, join(mkdtempSync(join(tmpdir(), "ext-vault-")), "extension-secrets.json"));
 
 // Services stub exposing only what extensionEnvOf touches: capabilities, files.read, workspace.root, the settings
 // vault, a no-op logger.

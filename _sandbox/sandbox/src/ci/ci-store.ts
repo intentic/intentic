@@ -2,8 +2,7 @@ import { randomBytes } from "node:crypto";
 import { RedSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
-import { jsonFile } from "../store/json-file.js";
-import { objectParse } from "../store/unknown-keys.js";
+import { openDocument } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
 
 // Daemon-recorded CI state in .intentic/secrets/ci.json: the webhook secret, each repo+branch's last terminal
@@ -63,12 +62,11 @@ const keyOf = (repo: string, branch: string): string => `${repo}\n${branch}`;
 const minted = (state: CiState): CiState => (state.secret === "" ? { ...state, secret: randomBytes(32).toString("hex") } : state);
 
 export const fileCiStore = (path: string): CiStore => {
-    const file = jsonFile<CiState>(path, {
-        parse: objectParse(CiStateSchema),
+    const file = openDocument<typeof ciDocument, CiState>(ciDocument, path, {
+        unknownKeys: true,
         // Empty secret marks no file yet; `minted` fills it inside the update queue so callers can't mint two.
         fallback: () => ({ secret: "", conclusions: {} }),
         mode: 0o600,
-        document: ciDocument,
     });
     return {
         secret: async () => (await file.update(minted)).secret,

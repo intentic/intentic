@@ -8,7 +8,7 @@ import {
     type LoopState,
 } from "@intentic/sandbox-contract";
 import { defineDocument } from "../store/evolution/documents.js";
-import { jsonEntries } from "../store/json-file.js";
+import { openEntries } from "../store/open-document.js";
 import { countResume, keyedEntries } from "../store/keyed-entries.js";
 import { stateRelPath } from "../state-paths.js";
 
@@ -40,15 +40,11 @@ export const loopsDocument = defineDocument({ path: stateRelPath(".intentic/reco
 export const loopDesignsDocument = defineDocument({ path: stateRelPath(".intentic/config/loop-designs.json"), schema: LoopDesignSchema, granularity: "entries" });
 
 export const fileLoopsStore = (path: string): LoopsStore => {
-    const file = jsonEntries<LoopRecord>(path, {
-        entry: (raw) => LoopRecordSchema.safeParse(raw).data,
-        document: loopsDocument,
-        idKeys: ["conversationId"],
-    });
-    const records = keyedEntries(file, "conversationId");
+    const file = openEntries(loopsDocument, path, { idKeys: ["conversationId"] });
+    const keyed = keyedEntries(file, "conversationId");
     return {
         list: async () => (await file.read()).toSorted((a, b) => b.startedAt - a.startedAt),
-        get: records.get,
+        get: keyed.get,
         start: async (loop, now) => {
             const record: LoopRecord = { ...loop, state: "running", startedAt: now, resumed: 0, iterations: [] };
             await file.update((records) =>
@@ -57,10 +53,10 @@ export const fileLoopsStore = (path: string): LoopsStore => {
             return record;
         },
         recordIteration: (conversationId, iteration) =>
-            records.amend(conversationId, (record) => ({ ...record, iterations: [...record.iterations, iteration].slice(-ITERATIONS_KEPT) })),
+            keyed.amend(conversationId, (record) => ({ ...record, iterations: [...record.iterations, iteration].slice(-ITERATIONS_KEPT) })),
         settle: (conversationId, state, now, detail) =>
-            records.amend(conversationId, (record) => ({ ...record, state, endedAt: now, ...(detail !== undefined ? { detail } : {}) })),
-        countResume: (conversationId) => countResume(records, conversationId),
+            keyed.amend(conversationId, (record) => ({ ...record, state, endedAt: now, ...(detail !== undefined ? { detail } : {}) })),
+        countResume: (conversationId) => countResume(keyed, conversationId),
     };
 };
 
@@ -75,7 +71,7 @@ export interface LoopDesignsStore {
 }
 
 export const fileLoopDesignsStore = (path: string): LoopDesignsStore => {
-    const file = jsonEntries<LoopDesign>(path, { entry: (raw) => LoopDesignSchema.safeParse(raw).data, document: loopDesignsDocument });
+    const file = openEntries(loopDesignsDocument, path);
     const { get, save, remove } = keyedEntries(file, "id");
     return { list: () => file.read(), get, save, remove };
 };

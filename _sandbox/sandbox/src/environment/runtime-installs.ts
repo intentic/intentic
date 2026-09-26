@@ -6,7 +6,7 @@ import {
     RuntimeInstallsFileSchema,
 } from "@intentic/sandbox-contract";
 import { defineDocument } from "../store/evolution/documents.js";
-import { jsonFile } from "../store/json-file.js";
+import { openDocument } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
 
 // Ledger of tools installed into the container at runtime, written by the harness (the install-steering hook), not the
@@ -69,11 +69,7 @@ const merged = (
 };
 
 export const fileRuntimeInstallsStore = (path: string): RuntimeInstallsStore => {
-    const file = jsonFile<RuntimeInstallsFile>(path, {
-        parse: (raw) => RuntimeInstallsFileSchema.safeParse(raw).data,
-        fallback: () => ({ installs: [] }),
-        document: runtimeInstallsDocument,
-    });
+    const file = openDocument(runtimeInstallsDocument, path, { fallback: (): RuntimeInstallsFile => ({ installs: [] }) });
     return {
         read: file.read,
         record: async (installs, command, session, at) => {

@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { Logger } from "pino";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
 import type { Config } from "../../env.config.js";
-import { jsonFile } from "../../store/json-file.js";
+import { cacheFile } from "../../store/open-document.js";
 import { type ClaudeStore, ensureFreshToken } from "./claude-credentials.js";
 
 // Claude's model catalog merges the CLI's tier aliases (effort levels and badges, no versioned id) with Anthropic's
@@ -195,7 +195,7 @@ export const createClaudeCatalog = (
     };
 
     // Parsed through the schema, not trusted; an older or truncated record degrades to the floor, not a half-row.
-    const store = jsonFile<Model[]>(persistPath, { parse: (raw) => z.array(ModelSchema).safeParse(raw).data?.filter(namesVersion), fallback: () => [] });
+    const store = cacheFile<Model[]>(persistPath, { parse: (raw) => z.array(ModelSchema).safeParse(raw).data?.filter(namesVersion), fallback: () => [] });
 
     const catalog = discoveredCatalog({
         ttlMs: MODELS_TTL_MS,

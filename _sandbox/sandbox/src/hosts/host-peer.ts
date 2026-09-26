@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import {
     derivedMachineId,
     HOST_HEARTBEAT_MS,
@@ -20,7 +19,7 @@ import { capabilityCtx } from "../capabilities/capability.js";
 import { deviceHandler } from "../capabilities/handlers/device.handler.js";
 import type { Services } from "../composition.js";
 import type { CardRule } from "../peers/enrollment.js";
-import { HostEnrollmentFieldsSchema } from "../peers/enrollment.js";
+import { HostEnrollmentFieldsSchema, hostEnrollmentsDocument, hostPairConsumedDocument } from "../peers/enrollment.js";
 import { PEER_BRIDGES, type PeerDoor } from "../peers/peer.js";
 import type { PeerHub } from "../peers/peer-hub.js";
 import { createPeerRoutes } from "../peers/peer-routes.js";
@@ -58,7 +57,7 @@ export const HOST_PEER: PeerDoor<HostHello, HostAnnounced, typeof HostEnrollment
     noun: "device",
     listKey: "hosts",
     store: {
-        files: (historyRoot) => ({ enrollments: join(historyRoot, "host-enrollments.json"), consumed: join(historyRoot, "host-pair-consumed.json") }),
+        documents: { enrollments: hostEnrollmentsDocument, consumed: hostPairConsumedDocument },
         key: "hosts",
         prefix: "iht_",
         extra: HostEnrollmentFieldsSchema.shape,

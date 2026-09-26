@@ -6,7 +6,7 @@ import { subscribeRuntimeChanges } from "../system/runtime-watch.js";
 import { forgetUpstream } from "./engine-channel.js";
 import { engineDescriptor } from "./engine-descriptors.js";
 import { forgetEngineResolution } from "./engine-resolve.js";
-import { activateVersion, engineVersionDir, forgetEngineStates, readEngineState } from "./engine-store.js";
+import { activateVersion, engineVersionDir, readEngineState } from "./engine-store.js";
 import { type EngineHost, type EngineInstaller, enginesView, revertEngine, setChannel, updateEngine } from "./engines.js";
 
 // Pins when the lifecycle installs something and when it deliberately does not, with the download itself faked.
@@ -42,7 +42,6 @@ let workspace: string;
 beforeEach(() => {
     process.env["INTENTIC_ENGINES_DIR"] = mkdtempSync(join(tmpdir(), "engines-lifecycle-"));
     workspace = mkdtempSync(join(tmpdir(), "engines-workspace-"));
-    forgetEngineStates();
     forgetEngineResolution();
     forgetUpstream();
     process.env["INTENTIC_ENGINES_LIST_URL"] = "https://example.test/engines.json";

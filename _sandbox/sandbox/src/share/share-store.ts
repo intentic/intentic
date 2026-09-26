@@ -1,7 +1,7 @@
 import { SharedConversationSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
-import { jsonFile } from "../store/json-file.js";
+import { openDocument } from "../store/open-document.js";
 
 // Daemon's own list of what's shared, on the history volume; the outbox's files alone can't say which conversation,
 // detail level, or when. An index, not the truth: a row surviving after its page was deleted by hand is harmless,
@@ -27,14 +27,7 @@ export interface ShareStore {
 const sorted = (shares: readonly StoredShare[]): StoredShare[] => shares.toSorted((left, right) => right.sharedAt - left.sharedAt);
 
 export const fileShareStore = (path: string): ShareStore => {
-    const file = jsonFile(path, {
-        parse: (raw) => {
-            const parsed = FileSchema.safeParse(raw);
-            return parsed.success ? parsed.data : undefined;
-        },
-        fallback: () => ({ shares: [] }),
-        document: sharesDocument,
-    });
+    const file = openDocument(sharesDocument, path, { fallback: () => ({ shares: [] }) });
     return {
         all: async () => sorted((await file.read()).shares),
         get: async (id) => (await file.read()).shares.find((share) => share.id === id),

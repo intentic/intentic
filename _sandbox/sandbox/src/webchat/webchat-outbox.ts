@@ -4,7 +4,7 @@ import type { TurnStream } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 import { threadKey } from "../sessions/thread-sessions.js";
 import { defineDocument } from "../store/evolution/documents.js";
-import { jsonFile } from "../store/json-file.js";
+import { openDocument } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
 import { WEBCHAT_PROVIDER } from "./webchat-config.js";
 
@@ -65,11 +65,7 @@ const live = (thread: z.infer<typeof ThreadSchema> | undefined, now: number): z.
     thread !== undefined && now - thread.lastAt <= OUTBOX_TTL_MS ? thread : undefined;
 
 export const fileWebchatOutbox = (path: string): WebchatOutbox => {
-    const file = jsonFile<OutboxFile>(path, {
-        parse: (raw) => FileSchema.safeParse(raw).data,
-        fallback: () => ({}),
-        document: webchatOutboxDocument,
-    });
+    const file = openDocument(webchatOutboxDocument, path, { fallback: (): OutboxFile => ({}) });
 
     return {
         append: async (key, text, now) => {

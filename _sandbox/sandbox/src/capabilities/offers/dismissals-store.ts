@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";
-import { jsonEntries } from "../../store/json-file.js";
+import { openEntries } from "../../store/open-document.js";
 import { stateRelPath } from "../../state-paths.js";
 
 // Declined-recommendation store (<workspace>/.intentic/config/capability-dismissals.json). Keyed by the evidence a entry
@@ -25,11 +25,7 @@ export interface DismissalsStore {
 }
 
 export const fileDismissalsStore = (path: string): DismissalsStore => {
-    const file = jsonEntries<DismissedRecommendation>(path, {
-        entry: (raw) => DismissedSchema.safeParse(raw).data,
-        document: dismissalsDocument,
-        idKeys: ["entry"],
-    });
+    const file = openEntries(dismissalsDocument, path, { idKeys: ["entry"] });
     return {
         list: file.read,
         dismiss: async (entry) => {

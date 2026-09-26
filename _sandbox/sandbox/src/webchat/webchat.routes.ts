@@ -11,10 +11,10 @@ import type { AppEnv } from "../app-env.js";
 import { type ThreadSession, WEBCHAT_SESSION_TTL_MS } from "../sessions/thread-sessions.js";
 import type { InstallsStore } from "../store/installs.js";
 import { rateWindow } from "../store/rate-window.js";
-import { statePath } from "../state-paths.js";
 import { createSseStream } from "./sse-stream.js";
 import { publicConfig, usableAntiBot } from "./webchat-config.js";
 import { resolveVisitor, SignInRequired, type VisitorIdentity } from "./webchat-identity.js";
+import { webchatInstallsDocument } from "../store/installs.js";
 
 // The Visitor chat's ingest: a public door (automations/public-door.ts) whose verb is `message`, where every arrival is
 // an agent turn. Somebody is waiting for an answer, so the reply streams back as SSE.
@@ -28,7 +28,7 @@ export const WEBCHAT_DOOR: PublicDoorSpec<WebchatConfig> = {
     disabled: "automation disabled",
     rateMax: 20,
     challengeParam: "conversation",
-    installs: (root) => statePath(root, ".intentic/records/webchat-installs.json"),
+    installs: webchatInstallsDocument,
     conversationPrefix: "wc",
 };
 

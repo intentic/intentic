@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { type Capability, VAULTED } from "@intentic/sandbox-contract";
 import { type CapabilitiesStore, fileCapabilitiesStore, vaultManifestSecrets, withSecretVault } from "../capabilities-store.js";
-import { fileSecretVault, type SecretVault } from "./secret-vault.js";
+import { capabilitySecretsDocument, fileSecretVault, type SecretVault } from "./secret-vault.js";
 
 // Pins the split: the manifest on disk holds a connection's shape but never its credential, while every store reader
 // still gets a whole Capability.
@@ -15,7 +15,7 @@ const vaulted = (): { store: CapabilitiesStore; manifest: string; vaultPath: str
     const manifest = join(root, STATE_DIR, "config", "capabilities.json");
     const vaultPath = join(root, "auth", "capability-secrets.json");
     const inner = fileCapabilitiesStore(manifest);
-    return { store: withSecretVault(inner, fileSecretVault(vaultPath), async () => new Map()), manifest, vaultPath };
+    return { store: withSecretVault(inner, fileSecretVault(capabilitySecretsDocument, vaultPath), async () => new Map()), manifest, vaultPath };
 };
 
 const onDisk = async (path: string): Promise<string> => readFile(path, "utf8").catch(() => "");
@@ -79,7 +79,7 @@ const swept = (): { inner: CapabilitiesStore; vault: SecretVault; manifest: stri
     const root = mkdtempSync(join(tmpdir(), "sweep-"));
     const manifest = join(root, STATE_DIR, "config", "capabilities.json");
     const inner = fileCapabilitiesStore(manifest);
-    const vault = fileSecretVault(join(root, "auth", "capability-secrets.json"));
+    const vault = fileSecretVault(capabilitySecretsDocument, join(root, "auth", "capability-secrets.json"));
     return { inner, vault, manifest, sweep: () => vaultManifestSecrets(inner, vault, async () => new Map()) };
 };
 
@@ -163,7 +163,7 @@ test("a secret pasted back into the manifest is swept out again: the state is re
 
 test("the vault reports every value it holds: what the output filter masks by value", async () => {
     const root = mkdtempSync(join(tmpdir(), "vault-"));
-    const vault = fileSecretVault(join(root, "capability-secrets.json"));
+    const vault = fileSecretVault(capabilitySecretsDocument, join(root, "capability-secrets.json"));
     await vault.set("reddit", { password: "Xk4!mQ2pRt7@wZ9aBc1_" });
     await vault.set("vpnbox", { presharedKey: "K7mNp2qR8tVw3xYz5aBc", config: "conf-body-aaaa" });
     expect((await vault.values()).toSorted()).toEqual(["K7mNp2qR8tVw3xYz5aBc", "Xk4!mQ2pRt7@wZ9aBc1_", "conf-body-aaaa"]);

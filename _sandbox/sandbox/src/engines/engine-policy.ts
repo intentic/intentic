@@ -1,9 +1,10 @@
+import { join } from "node:path";
 import { type EngineChannel, EngineChannelSchema, type EngineId, ENGINE_IDS } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { opt } from "../opt.js";
 import { defineDocument } from "../store/evolution/documents.js";
-import { jsonFile } from "../store/json-file.js";
-import { statePath, stateRelPath } from "../state-paths.js";
+import { openDocument } from "../store/open-document.js";
+import { stateRelPath } from "../state-paths.js";
 
 // The owner's standing channel choice per engine, one file in the workspace's config slice: a decision about the work,
 // not the machine, so it travels with the workspace (portability `carry`) while the binaries stay behind. Default is `{
@@ -24,13 +25,9 @@ const isEngineId = (id: string): id is EngineId => (ENGINE_IDS as readonly strin
 export const DEFAULT_CHANNEL: EngineChannel = { kind: "blessed" };
 
 const policyFile = (root: string) =>
-    jsonFile<EnginePolicyFile>(statePath(root, ".intentic/config/engines.json"), {
-        parse: (raw) => {
-            const parsed = EnginePolicyFileSchema.safeParse(raw).data;
-            return parsed === undefined ? undefined : { engines: Object.fromEntries(Object.entries(parsed.engines ?? {}).filter(([id]) => isEngineId(id))) };
-        },
+    openDocument(enginePolicyDocument, join(root, enginePolicyDocument.path), {
+        read: (parsed): EnginePolicyFile => ({ engines: Object.fromEntries(Object.entries(parsed.engines ?? {}).filter(([id]) => isEngineId(id))) }),
         fallback: () => ({ engines: {} }),
-        document: enginePolicyDocument,
     });
 
 export const readEngineChannels = async (root: string): Promise<Partial<Record<EngineId, EngineChannel>>> => (await policyFile(root).read()).engines;

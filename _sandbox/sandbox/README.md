@@ -53,9 +53,13 @@ flowchart LR
   child waiting for room, heavy commands (over the local `room.sock`) and the editor's memory gauge all read its one
   snapshot, taken by the formula in `@intentic/constants/memory-room`.
 - Stored files evolve under one engine (`store/`). Each is declared with `defineDocument` beside its store, carrying
-  the conversions its shape has had; `jsonFile`, `jsonEntries` and `jsonDir` read through the contract's one
-  `readDocument`, which runs them on every read, and keep what they do not know on writes, so a store's next save is
-  what persists a converted shape. Before any store opens, `store/evolution/state-convergence.ts` does only what a read
+  the conversions its shape has had, its path (the contract's state-file tables are found from it, `stateFile`) and
+  its layout; a store opens it with `store/open-document.ts` (`openDocument`, `openEntries`, `openIdList`,
+  `openDirectory`), which parses with the document's own schema through the contract's one `readDocument`, runs its
+  conversions on every read and keeps what this build does not know on writes, so a store's next save is what
+  persists a converted shape. Families of files with one shape (the doors' enrollment and burn files, the two vaults,
+  the two install ledgers) are one spec factory each. A runtime's regrowable cache is the only file opened without a
+  document (`cacheFile`); `store/documents-coverage.test.ts` fails on any other. Before any store opens, `store/evolution/state-convergence.ts` does only what a read
   cannot (documents that moved, structural steps: a regroup, a database schema, an import) under a journal a
   rolled-back build undoes, committed once boot converges; it runs each document's conversions without writing, so one
   that would fail is named first. `src/state-plan.ts` is the same plan, read-only, for `ic`'s pre-flight. Both

@@ -25,8 +25,9 @@ import type { Services } from "../composition.js";
 import { composeEnvironment } from "../environment/environment.js";
 import { capabilityFragments } from "../environment/fragment-sources.js";
 import { defineDocument } from "../store/evolution/documents.js";
-import { type JsonFile, jsonFile } from "../store/json-file.js";
-import { statePath, stateRelPath } from "../state-paths.js";
+import type { JsonFile } from "../store/json-file.js";
+import { openDocument } from "../store/open-document.js";
+import { stateRelPath } from "../state-paths.js";
 import { readExtensionEnablement, writeExtensionEnablement } from "./extension-enablement.js";
 import { extensionProcessKey, processesDesired, reconcileListenerProcesses, startAutoStartProcesses } from "./extension-processes.js";
 import { extensionRuntimeAbsent } from "./extension-readiness.js";
@@ -54,11 +55,7 @@ type UpdateState = z.infer<typeof StateSchema>;
 export const extensionUpdatesDocument = defineDocument({ path: stateRelPath(".intentic/records/extension-updates.json"), schema: StateSchema });
 
 const stateFile = (root: string): JsonFile<UpdateState> =>
-    jsonFile<UpdateState>(statePath(root, ".intentic/records/extension-updates.json"), {
-        parse: (raw) => StateSchema.safeParse(raw).data,
-        fallback: () => ({ extensions: {} }),
-        document: extensionUpdatesDocument,
-    });
+    openDocument(extensionUpdatesDocument, join(root, extensionUpdatesDocument.path), { fallback: () => ({ extensions: {} }) });
 
 export const readExtensionUpdateState = async (root: string): Promise<UpdateState> => stateFile(root).read();
 
@@ -81,8 +78,7 @@ const PolicySchema = z.object({
     updates: z.enum(["notify", "agent", "auto"]).optional(),
     advisories: z.enum(["auto-disable", "notify"]).optional(),
 });
-const PolicyFileSchema = z.record(z.string(), PolicySchema);
-type PolicyFile = z.infer<typeof PolicyFileSchema>;
+type PolicyFile = Record<string, z.infer<typeof PolicySchema>>;
 
 export const extensionUpdatePolicyDocument = defineDocument({
     path: stateRelPath(".intentic/config/extension-update-policy.json"),
@@ -90,21 +86,9 @@ export const extensionUpdatePolicyDocument = defineDocument({
     granularity: "record",
 });
 
-const policyFiles = new Map<string, JsonFile<PolicyFile>>();
-const policyFile = (root: string): JsonFile<PolicyFile> => {
-    const path = statePath(root, ".intentic/config/extension-update-policy.json");
-    const existing = policyFiles.get(path);
-    if (existing !== undefined) {
-        return existing;
-    }
-    const file = jsonFile<PolicyFile>(path, {
-        parse: (raw) => PolicyFileSchema.safeParse(raw).data,
-        fallback: () => ({}),
-        document: extensionUpdatePolicyDocument,
-    });
-    policyFiles.set(path, file);
-    return file;
-};
+// A handle per call: every handle on one path shares its write queue (queueOnFile).
+const policyFile = (root: string): JsonFile<PolicyFile> =>
+    openDocument(extensionUpdatePolicyDocument, join(root, extensionUpdatePolicyDocument.path), { fallback: () => ({}) });
 
 export const resolveUpdatePolicy = (stored: PolicyFile[string] | undefined): ExtensionUpdatePolicy => ({
     updates: stored?.updates ?? "notify",

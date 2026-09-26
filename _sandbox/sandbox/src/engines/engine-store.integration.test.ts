@@ -6,7 +6,6 @@ import {
     collectGarbage,
     deactivate,
     engineVersionDir,
-    forgetEngineStates,
     installedVersions,
     isQuarantined,
     quarantineVersion,
@@ -24,7 +23,6 @@ const version = (name: string): void => {
 
 beforeEach(() => {
     process.env["INTENTIC_ENGINES_DIR"] = mkdtempSync(join(tmpdir(), "engine-store-"));
-    forgetEngineStates();
 });
 
 test("a fresh store runs the image's copy and has nothing to go back to", async () => {

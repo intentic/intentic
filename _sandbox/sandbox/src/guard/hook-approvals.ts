@@ -3,7 +3,7 @@ import { type HookRequests, HookScriptSchema, SettingsHookSchema, type TurnNote 
 import { z } from "zod";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { defineDocument } from "../store/evolution/documents.js";
-import { approvalLedgers, type JsonFile, jsonFile } from "../store/json-file.js";
+import { openApprovalLedger, openDocument } from "../store/open-document.js";
 import { type HookPlace, type HookSet, settingsHookSet } from "./settings-hooks.js";
 
 /* The owner's yes to a set of Claude Code hooks (settings-hooks.ts), pinned by its digest, and the sets turns found still
@@ -31,26 +31,12 @@ export const hookRequestsDocument = defineDocument({ root: "history", path: "hoo
 // Newest kept: an older set nobody answered is one the workspace has since moved past.
 const REQUESTS_KEPT = 20;
 
-const ledgers = approvalLedgers((raw) => LedgerSchema.safeParse(raw).data, hookApprovalsDocument);
-
 // Keyed by the set's digest, which is the whole pin: a set changed in any way is a new key, unapproved.
-const ledgerOf = (historyRoot: string) => ledgers(join(historyRoot, "hook-approvals.json"));
+const ledgerOf = (historyRoot: string) => openApprovalLedger(hookApprovalsDocument, join(historyRoot, hookApprovalsDocument.path));
 
-// Memoized per path, so every writer of one file shares its update queue (json-file.ts).
-const requestFiles = new Map<string, JsonFile<Requests>>();
-
-const requestsOf = (historyRoot: string): JsonFile<Requests> => {
-    const path = join(historyRoot, "hook-requests.json");
-    const file =
-        requestFiles.get(path) ??
-        jsonFile<Requests>(path, {
-            parse: (raw) => RequestsSchema.safeParse(raw).data,
-            fallback: () => ({ requests: {} }),
-            document: hookRequestsDocument,
-        });
-    requestFiles.set(path, file);
-    return file;
-};
+// Every handle on one path shares its write queue (queueOnFile), so a handle per call is enough.
+const requestsOf = (historyRoot: string) =>
+    openDocument(hookRequestsDocument, join(historyRoot, hookRequestsDocument.path), { fallback: (): Requests => ({ requests: {} }) });
 
 const approved = async (historyRoot: string, digest: string): Promise<boolean> => (await ledgerOf(historyRoot).read()).approved[digest] !== undefined;
 

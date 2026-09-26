@@ -2,7 +2,7 @@ import { channelId, PushChannelSchema, type PushChannel } from "@intentic/sandbo
 import webpush from "web-push";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
-import { jsonFile } from "../store/json-file.js";
+import { openDocument } from "../store/open-document.js";
 
 // This sandbox's VAPID keypair plus one entry per registered device (a browser's web-push subscription or a native
 // relay channel, see PushChannelSchema).
@@ -40,13 +40,11 @@ export const pushDocument = defineDocument({ root: "history", path: "push.json",
 const keyed = (state: PushState): PushState => (state.publicKey === "" ? { ...state, ...webpush.generateVAPIDKeys() } : state);
 
 export const filePushStore = (path: string): PushStore => {
-    const file = jsonFile<PushState>(path, {
-        // Absent or corrupt state parses as unkeyed; `keyed` mints a fresh pair, and losing channels is recoverable.
-        parse: (raw) => StoredStateSchema.safeParse(raw).data,
+    // Absent or corrupt state parses as unkeyed; `keyed` mints a fresh pair, and losing channels is recoverable.
+    const file = openDocument<typeof pushDocument, PushState>(pushDocument, path, {
         // Empty keys are the in-memory unkeyed marker; the schema requires non-empty keys, so this never reaches disk.
         fallback: () => ({ publicKey: "", privateKey: "", channels: [] }),
         mode: 0o600,
-        document: pushDocument,
     });
 
     return {

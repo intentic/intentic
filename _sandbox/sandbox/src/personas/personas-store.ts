@@ -1,7 +1,8 @@
 import { type Persona, PersonaSchema } from "@intentic/sandbox-contract";
 import { drop, nested, rename, retype } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
-import { idListFile, type IdListStore } from "../store/id-list-file.js";
+import type { IdListStore } from "../store/id-list-file.js";
+import { openIdList } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
 
 // Personas are tracked in git unlike the rest of .intentic, since a card holds no secret: name, capability ids,
@@ -41,4 +42,4 @@ export const personasDocument = defineDocument({
 // An unreadable card is reported to both `onInvalid` (daemon log) and the manifest-problem registry (the screen it
 // vanished from).
 export const filePersonasStore = (path: string, onInvalid?: (id: string, reason: string) => void): PersonasStore =>
-    idListFile(path, PersonaSchema, onInvalid, personasDocument);
+    openIdList(personasDocument, path, onInvalid);

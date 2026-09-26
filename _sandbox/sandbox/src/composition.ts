@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { queuePrefixFor, queueWhole } from "./agent/tools/agent-terminals.js";
 import { join, resolve } from "node:path";
 import type { DeviceFacts, DeviceScopes, RunnerFacts, WebExtFacts, WebExtScopes, IntenticLine } from "@intentic/sandbox-contract";
@@ -32,54 +31,54 @@ import { piSpawner } from "./runtimes/pi/pi-rpc.js";
 import { type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
 import { runAgent } from "./agent/run/agent.js";
 import { cliProxyAuthDir, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient } from "./agent/providers/translator.js";
-import { fileHeldWakesStore } from "./automations/held-wakes-store.js";
-import { fileSendersStore } from "./automations/senders-store.js";
-import { fileAutomationsStore } from "./automations/automations-store.js";
-import { fileLoopDesignsStore, fileLoopsStore } from "./loops/loops-store.js";
-import { fileWorkflowRunsStore, fileWorkflowsStore } from "./workflows/workflows-store.js";
+import { fileHeldWakesStore, heldWakesDocument } from "./automations/held-wakes-store.js";
+import { fileSendersStore, sendersDocument } from "./automations/senders-store.js";
+import { automationRunsDocument, automationsDocument, fileAutomationsStore } from "./automations/automations-store.js";
+import { fileLoopDesignsStore, fileLoopsStore, loopDesignsDocument, loopsDocument } from "./loops/loops-store.js";
+import { fileWorkflowRunsStore, fileWorkflowsStore, workflowRunsDocument, workflowsDocument } from "./workflows/workflows-store.js";
 import { type ChoresStore, fileChoresStore, LEDGER_FILE, PROBES_FILE } from "./chores/chores-store.js";
 import { createProbeRunner, type ProbeRunner } from "./chores/probe-runner.js";
-import { fileCapabilitiesStore, vaultManifestSecrets, withSecretVault } from "./capabilities/capabilities-store.js";
+import { capabilitiesDocument, fileCapabilitiesStore, vaultManifestSecrets, withSecretVault } from "./capabilities/capabilities-store.js";
 import { contributionRegistry, invalidatingContributions } from "./capabilities/contributions.js";
-import { fileSecretVault } from "./capabilities/credentials/secret-vault.js";
+import { capabilitySecretsDocument, extensionSecretsDocument, fileSecretVault } from "./capabilities/credentials/secret-vault.js";
 import { secretRegistryOf } from "./secrets/secret-registry.js";
-import { fileSecretUses } from "./secrets/secret-uses.js";
+import { fileSecretUses, secretUsesDocument } from "./secrets/secret-uses.js";
 import { fileCredentialGates } from "./secrets/credential-gates.js";
 import { createCredentialGrants } from "./secrets/credential-grants.js";
 import { createCredentialGate } from "./secrets/credential-gate.js";
-import { fileWalletLedger, type WalletLedgerStore } from "./wallet/wallet-ledger.js";
+import { fileWalletLedger, walletLedgerDocument, type WalletLedgerStore } from "./wallet/wallet-ledger.js";
 import { createTrialService, type TrialService } from "./trial/trial.js";
 import { withTrialEndpoint } from "./trial/trial-endpoint.js";
-import { fileDismissalsStore } from "./capabilities/offers/dismissals-store.js";
-import { filePersonasStore, type PersonasStore } from "./personas/personas-store.js";
-import { fileAreasStore, type AreasStore } from "./areas/areas-store.js";
-import { fileHeavyCommandsStore } from "./system/resources/heavy-commands.js";
+import { dismissalsDocument, fileDismissalsStore } from "./capabilities/offers/dismissals-store.js";
+import { filePersonasStore, personasDocument, type PersonasStore } from "./personas/personas-store.js";
+import { areasDocument, type AreasStore, fileAreasStore } from "./areas/areas-store.js";
+import { fileHeavyCommandsStore, heavyCommandsDocument } from "./system/resources/heavy-commands.js";
 import { createResourceBudget } from "./workload/resource-budget.js";
 import { deriveBytes } from "./derived/derived-blob.js";
 import { deriveText, readDerivedText } from "./derived/derived-text.js";
 import { sidecarStatus } from "./derived/sidecar-service.js";
-import { fileCiStore } from "./ci/ci-store.js";
-import { fileVerifyStore } from "./workspace/deps/verify-store.js";
+import { ciDocument, fileCiStore } from "./ci/ci-store.js";
+import { fileVerifyStore, verifyDocument } from "./workspace/deps/verify-store.js";
 import { landCheckOf } from "./conversations/land/verify-landed.js";
-import { filePushChecksStore } from "./workspace/deps/push-checks-store.js";
+import { filePushChecksStore, pushChecksDocument } from "./workspace/deps/push-checks-store.js";
 import { createPushChecks } from "./workspace/deps/push-checks.js";
 import { createCiHookReconciler } from "./ci/hooks.js";
 import { createRunsCache } from "./ci/runs-cache.js";
 import { createBrowserRouters } from "./browser/tools/browser-prepare.js";
 import type { BrowserRouterFactory } from "./browser/tools/browser-router.js";
 
-import { fileAccountUsageStore } from "./usage/account-usage.js";
+import { accountUsageDocument, fileAccountUsageStore } from "./usage/account-usage.js";
 import { claudeHeadroomSource } from "./usage/claude-usage.js";
 import { createHeadroomService } from "./usage/headroom.js";
-import { fileUsageParkStore } from "./usage/usage-parks.js";
-import { fileModelCooldownStore } from "./usage/model-cooldowns.js";
-import { fileModelRefusalStore } from "./usage/model-refusals.js";
-import { fileObservedLimitStore } from "./usage/observed-limits.js";
-import { fileProviderRefusalStore } from "./usage/provider-refusals.js";
+import { fileUsageParkStore, usageParksDocument } from "./usage/usage-parks.js";
+import { fileModelCooldownStore, modelCooldownsDocument } from "./usage/model-cooldowns.js";
+import { fileModelRefusalStore, modelRefusalsDocument } from "./usage/model-refusals.js";
+import { fileObservedLimitStore, observedLimitsDocument } from "./usage/observed-limits.js";
+import { fileProviderRefusalStore, providerRefusalsDocument } from "./usage/provider-refusals.js";
 import { cursorHeadroomSource } from "./runtimes/cursor/cursor-usage.js";
-import { type ApprovalsStore, fileApprovalsStore } from "./approvals/approvals-store.js";
-import { fileIssuesStore } from "./issues/issues-store.js";
-import { fileInstallsStore } from "./store/installs.js";
+import { approvalsDocument, type ApprovalsStore, fileApprovalsStore } from "./approvals/approvals-store.js";
+import { fileIssuesStore, issuesDocument } from "./issues/issues-store.js";
+import { fileInstallsStore, issueInstallsDocument } from "./store/installs.js";
 import { HOST_PEER, type HostAnnounced, type HostClient } from "./hosts/host-peer.js";
 import { hostDeviceReach } from "./hosts/self-host.js";
 import { ownBrowserReach, WEBEXT_PEER, type WebExtAnnounced, type WebExtClient } from "./webext/webext-peer.js";
@@ -88,7 +87,7 @@ import { createPeerHub } from "./peers/peer-hub.js";
 import { filePeerStore } from "./peers/peer-store.js";
 import { filePeerTools } from "./peers/peer-tool-memory.js";
 import { fetchPresentation, type SandboxPresentation } from "./system/platform-client.js";
-import { enrolledFleet, syncPairBurnPath, type SyncMode } from "./hosts/desktop-sync.js";
+import { enrolledFleet, syncPairBurns, type SyncMode } from "./hosts/desktop-sync.js";
 import { pairings } from "./peers/enrollment.js";
 import { sqliteTurnJournal, turnJournalRows } from "./agent/run/turn/turn-journal.js";
 import { sqliteWatchJournal } from "./agent/verification/watch-journal.js";
@@ -152,21 +151,21 @@ import { createManagedProcesses } from "./processes/managed-processes.js";
 import { createServiceProcesses } from "./processes/service-processes.js";
 import { createPanelUpstreamResolver, type PanelUpstreamResolver } from "./panels/panel-upstream.js";
 import { discoverRepos } from "./workspace/layout/repo-discovery.js";
-import { type PushStore, filePushStore } from "./push/push-store.js";
+import { filePushStore, pushDocument, type PushStore } from "./push/push-store.js";
 import { createPushSender, type PushSender } from "./push/push.js";
 import { createPortForwards } from "./ports/port-forwards.js";
 import { scanListeningPorts, withOwningSessions } from "./ports/port-scan.js";
 import { transcriptSearchMetrics } from "./sessions/transcript-search.js";
-import { fileThreadSessionsStore } from "./sessions/thread-sessions.js";
-import { fileWebchatOutbox, outboxStreamFor } from "./webchat/webchat-outbox.js";
-import { fileShareStore, type ShareStore } from "./share/share-store.js";
+import { fileThreadSessionsStore, threadSessionsDocument } from "./sessions/thread-sessions.js";
+import { fileWebchatOutbox, outboxStreamFor, webchatOutboxDocument } from "./webchat/webchat-outbox.js";
+import { fileShareStore, sharesDocument, type ShareStore } from "./share/share-store.js";
 import { createSpeech, type Speech } from "./speech/transcribe.js";
-import { type SafetyLog, fileSafetyLog } from "./safety/safety-log.js";
+import { fileSafetyLog, type SafetyLog, safetyLogDocument } from "./safety/safety-log.js";
 import { type SafetyPolicyStore, fileSafetyPolicyStore } from "./safety/safety-policy-store.js";
-import { type SandboxSettingsStore, fileSandboxSettingsStore } from "./settings/settings-store.js";
-import { type RuleFiringsStore, fileRuleFiringsStore } from "./rules/rule-firings.js";
+import { fileSandboxSettingsStore, type SandboxSettingsStore, settingsDocument } from "./settings/settings-store.js";
+import { fileRuleFiringsStore, ruleFiringsDocument, type RuleFiringsStore } from "./rules/rule-firings.js";
 import { type DriftSweep, createDriftSweep } from "./environment/drift-sweep.js";
-import { type RuntimeInstallsStore, fileRuntimeInstallsStore } from "./environment/runtime-installs.js";
+import { fileRuntimeInstallsStore, runtimeInstallsDocument, type RuntimeInstallsStore } from "./environment/runtime-installs.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { cardDeps } from "./conversations/actor/card-offers.js";
 import { turnDoors } from "./agent/run/turn/turn-doors.js";
@@ -219,7 +218,7 @@ import { listWorkspaceChildren, walkWorkspaceTree } from "./workspace/files/work
 import { heldDirReads } from "./workspace/files/dir-reads.js";
 
 import { statePath } from "./state-paths.js";
-import { createDependencyCoordinator } from "./workspace/deps/reconcile-deps.js";
+import { createDependencyCoordinator, dependencyRequestsDocument } from "./workspace/deps/reconcile-deps.js";
 import { parkedCards } from "./conversations/actor/parked-cards.js";
 import { createAuthSlice, type AuthSlice } from "./auth/auth-slice.js";
 import type { HostsSlice } from "./hosts/hosts-slice.js";
@@ -364,7 +363,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // AI-provider credential root; AGENT_AUTH_DIR shares it across dev sandboxes so subscription OAuth survives.
     const authRoot = config.agentAuthDir !== "" ? config.agentAuthDir : statePath(workspace.root, ".intentic/secrets/auth/");
     // Hoisted: the turn stream and the translator client both read and record into this same file.
-    const accountUsage = fileAccountUsageStore(join(config.historyRoot, "account-usage.json"));
+    const accountUsage = fileAccountUsageStore(join(config.historyRoot, accountUsageDocument.path));
     const cliProxy = createCliProxyClient({
         managementUrl: cliProxyManagementUrl(config),
         token: config.translator.token,
@@ -410,12 +409,12 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const codex = createCodexSlice({ config, authRoot });
     const cursor = createCursorSlice({ authRoot, logger });
     // What this sandbox has been refused, for the plans that publish no allowance to read; Cursor's only reading.
-    const observedLimits = fileObservedLimitStore(join(config.historyRoot, "observed-limits.json"));
+    const observedLimits = fileObservedLimitStore(join(config.historyRoot, observedLimitsDocument.path));
     // Every way 'what each account has left' can be learned: Claude's own tokens, routed subscriptions via the
     // translator, and — where nothing is published — the refusals this sandbox has collected itself.
     const headroom = createHeadroomService({
         store: accountUsage,
-        parks: fileUsageParkStore(join(config.historyRoot, "usage-parks.json")),
+        parks: fileUsageParkStore(join(config.historyRoot, usageParksDocument.path)),
         sources: [
             claudeHeadroomSource(claude.claudeStore),
             cliProxy.headroom,
@@ -448,10 +447,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
         workspace,
         processes,
         logger,
-        requestsPath: join(config.historyRoot, "dependency-requests.json"),
+        requestsPath: join(config.historyRoot, dependencyRequestsDocument.path),
     });
     // Hoisted: the store and the sender reading it must be the same instance, or a subscription would go unseen.
-    const pushStore = filePushStore(join(config.historyRoot, "push.json"));
+    const pushStore = filePushStore(join(config.historyRoot, pushDocument.path));
     // Hoisted because the credential gate notifies through it when a release card goes up.
     const pushSender = createPushSender(pushStore, logger);
     // Shared by the turn path and worktree creation so both read one capability probe.
@@ -511,12 +510,12 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // Every write moves the contribution inventory (contributions.ts), which enumerates installed extensions from here;
     // the file watcher would too, but only after a turn planned in between had read the old one.
     const capabilityManifest = invalidatingContributions(
-        fileCapabilitiesStore(statePath(workspace.root, ".intentic/config/capabilities.json"), (id, reason) =>
+        fileCapabilitiesStore(join(workspace.root, capabilitiesDocument.path), (id, reason) =>
             logger.warn(`capabilities: skipping unreadable entry "${id}" (${reason}), the rest of the manifest is unaffected`),
         ),
     );
     // Credential values, off /work, sited beside the AI-provider logins outside the file routes and search index.
-    const secretVault = fileSecretVault(join(authRoot, "capability-secrets.json"));
+    const secretVault = fileSecretVault(capabilitySecretsDocument, join(authRoot, capabilitySecretsDocument.path));
     // Approval policy sits beside the vault it guards, off the tracked, agent-editable config directory.
     const credentialGates = fileCredentialGates(join(authRoot, "credential-gates.json"));
     const credentialGrants = createCredentialGrants();
@@ -533,7 +532,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             `capabilities: "${id}" holds non-string credential field(s) ${fields.join(", ")}, left in the manifest, which the agent can read`,
         );
     // Extension-settings' own vault, keyed by publisher.name, not capability id, since the two ids can collide.
-    const extensionSecretVault = fileSecretVault(join(authRoot, "extension-secrets.json"));
+    const extensionSecretVault = fileSecretVault(extensionSecretsDocument, join(authRoot, extensionSecretsDocument.path));
     const extensionHostAdapter = {
         workspace: { root: workspace.root },
         files: { read: readWorkspaceFile },
@@ -557,21 +556,21 @@ export const createServices = (config: Config, logger: Logger): Services => {
         trial,
         platformTunnel,
     );
-    const personas = filePersonasStore(statePath(workspace.root, ".intentic/config/personas.json"), (id, reason) =>
+    const personas = filePersonasStore(join(workspace.root, personasDocument.path), (id, reason) =>
         logger.warn(`personas: skipping unreadable card "${id}" (${reason}), the rest are unaffected`),
     );
-    const areas = fileAreasStore(statePath(workspace.root, ".intentic/config/areas.json"), (id, reason) =>
+    const areas = fileAreasStore(join(workspace.root, areasDocument.path), (id, reason) =>
         logger.warn(`areas: skipping unreadable area "${id}" (${reason}); anyone fenced to it reaches nothing until it parses`),
     );
-    const heavyCommands = fileHeavyCommandsStore(statePath(workspace.root, ".intentic/config/heavy-commands.json"), (reason) =>
+    const heavyCommands = fileHeavyCommandsStore(join(workspace.root, heavyCommandsDocument.path), (reason) =>
         logger.warn(`heavy-commands: ${reason}, falling back to the shipped rules`),
     );
-    const ciStore = fileCiStore(statePath(workspace.root, ".intentic/secrets/ci.json"));
+    const ciStore = fileCiStore(join(workspace.root, ciDocument.path));
     // Samples on a timer of its own, so a death certificate can look back at what the sandbox had.
     const resources = createResourceBudget();
-    const verifyStore = fileVerifyStore(statePath(workspace.root, ".intentic/records/verify.json"));
+    const verifyStore = fileVerifyStore(join(workspace.root, verifyDocument.path));
     // Hoisted: the drift sweep and the install-steering hook write the same ledger the /environment route reads.
-    const runtimeInstalls = fileRuntimeInstallsStore(statePath(workspace.root, ".intentic/records/runtime-installs.json"));
+    const runtimeInstalls = fileRuntimeInstallsStore(join(workspace.root, runtimeInstallsDocument.path));
     // Hoisted: the background probe runner writes the same cache the /chores route reads.
     const chores = fileChoresStore(join(workspace.root, PROBES_FILE), join(workspace.root, LEDGER_FILE));
     // Bound once against the same registry, whose sessionIdOf reads live turn state as well as the persisted entry.
@@ -669,7 +668,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         webextReach: (granted) => ownBrowserReach(services, granted),
         runners: filePeerStore(config.historyRoot, RUNNER_PEER.store),
         runnerHub: createPeerHub<RunnerClient, RunnerAnnounced, RunnerFacts, never>(RUNNER_PEER.hub, logger, peerTools),
-        syncPairings: pairings<SyncMode>(syncPairBurnPath(config.historyRoot)),
+        syncPairings: pairings<SyncMode>(syncPairBurns(config.historyRoot)),
         runnerParent: {},
         info,
         tools: internalTools(config.intenticAgentTools),
@@ -680,15 +679,15 @@ export const createServices = (config: Config, logger: Logger): Services => {
         vaultExtensionSettingSecrets: async () =>
             vaultExtensionSettingSecrets(workspace.root, extensionSecretVault, await settingSecretKeys(), onUnvaultableSetting),
         secretRegistry: secretRegistryOf(secretVault, () => workspace.repos["desired-state"]),
-        secretUses: fileSecretUses(statePath(workspace.root, ".intentic/records/secret-uses.json")),
+        secretUses: fileSecretUses(join(workspace.root, secretUsesDocument.path)),
         credentialGates,
         credentialGrants,
         // Grants must be one map: a release clicked at the shell exit must be the release the browser reads next turn.
         credentialGate: createCredentialGate({ gates: credentialGates, grants: credentialGrants, ...cardDeps({ conversations, cards, events }) }),
-        walletLedger: fileWalletLedger(statePath(workspace.root, ".intentic/records/wallet-ledger.json")),
+        walletLedger: fileWalletLedger(join(workspace.root, walletLedgerDocument.path)),
         trial,
         platformTunnel,
-        capabilityDismissals: fileDismissalsStore(statePath(workspace.root, ".intentic/config/capability-dismissals.json")),
+        capabilityDismissals: fileDismissalsStore(join(workspace.root, dismissalsDocument.path)),
         personas,
         areas,
         heavyCommands,
@@ -700,19 +699,19 @@ export const createServices = (config: Config, logger: Logger): Services => {
         landCheck: landCheckOf(() => services),
         pushChecks: createPushChecks({
             root: workspace.root,
-            store: filePushChecksStore(statePath(workspace.root, ".intentic/records/push-checks.json")),
+            store: filePushChecksStore(join(workspace.root, pushChecksDocument.path)),
             logger,
         }),
         ciRuns: createRunsCache(),
         ciHooks: createCiHookReconciler({ workspace, capabilities, ciStore, config, logger }),
         automations: fileAutomationsStore(
-            statePath(workspace.root, ".intentic/config/automations.json"),
-            statePath(workspace.root, ".intentic/records/automation-runs.json"),
+            join(workspace.root, automationsDocument.path),
+            join(workspace.root, automationRunsDocument.path),
         ),
-        loops: fileLoopsStore(statePath(workspace.root, ".intentic/records/loops.json")),
-        loopDesigns: fileLoopDesignsStore(statePath(workspace.root, ".intentic/config/loop-designs.json")),
-        workflows: fileWorkflowsStore(statePath(workspace.root, ".intentic/config/workflows.json")),
-        workflowRuns: fileWorkflowRunsStore(statePath(workspace.root, ".intentic/records/workflow-runs.json")),
+        loops: fileLoopsStore(join(workspace.root, loopsDocument.path)),
+        loopDesigns: fileLoopDesignsStore(join(workspace.root, loopDesignsDocument.path)),
+        workflows: fileWorkflowsStore(join(workspace.root, workflowsDocument.path)),
+        workflowRuns: fileWorkflowRunsStore(join(workspace.root, workflowRunsDocument.path)),
         chores,
         probeRunner: createProbeRunner({
             workspace,
@@ -721,17 +720,17 @@ export const createServices = (config: Config, logger: Logger): Services => {
             wanted: async () => (await enabledExtensions(extensionHostAdapter)).some((extension) => extension.id === "intentic.maintenance"),
             logger,
         }),
-        heldWakes: fileHeldWakesStore(statePath(workspace.root, ".intentic/records/approvals/")),
+        heldWakes: fileHeldWakesStore(join(workspace.root, heldWakesDocument.path)),
         threadSessions: fileThreadSessionsStore(
-            statePath(workspace.root, ".intentic/records/thread-sessions.json"),
+            join(workspace.root, threadSessionsDocument.path),
             (conversationId) => agents.entry(conversationId)?.archivedAt !== undefined,
         ),
-        senders: fileSendersStore(statePath(workspace.root, ".intentic/records/senders.json")),
-        webchatOutbox: fileWebchatOutbox(statePath(workspace.root, ".intentic/records/webchat-outbox.json")),
+        senders: fileSendersStore(join(workspace.root, sendersDocument.path)),
+        webchatOutbox: fileWebchatOutbox(join(workspace.root, webchatOutboxDocument.path)),
         outboxStreamFor: (origin) => outboxStreamFor(services, origin),
-        approvals: fileApprovalsStore(statePath(workspace.root, ".intentic/config/approvals/")),
-        issues: fileIssuesStore(statePath(workspace.root, ".intentic/records/issues/")),
-        issueInstalls: fileInstallsStore(statePath(workspace.root, ".intentic/records/issue-installs.json")),
+        approvals: fileApprovalsStore(join(workspace.root, approvalsDocument.path)),
+        issues: fileIssuesStore(join(workspace.root, issuesDocument.path)),
+        issueInstalls: fileInstallsStore(issueInstallsDocument, join(workspace.root, issueInstallsDocument.path)),
         turnJournal,
         // Beside the turn journal, for the same reason: it must outlive a container recreate.
         watchJournal: sqliteWatchJournal(conversationsDb),
@@ -743,10 +742,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
         promptRecord: filePromptRecord(config.historyRoot),
         activity: fileActivityStore(join(config.historyRoot, "activity.jsonl")),
         usage: fileUsageStore(join(config.historyRoot, "usage.jsonl")),
-        sandboxSettings: fileSandboxSettingsStore(statePath(workspace.root, ".intentic/config/settings.json")),
+        sandboxSettings: fileSandboxSettingsStore(join(workspace.root, settingsDocument.path)),
         safetyPolicy: fileSafetyPolicyStore(statePath(workspace.root, ".intentic/config/safety.md")),
-        safetyLog: fileSafetyLog(statePath(workspace.root, ".intentic/local/safety-log.json")),
-        ruleFirings: fileRuleFiringsStore(statePath(workspace.root, ".intentic/local/rule-firings.json")),
+        safetyLog: fileSafetyLog(join(workspace.root, safetyLogDocument.path)),
+        ruleFirings: fileRuleFiringsStore(join(workspace.root, ruleFiringsDocument.path)),
         runtimeInstalls,
         driftSweep: createDriftSweep({ workspace, runtimeInstalls, conversations, logger }),
         push: pushStore,
@@ -761,9 +760,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ...minted,
         accountUsage,
         headroom,
-        providerRefusals: fileProviderRefusalStore(join(config.historyRoot, "provider-refusals.json")),
-        modelRefusals: fileModelRefusalStore(join(config.historyRoot, "model-refusals.json")),
-        modelCooldowns: fileModelCooldownStore(join(config.historyRoot, "model-cooldowns.json")),
+        providerRefusals: fileProviderRefusalStore(join(config.historyRoot, providerRefusalsDocument.path)),
+        modelRefusals: fileModelRefusalStore(join(config.historyRoot, modelRefusalsDocument.path)),
+        modelCooldowns: fileModelCooldownStore(join(config.historyRoot, modelCooldownsDocument.path)),
         observedLimits,
         // Late-bound through the same holder the extension backend uses; the thunks only run per request.
         providerCatalogs: providerCatalogsOf(PROVIDER_MODULES, () => {
@@ -908,7 +907,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         workspaceTreeChanged: treeReads.changed,
         workspaceChildren: listWorkspaceChildren,
         iq,
-        shares: fileShareStore(join(config.historyRoot, "shares.json")),
+        shares: fileShareStore(join(config.historyRoot, sharesDocument.path)),
         speech: createSpeech({ workspaceRoot: workspace.root, log: (message) => logger.info(`speech: ${message}`) }),
         // Reads live sockets through the shared scan rather than the assigned port, since a monorepo can pin its own.
         panelUpstreamOf: createPanelUpstreamResolver({

@@ -1,7 +1,6 @@
 import { SETTINGS_HISTORY, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { defineDocument } from "../store/evolution/documents.js";
-import { jsonFile } from "../store/json-file.js";
-import { objectParse } from "../store/unknown-keys.js";
+import { openDocument } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
 
 // The sandbox-owned agent-settings manifest (<workspace>/.intentic/config/settings.json). Mirrors the automations
@@ -22,10 +21,10 @@ export interface SandboxSettingsStore {
 }
 
 export const fileSandboxSettingsStore = (path: string): SandboxSettingsStore => {
-    const file = jsonFile<SandboxSettings>(path, {
-        // `objectParse` rather than a bare safeParse: this is the manifest a person is most likely to open and
+    const file = openDocument(settingsDocument, path, {
+        // Unknown keys reported rather than a bare parse: this is the manifest a person is most likely to open and
         // edit, and a misspelled flag would otherwise be stripped in silence and simply never take effect.
-        parse: objectParse(SandboxSettingsSchema),
+        unknownKeys: true,
         // Applied when the file is absent or unreadable. The defaults live on the schema (every flag is opt-in,
         // so all default off), so parsing an empty object is the schema's OWN answer for "nothing was written
         // yet" rather than a second copy of the shape that could drift from it. A manifest that predates a flag
@@ -33,7 +32,6 @@ export const fileSandboxSettingsStore = (path: string): SandboxSettingsStore => 
         fallback: () => SandboxSettingsSchema.parse({}),
         // The one manifest the owner edits by hand: a version this build cannot parse is theirs to fix, never replaced.
         onUnreadable: "refuse",
-        document: settingsDocument,
     });
     return {
         get: file.read,

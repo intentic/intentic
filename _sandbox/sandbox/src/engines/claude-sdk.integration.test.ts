@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CLAUDE_SDK_EXPORTS } from "./engine-descriptors.js";
 import { forgetEngineResolution } from "./engine-resolve.js";
-import { activateVersion, engineVersionDir, forgetEngineStates, readEngineState } from "./engine-store.js";
+import { activateVersion, engineVersionDir, readEngineState } from "./engine-store.js";
 import { claudeCliPath, forgetClaudeSdk, refreshClaudeSdk, sdk } from "./claude-sdk.js";
 
 // The loader decides which SDK copy every turn runs on. A store copy is taken whole (JS + CLI binary from one prefix);
@@ -38,7 +38,6 @@ const writeStoreSdk = (version: string, exports: readonly string[]): void => {
 
 beforeEach(() => {
     process.env["INTENTIC_ENGINES_DIR"] = mkdtempSync(join(tmpdir(), "claude-sdk-"));
-    forgetEngineStates();
     forgetEngineResolution();
     forgetClaudeSdk();
 });
@@ -94,7 +93,6 @@ test("dropping the store's version returns the process to the image's copy", asy
     await refreshClaudeSdk();
 
     process.env["INTENTIC_ENGINES_DIR"] = mkdtempSync(join(tmpdir(), "claude-sdk-empty-"));
-    forgetEngineStates();
     forgetEngineResolution();
 
     expect(await refreshClaudeSdk()).toEqual({ source: "image" });

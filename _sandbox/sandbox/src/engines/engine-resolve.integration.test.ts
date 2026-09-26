@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { activateVersion, engineVersionDir, forgetEngineStates, quarantineVersion } from "./engine-store.js";
+import { activateVersion, engineVersionDir, quarantineVersion } from "./engine-store.js";
 import { engineBinary, engineReady, forgetEngineResolution, resolveEngine } from "./engine-resolve.js";
 
 // Every doubt resolves to the image's copy: an unused, missing, or quarantined store entry all fall back the same way,
@@ -18,7 +18,6 @@ const installFixture = (version: string): void => {
 
 beforeEach(() => {
     process.env["INTENTIC_ENGINES_DIR"] = mkdtempSync(join(tmpdir(), "engine-resolve-"));
-    forgetEngineStates();
     forgetEngineResolution();
 });
 

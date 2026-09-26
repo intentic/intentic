@@ -5,7 +5,8 @@ import { type EngineId, type EngineQuarantine, EngineQuarantineSchema } from "@i
 import { z } from "zod";
 import { opt } from "../opt.js";
 import { defineDocument } from "../store/evolution/documents.js";
-import { type JsonFile, jsonFile } from "../store/json-file.js";
+import type { JsonFile } from "../store/json-file.js";
+import { openDocument } from "../store/open-document.js";
 
 // Versions of the upstream engines, held on the daemon's volume (/history) outside the image so they survive container
 // recreate and stay off the workspace sync. Each version gets its own directory, never upgraded in place; the pointer
@@ -41,30 +42,14 @@ const enginesRoot = (): string => process.env["INTENTIC_ENGINES_DIR"] ?? join(HI
 export const engineDir = (id: EngineId): string => join(enginesRoot(), id);
 export const engineVersionDir = (id: EngineId, version: string): string => join(engineDir(id), "versions", version);
 
-const states = new Map<string, JsonFile<EngineState>>();
-
-// One JsonFile per engine per store root; a suite that moves the root mid-run gets a fresh handle instead of the old
-// tree's.
-const stateFile = (id: EngineId): JsonFile<EngineState> => {
-    const path = join(engineDir(id), "state.json");
-    const existing = states.get(path);
-    if (existing !== undefined) {
-        return existing;
-    }
-    const file = jsonFile<EngineState>(path, {
+// A handle per call: every handle on one path shares its write queue (queueOnFile), so a suite that moves the root
+// mid-run simply opens the new tree's file.
+const stateFile = (id: EngineId): JsonFile<EngineState> =>
+    openDocument(engineStateDocument, join(engineDir(id), "state.json"), {
         // Via `opt`, not a spread: exactOptionalPropertyTypes treats absent and undefined fields as different.
-        parse: (raw) => {
-            const parsed = EngineStateSchema.safeParse(raw).data;
-            return parsed === undefined
-                ? undefined
-                : { ...opt("active", parsed.active), ...opt("previous", parsed.previous), quarantined: parsed.quarantined };
-        },
+        read: (parsed): EngineState => ({ ...opt("active", parsed.active), ...opt("previous", parsed.previous), quarantined: parsed.quarantined }),
         fallback: () => ({ quarantined: [] }),
-        document: engineStateDocument,
     });
-    states.set(path, file);
-    return file;
-};
 
 export const readEngineState = (id: EngineId): Promise<EngineState> => stateFile(id).read();
 
@@ -137,5 +122,3 @@ const directoryBytes = async (dir: string): Promise<number> => {
     return sizes.reduce((total, size) => total + size, 0);
 };
 
-// Test seam: clears per-path JsonFile handles so a suite can move INTENTIC_ENGINES_DIR between cases.
-export const forgetEngineStates = (): void => states.clear();

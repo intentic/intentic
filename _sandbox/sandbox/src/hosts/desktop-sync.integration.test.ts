@@ -12,7 +12,7 @@ import {
     restoreAuthorizedKeys,
     revokeEnrollmentByMachine,
     revokeEnrollmentByToken,
-    syncPairBurnPath,
+    syncPairBurns,
     type SyncMode,
     verifySyncToken,
 } from "./desktop-sync.js";
@@ -33,7 +33,7 @@ describe("pairing tokens", () => {
 
     const table = (): { pending: ReturnType<typeof pairings<SyncMode>>; historyRoot: string } => {
         const historyRoot = mkdtempSync(join(tmpdir(), "sync-"));
-        return { pending: pairings<SyncMode>(syncPairBurnPath(historyRoot)), historyRoot };
+        return { pending: pairings<SyncMode>(syncPairBurns(historyRoot)), historyRoot };
     };
 
     it("is valid once, carries its mode, then is consumed", async () => {
@@ -69,7 +69,7 @@ describe("pairing tokens", () => {
         expect(pending.peek(token)).toBeUndefined();
 
         // New table, same env and token: the burn lives on /history, which survives the restart.
-        const rebooted = pairings<SyncMode>(syncPairBurnPath(historyRoot));
+        const rebooted = pairings<SyncMode>(syncPairBurns(historyRoot));
         expect(await rebooted.arm(token, "sync")).toBe(false);
         expect(rebooted.peek(token)).toBeUndefined();
     });

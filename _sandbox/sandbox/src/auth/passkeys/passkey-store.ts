@@ -10,8 +10,7 @@ import { utcDayOf } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";
-import { jsonFile } from "../../store/json-file.js";
-import { objectParse } from "../../store/unknown-keys.js";
+import { openDocument } from "../../store/open-document.js";
 import { stateRelPath } from "../../state-paths.js";
 import { tokenEquals, type VerifiedIdentity } from "../auth.js";
 import { rpIdOf } from "../browser-origins.js";
@@ -70,12 +69,11 @@ export interface PasskeyStore {
 }
 
 export const filePasskeys = (path: string): PasskeyStore => {
-    const file = jsonFile<PasskeysFile>(path, {
-        parse: objectParse(PasskeysFileSchema),
+    const file = openDocument<typeof passkeysDocument, PasskeysFile>(passkeysDocument, path, {
+        unknownKeys: true,
         fallback: () => ({ required: false, credentials: [], recovery: [] }),
         // The owner's require-a-passkey switch and recovery hashes: a fresh file over an unreadable one would drop both.
         onUnreadable: "refuse",
-        document: passkeysDocument,
     });
     return {
         list: async () => [...(await file.read()).credentials],

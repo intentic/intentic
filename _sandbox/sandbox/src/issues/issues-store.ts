@@ -1,7 +1,7 @@
 import { keyedLock } from "@intentic/base/async";
 import { type Issue, type IssueReport, IssueSchema, type IssueStatus, type IssueSummary } from "@intentic/sandbox-contract";
 import { defineDocument } from "../store/evolution/documents.js";
-import { jsonDir } from "../store/json-dir.js";
+import { openDirectory } from "../store/open-document.js";
 import { ManifestUnreadableError } from "../store/json-file.js";
 import { stateRelPath } from "../state-paths.js";
 import { culpritOf, titleOf } from "./fingerprint.js";
@@ -90,7 +90,7 @@ const folded = (existing: Issue, report: IssueReport, now: number): Issue => {
 };
 
 export const fileIssuesStore = (dir: string): IssuesStore => {
-    const files = jsonDir<Issue>(dir, (raw) => IssueSchema.safeParse(raw).data, issuesDocument);
+    const files = openDirectory(issuesDocument, dir);
 
     // A group this build cannot read is set aside and restarted, or every later report of that fingerprint would fail.
     const readOrSetAside = async (id: string): Promise<(Issue & { id: string }) | undefined> => {

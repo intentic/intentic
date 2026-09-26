@@ -49,7 +49,7 @@ export const hostSetupSeededDocument = defineDocument({ root: "history", path: "
 // Which setup cards this sandbox has already offered, not whether the machine is connected or the token spent
 // (host-peer.ts); its own file since it outlives both of those.
 const seededCards = (historyRoot: string) =>
-    jsonFile<z.infer<typeof SeededSchema>>(join(historyRoot, "host-setup-seeded.json"), {
+    jsonFile<z.infer<typeof SeededSchema>>(join(historyRoot, hostSetupSeededDocument.path), {
         parse: (raw) => SeededSchema.safeParse(raw).data,
         fallback: () => ({ ids: [] }),
         mode: 0o600,

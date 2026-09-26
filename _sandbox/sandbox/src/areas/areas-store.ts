@@ -1,7 +1,8 @@
 import { STATE_DIR } from "@intentic/constants";
 import { type Fence, type Area, AreaSchema } from "@intentic/sandbox-contract";
 import { defineDocument } from "../store/evolution/documents.js";
-import { idListFile, type IdListStore } from "../store/id-list-file.js";
+import type { IdListStore } from "../store/id-list-file.js";
+import { openIdList } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
 
 // The named parts of the workspace, tracked in git like personas: an area holds folder names, never a credential.
@@ -22,7 +23,7 @@ export const areasDocument = defineDocument({
 // absent — which fails SHUT, since a member row naming an area nobody can read resolves to a fence admitting nothing
 // rather than to no fence at all.
 export const fileAreasStore = (path: string, onInvalid?: (id: string, reason: string) => void): AreasStore =>
-    idListFile(path, AreaSchema, onInvalid, areasDocument);
+    openIdList(areasDocument, path, onInvalid);
 
 /**
  * The folders a set of area ids admits, or undefined when no area is named at all — the difference between "works

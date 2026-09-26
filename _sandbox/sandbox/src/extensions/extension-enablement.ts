@@ -1,7 +1,9 @@
+import { join } from "node:path";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
-import { type JsonFile, jsonFile } from "../store/json-file.js";
-import { statePath, stateRelPath } from "../state-paths.js";
+import type { JsonFile } from "../store/json-file.js";
+import { openDocument } from "../store/open-document.js";
+import { stateRelPath } from "../state-paths.js";
 
 // The owner's per-extension on/off switch (<workspace>/.intentic/config/extension-enablement.json), keyed by the
 // manifest-derived extension id (publisher.name), the same key extension-settings.json uses, so the choice
@@ -13,25 +15,10 @@ type EnablementFile = z.infer<typeof FileSchema>;
 
 export const extensionEnablementDocument = defineDocument({ path: stateRelPath(".intentic/config/extension-enablement.json"), schema: FileSchema });
 
-// Memoized per root for the reason extension-settings.ts spells out: `update`'s write queue lives on the file
-// object, so building a fresh one per call would let two toggles read the same map and the second erase the
-// first's key.
-const files = new Map<string, JsonFile<EnablementFile>>();
-
-const enablementFile = (root: string): JsonFile<EnablementFile> => {
-    const path = statePath(root, ".intentic/config/extension-enablement.json");
-    const existing = files.get(path);
-    if (existing !== undefined) {
-        return existing;
-    }
-    const file = jsonFile<EnablementFile>(path, {
-        parse: (raw) => FileSchema.safeParse(raw).data,
-        fallback: () => ({}),
-        document: extensionEnablementDocument,
-    });
-    files.set(path, file);
-    return file;
-};
+// A handle per call: every handle on one path shares its write queue (queueOnFile), so two toggles never read the same
+// map and the second erase the first's key.
+const enablementFile = (root: string): JsonFile<EnablementFile> =>
+    openDocument(extensionEnablementDocument, join(root, extensionEnablementDocument.path), { fallback: () => ({}) });
 
 export const readExtensionEnablement = async (root: string): Promise<EnablementFile> => enablementFile(root).read();
 

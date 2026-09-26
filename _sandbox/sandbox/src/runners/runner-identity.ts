@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { runnerEnrollUrl } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
-import { jsonFile } from "../store/json-file.js";
+import { openDocument } from "../store/open-document.js";
 import type { RunnerModeEnv } from "./runner-mode.js";
 
 /* WHO THIS RUNNER IS, the runner-side half of the pairing (the parent's half is the peer store, runners/runner-peer.ts). */
@@ -19,17 +19,15 @@ export type RunnerIdentity = z.infer<typeof RunnerIdentitySchema>;
 // One document for the two handles below, which open the same file.
 export const runnerIdentityDocument = defineDocument({ root: "history", path: "runner-identity.json", schema: RunnerIdentitySchema });
 
-export const runnerIdentityPath = (historyRoot: string): string => join(historyRoot, "runner-identity.json");
+export const runnerIdentityPath = (historyRoot: string): string => join(historyRoot, runnerIdentityDocument.path);
 
-export const readRunnerIdentity = async (historyRoot: string): Promise<RunnerIdentity | undefined> => {
-    const file = jsonFile<RunnerIdentity | undefined>(runnerIdentityPath(historyRoot), {
-        parse: (raw) => RunnerIdentitySchema.safeParse(raw).data,
+const identityFile = (historyRoot: string) =>
+    openDocument<typeof runnerIdentityDocument, RunnerIdentity | undefined>(runnerIdentityDocument, runnerIdentityPath(historyRoot), {
         fallback: () => undefined,
         mode: 0o600,
-        document: runnerIdentityDocument,
     });
-    return await file.read();
-};
+
+export const readRunnerIdentity = async (historyRoot: string): Promise<RunnerIdentity | undefined> => await identityFile(historyRoot).read();
 
 /* The identity, enrolling first when this container has never redeemed its pairing. */
 export const ensureRunnerIdentity = async (historyRoot: string, env: RunnerModeEnv): Promise<RunnerIdentity> => {
@@ -45,12 +43,6 @@ export const ensureRunnerIdentity = async (historyRoot: string, env: RunnerModeE
     }
     const enrolled = z.object({ id: z.string(), token: z.string() }).parse(await response.json());
     const identity: RunnerIdentity = { parentUrl: env.parentUrl, id: enrolled.id, token: enrolled.token, enrolledAt: Date.now() };
-    const file = jsonFile<RunnerIdentity | undefined>(runnerIdentityPath(historyRoot), {
-        parse: (raw) => RunnerIdentitySchema.safeParse(raw).data,
-        fallback: () => undefined,
-        mode: 0o600,
-        document: runnerIdentityDocument,
-    });
-    await file.update(() => identity);
+    await identityFile(historyRoot).update(() => identity);
     return identity;
 };

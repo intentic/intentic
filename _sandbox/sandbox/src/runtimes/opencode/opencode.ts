@@ -15,7 +15,7 @@ import { engineBinary } from "../../engines/engine-resolve.js";
 import { applyToStampedChild, SPAWN_STAMP_ENV } from "../../workload/workload-class.js";
 import { type InputModality, OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-models.js";
 import { type CommandGuard, consultWith, vendorSubject } from "../../guard/command-guard.js";
-import { jsonFile } from "../../store/json-file.js";
+import { cacheFile } from "../../store/open-document.js";
 import { discoverXaiModels, isChatModel, SEED_XAI_MODELS } from "./xai-models.js";
 
 // Shared OpenCode runtime: one warm `opencode serve` per container plus its client, used by turn adapters and the Grok
@@ -359,7 +359,7 @@ export const createOpenCodeService = (
     // xAI's catalog on the shared discovery ladder (agent/model-catalog.ts): live discovery, else the persisted file,
     // else the compile-time floor. Held by name as well as handed over, since boot needs the persisted ids without
     // asking xAI (a boot that waited on api.x.ai would hang whenever xAI is down).
-    const modelStore = jsonFile<string[]>(modelsPath, {
+    const modelStore = cacheFile<string[]>(modelsPath, {
         parse: (raw) => (Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string") : undefined),
         fallback: () => [],
     });

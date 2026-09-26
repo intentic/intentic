@@ -12,7 +12,7 @@ import { dirname, join } from "node:path";
 import { drop, isJsonObject, type JsonObject, nested } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { defineStep } from "../store/evolution/state-steps.js";
-import { jsonEntries } from "../store/json-file.js";
+import { openEntries } from "../store/open-document.js";
 import { countResume, keyedEntries } from "../store/keyed-entries.js";
 import { stateRelPath } from "../state-paths.js";
 
@@ -98,7 +98,7 @@ export interface WorkflowsStore {
 
 export const fileWorkflowsStore = (path: string): WorkflowsStore => {
     // One entry at a time: a design this build cannot read is skipped and kept, never the whole manifest.
-    const file = jsonEntries<Workflow>(path, { entry: (raw) => WorkflowSchema.safeParse(raw).data, document: workflowsDocument });
+    const file = openEntries(workflowsDocument, path);
     const { get, save, remove } = keyedEntries(file, "id");
     return { list: () => file.read(), get, save, remove };
 };
@@ -126,14 +126,10 @@ export interface WorkflowRunsStore {
 }
 
 export const fileWorkflowRunsStore = (path: string): WorkflowRunsStore => {
-    const file = jsonEntries<WorkflowRun>(path, {
-        entry: (raw) => WorkflowRunSchema.safeParse(raw).data,
-        document: workflowRunsDocument,
-        idKeys: ["runId"],
-    });
+    const file = openEntries(workflowRunsDocument, path, { idKeys: ["runId"] });
     // A scheduler may still be writing to a run that already rolled off the ledger; that write is a no-op.
-    const runs = keyedEntries(file, "runId");
-    const amend = runs.amend;
+    const keyed = keyedEntries(file, "runId");
+    const amend = keyed.amend;
     const amendSteps = (runId: string, change: (step: WorkflowStepRun) => WorkflowStepRun): Promise<void> =>
         amend(runId, (run) => ({ ...run, steps: run.steps.map(change) }));
 
@@ -150,7 +146,7 @@ export const fileWorkflowRunsStore = (path: string): WorkflowRunsStore => {
 
     return {
         list: async () => (await file.read()).toSorted((a, b) => b.startedAt - a.startedAt),
-        get: runs.get,
+        get: keyed.get,
         start: async (run) => {
             let evicted: WorkflowRun[] = [];
             await file.update((runs) => {
@@ -183,6 +179,6 @@ export const fileWorkflowRunsStore = (path: string): WorkflowRunsStore => {
             await file.update((runs) => runs.filter((run) => run.runId !== runId));
             await rm(join(artifacts, runId), { recursive: true, force: true });
         },
-        countResume: (runId) => countResume(runs, runId),
+        countResume: (runId) => countResume(keyed, runId),
     };
 };

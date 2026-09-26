@@ -3,7 +3,8 @@ import type { BrowserContext, CDPSession, Page } from "playwright";
 import { z } from "zod";
 import { stateRelPath } from "../../state-paths.js";
 import { defineDocument } from "../../store/evolution/documents.js";
-import { type JsonFile, jsonFile } from "../../store/json-file.js";
+import type { JsonFile } from "../../store/json-file.js";
+import { openDocument } from "../../store/open-document.js";
 
 // Sandbox-held WebAuthn passkeys over the daemon's CDP window: an owner's hardware key can't reach this container.
 // Each connected account gets a virtual authenticator restored from its own store, beside its Chromium profile.
@@ -36,22 +37,10 @@ interface PasskeyFile {
     readonly credentials: readonly PasskeyCredential[];
 }
 
-// One file per account (`<owner>.passkeys.json`, session-store.ts): declared for its shape and its conversions. Loose,
-// since its reader keeps every credential verbatim, whatever fields Chromium hands back.
-const PasskeyFileSchema = z.object({
-    credentials: z.array(
-        z.looseObject({
-            credentialId: z.string(),
-            isResidentCredential: z.boolean(),
-            rpId: z.string().optional(),
-            privateKey: z.string(),
-            userHandle: z.string().optional(),
-            signCount: z.number(),
-            userName: z.string().optional(),
-            userDisplayName: z.string().optional(),
-        }),
-    ),
-});
+// One file per account (`<owner>.passkeys.json`, session-store.ts): declared for its shape and its conversions. Each
+// credential as Chromium handed it (PasskeyCredential), kept verbatim: its reader never filters one out, since one
+// dropped on read would be dropped from disk by the next write, a key a site still holds the public half of.
+const PasskeyFileSchema = z.object({ credentials: z.array(z.unknown()) });
 export const browserPasskeysDocument = defineDocument({
     path: stateRelPath(".intentic/local/browser/", "<owner>.passkeys.json"),
     boot: false,
@@ -63,15 +52,10 @@ export const browserPasskeysDocument = defineDocument({
 // Set aside rather than refused: the key being saved is one the site already holds the public half of, so refusing it
 // would lose it, while the set-aside copy keeps every older one where a hand can put it back.
 const passkeyFile = (storePath: string): JsonFile<PasskeyFile> =>
-    jsonFile<PasskeyFile>(storePath, {
-        // Entries are kept verbatim, never filtered: one dropped on read would be dropped from disk by the next write.
-        parse: (raw) => {
-            const credentials = typeof raw === "object" && raw !== null ? (raw as { credentials?: unknown }).credentials : undefined;
-            return Array.isArray(credentials) ? { credentials: credentials as PasskeyCredential[] } : undefined;
-        },
+    openDocument(browserPasskeysDocument, storePath, {
+        read: (value): PasskeyFile => ({ credentials: value.credentials as PasskeyCredential[] }),
         fallback: () => ({ credentials: [] }),
         mode: 0o600,
-        document: browserPasskeysDocument,
     });
 
 export const listPasskeys = async (storePath: string): Promise<readonly PasskeyCredential[]> => (await passkeyFile(storePath).read()).credentials;

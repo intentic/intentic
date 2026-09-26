@@ -1,16 +1,17 @@
+import { join } from "node:path";
 import { z } from "zod";
 import type { SecretVault } from "../capabilities/credentials/secret-vault.js";
 import { defineDocument } from "../store/evolution/documents.js";
-import { type JsonFile, jsonFile } from "../store/json-file.js";
-import { statePath, stateRelPath } from "../state-paths.js";
+import type { JsonFile } from "../store/json-file.js";
+import { openDocument } from "../store/open-document.js";
+import { stateRelPath } from "../state-paths.js";
 
 // Per-extension settings (.intentic/config/extension-settings.json), keyed by the manifest id (publisher.name).
 // Not the capability entry id, so values survive a remove/re-add; secret values live in the vault instead.
 // Writes go to the vault first: the failure mode is an orphaned vault row, never a credential in the tracked file.
 
 const ExtensionSettingsSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean()]));
-const FileSchema = z.record(z.string(), ExtensionSettingsSchema);
-type SettingsFile = z.infer<typeof FileSchema>;
+type SettingsFile = Record<string, z.infer<typeof ExtensionSettingsSchema>>;
 export type ExtensionSettings = SettingsFile[string];
 
 export const extensionSettingsDocument = defineDocument({
@@ -19,23 +20,9 @@ export const extensionSettingsDocument = defineDocument({
     granularity: "record",
 });
 
-// Memoized per root: the write queue lives on the object; a fresh instance per call would drop concurrent writes.
-const files = new Map<string, JsonFile<SettingsFile>>();
-
-const settingsFile = (root: string): JsonFile<SettingsFile> => {
-    const path = statePath(root, ".intentic/config/extension-settings.json");
-    const existing = files.get(path);
-    if (existing !== undefined) {
-        return existing;
-    }
-    const file = jsonFile<SettingsFile>(path, {
-        parse: (raw) => FileSchema.safeParse(raw).data,
-        fallback: () => ({}),
-        document: extensionSettingsDocument,
-    });
-    files.set(path, file);
-    return file;
-};
+// A handle per call: every handle on one path shares its write queue (queueOnFile), so concurrent writes both land.
+const settingsFile = (root: string): JsonFile<SettingsFile> =>
+    openDocument(extensionSettingsDocument, join(root, extensionSettingsDocument.path), { fallback: () => ({}) });
 
 // Which of an extension's keys hold a credential; passed in since enumerating extensions sits a layer above this file.
 // An unknown id gets an empty set, leaving its values in the file: the safe answer since nothing declares them secret.

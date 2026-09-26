@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import {
     ISSUE_PAYLOAD_MAX,
     ISSUES_DAILY_MAX_DEFAULT,
@@ -13,11 +14,11 @@ import { createPublicDoor, type PublicDoor, type PublicDoorSpec } from "../autom
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import type { InstallsStore } from "../store/installs.js";
-import { statePath } from "../state-paths.js";
 import { fingerprintOf } from "./fingerprint.js";
 import { ISSUES_PROVIDER } from "../automations/catalog.js";
 import { wakeBrief } from "./issue-payload.js";
-import { fileIssuesStore, type IssuesStore } from "./issues-store.js";
+import { fileIssuesStore, issuesDocument, type IssuesStore } from "./issues-store.js";
+import { issueInstallsDocument } from "../store/installs.js";
 
 // The daemon's second public door (report), differing from the Visitor chat after admission: every report is a file
 // write, only sometimes a turn, since nobody waits on a crashing page. Grouping happens before anything can wake
@@ -70,7 +71,7 @@ export const INTAKE_DOOR: PublicDoorSpec<IssuesConfig> = {
     // Wider than the chat's: a crashing page can fire several reports a second; the daily ceiling is what matters.
     rateMax: 60,
     challengeParam: "client",
-    installs: (root) => statePath(root, ".intentic/records/issue-installs.json"),
+    installs: issueInstallsDocument,
     conversationPrefix: "bug",
 };
 
@@ -130,7 +131,7 @@ const gated = async (
 
 export const createIntakeRoutes = (
     services: Services,
-    issues: IssuesStore = fileIssuesStore(statePath(services.workspace.root, ".intentic/records/issues/")),
+    issues: IssuesStore = fileIssuesStore(join(services.workspace.root, issuesDocument.path)),
     installs?: InstallsStore,
 ) => {
     const door = createPublicDoor(services, INTAKE_DOOR, installs);

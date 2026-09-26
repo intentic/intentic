@@ -3,8 +3,7 @@ import { CONTROL_SCOPES, type ControlReach, type ControlScope, ControlScopeSchem
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";
-import { jsonFile } from "../../store/json-file.js";
-import { objectParse } from "../../store/unknown-keys.js";
+import { openDocument } from "../../store/open-document.js";
 import { stateRelPath } from "../../state-paths.js";
 import { tokenEquals } from "../auth.js";
 import { routeFloor } from "../role-floor.js";
@@ -68,10 +67,9 @@ export interface ControlTokens {
 }
 
 export const fileControlTokens = (path: string): ControlTokens => {
-    const file = jsonFile<StoredTokens>(path, {
-        parse: objectParse(StoredTokensSchema),
+    const file = openDocument<typeof controlTokensDocument, StoredTokens>(controlTokensDocument, path, {
+        unknownKeys: true,
         fallback: () => ({ tokens: [] }),
-        document: controlTokensDocument,
     });
     const live = (entry: StoredToken, now: number): boolean => entry.expiresAt === undefined || entry.expiresAt > now;
     return {

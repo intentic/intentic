@@ -122,7 +122,9 @@ document's conversions (a property of the wrong type, a new required one), when 
 from today's schema at any depth with no `drop` or `rename` for it (named by its dotted path), and when a retired name
 is reused. It does not see a key read a new way under the same name and type, a field a released shape spelled `any`,
 a refinement (a length, a pattern), or a store with no `defineDocument`. Define a document or a boot step as
-`export const name = defineDocument(…)` (or `defineStep`) at the top of its module, and list it by running the shape
+`export const name = defineDocument(…)` (or `defineStep`) at the top of its module, open it with `openDocument(spec,
+path, …)` (or `openEntries`, `openIdList`, `openDirectory`; `_sandbox/sandbox/src/store/open-document.ts`), which
+parses with the spec's own schema, never with a second one, and list it by running the shape
 generator (`node --import tsx src/store/shapes/write-state-shapes.ts --freeze` in `_sandbox/sandbox`): the boot step
 and the update pre-flight read only `src/bootstrap/state-registry.ts`, and its test fails on a definition missing from
 it. Never read an existing key a new way (rename it), and never reuse a retired name. [COMPATIBILITY.md](COMPATIBILITY.md#stored-data)

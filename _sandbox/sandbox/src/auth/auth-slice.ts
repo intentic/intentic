@@ -2,26 +2,14 @@ import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Config } from "../env.config.js";
-import { statePath } from "../state-paths.js";
-import {
-    type AuthorizeOptions,
-    createAuthorizer,
-    createGoogleVerifier,
-    fileMembersStore,
-    fileOwnerStore,
-    type MembersStore,
-    ownerTicketVerifier,
-    type PasskeyPolicy,
-    type Proof,
-    type ProvenCaller,
-} from "./auth.js";
+import { type AuthorizeOptions, createAuthorizer, createGoogleVerifier, fileMembersStore, fileOwnerStore, membersDocument, type MembersStore, ownerDocument, ownerTicketVerifier, type PasskeyPolicy, type Proof, type ProvenCaller } from "./auth.js";
 import { fileBrowserAccess } from "./browser-access.js";
 import { allowedOriginsOf, originAllowedBy } from "./browser-origins.js";
 import { type AuthConnections, createAuthConnections } from "./connections.js";
-import { createPasskeyCeremonies, filePasskeys, type PasskeyCeremonies, type PasskeyStore } from "./passkeys/passkey-store.js";
+import { createPasskeyCeremonies, filePasskeys, type PasskeyCeremonies, passkeysDocument, type PasskeyStore } from "./passkeys/passkey-store.js";
 import { createSessions, type MintedSession } from "./session.js";
-import { type ControlTokens, fileControlTokens } from "./tokens/control-tokens.js";
-import { type DoorTokens, fileDoorTokens } from "./tokens/door-tokens.js";
+import { type ControlTokens, controlTokensDocument, fileControlTokens } from "./tokens/control-tokens.js";
+import { type DoorTokens, doorTokensDocument, fileDoorTokens } from "./tokens/door-tokens.js";
 import { createMediaTickets, type MediaTickets } from "./tokens/media-tickets.js";
 import { createWsTickets, type WsTickets } from "./tokens/ws-tickets.js";
 
@@ -70,7 +58,7 @@ const passkeysOf = (
     config: Config,
     workspaceRoot: string,
 ): { readonly passkeys: PasskeyStore; readonly passkeyCeremonies: PasskeyCeremonies; readonly passkeyPolicy: PasskeyPolicy } => {
-    const passkeys = filePasskeys(statePath(workspaceRoot, ".intentic/identity/passkeys.json"));
+    const passkeys = filePasskeys(join(workspaceRoot, passkeysDocument.path));
     const sameEmail = (left: string, right: string): boolean => left.toLowerCase() === right.toLowerCase();
     return {
         passkeys,
@@ -90,10 +78,10 @@ const passkeysOf = (
 
 // Builds the auth slice from config; loopback (no Google client id) leaves `auth` undefined, so every route is open.
 export const createAuthSlice = (config: Config, workspaceRoot: string): AuthSlice => {
-    const members = fileMembersStore(statePath(workspaceRoot, ".intentic/identity/members.json"));
+    const members = fileMembersStore(join(workspaceRoot, membersDocument.path));
     const { passkeys, passkeyCeremonies, passkeyPolicy } = passkeysOf(config, workspaceRoot);
     // Bound owner, hoisted since the Access roster and gate routes both need to read, never write, the email.
-    const ownerStore = fileOwnerStore(statePath(workspaceRoot, ".intentic/identity/owner.json"));
+    const ownerStore = fileOwnerStore(join(workspaceRoot, ownerDocument.path));
     // Session secret under historyRoot, daemon-private and persistent, so a restart doesn't sign every browser out.
     const sessions = createSessions(join(config.historyRoot, "session-secret"));
     const authConnections = createAuthConnections();
@@ -133,8 +121,8 @@ export const createAuthSlice = (config: Config, workspaceRoot: string): AuthSlic
         mediaTickets: createMediaTickets(),
         panelToken: randomBytes(32).toString("hex"),
         agentToken: randomBytes(32).toString("hex"),
-        controlTokens: fileControlTokens(statePath(workspaceRoot, ".intentic/identity/control-tokens.json")),
-        doorTokens: fileDoorTokens(statePath(workspaceRoot, ".intentic/secrets/doors.json")),
+        controlTokens: fileControlTokens(join(workspaceRoot, controlTokensDocument.path)),
+        doorTokens: fileDoorTokens(join(workspaceRoot, doorTokensDocument.path)),
         passkeys,
         passkeyCeremonies,
         members,

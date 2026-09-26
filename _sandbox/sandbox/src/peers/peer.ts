@@ -1,6 +1,6 @@
 import type { RuntimeDomain } from "@intentic/sandbox-contract";
 import type { z } from "zod";
-import type { CardRule } from "./enrollment.js";
+import type { BurnDocument, CardRule, EnrollmentsDocument } from "./enrollment.js";
 
 // A peer is something of the user's that dials this sandbox and serves a contract back over the socket it opened: their
 // computer (hosts/), their browser (webext/), or one of this sandbox's own runners (runners/). A door is the data that
@@ -16,8 +16,8 @@ import type { CardRule } from "./enrollment.js";
 export type PeerSlug = "hosts" | "webext" | "runners";
 
 export interface PeerStoreSpec<Shape extends z.ZodRawShape> {
-    // Two files on /history: digests, spent pairings; names stay literal for HISTORY_STATE_FILES's guard.
-    readonly files: (historyRoot: string) => { readonly enrollments: string; readonly consumed: string };
+    // Two documents on /history, each where its own spec says: digests, and spent pairings.
+    readonly documents: { readonly enrollments: EnrollmentsDocument; readonly consumed: BurnDocument };
     // The top-level key inside the enrollments file.
     readonly key: string;
     // What the durable token looks like, so a credential in a log says which door it opens.

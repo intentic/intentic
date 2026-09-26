@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
-import { fileSecretVault } from "../capabilities/credentials/secret-vault.js";
+import { capabilitySecretsDocument, fileSecretVault } from "../capabilities/credentials/secret-vault.js";
 import { resolveSecretReferences, secretReference, secretRegistryOf } from "./secret-registry.js";
 
 // Secrets live in three stores (capability vault, DevOps .env, deploy-generated values); pins that the registry unions
@@ -12,7 +12,7 @@ import { resolveSecretReferences, secretReference, secretRegistryOf } from "./se
 const withStores = () => {
     const root = mkdtempSync(join(tmpdir(), "secret-registry-"));
     const repo = join(root, "desired-state");
-    const vault = fileSecretVault(join(root, "auth", "capability-secrets.json"));
+    const vault = fileSecretVault(capabilitySecretsDocument, join(root, "auth", "capability-secrets.json"));
     const write = async (file: string, body: string): Promise<void> => {
         await mkdir(repo, { recursive: true });
         await writeFile(join(repo, file), body);

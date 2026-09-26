@@ -1,6 +1,6 @@
 import { type RuleFirings, RuleFiringsSchema } from "@intentic/sandbox-contract";
 import { defineDocument } from "../store/evolution/documents.js";
-import { jsonFile } from "../store/json-file.js";
+import { openDocument } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
 
 // One last-fired timestamp per rule id, so a rule that quietly stopped firing is visible. Stamped only when a rule did
@@ -15,11 +15,7 @@ export interface RuleFiringsStore {
 }
 
 export const fileRuleFiringsStore = (path: string): RuleFiringsStore => {
-    const file = jsonFile<RuleFirings>(path, {
-        parse: (raw) => RuleFiringsSchema.safeParse(raw).data,
-        fallback: () => ({}),
-        document: ruleFiringsDocument,
-    });
+    const file = openDocument(ruleFiringsDocument, path, { fallback: (): RuleFirings => ({}) });
     return {
         get: file.read,
         // Deleted rules' ids are left in place unpruned; nothing reads an id that no longer exists in settings.

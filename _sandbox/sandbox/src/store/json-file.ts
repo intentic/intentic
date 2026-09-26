@@ -224,34 +224,3 @@ export const boundedLog = <E>(file: JsonFile<E[]>, cap: number): BoundedLog<E> =
     },
     read: () => file.read(),
 });
-
-// The owner's yes to what an agent can write, one pin per key, kept under the history root where no workspace write reaches.
-export interface ApprovalLedger<P> {
-    // An unreadable ledger approves nothing: its pins read as none, and `unreadable` says why.
-    readonly read: () => Promise<{ readonly approved: Readonly<Record<string, P>>; readonly unreadable: boolean }>;
-    // A change that returns the pins it was handed writes nothing.
-    readonly update: (change: (approved: Readonly<Record<string, P>>) => Readonly<Record<string, P>>) => Promise<void>;
-}
-
-type Pins<P> = { readonly approved: Readonly<Record<string, P>> };
-
-// One handle per ledger file, so every writer of it shares its update queue.
-export const approvalLedgers = <P>(parse: (raw: unknown) => Pins<P> | undefined, document: DocumentSpec): ((path: string) => ApprovalLedger<P>) => {
-    const files = new Map<string, JsonFile<Pins<P>>>();
-    return (path) => {
-        const file = files.get(path) ?? jsonFile<Pins<P>>(path, { parse, fallback: () => ({ approved: {} }), document });
-        files.set(path, file);
-        return {
-            read: async () => {
-                const ledger = await file.state();
-                return ledger.unreadable ? { approved: {}, unreadable: true } : { approved: ledger.value.approved, unreadable: false };
-            },
-            update: async (change) => {
-                await file.update((ledger) => {
-                    const approved = change(ledger.approved);
-                    return approved === ledger.approved ? ledger : { approved };
-                });
-            },
-        };
-    };
-};

@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { type runnerContract,type NeedsAction,type RunnerFacts,RUNNER_HEARTBEAT_MS,type RunnerHello,RunnerHelloSchema,type RunnerSummary } from "@intentic/sandbox-contract";
 import type { ContractRouterClient } from "@orpc/contract";
 import { z } from "zod";
@@ -9,6 +8,7 @@ import { createPeerRoutes } from "../peers/peer-routes.js";
 import type { PeerStore } from "../peers/peer-store.js";
 import { parseDefinitionToml, settingsDefinition, settingsDrift } from "../portability/definition.js";
 import { runnerParity } from "./runner-parity.js";
+import { runnerEnrollmentsDocument, runnerPairConsumedDocument } from "../peers/enrollment.js";
 
 // A runner is a peer door (peers/): this sandbox's own execution container elsewhere, dialling in with its durable
 // token and serving runnerContract. Every pairing is minted replayable, since it ends up immortal once burned into a
@@ -30,7 +30,7 @@ export const RUNNER_PEER: PeerDoor<RunnerHello, RunnerAnnounced, { host: z.ZodOp
     noun: "runner",
     listKey: "runners",
     store: {
-        files: (historyRoot) => ({ enrollments: join(historyRoot, "runner-enrollments.json"), consumed: join(historyRoot, "runner-pair-consumed.json") }),
+        documents: { enrollments: runnerEnrollmentsDocument, consumed: runnerPairConsumedDocument },
         key: "runners", prefix: "irt_", extra: { host: z.string().optional() }, replayable: true, pairTtlMs: RUNNER_PAIR_TTL_MS
     },
     hub: {

@@ -1,7 +1,6 @@
 import { z } from "zod";
-import { opt } from "../../opt.js";
 import { defineDocument } from "../../store/evolution/documents.js";
-import { jsonFile } from "../../store/json-file.js";
+import { openDocument } from "../../store/open-document.js";
 
 // Stores capability credential values under AGENT_AUTH_DIR (mode 0600), outside the file routes, tree walk and search
 // index the manifest is subject to, so reading or grepping the manifest never surfaces a credential. Not a barrier
@@ -9,22 +8,13 @@ import { jsonFile } from "../../store/json-file.js";
 
 // id -> {config key -> value}; an entry with no credentials keeps no row, not an empty object.
 const SecretValuesSchema = z.record(z.string(), z.string());
-const VaultSchema = z.record(z.string(), SecretValuesSchema);
-export type SecretVaultContents = z.infer<typeof VaultSchema>;
+export type SecretVaultContents = Record<string, z.infer<typeof SecretValuesSchema>>;
 
-// Two vaults on one factory, the capabilities' and the extensions'; the vault picks the one its path names.
-export const capabilitySecretsDocument = defineDocument({
-    root: "auth",
-    path: "capability-secrets.json",
-    schema: SecretValuesSchema,
-    granularity: "record",
-});
-export const extensionSecretsDocument = defineDocument({
-    root: "auth",
-    path: "extension-secrets.json",
-    schema: SecretValuesSchema,
-    granularity: "record",
-});
+// Two vaults, one family: the capabilities' and the extensions', the same shape under two names in the auth root.
+const vaultFile = (path: string) => ({ root: "auth" as const, path, schema: SecretValuesSchema, granularity: "record" as const });
+export const capabilitySecretsDocument = defineDocument(vaultFile("capability-secrets.json"));
+export const extensionSecretsDocument = defineDocument(vaultFile("extension-secrets.json"));
+export type VaultDocument = typeof capabilitySecretsDocument;
 
 export interface SecretVault {
     // Every stored value for one capability, or {} when it holds none.
@@ -38,19 +28,13 @@ export interface SecretVault {
     readonly values: () => Promise<readonly string[]>;
 }
 
-export const fileSecretVault = (path: string): SecretVault => {
-    // A path naming neither vault (a test's own) runs no conversions.
-    const document = [capabilitySecretsDocument, extensionSecretsDocument].find((spec) => path.endsWith(`/${spec.path}`));
-    const file = jsonFile<SecretVaultContents>(path, {
-        parse: (raw) => {
-            const parsed = VaultSchema.safeParse(raw);
-            return parsed.success ? parsed.data : undefined;
-        },
-        fallback: () => ({}),
+// `document` says which vault this is; `path` where it is (under the auth root, or a test's own).
+export const fileSecretVault = (document: VaultDocument, path: string): SecretVault => {
+    const file = openDocument(document, path, {
+        fallback: (): SecretVaultContents => ({}),
         mode: 0o600,
         // Credentials are not state the daemon can regrow: a fresh vault over an unreadable one would drop every one.
         onUnreadable: "refuse",
-        ...opt("document", document),
     });
     return {
         get: async (id) => (await file.read())[id] ?? {},

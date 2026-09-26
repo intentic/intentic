@@ -1,7 +1,7 @@
+import { join } from "node:path";
 import type { WebchatConfig, WebchatMessage } from "@intentic/sandbox-contract";
-import { createGoogleVerifier, fileOwnerStore, type IdTokenVerifier } from "../auth/auth.js";
+import { createGoogleVerifier, fileOwnerStore, type IdTokenVerifier, ownerDocument } from "../auth/auth.js";
 import type { Services } from "../composition.js";
-import { statePath } from "../state-paths.js";
 
 // Who the daemon tells the model it is talking to.
 // The distinction it keeps is between a name someone typed and a name Google signed: both reach the prompt, but a
@@ -36,7 +36,7 @@ const verifierFor = (clientId: string): IdTokenVerifier => {
 // Emails that can already reach this sandbox: owner plus every member. Read per message, not cached, since a stale
 // `member` tag would misidentify who is talking.
 const authorizedEmails = async (services: Pick<Services, "workspace" | "members">): Promise<Set<string>> => {
-    const owner = await fileOwnerStore(statePath(services.workspace.root, ".intentic/identity/owner.json")).read();
+    const owner = await fileOwnerStore(join(services.workspace.root, ownerDocument.path)).read();
     const members = await services.members.list();
     return new Set([...(owner === undefined ? [] : [owner]), ...members.map(({ email }) => email)].map((email) => email.toLowerCase()));
 };

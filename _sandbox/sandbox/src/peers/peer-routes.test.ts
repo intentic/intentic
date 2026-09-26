@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -8,16 +7,11 @@ import type { Services } from "../composition.js";
 import type { PeerDoor } from "./peer.js";
 import type { PeerHub } from "./peer-hub.js";
 import { admitPeer, createPeerRoutes, greetPeer } from "./peer-routes.js";
-import type { Presented } from "./enrollment.js";
+import { type Presented, webextEnrollmentsDocument, webextPairConsumedDocument } from "./enrollment.js";
 import type { PeerStore } from "./peer-store.js";
 
-// The two files a door keeps on /history, spelled the way the doors spell them.
-const peerFiles =
-    (stem: string) =>
-    (root: string): { enrollments: string; consumed: string } => ({
-        enrollments: join(root, `${stem}-enrollments.json`),
-        consumed: join(root, `${stem}-pair-consumed.json`),
-    });
+// A door's two documents on /history: a browser's, whose records carry nothing beside the digest.
+const BROWSER_DOCUMENTS = { enrollments: webextEnrollmentsDocument, consumed: webextPairConsumedDocument };
 
 // A peer's MCP bridge, reached the way a turn reaches it: mounted on a turn's lease and served by the daemon's one MCP
 // door on a bare Hono. Pins the bridge's decisions (what an unknown or offline peer looks like, verbatim forwarding)
@@ -27,7 +21,7 @@ const door: PeerDoor<{ type: "hello"; token: string; version: string }, { versio
     slug: "hosts",
     noun: "device",
     listKey: "hosts",
-    store: { files: peerFiles("host"), key: "hosts", prefix: "iht_", extra: {} },
+    store: { documents: BROWSER_DOCUMENTS, key: "browsers", prefix: "iht_", extra: {} },
     hub: { domain: "hosts", heartbeatMs: 30_000, callTimeoutMs: 60_000, offline: (id) => `"${id}" is not connected right now` },
     hello: {
         schema: z.object({ type: z.literal("hello"), token: z.string(), version: z.string() }),

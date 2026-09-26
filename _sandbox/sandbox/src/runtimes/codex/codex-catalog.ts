@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { compareUnrankedModelIds, humanizeModelId, type Model, ModelSchema } from "@intentic/sandbox-contract";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
 import type { Config } from "../../env.config.js";
-import { jsonFile } from "../../store/json-file.js";
+import { cacheFile } from "../../store/open-document.js";
 import { codexModelList, type CodexModelListReader } from "./codex-model-list.js";
 import { discoverCodexModels, discoverTranslatorCodexModels, isCodexModel, SEED_CODEX_MODELS } from "./codex-models.js";
 
@@ -67,7 +67,7 @@ export const createCodexCatalog = (
             return ids.length > 0 ? ranked(ids) : metadata;
         },
         idOf: (model) => model.id,
-        store: jsonFile<Model[]>(persistPathOf(codexHome), {
+        store: cacheFile<Model[]>(persistPathOf(codexHome), {
             parse: (raw) => {
                 const stored = ModelSchema.array().safeParse(raw);
                 return stored.success ? stored.data : undefined;

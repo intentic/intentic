@@ -3,9 +3,9 @@ import { join } from "node:path";
 import { z } from "zod";
 import type { Services } from "../composition.js";
 import { defineDocument } from "../store/evolution/documents.js";
-import { jsonFile } from "../store/json-file.js";
+import { openDocument } from "../store/open-document.js";
 import { appPanelKey, buildAppSpec } from "../workspace/layout/app-previews.js";
-import { statePath, stateRelPath } from "../state-paths.js";
+import { stateRelPath } from "../state-paths.js";
 import { publicAddressOf } from "../env.config.js";
 
 // What this workspace runs on boot: one entry per `<repo>/_apps/<app>` with its dev command, so every boot restarts it,
@@ -26,12 +26,7 @@ export const autostartDocument = defineDocument({ path: stateRelPath(".intentic/
 export type AutostartApp = z.infer<typeof AutostartAppSchema>;
 type Autostart = z.infer<typeof AutostartSchema>;
 
-const store = (root: string) =>
-    jsonFile<Autostart>(statePath(root, ".intentic/config/autostart.json"), {
-        parse: (raw) => AutostartSchema.safeParse(raw).data,
-        fallback: () => ({ apps: [] }),
-        document: autostartDocument,
-    });
+const store = (root: string) => openDocument(autostartDocument, join(root, autostartDocument.path), { fallback: (): Autostart => ({ apps: [] }) });
 
 export const readAutostart = async (root: string): Promise<readonly AutostartApp[]> => (await store(root).read()).apps;
 

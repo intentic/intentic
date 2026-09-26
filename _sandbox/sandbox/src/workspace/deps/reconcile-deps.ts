@@ -6,7 +6,7 @@ import type { Logger } from "pino";
 import { z } from "zod";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
 import { defineDocument } from "../../store/evolution/documents.js";
-import { jsonFile } from "../../store/json-file.js";
+import { openDocument } from "../../store/open-document.js";
 import { unresolvedDependencies } from "./dependency-drift.js";
 import { type DependencyOrigin, type DependencyRequestOrigin, originPriority } from "./dependency-origin.js";
 import { behindCount, INSTALLABLE, installPanelKey, type ProjectSetupStatus, startInstall, workspaceSetup } from "../layout/workspace-setup.js";
@@ -31,14 +31,10 @@ interface RequestState {
 
 export const dependencyRequestsDocument = defineDocument({ root: "history", path: "dependency-requests.json", schema: RequestStateSchema });
 
-const requestState = (raw: unknown): RequestState | undefined => {
-    const parsed = RequestStateSchema.safeParse(raw);
-    if (!parsed.success) {
-        return undefined;
-    }
-    return {
+// The schema's value as this store holds it: each origin spelled for exact optional types.
+const requestState = (parsed: z.output<typeof RequestStateSchema>): RequestState => ({
         projects: Object.fromEntries(
-            Object.entries(parsed.data.projects).map(([dir, origin]) => [
+            Object.entries(parsed.projects).map(([dir, origin]) => [
                 dir,
                 {
                     kind: "request" as const,
@@ -47,8 +43,7 @@ const requestState = (raw: unknown): RequestState | undefined => {
                 },
             ]),
         ),
-    };
-};
+    });
 
 export interface ReconcileOutcome {
     readonly missing: number;
@@ -103,11 +98,7 @@ const belongsToLand = (dir: string, origin: Extract<DependencyOrigin, { kind: "l
     origin.repos.some(({ repo }) => (dir === "" ? repo === "root" : dir === repo || dir.startsWith(`${repo}/`)));
 
 export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): DependencyCoordinator => {
-    const requests = jsonFile<RequestState>(deps.requestsPath, {
-        parse: requestState,
-        fallback: () => ({ projects: {} }),
-        document: dependencyRequestsDocument,
-    });
+    const requests = openDocument(dependencyRequestsDocument, deps.requestsPath, { read: requestState, fallback: () => ({ projects: {} }) });
     const causes = new Map<string, DependencyOrigin>();
     const listeners = new Set<(event: DependencyInstallStarted) => void>();
     const failureListeners = new Set<(event: DependencyInstallStartFailed) => void>();

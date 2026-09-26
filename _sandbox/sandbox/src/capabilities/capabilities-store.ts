@@ -1,7 +1,8 @@
 import { type Capability, CapabilitySchema, VAULTED } from "@intentic/sandbox-contract";
 import { isJsonObject, mapValue, retireEntries } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
-import { idListFile, type IdListStore } from "../store/id-list-file.js";
+import type { IdListStore } from "../store/id-list-file.js";
+import { openIdList } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
 import type { ResolvedContribution } from "./contributions.js";
 import { partitionSecretValues } from "./credentials/secret-fields.js";
@@ -32,7 +33,7 @@ export const capabilitiesDocument = defineDocument({
 // JSON file store on the shared id-list store (store/id-list-file.ts): per-entry validation, skipped entries reported,
 // and writes that preserve what this build can't read.
 export const fileCapabilitiesStore = (path: string, onInvalid?: (id: string, reason: string) => void): CapabilitiesStore =>
-    idListFile(path, CapabilitySchema, onInvalid, capabilitiesDocument);
+    openIdList(capabilitiesDocument, path, onInvalid);
 
 // Decorator, not a file-store change: the manifest keeps a connection's shape, the vault keeps its credential values.
 // Reads rehydrate so every caller gets a whole Capability; writes go to the vault first, orphaning at worst.

@@ -2,7 +2,8 @@ import { randomBytes } from "node:crypto";
 import { utcDayOf } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
-import { boundedLog, jsonFile } from "../store/json-file.js";
+import { boundedLog } from "../store/json-file.js";
+import { openEntries } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
 
 // One row per payment attempt that reached a signature request, plus declines and expiries; what the history command,
@@ -82,16 +83,11 @@ export const spentTodayAtomic = (rows: readonly PaymentRow[], nowMs: number, usd
 };
 
 export const fileWalletLedger = (path: string, now: () => number = Date.now): WalletLedgerStore => {
-    const file = jsonFile<PaymentRow[]>(path, {
-        parse: (raw) => {
-            const parsed = z.array(PaymentRowSchema).safeParse(raw);
-            return parsed.success ? parsed.data : undefined;
-        },
-        fallback: () => [],
+    // One row at a time: a row this build cannot read is kept as written and reported, never the whole ledger.
+    const file = openEntries(walletLedgerDocument, path, {
         mode: 0o600,
         // The cap's only memory of today's spend: a fresh ledger over an unreadable one would forget it.
         onUnreadable: "refuse",
-        document: walletLedgerDocument,
     });
     const log = boundedLog(file, ROWS_CAP);
     return {

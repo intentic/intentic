@@ -10,8 +10,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";
-import { jsonFile } from "../../store/json-file.js";
-import { objectParse } from "../../store/unknown-keys.js";
+import { openDocument } from "../../store/open-document.js";
 import { stateRelPath } from "../../state-paths.js";
 import { opt } from "../../opt.js";
 
@@ -389,10 +388,9 @@ export interface PushChecksStore {
 }
 
 export const filePushChecksStore = (path: string): PushChecksStore => {
-    const file = jsonFile<PushChecksState>(path, {
-        parse: objectParse(PushChecksStateSchema),
+    const file = openDocument<typeof pushChecksDocument, PushChecksState>(pushChecksDocument, path, {
+        unknownKeys: true,
         fallback: () => ({ pushes: [], seen: [] }),
-        document: pushChecksDocument,
     });
     const tallied =
         (

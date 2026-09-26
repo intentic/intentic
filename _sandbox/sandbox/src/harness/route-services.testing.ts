@@ -20,7 +20,7 @@ import { providerReadiness } from "../agent/providers/provider-registry.js";
 import { budgetOn } from "../agent/run/turn/turn-plan.testing.js";
 import { PROVIDER_MODULES, RUNTIME_ADAPTERS } from "../runtimes/runtime-table.js";
 import { createReachReporter } from "../system/listeners/reach-report.js";
-import { enrolledFleet, syncPairBurnPath, type SyncMode } from "../hosts/desktop-sync.js";
+import { enrolledFleet, syncPairBurns, type SyncMode } from "../hosts/desktop-sync.js";
 import { outboxStreamFor } from "../webchat/webchat-outbox.js";
 import { createPortForwards } from "../ports/port-forwards.js";
 import { rejectAuth } from "./route-client.testing.js";
@@ -129,7 +129,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
     const cards = parkedCards(conversations);
     const workspace = workspacePaths(WORKSPACE_ROOT);
     // Real pairing table so mint and redeem share one implementation, following the test's own history root.
-    const syncPairings = pairings<SyncMode>(syncPairBurnPath((rest.config ?? testConfig).historyRoot));
+    const syncPairings = pairings<SyncMode>(syncPairBurns((rest.config ?? testConfig).historyRoot));
     // The phrase index these suites search through: production schema and SQL, over nothing.
     const testSaid = openSearchIndex(IN_MEMORY);
     // Completed by unstubbed: only what these suites rely on appears below; anything else names itself if reached.

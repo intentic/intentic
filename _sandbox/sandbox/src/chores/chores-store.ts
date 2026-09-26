@@ -2,7 +2,7 @@ import type { ChoreLedgerEntry, ProbeId, ProbeResult } from "@intentic/sandbox-c
 import { ChoreLedgerEntrySchema, ProbeResultSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
-import { jsonEntries, jsonFile } from "../store/json-file.js";
+import { openDocument, openEntries } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
 
 // Persists two files under .intentic/records/chores/: a probe cache and a ledger of actions. In .intentic, not a repo,
@@ -33,12 +33,8 @@ export interface ChoresStore {
 }
 
 export const fileChoresStore = (probesPath: string, ledgerPath: string): ChoresStore => {
-    const probeFile = jsonFile<ProbeCache>(probesPath, {
-        parse: (raw) => ProbeCacheSchema.safeParse(raw).data,
-        fallback: () => ({}),
-        document: choreProbesDocument,
-    });
-    const ledgerFile = jsonEntries<ChoreLedgerEntry>(ledgerPath, { entry: (raw) => ChoreLedgerEntrySchema.safeParse(raw).data, document: choreLedgerDocument });
+    const probeFile = openDocument(choreProbesDocument, probesPath, { fallback: (): ProbeCache => ({}) });
+    const ledgerFile = openEntries(choreLedgerDocument, ledgerPath);
     return {
         probes: probeFile.read,
         probesFor: async (repo) => Object.values((await probeFile.read())[repo] ?? {}),

@@ -7,7 +7,7 @@ import { z } from "zod";
 import { stateRelPath } from "../../state-paths.js";
 import { convertDocument } from "./conversions.js";
 import { conversionDigest, defineDocument, type DocumentRoot, type DocumentSpec, engineEpoch } from "./documents.js";
-import { jsonEntries } from "../json-file.js";
+import { openEntries } from "../open-document.js";
 import { isDowngrade, newestRunVersion, recordNewestRun } from "../newest-run.js";
 import { commitEpisodes, type Episode, GRACE_MS, type Journal, openEpisode, pruneEpisodes, readJournal, restoreEpisode, writeJournal } from "./state-journal.js";
 import type { StructuralStep } from "./state-steps.js";
@@ -330,10 +330,7 @@ export const conversionsDocument = defineDocument({ path: stateRelPath(".intenti
 const LEDGER_KEPT = 50;
 
 const appendLedger = async (workspaceRoot: string, entry: z.infer<typeof LedgerEntrySchema>): Promise<void> => {
-    const ledger = jsonEntries(join(workspaceRoot, conversionsDocument.path), {
-        entry: (raw) => LedgerEntrySchema.safeParse(raw).data,
-        document: conversionsDocument,
-    });
+    const ledger = openEntries(conversionsDocument, join(workspaceRoot, conversionsDocument.path));
     await ledger.update((entries) => [...entries, entry].slice(-LEDGER_KEPT));
 };
 

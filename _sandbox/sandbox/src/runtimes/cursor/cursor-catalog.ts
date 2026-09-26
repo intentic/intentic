@@ -1,7 +1,7 @@
 import type { ModelListItem } from "@cursor/sdk";
 import type { Model } from "@intentic/sandbox-contract";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
-import { jsonFile } from "../../store/json-file.js";
+import { cacheFile } from "../../store/open-document.js";
 import type { CursorStore } from "./cursor-credentials.js";
 import { SEED_CURSOR_MODELS, seedCatalog, toCatalog } from "./cursor-models.js";
 import { cursorSdk } from "./cursor-sdk.js";
@@ -42,7 +42,7 @@ export const createCursorCatalog = (store: CursorStore, persistPath: string): Cu
         ttlMs: MODELS_TTL_MS,
         discover,
         idOf: (item) => item.id,
-        store: jsonFile<string[]>(persistPath, {
+        store: cacheFile<string[]>(persistPath, {
             parse: (raw) => (Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string") : undefined),
             fallback: () => [],
         }),

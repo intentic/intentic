@@ -74,6 +74,10 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: "backups/", portability: "derived" },
     // Bundles being taken in, mid-review; excluded as someone else's. Deleted on apply/abandon, swept after a crash.
     { path: "arrivals/", portability: "derived" },
+    // The agent engines this sandbox installed beside the image's own, each with its pointer file; reinstalled on demand.
+    { path: "engines/", portability: "derived" },
+    // An update the host downloaded and built for this sandbox (`ic sandbox prepare`); about this machine only.
+    { path: "update-staged.json", portability: "derived" },
 
     /* ---- credentials ---- */
 

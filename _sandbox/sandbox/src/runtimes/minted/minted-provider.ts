@@ -11,7 +11,7 @@ import type { Logger } from "pino";
 import { z } from "zod";
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
 import type { Services } from "../../composition.js";
-import { jsonFile } from "../../store/json-file.js";
+import { cacheFile } from "../../store/open-document.js";
 import { metaLoginDriver } from "./meta-login.js";
 import { createMintedCatalog, type MintedCatalog } from "./minted-catalog.js";
 import { fileMintedStore, type MintedStore } from "./minted-credentials.js";
@@ -89,7 +89,7 @@ export const createMintedSlice = (input: { readonly authRoot: string; readonly l
                     seed: SEED_MODELS[provider],
                     // Beside the credentials rather than in a cache dir: the list is this estate's, and a disconnected
                     // provider's auth directory should take its catalogs with it.
-                    file: jsonFile<Model[]>(join(dir, `models-${variant.id}.json`), {
+                    file: cacheFile<Model[]>(join(dir, `models-${variant.id}.json`), {
                         parse: (raw) => z.array(ModelSchema).safeParse(raw).data,
                         fallback: () => [],
                     }),

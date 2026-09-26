@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { diffPowerMaps, type ExtensionManifest, powersOf, type PowersDiff } from "@intentic/extension-manifest";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
-import { approvalLedgers } from "../store/json-file.js";
+import { openApprovalLedger } from "../store/open-document.js";
 
 /* The owner's yes to each workspace extension, pinned by its id and a digest of the powers it declared then. Kept under
  * the history root: an agent can write the extension's folder, so its approval must sit where no workspace write
@@ -15,10 +15,8 @@ const LedgerSchema = z.object({
 
 export const extensionApprovalsDocument = defineDocument({ root: "history", path: "extension-approvals.json", schema: LedgerSchema });
 
-const ledgers = approvalLedgers((raw) => LedgerSchema.safeParse(raw).data, extensionApprovalsDocument);
-
 // Keyed by extension id; the pin carries the digest, since one id is approved again for new powers.
-const ledgerOf = (historyRoot: string) => ledgers(join(historyRoot, "extension-approvals.json"));
+const ledgerOf = (historyRoot: string) => openApprovalLedger(extensionApprovalsDocument, join(historyRoot, extensionApprovalsDocument.path));
 
 // Over the power KEYS, sorted: a relabelled view keeps its approval, a newly declared power does not.
 const digestOf = (powers: ReadonlyMap<string, string>): string => createHash("sha256").update(JSON.stringify([...powers.keys()].toSorted())).digest("hex");

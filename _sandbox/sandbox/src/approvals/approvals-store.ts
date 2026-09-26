@@ -3,7 +3,7 @@ import { ApprovalSchema, type ApprovalSummary } from "@intentic/sandbox-contract
 import type { Services } from "../composition.js";
 import { writeLoadedSkill } from "../store/loaded-skills.js";
 import { defineDocument } from "../store/evolution/documents.js";
-import { jsonDir } from "../store/json-dir.js";
+import { openDirectory } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
 
 // The workspace-relative home the skill text teaches the agent; can't name a dir the store stopped reading.
@@ -33,7 +33,7 @@ export interface ApprovalsStore {
 
 // A per-file JSON store, used in production at <workspace>/.intentic/config/approvals/.
 export const fileApprovalsStore = (dir: string): ApprovalsStore => {
-    const files = jsonDir(dir, (raw) => ApprovalSchema.safeParse(raw).data, approvalsDocument);
+    const files = openDirectory(approvalsDocument, dir);
     return {
         list: async () => {
             const { entries, invalid } = await files.list();

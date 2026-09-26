@@ -1,12 +1,12 @@
+import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { derivedMachineId, hostEntryOf, hostEnvironmentOf } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { tokenEquals } from "../auth/auth.js";
-import { opt } from "../opt.js";
-import { at, type JsonObject, transform } from "../store/evolution/conversions.js";
-import { defineDocument } from "../store/evolution/documents.js";
-import { jsonFile } from "../store/json-file.js";
+import { at, type Conversion, type JsonObject, transform } from "../store/evolution/conversions.js";
+import { type DocumentSpec, defineDocument } from "../store/evolution/documents.js";
+import { openDocument } from "../store/open-document.js";
 
 // How something outside this sandbox becomes something it trusts, split into two halves by lifetime. A PAIRING is
 // short-lived, single-use, in-memory; an ENROLLMENT is what redeeming one produces, the durable token stored on
@@ -18,12 +18,22 @@ const PAIR_TTL_MS = 10 * 60 * 1000;
 // Digests, never tokens: records that something was spent, without holding anything that could spend it.
 const BurnedSchema = z.object({ digests: z.array(z.string()) });
 
-// Each door's burn file; `pairings` picks the one its path names.
-export const syncPairConsumedDocument = defineDocument({ root: "history", path: "sync-pair-consumed.json", schema: BurnedSchema });
-export const hostPairConsumedDocument = defineDocument({ root: "history", path: "host-pair-consumed.json", schema: BurnedSchema });
-export const webextPairConsumedDocument = defineDocument({ root: "history", path: "webext-pair-consumed.json", schema: BurnedSchema });
-export const runnerPairConsumedDocument = defineDocument({ root: "history", path: "runner-pair-consumed.json", schema: BurnedSchema });
-const burnDocuments = [syncPairConsumedDocument, hostPairConsumedDocument, webextPairConsumedDocument, runnerPairConsumedDocument];
+// Each door's burn file, one family: the same shape under four names on /history.
+const burnFile = (path: string) => ({ root: "history" as const, path, schema: BurnedSchema });
+export const syncPairConsumedDocument = defineDocument(burnFile("sync-pair-consumed.json"));
+export const hostPairConsumedDocument = defineDocument(burnFile("host-pair-consumed.json"));
+export const webextPairConsumedDocument = defineDocument(burnFile("webext-pair-consumed.json"));
+export const runnerPairConsumedDocument = defineDocument(burnFile("runner-pair-consumed.json"));
+export type BurnDocument = typeof syncPairConsumedDocument;
+
+// Where a door records the pairings it burned: its document, and the file it opens (under /history, or a test's own).
+export interface Burns {
+    readonly document: BurnDocument;
+    readonly path: string;
+}
+
+// The burn file of a door, at its address under a history root.
+export const burnsAt = (document: BurnDocument, historyRoot: string): Burns => ({ document, path: join(historyRoot, document.path) });
 
 // A pairing minted and redeemed entirely in-process needs no burn record; one written somewhere immortal (a container's
 // env, replayed into every rebuild) does, permanently. `replayable` is a property of one token, declared at mint time,
@@ -44,20 +54,10 @@ export interface Pairings<T> {
     readonly redeem: (token: string) => Promise<T | undefined>;
 }
 
-// `burns` is the /history file replayable pairings are recorded in. Omitting it declares nothing at this door can be
+// `burns` is the /history document replayable pairings are recorded in. Omitting it declares nothing at this door can be
 // replayed, so `arm` refuses: an unauditable token must not be accepted. `ttlMs` is how long an unredeemed one lives.
-export const pairings = <T>(burns?: string, ttlMs = PAIR_TTL_MS): Pairings<T> => {
-    // A path naming none of the doors' burn files (a test's own) runs no conversions.
-    const document = burns === undefined ? undefined : burnDocuments.find((spec) => burns.endsWith(`/${spec.path}`));
-    const burned =
-        burns === undefined
-            ? undefined
-            : jsonFile<z.infer<typeof BurnedSchema>>(burns, {
-                  parse: (raw) => BurnedSchema.safeParse(raw).data,
-                  fallback: () => ({ digests: [] }),
-                  mode: 0o600,
-                  ...opt("document", document),
-              });
+export const pairings = <T>(burns?: Burns, ttlMs = PAIR_TTL_MS): Pairings<T> => {
+    const burned = burns === undefined ? undefined : openDocument(burns.document, burns.path, { fallback: () => ({ digests: [] }), mode: 0o600 });
     const live = new Map<string, { payload: T; expiresAt: number; replayable: boolean }>();
 
     const isBurned = async (token: string): Promise<boolean> =>
@@ -173,9 +173,16 @@ export interface Enrollments<X extends object> {
     readonly revoke: (id: string) => Promise<boolean>;
 }
 
-// Each door's enrollments file, spelled out per door since each keeps its own top-level key and its own fields beside
-// the digest (a runner's host machine); `enrollments` picks the one its path names.
+// Each door's enrollments file, one family: a top-level key of its own, and each entry the digest plus whatever the door
+// keeps beside it (a runner's host machine). The document's schema is the one `enrollments` reads with.
 const EnrollmentSchema = z.object({ id: z.string(), hash: z.string(), enrolledAt: z.number() });
+type EnrollmentsSchema<Key extends string, Extra extends z.ZodRawShape> = z.ZodObject<{
+    [K in Key]: z.ZodArray<ReturnType<typeof EnrollmentSchema.extend<Extra>>>;
+}>;
+// SAFETY: a computed key widens the object's shape to a string index; the one key it holds is `key`, as the type says.
+const enrollmentsSchema = <const Key extends string, const Extra extends z.ZodRawShape>(key: Key, extra: Extra): EnrollmentsSchema<Key, Extra> =>
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- zod cannot type a computed key, so the shape is restated whole
+    z.object({ [key]: z.array(EnrollmentSchema.extend(extra)) }) as unknown as EnrollmentsSchema<Key, Extra>;
 
 // A host enrollment is one OS install of one computer, lent to this sandbox by one card: `machineId` and `environment`
 // say which install, `card` which grant. `id` is the connection key the hub and the MCP mount address it by, always
@@ -185,7 +192,7 @@ type LegacyHostEnrollment = JsonObject & { readonly id: string; readonly hash: s
 export const hostEnrollmentsDocument = defineDocument({
     root: "history",
     path: "host-enrollments.json",
-    schema: z.object({ hosts: z.array(EnrollmentSchema.extend(HostEnrollmentFieldsSchema.shape)) }),
+    schema: enrollmentsSchema("hosts", HostEnrollmentFieldsSchema.shape),
     history: [
         // 2026-09-25: an enrollment's card and environment were spelled only in its id (`<card>::<environment>`), and no
         // enrollment knew which computer it was on. Read off the id once; the machine id is derived from the card
@@ -209,18 +216,21 @@ export const hostEnrollmentsDocument = defineDocument({
 export const webextEnrollmentsDocument = defineDocument({
     root: "history",
     path: "webext-enrollments.json",
-    schema: z.object({ browsers: z.array(EnrollmentSchema) }),
+    schema: enrollmentsSchema("browsers", {}),
 });
 export const runnerEnrollmentsDocument = defineDocument({
     root: "history",
     path: "runner-enrollments.json",
-    schema: z.object({ runners: z.array(EnrollmentSchema.extend({ host: z.string().optional() })) }),
+    schema: enrollmentsSchema("runners", { host: z.string().optional() }),
 });
-const enrollmentDocuments = [hostEnrollmentsDocument, webextEnrollmentsDocument, runnerEnrollmentsDocument];
+// Any door's enrollments document.
+export type EnrollmentsDocument = DocumentSpec<z.ZodObject, readonly Conversion[], readonly string[], "object", false>;
 
 export const enrollments = <Shape extends z.ZodRawShape>(args: {
-    // The file on /history; each door keeps its own name and top-level key, so this consolidates the mechanic, not the
-    // bytes.
+    // The door's document (its schema, built by the family above, is the one read with) and the file it opens, on
+    // /history or a test's own; each door keeps its own name and top-level key, so this consolidates the mechanic, not
+    // the bytes.
+    readonly document: EnrollmentsDocument;
     readonly path: string;
     readonly key: string;
     // Shape of the durable token, so a credential seen in a log says which door it opens.
@@ -233,19 +243,16 @@ export const enrollments = <Shape extends z.ZodRawShape>(args: {
     type X = z.infer<z.ZodObject<Shape>>;
     const rule = args.card ?? identityRule<X>();
     // Written out rather than inferred from the schema: a generic spread of `extra` into `z.object` type-checks on the
-    // way in but won't resolve `id`/`hash` structurally on the way out. The schema's job narrows to rejecting a file
-    // this build can't read.
+    // way in but won't resolve `id`/`hash` structurally on the way out.
     type Entry = { id: string; hash: string; enrolledAt: number } & z.infer<z.ZodObject<Shape>>;
-    const EntrySchema = z.object({ id: z.string(), hash: z.string(), enrolledAt: z.number(), ...args.extra });
-    const StoredSchema = z.object({ [args.key]: z.array(EntrySchema) });
-
-    // A path naming none of the doors' files (a test's own) runs no conversions.
-    const document = enrollmentDocuments.find((spec) => args.path.endsWith(`/${spec.path}`));
-    const file = jsonFile<Record<string, Entry[]>>(args.path, {
-        parse: (raw) => StoredSchema.safeParse(raw).data as Record<string, Entry[]> | undefined,
+    if (!Object.hasOwn(args.document.schema.shape, args.key)) {
+        throw new Error(`${args.document.path} keeps its enrollments under ${Object.keys(args.document.schema.shape).join(", ")}, not ${args.key}`);
+    }
+    const file = openDocument<EnrollmentsDocument, Record<string, Entry[]>>(args.document, args.path, {
+        // SAFETY: the document's schema is this door's family schema, whose one key holds entries of this door's shape.
+        read: (stored) => stored as Record<string, Entry[]>,
         fallback: () => ({ [args.key]: [] }),
         mode: 0o600,
-        ...opt("document", document),
     });
 
     const read = async (): Promise<Entry[]> => (await file.read())[args.key] ?? [];

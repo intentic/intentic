@@ -5,7 +5,8 @@ import { STATE_DIR } from "@intentic/constants";
 import { z } from "zod";
 import { rename, retireEntries, retype } from "./evolution/conversions.js";
 import { defineDocument, type DocumentSpec } from "./evolution/documents.js";
-import { approvalLedgers, boundedLog, type JsonFile, jsonEntries, jsonFile, ManifestUnreadableError, writeJsonFile } from "./json-file.js";
+import { boundedLog, type JsonFile, jsonEntries, jsonFile, ManifestUnreadableError, writeJsonFile } from "./json-file.js";
+import { openApprovalLedger } from "./open-document.js";
 import { recordedProblems } from "./manifest-problems.js";
 import { clearNewestRun, recordNewestRun } from "./newest-run.js";
 
@@ -401,9 +402,10 @@ describe("boundedLog", () => {
     });
 });
 
-describe("approvalLedgers", () => {
+describe("openApprovalLedger", () => {
     const Ledger = z.object({ approved: z.record(z.string(), z.object({ approvedAt: z.number() })) });
-    const ledgerAt = approvalLedgers((raw) => Ledger.safeParse(raw).data, defineDocument({ path: "evolution/approvals.json", schema: Ledger }));
+    const approvals = defineDocument({ path: "evolution/approvals.json", schema: Ledger });
+    const ledgerAt = (path: string) => openApprovalLedger(approvals, path);
 
     test("a pin approves its key, and a change handing back the pins it was given writes nothing", async () => {
         const path = await tempFile("approvals.json");
