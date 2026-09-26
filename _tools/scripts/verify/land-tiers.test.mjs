@@ -65,6 +65,34 @@ test("a backlog rule counts only what the change added: a new shape, or a measur
     assert.deepEqual(introduced(before, before), []);
 });
 
+// The complexity rule's message as oxlint-plugin-complexity prints it: the score, then one breakdown line per point.
+const scored = (name, score, { metric = "Cognitive Complexity", from = 100 } = {}) => ({
+    code: "complexity(complexity)",
+    message: `Function '${name}' has ${metric} of ${score}. Maximum allowed is 20. [nested functions: +${score}]\n\nBreakdown:\n${Array.from(
+        { length: score },
+        (_, index) => `>>> Line ${from + index * 3}: +1 for 'nested arrow function' [top offender]`,
+    ).join("\n")}`,
+});
+
+test("a complexity finding whose score went down is not new, though its breakdown lost lines", () => {
+    assert.deepEqual(introduced([scored("installFakeFly", 38)], [scored("installFakeFly", 40)]), []);
+});
+
+test("a complexity finding at the same score with a different breakdown is not new", () => {
+    assert.deepEqual(introduced([scored("installFakeFly", 38, { from: 7 })], [scored("installFakeFly", 38)]), []);
+});
+
+test("a complexity finding whose score went up is new", () => {
+    const grown = scored("installFakeFly", 41);
+    assert.deepEqual(introduced([grown], [scored("installFakeFly", 40)]), [grown]);
+});
+
+test("a function newly over the limit is new, and a symbol is matched only to its own metric", () => {
+    const fresh = scored("parse2", 22);
+    const cyclomatic = scored("installFakeFly", 25, { metric: "cyclomatic complexity" });
+    assert.deepEqual(introduced([scored("installFakeFly", 38), fresh, cyclomatic], [scored("installFakeFly", 40)]), [fresh, cyclomatic]);
+});
+
 test("the plugin tier ignores exactly what the root config ignores, since extends does not carry the list", () => {
     const root = repoRoot(import.meta.url);
     const ignored = (config) => {

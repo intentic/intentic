@@ -24,13 +24,26 @@ export const OXLINT_TIMEOUT_MS = 60_000;
 export const oxlintIn = (checkout) =>
     [checkout, repoRoot(import.meta.url)].map((dir) => join(dir, `node_modules/.bin/oxlint`)).find((bin) => existsSync(bin));
 
-// Rule and message with every number blanked, never position: an insertion above shifts every offset below it.
-const identityOf = (d) => `${d.code} ${d.message.replaceAll(/\d+/gu, `#`)}`;
+// A message that states a measured score against a limit ("Function 'f' has Cognitive Complexity of 38. Maximum allowed
+// is 20." then a breakdown of every line that scored) is about the function it names: `head` is the rule's metric and that
+// name, `score` the measured value.
+const SCORED = /^(?<head>.+?) of (?<score>\d+)\. Maximum allowed is \d+\./u;
 
-// The first number in a message is the value measured ("nested too deeply (5)"); undefined for a rule that counts nothing.
+// HOW A FINDING NOW IS MATCHED TO ONE BEFORE. A scored finding is matched by rule, metric and symbol (the file is the
+// caller's grouping), and is new only when that symbol had no such finding or its score went up: its breakdown lists every
+// offending line, so matching it by message would make any resize of the function, a reduction included, read as new.
+// Any other finding is matched by rule and message with every number blanked, never position: an insertion above shifts
+// every offset below it.
+const identityOf = (d) => {
+    const scored = SCORED.exec(d.message);
+    return scored === null ? `${d.code} ${d.message.replaceAll(/\d+/gu, `#`)}` : `${d.code} ${scored.groups.head}`;
+};
+
+// The value measured: a scored message's score, else the first number in it ("nested too deeply (5)"); undefined for a
+// rule that counts nothing.
 const measured = (d) => {
-    const found = /\d+/u.exec(d.message);
-    return found === null ? undefined : Number(found[0]);
+    const found = SCORED.exec(d.message)?.groups.score ?? /\d+/u.exec(d.message)?.[0];
+    return found === undefined ? undefined : Number(found);
 };
 
 // Each diagnostic's `pick`, grouped by its identity.
@@ -67,9 +80,12 @@ const unaccounted = (list, baselineValues) => {
 
 // A plugin finding that names its symbol ("Rename symbol "STATE_SHAPES" …") is about that name, and such a rule flags
 // every reference to it: one more use of a name the file already had is not a new name. Those count once per file.
-const namesItsSymbol = (d) => PLUGIN_RULE.test(d.code) && /"[^"]+"/u.test(d.message);
+const namesItsSymbol = (d) => PLUGIN_RULE.test(d.code) && !SCORED.test(d.message) && /"[^"]+"/u.test(d.message);
 
-/** What `current` has that `baseline` did not: an identity the baseline lacked, or one whose measured value grew. */
+/**
+ * What one file's `current` diagnostics have that its `baseline` did not: an identity the baseline lacked, or one whose
+ * measured value grew (identityOf says what an identity is).
+ */
 export const introduced = (current, baseline) => {
     const before = grouped(baseline, measured);
     return [...grouped(current, (d) => d)].flatMap(([key, list]) => {
