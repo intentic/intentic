@@ -70,9 +70,10 @@ whose steps are named in `agent/run/placement/turn-close.ts`:
 
 1. **Hush.** The body has ended, so its steering closes: a person's words or a wake that fires from here wait in the
    conversation's queue for the next turn, rather than going into a queue no model reads.
-2. **Judge jobs**, once per run, however the turn ended. A job the turn left running is stopped with it, unless the
-   turn reached it and its closing reply gives the person its link (`http://host:PORT`) in a sentence that does not say
-   it was stopped (`agent/tools/jobs/job-fates.ts`); one the turn never reached is awaited.
+2. **Judge jobs**, once per run, however the turn ended (`agent/tools/jobs/job-fates.ts`). A job the agent kept for
+   the person with the `keep` tool, or one on a port the conversation already handed over, keeps running for them. A
+   server the turn reached and nobody kept is stopped with it; anything else is awaited. The closing reply's words
+   decide nothing.
 3. **Arm wakes.** Each awaited job, and each finished one whose exit the model never read, is handed to a watch
    (`background-adoption.ts`). Whether the conversation now runs again by itself is read from what it holds:
    `awaitingWake` (`conversations/actor/conversation-state.ts`: an armed watch, or the sandbox's or an agent's words
@@ -82,7 +83,10 @@ whose steps are named in `agent/run/placement/turn-close.ts`:
    is the turn that finishes the work. Otherwise the repository's own machine fixers run in the worktree on what the
    turn changed (`conversations/land/worktree-fixers.ts`, `_tools/scripts/verify/fixers.mjs` where the repository
    ships it), so what they write rides this land; then the rules decide, and it lands under the lease. The check after
-   the land runs the same fixers on the main tree as the backstop.
+   the land runs the same fixers on the main tree as the backstop. With the owner's version rule standing, the land's
+   claim is then committed (`conversations/land/version-landed.ts`), the one place any land (a turn's, by hand, a
+   conflict's re-land, a fix-up's) becomes a commit: a subject that narrates instead of describing a change is replaced
+   there by one built from the claimed paths (`committableSubject`), whichever path drafted or stored it.
 5. **Settle.** The placement's books, then the conversation's actor.
 6. **Publish, once.** The placement announces how the turn ended (`TurnEnding`: failed, stopped, awaiting a wake, or
    finished); a worktree turn's is the workspace `turn.settled` event.

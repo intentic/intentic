@@ -493,8 +493,9 @@ const narrates = (subject: string): boolean => {
 };
 
 // Why a drafted subject cannot head a commit, or undefined when it can; the one judgement every drafting path makes
-// (landed-subject.ts, over each model's reply, which routes a refused one to the next model). `recent` are the subjects
-// the prompt showed as vocabulary: copying one back describes somebody else's change.
+// (landed-subject.ts, over each model's reply, which routes a refused one to the next model), made again where a land
+// commit is written (committableSubject). `recent` are the subjects the prompt showed as vocabulary: copying one back
+// describes somebody else's change.
 export const commitSubjectFlaw = (subject: string, recent: readonly string[] = []): string | undefined => {
     if (narrates(subject)) {
         return `narrated its own work instead of writing a commit subject`;
@@ -505,6 +506,28 @@ export const commitSubjectFlaw = (subject: string, recent: readonly string[] = [
     }
     return undefined;
 };
+
+// A path's area: its top directory, with the `_`/`.` a repo prefixes its groups with dropped; empty at the root.
+const areaOf = (path: string): string => {
+    const [top = ``, ...rest] = path.split(`/`);
+    return rest.length === 0 ? `` : top.replace(/^[._]+/u, ``);
+};
+
+// A conventional subject built from the claim alone, for a land whose own subject cannot head a commit. It names where
+// the change is, never what it does: only a reading of the diff could say that, and the reading is what failed.
+export const subjectFromPaths = (paths: readonly string[]): string => {
+    const areas = [...new Set(paths.map(areaOf))];
+    const [area] = areas;
+    const scope = areas.length === 1 && area !== undefined && area !== `` ? `(${area})` : ``;
+    const [only] = paths;
+    const what = paths.length === 1 && only !== undefined ? (only.split(`/`).at(-1) ?? only) : `${String(paths.length)} files`;
+    return clipSubject(`chore${scope}: update ${what}`);
+};
+
+// The subject a land commit is written under, judged where it is written (version-landed.ts), whatever path drafted
+// or stored it: a flawed one is replaced by one built from the change, never committed as it stands.
+export const committableSubject = (subject: string, paths: readonly string[]): string =>
+    subject.trim() === `` || commitSubjectFlaw(subject) !== undefined ? subjectFromPaths(paths) : subject;
 
 // No body reader by design: anything past the first line and the trailers just falls on the floor, so "one line only"
 // needs no separate enforcement.

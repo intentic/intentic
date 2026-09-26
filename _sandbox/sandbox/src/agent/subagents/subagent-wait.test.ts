@@ -1,6 +1,7 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { unstubbed } from "@intentic/testing";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
+import { memoryFleet } from "../../testing.js";
 import type { ChildSupervisor } from "./children.js";
 import { subagentWaitServer } from "./subagent-wait.js";
 
@@ -55,12 +56,22 @@ const toolNames = async (server: McpSdkServerConfigWithInstance): Promise<readon
 };
 
 // One schema the SDK cannot convert fails the whole listing, and the CLI then mounts the server with no tools at all.
-test("a delegating turn's server lists wait beside every supervision tool", async () => {
-    await expect(toolNames(serverWith(unstubbed<ChildSupervisor>("children", {})))).resolves.toEqual(["providers", "spawn", "send", "answer", "wait"]);
+test("a delegating turn's server lists wait and keep beside every supervision tool", async () => {
+    await expect(toolNames(serverWith(unstubbed<ChildSupervisor>("children", {})))).resolves.toEqual(["providers", "spawn", "send", "answer", "wait", "keep"]);
 });
 
-test("a turn that may not delegate still lists wait", async () => {
-    await expect(toolNames(serverWith(undefined))).resolves.toEqual(["wait"]);
+test("a turn that may not delegate still lists wait and keep", async () => {
+    await expect(toolNames(serverWith(undefined))).resolves.toEqual(["wait", "keep"]);
+});
+
+test("keep answers not ok, with the reason, for an id that names none of the conversation's commands", async () => {
+    const call = await connect(
+        subagentWaitServer({ conversationId: "parent", conversations: memoryFleet().conversations, signal: new AbortController().signal }),
+    );
+    const reply = await call("tools/call", { name: "keep", arguments: { target: "b-nobody", reason: "dev server" } });
+    expect(reply.result?.content?.map((block) => JSON.parse(block.text) as unknown)).toEqual([
+        { ok: false, message: "No background command of this conversation has that ID." },
+    ]);
 });
 
 test("answer hands the child its picks keyed by each question's text", async () => {

@@ -148,8 +148,9 @@ export const harnessServers = (
         ...(turn.browser.servers.length > 0 ? { secrets: browserSecretsServer(turn.browser, turn.secrets) } : {}),
         // hashlineEdits swaps the native Edit/Write (disabled in the policy) for hash-anchored file tools.
         ...(turn.hashlineEdits ? { hashline: createHashlineServer(context.localCwd) } : {}),
-        // `wait` parks until a child of this turn settles, and `spawn` (same server) starts a full agent on any connected
-        // provider; always offered, and withheld only without the delegate shelf and full agency.
+        // `wait` parks until a child of this turn settles, `keep` leaves a background command running for the person, and
+        // `spawn` (same server) starts a full agent on any connected provider; `wait` and `keep` are always offered, the
+        // rest withheld without the delegate shelf and full agency.
         subagents: subagentWaitServer({
             conversationId: context.base.spec.conversationId,
             conversations: deps.conversations,

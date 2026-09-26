@@ -1,6 +1,7 @@
 import { landedCommitMessage, type Rule } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { commitOnly } from "../../git/changes/changes-index.js";
+import { committableSubject, commitSubjectFlaw } from "../../git/ops/commit-message.js";
 import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import { standing } from "../../rules/rules.js";
@@ -24,39 +25,65 @@ export const versionRuleOf = (rules: readonly Rule[]): Rule | undefined =>
 // left nothing to describe): the conversation's own title, which at least names the ask.
 const fallbackSubject = (title: string | undefined, id: string): string => `Agent: ${title ?? id}`;
 
+// One repo's claim: the paths this agent's landing put in its main tree that history has not absorbed yet.
+interface RepoClaim {
+    readonly repo: string;
+    readonly dir: string;
+    readonly paths: readonly string[];
+}
+
+// The claim is read off git (origins.ts), which is exactly the set a commit should carry.
+const claimsOf = async (services: Services, id: string, repos: readonly string[]): Promise<RepoClaim[]> => {
+    const claims: RepoClaim[] = [];
+    for (const repo of repos) {
+        const dir = services.agentWorktrees.mainDir(repo);
+        const origins = await services.agentOrigins.forRepo(repo, dir);
+        const paths = Object.entries(origins)
+            .filter(([, ids]) => ids.includes(id))
+            .map(([path]) => path);
+        if (paths.length > 0) {
+            claims.push({ repo, dir, paths });
+        }
+    }
+    return claims;
+};
+
 // Commits one landing's claimed paths in each repo it spans, under the repo lock so a land or a discard queues behind
-// it. Returns the repos it committed in.
+// it. Returns the repos it committed in. Every land reaches the main tree's history here (a turn's, one by hand, a
+// conflict's re-land, a fix-up's), so this is where its subject is judged: whichever path drafted or stored it.
 const commitClaim = async (services: Services, id: string): Promise<string[]> => {
     const entry = services.agents.entry(id);
     if (entry === undefined) {
+        return [];
+    }
+    const claims = await claimsOf(
+        services,
+        id,
+        reposOf(entry).map((composed) => composed.repo),
+    );
+    if (claims.length === 0) {
         return [];
     }
     // The drafted message with its trailers; a land nobody drafted keeps the conversation's Test-Note and Allow lines all
     // the same.
     const landed = entry.landing.message;
     const trailers = landed === undefined ? await conversationTrailers(services, entry) : {};
-    const message = landedCommitMessage(
-        landed ?? {
-            subject: fallbackSubject(entry.social.title?.text, id),
-            ...opt("testNote", trailers.testNote),
-            ...opt("allows", trailers.allows === undefined ? undefined : [...trailers.allows]),
-        },
-    );
+    const title = entry.social.title?.text;
+    // The title stands in only when it could head a commit itself; the prefix would hide a narrated one from the check.
+    const written = landed?.subject ?? (title === undefined || commitSubjectFlaw(title) === undefined ? fallbackSubject(title, id) : ``);
+    const subject = committableSubject(written, claims.flatMap((claim) => claim.paths));
+    if (subject !== written) {
+        services.logger.warn({ agent: id, refused: written, subject }, "landed: its subject could not head a commit, committed under one built from the change");
+    }
+    const message = landedCommitMessage({
+        ...(landed ?? { ...opt("testNote", trailers.testNote), ...opt("allows", trailers.allows === undefined ? undefined : [...trailers.allows]) }),
+        subject,
+    });
     const committed: string[] = [];
-    for (const composed of reposOf(entry)) {
-        const dir = services.agentWorktrees.mainDir(composed.repo);
-        // The claim is read off git (origins.ts): the paths this agent's landing put in the tree that history has
-        // not absorbed yet, which is exactly the set a commit should carry.
-        const origins = await services.agentOrigins.forRepo(composed.repo, dir);
-        const paths = Object.entries(origins)
-            .filter(([, ids]) => ids.includes(id))
-            .map(([path]) => path);
-        if (paths.length === 0) {
-            continue;
-        }
-        const did = await services.agentWorktrees.withRepoLock(composed.repo, () => commitOnly(dir, paths, message, AGENT_GIT_AUTHOR));
+    for (const claim of claims) {
+        const did = await services.agentWorktrees.withRepoLock(claim.repo, () => commitOnly(claim.dir, claim.paths, message, AGENT_GIT_AUTHOR));
         if (did) {
-            committed.push(composed.repo);
+            committed.push(claim.repo);
         }
     }
     return committed;

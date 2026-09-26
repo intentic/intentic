@@ -125,6 +125,9 @@ interface JobRecord {
     // Where a `handed` job listens.
     ports: readonly number[] | undefined;
     stoppedBy: JobStopper | undefined;
+    // Why the agent kept it for the person (the `keep` tool), the one fact that hands a job over as its turn ends.
+    // Held here only: no turn survives a restart, so a restored job has nothing left to decide by it.
+    kept: string | undefined;
 }
 
 // A conversation's jobs, by job id, until nothing depends on one any more.
@@ -345,6 +348,7 @@ const UNJUDGED = {
     watch: undefined,
     ports: undefined,
     stoppedBy: undefined,
+    kept: undefined,
 } as const satisfies Omit<JobRecord, "job" | "shellId" | "toolUseId">;
 
 // Undefined for anything that is not a job file; never throws, so a bad entry cannot fail a boot.
@@ -492,7 +496,34 @@ export interface JudgedJob {
     readonly job: BackgroundJob;
     // The call that started it, so its own command line is never read as the agent using what it started.
     readonly toolUseId: string | undefined;
+    // Whether the agent kept it for the person with the `keep` tool.
+    readonly kept: boolean;
 }
+
+export type KeepOutcome = "kept" | "unknown" | "ended" | "stopped";
+
+/**
+ * Records the agent's decision to leave a running job to the person, by the id its Bash call returned or the job's own:
+ * the turn's ending hands it over on this fact alone (job-fates.ts). A job that already ended, or is being stopped,
+ * cannot be kept.
+ */
+export const keepBackgroundJob = (actors: Holders, conversationId: string, id: string, reason: string): KeepOutcome => {
+    const record = actors
+        .holdings(JOBS)
+        .of(conversationId)
+        .find((candidate) => candidate.shellId === id || candidate.job.id === id);
+    if (record === undefined) {
+        return "unknown";
+    }
+    if (jobFinished(record.job)) {
+        return "ended";
+    }
+    if (record.fate === "stopped") {
+        return "stopped";
+    }
+    record.kept = reason;
+    return "kept";
+};
 
 /**
  * The conversation's jobs a run's ending has to judge: running, and neither handed over nor being stopped. Asked once
@@ -503,7 +534,7 @@ export const jobsToJudge = (actors: Holders, conversationId: string): readonly J
         .holdings(JOBS)
         .of(conversationId)
         .filter((record) => !jobFinished(record.job) && (record.fate === undefined || record.fate === "awaited"))
-        .map((record) => ({ job: record.job, toolUseId: record.toolUseId }));
+        .map((record) => ({ job: record.job, toolUseId: record.toolUseId, kept: record.kept !== undefined }));
 
 /** Where a running job's pane leads a session, for the dirs that have one; the pid is the session's id. */
 export const jobPanes = (jobs: readonly BackgroundJob[]): Promise<Map<string, number>> => jobRunnerPids(jobs.map((job) => job.dir));

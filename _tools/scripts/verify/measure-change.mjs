@@ -12,7 +12,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { allowedInRange } from "../../checks/lib/allow.mjs";
 import { addedPluginFindings } from "../../oxlint/added.mjs";
-import { changedSince } from "../lib/git.mjs";
+import { changesSince } from "../lib/git.mjs";
 import { weakenings } from "./assertion-ratchet.mjs";
 import { checkVerdicts, reportsAt } from "./check-snapshot.mjs";
 import { rustfmtAvailable, touchedCrates } from "./fixers.mjs";
@@ -149,9 +149,14 @@ const pluginFinding = (unit) => ({ kind: "lint", source: "lint-plugins", recheck
  * them (checkVerdicts), so the runner is not asked twice.
  */
 export const measureChange = (root, base, { verdicts, changed } = {}) => {
-    const paths = changed ?? changedSince(root, base) ?? [];
+    const listed = changed === undefined ? changesSince(root, base) : { paths: changed };
+    // A change git cannot list is not an empty one: linted as nothing, it would pass every judgment built on it.
+    const paths = listed.paths ?? [];
     const lintable = paths.filter((path) => LINTABLE.test(path) && existsSync(join(root, path)));
-    const lint = runLint(root, lintable);
+    const lint =
+        listed.error === undefined
+            ? runLint(root, lintable)
+            : { ran: false, findings: [], why: `git could not list what changed since ${base.slice(0, 9)}: ${listed.error}` };
     const untidy = (verdicts ?? checkVerdicts(root) ?? []).filter((verdict) => !verdict.ok && verdict.measured && verdict.gate === "tidy");
     return [
         ...(lint.ran ? lint.findings : [{ kind: "lint", source: "lint", recheckable: true, text: `lint could not run: ${lint.why}`, key: "", unit: `lint could not run: ${lint.why}` }]),

@@ -11,6 +11,7 @@ import { bashTmuxHooks } from "../agent-terminals.js";
 import {
     type BackgroundJob,
     jobStatusPath,
+    keepBackgroundJob,
     noteJobShell,
     noteJobWatch,
     openBackgroundJob,
@@ -112,50 +113,43 @@ const ended = async (job: BackgroundJob): Promise<void> => {
 describe("a job's fate, from what its turn did", () => {
     const none = new Set<number>();
 
-    it("waits on anything that listens on nothing, whatever was said about it", () => {
-        expect(jobFate({ ports: [], targets: ["curl localhost:5173"], closing: "It is up at http://localhost:5173", handed: none })).toBe("awaited");
+    it("hands over whatever the agent kept, reached or not, listening or not", () => {
+        expect(jobFate({ kept: true, ports: [5173], targets: ["curl -s localhost:5173"], handed: none })).toBe("handed");
+        expect(jobFate({ kept: true, ports: [5173], targets: [], handed: none })).toBe("handed");
+        expect(jobFate({ kept: true, ports: [], targets: [], handed: none })).toBe("handed");
     });
 
-    it("hands over a server the turn reached and whose link its last reply gives", () => {
-        for (const closing of ["Open http://localhost:5173/ to try it", "It's up at <http://127.0.0.1:5173>.", "Try https://[::1]:5173/app"]) {
-            expect(jobFate({ ports: [5173], targets: ["curl -s localhost:5173"], closing, handed: none })).toBe("handed");
-        }
+    it("waits on anything unkept that listens on nothing", () => {
+        expect(jobFate({ kept: false, ports: [], targets: ["curl localhost:5173"], handed: none })).toBe("awaited");
     });
 
-    // The misfire this rule exists for: the reply names the address it just stopped, which is not giving it to anybody.
-    it("does not hand over a server the reply says it stopped, or one it names without a link", () => {
-        for (const closing of [
-            "I stopped the server on localhost:5173.",
-            "I stopped the dev server at http://localhost:5173 once the check passed.",
-            "It's on `127.0.0.1:5173`.",
-            "Serving on :5173",
-            "The dev server is on port 5173.",
-        ]) {
-            expect(jobFate({ ports: [5173], targets: ["curl -s localhost:5173"], closing, handed: none })).toBe("stopped");
-        }
+    it("stops an unkept server the turn reached", () => {
+        expect(jobFate({ kept: false, ports: [47_148], targets: ["http://127.0.0.1:47148/demo/kit"], handed: none })).toBe("stopped");
+        expect(jobFate({ kept: false, ports: [5173], targets: ["curl -s http://[::1]:5173/"], handed: none })).toBe("stopped");
     });
 
-    it("does not hand over a server the turn never reached, whatever link it gives: it stays awaited", () => {
-        expect(jobFate({ ports: [5173], targets: [], closing: "Open http://localhost:5173/ to try it", handed: none })).toBe("awaited");
-    });
-
-    it("stops a server the turn reached and said nothing about", () => {
-        expect(jobFate({ ports: [47_148], targets: ["http://127.0.0.1:47148/demo/kit"], closing: "The blocks are highlighted now.", handed: none })).toBe(
-            "stopped",
-        );
-        expect(jobFate({ ports: [5173], targets: ["curl -s http://[::1]:5173/"], closing: "Done.", handed: none })).toBe("stopped");
-    });
-
-    it("leaves a listener the turn never reached awaited: a test suite's own server, mid-run", () => {
-        expect(jobFate({ ports: [34_567], targets: ["pnpm test"], closing: "Tests are running.", handed: none })).toBe("awaited");
+    it("leaves an unkept listener the turn never reached awaited: a test suite's own server, mid-run", () => {
+        expect(jobFate({ kept: false, ports: [34_567], targets: ["pnpm test"], handed: none })).toBe("awaited");
     });
 
     it("does not read a longer port, or a starting command's flag, as the port", () => {
-        expect(jobFate({ ports: [5173], targets: ["pnpm dev --port 5173"], closing: "Look at localhost:51730", handed: none })).toBe("awaited");
+        expect(jobFate({ kept: false, ports: [5173], targets: ["pnpm dev --port 5173", "curl localhost:51730"], handed: none })).toBe("awaited");
     });
 
-    it("keeps a port this conversation already handed over, restarted and not named again", () => {
-        expect(jobFate({ ports: [5173], targets: ["curl localhost:5173"], closing: "Restarted it.", handed: new Set([5173]) })).toBe("handed");
+    it("keeps a port this conversation already handed over, restarted and not kept again", () => {
+        expect(jobFate({ kept: false, ports: [5173], targets: ["curl localhost:5173"], handed: new Set([5173]) })).toBe("handed");
+    });
+});
+
+describe("keeping a job for the person", () => {
+    it("records the keep on a running job by the id its Bash call returned, and refuses what cannot be kept", async () => {
+        const { job } = await running("conv-keep", "exec sleep 60", "tu-keep");
+        noteJobShell(actors, "tu-keep", "bkeep1");
+        expect(keepBackgroundJob(actors, "conv-keep", "bkeep1", "dev server")).toBe("kept");
+        expect(keepBackgroundJob(actors, "conv-keep", "b-nobody", "dev server")).toBe("unknown");
+        expect(keepBackgroundJob(actors, "conv-other", "bkeep1", "dev server")).toBe("unknown");
+        expect(await stopBackgroundJob(actors, job, "agent")).toBe(true);
+        expect(keepBackgroundJob(actors, "conv-keep", "bkeep1", "dev server")).toBe("ended");
     });
 });
 
@@ -173,9 +167,39 @@ describe("a turn's ending, over a real job", () => {
         expect(settledBackgroundJobs(actors, "conv-fate-stop")).toEqual({ running: [], unseen: [] });
     });
 
-    it("leaves a server whose address the reply gave running for the person, then stops it when they ask", async () => {
+    // The review's four replies: three hand a server over and one does not, and no reading of the words told them apart.
+    // Each decides by the keep alone, kept or not.
+    const REPLIES = [
+        "I stopped the old dev server and started a fresh one at http://localhost:5173 for you.",
+        "It's running at http://localhost:5173, leave it up and kill it when done.",
+        "It is up at localhost:5173, open it in Preview.",
+        "I stopped the server on localhost:5173.",
+    ];
+    for (const [index, reply] of REPLIES.entries()) {
+        for (const kept of [true, false]) {
+            it(`${kept ? "hands over" : "stops"} a server it reached that was ${kept ? "" : "not "}kept, replying "${reply}"`, async () => {
+                const conversationId = `conv-fate-reply-${String(index)}-${kept ? "kept" : "unkept"}`;
+                const { job, leader } = await running(conversationId);
+                if (kept) {
+                    expect(keepBackgroundJob(actors, conversationId, job.id, "dev server for the person")).toBe("kept");
+                }
+                turnWith(conversationId, [called("curl -s localhost:5173"), said(reply)]);
+                await resolveTurnJobs(listening(leader, 5173), conversationId);
+                if (kept) {
+                    expect(card(conversationId, job.id)).toMatchObject({ handed: true, ports: [5173] });
+                    expect(card(conversationId, job.id)?.stoppedBy).toBeUndefined();
+                } else {
+                    expect(card(conversationId, job.id)?.stoppedBy).toBe("turn");
+                    expect(card(conversationId, job.id)?.handed).toBeUndefined();
+                }
+            });
+        }
+    }
+
+    it("leaves a server the agent kept running for the person, then stops it when they ask", async () => {
         const { job, leader } = await running("conv-fate-hand");
-        turnWith("conv-fate-hand", [called("curl -s localhost:5173"), said("The app is running at http://localhost:5173.")]);
+        expect(keepBackgroundJob(actors, "conv-fate-hand", job.id, "the app for the person")).toBe("kept");
+        turnWith("conv-fate-hand", [called("curl -s localhost:5173"), said("Done.")]);
         await resolveTurnJobs(listening(leader, 5173), "conv-fate-hand");
         expect(card("conv-fate-hand", job.id)).toMatchObject({ handed: true, ports: [5173] });
         // Not handed to a watch: its exit is the person's business now.
@@ -189,13 +213,14 @@ describe("a turn's ending, over a real job", () => {
     });
 
     // One judgement per run is the close's (turn-placement.test.ts); a later run's ending judges an awaited job again.
-    it("leaves a listener the turn never reached awaited, and a later run that reached it and gave its link hands it over", async () => {
+    it("leaves a listener the turn never reached awaited, and a later run that kept it hands it over", async () => {
         const { job, leader } = await running("conv-fate-await");
         turnWith("conv-fate-await", [said("The suite is still running; I'll pick it up when it finishes.")]);
         await resolveTurnJobs(listening(leader, 34_567), "conv-fate-await");
         expect(card("conv-fate-await", job.id)?.stoppedBy).toBeUndefined();
         expect(settledBackgroundJobs(actors, "conv-fate-await").running.map((entry) => entry.id)).toEqual([job.id]);
-        turnWith("conv-fate-await", [called("curl -s localhost:34567"), said("It's up at http://localhost:34567.")]);
+        expect(keepBackgroundJob(actors, "conv-fate-await", job.id, "the app for the person")).toBe("kept");
+        turnWith("conv-fate-await", [called("curl -s localhost:34567"), said("It's up.")]);
         await resolveTurnJobs(listening(leader, 34_567), "conv-fate-await");
         expect(card("conv-fate-await", job.id)).toMatchObject({ handed: true, ports: [34_567] });
     });

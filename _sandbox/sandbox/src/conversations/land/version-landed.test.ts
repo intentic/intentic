@@ -2,6 +2,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Rule } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
+import { committableSubject, subjectFromPaths } from "../../git/ops/commit-message.js";
 import { settleLanding, versionRuleOf } from "./version-landed.js";
 import { isolatedAgent } from "../../testing.js";
 
@@ -18,13 +19,17 @@ const rule = (over: Partial<Rule> & Pick<Rule, "id" | "moment" | "action">): Rul
 const version = (id: string, over: Partial<Rule> = {}): Rule =>
     rule({ id, moment: "agent.landed", action: { kind: "builtin", name: "version-landed" }, ...over });
 
-const servicesWith = (rules: readonly Rule[], landedSubject?: string, landed: { testNote?: string; said?: string } = {}): Services =>
+const servicesWith = (
+    rules: readonly Rule[],
+    landedSubject?: string,
+    landed: { testNote?: string; said?: string; title?: string; origins?: Record<string, string[]> } = {},
+): Services =>
     unstubbed<Services>("services", {
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => ({ rules }) as never }),
         agents: unstubbed<Services["agents"]>("agents", {
             entry: () =>
                 isolatedAgent([{ repo: "root", base: "a".repeat(40) }], {
-                    social: { title: { text: "Recent commits", source: "derived" }, reactions: [] },
+                    social: { title: { text: landed.title ?? "Recent commits", source: "derived" }, reactions: [] },
                     landing:
                         landedSubject === undefined
                             ? {}
@@ -38,7 +43,7 @@ const servicesWith = (rules: readonly Rule[], landedSubject?: string, landed: { 
             mainDir: () => WORKSPACE_ROOT,
             withRepoLock: async (_repo, run) => run(),
         }),
-        agentOrigins: unstubbed<Services["agentOrigins"]>("agentOrigins", { forRepo: async () => ({ "a.ts": ["c1"] }) }),
+        agentOrigins: unstubbed<Services["agentOrigins"]>("agentOrigins", { forRepo: async () => landed.origins ?? { "a.ts": ["c1"] } }),
         ruleFirings: unstubbed<Services["ruleFirings"]>("ruleFirings", { stamp: async () => undefined }),
         logger: unstubbed<Services["logger"]>("logger", { debug: () => undefined, info: () => undefined, warn: () => undefined }),
     });
@@ -86,9 +91,42 @@ describe(`settling a landing`, () => {
         expect(commitOnly).toHaveBeenLastCalledWith(WORKSPACE_ROOT, [`a.ts`], `Agent: Recent commits\n\nTest-Note: prose became structure`);
     });
 
+    // The subject 50eb6b7d6 landed under, 701 files: whatever path put it on the landing, it is not written.
+    const NARRATED = `Checking key diff hunks to confirm the main architectural changes.`;
+    const claim = { "_sandbox/sandbox/src/a.ts": [`c1`], "_sandbox/sandbox/src/b.ts": [`c1`], "_sandbox/sandbox/README.md": [`c1`] };
+
+    test(`a narrated subject is never committed: the claim goes in under one built from the change, trailers kept`, async () => {
+        await settleLanding(servicesWith([version(`auto-version`)], NARRATED, { testNote: `rows became a table`, origins: claim }), `c1`);
+        expect(commitOnly).toHaveBeenCalledWith(WORKSPACE_ROOT, Object.keys(claim), `chore(sandbox): update 3 files\n\nTest-Note: rows became a table`);
+    });
+
+    test(`an undrafted land whose title narrates is committed under a subject built from the change, not the title`, async () => {
+        describeLanding.mockRejectedValue(new Error(`no model`));
+        await settleLanding(servicesWith([version(`auto-version`)], undefined, { title: NARRATED, origins: claim }), `c1`);
+        expect(commitOnly).toHaveBeenCalledWith(WORKSPACE_ROOT, Object.keys(claim), `chore(sandbox): update 3 files`);
+    });
+
     test(`without the rule the subject is still drafted for the chip, and nothing is committed`, async () => {
         await settleLanding(servicesWith([], `fix: cascading markers`), `c1`);
         expect(describeLanding).toHaveBeenCalledTimes(1);
         expect(commitOnly).not.toHaveBeenCalled();
+    });
+});
+
+describe(`the subject a land commit is written under`, () => {
+    test(`keeps a subject that can head a commit`, () => {
+        expect(committableSubject(`fix(sandbox): stop a server nobody kept`, [`_sandbox/sandbox/src/a.ts`])).toBe(`fix(sandbox): stop a server nobody kept`);
+    });
+
+    test(`replaces a narrated or empty one with where the change is`, () => {
+        expect(committableSubject(`Checking key diff hunks to confirm the main architectural changes.`, [`_editor/web/src/a.vue`, `_editor/web/b.ts`])).toBe(
+            `chore(editor): update 2 files`,
+        );
+        expect(committableSubject(``, [`package.json`])).toBe(`chore: update package.json`);
+    });
+
+    test(`names no scope when the change spans areas, or sits at the root`, () => {
+        expect(subjectFromPaths([`_sandbox/sandbox/a.ts`, `_editor/web/b.ts`, `turbo.json`])).toBe(`chore: update 3 files`);
+        expect(subjectFromPaths([`docs/architecture/sandbox.md`])).toBe(`chore(docs): update sandbox.md`);
     });
 });

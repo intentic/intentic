@@ -7,6 +7,7 @@ import { type ChildSupervisor, spawnedNote } from "./children.js";
 import type { SubagentWaitUntil } from "./subagents.js";
 import { waitForWork, workWaitAnswer } from "./work-wait.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
+import { keepBackgroundJob, type KeepOutcome } from "../tools/jobs/background-jobs.js";
 
 // A tool, not a CLI: a blocking shell command would hit the soft-timeout and become the polling it replaces.
 
@@ -29,6 +30,13 @@ const UNTIL = z.enum(["blocked", "finished"]);
 
 const NOTHING_TO_WAIT_FOR =
     "Nothing to wait for: no child or background command of this conversation is still running under that id, or its ending was already reported.";
+
+const KEEP_ANSWERS: Readonly<Record<KeepOutcome, string>> = {
+    kept: "Kept: it keeps running for the person after your turn ends. Give them its address in your reply.",
+    unknown: "No background command of this conversation has that ID.",
+    ended: "That command has already exited, so there is nothing to keep running.",
+    stopped: "That command is being stopped, so it cannot be kept. Start it again and keep the new one.",
+};
 
 // The tool's whole answer as one JSON text block, so the model can branch on `outcome` without parsing prose.
 const answer = (payload: Record<string, unknown>): { content: [{ type: "text"; text: string }] } => ({
@@ -201,6 +209,27 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                 },
                 // Moves only which endings this conversation was told, marked as a wait settles, so parallel waits never share one.
                 { annotations: toolAnnotations("read") },
+            ),
+            sdk().tool(
+                "keep",
+                "Leave a command you ran with run_in_background running for the person after your turn ends: a dev server " +
+                    "or preview you started FOR them. This call is the only thing that keeps one: what your reply says " +
+                    "decides nothing. A server you reached and did not keep is stopped when your turn ends; one you never " +
+                    "reached is waited on like any command. A kept command wakes nobody when it exits and the person stops " +
+                    "it from chat or Preview, so give them its address in your reply. Target it by the ID its Bash call returned.",
+                {
+                    target: z.string().min(1).describe("The background command's ID, as its Bash call returned it"),
+                    reason: z.string().min(1).max(200).describe('What the person gets, e.g. "dev server for you at http://localhost:5173"'),
+                },
+                (args) => {
+                    if (deps.conversationId === undefined) {
+                        return Promise.resolve(answer({ ok: false, message: "This turn has no conversation, so nothing it starts outlives it." }));
+                    }
+                    const outcome = keepBackgroundJob(deps.conversations, deps.conversationId, args.target, args.reason);
+                    return Promise.resolve(answer({ ok: outcome === "kept", message: KEEP_ANSWERS[outcome] }));
+                },
+                // Changes what the turn's ending does with the job, and nothing else.
+                { annotations: toolAnnotations("write") },
             ),
         ],
     });
