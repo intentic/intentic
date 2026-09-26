@@ -1,5 +1,6 @@
 import type { ComponentPublicInstance, InjectionKey, Ref } from "vue";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
+import type { IdMatch } from "../idMatch";
 import type { TrayState } from "../view/childFold";
 
 // What a card's tray of children reads from the board that draws it. Provided rather than passed as props, because the
@@ -15,6 +16,8 @@ export interface ChildRowsBoard {
     readonly selected: (id: string) => boolean;
     readonly needle: Readonly<Ref<string>>;
     readonly matchCase: Readonly<Ref<boolean>>;
+    // What the filter's id tier found on a child (idMatch.ts), drawn on its row as a card draws it.
+    readonly idMatchOf: (child: FleetAgent) => IdMatch | undefined;
     // The card's own presses, answered for a row exactly as for a card (useCardFocus, useCardMenu).
     readonly open: (child: FleetAgent, event?: MouseEvent) => void;
     readonly review: (child: FleetAgent) => void;

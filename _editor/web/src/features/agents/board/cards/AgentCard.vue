@@ -20,6 +20,7 @@ import { presenceOthers } from "../../../../shell/presence/usePresence";
 import UnsentMark from "../../../../components/UnsentMark.vue";
 import WorkflowMark from "../../../../components/WorkflowMark.vue";
 import { dropActionFor, type PendingAction } from "../laneDrop";
+import type { IdMatch } from "../idMatch";
 import {
     activityLine,
     agentDisplayTitle,
@@ -82,6 +83,8 @@ const props = defineProps<{
     peek?: boolean;
     // Evidence for why the board's filter matched; absent when the hit was the title, marked there instead.
     match?: MatchSnippet;
+    // The filter named this card by its id, or a piece of it (idMatch.ts); whole, the card wears the found halo.
+    idMatch?: IdMatch;
     query?: string;
     // Filter's case-sensitivity switch, so marks are struck under the rule search actually used.
     matchCase?: boolean;
@@ -358,6 +361,8 @@ const displayTitle = computed(() => agentDisplayTitle(props.agent, unsentWords.v
 // Term is case-folded to match the filter's own rule, unless `Aa` (matchCase) is on.
 const needle = computed(() => (props.matchCase === true ? (props.query ?? ``) : (props.query?.toLowerCase() ?? ``)));
 const titleRuns = computed(() => markSegments(displayTitle.value, needle.value, props.matchCase === true));
+// The identifier the filter matched, its matched part marked; ids have no case, so neither does the mark.
+const idRuns = computed(() => (props.idMatch === undefined ? [] : markSegments(props.idMatch.text, props.idMatch.mark)));
 // "New" already says unopened; "Updated" hides when you last looked, so only that one earns a hover hint. The
 // sentence is the rails' own (agentStatus.unreadHint); only the clock is this card's.
 const chipHint = computed(() => (chip.value?.seenAt === undefined ? undefined : unreadHint(relativeTime(chip.value.seenAt))));
@@ -424,13 +429,15 @@ const grab = (event: PointerEvent): void => {
         role="button"
         tabindex="0"
         :aria-label="t(`agents.agentCard.focusAgent`, { displayTitle })"
-        class="session-card group flex w-full select-none flex-col rounded-xl border text-left outline-none focus-visible:ring-2 focus-visible:ring-primary-500/25"
+        class="session-card group flex w-full select-none flex-col rounded-xl border text-left focus-visible:ring-2 focus-visible:ring-primary-500/25"
         :class="[
             /* A LIVE CARD IS A BIGGER CARD (see `live`): the two lanes about work in flight get 16px of padding and a 14px title, the ledger keeps 14 and 12. */
             live ? 'gap-2.5 p-4' : 'gap-2 p-3.5',
             /* TWO STATES, TWO CHANNELS, AND NEITHER IS DRAWN HERE. */
             lane === 'attention' ? 'session-card-attention' : '',
             selected ? 'session-card-on' : '',
+            /* The halo is an outline, which `outline-none` (a utility, so it outranks any component rule) would erase. */
+            idMatch?.exact === true ? 'session-card-found' : 'outline-none',
             dragging ? 'opacity-40' : '',
         ]"
         @pointerdown="grab"
@@ -609,8 +616,26 @@ const grab = (event: PointerEvent): void => {
 
         <!-- Card body, column or row depending on `dense`: column stacks one block per row; row wraps the same blocks along one line. -->
         <div :class="dense ? 'flex flex-wrap items-center gap-x-3.5 gap-y-1.5' : 'flex flex-col gap-2'">
-            <!-- Why this card matched the filter; leads the body while a filter is active. -->
-            <p v-if="match !== undefined" class="flex min-w-0 items-start gap-2 text-2xs text-muted" :class="dense ? 'w-full' : ''">
+            <!-- Why this card matched the filter; leads the body while a filter is active. An id is its own evidence, since nothing the card says holds it: spelled as typed, in the id's own face, and named whole when it is. -->
+            <p
+                v-if="idMatch !== undefined"
+                class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted"
+                :class="dense ? 'w-full' : ''"
+            >
+                <Icon name="search" class="shrink-0 text-2xs text-subtle" />
+                <span class="min-w-0 truncate font-mono">
+                    <span v-for="(run, at) in idRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{
+                        run.text
+                    }}</span>
+                </span>
+                <span
+                    v-if="idMatch.exact"
+                    v-tooltip.top="t(`agents.agentCard.exactIdHint`)"
+                    class="ui-status-pill shrink-0 bg-primary-600/20 py-px font-semibold text-link"
+                    >{{ t(`agents.agentCard.exactId`) }}</span
+                >
+            </p>
+            <p v-else-if="match !== undefined" class="flex min-w-0 items-start gap-2 text-2xs text-muted" :class="dense ? 'w-full' : ''">
                 <Icon name="search" class="mt-px shrink-0 text-2xs text-subtle" />
                 <MatchLine :snippet="match" :needle="needle" :match-case="matchCase" class="line-clamp-2 min-w-0 flex-1 leading-4" />
             </p>

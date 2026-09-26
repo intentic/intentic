@@ -31,7 +31,9 @@ export type ViewEvent =
     // A link uncovering its card: the archive for an archived one, the whole lane for one outside the window.
     | { readonly kind: `uncover`; readonly into: `archive` | `lane` }
     | { readonly kind: `purged` }
-    | { readonly kind: `beyond` };
+    | { readonly kind: `beyond` }
+    // The query named an archived agent whole (foundCard), so the matches off the board unfold without being asked.
+    | { readonly kind: `unfold` };
 
 export const VIEW_START: BoardView = { archive: false, all: false, shown: ARCHIVE_PAGE, purged: false, beyond: false };
 
@@ -51,6 +53,7 @@ const MOVES: Moves = {
     },
     purged: (view) => (view.purged ? view : { ...view, purged: true }),
     beyond: (view) => ({ ...view, beyond: !view.beyond }),
+    unfold: (view) => (view.beyond ? view : { ...view, beyond: true }),
 };
 
 // The table is keyed by the event's own kind, so the entry read always takes the event it is handed.

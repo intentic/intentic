@@ -45,6 +45,12 @@ describe(`the board's view`, () => {
         expect(stepView(at({ beyond: true }), { kind: `beyond` })).toEqual(VIEW_START);
     });
 
+    it(`unfolds what a query found off the board for a card named by its id, and never folds it back`, () => {
+        expect(stepView(VIEW_START, { kind: `unfold` })).toEqual(at({ beyond: true }));
+        const unfolded = at({ beyond: true, shown: 60 });
+        expect(stepView(unfolded, { kind: `unfold` })).toBe(unfolded);
+    });
+
     it(`windows Finished only while browsing its own tail`, () => {
         expect([
             windowedIn(VIEW_START, false),

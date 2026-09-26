@@ -43,6 +43,18 @@ export const dropClass = (
     return drop.over === lane ? `min-h-24 bg-primary-600/5 ring-2 ring-primary-500/60` : `min-h-24 ring-1 ring-line-strong/60`;
 };
 
+// A card a query names by its id, or one a named child rides under, leads whatever list holds it: a pasted id is looking
+// for that card, and the conversations that merely mention it follow. Stable otherwise, so the lanes keep their order.
+export const leadWith = (
+    cards: FleetAgent[],
+    exact: (agent: FleetAgent) => boolean,
+    childrenOf: (card: FleetAgent) => readonly FleetAgent[],
+): FleetAgent[] => {
+    const named = (card: FleetAgent): boolean => exact(card) || childrenOf(card).some(exact);
+    const lead = cards.filter(named);
+    return lead.length === 0 ? cards : [...lead, ...cards.filter((card) => !named(card))];
+};
+
 export interface LanesHost {
     readonly view: Readonly<Ref<BoardView>>;
     // What the scope left on the board (boardScope): the cards, and the children riding under them.
@@ -60,6 +72,8 @@ export interface LanesHost {
         readonly active: Readonly<Ref<boolean>>;
         readonly needle: Readonly<Ref<string>>;
         readonly matches: (agent: FleetAgent) => boolean;
+        // The query is this agent's id whole (idMatch.ts).
+        readonly exact: (agent: FleetAgent) => boolean;
         readonly archivedMatches: Readonly<Ref<readonly FleetAgent[]>>;
         readonly sessionMatches: Readonly<Ref<readonly unknown[]>>;
         readonly partial: Readonly<Ref<boolean>>;
@@ -102,7 +116,9 @@ export const useBoardLanes = (host: LanesHost) => {
     // How many rows the archive would draw: a run with four steps counts as one row there, not five.
     const archiveSize = computed(() => archivedCards.value.length + scope.archivedRunRows.value.length);
     // Filters the whole pile first, then pages the result, never the reverse, or a match nine hundred rows down reads as none.
-    const archiveRows = computed(() => (filter.active.value ? archivedCards.value.filter(answers) : archivedCards.value));
+    const archiveRows = computed(() =>
+        filter.active.value ? leadWith(archivedCards.value.filter(answers), filter.exact, trays.childrenOf) : archivedCards.value,
+    );
     const archiveHidden = computed(() => Math.max(0, archiveRows.value.length - view.value.shown));
     const finishedWindow = computed(() =>
         windowFinished(scope.boardLanes.value.finished, windowed.value ? trays.selectedCard.value : undefined, (agent) => agent.id),
@@ -115,7 +131,7 @@ export const useBoardLanes = (host: LanesHost) => {
         }
         const source =
             lane !== `finished` ? scope.boardLanes.value[lane] : windowed.value ? finishedWindow.value.shown : scope.boardLanes.value.finished;
-        return filter.active.value ? source.filter(answers) : source;
+        return filter.active.value ? leadWith(source.filter(answers), filter.exact, trays.childrenOf) : source;
     };
     // Rows the filter kept, not rows drawn: the archive draws only a page of its matches, and the pager is not the answer.
     const keptIn = (lane: FleetLane): number =>
@@ -128,7 +144,13 @@ export const useBoardLanes = (host: LanesHost) => {
             runsFor(`finished`).length,
     );
     // What a query found off the board, lest a filter answer "nothing" for a hit one click away; a filed run lists its steps.
-    const archivedHits = computed(() => filter.archivedMatches.value.filter((agent) => !insideRun(agent, scope.ledgerRunIds.value)));
+    const archivedHits = computed(() =>
+        leadWith(
+            filter.archivedMatches.value.filter((agent) => !insideRun(agent, scope.ledgerRunIds.value)),
+            filter.exact,
+            trays.childrenOf,
+        ),
+    );
     const beyondCount = computed(() => archivedHits.value.length + filter.sessionMatches.value.length);
     // Not while the archive is the Finished column, since those cards are on screen there already.
     const beyondVisible = computed(() => filter.active.value && !view.value.archive && beyondCount.value > 0);

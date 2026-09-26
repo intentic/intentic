@@ -14,7 +14,7 @@ import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { useAuth } from "../../auth/useAuth";
 import { useSandboxSharedAccess } from "../../sandbox/access/useSandboxSharedAccess";
 import { useAgents } from "../fleet/useAgents";
-import { laneOf } from "../fleet/agentStatus";
+import { agentDisplayTitle, laneOf } from "../fleet/agentStatus";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
 import { pendingOn } from "../fleet/useAgents-provisional";
 import { fleetScope, scopeOffered } from "../fleet/fleetScope";
@@ -42,6 +42,7 @@ import { followAcross, useBoardScope } from "./view/boardScope";
 import { useBoardView } from "./view/boardView";
 import { useCardMenu } from "./view/cardMenu";
 import { useCardFocus, useCardRing } from "./view/cardSelection";
+import { useFoundCard } from "./view/foundCard";
 import { boardStarters } from "./view/firstScreen";
 import { useLaneMotion } from "./view/laneMotion";
 import { useT } from "@intentic/ui/i18n";
@@ -68,7 +69,7 @@ const hint = computed(() => dropHint(action.value, dragged.value, over.value));
 const pendingFor = (agent: FleetAgent) => pendingOf(agent, pendingOn(agent.id, agent.sandboxId), agents.busyIds.value);
 // Its field is always on the header, not behind a glyph, so nobody has to learn the board is searchable.
 const filter = useAgentFilter();
-const { query, needle, matchCase, active: filtering, snippetOf, sessionMatches, searching, partial: searchPartial } = filter;
+const { query, needle, matchCase, active: filtering, snippetOf, idMatchOf, sessionMatches, searching, partial: searchPartial } = filter;
 const filterField = ref<InstanceType<typeof SearchBar> | undefined>(undefined);
 const { view, move } = useBoardView(needle);
 const workflows = useWorkflowRuns();
@@ -100,6 +101,22 @@ const focus = useCardFocus({
     summon: summonChat,
 });
 const { focusAgent, reviewAgent, keepAgent, closeAgent, openSession } = focus;
+// The card the filter names by its id: the lanes lead with it, it is scrolled to, and Enter in the field opens it as a
+// click would; with nothing named, Enter does what it always did, which is nothing.
+const { found, openFound } = useFoundCard({ filter, lanes, move, reveal: revealCard, open: (agent) => focusAgent(agent) });
+const onFieldEnter = (event: KeyboardEvent): void => {
+    // Enter that confirms an IME composition is the composition's, not a request to open anything.
+    if (event.isComposing) {
+        return;
+    }
+    if (openFound()) {
+        event.preventDefault();
+    }
+};
+// What the halo says to a reader who cannot see it.
+const foundAnnouncement = computed(() =>
+    found.value === undefined ? `` : t(`agents.agentsView.foundById`, { title: agentDisplayTitle(found.value) }),
+);
 // A card's archive and restore take the children riding under it (boardTrays.familyOf), from the card and its menu alike.
 const withFamilies = (ids: readonly string[]): string[] => lanes.withFamilies(ids, agents.agentById);
 const { cardMenu, cardMenuItems, openCardMenu } = useCardMenu({
@@ -121,6 +138,7 @@ provide(CHILD_ROWS, {
     selected: (id) => id === highlightId.value || inPane(id),
     needle,
     matchCase,
+    idMatchOf,
     open: (child, event) => focusAgent(child, event),
     review: reviewAgent,
     menu: openCardMenu,
@@ -173,6 +191,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                 :placeholder="t(`agents.words.filterByMessages`)"
                 class="mx-auto max-w-full shrink-0"
                 :class="narrow ? 'order-last basis-full' : 'w-72'"
+                @keydown.enter="onFieldEnter"
             />
             <div class="flex min-w-0 flex-1 basis-0 items-center justify-end gap-2">
                 <!-- Filtering shows a searching state while lane counts are partial. -->
@@ -202,6 +221,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
         </p>
         <!-- What the counter's pulse can't tell a screen reader; covers every archive so the visual pill stays purely visual. -->
         <span class="sr-only" aria-live="polite">{{ announcement }}</span>
+        <span class="sr-only" aria-live="polite">{{ foundAnnouncement }}</span>
         <!-- Nothing on the board AND nothing archived is the only true empty state; an archive behind it would otherwise be a dead end with no door to it. -->
         <div v-if="screen !== 'lanes'" class="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-4 text-center">
             <!-- One heading, one sentence, nothing waiting on a daemon read: it used to swap its lower half once accounts loaded. -->
@@ -373,6 +393,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                                 pendingFor(agent),
                                 agent.id === highlightId || inPane(agent.id),
                                 snippetOf(agent),
+                                idMatchOf(agent),
                                 needle,
                                 matchCase,
                                 isMovingLane(agent.id),
@@ -391,6 +412,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                                     :selected="agent.id === highlightId || inPane(agent.id)"
                                     :peek="peeked(agent.id)"
                                     :match="snippetOf(agent)"
+                                    :id-match="idMatchOf(agent)"
                                     :query="needle"
                                     :match-case="matchCase"
                                     :family="familyOf(agent).length"
@@ -474,6 +496,7 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
                             :pending="pendingFor(agent)"
                             :selected="agent.id === highlightId || inPane(agent.id)"
                             :match="snippetOf(agent)"
+                            :id-match="idMatchOf(agent)"
                             :query="needle"
                             :match-case="matchCase"
                             @open="(event) => focusAgent(agent, event)"

@@ -352,7 +352,7 @@ it(`hands the column back to the lanes when the switch is flipped`, async () => 
     useChatGrouping().set(`lane`);
     await settle();
     expect(tile(el, `Work`)).toBeNull();
-    expect(el.querySelector(`[aria-label="Filter chats by your messages"]`)).not.toBeNull();
+    expect(el.querySelector(`[aria-label="Filter chats by your messages or id"]`)).not.toBeNull();
 });
 
 // A SANDBOX FROM BEFORE 2026-09-25 says only who a conversation's first turn acted as (`actsAs`), never who it speaks as

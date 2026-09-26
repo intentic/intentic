@@ -48,7 +48,7 @@ afterEach(() => {
 });
 
 // A board over plain refs: the scope's output (its children folded under their cards, as boardScope folds them), a
-// filter matching titles, a drag, the store's archive and the ring.
+// filter matching titles and naming a card by its id typed whole, a drag, the store's archive and the ring.
 const boardOf = (
     fleet: FleetAgent[],
     over: { runs?: WorkflowRun[]; archivedRuns?: WorkflowRun[]; archived?: FleetAgent[]; held?: AutomationApproval[] } = {},
@@ -72,7 +72,8 @@ const boardOf = (
     const filter = {
         active,
         needle,
-        matches: (agent: FleetAgent): boolean => !active.value || (agent.title ?? ``).includes(needle.value),
+        matches: (agent: FleetAgent): boolean => !active.value || (agent.title ?? ``).includes(needle.value) || agent.id === needle.value,
+        exact: (agent: FleetAgent): boolean => active.value && agent.id === needle.value,
         archivedMatches: shallowRef<readonly FleetAgent[]>([]),
         sessionMatches: shallowRef<readonly unknown[]>([]),
         partial,
@@ -117,6 +118,15 @@ describe(`Finished's window`, () => {
         filterBy(`agent f`);
         expect(lanes.cardsFor(`finished`)).toHaveLength(8);
         expect(lanes.matchTally.value).toBe(`8 of 8`);
+    });
+
+    it(`leads with the card a query names by its id, the cards that mention it following in the lane's own order`, () => {
+        const mentions = (id: string, updatedAt: number): FleetAgent => card(id, { title: `wait for f5`, updatedAt });
+        const { lanes, filterBy } = boardOf([mentions(`m0`, 20_000), ...finished(8), mentions(`m1`, 1)]);
+        filterBy(`f5`);
+        expect(ids(lanes.cardsFor(`finished`))).toEqual([`f5`, `m0`, `m1`]);
+        filterBy(`wait`);
+        expect(ids(lanes.cardsFor(`finished`))).toEqual([`m0`, `m1`]);
     });
 
     it(`caps the lane's runs with its cards, and counts the ones it capped in the tail row`, () => {
@@ -252,6 +262,18 @@ describe(`children riding under their parent`, () => {
         expect(ids(lanes.cardsFor(`active`))).toEqual([`p`]);
         expect(ids(lanes.cardsFor(`finished`))).toEqual([]);
         expect(ids(lanes.trayFor(parent)?.lead ?? [])).toEqual([`h1`]);
+    });
+
+    it(`leads its lane with the card a child named by its id rides under, and the archive's matches with a filed one named`, () => {
+        const { lanes, view, filterBy } = boardOf([card(`first`, { status: `running`, startedAt: 0, title: `h1 notes` }), parent, helper(`h1`)], {
+            archived: [card(`a0`, { archivedAt: 9, title: `about h1x` }), card(`h1x`, { archivedAt: 8 })],
+        });
+        expect(ids(lanes.cardsFor(`active`))).toEqual([`first`, `p`]);
+        filterBy(`h1`);
+        expect(ids(lanes.cardsFor(`active`))).toEqual([`p`, `first`]);
+        view.value = { ...VIEW_START, archive: true };
+        filterBy(`h1x`);
+        expect(ids(lanes.cardsFor(`finished`))).toEqual([`h1x`, `a0`]);
     });
 
     it(`keeps the card a ringed child rides under in Finished's window`, () => {

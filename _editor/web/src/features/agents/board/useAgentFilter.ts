@@ -8,6 +8,7 @@ import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 import { useAgents } from "../fleet/useAgents";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
+import { handleOf, type IdMatch, idMatchOf } from "./idMatch";
 import { rpcKey } from "../../../lib/queryKeys";
 
 // Filters the fleet by what was said, as a factory (not a singleton) so each surface owns its own query. Matches in two
@@ -71,10 +72,25 @@ const snippetFor = (lines: readonly SpokenLine[], needle: string): MatchSnippet 
     return said(`user`) ?? said(`agent`);
 };
 
-// A match and its evidence; `snippet` is absent when the hit was the title, which the card already shows.
+// A match and its evidence; neither is present when the hit was the title, which the card already shows. `id` is set
+// when the query named the agent's id (idMatch.ts), which outranks anything it also said: a pasted id is looking for
+// that card, not for the conversations that mention it.
 interface AgentHit {
     readonly snippet?: MatchSnippet;
+    readonly id?: IdMatch;
 }
+
+// Whether two answers for one card say the same thing, so the first object can keep standing for both.
+const sameSnippet = (left: MatchSnippet | undefined, right: MatchSnippet | undefined): boolean =>
+    left === right || (left !== undefined && right !== undefined && left.text === right.text && left.speaker === right.speaker);
+const sameId = (left: IdMatch | undefined, right: IdMatch | undefined): boolean =>
+    left === right ||
+    (left !== undefined && right !== undefined && left.text === right.text && left.mark === right.mark && left.exact === right.exact);
+const sameHit = (left: AgentHit, right: AgentHit): boolean => sameSnippet(left.snippet, right.snippet) && sameId(left.id, right.id);
+
+// One card, addressed by box and id, never id alone: ids are minted per daemon and a wider board can hold two cards
+// sharing one.
+const cardKey = (agent: FleetAgent): string => `${agent.sandboxId ?? ``}/${agent.id}`;
 
 const MIN_QUERY = 2;
 const DEBOUNCE_MS = 150;
@@ -180,37 +196,34 @@ export function useAgentFilter() {
     // A hit's identity held across evaluations, since `snippetOf` feeds `v-memo`: a same-content object avoids
     // redrawing every matched card on every roster frame. Keyed by card, not by card-and-title.
     const held = new Map<string, AgentHit>();
-    const sameHit = (left: AgentHit, right: AgentHit): boolean =>
-        left.snippet === right.snippet ||
-        (left.snippet !== undefined &&
-            right.snippet !== undefined &&
-            left.snippet.text === right.snippet.text &&
-            left.snippet.speaker === right.snippet.speaker);
-    // One card, addressed by box and id, never id alone: ids are minted per daemon and a wider board can hold two cards
-    // sharing one.
-    const cardKey = (agent: FleetAgent): string => `${agent.sandboxId ?? ``}/${agent.id}`;
 
     // A memoising closure re-minted on every reactive change (query, case rule, transcripts, daemon reply), since the
-    // board tests every card in a lane several times per render. The title rides in the memo key, being the one input
-    // read lazily off the agent handed in, so a rename doesn't keep answering for the old name.
+    // board tests every card in a lane several times per render. The title and the session id ride in the memo key, being
+    // the inputs read lazily off the agent handed in that can change under the same card.
     const finder = computed(() => {
         const on = active.value;
         const term = needle.value;
         const caseSensitive = matchCase.value;
         const index = localLines.value;
         const answered = remote.value;
+        // The query read as a handle as well, undefined while it reads only as words.
+        const named = handleOf(query.value);
         const found = new Map<string, AgentHit | undefined>();
         return (agent: FleetAgent): AgentHit | undefined => {
             if (!on) {
                 return undefined;
             }
             const card = cardKey(agent);
-            const key = `${card}/${agent.title ?? ``}`;
+            const key = `${card}/${agent.sessionId ?? ``}/${agent.title ?? ``}`;
             if (found.has(key)) {
                 return found.get(key);
             }
             const title = caseSensitive ? agent.title : agent.title?.toLowerCase();
             const hit = ((): AgentHit | undefined => {
+                const id = named === undefined ? undefined : idMatchOf(agent, named);
+                if (id !== undefined) {
+                    return { id };
+                }
                 if (title?.includes(term) === true) {
                     return {};
                 }
@@ -231,6 +244,10 @@ export function useAgentFilter() {
 
     const matches = (agent: FleetAgent): boolean => !active.value || hitOf(agent) !== undefined;
     const snippetOf = (agent: FleetAgent): MatchSnippet | undefined => hitOf(agent)?.snippet;
+    // The same object while the answer stands (`held`), so it can ride in a card's `v-memo` as `snippetOf` does.
+    const idMatchOfAgent = (agent: FleetAgent): IdMatch | undefined => hitOf(agent)?.id;
+    // The query is this agent's id, branch or session id, whole: the card the board leads with and Enter opens.
+    const exact = (agent: FleetAgent): boolean => hitOf(agent)?.id?.exact === true;
 
     // The `Aa` switch itself, one preference so every surface shows the same one.
     const archivedMatches = computed(() => {
@@ -262,6 +279,8 @@ export function useAgentFilter() {
         active,
         matches,
         snippetOf,
+        idMatchOf: idMatchOfAgent,
+        exact,
         archivedMatches,
         sessionMatches,
         // Whether the daemon has answered for what's currently typed; true during the debounce and while the request is

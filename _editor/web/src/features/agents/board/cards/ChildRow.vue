@@ -8,6 +8,7 @@ import { activityLine, agentDisplayTitle, agentStatusMeta, formatElapsed, laneOf
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
 import { relativeTime } from "../../../chat/models/catalog";
 import { markSegments } from "../../review/markSegments";
+import type { IdMatch } from "../idMatch";
 
 // One child riding under its parent's card (childFold): how it stands, what it is called, and how long it has worked
 // or when it settled. Everything else it has — the model, the branch, the cost, the diff — is its own chat's to say,
@@ -22,6 +23,8 @@ const props = defineProps<{
     provider: AgentProvider;
     needle: string;
     matchCase: boolean;
+    // The filter named this child by its id, or a piece of it (idMatch.ts), as a card's `idMatch` means it.
+    idMatch?: IdMatch;
 }>();
 const emit = defineEmits<{ open: [event: MouseEvent]; review: []; menu: [event: MouseEvent] }>();
 
@@ -44,6 +47,11 @@ const title = computed(() => agentDisplayTitle(props.agent));
 const titleRuns = computed(() =>
     markSegments(title.value, props.matchCase ? props.needle : props.needle.toLowerCase(), props.matchCase),
 );
+// The piece of its id the filter matched, drawn after the title, since nothing else on a row says why it is there. Named
+// whole, the row wears the halo instead: a row has no room to spend on an id the reader just typed out in full.
+const idRuns = computed(() =>
+    props.idMatch === undefined || props.idMatch.exact ? undefined : markSegments(props.idMatch.text, props.idMatch.mark),
+);
 // What it is doing right now, the card's own sentence, in the hover of the clock that says for how long.
 const doing = computed(() => activityLine(props.agent) ?? t(`ui.status.working`));
 const elsewhere = computed(() => (props.agent.provider === props.provider ? undefined : providerLabel(props.agent.provider)));
@@ -53,7 +61,7 @@ const elsewhere = computed(() => (props.agent.provider === props.provider ? unde
     <button
         type="button"
         class="ui-row-select flex min-h-7 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left max-md:min-h-10"
-        :class="{ 'ui-row-select-on': selected }"
+        :class="{ 'ui-row-select-on': selected, 'outline-2 outline-offset-1 outline-primary-500/60': idMatch?.exact === true }"
         @click="emit(`open`, $event)"
         @dblclick="emit(`review`)"
         @contextmenu.prevent.stop="emit(`menu`, $event)"
@@ -67,8 +75,12 @@ const elsewhere = computed(() => (props.agent.provider === props.provider ? unde
             class="shrink-0 text-xs"
             :class="glyph.class"
         />
-        <span class="min-w-0 flex-1 truncate text-xs" :class="settled ? 'text-muted' : 'text-content'">
+        <!-- Keeps a few characters of itself however much the row carries after it: a row that is only an id and a clock says nothing. -->
+        <span class="min-w-10 flex-1 truncate text-xs" :class="settled ? 'text-muted' : 'text-content'">
             <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{ run.text }}</span>
+        </span>
+        <span v-if="idRuns !== undefined" class="min-w-0 max-w-2/5 truncate font-mono text-2xs text-muted">
+            <span v-for="(run, at) in idRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{ run.text }}</span>
         </span>
         <span v-if="elsewhere !== undefined" class="shrink-0 text-2xs text-subtle">{{ elsewhere }}</span>
         <span v-if="working && agent.startedAt !== undefined" v-tooltip.top="doing" class="shrink-0 text-2xs font-medium tabular-nums text-link">{{

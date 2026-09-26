@@ -137,6 +137,51 @@ describe(`useAgentFilter`, () => {
         expect(filter.snippetOf(first as FleetAgent)).toBeUndefined();
     });
 
+    // An id is how agents, the CLI and every link name a conversation, and nothing it says contains it.
+    it(`finds a card by its pasted id on the keystroke and names it whole, and only it, among cards that mention it`, async () => {
+        setAgents(
+            [
+                agent(`crisp-basin-z86j`, { title: `fix the login bug`, branch: `agent/crisp-basin-z86j` }),
+                agent(`crisp-otter-a1b2`, { title: `tidy the readme` }),
+                agent(`swift-reef-q0w9`, { title: `wait for crisp-basin-z86j` }),
+            ],
+            1,
+        );
+        const filter = filterIn();
+        filter.query.value = `crisp-basin-z86j`;
+        await nextTick();
+        const cards = (): readonly FleetAgent[] => useAgents().fleet.value;
+        expect(cards().map((card) => [filter.matches(card), filter.exact(card)])).toEqual([
+            [true, true],
+            [false, false],
+            [true, false],
+        ]);
+        const named = cards().map((card) => filter.idMatchOf(card));
+        expect(named).toEqual([{ text: `crisp-basin-z86j`, mark: `crisp-basin-z86j`, exact: true }, undefined, undefined]);
+        // A roster frame that changed nothing hands back the same evidence, which the card's v-memo compares by identity.
+        setAgents(
+            cards().map((card) => agent(card.id, { title: card.title, branch: card.branch })),
+            2,
+        );
+        await nextTick();
+        expect(cards().map((card) => filter.idMatchOf(card))[0]).toBe(named[0]);
+    });
+
+    it(`finds every card holding a hyphenated piece of an id without naming any, and never reads a bare word as one`, async () => {
+        setAgents([agent(`crisp-basin-z86j`, { title: `fix the login bug` }), agent(`crisp-otter-a1b2`, { title: `tidy the readme` })], 1);
+        const filter = filterIn();
+        filter.query.value = `crisp-`;
+        await nextTick();
+        const cards = useAgents().fleet.value;
+        expect(cards.map((card) => [filter.matches(card), filter.exact(card)])).toEqual([
+            [true, false],
+            [true, false],
+        ]);
+        filter.query.value = `basin`;
+        await nextTick();
+        expect(cards.map((card) => filter.matches(card))).toEqual([false, false]);
+    });
+
     // The point of the local tier: an open tab needs no round trip and answers on the keystroke.
     it(`matches a later prompt of an OPEN tab without the daemon, and quotes the line`, async () => {
         setAgents([agent(`a1`, { title: `fix the login bug` })], 1);

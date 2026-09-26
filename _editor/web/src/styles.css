@@ -171,6 +171,11 @@
     .session-card-attention {
         --card-accent: inset 2px 0 0 0 var(--color-attention-edge);
     }
+/* THE FILTER NAMED THIS CARD BY ITS ID: a halo outside the edge, where the selection ring (inset) never draws, so the card that is found and also open wears both and neither hides the other. An outline, not one more shadow in the stack: it costs no layout and no other rule writes it. */
+    .session-card.session-card-found {
+        outline: 2px solid color-mix(in srgb, var(--color-primary-500) 60%, transparent);
+        outline-offset: 2px;
+    }
 }
 
 /* GSI injects its One Tap / verifying prompt iframe at body level. */
