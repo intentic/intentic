@@ -1741,7 +1741,7 @@
         },
         "agentChecks": {
             "repairAfterLanding": "Reparar lo que se rompe tras integrar",
-            "repairAfterLandingNote": "Cuando una integración deja en rojo la comprobación del árbol principal, espera a que también se compruebe el trabajo integrado mientras tanto y luego lo devuelve a la conversación que lo integró mientras aún lo tiene presente, o arranca una conversación nueva con ello. Cuando la CI de main sigue en rojo por un mismo fallo, arranca un agente de reparación en cuanto dejan de llegar pushes, y relanza una vez un fallo de los propios runners de CI.",
+            "repairAfterLandingNote": "Los lands rojos vuelven; la CI de main recibe un agente correctivo.",
             "afterLanding": "Tras integrar el trabajo"
         },
         "agentClock": {

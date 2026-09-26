@@ -1731,7 +1731,7 @@
         },
         "agentChecks": {
             "repairAfterLanding": "Réparer ce qui casse après l'intégration",
-            "repairAfterLandingNote": "Quand une intégration fait passer au rouge la vérification de l'arbre principal, on attend que le travail intégré entre-temps soit vérifié aussi, puis on la renvoie à la conversation qui l'a intégrée tant qu'elle l'a encore en tête, ou on lance une nouvelle conversation dessus. Quand la CI de main reste rouge sur un même échec, un agent de réparation démarre dès que les pushs cessent, et un échec des runners de CI eux-mêmes est relancé une fois.",
+            "repairAfterLandingNote": "Les lands rouges reviennent ; la CI main reçoit un agent correctif.",
             "afterLanding": "Après l'intégration du travail"
         },
         "agentClock": {

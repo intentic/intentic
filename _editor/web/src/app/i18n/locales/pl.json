@@ -1740,7 +1740,7 @@
         },
         "agentChecks": {
             "repairAfterLanding": "Naprawiaj to, co psuje się po scaleniu",
-            "repairAfterLandingNote": "Gdy scalenie wywraca sprawdzenie głównego drzewa, czeka, aż praca scalona w międzyczasie też zostanie sprawdzona, a potem odsyła ją do rozmowy, która ją scaliła, póki ta wciąż ma ją w pamięci, albo zaczyna nad nią nową rozmowę. Gdy CI na main pozostaje czerwone na tym samym błędzie, po ucichnięciu pushy startuje agent naprawczy, a błąd samych runnerów CI jest raz uruchamiany ponownie.",
+            "repairAfterLandingNote": "Czerwone landy wracają; CI main dostaje jednego agenta naprawczego.",
             "afterLanding": "Po scaleniu pracy"
         },
         "agentClock": {

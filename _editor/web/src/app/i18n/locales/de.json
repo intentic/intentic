@@ -1732,7 +1732,7 @@
         },
         "agentChecks": {
             "repairAfterLanding": "Reparieren, was nach dem Landen kaputtgeht",
-            "repairAfterLandingNote": "Wenn eine Landung die Prüfung des Hauptbaums rot macht, wird gewartet, bis auch die inzwischen gelandete Arbeit geprüft ist; dann geht sie an die Unterhaltung zurück, die sie gelandet hat, solange diese sie noch im Kopf hat, oder eine neue Unterhaltung übernimmt sie. Bleibt die CI von main bei einem Fehler rot, startet ein Reparatur-Agent, sobald keine Pushes mehr kommen; ein Fehler der CI-Runner selbst wird einmal neu gestartet.",
+            "repairAfterLandingNote": "Rote Landings kommen zurück; main-CI bekommt einen Fix-Agenten.",
             "afterLanding": "Nachdem Arbeit gelandet ist"
         },
         "agentClock": {

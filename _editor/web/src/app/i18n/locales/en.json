@@ -1884,7 +1884,7 @@
         },
         "agentChecks": {
             "repairAfterLanding": "Repair what breaks after landing",
-            "repairAfterLandingNote": "When a land turns the main tree's check red, wait until the work landed meanwhile has been checked too, then send it back to the conversation that landed it while that one still has it in mind, or start a fresh conversation on it. When main's CI stays red on one failure, start a fix agent once pushes go quiet, and re-run a failure on the CI fleet itself once.",
+            "repairAfterLandingNote": "Red lands route back; main CI gets one fix agent.",
             "afterLanding": "After work lands"
         },
         "agentClock": {
