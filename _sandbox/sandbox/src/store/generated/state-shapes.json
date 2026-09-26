@@ -46,7 +46,7 @@
   "history:engines/<engine>/state.json": [
     {
       "type": "{ active?: string; previous?: string; quarantined?: { at: string; reason: string; version: string }[] }",
-      "since": "unreleased"
+      "since": "v1.313.0"
     }
   ],
   "history:extension-approvals.json": [
@@ -74,7 +74,7 @@
     },
     {
       "type": "{ hosts: { card: string; enrolledAt: number; environment: string; hash: string; id: string; machineId: string }[] }",
-      "since": "unreleased"
+      "since": "v1.313.0"
     }
   ],
   "history:host-pair-consumed.json": [
@@ -160,7 +160,7 @@
     },
     {
       "type": "{ enrolledAt: number; environment?: string; key: string; machine: string; machineId?: string; mode: \"sync\" | \"mirror\"; seenAt?: number; tokenDigest: string }",
-      "since": "unreleased"
+      "since": "v1.313.0"
     }
   ],
   "history:sync-pair-consumed.json": [
@@ -172,7 +172,7 @@
   "history:update-staged.json": [
     {
       "type": "{ at: number; channel: string; plan?: { converts?: { change: string; detail?: string; document: string }[]; digest?: string; downgrade?: boolean; engine?: number; failures?: { detail: string; document: string }[]; files?: string[]; ok: boolean; plan?: 1; steps?: { change: string; detail?: string; document: string }[]; version?: string }; version?: string }",
-      "since": "unreleased"
+      "since": "v1.313.0"
     }
   ],
   "history:usage-parks.json": [
@@ -336,7 +336,7 @@
     },
     {
       "type": "{ defaultPool?: string; limit?: number; maxHoldSeconds?: number; memoryGateSeconds?: number; onDeadline?: \"run\" | \"skip\"; queue?: boolean; ruleEdits?: ({ disabled?: boolean; exempt?: boolean; id: string; limit?: number; maxHoldSeconds?: number; onDeadline?: \"run\" | \"skip\"; pattern?: string; pool?: string })[]; waitSeconds?: number }",
-      "since": "unreleased"
+      "since": "v1.313.0"
     }
   ],
   "workspace:.intentic/config/loop-designs.json": [
@@ -376,7 +376,7 @@
     },
     {
       "type": "{ brief?: string; briefing?: { omit: (\"map\" | \"context\" | \"skills\" | \"search\" | \"delegation\" | \"checks\" | \"dependencies\" | \"repoSync\" | \"handoff\")[] }; capabilities: string[]; context?: { repos: string[] }; id: string; label?: string; models?: ({ effort?: string; fast?: boolean; harness?: \"native\" | \"claude-code\"; model: string; provider: string; thinking?: boolean })[]; powers?: { browser?: boolean; code?: boolean; connectors?: string[]; delegate?: boolean; devices?: string[]; extensions?: string[]; files?: \"none\" | \"read\" | \"write\"; mcp?: string[]; sandbox?: boolean; shell?: boolean; web?: boolean }; systemPromptMode?: \"intentic\" | \"claude\" | \"custom\"; workspace?: { folders?: string[]; startIn?: string } }",
-      "since": "unreleased"
+      "since": "v1.313.0"
     }
   ],
   "workspace:.intentic/config/settings.json": [
@@ -494,7 +494,7 @@
     },
     {
       "type": "{ actionRules?: Record<string, \"allow\" | \"hold\" | \"deny\">; admission?: { event?: \"allow\" | \"hold\" | \"deny\"; issues?: \"allow\" | \"hold\" | \"deny\"; listener?: \"allow\" | \"hold\" | \"deny\"; schedule?: \"allow\" | \"hold\" | \"deny\"; webchat?: \"allow\" | \"hold\" | \"deny\"; workflow?: \"allow\" | \"deny\"; workspace?: \"allow\" | \"hold\" | \"deny\" }; adoptedChecks?: Record<string, string>; agentRetentionDays?: number; autoModelGuidance?: string; autoRepair?: boolean; autoResumeOnRestart?: boolean; automationFailureLimit?: number; changelogRepos?: string[]; commandJudge?: \"off\" | \"watch\" | \"on\"; fieldNotes?: boolean; fieldNotesBudget?: number; fieldNotesHoldout?: number; hashlineEdits?: boolean; iqSearch?: boolean; iqSearchHoldout?: number; keepWarm?: { auto?: boolean; hours?: number; minTokens?: number; reserve?: number }; leanGuidance?: boolean; leanGuidanceHoldout?: number; limitMoveCarryUnder?: number; limitPolicy?: \"wait\" | \"resend\" | \"move\"; modelRoles?: Record<string, ({ effort?: string; fast?: boolean; harness?: \"native\" | \"claude-code\"; model: string; provider: string; thinking?: boolean })[]>; offload?: { commands?: Record<string, string>; landCheck?: string }; outagePolicy?: \"wait\" | \"retry\"; outputCleaners?: string; outputHoldout?: number; personaRouting?: boolean; rules?: ({ action: { command: string; kind: \"command\"; timeoutMs?: number } | { kind: \"verdict\"; verdict: \"allow\" | \"hold\" } | { kind: \"builtin\"; name: \"verify-ui-edits\" | \"version-landed\" }; enabled?: boolean; id: string; label: string; moment: \"file.edited\" | \"turn.ending\" | \"agent.finished\" | \"agent.landed\"; when?: { outcome?: (\"clean\" | \"error\" | \"conflict\" | \"checks-failed\")[]; paths?: string[]; repo?: string; sample?: number } })[]; sidecars?: boolean; skills?: string[]; stableSystemPrompt?: boolean; stopPolicy?: \"wait\" | \"retry\"; subagentDepth?: number; subagentsAtOnce?: number; subagentsPerTurn?: number; systemPrompt?: string; systemPromptMode?: \"intentic\" | \"claude\" | \"custom\"; timezone?: \"\" | string; workspaceMap?: boolean; workspaceMapHoldout?: number }",
-      "since": "unreleased"
+      "since": "v1.313.0"
     }
   ],
   "workspace:.intentic/config/workflows.json": [
@@ -534,19 +534,19 @@
   "workspace:.intentic/identity/workspace.json": [
     {
       "type": "{ id: string }",
-      "since": "unreleased"
+      "since": "v1.313.0"
     }
   ],
   "workspace:.intentic/local/browser/<owner>.passkeys.json": [
     {
       "type": "{ credentials: unknown[] }",
-      "since": "unreleased"
+      "since": "v1.313.0"
     }
   ],
   "workspace:.intentic/local/newest-run.json": [
     {
       "type": "{ digest?: string; engine?: number; version?: string }",
-      "since": "unreleased"
+      "since": "v1.313.0"
     }
   ],
   "workspace:.intentic/local/rule-firings.json": [
@@ -592,7 +592,7 @@
     },
     {
       "type": "{ at: number; digest?: string; engine: number; steps: { change: string; detail?: string; document: string }[]; version: string }",
-      "since": "unreleased"
+      "since": "v1.313.0"
     }
   ],
   "workspace:.intentic/records/extension-updates.json": [
@@ -636,7 +636,7 @@
     },
     {
       "type": "{ ended?: Record<string, { decisions?: ({ at: number; conversationId?: string; detail?: string; findings?: string[]; kind: \"waiting\" | \"held\" | \"original\" | \"fix-up\" | \"reported\" | \"resolved\" | \"spent\" | \"dismissed\" })[]; findings?: ({ command?: string; commit?: { sha: string; subject: string }; gate?: \"code\" | \"tidy\"; id: string; key: string; path?: string; recheckable: boolean; source: string; text: string })[]; named?: boolean; since: number; suspects?: string[] }>; pushes?: ({ at: number; base?: string; branch?: string; commits: number; findings: ({ command?: string; commit?: { sha: string; subject: string }; gate?: \"code\" | \"tidy\"; id: string; key: string; path?: string; recheckable: boolean; source: string; text: string })[]; head: string; id: string; project: string; refused?: boolean; remote?: string })[]; reds?: Record<string, { decisions?: ({ at: number; conversationId?: string; detail?: string; findings?: string[]; kind: \"waiting\" | \"held\" | \"original\" | \"fix-up\" | \"reported\" | \"resolved\" | \"spent\" | \"dismissed\" })[]; findings?: ({ command?: string; commit?: { sha: string; subject: string }; gate?: \"code\" | \"tidy\"; id: string; key: string; path?: string; recheckable: boolean; source: string; text: string })[]; named?: boolean; since: number; suspects?: string[] }>; seen?: string[] }",
-      "since": "unreleased"
+      "since": "v1.313.0"
     }
   ],
   "workspace:.intentic/records/runtime-installs.json": [
@@ -674,7 +674,7 @@
     },
     {
       "type": "{ lands?: Record<string, { agentId: string; at: number; branch: string; kind: \"land\"; repos: { dir: string; from: string; repo: string }[]; title?: string }[]>; projects: Record<string, { at: number; attempt: number; failures?: string[]; since?: number; status: \"green\" | \"red\" }>; runs?: ({ at: number; attempt: number; command: string; failureCount: number; failures: string[]; lands: { at: number; conversationId: string; title?: string }[]; named?: boolean; project: string; routing?: { at: number; conversationId?: string; detail?: string; findings?: string[]; kind: \"waiting\" | \"held\" | \"original\" | \"fix-up\" | \"reported\" | \"resolved\" | \"spent\" | \"dismissed\" }; startedAt: number; status: \"green\" | \"red\"; suspects?: string[]; units?: { name: string; path?: string }[] })[]; streaks?: Record<string, { carried?: { command: string; failures: string[]; fresh: string[]; heldSince?: number; lands: { agentId: string; at: number; branch: string; kind: \"land\"; repos: { dir: string; from: string; repo: string }[]; title?: string }[]; logTail: string; measured: boolean; on?: string[]; runs: number[]; waits: number }; decisions?: ({ at: number; conversationId?: string; detail?: string; findings?: string[]; kind: \"waiting\" | \"held\" | \"original\" | \"fix-up\" | \"reported\" | \"resolved\" | \"spent\" | \"dismissed\" })[]; findings?: ({ command?: string; commit?: { sha: string; subject: string }; gate?: \"code\" | \"tidy\"; id: string; path?: string; recheckable: boolean; source: string; text: string })[]; named?: boolean; since: number; suspects?: string[]; told?: string[] }> }",
-      "since": "unreleased"
+      "since": "v1.313.0"
     }
   ],
   "workspace:.intentic/records/wallet-ledger.json": [
@@ -712,7 +712,7 @@
     },
     {
       "type": "{ announced?: Record<string, number[]>; conclusions: Record<string, { at: number; status: \"success\" | \"failed\" }>; reds?: Record<string, { count: number; decisions?: ({ at: number; conversationId?: string; detail?: string; findings?: string[]; kind: \"waiting\" | \"held\" | \"original\" | \"fix-up\" | \"reported\" | \"resolved\" | \"spent\" | \"dismissed\" })[]; findings?: ({ command?: string; commit?: { sha: string; subject: string }; gate?: \"code\" | \"tidy\"; id: string; path?: string; recheckable: boolean; source: string; text: string })[]; firstRunId: number; named?: boolean; runId: number; seenAt: number; since: number; suspects?: string[] }>; secret: string }",
-      "since": "unreleased"
+      "since": "v1.313.0"
     }
   ],
   "workspace:.intentic/secrets/doors.json": [
@@ -824,7 +824,7 @@
     },
     {
       "type": "{ createdAt: number; definition: { capabilities?: ({ config: {}; id: string; kind: \"devops\" } | { config: {}; id: string; kind: \"monorepo\" } | { config: { token?: string; url: string }; id: string; kind: \"mcp\" } | { config: { provider: string }; id: string; kind: \"cli\" } | { config: { path?: string; ref?: string; token?: string; url: string }; id: string; kind: \"plugin\" } | { config: { path?: string; ref: string; registry?: string; token?: string; url: string }; id: string; kind: \"extension\" } | { config: { auth: \"key\"; host: string; port?: number; privateKey: string; user: string } | { auth: \"password\"; host: string; password: string; port?: number; user: string }; id: string; kind: \"ssh\" } | { config: { autoConnect?: \"on\" | \"off\"; config: string; provider: \"wireguard\" } | { autoConnect?: \"on\" | \"off\"; password: string; port?: number; provider: \"fortinet\"; realm?: string; server: string; trustedCert?: string; username: string } | { aggressive?: \"on\" | \"off\"; autoConnect?: \"on\" | \"off\"; dhGroup?: \"2\" | \"5\" | \"14\" | \"15\" | \"16\" | \"19\" | \"20\"; ikeVersion?: \"1\" | \"2\"; localId?: string; password?: string; pfs?: \"on\" | \"off\"; presharedKey: string; provider: \"ipsec\"; remoteId?: string; routedNetworks?: string; server: string; username?: string }; id: string; kind: \"vpn\" } | { config: { autoStart?: \"on\" | \"off\"; country?: string; provider: \"tor\" } | { autoStart?: \"on\" | \"off\"; country?: string; provider: \"vpngate\" } | { autoStart?: \"on\" | \"off\"; config: string; country?: string; provider: \"wireguard\" }; id: string; kind: \"exit\" } | { config: { access?: \"read\" | \"readwrite\"; autoMount?: \"on\" | \"off\"; domain?: string; password?: string; path?: string; provider: \"smb\"; server: string; share: string; username: string; version?: \"auto\" | \"3.1.1\" | \"3.0\" | \"2.1\" | \"1.0\" }; id: string; kind: \"netdisk\" } | { config: { addressPool?: string; gpu?: \"on\" | \"off\"; insecureRegistries?: string; registryMirror?: string }; id: string; kind: \"docker\" } | { config: { exit?: string; identity?: string; openedAt?: string; password?: string; platform: string; purpose?: string; username?: string }; id: string; kind: \"browser\" } | { config: { email: string; exit?: string; loginUrl?: string; mailbox?: string; openAccounts?: \"on\" | \"off\"; password?: string }; id: string; kind: \"identity\" } | { config: { control?: \"on\" | \"off\"; destructive?: \"on\" | \"off\"; platform: string; roots?: string; sandboxes?: \"on\" | \"off\"; screen?: \"on\" | \"off\"; shell?: \"on\" | \"off\"; write?: \"on\" | \"off\" }; id: string; kind: \"device\" } | { config: { act?: \"on\" | \"off\"; confirm?: \"sensitive\" | \"always\" | \"never\"; cookies?: \"on\" | \"off\"; platform: string; read?: \"on\" | \"off\"; screenshot?: \"on\" | \"off\" }; id: string; kind: \"webext\" } | { config: { command: string; env?: string; loginCommand?: string; name?: string }; id: string; kind: \"agent\" } | { config: { apiKey?: string; baseUrl: string; headers?: string; protocol?: \"openai\" | \"anthropic\" }; id: string; kind: \"endpoint\" } | { config: { context?: \"16384\" | \"32768\" | \"65536\" | \"131072\" | \"custom\"; contextTokens?: number; gpu?: \"on\" | \"off\"; model: string; url?: string }; id: string; kind: \"localmodel\" } | { config: { address?: string; allow?: string; autoApproveUnderUsd?: string; dailyCapUsd?: string; deny?: string; network?: \"eip155:8453\" | \"eip155:84532\"; perPaymentMaxUsd?: string }; id: string; kind: \"wallet\" } | { config: { token: string }; id: string; kind: \"fleet\" })[]; environment?: { baseImage?: string; dockerfile?: string }; name?: string; repositories?: { id: string; ref?: string; remote: string }[]; schemaVersion: 1; secrets?: string[]; settings?: { actionRules?: Record<string, \"allow\" | \"hold\" | \"deny\">; admission?: { event?: \"allow\" | \"hold\" | \"deny\"; issues?: \"allow\" | \"hold\" | \"deny\"; listener?: \"allow\" | \"hold\" | \"deny\"; schedule?: \"allow\" | \"hold\" | \"deny\"; webchat?: \"allow\" | \"hold\" | \"deny\"; workflow?: \"allow\" | \"deny\"; workspace?: \"allow\" | \"hold\" | \"deny\" }; adoptedChecks?: Record<string, string>; agentRetentionDays?: number; autoModelGuidance?: string; autoRepair?: boolean; autoResumeOnRestart?: boolean; automationFailureLimit?: number; changelogRepos?: string[]; commandJudge?: \"off\" | \"watch\" | \"on\"; fieldNotes?: boolean; fieldNotesBudget?: number; fieldNotesHoldout?: number; hashlineEdits?: boolean; iqSearch?: boolean; iqSearchHoldout?: number; keepWarm?: { auto?: boolean; hours?: number; minTokens?: number; reserve?: number }; leanGuidance?: boolean; leanGuidanceHoldout?: number; limitMoveCarryUnder?: number; limitPolicy?: \"wait\" | \"resend\" | \"move\"; modelRoles?: Record<string, ({ effort?: string; fast?: boolean; harness?: \"native\" | \"claude-code\"; model: string; provider: string; thinking?: boolean })[]>; offload?: { commands?: Record<string, string>; landCheck?: string }; outagePolicy?: \"wait\" | \"retry\"; outputCleaners?: string; outputHoldout?: number; personaRouting?: boolean; rules?: ({ action: { command: string; kind: \"command\"; timeoutMs?: number } | { kind: \"verdict\"; verdict: \"allow\" | \"hold\" } | { kind: \"builtin\"; name: \"verify-ui-edits\" | \"version-landed\" }; enabled?: boolean; id: string; label: string; moment: \"file.edited\" | \"turn.ending\" | \"agent.finished\" | \"agent.landed\"; when?: { outcome?: (\"clean\" | \"error\" | \"conflict\" | \"checks-failed\")[]; paths?: string[]; repo?: string; sample?: number } })[]; sidecars?: boolean; skills?: string[]; stableSystemPrompt?: boolean; stopPolicy?: \"wait\" | \"retry\"; subagentDepth?: number; subagentsAtOnce?: number; subagentsPerTurn?: number; systemPrompt?: string; systemPromptMode?: \"intentic\" | \"claude\" | \"custom\"; timezone?: \"\" | string; workspaceMap?: boolean; workspaceMapHoldout?: number }; workspace?: { ref?: string; remote: string } }; excluded: { note?: string; path: string; portability: string }[]; presentation?: { image?: string; name?: string }; repos: string[]; sandbox?: { name: string }; secrets: boolean; version: 3 }",
-      "since": "unreleased"
+      "since": "v1.313.0"
     }
   ],
   "workspace:sandbox.toml": [
@@ -922,7 +922,7 @@
     },
     {
       "type": "{ capabilities?: ({ config: {}; id: string; kind: \"devops\" } | { config: {}; id: string; kind: \"monorepo\" } | { config: { token?: string; url: string }; id: string; kind: \"mcp\" } | { config: { provider: string }; id: string; kind: \"cli\" } | { config: { path?: string; ref?: string; token?: string; url: string }; id: string; kind: \"plugin\" } | { config: { path?: string; ref: string; registry?: string; token?: string; url: string }; id: string; kind: \"extension\" } | { config: { auth: \"key\"; host: string; port?: number; privateKey: string; user: string } | { auth: \"password\"; host: string; password: string; port?: number; user: string }; id: string; kind: \"ssh\" } | { config: { autoConnect?: \"on\" | \"off\"; config: string; provider: \"wireguard\" } | { autoConnect?: \"on\" | \"off\"; password: string; port?: number; provider: \"fortinet\"; realm?: string; server: string; trustedCert?: string; username: string } | { aggressive?: \"on\" | \"off\"; autoConnect?: \"on\" | \"off\"; dhGroup?: \"2\" | \"5\" | \"14\" | \"15\" | \"16\" | \"19\" | \"20\"; ikeVersion?: \"1\" | \"2\"; localId?: string; password?: string; pfs?: \"on\" | \"off\"; presharedKey: string; provider: \"ipsec\"; remoteId?: string; routedNetworks?: string; server: string; username?: string }; id: string; kind: \"vpn\" } | { config: { autoStart?: \"on\" | \"off\"; country?: string; provider: \"tor\" } | { autoStart?: \"on\" | \"off\"; country?: string; provider: \"vpngate\" } | { autoStart?: \"on\" | \"off\"; config: string; country?: string; provider: \"wireguard\" }; id: string; kind: \"exit\" } | { config: { access?: \"read\" | \"readwrite\"; autoMount?: \"on\" | \"off\"; domain?: string; password?: string; path?: string; provider: \"smb\"; server: string; share: string; username: string; version?: \"auto\" | \"3.1.1\" | \"3.0\" | \"2.1\" | \"1.0\" }; id: string; kind: \"netdisk\" } | { config: { addressPool?: string; gpu?: \"on\" | \"off\"; insecureRegistries?: string; registryMirror?: string }; id: string; kind: \"docker\" } | { config: { exit?: string; identity?: string; openedAt?: string; password?: string; platform: string; purpose?: string; username?: string }; id: string; kind: \"browser\" } | { config: { email: string; exit?: string; loginUrl?: string; mailbox?: string; openAccounts?: \"on\" | \"off\"; password?: string }; id: string; kind: \"identity\" } | { config: { control?: \"on\" | \"off\"; destructive?: \"on\" | \"off\"; platform: string; roots?: string; sandboxes?: \"on\" | \"off\"; screen?: \"on\" | \"off\"; shell?: \"on\" | \"off\"; write?: \"on\" | \"off\" }; id: string; kind: \"device\" } | { config: { act?: \"on\" | \"off\"; confirm?: \"sensitive\" | \"always\" | \"never\"; cookies?: \"on\" | \"off\"; platform: string; read?: \"on\" | \"off\"; screenshot?: \"on\" | \"off\" }; id: string; kind: \"webext\" } | { config: { command: string; env?: string; loginCommand?: string; name?: string }; id: string; kind: \"agent\" } | { config: { apiKey?: string; baseUrl: string; headers?: string; protocol?: \"openai\" | \"anthropic\" }; id: string; kind: \"endpoint\" } | { config: { context?: \"16384\" | \"32768\" | \"65536\" | \"131072\" | \"custom\"; contextTokens?: number; gpu?: \"on\" | \"off\"; model: string; url?: string }; id: string; kind: \"localmodel\" } | { config: { address?: string; allow?: string; autoApproveUnderUsd?: string; dailyCapUsd?: string; deny?: string; network?: \"eip155:8453\" | \"eip155:84532\"; perPaymentMaxUsd?: string }; id: string; kind: \"wallet\" } | { config: { token: string }; id: string; kind: \"fleet\" })[]; environment?: { baseImage?: string; dockerfile?: string }; name?: string; repositories?: { id: string; ref?: string; remote: string }[]; schemaVersion: 1; secrets?: string[]; settings?: { actionRules?: Record<string, \"allow\" | \"hold\" | \"deny\">; admission?: { event?: \"allow\" | \"hold\" | \"deny\"; issues?: \"allow\" | \"hold\" | \"deny\"; listener?: \"allow\" | \"hold\" | \"deny\"; schedule?: \"allow\" | \"hold\" | \"deny\"; webchat?: \"allow\" | \"hold\" | \"deny\"; workflow?: \"allow\" | \"deny\"; workspace?: \"allow\" | \"hold\" | \"deny\" }; adoptedChecks?: Record<string, string>; agentRetentionDays?: number; autoModelGuidance?: string; autoRepair?: boolean; autoResumeOnRestart?: boolean; automationFailureLimit?: number; changelogRepos?: string[]; commandJudge?: \"off\" | \"watch\" | \"on\"; fieldNotes?: boolean; fieldNotesBudget?: number; fieldNotesHoldout?: number; hashlineEdits?: boolean; iqSearch?: boolean; iqSearchHoldout?: number; keepWarm?: { auto?: boolean; hours?: number; minTokens?: number; reserve?: number }; leanGuidance?: boolean; leanGuidanceHoldout?: number; limitMoveCarryUnder?: number; limitPolicy?: \"wait\" | \"resend\" | \"move\"; modelRoles?: Record<string, ({ effort?: string; fast?: boolean; harness?: \"native\" | \"claude-code\"; model: string; provider: string; thinking?: boolean })[]>; offload?: { commands?: Record<string, string>; landCheck?: string }; outagePolicy?: \"wait\" | \"retry\"; outputCleaners?: string; outputHoldout?: number; personaRouting?: boolean; rules?: ({ action: { command: string; kind: \"command\"; timeoutMs?: number } | { kind: \"verdict\"; verdict: \"allow\" | \"hold\" } | { kind: \"builtin\"; name: \"verify-ui-edits\" | \"version-landed\" }; enabled?: boolean; id: string; label: string; moment: \"file.edited\" | \"turn.ending\" | \"agent.finished\" | \"agent.landed\"; when?: { outcome?: (\"clean\" | \"error\" | \"conflict\" | \"checks-failed\")[]; paths?: string[]; repo?: string; sample?: number } })[]; sidecars?: boolean; skills?: string[]; stableSystemPrompt?: boolean; stopPolicy?: \"wait\" | \"retry\"; subagentDepth?: number; subagentsAtOnce?: number; subagentsPerTurn?: number; systemPrompt?: string; systemPromptMode?: \"intentic\" | \"claude\" | \"custom\"; timezone?: \"\" | string; workspaceMap?: boolean; workspaceMapHoldout?: number }; workspace?: { ref?: string; remote: string } }",
-      "since": "unreleased"
+      "since": "v1.313.0"
     }
   ]
 }
