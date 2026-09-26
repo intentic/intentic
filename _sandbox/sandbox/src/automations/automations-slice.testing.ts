@@ -55,7 +55,8 @@ export const memoryThreadSessionsStore = (archived: ArchivedConversation): Threa
         settle: async (key, sessionId, now) => {
             const existing = sessions.get(key);
             if (existing !== undefined) {
-                sessions.set(key, { ...existing, lastAt: now, ...(sessionId !== undefined ? { sessionId } : {}) });
+                // An unknown session keeps the one the thread already had.
+                sessions.set(key, sessionId === undefined ? { ...existing, lastAt: now } : { ...existing, lastAt: now, sessionId });
             }
         },
     };

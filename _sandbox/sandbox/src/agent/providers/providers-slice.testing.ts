@@ -26,41 +26,64 @@ export interface ProvidersFakeOverrides {
     readonly cliProxy?: Partial<ProvidersSlice["cliProxy"]> | undefined;
 }
 
+// Nothing to sweep: reading one needs a live OAuth endpoint; writes are swallowed like the store's.
+const idleHeadroom = () =>
+    ({
+        refresh: async () => {},
+        held: () => [],
+        parked: async () => false,
+        park: async () => {},
+        record: async () => {},
+        clear: async () => {},
+        read: async () => ({}),
+        onChange: () => () => {},
+        start: () => () => {},
+    }) satisfies ProvidersSlice["headroom"];
+
+// Nothing connected in the translator by default; the Codex subscription suite overrides this.
+const emptyCliProxy = (overrides: ProvidersFakeOverrides["cliProxy"]) =>
+    unstubbed<ProvidersSlice["cliProxy"]>("cliProxy", {
+        accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }),
+        connect: async () => ({ url: "", code: "", state: "", flow: "device" as const }),
+        complete: async () => {},
+        disconnect: async () => {},
+        models: async () => [],
+        headroom: { targets: async () => [] },
+        sharedUsageKey: async () => undefined,
+        turnLimit: async () => ({ spent: 0, withHeadroom: 0 }),
+        // Nothing connected, so nothing to take out of the rotation; the account list calls this on every read.
+        benchUnusable: async () => [],
+        ...overrides,
+    });
+
+// No OpenCode server and no xAI sign-in: nothing connected, no events, every write swallowed.
+const idleOpenCode = () =>
+    ({
+        // SAFETY: an empty client for a server never started. What reads a member off it (Grok's sign-in, Gemini's
+        // one-shot, an OpenCode turn) runs only in suites that pass their own `openCode`, and Grok's boot warm-up asks
+        // for it only once xAI is connected, which it never is here.
+        client: async () => ({}) as never,
+        stop: async () => {},
+        events: async () => ({ stream: { async *[Symbol.asyncIterator]() {} } }),
+        watch: async () => {},
+        connected: async () => false,
+        sessionExists: async () => true,
+        xaiModels: async () => ({ models: [{ id: "grok-4", label: "Grok 4" }], default: "grok-4" }),
+        recordModels: async () => {},
+        disconnect: async () => {},
+    }) satisfies ProvidersSlice["openCode"];
+
 export const providersSliceFake = (context: SliceFakeContext, { usage, cliProxy }: ProvidersFakeOverrides) =>
     ({
         usage: unstubbed("usage", { record: async () => {}, rollup: async () => [], turns: async () => [], ...usage }),
         // No usage measured by default, as if the window just reset.
         accountUsage: { read: async () => ({}), record: async () => {}, markUnread: async () => undefined, clear: async () => {} },
-        // Nothing to sweep: reading one needs a live OAuth endpoint; writes are swallowed like the store's.
-        headroom: {
-            refresh: async () => {},
-            held: () => [],
-            parked: async () => false,
-            park: async () => {},
-            record: async () => {},
-            clear: async () => {},
-            read: async () => ({}),
-            onChange: () => () => {},
-            start: () => () => {},
-        },
+        headroom: idleHeadroom(),
         // Nothing refused yet; both writes sit on the turn path, so any turn-running test touches this store.
         providerRefusals: { read: async () => ({}), record: async () => {}, clear: async () => {}, onChange: () => () => {} },
         // Nothing cooling; the write sits on the routed rate-limit path, so any refused routed turn touches this store.
         modelCooldowns: { cooling: async () => new Map(), record: async () => {} },
-        // Nothing connected in the translator by default; the Codex subscription suite overrides this.
-        cliProxy: unstubbed("cliProxy", {
-            accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }),
-            connect: async () => ({ url: "", code: "", state: "", flow: "device" as const }),
-            complete: async () => {},
-            disconnect: async () => {},
-            models: async () => [],
-            headroom: { targets: async () => [] },
-            sharedUsageKey: async () => undefined,
-            turnLimit: async () => ({ spent: 0, withHeadroom: 0 }),
-            // Nothing connected, so nothing to take out of the rotation; the account list calls this on every read.
-            benchUnusable: async () => [],
-            ...cliProxy,
-        }),
+        cliProxy: emptyCliProxy(cliProxy),
         providerCatalogs: testProviderCatalogs,
         // The real tables: which runtime a pair reaches and which module answers for a provider are facts about the
         // product, not stand-ins. Readiness is swept through the finished services, so it asks this suite's stores.
@@ -70,17 +93,6 @@ export const providersSliceFake = (context: SliceFakeContext, { usage, cliProxy 
         async *agent() {
             yield { kind: "done" };
         },
-        openCode: {
-            client: async () => ({}) as never,
-            stop: async () => {},
-            events: async () => ({ stream: { async *[Symbol.asyncIterator]() {} } }),
-            watch: async () => {},
-
-            connected: async () => false,
-            sessionExists: async () => true,
-            xaiModels: async () => ({ models: [{ id: "grok-4", label: "Grok 4" }], default: "grok-4" }),
-            recordModels: async () => {},
-            disconnect: async () => {},
-        },
+        openCode: idleOpenCode(),
         authRoot: `${WORKSPACE_ROOT}/${STATE_DIR}`,
     }) satisfies Partial<ProvidersSlice>;

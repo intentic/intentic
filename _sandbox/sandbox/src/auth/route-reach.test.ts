@@ -30,7 +30,7 @@ const ROUTES: readonly ContractRoute[] = [...RAW_ROUTE_LIST, ...SANDBOX_ROUTES];
 // Every RouteMeta field, and whether it decides who reaches the route. Keyed by the interface, so a field added there
 // fails this file's typecheck until `declaredRowOf` says how it reads; `lane` and `front` say how a request travels,
 // not who may send it.
-const FIELDS: Readonly<Record<keyof RouteMeta, "reach" | "transport">> = {
+const FIELDS = {
     auth: "reach",
     embedded: "reach",
     beforeBoot: "reach",
@@ -45,12 +45,12 @@ const FIELDS: Readonly<Record<keyof RouteMeta, "reach" | "transport">> = {
     control: "reach",
     lane: "transport",
     front: "transport",
-};
+} as const satisfies Record<keyof RouteMeta, "reach" | "transport">;
 
 // The reading itself, pinned on one route per rule it applies: a default floor for a read and for a write, a declared
 // floor on a read, each credential column, each control reach, a stream, a door, the upload's attachment row, and `ALL`
 // read as a write. A row here changes only when that route's declaration does.
-const PINNED: Readonly<Record<string, string>> = {
+const PINNED = {
     "GET /health": "door early timed viewer panel read drive land",
     "POST /agent": "bearer waits timed collaborator guest panel editor drive land",
     "POST /agent/attach": "bearer waits stream viewer guest panel read drive land",
@@ -68,7 +68,7 @@ const PINNED: Readonly<Record<string, string>> = {
     "POST /workspace/upload": "bearer waits timed writer panel",
     "POST /workspace/upload ?path=<attachment>": "bearer waits timed collaborator guest panel",
     "ALL /x/*": "bearer waits timed maintainer panel",
-};
+} as const satisfies Record<string, string>;
 
 // A route's concrete request: each `{param}` a sample segment, a raw route's `/*` two more, `ALL` read as a POST.
 const requestOf = (route: ContractRoute): { readonly method: string; readonly path: string } => {
@@ -103,7 +103,7 @@ const declaredRowOf = (route: ContractRoute, intoAttachments: boolean): string =
     // the route's floor, never an attachment's.
     const read = control !== "never" && (control === "read" || (isRead(method) && floor === "viewer"));
     const drive = read || (control !== "never" && roleAtLeast("collaborator", floor));
-    const rungs: Readonly<Record<ControlScope, boolean>> = { editor: control === "editor", read, drive, land: drive || control === "land" };
+    const rungs = { editor: control === "editor", read, drive, land: drive || control === "land" } satisfies Record<ControlScope, boolean>;
     return [
         meta.auth === "door" ? "door" : "bearer",
         meta.beforeBoot === true ? "early" : "waits",

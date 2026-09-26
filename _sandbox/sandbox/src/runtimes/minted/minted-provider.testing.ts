@@ -12,13 +12,12 @@ export const memoryMintedStore = (providerName: string): MintedStore => {
         list: async () => accounts.map(row),
         credentials: async () => accounts,
         connect: async ({ apiKey, variant, email }) => {
-            const stored: StoredKeyAccount = {
-                id: `${providerName}-${accounts.length + 1}`,
-                apiKey,
-                variant,
-                connectedAt: accounts.length + 1,
-                ...(email !== undefined && email.trim() !== "" ? { email: email.trim() } : {}),
-            };
+            const stored: StoredKeyAccount = { id: `${providerName}-${accounts.length + 1}`, apiKey, variant, connectedAt: accounts.length + 1 };
+            // A blank sign-in identity is none: the row falls back to the provider's name.
+            const identity = email?.trim() ?? "";
+            if (identity !== "") {
+                stored.email = identity;
+            }
             accounts = [...accounts, stored];
             return row(stored);
         },

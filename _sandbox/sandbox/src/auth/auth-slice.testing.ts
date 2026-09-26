@@ -52,6 +52,14 @@ export const memoryPasskeyStore = (initial: StoredCredential[] = [], required = 
     };
 };
 
+// One fixed control token per scope, named for it, so a test presents the reach it means; `ict_valid` is editor.
+const CONTROL_TOKEN_SCOPES = new Map<string, ControlScope>([
+    ["ict_valid", "editor"],
+    ["ict_read-token", "read"],
+    ["ict_drive-token", "drive"],
+    ["ict_land-token", "land"],
+]);
+
 // `auth` is too wide to spell out, so a suite passes the members it means and the rest refuse.
 export interface AuthFakeOverrides {
     readonly auth?: Partial<NonNullable<AuthSlice["auth"]>> | undefined;
@@ -69,14 +77,12 @@ export const authSliceFake = ({ auth }: AuthFakeOverrides, passkeys: AuthSlice["
         panelToken: "panel-secret",
         // The /vpn-scoped secret the in-container CLI presents; fixed here, minted per boot in production.
         agentToken: "agent-secret",
-        // One fixed token per scope, named for it, so a test presents the reach it means; `ict_valid` is editor.
         // Doors' credentials, in memory; a test seeds one with `ensure`, as an operator copies the URL off the row.
         doorTokens: memoryDoorTokens(),
         controlTokens: {
             mint: async (label, scope) => ({ id: "ct-1", token: `ict_minted-${scope}-${label}` }),
             resolve: async (presented) => {
-                const scope = { ict_valid: "editor", "ict_read-token": "read", "ict_drive-token": "drive", "ict_land-token": "land" }[presented] as
-                    ControlScope | undefined;
+                const scope = CONTROL_TOKEN_SCOPES.get(presented);
                 return scope === undefined ? undefined : { id: `ct-${scope}`, label: `${scope} token`, scope };
             },
             touch: async () => undefined,

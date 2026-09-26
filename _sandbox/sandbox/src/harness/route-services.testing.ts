@@ -53,10 +53,38 @@ export type WideSeamOverrides = AuthFakeOverrides &
     WorkspaceFakeOverrides & { readonly sandboxSettings?: Partial<Services["sandboxSettings"]> | undefined };
 export type ServiceOverrides = Partial<Omit<Services, keyof WideSeamOverrides>> & WideSeamOverrides;
 
+// The members Services declares itself that no route suite drives, each empty or inert: nothing installed, tunnelled,
+// presented, logged or left to reap. A factory, so each suite's services hold their own.
+const inertOwnMembers = () =>
+    ({
+        // Empty memory shell, not the file store; a temp tree here would reclassify every suite as machine-touching.
+        runtimeInstalls: {
+            read: async () => ({ installs: [] }),
+            record: async () => {},
+            saveDrift: async () => {},
+            decline: async () => {},
+        },
+        info: undefined,
+        // No dev platform, no TLS to terminate; a fake since compat entries read it on every capability write.
+        platformTunnel: { url: () => undefined, ready: Promise.resolve(), close: () => {} },
+        // No platform to ask, which is the ordinary state under test and the one an export has to survive: a bundle
+        // packed here simply carries no display name or logo. A test that cares overrides this.
+        presentation: async () => undefined,
+        // Nothing on record, and an append is dropped.
+        activity: { append: async () => {}, list: async () => [] },
+        // Inert: archive/discard hard-stop on every press; a route suite has no tmux, processes or browsers to reap.
+        reaper: { start: () => {}, stop: () => {}, sweep: async () => {}, reapConversation: async () => {}, metrics: () => ({}) },
+    }) satisfies Partial<Services>;
+
+// Where `services` leaves what it composed, for the slice fakes that answer through the finished services.
+interface ComposedServices {
+    current?: Services;
+}
+
 export const services = (overrides: ServiceOverrides = {}): Services => {
     const { auth, git, usage, claudeStore, cliProxy, sandboxSettings, iq, ...rest } = overrides;
     // Filled once the literal below is: every slice fake that answers through the finished services reads it per call.
-    const composed: { current?: Services } = {};
+    const composed: ComposedServices = {};
     const context: SliceFakeContext = {
         historyRoot: (rest.config ?? testConfig).historyRoot,
         self: () => {
@@ -68,7 +96,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
     };
     const conversationsFake = conversationsSliceFake(context);
     // Completed by unstubbed: only what these suites rely on appears in a slice's fake (`<slice>.testing.ts`, beside the
-    // slice) or below; anything else names itself if reached. Below: the members Services declares itself.
+    // slice) or below; anything else names itself if reached. From `inertOwnMembers` on: the members Services declares
+    // itself.
     const merged = unstubbed<Services>("services", {
         ...authSliceFake({ auth }, rest.passkeys),
         ...automationsSliceFake((conversationId) => conversationsFake.agents.entry(conversationId)?.archivedAt !== undefined),
@@ -92,6 +121,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         ...grokSliceFake(),
         ...kimiSliceFake(),
         ...mintedSliceFake(),
+        ...inertOwnMembers(),
         config: testConfig,
         logger: createLogger(testConfig),
         // No chain declared, so converged from birth; the gate itself is covered below with a declared chain.
@@ -100,25 +130,11 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         announcer: createAnnouncer(testConfig, createLogger(testConfig)),
         // Same terms as announcer: never started, so /health reads `off` on a daemon with no public address to probe.
         reach: createReachReporter(testConfig, createLogger(testConfig)),
-        // Empty memory shell, not the file store; a temp tree here would reclassify every suite as machine-touching.
-        runtimeInstalls: {
-            read: async () => ({ installs: [] }),
-            record: async () => {},
-            saveDrift: async () => {},
-            decline: async () => {},
-        },
-        info: undefined,
-        // No dev platform, no TLS to terminate; a fake since compat entries read it on every capability write.
-        platformTunnel: { url: () => undefined, ready: Promise.resolve(), close: () => {} },
-        // No platform to ask, which is the ordinary state under test and the one an export has to survive: a bundle
-        // packed here simply carries no display name or logo. A test that cares overrides this.
-        presentation: async () => undefined,
         // No personas by default: an unattended turn reaches no logged-in account, since an unpinned wake is denied
         // rather than waved through. A suite wanting one builds the card and its browser capability.
         personas: memoryPersonasStore(),
         // No areas by default: the unfenced workspace, which is what every member row without them already means.
         areas: memoryAreasStore(),
-        activity: { append: async () => {}, list: async () => [] },
         // Schema's own defaults: parsing an empty object is exactly what an unwritten settings file reads as.
         sandboxSettings: unstubbed("sandboxSettings", {
             get: async () => SandboxSettingsSchema.parse({}),
@@ -140,8 +156,6 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         derived: { read: readDerivedText, derive: deriveText, deriveBytes, status: sidecarStatus },
         history: fakeHistory(),
         async *intentic() {},
-        // Inert: archive/discard hard-stop on every press; a route suite has no tmux, processes or browsers to reap.
-        reaper: { start: () => {}, stop: () => {}, sweep: async () => {}, reapConversation: async () => {}, metrics: () => ({}) },
         // The engine's own announcements, as composition binds them, and the reactions it subscribes.
         events: createDomainEvents((name, error) => context.self().logger.warn({ err: error, event: name }, "domain event: a reaction failed")),
         ...rest,

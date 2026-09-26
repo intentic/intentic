@@ -21,9 +21,38 @@ const ABSENT_MAIN = join(tmpdir(), "intentic-absent-main");
 // Where a conversation's checkout lives, shared by the worktree fake and the scope composed from it.
 const conversationDir = (id: string): string => `${HISTORY_ROOT}/worktrees/${id}`;
 
+// Each conversation's checkout at its place under HISTORY_ROOT, none of them on disk, and a main checkout that exists
+// nowhere; worktree git stays stubbed. A factory, so each suite's services hold their own.
+const absentWorktrees = () =>
+    ({
+        conversationDir,
+        worktreeDir: (id, repo) => (repo === "root" ? `${HISTORY_ROOT}/worktrees/${id}` : `${HISTORY_ROOT}/worktrees/${id}/${repo}`),
+        mainDir: (repo) => (repo === "root" ? ABSENT_MAIN : join(ABSENT_MAIN, repo)),
+        exists: async () => false,
+        // Live checkout standing on its own branch: routes read the worktree path, the steady state these fakes
+        // model, and nothing has strayed off it.
+        attached: async () => true,
+        elsewhere: async () => [],
+        snapshot: async () => [{ repo: "root", base: "a".repeat(40) }],
+        sessionStore: (entry) => claudeStoreOf(ABSENT_MAIN, HISTORY_ROOT, entry),
+        ensure: async (id) => ({
+            cwd: `${HISTORY_ROOT}/worktrees/${id}`,
+            branch: `agent/${id}`,
+            repos: [{ repo: "root", base: "a".repeat(40) }],
+            fenced: false,
+            elsewhere: [],
+        }),
+        remove: async () => {},
+        retire: async () => {},
+        reapRepoCheckout: async () => {},
+        prune: async () => {},
+        withRepoLock: (_repo, task) => task(),
+        repoBusy: () => false,
+    }) satisfies ConversationsSlice["agentWorktrees"];
+
 export const conversationsSliceFake = (context: SliceFakeContext) => {
     // Real registry over an in-memory conversations database, with every conversation's directory under the suite's own
-    // history root; worktree git stays stubbed.
+    // history root.
     const conversationsDb = openConversationsDb(IN_MEMORY);
     const units = conversationUnits(context.historyRoot, sqliteAgentsStore(conversationsDb).has);
     const { agents, conversations } = memoryFleet(fleetStoreOver(conversationsDb, units));
@@ -44,31 +73,7 @@ export const conversationsSliceFake = (context: SliceFakeContext) => {
             clearTurn: async () => {},
             clearFire: async () => {},
         },
-        agentWorktrees: {
-            conversationDir,
-            worktreeDir: (id, repo) => (repo === "root" ? `${HISTORY_ROOT}/worktrees/${id}` : `${HISTORY_ROOT}/worktrees/${id}/${repo}`),
-            mainDir: (repo) => (repo === "root" ? ABSENT_MAIN : join(ABSENT_MAIN, repo)),
-            exists: async () => false,
-            // Live checkout standing on its own branch: routes read the worktree path, the steady state these fakes
-            // model, and nothing has strayed off it.
-            attached: async () => true,
-            elsewhere: async () => [],
-            snapshot: async () => [{ repo: "root", base: "a".repeat(40) }],
-            sessionStore: (entry) => claudeStoreOf(ABSENT_MAIN, HISTORY_ROOT, entry),
-            ensure: async (id) => ({
-                cwd: `${HISTORY_ROOT}/worktrees/${id}`,
-                branch: `agent/${id}`,
-                repos: [{ repo: "root", base: "a".repeat(40) }],
-                fenced: false,
-                elsewhere: [],
-            }),
-            remove: async () => {},
-            retire: async () => {},
-            reapRepoCheckout: async () => {},
-            prune: async () => {},
-            withRepoLock: (_repo, task) => task(),
-            repoBusy: () => false,
-        },
+        agentWorktrees: absentWorktrees(),
         // Composed from the same two lookups the daemon uses, so an unscoped read is the shared tree just as in
         // production. Read through the finished services, so redirecting `workspace` moves the file routes with it.
         workspaceScope: {
