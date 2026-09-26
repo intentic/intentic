@@ -1,5 +1,6 @@
 import { REQUEST_FIELDS, type RequestField, type TranscriptRequests, type TranscriptRow } from "../events/transcript.js";
 import type { AgentReply } from "../schemas/providers/plan-limits.js";
+import { startedChildCard } from "./child-run.js";
 
 // How a reply settles the card it answers: one rule used both by the fold and by a chat freezing its own card
 // optimistically before the frame returns. No reply (turn stopped or died) reads as cancelled for every card; a reply
@@ -22,7 +23,7 @@ export const settledRequests = (cards: TranscriptRequests, reply: AgentReply | u
     }
     if (permission !== undefined) {
         out.permission = {
-            ...permission,
+            ...startedChildCard(permission, reply),
             status:
                 reply?.kind !== "permission"
                     ? "cancelled"

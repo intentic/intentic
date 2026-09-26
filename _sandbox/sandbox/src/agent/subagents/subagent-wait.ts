@@ -118,7 +118,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                               });
                               return answer(
                                   result.ok
-                                      ? { ok: true, child: result.id, note: spawnedNote(result.id) }
+                                      ? { ok: true, child: result.id, note: spawnedNote(result.id, result.note) }
                                       : { ok: false, message: result.message },
                               );
                           },

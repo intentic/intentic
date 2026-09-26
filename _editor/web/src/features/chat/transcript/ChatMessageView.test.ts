@@ -5,6 +5,8 @@ import {
     type AgentActivity,
     type AgentJob,
     type AgentWatch,
+    type ChildAgentAsk,
+    type TranscriptPermission,
     agentWordsRow,
     childReportPrompt,
     landFixPrompt,
@@ -225,6 +227,8 @@ jest.mock("../../sandbox/devices/useSelfResources", () => ({
 }));
 
 const { default: ChatMessageView } = await import("./ChatMessageView.vue");
+// The shell's own picker seam, real: a child-agent card opens it, and the test answers it as the panel's bar would.
+const { modelRequest, settleModelPick } = await import("../models/host/hostModelPicker");
 // Imported so the loader suite's last test can mount it standalone, asserting the same status line with no message at
 // all.
 const { default: ChatTurnStatus } = await import("./ChatTurnStatus.vue");
@@ -621,6 +625,128 @@ describe(`ChatMessageView permission card`, () => {
         const element = mount(held({ status: `always` }));
         expect(element.textContent).toContain(`✓ Always allowed`);
         expect([...element.querySelectorAll(`button`)].some((button) => button.textContent?.includes(`Allow once`))).toBe(false);
+    });
+});
+
+// The child-agent gate's card: what would start, on what, and, for a start, the owner's chance to change that before
+// allowing it, through the same shell picker a Fix with agent caret opens.
+describe(`ChatMessageView child-agent card`, () => {
+    const asked: ChildAgentAsk = {
+        move: `spawn`,
+        task: `Port the parser to zig`,
+        provider: `claude`,
+        model: `claude-opus-4-6`,
+        effort: `max`,
+        account: `work`,
+        on: `rog`,
+    };
+    const held = (child: Partial<ChildAgentAsk> = {}, extra: Partial<TranscriptPermission> = {}): ChatMessage => ({
+        id: 4,
+        role: `assistant`,
+        text: ``,
+        permission: {
+            requestId: `perm-child`,
+            status: `pending`,
+            toolName: `agents.spawn`,
+            title: `Start a child agent on Claude Code?`,
+            displayName: `Start it`,
+            reason: `this turn has taken in content from outside (shell-fetch)`,
+            child: { ...asked, ...child },
+            ...extra,
+        },
+    });
+    const button = (element: HTMLElement, text: string): HTMLButtonElement | undefined =>
+        [...element.querySelectorAll<HTMLButtonElement>(`button`)].find((candidate) => candidate.textContent?.trim() === text);
+    const chip = (element: HTMLElement): HTMLButtonElement | null => element.querySelector<HTMLButtonElement>(`button.ui-chip`);
+    // The card's own answers, in order: what the actions row offers, and nothing from its body.
+    const answers = (element: HTMLElement): string[] =>
+        [...element.querySelectorAll<HTMLButtonElement>(`.chat-card-row button`)].map((candidate) => candidate.textContent?.trim() ?? ``);
+
+    afterEach(() => {
+        settleModelPick(undefined);
+    });
+
+    it(`names the child it would start and everything it runs on`, () => {
+        const element = mount(held());
+        expect(element.querySelector(`.chat-card-title`)?.textContent).toBe(`Start a child agent on Claude Code?`);
+        expect(element.textContent).toContain(`Port the parser to zig`);
+        expect(chip(element)?.textContent).toContain(`Claude Opus 4.6`);
+        expect(element.textContent).toContain(`Account: work`);
+        expect(element.textContent).toContain(`On rog`);
+        expect(element.textContent).toContain(`Requested because: this turn has taken in content from outside (shell-fetch)`);
+        expect(answers(element)).toEqual([`Start it`, `No`]);
+    });
+
+    it(`opens the shell picker over the child's run, offering its knobs, and allows with the owner's pick`, async () => {
+        const element = mount(held());
+        chip(element)?.click();
+        expect(modelRequest.value).toMatchObject({
+            provider: `claude`,
+            model: `claude-opus-4-6`,
+            effort: `max`,
+            account: `work`,
+            chooseRun: true,
+            action: `Use for this agent`,
+        });
+
+        settleModelPick({ provider: `codex`, model: `gpt-5.5`, label: `GPT-5.5`, effort: `high` });
+        await nextTick();
+        await nextTick();
+        // The card now reads the owner's pick, says what it replaced, and titles the provider that would actually run.
+        expect(chip(element)?.classList.contains(`ui-chip-on`)).toBe(true);
+        expect(element.textContent).toContain(`Changed from the agent's pick: Claude Opus 4.6`);
+        expect(element.querySelector(`.chat-card-title`)?.textContent).not.toContain(`Claude Code`);
+
+        button(element, `Start it`)?.click();
+        expect(reply).toHaveBeenCalledWith(`perm-child`, {
+            kind: `permission`,
+            decision: `once`,
+            child: { provider: `codex`, model: `gpt-5.5`, effort: `high` },
+        });
+    });
+
+    it(`goes back to the agent's pick, and then allows with nothing to replace`, async () => {
+        const element = mount(held());
+        chip(element)?.click();
+        settleModelPick({ provider: `claude`, model: `claude-sonnet-4-6`, label: `Claude Sonnet 4.6` });
+        await nextTick();
+        await nextTick();
+        button(element, `Use the agent's pick`)?.click();
+        await nextTick();
+        expect(element.textContent).not.toContain(`Changed from`);
+
+        button(element, `Start it`)?.click();
+        expect(reply).toHaveBeenCalledWith(`perm-child`, { kind: `permission`, decision: `once` });
+    });
+
+    it(`a pick that is the agent's own anyway is no change`, async () => {
+        const element = mount(held());
+        chip(element)?.click();
+        settleModelPick({ provider: `claude`, model: `claude-opus-4-6`, label: `Claude Opus 4.6`, effort: `max`, account: `work` });
+        await nextTick();
+        await nextTick();
+        expect(element.textContent).not.toContain(`Changed from`);
+        expect(chip(element)?.classList.contains(`ui-chip-on`)).toBe(false);
+    });
+
+    it(`a message to a running child shows the words and the child's run, which it cannot change`, () => {
+        const element = mount(held({ move: `send`, child: `sub-1`, message: `Now the lexer too.` }, { title: `Send this to a child agent on Claude Code?` }));
+        expect(element.querySelector(`.chat-card-title`)?.textContent).toBe(`Send this to a child agent on Claude Code?`);
+        expect(element.textContent).toContain(`Now the lexer too.`);
+        expect(element.textContent).toContain(`Claude Opus 4.6`);
+        expect(chip(element)).toBeNull();
+        expect(answers(element)).toEqual([`Send it`, `No`]);
+    });
+
+    it(`once settled, reads what started and what the agent had asked for, and offers nothing`, () => {
+        const element = mount(
+            held({ provider: `codex`, model: `gpt-5.5`, effort: undefined, account: undefined, proposed: { provider: `claude`, model: `claude-opus-4-6` } }, { status: `allowed` }),
+        );
+        expect(element.textContent).toContain(`✓ Allowed`);
+        expect(element.textContent).toContain(`Changed from the agent's pick: Claude Opus 4.6`);
+        expect(chip(element)).toBeNull();
+        expect(button(element, `Use the agent's pick`)).toBeUndefined();
+        expect(answers(element)).toEqual([]);
     });
 });
 

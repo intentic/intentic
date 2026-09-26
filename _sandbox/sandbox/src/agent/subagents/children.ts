@@ -1,8 +1,8 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { WorkPlace } from "../../workload/resource-budget.js";
 import { worktreeOf } from "../../conversations/registry/agents-store.js";
-import type { AgentEvent, AgentHarness, AgentProvider, AskQuestion, TurnProfile } from "@intentic/sandbox-contract";
-import { capabilitiesOf, DEFAULT_HARNESS, newConversationId, PROVIDERS } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentHarness, AgentProvider, AskQuestion, ChildAgentAsk, ChildMove, ChildRun, TurnProfile } from "@intentic/sandbox-contract";
+import { capabilitiesOf, childRunOf, DEFAULT_HARNESS, newConversationId, PROVIDERS, sameChildRun } from "@intentic/sandbox-contract";
 import { cardDeps, raiseRequest } from "../../conversations/actor/card-offers.js";
 import type { Holding } from "../../conversations/actor/conversation-holdings.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
@@ -26,9 +26,12 @@ import { runnerSummaries } from "../../runners/runner-peer.js";
 // conversation on the same turn pump, queued until the box has memory for it. A parked question is the parent's to
 // answer; a permission or plan hold is the owner's alone. A child outlives its parent's own turn.
 
-/** What a parent is told as its child starts: a box short of memory queues it first, and `wait` covers that too. */
-export const spawnedNote = (id: string): string =>
-    `Started; on a box short of memory it waits as pending until there is room. Supervise it with wait(target: "${id}").`;
+/**
+ * What a parent is told as its child starts: a box short of memory queues it first, and `wait` covers that too. What
+ * the owner changed on the gate's card, when they did, leads, since it is what the parent must not report wrongly.
+ */
+export const spawnedNote = (id: string, repointed?: string): string =>
+    `${repointed === undefined ? "" : `${repointed} `}Started; on a box short of memory it waits as pending until there is room. Supervise it with wait(target: "${id}").`;
 
 // Chars of the child's closing text kept inline on the roster row; the full text is in its own transcript.
 const REPORT_KEPT = 2_000;
@@ -42,6 +45,9 @@ export interface ChildSpawnSpec {
     readonly model: string;
     readonly harness?: AgentHarness;
     readonly effort?: string;
+    // Named only by an owner re-pointing the child on the gate's card; no door lets the agent set them.
+    readonly thinking?: boolean;
+    readonly fast?: boolean;
     readonly account?: string;
     // Runner id, or "here" to pin this sandbox; absent lets the fleet scheduler place it.
     readonly on?: string;
@@ -54,8 +60,9 @@ export interface ChildParent {
 }
 
 export type ChildSpawnResult =
-    // `id` is the child's conversation id: also the roster record's id and the wait tool's target.
-    { readonly ok: true; readonly id: string } | { readonly ok: false; readonly message: string };
+    // `id` is the child's conversation id: also the roster record's id and the wait tool's target. `note` says what the
+    // owner changed before allowing it, so the parent's report names the model that actually did the work.
+    { readonly ok: true; readonly id: string; readonly note?: string } | { readonly ok: false; readonly message: string };
 
 export type ChildActionResult = { readonly ok: true; readonly note?: string } | { readonly ok: false; readonly message: string };
 
@@ -312,18 +319,17 @@ const runChildTurn = (
     })();
 };
 
+// A supervisor move let through; `run` is set only when the owner re-pointed a start on the card, and is then the whole
+// run to start the child on in place of the agent's.
+type Admission = { readonly ok: true; readonly run?: ChildRun } | { readonly ok: false; readonly message: string };
+
 // Consulted before every supervisor mutation (spawn, send, answer): the owner's action rules plus the taint floor. A
 // hold asks the owner rather than refusing outright, when there is a live turn to ask in.
-const admitSupervision = async (
-    services: Services,
-    parent: string,
-    provider: string,
-    move: SupervisionMove,
-): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }> => {
+const admitSupervision = async (services: Services, parent: string, ask: ChildAgentAsk): Promise<Admission> => {
     const settings = await services.sandboxSettings.get();
     const outsideSource = conversationTaintSource(parent);
     const verdict = guard(childSpawn, {
-        provider,
+        provider: ask.provider,
         rules: settings.actionRules,
         ...(outsideSource !== undefined ? { outsideSource } : {}),
     });
@@ -331,32 +337,37 @@ const admitSupervision = async (
         return { ok: false, message: `Refused: ${verdict.reason}.` };
     }
     if (verdict.effect === "hold") {
-        return askOwner(services, parent, provider, move, verdict.reason);
+        return askOwner(services, parent, ask, verdict.reason);
     }
     return { ok: true };
 };
 
+// A provider the owner's rules refuse stays refused when it was picked on the card: the card overrides the agent's
+// choice, never the rulebook. A hold is already answered, since the owner is the one who picked it.
+const refusedByRules = async (services: Services, provider: string): Promise<string | undefined> => {
+    const settings = await services.sandboxSettings.get();
+    const verdict = guard(childSpawn, { provider, rules: settings.actionRules });
+    return verdict.effect === "deny" ? `Refused: ${verdict.reason}.` : undefined;
+};
+
 // Which supervisor move is held, so the card names the action truthfully rather than a generic one.
-type SupervisionMove = "spawn" | "send" | "answer";
-const MOVE_TITLE: Readonly<Record<SupervisionMove, string>> = {
+const MOVE_TITLE: Readonly<Record<ChildMove, string>> = {
     spawn: "Start a child agent",
     send: "Send this to a child agent",
     answer: "Answer a child agent",
 };
-const MOVE_BUTTON: Readonly<Record<SupervisionMove, string>> = { spawn: "Start it", send: "Send it", answer: "Answer it" };
+const MOVE_BUTTON: Readonly<Record<ChildMove, string>> = { spawn: "Start it", send: "Send it", answer: "Answer it" };
 
 // Same window as the payment offer: long enough to return to, short enough not to hold the call open all turn.
 const SUPERVISION_DEADLINE_MS = 10 * 60_000;
 
+// What the card quotes of the parent's words to a child: enough to judge it by, not a second transcript.
+const MESSAGE_SHOWN = 600;
+
 // Raises the card and waits, or says why it could not be raised. The three refusal messages differ because the model's
 // next move differs, and only one is the owner actually declining.
-const askOwner = async (
-    services: Services,
-    parent: string,
-    provider: string,
-    move: SupervisionMove,
-    reason: string,
-): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }> => {
+const askOwner = async (services: Services, parent: string, ask: ChildAgentAsk, reason: string): Promise<Admission> => {
+    const { move, provider } = ask;
     const run = turnRunOf(services.conversations, parent);
     if (run === undefined || run.done) {
         // No live turn to raise a card in: a detached `agents` shell, or one that already ended.
@@ -367,7 +378,7 @@ const askOwner = async (
                 `Ask in chat; they can also set the agents.spawn action rule.`,
         };
     }
-    const { decision } = await raiseRequest(
+    const { decision, reply } = await raiseRequest(
         cardDeps(services),
         { conversationId: parent, push: (event) => run.push(event) },
         {
@@ -378,17 +389,21 @@ const askOwner = async (
                 kind: "permission",
                 requestId,
                 toolName: "agents.spawn",
-                title: `${MOVE_TITLE[move]} on ${provider}?`,
+                title: `${MOVE_TITLE[move]} on ${labelOf(provider)}?`,
                 displayName: MOVE_BUTTON[move],
                 reason,
+                child: ask,
             }),
-            approves: (reply) => reply.decision !== "deny",
+            approves: (answer) => answer.decision !== "deny",
             deadlineMs: SUPERVISION_DEADLINE_MS,
         },
     );
     switch (decision) {
-        case "approved":
-            return { ok: true };
+        case "approved": {
+            // Only a start can be re-pointed: a child already running keeps the run it was started on (childProfile).
+            const picked = move === "spawn" ? reply.child : undefined;
+            return picked !== undefined && !sameChildRun(ask, picked) ? { ok: true, run: childRunOf(picked) } : { ok: true };
+        }
         case "unanswered":
             return {
                 ok: false,
@@ -450,16 +465,87 @@ const childRouting = (spec: ChildSpawnSpec): { readonly provider: AgentProvider;
 // own provider and model pick decides, not a settings-row default.
 const childProfile = (spec: ChildSpawnSpec): TurnProfile => {
     const { provider, harness, model } = childRouting(spec);
-    return {
-        agent: provider,
-        harness,
-        model,
-        ...(spec.effort !== undefined ? { effort: spec.effort } : {}),
-        ...(spec.account !== undefined ? { account: spec.account } : {}),
-        isolated: true,
-        unattended: true,
-    };
+    const profile: TurnProfile = { agent: provider, harness, model, isolated: true, unattended: true };
+    // Each knob only where one was named: an absent one is the model's own default.
+    if (spec.effort !== undefined) {
+        profile.effort = spec.effort;
+    }
+    if (spec.thinking !== undefined) {
+        profile.thinking = spec.thinking;
+    }
+    if (spec.fast !== undefined) {
+        profile.fast = spec.fast;
+    }
+    if (spec.account !== undefined) {
+        profile.account = spec.account;
+    }
+    return profile;
 };
+
+// A spec while it is being put together, before it is handed on as the readonly one.
+type SpecDraft = { -readonly [K in keyof ChildSpawnSpec]: ChildSpawnSpec[K] };
+
+// The spec the owner allowed, when they re-pointed the child on the card: their run replaces the agent's whole, so an
+// effort or an account the agent named for its own model never rides along onto another.
+const withRun = (spec: ChildSpawnSpec, run: ChildRun): ChildSpawnSpec => {
+    const { harness: _harness, account: _account, effort: _effort, thinking: _thinking, fast: _fast, ...task } = spec;
+    const next: SpecDraft = { ...task, provider: run.provider, model: run.model };
+    if (run.harness !== undefined) {
+        next.harness = run.harness;
+    }
+    if (run.account !== undefined) {
+        next.account = run.account;
+    }
+    if (run.effort !== undefined) {
+        next.effort = run.effort;
+    }
+    if (run.thinking !== undefined) {
+        next.thinking = run.thinking;
+    }
+    if (run.fast !== undefined) {
+        next.fast = run.fast;
+    }
+    return next;
+};
+
+// A run in words for the parent's tool result: provider and model as the ids the agent spawns with, since that is its
+// vocabulary, and each knob only when one was named.
+const runWords = (run: ChildRun): string =>
+    [
+        `${run.provider}/${run.model}`,
+        run.effort !== undefined ? `${run.effort} effort` : undefined,
+        run.thinking === false ? "no extended thinking" : undefined,
+        run.fast === true ? "fast speed" : undefined,
+        run.harness === "claude-code" ? "the Claude Code loop" : undefined,
+        run.account !== undefined ? `account ${run.account}` : undefined,
+    ]
+        .filter((part) => part !== undefined)
+        .join(", ");
+
+/** What the parent is told when the owner started its child on something else, so its own report names the right model. */
+export const repointedNote = (asked: ChildRun, run: ChildRun): string =>
+    `The owner changed what it runs on before allowing it: it runs on ${runWords(run)}, not on ${runWords(asked)} as you asked.`;
+
+// A child's task in one line, as its roster row and the gate's card both show it.
+const taskLine = (spec: Pick<ChildSpawnSpec, "prompt" | "description">): string =>
+    (spec.description ?? spec.prompt).replaceAll(/\s+/gu, " ").trim().slice(0, 200);
+
+// What the gate's card says about a child: its run, task and machine off the call's spec or the child's own record,
+// never the parent's prose about them.
+const childAsk = (move: ChildMove, spec: ChildSpawnSpec): ChildAgentAsk => {
+    const ask: ChildAgentAsk = { move, ...childRunOf(spec), task: taskLine(spec) };
+    if (spec.on !== undefined) {
+        ask.on = spec.on;
+    }
+    return ask;
+};
+
+// The same for a child that already exists, with the words the parent would say to it.
+const askAbout = (kid: ChildRecord, move: ChildMove, childId: string, message: string): ChildAgentAsk => ({
+    ...childAsk(move, kid.spec),
+    child: childId,
+    message: message.trim().slice(0, MESSAGE_SHOWN),
+});
 
 // The runner a child goes to, undefined for here. No preference: the scheduler places it. A named machine gets it, or
 // here if that machine is unusable.
@@ -485,17 +571,26 @@ const childPlacement = async (
  * Starts a child agent and returns once it is queued; on a box short of memory it waits as `pending` before its turn
  * runs. Budget/depth refusals come back immediately; a provider refusal surfaces later as the child's own failure.
  */
-export const spawnChild = async (services: Services, parent: ChildParent, spec: ChildSpawnSpec): Promise<ChildSpawnResult> => {
+export const spawnChild = async (services: Services, parent: ChildParent, asked: ChildSpawnSpec): Promise<ChildSpawnResult> => {
     const settings = await services.sandboxSettings.get();
     const depth = spawnDepthOf(services.conversations, parent.conversationId) + 1;
     if (depth > settings.subagentDepth) {
         return { ok: false, message: `Spawn depth ${settings.subagentDepth} reached: this agent is itself a spawned child and may not go deeper.` };
     }
-    const { provider, harness, model } = childRouting(spec);
-    const allowed = await admitSupervision(services, parent.conversationId, provider, "spawn");
+    const description = taskLine(asked);
+    const allowed = await admitSupervision(services, parent.conversationId, childAsk("spawn", asked));
     if (!allowed.ok) {
         return allowed;
     }
+    // What the owner allowed is what starts: their pick on the card when they changed it, the agent's otherwise.
+    const spec = allowed.run === undefined ? asked : withRun(asked, allowed.run);
+    if (spec.provider !== asked.provider) {
+        const refused = await refusedByRules(services, spec.provider);
+        if (refused !== undefined) {
+            return { ok: false, message: refused };
+        }
+    }
+    const { provider, harness, model } = childRouting(spec);
     const admitted = await admitChildTurn(services, parent.conversationId);
     if (!admitted.ok) {
         return admitted;
@@ -506,7 +601,6 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
         composeRuntimeFloor(parent.conversationId, provider, harness);
         const placement = await childPlacement(services, spec, provider, harness);
         const id = `sub-${newConversationId()}`;
-        const description = (spec.description ?? spec.prompt).replaceAll(/\s+/gu, " ").trim().slice(0, 200);
         const profile = childProfile(spec);
         const turn: TurnInput & { conversationId: string } = {
             prompt: spec.prompt,
@@ -558,7 +652,7 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
         });
         runChildTurn(services, id, parent.conversationId, turn, placement === undefined ? "local" : { runner: placement });
         handedOff = true;
-        return { ok: true, id };
+        return allowed.run === undefined ? { ok: true, id } : { ok: true, id, note: repointedNote(childRunOf(asked), allowed.run) };
     } finally {
         if (!handedOff) {
             admitted.release();
@@ -575,7 +669,7 @@ export const sendToChild = async (services: Services, parent: ChildParent, child
     if (kid === undefined || kid.parent !== parent.conversationId) {
         return { ok: false, message: "No such child of this conversation. `list` shows yours." };
     }
-    const allowed = await admitSupervision(services, parent.conversationId, kid.spec.provider, "send");
+    const allowed = await admitSupervision(services, parent.conversationId, askAbout(kid, "send", childId, message));
     if (!allowed.ok) {
         return allowed;
     }
@@ -651,7 +745,11 @@ export const answerChild = async (
     if (kid === undefined || kid.parent !== parent.conversationId) {
         return { ok: false, message: "No such child of this conversation. `list` shows yours." };
     }
-    const allowed = await admitSupervision(services, parent.conversationId, kid.spec.provider, "answer");
+    // The picks as the card quotes them: each question with what the parent chose for it.
+    const picks = Object.entries(answers)
+        .map(([question, chosen]) => `${question} → ${chosen.join(", ")}`)
+        .join("\n");
+    const allowed = await admitSupervision(services, parent.conversationId, askAbout(kid, "answer", childId, picks));
     if (!allowed.ok) {
         return allowed;
     }

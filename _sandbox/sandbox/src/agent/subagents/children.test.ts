@@ -729,7 +729,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
             const requestId = await cardOn();
             // Names the move and provider, so answering it isn't a guess about what it does.
             const card = turnRunOf(actors, parent.conversationId)?.rows.find((row) => row.permission !== undefined)?.permission;
-            expect(card).toMatchObject({ toolName: "agents.spawn", title: "Start a child agent on claude?", displayName: "Start it" });
+            expect(card).toMatchObject({ toolName: "agents.spawn", title: "Start a child agent on Claude Code?", displayName: "Start it" });
             // No always-allow offered: nothing here would remember one.
             expect(card).not.toHaveProperty("alwaysLabel");
 
@@ -760,6 +760,151 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
             const message = result.ok === false ? result.message : "";
             expect(message).toContain("declined");
             expect(message).toContain("Do not retry");
+        } finally {
+            live.release();
+        }
+    });
+
+    // What the owner is asked to allow is on the card itself, from the call, not the agent's prose about it.
+    it("shows the child it would start: task, model, effort, account and machine", async () => {
+        const live = liveParent();
+        try {
+            const spawning = spawnChild(drivenBy(spawnServices({ actionRules: { "agents.spawn": "hold" } }, [], actors), fakeTurn([])), parent, {
+                prompt: "Port the parser to zig",
+                description: "Port the parser",
+                provider: "claude",
+                model: "claude-opus-4-6",
+                effort: "max",
+                account: "work",
+                on: "here",
+            });
+            const requestId = await cardOn();
+            const card = turnRunOf(actors, parent.conversationId)?.rows.find((row) => row.permission !== undefined)?.permission;
+            expect(card?.child).toEqual({
+                move: "spawn",
+                task: "Port the parser",
+                provider: "claude",
+                model: "claude-opus-4-6",
+                effort: "max",
+                account: "work",
+                on: "here",
+            });
+            cards.resolve({ kind: "permission", requestId, decision: "deny" });
+            await spawning;
+        } finally {
+            live.release();
+        }
+    });
+
+    // The owner's pick replaces the agent's whole: an effort or an account named for one model means nothing on another.
+    it("starts the child on what the owner picked on the card, and tells the parent so", async () => {
+        const live = liveParent();
+        try {
+            const turns: AgentTurn[] = [];
+            const spawning = spawnChild(drivenBy(spawnServices({ actionRules: { "agents.spawn": "hold" } }, [], actors), fakeTurn(turns)), parent, {
+                prompt: "go",
+                provider: "claude",
+                model: "claude-opus-4-6",
+                effort: "max",
+                account: "work",
+            });
+            const requestId = await cardOn();
+            cards.resolve({ kind: "permission", requestId, decision: "once", child: { provider: "claude", model: "claude-haiku-4-5", fast: true } });
+            const result = await spawning;
+            if (!result.ok) {
+                throw new Error(result.message);
+            }
+            await settled(result.id);
+            expect(turns[0]).toMatchObject({ agent: "claude", model: "claude-haiku-4-5", fast: true });
+            expect(turns[0]).not.toHaveProperty("effort");
+            expect(turns[0]).not.toHaveProperty("account");
+            expect(listSubagentSessions(actors).find((session) => session.id === result.id)?.model).toBe("claude-haiku-4-5");
+            expect(result.note).toContain("The owner changed what it runs on");
+            expect(result.note).toContain("claude-haiku-4-5");
+            // The settled card reads what started, keeping what the agent asked for beside it.
+            const card = turnRunOf(actors, parent.conversationId)?.rows.find((row) => row.permission !== undefined)?.permission;
+            expect(card?.child).toMatchObject({ model: "claude-haiku-4-5", proposed: { model: "claude-opus-4-6", effort: "max" } });
+        } finally {
+            live.release();
+        }
+    });
+
+    it("an allow that picks what the agent asked for anyway changes nothing and says nothing", async () => {
+        const live = liveParent();
+        try {
+            const spawning = spawnChild(drivenBy(spawnServices({ actionRules: { "agents.spawn": "hold" } }, [], actors), fakeTurn([])), parent, {
+                prompt: "go",
+                provider: "claude",
+                model: "claude-sonnet-4-6",
+            });
+            const requestId = await cardOn();
+            cards.resolve({ kind: "permission", requestId, decision: "once", child: { provider: "claude", model: "claude-sonnet-4-6", harness: "native" } });
+            const result = await spawning;
+            expect(result).toMatchObject({ ok: true });
+            expect(result).not.toHaveProperty("note");
+            if (result.ok) {
+                await settled(result.id);
+            }
+        } finally {
+            live.release();
+        }
+    });
+
+    // The card overrides the agent's choice, never the owner's own rulebook.
+    it("a provider the rules refuse stays refused when it is picked on the card", async () => {
+        const live = liveParent();
+        try {
+            const turns: AgentTurn[] = [];
+            const rules = { "agents.spawn": "hold", "agents.spawn.cursor": "deny" } as const;
+            const spawning = spawnChild(drivenBy(spawnServices({ actionRules: rules }, [], actors), fakeTurn(turns)), parent, {
+                prompt: "go",
+                provider: "claude",
+                model: "claude-sonnet-4-6",
+            });
+            const requestId = await cardOn();
+            cards.resolve({ kind: "permission", requestId, decision: "once", child: { provider: "cursor", model: "composer-2.5" } });
+            const result = await spawning;
+            expect(result.ok === false ? result.message : "").toContain("refused by the action rules");
+            expect(turns).toEqual([]);
+        } finally {
+            live.release();
+        }
+    });
+
+    // A child already running keeps the run it was started on: a send's card shows it, and an allow cannot move it.
+    it("a send's card names the child, its run and the words, and keeps its run", async () => {
+        const services = spawnServices({}, [], actors);
+        const turns: AgentTurn[] = [];
+        const first = await spawnChild(drivenBy(services, fakeTurn(turns)), parent, {
+            prompt: "Port the parser",
+            provider: "claude",
+            model: "claude-sonnet-4-6",
+            effort: "high",
+        });
+        if (!first.ok) {
+            throw new Error(first.message);
+        }
+        await settled(first.id);
+        const live = liveParent();
+        try {
+            const held = drivenBy(spawnServices({ actionRules: { "agents.spawn": "hold" } }, [], actors), fakeTurn(turns));
+            const sending = sendToChild(held, parent, first.id, "Now the lexer too.");
+            const requestId = await cardOn();
+            const card = turnRunOf(actors, parent.conversationId)?.rows.find((row) => row.permission !== undefined)?.permission;
+            expect(card?.title).toBe("Send this to a child agent on Claude Code?");
+            expect(card?.child).toMatchObject({
+                move: "send",
+                child: first.id,
+                task: "Port the parser",
+                message: "Now the lexer too.",
+                provider: "claude",
+                model: "claude-sonnet-4-6",
+                effort: "high",
+            });
+            cards.resolve({ kind: "permission", requestId, decision: "once", child: { provider: "cursor", model: "composer-2.5" } });
+            expect(await sending).toMatchObject({ ok: true });
+            await settled(first.id);
+            expect(turns[1]).toMatchObject({ prompt: "Now the lexer too.", agent: "claude", model: "claude-sonnet-4-6", effort: "high" });
         } finally {
             live.release();
         }

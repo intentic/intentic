@@ -446,8 +446,12 @@ const spawn = async (argv) => {
     if (status !== 200) {
         return die(`agents: ${refusalOf(text)}`);
     }
-    const { id } = JSON.parse(text);
+    const { id, note } = JSON.parse(text);
     process.stdout.write(`${id}\n`);
+    // What the owner changed on the card before allowing it, so the model that ran is the one the caller reports.
+    if (typeof note === "string" && note !== "") {
+        process.stderr.write(`${note}\n`);
+    }
     process.stderr.write(`Started; on a box short of memory it waits as pending until there is room. Follow it with: agents wait ${id}\n`);
 };
 

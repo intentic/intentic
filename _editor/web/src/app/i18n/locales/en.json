@@ -1622,6 +1622,25 @@
             "agentNeedsHelp": "The agent needs your help:",
             "optionalNoteBackTo": "Optional note back to the agent",
             "doneHandBack": "Done: hand back"
+        },
+        "chatChildAgentAsk": {
+            "spawnTitle": "Start a child agent on {provider}?",
+            "sendTitle": "Send this to a child agent on {provider}?",
+            "answerTitle": "Answer a child agent on {provider}?",
+            "spawn": "Start it",
+            "send": "Send it",
+            "answer": "Answer it",
+            "change": "Change what it runs on: {run}",
+            "changeHint": "Pick another model, account or effort for it before you start it",
+            "useForAgent": "Use for this agent",
+            "fast": "Fast",
+            "account": "Account: {account}",
+            "anyAccount": "Account: whichever has the most room",
+            "through": "Through {harness}",
+            "onHere": "In this sandbox",
+            "onRunner": "On {runner}",
+            "changedFrom": "Changed from the agent's pick: {run}",
+            "useAgentsPick": "Use the agent's pick"
         }
     },
     "common": {

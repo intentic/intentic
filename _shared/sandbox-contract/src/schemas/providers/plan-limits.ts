@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ChildRunSchema } from "../../events/requests.js";
 import { TRANSLATOR_PROVIDERS, type TranslatorProvider } from "../../models/provider-specs.js";
 import { AgentHarnessSchema, AgentProviderSchema, EditorContextSchema } from "../agent.js";
 import { MENTION_LIMIT } from "../../text/mentions.js";
@@ -202,6 +203,10 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
             .enum(["once", "always", "deny"])
             .describe("Once allows this call alone; always allows that whole tool for the rest of the conversation; no blocks it."),
         feedback: z.string().optional().describe("Why not, which goes back to the model as the reason."),
+        // Whole, not a patch: effort or an account named for one model means nothing on another.
+        child: ChildRunSchema.optional().describe(
+            "For a request to start a child agent: what to start it on instead of what the agent asked for. It replaces the whole run (model, account, effort and the rest), not only the fields it names. Ignored with a no, and on any other request.",
+        ),
     }),
     z.object({
         kind: z

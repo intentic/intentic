@@ -136,7 +136,7 @@ const spawnTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool 
             ...(description !== undefined ? { description } : {}),
             ...(effort !== undefined ? { effort } : {}),
         });
-        return JSON.stringify(result.ok ? { ok: true, child: result.id, note: spawnedNote(result.id) } : result);
+        return JSON.stringify(result.ok ? { ok: true, child: result.id, note: spawnedNote(result.id, result.note) } : result);
     },
 });
 

@@ -1531,6 +1531,25 @@
             "agentNeedsHelp": "Der Agent braucht Ihre Hilfe:",
             "optionalNoteBackTo": "Optionale Notiz zurück an den Agenten",
             "doneHandBack": "Fertig: zurückgeben"
+        },
+        "chatChildAgentAsk": {
+            "spawnTitle": "Einen Unteragenten auf {provider} starten?",
+            "sendTitle": "Das an einen Unteragenten auf {provider} senden?",
+            "answerTitle": "Einem Unteragenten auf {provider} antworten?",
+            "spawn": "Starten",
+            "send": "Senden",
+            "answer": "Antworten",
+            "change": "Ändern, worauf er läuft: {run}",
+            "changeHint": "Vor dem Start ein anderes Modell, Konto oder eine andere Denkstufe wählen",
+            "useForAgent": "Für diesen Agenten verwenden",
+            "fast": "Schnell",
+            "account": "Konto: {account}",
+            "anyAccount": "Konto: das mit dem meisten Spielraum",
+            "through": "Über {harness}",
+            "onHere": "In dieser Sandbox",
+            "onRunner": "Auf {runner}",
+            "changedFrom": "Geändert gegenüber der Wahl des Agenten: {run}",
+            "useAgentsPick": "Wahl des Agenten verwenden"
         }
     },
     "common": {

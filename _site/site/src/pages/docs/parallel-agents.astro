@@ -142,6 +142,9 @@ const lanes = [
         A parent may answer a child's factual question. It may not approve the child's permission request or plan: those cards remain yours,
         because letting a model approve its own held action through another model would erase the approval boundary. The same guard that
         protects other agent actions can hold delegation after a turn has consumed untrusted outside content unless you explicitly allow it.
+        A held start shows you the child before you answer: its task, model, effort, account and machine. The model line opens the same
+        picker as Fix with agent, so you can move the child to another model, account or effort, and it starts on your pick. The parent is
+        told what you changed.
     </p>
     <p>
         Full children can also run on <a href="/docs/remote-runners/">remote runners</a>. When no machine is named, the fleet scheduler spreads

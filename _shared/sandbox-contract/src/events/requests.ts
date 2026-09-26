@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AgentProviderSchema } from "../schemas/agent.js";
+import { AgentHarnessSchema, AgentProviderSchema } from "../schemas/agent.js";
 import { CredentialGateKindSchema, CredentialGateScopeSchema, CredentialLaneSchema } from "../schemas/secrets.js";
 
 // Requests a turn raises to ask the person something mid-turn; each pauses the turn until `POST /agent/reply` answers it.
@@ -40,6 +40,42 @@ export const ProgramAskSchema = z.object({
 });
 export type ProgramAsk = z.infer<typeof ProgramAskSchema>;
 
+// What a child agent runs on: who serves it and how. The child-agent gate's request shows it, and the owner's allow may
+// carry a replacement (the permission reply's `child`, plan-limits.ts).
+export const ChildRunSchema = z.object({
+    provider: AgentProviderSchema.describe("Which provider serves it."),
+    model: z.string().min(1).describe("Which of that provider's models."),
+    harness: AgentHarnessSchema.optional().describe("Which agentic loop runs it. Absent is the provider's own."),
+    account: z
+        .string()
+        .optional()
+        .describe("Which of that provider's connected accounts pays for it. Absent is whichever has the most room when it starts."),
+    effort: z.string().optional().describe("How hard it thinks, where the model offers a choice. Absent is the model's own default."),
+    thinking: z.boolean().optional().describe("Whether it reasons before it answers, where the model offers the choice."),
+    fast: z.boolean().optional().describe("Whether it asks for the faster rate, at the higher price."),
+});
+export type ChildRun = z.infer<typeof ChildRunSchema>;
+
+// A move a parent makes on a child agent that the owner's rules may hold for a yes.
+export const ChildMoveSchema = z.enum(["spawn", "send", "answer"]);
+export type ChildMove = z.infer<typeof ChildMoveSchema>;
+
+// The child a held request is about, as the daemon's own record of the call has it, never as the agent describes it.
+export const ChildAgentAskSchema = ChildRunSchema.extend({
+    move: ChildMoveSchema.describe("What the parent asks to do: start a new child, say something to one it started, or answer one's question."),
+    child: z.string().optional().describe("The child's id, for one that already exists."),
+    task: z.string().optional().describe("What the child is for, in a line."),
+    message: z
+        .string()
+        .optional()
+        .describe("What the parent would say to it: the message it sends, or the answers it gives. Clipped for the request."),
+    on: z.string().optional().describe('Which machine it runs on, when one is named: a runner, or "here" for this sandbox.'),
+    proposed: ChildRunSchema.optional().describe(
+        "What the agent asked to start it on, when the owner started it on something else instead. Present only once the request has settled that way.",
+    ),
+});
+export type ChildAgentAsk = z.infer<typeof ChildAgentAskSchema>;
+
 // One per-tool permission prompt (SDK's canUseTool, surfaced as a request); the daemon passes the bridge's own rendered
 // strings through unchanged. `alwaysLabel` is present only when the SDK offered a rule to persist.
 export const PermissionAskSchema = z.object({
@@ -61,6 +97,9 @@ export const PermissionAskSchema = z.object({
         ),
     program: ProgramAskSchema.optional().describe(
         "The program this request is holding, when the request is about one. Present on a command gate's request and absent on every other permission ask.",
+    ),
+    child: ChildAgentAskSchema.optional().describe(
+        "The child agent this request would start or reach, and what it runs on. Present on the child-agent gate's request and absent on every other permission ask.",
     ),
     // The judge's own sentence, present only when the title can't say it; never written by the agent being gated.
     explain: z

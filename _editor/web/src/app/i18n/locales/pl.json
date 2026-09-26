@@ -1540,6 +1540,25 @@
             "agentNeedsHelp": "Agent potrzebuje Twojej pomocy:",
             "optionalNoteBackTo": "Opcjonalna notatka z powrotem do agenta",
             "doneHandBack": "Gotowe: oddaj"
+        },
+        "chatChildAgentAsk": {
+            "spawnTitle": "Uruchomić agenta podrzędnego na {provider}?",
+            "sendTitle": "Wysłać to agentowi podrzędnemu na {provider}?",
+            "answerTitle": "Odpowiedzieć agentowi podrzędnemu na {provider}?",
+            "spawn": "Uruchom",
+            "send": "Wyślij",
+            "answer": "Odpowiedz",
+            "change": "Zmień, na czym działa: {run}",
+            "changeHint": "Przed uruchomieniem wybierz inny model, konto lub poziom wysiłku",
+            "useForAgent": "Użyj dla tego agenta",
+            "fast": "Szybko",
+            "account": "Konto: {account}",
+            "anyAccount": "Konto: to z największym zapasem",
+            "through": "Przez {harness}",
+            "onHere": "W tym sandboksie",
+            "onRunner": "Na {runner}",
+            "changedFrom": "Zmieniono względem wyboru agenta: {run}",
+            "useAgentsPick": "Użyj wyboru agenta"
         }
     },
     "common": {
