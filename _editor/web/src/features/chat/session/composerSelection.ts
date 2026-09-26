@@ -8,7 +8,7 @@ import type { Conversation } from "./conversation";
 import { type PickAction, type PickEffects, type PickWorld, reduceSelection, type Selection, UNPICKED } from "./selectionReducer";
 import type { TranscriptView } from "./transcriptView";
 import type { TurnClient } from "./turnClient";
-import { formatReset, formatUtilization, isStale, modelAllowance, usageStatusFor } from "./usageStatus";
+import { formatRemaining, formatReset, isStale, modelAllowance, usageStatusFor } from "./usageStatus";
 
 // A conversation's selection as the composer binds it: the value `reduceSelection` moves, read one pick at a time, and
 // the one "switched" divider a change of it owes the transcript. Which picks a switch retires is the reducer's rule;
@@ -225,7 +225,7 @@ export class ComposerSelection {
     }
 
     // Whose allowance the new model spends, when the plan meters it separately and this sandbox has a reading for it.
-    // The floor mark rides along since a reading can only have climbed; the reset date shows once the pool is spent.
+    // The at-most mark rides along since a stale reading can only have been spent further; the reset date shows once the pool is spent.
     private allowanceNote(model: { readonly id: string; readonly label: string }): string {
         const usage = usageStatusFor(this.provider.value, this.account.value, model);
         const allowance = modelAllowance(usage, model);
@@ -233,7 +233,7 @@ export class ComposerSelection {
             return ``;
         }
         const resetsAt = allowance.percent >= SPENT_UTILIZATION ? allowance.resetsAt : undefined;
-        return ` · ${allowance.name} ${formatUtilization(allowance.percent, isStale(usage))} used${
+        return ` · ${allowance.name} ${formatRemaining(allowance.percent, isStale(usage))}${
             resetsAt === undefined ? `` : `, resets ${formatReset(resetsAt)}`
         }`;
     }

@@ -1,7 +1,18 @@
 <script setup lang="ts">
 import { placeAnchored, type Placement, ProgressRing, type Side, useHoverIntent } from "@intentic/ui";
 import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref } from "vue";
-import { formatAge, formatReset, formatUtilization, type PlanHeadroom, usageDetail, usageTone } from "../features/chat/session/usageStatus";
+import { SPENT_UTILIZATION } from "@intentic/sandbox-contract";
+import {
+    formatAge,
+    formatRemaining,
+    formatReset,
+    meterFill,
+    meterTrack,
+    type PlanHeadroom,
+    remainingPercent,
+    usageDetail,
+    usageTone,
+} from "../features/chat/session/usageStatus";
 import { useT } from "@intentic/ui/i18n";
 
 // Usage ring and breakdown panel, shared by the composer chip, model picker and Agent tab rows. A small table
@@ -96,7 +107,8 @@ onBeforeUnmount(hide);
 <template>
     <!-- The anchor includes whatever rides beside the ring (the chip's percentage), so hovering it opens the card. -->
     <span ref="anchor" class="inline-flex items-center gap-1" @mouseenter="show" @mouseleave="hide" @pointerdown="hide">
-        <ProgressRing :value="headroom.percent" :class="headroom.tone" />
+        <!-- Drains like every allowance meter: the arc is what is left, and a spent pool keeps a tinted empty ring. -->
+        <ProgressRing :value="remainingPercent(headroom.percent)" :class="headroom.tone" :tint-track="headroom.percent >= SPENT_UTILIZATION" />
         <slot />
         <!-- The arc is aria-hidden and a pointer-only card never reaches a screen reader, so it's spoken here instead. -->
         <span class="sr-only">{{ activity ? `${usageDetail(headroom)} ${activity}.` : usageDetail(headroom) }}</span>
@@ -126,15 +138,15 @@ onBeforeUnmount(hide);
                                 {{ pool.label }}
                             </span>
                             <span class="shrink-0 text-xs font-medium tabular-nums" :class="usageTone(pool.percent)">
-                                {{ formatUtilization(pool.percent, headroom.stale) }}
+                                {{ formatRemaining(pool.percent, headroom.stale) }}
                             </span>
                         </div>
-                        <!-- A pool at 0% still draws a sliver; an empty track would read as no reading at all. -->
-                        <div class="h-1.5 overflow-hidden rounded-full bg-content/10">
+                        <!-- The fill is what is left; a spent pool tints its empty track, so it can't read as no reading at all. -->
+                        <div class="h-1.5 overflow-hidden rounded-full" :class="meterTrack(pool.percent)">
                             <div
                                 class="ui-meter-fill h-full rounded-full"
                                 :class="usageTone(pool.percent)"
-                                :style="{ width: `${Math.max(pool.percent, 1)}%` }"
+                                :style="{ width: `${meterFill(pool.percent)}%` }"
                             />
                         </div>
                         <span v-if="pool.resetsAt !== undefined" class="text-2xs text-subtle">{{
@@ -151,9 +163,9 @@ onBeforeUnmount(hide);
                     <!-- Measured, with every pool since reset; distinct from unmeasured, which draws no ring at all. -->
                     <p v-if="headroom.pools.length === 0" class="text-xs text-muted">{{ t(`common.usageRing.everyPoolResetFull`) }}</p>
 
-                    <!-- The ≥ mark is explained only when one is shown; a card of hard 100s has none to explain. -->
+                    <!-- The ≤ mark is explained only when one is shown; a card of spent pools has none to explain. -->
                     <p v-if="headroom.stale && headroom.pools.some((pool) => pool.percent < 100)" class="text-2xs leading-relaxed text-subtle">
-                        {{ t(`common.usageRing.floorsEveryDeviceOn`) }}
+                        {{ t(`common.usageRing.atMostOtherDevices`) }}
                     </p>
                 </div>
             </div>

@@ -4,7 +4,9 @@ import { computed } from "vue";
 // A tiny circular progress meter. The arc is drawn with `currentColor`, so a Tailwind `text-*` class on the
 // element sets its colour (e.g. text-primary-500, or text-warning past a threshold); the track is a faint
 // neutral. Rotated so the arc starts at 12 o'clock and fills clockwise.
-const { value, size = 14, stroke = 2 } = defineProps<{ value: number; size?: number; stroke?: number }>();
+// `tintTrack` draws the track in the arc's own colour, faintly: for a meter that drains, an empty ring is a state worth
+// its colour (a spent allowance), and a neutral track alone would read the same as no reading at all.
+const { value, size = 14, stroke = 2, tintTrack = false } = defineProps<{ value: number; size?: number; stroke?: number; tintTrack?: boolean }>();
 
 const radius = computed(() => (size - stroke) / 2);
 const circumference = computed(() => 2 * Math.PI * radius.value);
@@ -20,7 +22,9 @@ const offset = computed(() => circumference.value * (1 - Math.min(100, Math.max(
             :r="radius"
             fill="none"
             :stroke-width="stroke"
-            :style="{ stroke: 'color-mix(in srgb, var(--color-content) 12%, transparent)' }"
+            :style="{
+                stroke: tintTrack ? 'color-mix(in srgb, currentColor 35%, transparent)' : 'color-mix(in srgb, var(--color-content) 12%, transparent)',
+            }"
         />
         <circle
             :cx="size / 2"

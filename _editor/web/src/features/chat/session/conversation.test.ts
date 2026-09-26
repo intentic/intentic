@@ -554,8 +554,8 @@ describe(`Conversation`, () => {
         await conversation.turn.send(`first`, { ...settings, account: `acct-1` });
 
         conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `claude-opus-4-6` } });
-        // Rounded once, by the same projection the usage meters use.
-        expect(conversation.transcript.messages.value.at(-1)!.text).toContain(`Opus 61% used`);
+        // Rounded once, by the same projection the usage meters use, and stated as what is left (61.4% spent).
+        expect(conversation.transcript.messages.value.at(-1)!.text).toContain(`Opus 39% left`);
     });
 
     // A parked turn is `streaming` too (the run is alive), so a mid-turn guard on that flag also blocked switching

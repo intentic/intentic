@@ -1555,8 +1555,8 @@
             "unsent": "Non envoyé"
         },
         "usageRing": {
+            "atMostOtherDevices": "≤ signifie au plus : les autres appareils de ce compte puisent dans les mêmes réserves.",
             "everyPoolResetFull": "Chaque réserve est réinitialisée : la totalité du quota est disponible.",
-            "floorsEveryDeviceOn": "≥ sont des planchers : tous les appareils du compte puisent dans les mêmes réserves.",
             "measured": "mesuré {measuredAt}",
             "resets": "réinitialisation {resetsAt}"
         },
@@ -2601,6 +2601,7 @@
             "allAccounts": "Tous les comptes",
             "bindingPool": "Réserve limitante",
             "cantServeTurn": "Ne peut pas servir un tour · {attentionTotal}",
+            "left": "Restant",
             "more": "+{hidden} de plus",
             "nextPoolReopens": "prochaine réserve rouverte {nextResetAt}",
             "noAccountMatchesFilter": "Aucun compte ne correspond à ce filtre.",
@@ -2615,7 +2616,6 @@
             "resets": "réinitialisation {resetsAt}",
             "seatFromAdmin": "demandez à un admin de l'organisation de lui attribuer un siège | demandez à un admin de l'organisation de leur attribuer des sièges",
             "showingMostConstrained": "affichage des {max_bars} plus contraintes sur {count}",
-            "used": "Utilisé",
             "viewAccounts": "Voir les comptes"
         },
         "repoCheckRow": {
@@ -3674,6 +3674,7 @@
         "name": "Nom",
         "needs": "A besoin de vous",
         "other": "Autre",
+        "percentLeft": "{percent} restant",
         "planLimits": "Limites de l'offre",
         "preview": "Aperçu",
         "removed": "supprimé",

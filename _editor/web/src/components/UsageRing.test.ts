@@ -68,12 +68,16 @@ it(`lists every pool with its own figure and reset, and says how old the reading
     const panel = await card();
     for (const pool of pools) {
         expect(panel.textContent).toContain(pool.label);
-        expect(panel.textContent).toContain(`${pool.percent}%`);
+        expect(panel.textContent).toContain(`${100 - pool.percent}% left`);
     }
     // A pool with no reset simply claims none; the other pool's reset is still named.
     expect(panel.textContent).toContain(formatReset(RESETS_AT));
     // One meter per pool: which allowance is about to bite is seen, not parsed.
     expect(panel.querySelectorAll(`.ui-meter-fill`)).toHaveLength(pools.length);
+    // Each drains: as wide as what is left, never as what was spent.
+    expect([...panel.querySelectorAll<HTMLElement>(`.ui-meter-fill`)].map((fill) => fill.style.width)).toEqual(
+        pools.map((pool) => `${100 - pool.percent}%`),
+    );
 });
 
 it(`speaks the whole breakdown beside the arc, since a card raised by a pointer never reaches a screen reader`, async () => {
@@ -82,7 +86,7 @@ it(`speaks the whole breakdown beside the arc, since a card raised by a pointer 
     const pools = headroom().pools;
     for (const pool of pools) {
         expect(spoken).toContain(pool.label);
-        expect(spoken).toContain(`${pool.percent}%`);
+        expect(spoken).toContain(`${100 - pool.percent}% left`);
     }
     expect(spoken).toContain(formatReset(RESETS_AT));
 });
@@ -132,11 +136,11 @@ it(`shows nothing for a pointer that only sweeps past, and closes the moment one
     expect(document.body.querySelector(`.ui-anchored`)).toBeNull();
 });
 
-it(`explains the ≥ only while the reading is old enough to have been overtaken elsewhere`, async () => {
+it(`explains the ≤ only while the reading is old enough to have been overtaken elsewhere`, async () => {
     const fresh = await card();
-    expect(fresh.textContent).not.toContain(`≥`);
+    expect(fresh.textContent).not.toContain(`≤`);
     document.body.innerHTML = ``;
     const stale = await card({ stale: true });
-    expect(stale.textContent).toContain(`≥${headroom().percent}%`);
+    expect(stale.textContent).toContain(`≤${100 - headroom().percent}% left`);
     expect(stale.textContent).not.toBe(fresh.textContent);
 });

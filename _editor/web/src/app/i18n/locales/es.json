@@ -1564,8 +1564,8 @@
             "unsent": "Sin enviar"
         },
         "usageRing": {
+            "atMostOtherDevices": "≤ significa como máximo: otros dispositivos de esta cuenta gastan de las mismas bolsas.",
             "everyPoolResetFull": "Todas las bolsas se han reiniciado: la asignación completa está disponible.",
-            "floorsEveryDeviceOn": "≥ son mínimos: todos los dispositivos de la cuenta gastan de las mismas bolsas.",
             "measured": "medido {measuredAt}",
             "resets": "se reinicia {resetsAt}"
         },
@@ -2613,6 +2613,7 @@
             "allAccounts": "Todas las cuentas",
             "bindingPool": "Bolsa que ata",
             "cantServeTurn": "No puede servir un turno · {attentionTotal}",
+            "left": "Queda",
             "more": "+{hidden} más",
             "nextPoolReopens": "la próxima bolsa se reabre {nextResetAt}",
             "noAccountMatchesFilter": "Ninguna cuenta coincide con ese filtro.",
@@ -2627,7 +2628,6 @@
             "resets": "se reinicia {resetsAt}",
             "seatFromAdmin": "pide a un admin de la organización que le asigne un puesto | pide a un admin de la organización que les asigne puestos",
             "showingMostConstrained": "mostrando las {max_bars} más ajustadas de {count}",
-            "used": "Usado",
             "viewAccounts": "Ver cuentas"
         },
         "repoCheckRow": {
@@ -3702,6 +3702,7 @@
         "name": "Nombre",
         "needs": "Te necesita",
         "other": "Otros",
+        "percentLeft": "quedan {percent}",
         "planLimits": "Límites del plan",
         "preview": "Vista previa",
         "removed": "eliminado",

@@ -9,8 +9,10 @@ import { useSandboxOutline } from "../overview/useSandboxOutline";
 import {
     accountFixLabel,
     formatAge,
+    formatRemaining,
     formatReset,
-    formatUtilization,
+    meterFill,
+    meterTrack,
     type PlanLimitBand,
     PLAN_LIMIT_BANDS,
     type PlanLimitGroup,
@@ -20,6 +22,7 @@ import {
     type PlanLimitRow,
     planLimitRows,
     planLimitSummary,
+    remainingFigure,
     usageTone,
 } from "../../chat/session/usageStatus";
 import { useT } from "@intentic/ui/i18n";
@@ -89,7 +92,7 @@ const barsOf = (group: PlanLimitGroup): readonly PlanLimitRow[] => group.rows.sl
 // (unread/no limits). Inline groups say nothing here, their meters are already visible below.
 const groupState = (group: PlanLimitGroup): string => {
     if (group.tightest?.percent !== undefined) {
-        return `tightest ${formatUtilization(group.tightest.percent, group.tightest.stale)} · ${group.tightest.label}`;
+        return `tightest: ${formatRemaining(group.tightest.percent, group.tightest.stale)} · ${group.tightest.label}`;
     }
     if (group.counts.none === group.rows.length) {
         return `publishes no limits`;
@@ -103,7 +106,7 @@ const groupState = (group: PlanLimitGroup): string => {
 const barTooltip = (row: PlanLimitRow): string =>
     row.percent === undefined
         ? `${row.label} · no reading yet`
-        : `${row.label} · ${row.binding?.label ?? ``} ${formatUtilization(row.percent, row.stale)}${row.binding?.resetsAt === undefined ? `` : ` · resets ${formatReset(row.binding.resetsAt)}`}`;
+        : `${row.label} · ${row.binding?.label ?? ``} ${formatRemaining(row.percent, row.stale)}${row.binding?.resetsAt === undefined ? `` : ` · resets ${formatReset(row.binding.resetsAt)}`}`;
 
 // attention
 
@@ -260,18 +263,20 @@ const roster = computed(() => {
                                         class="flex flex-wrap items-center gap-x-3 gap-y-1 @xl:flex-nowrap"
                                     >
                                         <span class="min-w-0 flex-1 truncate text-2xs text-muted @xl:w-40 @xl:flex-none">{{ pool.label }}</span>
-                                        <!-- Zero usage keeps a visible sliver so the pool remains present. -->
+                                        <!-- Drains as turns spend it: the fill is what is left. A spent pool tints its empty track, so
+                                             it can't be mistaken for one with no reading. -->
                                         <div
-                                            class="order-last h-1.5 min-w-0 flex-1 basis-full overflow-hidden rounded-full bg-content/10 @xl:order-none @xl:basis-0"
+                                            class="order-last h-1.5 min-w-0 flex-1 basis-full overflow-hidden rounded-full @xl:order-none @xl:basis-0"
+                                            :class="meterTrack(pool.percent)"
                                         >
                                             <div
                                                 class="ui-meter-fill h-full rounded-full"
                                                 :class="usageTone(pool.percent)"
-                                                :style="{ width: `${Math.max(pool.percent, 1)}%` }"
+                                                :style="{ width: `${meterFill(pool.percent)}%` }"
                                             />
                                         </div>
-                                        <span class="w-12 shrink-0 text-right text-2xs tabular-nums" :class="usageTone(pool.percent)">
-                                            {{ formatUtilization(pool.percent, row.stale) }}
+                                        <span class="w-16 shrink-0 text-right text-2xs tabular-nums" :class="usageTone(pool.percent)">
+                                            {{ formatRemaining(pool.percent, row.stale) }}
                                         </span>
                                         <span class="shrink-0 truncate text-right text-2xs text-subtle @xl:w-32">
                                             {{ pool.resetsAt === undefined ? `` : t(`sandbox.planLimitsPanel.resets`, { resetsAt: formatReset(pool.resetsAt) }) }}
@@ -280,20 +285,21 @@ const roster = computed(() => {
                                 </div>
                             </template>
 
-                            <!-- Large providers use bars; missing readings keep an empty track. -->
+                            <!-- Large providers use bars, one per account, each as tall as what it has left; a missing reading keeps an empty neutral track. -->
                             <template v-else>
                                 <div class="flex h-5 items-end gap-0.5">
                                     <span
                                         v-for="row in barsOf(group)"
                                         :key="row.id"
                                         v-tooltip.top="barTooltip(row)"
-                                        class="flex h-full w-1.5 items-end rounded-2xs bg-content/10"
+                                        class="flex h-full w-1.5 items-end rounded-2xs"
+                                        :class="row.percent === undefined ? `bg-content/10` : meterTrack(row.percent)"
                                     >
                                         <span
                                             v-if="row.percent !== undefined"
                                             class="ui-meter-fill w-full rounded-2xs"
                                             :class="usageTone(row.percent)"
-                                            :style="{ height: `${Math.max(row.percent, 4)}%` }"
+                                            :style="{ height: `${meterFill(row.percent, 5)}%` }"
                                         />
                                     </span>
                                 </div>
@@ -382,7 +388,7 @@ const roster = computed(() => {
                                 <th class="py-1.5 pr-3 font-medium">{{ t(`shared.account`) }}</th>
                                 <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.words.provider`) }}</th>
                                 <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.planLimitsPanel.bindingPool`) }}</th>
-                                <th class="py-1.5 pr-3 text-right font-medium">{{ t(`sandbox.planLimitsPanel.used`) }}</th>
+                                <th class="py-1.5 pr-3 text-right font-medium">{{ t(`sandbox.planLimitsPanel.left`) }}</th>
                                 <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.planLimitsPanel.reopens`) }}</th>
                                 <th class="py-1.5 font-medium">{{ t(`sandbox.planLimitsPanel.read2`) }}</th>
                             </tr>
@@ -400,7 +406,7 @@ const roster = computed(() => {
                                     {{ row.binding?.label ?? (row.readable ? `—` : t(`sandbox.planLimitsPanel.noPublishedLimits`)) }}
                                 </td>
                                 <td class="py-1.5 pr-3 text-right tabular-nums" :class="row.percent === undefined ? `` : usageTone(row.percent)">
-                                    {{ row.percent === undefined ? `—` : formatUtilization(row.percent, row.stale) }}
+                                    {{ row.percent === undefined ? `—` : remainingFigure(row.percent, row.stale) }}
                                 </td>
                                 <td class="py-1.5 pr-3">{{ row.binding?.resetsAt === undefined ? `—` : formatReset(row.binding.resetsAt) }}</td>
                                 <td class="py-1.5">{{ row.measuredAt === undefined ? `never` : formatAge(row.measuredAt) }}</td>

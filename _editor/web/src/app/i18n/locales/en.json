@@ -1650,8 +1650,8 @@
             "unsent": "Unsent"
         },
         "usageRing": {
+            "atMostOtherDevices": "≤ means at most: other devices on this account spend the same pools.",
             "everyPoolResetFull": "Every pool has reset: the full allowance is available.",
-            "floorsEveryDeviceOn": "≥ these are floors: every device on the account spends the same pools.",
             "measured": "measured {measuredAt}",
             "resets": "resets {resetsAt}"
         },
@@ -2813,6 +2813,7 @@
             "allAccounts": "All accounts",
             "bindingPool": "Binding pool",
             "cantServeTurn": "Can't serve a turn · {attentionTotal}",
+            "left": "Left",
             "more": "+{hidden} more",
             "nextPoolReopens": "next pool reopens {nextResetAt}",
             "noAccountMatchesFilter": "No account matches that filter.",
@@ -2827,7 +2828,6 @@
             "resets": "resets {resetsAt}",
             "seatFromAdmin": "ask an org admin to assign it a seat | ask an org admin to assign them seats",
             "showingMostConstrained": "showing the {max_bars} most constrained of {count}",
-            "used": "Used",
             "viewAccounts": "View accounts"
         },
         "repoCheckRow": {
@@ -3972,6 +3972,7 @@
         "name": "Name",
         "needs": "Needs you",
         "other": "Other",
+        "percentLeft": "{percent} left",
         "personas": "Personas",
         "planLimits": "Plan limits",
         "preview": "Preview",

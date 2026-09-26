@@ -73,8 +73,9 @@ it(`draws one bar for a pool nobody picks among, and never a row per sign-in`, (
         })),
     });
 
-    // One bar, at the pool's roomiest reading: what a turn routed to this provider would land on.
-    expect(barWidths(el)).toEqual([`4%`]);
+    // One bar, at the pool's roomiest reading: what a turn routed to this provider would land on. It drains, so its
+    // width is what that reading has left.
+    expect(barWidths(el)).toEqual([`96%`]);
     // Not one address shown: the reader can't pick among these, so naming one would read as the account in use.
     expect(el.textContent).not.toContain(`radarsuspam`);
     // The pool's depth is carried by the count instead; 5/6 means one credential is exhausted (spentOutright).
@@ -158,7 +159,7 @@ it(`draws an account that is nearly spent in the warning tone rather than droppi
         },
     ]);
 
-    expect(barWidths(el)).toEqual([`96%`]);
+    expect(barWidths(el)).toEqual([`4%`]);
     expect(el.textContent).not.toContain(`Unavailable`);
     expect(el.querySelector(`[aria-hidden="true"] .tabular-nums`)?.className).toContain(`text-warning`);
 });
@@ -173,9 +174,9 @@ it(`spells out for a screen reader what the bar says by its width`, () => {
     ]);
 
     // Every part the column shortens or drops is spoken here or nowhere; a bar is decoration to a screen reader.
-    expect(spoken(el)).toContain(`Weekly · all models 41% (resets ${formatReset(1_700_090_000)})`);
+    expect(spoken(el)).toContain(`Weekly · all models 59% left (resets ${formatReset(1_700_090_000)})`);
     // Spoken once: the drawn row is hidden from the tree, or a reader would hear both the truncated and full line.
-    expect(el.querySelector(`[aria-hidden="true"] .tabular-nums`)?.textContent?.trim()).toBe(`41%`);
+    expect(el.querySelector(`[aria-hidden="true"] .tabular-nums`)?.textContent?.trim()).toBe(`59% left`);
 });
 
 // Both of an account's allowances are drawn, each beside its own window's length: one bar at the tighter of the
@@ -195,11 +196,11 @@ it(`draws both the session and the week, each named by its own window`, () => {
         },
     ]);
 
-    // A bar each, at its own pool's reading, rather than one bar at the worse of the two.
-    expect(barWidths(el)).toEqual([`12%`, `87%`]);
+    // A bar each, at what its own pool has left, rather than one bar at the worse of the two.
+    expect(barWidths(el)).toEqual([`88%`, `13%`]);
     // Each stands beside its window's length, short enough to need no legend; the 5-hour session comes first.
     expect(lanes(el)).toEqual([`5h`, `wk`]);
-    expect([...el.querySelectorAll(`[aria-hidden="true"] .tabular-nums`)].map((node) => node.textContent?.trim())).toEqual([`12%`, `87%`]);
+    expect([...el.querySelectorAll(`[aria-hidden="true"] .tabular-nums`)].map((node) => node.textContent?.trim())).toEqual([`88% left`, `13% left`]);
 });
 
 it(`displays remaining minutes on 5h window and remaining time on weekly window when not exhausted`, () => {
@@ -218,8 +219,8 @@ it(`displays remaining minutes on 5h window and remaining time on weekly window 
         },
     ]);
 
-    expect(el.textContent).toContain(`in 45m`);
-    expect(el.textContent).toContain(`in 3d`);
+    expect(el.textContent).toContain(`13% left · resets in 45m`);
+    expect(el.textContent).toContain(`39% left · resets in 3d`);
 });
 
 it(`collapses unmeasured providers to title row and groups them together`, () => {
@@ -254,7 +255,7 @@ it(`does not render 'most room' row for pooled providers`, () => {
     });
 
     expect(el.textContent).not.toContain(`most room`);
-    expect(barWidths(el)).toEqual([`40%`]);
+    expect(barWidths(el)).toEqual([`60%`]);
 });
 
 // The age beside the refresh control is the OLDEST reading on the rail, so one account the provider will not re-read
@@ -298,7 +299,7 @@ it(`names a lost seat by who can fix it, and says nothing about re-reading it`, 
     expect(el.textContent).toContain(`ask an org admin for a seat`);
     expect(el.textContent).not.toContain(`reconnect on the Agent tab`);
     expect(el.textContent).not.toContain(`Can't re-read`);
-    expect(barWidths(el)).toEqual([`24%`]);
+    expect(barWidths(el)).toEqual([`76%`]);
 });
 
 // A held account this window has no row for (a provider it hasn't listed) still explains a number that didn't move,

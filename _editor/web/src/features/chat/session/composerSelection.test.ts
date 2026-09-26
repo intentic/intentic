@@ -76,7 +76,7 @@ describe(`the words a switch owes`, () => {
     });
 
     it(`a model swap names the model and its allowance, and nothing before a send or back where the last one ran`, () => {
-        expect(modelSwitchText({ ...MOVED, allowance: ` · Opus 61% used` })).toBe(`Switched to Haiku · Opus 61% used`);
+        expect(modelSwitchText({ ...MOVED, allowance: ` · Opus 39% left` })).toBe(`Switched to Haiku · Opus 39% left`);
         expect(modelSwitchText({ ...MOVED, sentModel: undefined })).toBeUndefined();
         expect(modelSwitchText({ ...MOVED, sentModel: `haiku` })).toBeUndefined();
     });

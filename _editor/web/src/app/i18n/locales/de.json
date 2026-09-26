@@ -1554,8 +1554,8 @@
             "unsent": "Nicht gesendet"
         },
         "usageRing": {
+            "atMostOtherDevices": "≤ heißt höchstens: andere Geräte in diesem Konto zahlen aus denselben Töpfen.",
             "everyPoolResetFull": "Jeder Topf ist zurückgesetzt: das volle Kontingent steht bereit.",
-            "floorsEveryDeviceOn": "≥ sind Untergrenzen: jedes Gerät im Konto zahlt aus denselben Töpfen.",
             "measured": "gemessen {measuredAt}",
             "resets": "setzt sich zurück {resetsAt}"
         },
@@ -2600,6 +2600,7 @@
             "allAccounts": "Alle Konten",
             "bindingPool": "Bindender Topf",
             "cantServeTurn": "Kann keinen Zug bedienen · {attentionTotal}",
+            "left": "Übrig",
             "more": "+{hidden} weitere",
             "nextPoolReopens": "nächster Topf öffnet {nextResetAt}",
             "noAccountMatchesFilter": "Kein Konto passt zu diesem Filter.",
@@ -2614,7 +2615,6 @@
             "resets": "setzt sich zurück {resetsAt}",
             "seatFromAdmin": "bitten Sie einen Org-Admin, ihm einen Sitz zuzuweisen | bitten Sie einen Org-Admin, ihnen Sitze zuzuweisen",
             "showingMostConstrained": "es werden die {max_bars} engsten von {count} gezeigt",
-            "used": "Verbraucht",
             "viewAccounts": "Konten ansehen"
         },
         "repoCheckRow": {
@@ -3679,6 +3679,7 @@
         "models": "Modelle",
         "needs": "Braucht Sie",
         "other": "Sonstiges",
+        "percentLeft": "{percent} übrig",
         "planLimits": "Tarifgrenzen",
         "preview": "Vorschau",
         "removed": "entfernt",

@@ -9,7 +9,7 @@ import KeepWarmPanel from "../../agents/fleet/KeepWarmPanel.vue";
 import { contextPct, formatElapsed, turnInFlight } from "../../agents/fleet/agentStatus";
 import { cacheAlive, cacheCooling, endedLine, keptWarm } from "../../agents/fleet/promptCache";
 import { useAgents } from "../../agents/fleet/useAgents";
-import { formatReset, formatUtilization, planHeadroom, usageStatusFor } from "../session/usageStatus";
+import { formatRemaining, formatReset, planHeadroom, usageStatusFor } from "../session/usageStatus";
 import { usePaneView } from "./useChat-view";
 import { sandboxAvailabilityVisual } from "../../sandbox/overview/availability";
 import { useSandboxAvailability } from "../../sandbox/overview/useSandboxAvailability";
@@ -95,19 +95,22 @@ const cacheOpen = ref(false);
 const cacheTrigger = ref<HTMLElement>();
 
 // Subscription headroom for this conversation's account, from the shared usage map; a small ring once there's a
-// reading, tinted as the binding pool fills, keyed by account. Tracks the pool that gates this conversation's
+// reading, draining and tinted as the binding pool is spent, keyed by account. Tracks the pool that gates this conversation's
 // model specifically (its card lists all of them).
 const usageChip = computed(() => {
     // The account the daemon has the conversation on (bindSession); a chat still on auto has none to show yet.
     const modelRef = model.value === `` ? undefined : { id: model.value };
     const headroom = planHeadroom(usageStatusFor(provider.value, account.value, modelRef), modelRef);
-    // No binding pool means nothing measured or everything reset; stays hidden rather than pinning a false 0%.
+    // No binding pool means nothing measured or everything reset; stays hidden rather than pinning a false "100% left".
     if (headroom?.binding === undefined) {
         return undefined;
     }
     // Once a pool is effectively spent, its reset joins the visible label instead of waiting behind a hover.
-    const reset = headroom.percent >= SPENT_UTILIZATION && headroom.binding.resetsAt !== undefined ? ` · ${formatReset(headroom.binding.resetsAt)}` : ``;
-    return { headroom, label: `${formatUtilization(headroom.percent, headroom.stale)}${reset}` };
+    const reset =
+        headroom.percent >= SPENT_UTILIZATION && headroom.binding.resetsAt !== undefined
+            ? ` · ${t(`common.usageRing.resets`, { resetsAt: formatReset(headroom.binding.resetsAt) })}`
+            : ``;
+    return { headroom, label: `${formatRemaining(headroom.percent, headroom.stale)}${reset}` };
 });
 </script>
 

@@ -1563,8 +1563,8 @@
             "unsent": "Niewysłane"
         },
         "usageRing": {
+            "atMostOtherDevices": "≤ oznacza co najwyżej: inne urządzenia na tym koncie czerpią z tych samych pul.",
             "everyPoolResetFull": "Każda pula została zresetowana: dostępny jest pełny przydział.",
-            "floorsEveryDeviceOn": "≥ to wartości minimalne: wszystkie urządzenia na koncie czerpią z tych samych pul.",
             "measured": "zmierzono {measuredAt}",
             "resets": "reset {resetsAt}"
         },
@@ -2612,6 +2612,7 @@
             "allAccounts": "Wszystkie konta",
             "bindingPool": "Pula wiążąca",
             "cantServeTurn": "Nie może obsłużyć tury · {attentionTotal}",
+            "left": "Zostało",
             "more": "+{hidden} więcej",
             "nextPoolReopens": "następna pula otwiera się {nextResetAt}",
             "noAccountMatchesFilter": "Żadne konto nie pasuje do tego filtra.",
@@ -2626,7 +2627,6 @@
             "resets": "reset {resetsAt}",
             "seatFromAdmin": "poproś admina organizacji o przypisanie mu stanowiska | poproś admina organizacji o przypisanie im stanowisk | poproś admina organizacji o przypisanie im stanowisk",
             "showingMostConstrained": "pokazujemy {max_bars} najbardziej ograniczonych z {count}",
-            "used": "Zużyto",
             "viewAccounts": "Zobacz konta"
         },
         "repoCheckRow": {
@@ -3702,6 +3702,7 @@
         "name": "Nazwa",
         "needs": "Potrzebuje Cię",
         "other": "Inne",
+        "percentLeft": "zostało {percent}",
         "personas": "Persony",
         "planLimits": "Limity planu",
         "preview": "Podgląd",

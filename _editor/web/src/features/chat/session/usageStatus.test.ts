@@ -12,12 +12,14 @@ import {
     accountState,
     bindingWindow,
     formatAge,
+    formatRemaining,
     formatReset,
-    formatUtilization,
     formatWait,
     isSpent,
     isStale,
     liveUsage,
+    meterFill,
+    meterTrack,
     modelAllowance,
     orderedWindows,
     planLimitBand,
@@ -29,6 +31,7 @@ import {
     planHeadroom,
     refusalFor,
     refusalNote,
+    remainingPercent,
     usageDetail,
     usagePercent,
     usageStatusFor,
@@ -148,18 +151,44 @@ describe(`formatAge`, () => {
     });
 });
 
-describe(`isStale / formatUtilization`, () => {
+describe(`isStale / formatRemaining`, () => {
     const now = 1_000_000_000_000;
-    it(`turns an overtaken reading into a floor rather than a figure`, () => {
+    it(`states what is left, and turns an overtaken reading into a ceiling rather than a figure`, () => {
         expect(isStale(usage({ measuredAt: now - 60_000 }), now)).toBe(false);
         expect(isStale(usage({ measuredAt: now - 8 * 3_600_000 }), now)).toBe(true);
-        expect(formatUtilization(98, false)).toBe(`98%`);
-        expect(formatUtilization(98, true)).toBe(`≥98%`);
+        expect(formatRemaining(98, false)).toBe(`2% left`);
+        expect(formatRemaining(98, true)).toBe(`≤2% left`);
+        expect(formatRemaining(0, false)).toBe(`100% left`);
     });
 
-    it(`never marks a spent pool as a floor, however old the reading is`, () => {
-        expect(formatUtilization(100, true)).toBe(`100%`);
-        expect(formatUtilization(99, true)).toBe(`≥99%`);
+    it(`never marks a spent pool as a ceiling, however old the reading is`, () => {
+        expect(formatRemaining(100, true)).toBe(`0% left`);
+        expect(formatRemaining(99, true)).toBe(`≤1% left`);
+    });
+
+    it(`never reads past either end of the allowance`, () => {
+        expect(remainingPercent(104)).toBe(0);
+        expect(remainingPercent(-3)).toBe(100);
+    });
+});
+
+// The bar drains: its fill is what is left. A pool on its last percent keeps a sliver, a spent one draws none and tints
+// its track instead, since an empty neutral track is what a missing reading looks like.
+describe(`meterFill / meterTrack`, () => {
+    it(`fills with what is left`, () => {
+        expect(meterFill(0)).toBe(100);
+        expect(meterFill(28)).toBe(72);
+    });
+
+    it(`keeps a sliver for a pool that is nearly, but not quite, spent`, () => {
+        expect(meterFill(99)).toBe(2);
+        expect(meterFill(99, 5)).toBe(5);
+    });
+
+    it(`draws a spent pool as an empty, tinted track, distinct from one with room`, () => {
+        expect(meterFill(100)).toBe(0);
+        expect(meterTrack(100)).toContain(`danger`);
+        expect(meterTrack(99)).not.toContain(`danger`);
     });
 });
 
@@ -174,11 +203,11 @@ describe(`usageDetail`, () => {
         });
         const detail = usageDetail(projected);
         for (const pool of projected.pools) {
-            expect(detail).toContain(`${pool.label} ${formatUtilization(pool.percent, projected.stale)}`);
+            expect(detail).toContain(`${pool.label} ${formatRemaining(pool.percent, projected.stale)}`);
         }
         expect(detail).toContain(formatAge(measuredAt));
-        expect(detail).toContain(`12%`);
-        expect(detail).toContain(`98%`);
+        expect(detail).toContain(`88% left`);
+        expect(detail).toContain(`2% left`);
     });
 
     it(`names each pool's reset beside its figure, "wait 20 minutes" and "wait until Thursday" are different answers`, () => {
@@ -190,16 +219,16 @@ describe(`usageDetail`, () => {
         });
         const detail = usageDetail(projected);
         expect(detail).toContain(formatReset(resetsAt));
-        expect(detail).toContain(`91%`);
-        expect(detail).toContain(`40%`);
+        expect(detail).toContain(`9% left`);
+        expect(detail).toContain(`60% left`);
         expect(detail).toContain(formatAge(measuredAt));
     });
 
-    it(`marks every figure as a floor once the reading is old enough to have been overtaken elsewhere`, () => {
+    it(`marks every figure as a ceiling once the reading is old enough to have been overtaken elsewhere`, () => {
         const measuredAt = Date.now() - 8 * 3_600_000;
         const projected = headroom({ windows: [window({ kind: `seven_day`, utilization: 1 })], measuredAt });
         const detail = usageDetail(projected);
-        expect(detail).toContain(formatUtilization(1, true));
+        expect(detail).toContain(`≤99% left`);
         expect(detail).toContain(usageWindowLabel(window({ kind: `seven_day` })));
         expect(detail).toContain(formatAge(measuredAt));
     });
@@ -418,7 +447,7 @@ describe(`liveUsage under a standing refusal`, () => {
         // The reading (measuredAt 500) predates the refusal (at 1000), the ordinary case.
         expect(percentsOf(liveUsage(`claude`, `claude-1`, pools({ measuredAt: 500 })))).toEqual([40, 100]);
         const projected = planHeadroom(liveUsage(`claude`, `claude-1`, pools({ measuredAt: 500 })));
-        expect(formatUtilization(projected?.percent ?? 0, true)).toBe(`100%`);
+        expect(formatRemaining(projected?.percent ?? 0, true)).toBe(`0% left`);
     });
 
     it(`pins only the pool that was binding, the others keep their own readings`, () => {

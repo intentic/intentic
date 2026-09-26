@@ -282,9 +282,24 @@ export const oldestMovableReading = (
 const STALE_AFTER_MS = 10 * 60_000;
 export const isStale = (usage: AccountUsage, now: number = Date.now()): boolean => now - usage.measuredAt > STALE_AFTER_MS;
 
-// Marks a percentage as a floor when the reading is stale enough to have been overtaken. Never marks 100:
-// a full pool has nowhere left to climb to.
-export const formatUtilization = (percent: number, stale: boolean): string => `${stale && percent < 100 ? `≥` : ``}${percent}%`;
+// An allowance is drawn as what is LEFT, a gauge that drains as turns spend it: the question every one of these surfaces
+// answers is "can I keep working here", and a remaining figure answers it without subtracting. Readings stay the
+// providers' utilization underneath (sorting, tone, the spent line); only what a reader sees is turned around.
+export const remainingPercent = (percent: number): number => Math.min(100, Math.max(0, 100 - percent));
+
+// A stale reading's use is a floor (other devices spend the same pools unseen), so what it leaves is a ceiling: `≤`.
+// Never marks a spent pool, which has nowhere lower to fall. The bare figure is for a column whose header already says
+// "Left"; everywhere else the word rides with the number, since a bare percentage of an allowance reads either way.
+export const remainingFigure = (percent: number, stale: boolean): string =>
+    `${stale && percent < SPENT_UTILIZATION ? `≤` : ``}${remainingPercent(percent)}%`;
+export const formatRemaining = (percent: number, stale: boolean): string => t(`shared.percentLeft`, { percent: remainingFigure(percent, stale) });
+
+// A meter's fill: what is left, with a sliver kept for a pool on its last percent so it still reads as "a little",
+// not "none". A spent pool draws no fill at all; its track takes the danger tint instead (meterTrack), since an empty
+// neutral track is what a missing reading looks like.
+export const meterFill = (percent: number, sliver = 2): number =>
+    percent >= SPENT_UTILIZATION ? 0 : Math.max(remainingPercent(percent), sliver);
+export const meterTrack = (percent: number): string => (percent >= SPENT_UTILIZATION ? `bg-danger/25` : `bg-content/10`);
 
 // Same breakdown as one sentence: the ring's accessible name, since a screen reader has no hover to reach the
 // card. Lists every pool (a single number can't say which is binding), reset in parens.
@@ -292,7 +307,7 @@ export const usageDetail = (headroom: PlanHeadroom): string =>
     [
         ...headroom.pools.map(
             (pool) =>
-                `${pool.label} ${formatUtilization(pool.percent, headroom.stale)}${pool.resetsAt === undefined ? `` : ` (resets ${formatReset(pool.resetsAt)})`}`,
+                `${pool.label} ${formatRemaining(pool.percent, headroom.stale)}${pool.resetsAt === undefined ? `` : ` (resets ${formatReset(pool.resetsAt)})`}`,
         ),
         `measured ${formatAge(headroom.measuredAt)}`,
     ].join(` · `);
