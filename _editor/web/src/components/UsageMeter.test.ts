@@ -97,10 +97,35 @@ it(`lists every pool with its own figure and reset, and says how old the reading
     expect(panel.textContent).toContain(formatReset(RESETS_AT));
     // One meter per pool: which allowance is about to bite is seen, not parsed.
     expect(panel.querySelectorAll(`.ui-meter-fill`)).toHaveLength(pools.length);
-    // Each drains: as wide as what is left, never as what was spent.
-    expect([...panel.querySelectorAll<HTMLElement>(`.ui-meter-fill`)].map((fill) => fill.style.width)).toEqual(
-        pools.map((pool) => `${100 - pool.percent}%`),
-    );
+    // Each drains: as wide as what is left, never as what was spent. The week leads, the session nested under it.
+    expect([...panel.querySelectorAll<HTMLElement>(`.ui-meter-fill`)].map((fill) => fill.style.width)).toEqual([`9%`, `44%`]);
+});
+
+// The chat rail's tree, in the picker's card: a spent week holds the session and a per-model week inside it, so
+// their room is drawn neutral rather than green, and they name what they wait on instead of their own reset.
+it(`nests pools inside the week, and holds them in neutral while the week is spent`, async () => {
+    const week: PlanLimitPool = { kind: `seven_day`, label: `Weekly · all models`, percent: 100, resetsAt: RESETS_AT, gates: `all` };
+    const session: PlanLimitPool = { kind: `five_hour`, label: `5-hour session`, percent: 0, resetsAt: RESETS_AT + 3600, gates: `all` };
+    const fable: PlanLimitPool = { kind: `model:Fable`, label: `Weekly · Fable`, percent: 8, resetsAt: RESETS_AT, gates: { models: [`Fable`] } };
+    const panel = await card({ percent: 100, tone: `text-danger`, pools: [week, session, fable], binding: week });
+    const fills = [...panel.querySelectorAll<HTMLElement>(`.ui-meter-fill`)];
+    expect(fills.map((fill) => fill.style.width)).toEqual([`0%`, `100%`, `92%`]);
+    expect(fills.slice(1).every((fill) => fill.classList.contains(`text-subtle`) && !fill.classList.contains(`text-success`))).toBe(true);
+    expect(panel.textContent?.match(/on hold until Weekly · all models resets/gu)).toHaveLength(2);
+    expect(panel.textContent).not.toContain(formatReset(RESETS_AT + 3600));
+    // The inline hairlines agree: the week spent, the session beside it held, not green.
+    const anchor = document.body.querySelector(`span`) as HTMLElement;
+    const hairlines = [...anchor.querySelectorAll<HTMLElement>(`[aria-hidden="true"] .ui-meter-fill`)];
+    expect(hairlines[1]?.classList.contains(`text-subtle`)).toBe(true);
+});
+
+// Separate lanes (Claude and Gemini on one Google plan) don't hold each other: a spent one leaves the other green.
+it(`leaves a sibling lane usable when a lane beside it, not above it, is spent`, async () => {
+    const claude: PlanLimitPool = { kind: `model:claude`, label: `Weekly · Claude`, percent: 100, resetsAt: RESETS_AT, gates: { models: [`claude`] } };
+    const gemini: PlanLimitPool = { kind: `model:gemini`, label: `Weekly · Gemini`, percent: 20, resetsAt: RESETS_AT, gates: { models: [`gemini`] } };
+    const panel = await card({ percent: 100, pools: [claude, gemini], binding: claude });
+    expect(panel.textContent).not.toContain(`on hold`);
+    expect(panel.querySelectorAll(`.ui-meter-fill`)[1]?.classList.contains(`text-success`)).toBe(true);
 });
 
 it(`speaks the whole breakdown beside the bars, since a card raised by a pointer never reaches a screen reader`, async () => {

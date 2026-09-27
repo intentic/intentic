@@ -8,6 +8,7 @@ import {
     meterFill,
     meterTint,
     meterTrack,
+    nestPools,
     type PlanHeadroom,
     type PlanLimitPool,
     usageDetail,
@@ -33,14 +34,30 @@ const { headroom, flank = `right` } = defineProps<{
     flank?: Side;
 }>();
 
+// Pools as a tree: the 5-hour session and a per-model week hang off the account's week, the way the chat rail draws
+// them. A pool whose holder is spent is capped: its own room can't be spent until the holder reopens, so it is drawn
+// neutral rather than green, and says what it waits on instead of when it resets itself.
+const nested = computed(() => nestPools(headroom.pools, (pool) => pool));
+const capped = computed<ReadonlySet<string>>(() => new Set(nested.value.filter((entry) => entry.capped).map((entry) => entry.item.kind)));
+// The spent pool a held one waits on: up past any holder that is itself only held, to the first that isn't.
+const heldBy = (pool: PlanLimitPool | undefined): PlanLimitPool | undefined => {
+    let holder = pool;
+    while (holder !== undefined && capped.value.has(holder.kind)) {
+        holder = nested.value.find((entry) => entry.item === holder)?.parent;
+    }
+    return holder;
+};
+
 // Account-wide pools in display order, then the binding one if it is a slice; a measured reading with every pool
 // reset draws one full bar, since no bars at all is what unmeasured looks like.
-const bars = computed<readonly number[]>(() => {
+const bars = computed<readonly { readonly percent: number; readonly capped: boolean }[]>(() => {
     const shown: PlanLimitPool[] = headroom.pools.filter((pool) => pool.gates === `all`);
     if (headroom.binding !== undefined && !shown.some((pool) => pool.kind === headroom.binding?.kind)) {
         shown.push(headroom.binding);
     }
-    return shown.length === 0 ? [headroom.percent] : shown.map((pool) => pool.percent);
+    return shown.length === 0
+        ? [{ percent: headroom.percent, capped: false }]
+        : shown.map((pool) => ({ percent: pool.percent, capped: capped.value.has(pool.kind) }));
 });
 
 const GAP = 8; // px between the meter and the card: the arrow's height
@@ -122,11 +139,11 @@ onBeforeUnmount(hide);
     <span ref="anchor" class="inline-flex items-center gap-1" @mouseenter="show" @mouseleave="hide" @pointerdown="hide">
         <!-- Drains like every allowance meter: the fill is what is left, and a spent pool tints its empty track. -->
         <span class="inline-flex w-4 shrink-0 flex-col gap-0.5" aria-hidden="true">
-            <span v-for="(percent, index) in bars" :key="index" class="block h-[3px] overflow-hidden rounded-full" :class="meterTrack(percent)">
+            <span v-for="(bar, index) in bars" :key="index" class="block h-[3px] overflow-hidden rounded-full" :class="meterTrack(bar.percent)">
                 <span
                     class="ui-meter-fill block h-full rounded-full"
-                    :class="usageTone(percent)"
-                    :style="{ width: `${meterFill(percent)}%`, ...meterTint(percent) }"
+                    :class="bar.capped ? `text-subtle` : usageTone(bar.percent)"
+                    :style="{ width: `${meterFill(bar.percent)}%`, ...(bar.capped ? {} : meterTint(bar.percent)) }"
                 />
             </span>
         </span>
@@ -152,25 +169,41 @@ onBeforeUnmount(hide);
                         }}</span>
                     </div>
 
-                    <!-- One line per pool: pools are independently gated, so which is about to bite can't come from one number. -->
-                    <div v-for="pool in headroom.pools" :key="pool.kind" class="flex flex-col gap-1">
+                    <!-- One line per pool: pools are independently gated, so which is about to bite can't come from one number.
+                         A pool inside another hangs off it on an elbow, one step in per level, same as the chat rail. -->
+                    <div v-for="{ item: pool, depth, parent, capped: held } in nested" :key="pool.kind" class="flex flex-col gap-1">
                         <div class="flex items-baseline justify-between gap-2">
-                            <span class="min-w-0 truncate text-xs" :class="pool === headroom.binding ? `font-medium text-content` : `text-muted`">
-                                {{ pool.label }}
+                            <span class="flex min-w-0 items-baseline text-xs" :class="pool === headroom.binding ? `font-medium text-content` : `text-muted`">
+                                <span
+                                    v-if="depth > 0"
+                                    class="mr-1.5 size-1.5 shrink-0 -translate-y-0.5 self-center rounded-bl-2xs border-b border-l border-line-strong"
+                                    :style="{ marginLeft: `${0.125 + (depth - 1) * 0.625}rem` }"
+                                />
+                                <span class="truncate">{{ pool.label }}</span>
                             </span>
-                            <span class="shrink-0 text-xs font-medium tabular-nums" :class="usageTone(pool.percent)" :style="meterTint(pool.percent)">
+                            <!-- A held pool's figure is still true, but not spendable: stated in neutral, not in the healthy green. -->
+                            <span
+                                class="shrink-0 text-xs font-medium tabular-nums"
+                                :class="held ? `text-subtle` : usageTone(pool.percent)"
+                                :style="held ? {} : meterTint(pool.percent)"
+                            >
                                 {{ formatRemaining(pool.percent, headroom.stale) }}
                             </span>
                         </div>
-                        <!-- The fill is what is left; a spent pool tints its empty track, so it can't read as no reading at all. -->
-                        <div class="h-1.5 overflow-hidden rounded-full" :class="meterTrack(pool.percent)">
+                        <!-- The fill is what is left; a spent pool tints its empty track, so it can't read as no reading at all.
+                             A nested pool draws thinner, since the pool holding it is the headline. -->
+                        <div class="overflow-hidden rounded-full" :class="[meterTrack(pool.percent), depth > 0 ? `ml-3 h-1` : `h-1.5`]">
                             <div
                                 class="ui-meter-fill h-full rounded-full"
-                                :class="usageTone(pool.percent)"
-                                :style="{ width: `${meterFill(pool.percent)}%`, ...meterTint(pool.percent) }"
+                                :class="held ? `text-subtle` : usageTone(pool.percent)"
+                                :style="{ width: `${meterFill(pool.percent)}%`, ...(held ? {} : meterTint(pool.percent)) }"
                             />
                         </div>
-                        <span v-if="pool.resetsAt !== undefined" class="text-2xs text-subtle">{{
+                        <!-- Held: when the holder reopens is the only reset that matters, and it's printed on the holder already. -->
+                        <span v-if="held && heldBy(parent) !== undefined" class="text-2xs text-subtle" :class="depth > 0 ? `ml-3` : ``">{{
+                            t(`common.usageRing.heldUntil`, { pool: heldBy(parent)?.label })
+                        }}</span>
+                        <span v-else-if="pool.resetsAt !== undefined" class="text-2xs text-subtle" :class="depth > 0 ? `ml-3` : ``">{{
                             t(`common.usageRing.resets`, { resetsAt: formatReset(pool.resetsAt) })
                         }}</span>
                     </div>

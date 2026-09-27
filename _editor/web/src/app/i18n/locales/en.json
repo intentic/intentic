@@ -1743,6 +1743,7 @@
         "usageRing": {
             "atMostOtherDevices": "≤ means at most: other devices on this account spend the same pools.",
             "everyPoolResetFull": "Every pool has reset: the full allowance is available.",
+            "heldUntil": "on hold until {pool} resets",
             "measured": "measured {measuredAt}",
             "resets": "resets {resetsAt}"
         },

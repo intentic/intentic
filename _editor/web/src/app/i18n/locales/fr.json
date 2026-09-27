@@ -1638,6 +1638,7 @@
         "usageRing": {
             "atMostOtherDevices": "≤ signifie au plus : les autres appareils de ce compte puisent dans les mêmes réserves.",
             "everyPoolResetFull": "Chaque réserve est réinitialisée : la totalité du quota est disponible.",
+            "heldUntil": "en attente de la réinitialisation de {pool}",
             "measured": "mesuré {measuredAt}",
             "resets": "réinitialisation {resetsAt}"
         },

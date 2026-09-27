@@ -1646,6 +1646,7 @@
         "usageRing": {
             "atMostOtherDevices": "≤ oznacza co najwyżej: inne urządzenia na tym koncie czerpią z tych samych pul.",
             "everyPoolResetFull": "Każda pula została zresetowana: dostępny jest pełny przydział.",
+            "heldUntil": "wstrzymane do odnowienia: {pool}",
             "measured": "zmierzono {measuredAt}",
             "resets": "reset {resetsAt}"
         },

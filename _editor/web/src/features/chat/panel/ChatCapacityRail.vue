@@ -210,23 +210,28 @@ const blockedDetail = (entry: CapacityBlocked): string =>
                                 </span>
                                 <!-- Drains as turns spend it: the fill is what is left. A spent pool draws no fill and tints its
                                      track instead, since an empty neutral track reads as "no reading". A nested lane draws thinner,
-                                     since the lane holding it is the headline; and fades when that one is spent, since its room
-                                     can't be used until the holder reopens. -->
+                                     since the lane holding it is the headline; and turns neutral when that one is spent, since its
+                                     room can't be used until the holder reopens (green would claim room that isn't spendable). -->
                                 <span
                                     class="block overflow-hidden rounded-full"
-                                    :class="[meterTrack(lane.percent), lane.depth > 0 ? `h-0.5` : `h-1`, lane.capped ? `opacity-40` : ``]"
+                                    :class="[meterTrack(lane.percent), lane.depth > 0 ? `h-0.5` : `h-1`]"
                                 >
                                     <span
                                         class="ui-meter-fill block h-full rounded-full"
-                                        :class="usageTone(lane.percent)"
-                                        :style="{ width: `${meterFill(lane.percent)}%`, ...meterTint(lane.percent) }"
+                                        :class="lane.capped ? `text-subtle` : usageTone(lane.percent)"
+                                        :style="{ width: `${meterFill(lane.percent)}%`, ...(lane.capped ? {} : meterTint(lane.percent)) }"
                                     />
                                 </span>
-                                <div class="flex items-baseline justify-end gap-1 whitespace-nowrap text-right" :class="lane.capped ? `opacity-40` : ``">
-                                    <span class="text-2xs font-medium tabular-nums" :class="usageTone(lane.percent)" :style="meterTint(lane.percent)">
+                                <div class="flex items-baseline justify-end gap-1 whitespace-nowrap text-right">
+                                    <span
+                                        class="text-2xs font-medium tabular-nums"
+                                        :class="lane.capped ? `text-subtle` : usageTone(lane.percent)"
+                                        :style="lane.capped ? {} : meterTint(lane.percent)"
+                                    >
                                         {{ remainingFigure(lane.percent, row.stale) }}
                                     </span>
-                                    <span v-if="laneReset(lane)" class="text-3xs text-subtle">·&nbsp;{{ laneReset(lane) }}</span>
+                                    <!-- A held lane's own reset is moot: it opens when its holder does, dated on the holder's line. -->
+                                    <span v-if="!lane.capped && laneReset(lane)" class="text-3xs text-subtle">·&nbsp;{{ laneReset(lane) }}</span>
                                 </div>
                             </template>
 

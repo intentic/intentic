@@ -1637,6 +1637,7 @@
         "usageRing": {
             "atMostOtherDevices": "≤ heißt höchstens: andere Geräte in diesem Konto zahlen aus denselben Töpfen.",
             "everyPoolResetFull": "Jeder Topf ist zurückgesetzt: das volle Kontingent steht bereit.",
+            "heldUntil": "pausiert, bis {pool} zurückgesetzt wird",
             "measured": "gemessen {measuredAt}",
             "resets": "setzt sich zurück {resetsAt}"
         },

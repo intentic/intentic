@@ -1647,6 +1647,7 @@
         "usageRing": {
             "atMostOtherDevices": "≤ significa como máximo: otros dispositivos de esta cuenta gastan de las mismas bolsas.",
             "everyPoolResetFull": "Todas las bolsas se han reiniciado: la asignación completa está disponible.",
+            "heldUntil": "en pausa hasta que se restablezca {pool}",
             "measured": "medido {measuredAt}",
             "resets": "se reinicia {resetsAt}"
         },
