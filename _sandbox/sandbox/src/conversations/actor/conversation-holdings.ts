@@ -206,6 +206,9 @@ export interface LiveRun {
     readonly attach: (fellBehind: () => Error, signal?: AbortSignal) => AttachedRun;
     // Raw frames from this instant on.
     readonly frames: () => AsyncGenerator<AgentEvent>;
+    // False for a run started through the unjournalled door on purpose (a loop's iteration, whose loop keeps its own
+    // books and starts the next one after a restart); absent or true for one the turn journal is meant to hold.
+    readonly journalled?: boolean;
 }
 
 // Held by its conversation under the conversation's own id: one run at a time, the newest replacing the last.
@@ -270,10 +273,10 @@ export const soleLiveConversation = (actors: Pick<HoldingsIndex, "holdings">): s
 // second record of the same fact (journal, fleet registry).
 export const liveTurnConversations = (
     actors: Pick<HoldingsIndex, "holdings">,
-): readonly { readonly conversationId: string; readonly startedAt: number }[] =>
+): readonly { readonly conversationId: string; readonly startedAt: number; readonly journalled: boolean }[] =>
     retained(actors)
         .filter(([, run]) => !run.done)
-        .map(([conversationId, run]) => ({ conversationId, startedAt: run.startedAt }));
+        .map(([conversationId, run]) => ({ conversationId, startedAt: run.startedAt, journalled: run.journalled !== false }));
 
 export const turnRunMetrics = (actors: Pick<HoldingsIndex, "holdings">): Readonly<Record<string, number>> => {
     const runs = retained(actors);

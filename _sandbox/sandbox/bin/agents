@@ -82,13 +82,19 @@ SPAWN AND SUPERVISE
   agents wait [<id>] [--until blocked|finished] [--timeout <seconds>]
                                        block until a subagent needs input or finishes (default: either,
                                        whichever comes first); no id means whichever subagent moves first.
-                                       A blocked subagent's question is printed whole, options included
+                                       A blocked subagent's question is printed whole, options included, and
+                                       a finished one's whole report rides as \`report\` where its summary is cut.
+                                       \`paused\` means its turn stopped on a wall the sandbox runs it past by
+                                       itself: its report is still to come
   agents send <id> '<message>'         steer a working subagent, or run a follow-up turn on a finished
                                        one, continuing its session
   agents answer <id> '<text>'          answer the QUESTION a subagent is parked on (one-question cards);
   agents answer <id> --json '<obj>'    or pass picks keyed by question text: {"<question>": ["<pick>"]}.
                                        Questions only: permission and plan cards are the owner's to
                                        answer, and the daemon refuses them here
+  agents cancel <id>                   stop a subagent: its running turn, a start still waiting, or a re-run the
+                                       sandbox booked for it by itself (\`wait\` shows that as paused). Use it
+                                       before handing its task to another agent, so the original never resumes
   agents list                          the subagents THIS conversation started, live first. Not \`ls\`, which
                                        is every conversation in the workspace
 
@@ -480,6 +486,8 @@ const wait = async (argv) => {
         process.stderr.write("Something was said into your turn while you waited: read it, then call `agents wait` again if you still need to.\n");
     } else if (question !== undefined) {
         process.stderr.write(`blocked on a question — answer with \`agents answer ${agent?.id ?? "<id>"} '<text>'\`\n`);
+    } else if (agent?.status === "paused") {
+        process.stderr.write(`paused, not finished: ${agent.error ?? agent.summary ?? ""}\n`);
     } else if (agent?.summary !== undefined) {
         process.stderr.write(`${outcome}: ${agent.summary}\n`);
     }
@@ -498,6 +506,22 @@ const send = async (argv) => {
     }
     const { note } = JSON.parse(text);
     process.stdout.write(`${note ?? "sent"}\n`);
+};
+
+// Stops a child's running turn, its pending start, or the re-run the sandbox booked for it, so it never duplicates work
+// handed to someone else.
+const cancelChild = async (argv) => {
+    const { positional } = parseFlags(argv, []);
+    const [id] = positional;
+    if (id === undefined) {
+        return die(`agents: cancel needs a subagent's id\n\n${USAGE}`);
+    }
+    const { status, text } = await call("POST", "/children/cancel", JSON.stringify({ child: id }));
+    if (status !== 200) {
+        return die(`agents: ${refusalOf(text)}`);
+    }
+    const { note } = JSON.parse(text);
+    process.stdout.write(`${note ?? "cancelled"}\n`);
 };
 
 const answerChild = async (argv) => {
@@ -587,6 +611,7 @@ const main = async () => {
     if (command === "send") return send(rest);
     if (command === "message") return message(rest);
     if (command === "answer") return answerChild(rest);
+    if (command === "cancel") return cancelChild(rest);
     if (command === "list") return list();
     process.stdout.write(`${USAGE}\n`);
     if (command !== undefined && command !== "--help" && command !== "help") {

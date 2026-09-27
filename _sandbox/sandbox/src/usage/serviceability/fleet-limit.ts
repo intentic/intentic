@@ -1,4 +1,13 @@
-import { gatingWindows, type ModelRef, type ServiceFacts, serviceState, SPENT_UTILIZATION, type UsageWindow } from "@intentic/sandbox-contract";
+import {
+    type AccountState,
+    gatingWindows,
+    type ModelRef,
+    type ProviderRefusal,
+    type ServiceFacts,
+    serviceStates,
+    SPENT_UTILIZATION,
+    type UsageWindow,
+} from "@intentic/sandbox-contract";
 
 // What the recorded quota says about a provider's fleet for one model. `withHeadroom` separates a real refusal from
 // CLIProxyAPI cooling a credential for another reason, since a fleet-wide proxy makes every refusal look quota-shaped.
@@ -42,19 +51,18 @@ const soonestOf = (exhausted: readonly Exhausted[]): Exhausted | undefined =>
 type Verdict = { readonly kind: "unmeasured" } | { readonly kind: "room"; readonly measuredAt: number } | { readonly kind: "spent"; readonly exhausted: readonly Exhausted[] };
 
 // A blocked account reopens only when its bench lifts (`until`), and never by a wait otherwise; a spent one names the
-// full pools this model spends, the only ones worth naming.
-const judge = (reading: FleetReading, model: ModelRef | undefined): Verdict => {
-    const state = serviceState(reading, undefined, model);
+// full pools this model spends, the only ones worth naming, or, spent by a standing refusal the reading does not show,
+// the instant the provider itself said to try again.
+const judge = (reading: FleetReading, state: AccountState, model: ModelRef | undefined): Verdict => {
     switch (state.kind) {
         case "blocked":
             return { kind: "spent", exhausted: [{ resetsAt: state.until, pool: undefined }] };
-        case "spent":
-            return {
-                kind: "spent",
-                exhausted: gatingWindows(reading.usage, model)
-                    .filter((window) => window.utilization >= SPENT_UTILIZATION)
-                    .map(exhaustedPool),
-            };
+        case "spent": {
+            const full = gatingWindows(reading.usage, model)
+                .filter((window) => window.utilization >= SPENT_UTILIZATION)
+                .map(exhaustedPool);
+            return { kind: "spent", exhausted: full.length > 0 ? full : [{ resetsAt: state.reopensAt, pool: undefined }] };
+        }
         case "ready":
             return { kind: "room", measuredAt: reading.usage?.measuredAt ?? 0 };
         case "unknown":
@@ -62,8 +70,10 @@ const judge = (reading: FleetReading, model: ModelRef | undefined): Verdict => {
     }
 };
 
-export const fleetLimit = (readings: readonly FleetReading[], model: ModelRef | undefined): TurnLimit => {
-    const verdicts = readings.map((reading) => judge(reading, model));
+/** The fleet's verdict for one model; `refusal` is the provider's last refusal, which stands until something answers it. */
+export const fleetLimit = (readings: readonly FleetReading[], model: ModelRef | undefined, refusal?: ProviderRefusal): TurnLimit => {
+    const states = serviceStates(readings, refusal, model);
+    const verdicts = readings.map((reading) => judge(reading, states.get(reading.account) ?? { kind: "unknown" }, model));
     const room = verdicts.flatMap((verdict) => (verdict.kind === "room" ? [verdict.measuredAt] : []));
     const exhausted = verdicts.flatMap((verdict) => (verdict.kind === "spent" ? verdict.exhausted : []));
     const spent = verdicts.filter((verdict) => verdict.kind === "spent").length;

@@ -78,8 +78,10 @@ export const sayToParent = async (deps: ChildNewsDeps, parent: string, prompt: s
  * What a child's failure tells its parent when the sandbox booked a re-run of that same turn, so the parent neither
  * sends the task again nor hands it to another agent. `at` is when it fires, in epoch seconds, where one is known.
  */
-export const bookedRerunWords = (rerun: { readonly at?: number | undefined }): string =>
-    `The sandbox runs this same turn again by itself${rerun.at === undefined ? " shortly" : ` at ${new Date(rerun.at * 1000).toISOString().slice(11, 16)} UTC`}, and its report reaches you when that ends: do not send it the task again or give the task to another agent meanwhile.`;
+export const bookedRerunWords = (rerun: { readonly at?: number | undefined }, child?: string): string =>
+    `The sandbox runs this same turn again by itself${rerun.at === undefined ? " shortly" : ` at ${new Date(rerun.at * 1000).toISOString().slice(11, 16)} UTC`}, and its report reaches you when that ends: do not send it the task again or give the task to another agent meanwhile.${
+        child === undefined ? "" : ` To have it not run again, cancel it (the cancel tool, or \`agents cancel ${child}\`), then decide yourself.`
+    }`;
 
 /** A child's work reached the main tree: its parent hears so, and that a red on it is routed without its help. */
 export const reportChildLanded = async (deps: ChildNewsDeps, event: WorkspaceEvent): Promise<void> => {

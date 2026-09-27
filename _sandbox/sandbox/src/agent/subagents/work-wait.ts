@@ -6,6 +6,7 @@ import { type SubagentWaitOptions, type SubagentWaitUntil, waitForSubagent } fro
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import { whenSteered } from "../../conversations/actor/conversation-holdings.js";
 import { opt } from "../../opt.js";
+import { withdrawQueuedReport } from "./queued-reports.js";
 
 // The one park for work a conversation started here: a child agent, or a background command.
 
@@ -126,7 +127,11 @@ const wordsSaid = (actors: Actors, conversationId: string, signal: AbortSignal):
  * Parks until the named child or command (by the id its Bash call returned) moves, or for "any" whichever moves first;
  * words said into the waiting turn meanwhile hand it back at once, with outcome `message`.
  */
-export const waitForWork = async (actors: Actors, conversationId: string, options: SubagentWaitOptions): Promise<WorkWaitOutcome> => {
+export const waitForWork = async (
+    actors: Pick<ConversationActors, "holdings" | "queued" | "send">,
+    conversationId: string,
+    options: SubagentWaitOptions,
+): Promise<WorkWaitOutcome> => {
     if (options.signal?.aborted === true) {
         return { outcome: "aborted" };
     }
@@ -134,7 +139,16 @@ export const waitForWork = async (actors: Actors, conversationId: string, option
     const abort = (): void => heard.abort();
     options.signal?.addEventListener("abort", abort, { once: true });
     try {
-        return await Promise.race([parkOnWork(actors, conversationId, { ...options, signal: heard.signal }), wordsSaid(actors, conversationId, heard.signal)]);
+        const result = await Promise.race([
+            parkOnWork(actors, conversationId, { ...options, signal: heard.signal }),
+            wordsSaid(actors, conversationId, heard.signal),
+        ]);
+        // This wait hands the child's ending over, so a copy of its report still queued for this conversation would
+        // arrive a second time: it comes back out.
+        if ((result.outcome === "finished" || result.outcome === "blocked") && result.agent !== undefined) {
+            withdrawQueuedReport(actors, result.agent.id);
+        }
+        return result;
     } finally {
         options.signal?.removeEventListener("abort", abort);
         heard.abort();
@@ -171,17 +185,30 @@ const parkOnWork = async (actors: Actors, conversationId: string, options: Subag
 const WORDS_SAID =
     "Something was said into your turn while you waited (the owner, a watch that fired, a child's report or the sandbox): it follows this result. Read it, then wait again if you still need to; nothing you were waiting on has moved.";
 
-/** The answer every wait door gives, a blocked child's whole question included so the caller can answer it. */
-export const workWaitAnswer = (
-    result: WorkWaitOutcome,
-    pendingQuestion: (childId: string) => PendingChildCard | undefined,
-): Record<string, unknown> => {
-    const question = result.outcome === "blocked" && result.agent !== undefined ? pendingQuestion(result.agent.id) : undefined;
+// What a wait door reads of a spawned child beyond its roster row.
+export interface ChildLookups {
+    // The whole question a blocked child is parked on, so the caller can answer it.
+    readonly pendingQuestion: (childId: string) => PendingChildCard | undefined;
+    // Its last turn's whole closing message, where the row's summary had to cut it.
+    readonly report: (childId: string) => string | undefined;
+}
+
+// A child whose turn has ended (or paused for the sandbox's re-run) has a report to hand over whole.
+const ENDED: ReadonlySet<string> = new Set(["completed", "failed", "killed", "paused"]);
+
+/** The answer every wait door gives: a blocked child's whole question, and an ended one's whole report where its row cut it. */
+export const workWaitAnswer = (result: WorkWaitOutcome, lookups: ChildLookups): Record<string, unknown> => {
+    const agent = result.agent;
+    const question = result.outcome === "blocked" && agent !== undefined ? lookups.pendingQuestion(agent.id) : undefined;
+    const whole = agent !== undefined && ENDED.has(agent.status) ? lookups.report(agent.id) : undefined;
+    // Only where it says more than the row's summary, which is its head.
+    const report = whole !== undefined && whole.trim().length > (agent?.summary?.length ?? 0) ? whole : undefined;
     return {
         outcome: result.outcome,
-        ...(result.agent === undefined ? {} : { agent: result.agent }),
+        ...(agent === undefined ? {} : { agent }),
         ...(result.job === undefined ? {} : { job: result.job }),
         ...(question === undefined ? {} : { question }),
+        ...opt("report", report),
         ...opt("note", result.outcome === "message" ? WORDS_SAID : undefined),
     };
 };

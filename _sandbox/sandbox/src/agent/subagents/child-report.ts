@@ -4,7 +4,9 @@ import { parentOfActor } from "../../auth/principal.js";
 import { deliverWake, type WakeDoors } from "../run/turn/wake-delivery.js";
 import { bookedRerunWords } from "./child-lands.js";
 import { childVerification } from "./child-verification.js";
-import { markSubagentEndingReported, subagentEndingReported } from "./subagents.js";
+import { randomUUID } from "node:crypto";
+import { subagentEndingReported, subagentEndingReporter } from "./subagents.js";
+import { noteQueuedReport } from "./queued-reports.js";
 import type { DomainEventMap } from "../../seams/domain-events.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 
@@ -14,7 +16,7 @@ import type { ConversationActors } from "../../conversations/actor/conversation-
 export interface ChildReportDeps {
     readonly doors: WakeDoors;
     readonly logger: Logger;
-    // Where the child's roster record and its verification ledger are held.
+    // Where the child's roster record, its verification ledger and a report still queued for its parent are held.
     readonly conversations: Pick<ConversationActors, "holdings">;
     // A child's entry names its parent in `startedBy`.
     readonly entryOf: (conversationId: string) => { readonly startedBy?: string | undefined; readonly title?: string | undefined } | undefined;
@@ -29,11 +31,14 @@ const REPORT_CHARS = 4_000;
 
 const reportText = (settled: DomainEventMap["run.settled"], killed: string | undefined): string => {
     const answer =
-        settled.closing.length <= REPORT_CHARS ? settled.closing : `${settled.closing.slice(0, REPORT_CHARS)}… (the rest is in its own chat)`;
+        settled.closing.length <= REPORT_CHARS
+            ? settled.closing
+            : `${settled.closing.slice(0, REPORT_CHARS)}… (cut here: wait(target: "${settled.conversationId}") returns its whole report)`;
     const ending = killed ?? (settled.failure === undefined ? undefined : `The turn failed: ${settled.failure}`);
-    // A re-run the sandbox booked for itself is said with the failure, or the parent sends the task again or hands it on.
-    const rerun = settled.rerun === undefined ? undefined : bookedRerunWords(settled.rerun);
-    return [answer, ...(ending === undefined ? [] : [ending]), ...(rerun === undefined ? [] : [rerun])].filter((part) => part !== "").join("\n\n");
+    // A re-run the sandbox booked for itself leads, ahead of the failure, or the parent sends the task again or hands it
+    // on before it reads that far.
+    const rerun = settled.rerun === undefined || killed !== undefined ? undefined : `Paused, not finished. ${bookedRerunWords(settled.rerun, settled.conversationId)}`;
+    return [...(rerun === undefined ? [] : [rerun]), answer, ...(ending === undefined ? [] : [ending])].filter((part) => part !== "").join("\n\n");
 };
 
 // Nobody when a person started the turn in the child's own chat, a wait already took it, or the parent is gone.
@@ -61,6 +66,8 @@ export const reportChildTurn = async (deps: ChildReportDeps, settled: DomainEven
         if (target === undefined) {
             return;
         }
+        // Taken before anything is awaited: the record this ending is about, whichever arrives first of it and this.
+        const reported = subagentEndingReporter(deps.conversations, settled.conversationId);
         const prompt = childReportPrompt({
             child: settled.conversationId,
             title: target.title,
@@ -68,7 +75,12 @@ export const reportChildTurn = async (deps: ChildReportDeps, settled: DomainEven
             report: reportText(settled, settled.failure === undefined ? undefined : await deps.killNote(settled.conversationId, settled.failure)),
             verification: childVerification(deps.conversations, settled.conversationId),
         });
-        const receipt = await deliverWake(deps.doors, { conversationId: target.parent, prompt, voice: "sandbox", profile: target.profile });
+        // Asked again after the awaits above: a wait of the parent's may have taken this ending meanwhile.
+        if (subagentEndingReported(deps.conversations, settled.conversationId)) {
+            return;
+        }
+        const messageId = `child-report-${randomUUID()}`;
+        const receipt = await deliverWake(deps.doors, { conversationId: target.parent, prompt, voice: "sandbox", profile: target.profile, messageId });
         if ("invalid" in receipt) {
             deps.logger.error(
                 { child: settled.conversationId, parent: target.parent, report: prompt, invalid: receipt.invalid },
@@ -81,9 +93,12 @@ export const reportChildTurn = async (deps: ChildReportDeps, settled: DomainEven
             return;
         }
         // Said into its turn, or a turn of its own: the parent has it, and `wait` must not hand it over again. One still
-        // queued behind a turn that takes no words is not read yet, so a wait meanwhile may still return it.
-        if (receipt.delivered !== "queued") {
-            markSubagentEndingReported(deps.conversations, settled.conversationId);
+        // queued behind a turn that takes no words is not read yet, so a wait meanwhile may still return it, and then
+        // takes it out of the queue (queued-reports.ts) rather than letting it arrive a second time.
+        if (receipt.delivered === "queued") {
+            noteQueuedReport(deps.conversations, settled.conversationId, { parent: target.parent, messageId });
+        } else {
+            reported();
         }
         deps.logger.info({ child: settled.conversationId, parent: target.parent, delivered: receipt.delivered }, "child report: delivered");
     } catch (error) {

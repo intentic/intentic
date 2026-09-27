@@ -147,6 +147,9 @@ export interface ServiceFacts {
     readonly seatRefusal?: string | undefined;
     readonly cooling?: { readonly until?: number | undefined; readonly reason?: string | undefined; readonly verify?: string | undefined } | undefined;
     readonly usage?: AccountUsage | undefined;
+    // How the account is named to a person (its label, a routed credential's address); a surface that quotes a figure
+    // says whose it is.
+    readonly label?: string | undefined;
 }
 
 // A spent allowance is over once a reading with room lands after it; a refused credential once any reading does (the
@@ -168,10 +171,21 @@ const answers = (refusal: ProviderRefusal, facts: ServiceFacts): boolean => {
  * the account it named is disconnected, `answered` once that account (or, for a refusal naming none, any account) has a
  * later reading that contradicts it, else `standing`. An empty list is one not loaded yet, so the refusal stands.
  */
-export const refusalVerdict = (refusal: ProviderRefusal, accounts: readonly ServiceFacts[]): "standing" | "answered" | "gone" => {
+export const refusalVerdict = (
+    refusal: ProviderRefusal,
+    accounts: readonly ServiceFacts[],
+    now: number = Date.now(),
+): "standing" | "answered" | "gone" => {
     const named = accounts.filter((facts) => facts.account === refusal.account);
     if (refusal.account !== undefined && named.length === 0) {
         return accounts.length === 0 ? "standing" : "gone";
+    }
+    // Where the provider named when to try again, and it is known which account it refused (it named one, or there is
+    // only one), its own words outrank a usage endpoint that kept showing room while it refused: over at that instant,
+    // and not before. A nameless refusal over several accounts is still answered by any of them reading room, since the
+    // translator benches the one it refused and routes on.
+    if (refusal.kind === "limit" && refusal.resetsAt !== undefined && (refusal.account !== undefined || accounts.length <= 1)) {
+        return refusal.resetsAt * 1000 <= now ? "answered" : "standing";
     }
     return (refusal.account === undefined ? accounts : named).some((facts) => answers(refusal, facts)) ? "answered" : "standing";
 };
@@ -215,10 +229,12 @@ const refusedPool = (usage: AccountUsage | undefined, refusal: ProviderRefusal, 
     if (usage === undefined || binding === undefined) {
         // No pool to pin: the refusal itself is the evidence, unless it was about a different model than this question.
         const sameModel = refusal.model === undefined || model === undefined || refusal.model === model.id;
-        return sameModel ? { kind: "spent" } : headroomState(usage, model);
+        return sameModel ? spent(refusal.resetsAt) : headroomState(usage, model);
     }
     const pinned = usage.windows.map((window) => (window === binding ? { ...window, utilization: Math.max(window.utilization, SPENT_UTILIZATION) } : window));
-    return headroomState({ ...usage, windows: pinned }, model);
+    const state = headroomState({ ...usage, windows: pinned }, model);
+    // The provider's own "try again at" is when it reopens, over whatever the polled pool last said.
+    return state.kind === "spent" && refusal.resetsAt !== undefined ? spent(refusal.resetsAt) : state;
 };
 
 /**
@@ -262,7 +278,7 @@ export const serviceStates = (
     model?: ModelRef,
     now: number = Date.now(),
 ): ReadonlyMap<string, AccountState> => {
-    const standing = refusal !== undefined && refusalVerdict(refusal, accounts) === "standing" ? refusal : undefined;
+    const standing = refusal !== undefined && refusalVerdict(refusal, accounts, now) === "standing" ? refusal : undefined;
     return new Map(
         accounts.map((facts) => [
             facts.account,

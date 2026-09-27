@@ -26,6 +26,7 @@ const childCli = [
     "agents wait <child-id>                  # until it needs input or finishes",
     "agents answer <child-id> 'Use TOML 1.0' # factual questions only",
     "agents send <child-id> 'Also cover CRLF input'",
+    "agents cancel <child-id>                # stop it, or a re-run booked for it",
     "agents list",
 ].join("\n");
 
@@ -130,7 +131,8 @@ const lanes = [
     <p>
         A child sees none of the parent's chat, so its task must carry the paths, requirements and constraints it needs. Spawn returns as soon
         as the child is running. Wait sleeps until a child needs input or finishes instead of making the parent poll, and hands the turn back
-        early when something is said into it, so a message from you does not sit behind a half-hour wait. Send steers a live child or starts a
+        early when something is said into it, so a message from you does not sit behind a half-hour wait. It returns the child's whole closing
+        report, not only the head its row shows, and a report the parent already heard is not handed over a second time. Send steers a live child or starts a
         follow-up turn on a settled one, continuing that child's session; a follow-up that meets a turn somebody else started on the child (you
         writing in its chat, a land conflict, a failed check sent back to it) runs once that turn ends.
     </p>
@@ -143,7 +145,9 @@ const lanes = [
         <strong>A spawn names its provider and its model.</strong> Neither is optional and nothing is chosen for you: a child is a whole agent
         session against a real allowance, started by a model rather than by you, and one parent can start twenty of them in a turn. Providers
         answers what that spawn may name — every connected provider, its models, and how much allowance each still has, with the ones whose
-        every account is at its cap left out, so what it lists is what can actually run.
+        every account is at its cap left out, so what it lists is what can actually run. Each figure names the account it was read from and
+        how old that reading is, a reading the sandbox can no longer refresh is marked stale, and a provider that just refused a turn with
+        "try again at …" is listed as spent until then, whatever its usage page still says.
     </p>
 
     <h3>Supervision stays above the tree</h3>
@@ -164,13 +168,16 @@ const lanes = [
     <p>
         A held move does not stop the parent. It comes back at once as held, and the parent carries on: a held start waits on its card as a
         child, and a held message goes once you allow it. <strong>Allow for the rest of this turn</strong> lets every later move on that
-        provider through without asking again, until the parent's turn ends. If you decline, or the turn ends before you answer, the move never
-        runs, and a parent still in its turn is told.
+        provider through without asking again, until the parent's turn ends. The parent is told why the move was held, a rule of yours or the
+        outside content its turn took in, and that the card lasts as long as its turn. If you decline, or the turn ends before you answer, the
+        move never runs, and a parent still in its turn is told; an unanswered card is not a refusal, so the parent may ask again later.
     </p>
     <p>
-        When the sandbox re-runs a child's failed turn by itself, after its allowance reopened or when it stopped short, the parent is told
-        so with the failure, and again when the re-run starts if its turn is live, so it does not hand the same task to another agent in the
-        meantime.
+        When the sandbox will re-run a child's failed turn by itself, after its allowance reopens or when it stopped short, the child is
+        <strong>paused</strong>, not failed: wait reports it as paused with when the re-run comes, and the parent is told again when it starts
+        if its turn is live, so it does not hand the same task to another agent meanwhile. A parent that would rather do the work another way
+        cancels the child first, which drops the booked re-run; a pause whose re-run never comes ends as failed. Child turns are journalled
+        like any turn the sandbox starts, so a child working through a container restart picks up again and still reports to its parent.
     </p>
     <p>
         Full children can also run on <a href="/docs/remote-runners/">remote runners</a>. When no machine is named, the fleet scheduler spreads

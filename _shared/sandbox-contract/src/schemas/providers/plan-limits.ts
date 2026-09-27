@@ -123,6 +123,14 @@ export const ProviderRefusalSchema = z.object({
     // Lets a `limit` refusal be read against the pool that model spends (`UsageWindow.gates`), not the account's
     // fullest pool.
     model: z.string().optional().describe("Which model the refused turn was on, where that is known."),
+    // The provider's own "try again at …", which a polled reading cannot contradict: a usage endpoint can keep showing
+    // room while the plan refuses every turn.
+    resetsAt: z
+        .number()
+        .optional()
+        .describe(
+            "When the provider said to try again, in epoch seconds, for a spent allowance where it named one. Until then the refusal stands whatever a reading says; after it, it is over.",
+        ),
 });
 export type ProviderRefusal = z.infer<typeof ProviderRefusalSchema>;
 export const ProviderRefusalsSchema = z.object({

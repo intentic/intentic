@@ -209,6 +209,21 @@ test("a refusal stands until a later reading contradicts it, and never past its 
     expect(refusalVerdict(refusal({ kind: "limit", account: "a" }), [])).toBe("standing");
 });
 
+// Codex's usage endpoint kept reading room while every turn was refused "try again at 3:38 PM": the provider's own
+// instant is what ends the refusal, where it is known which account it refused.
+test("a spent allowance with the provider's own reset stands until that instant, whatever a later reading says", () => {
+    const room = at(2_000, window({ kind: "five_hour", utilization: 0 }));
+    const until = { kind: "limit", resetsAt: 10 } as const;
+    expect(refusalVerdict(refusal({ ...until, account: "a" }), [{ account: "a", usage: room }], 9_999)).toBe("standing");
+    expect(refusalVerdict(refusal({ ...until, account: "a" }), [{ account: "a", usage: room }], 10_000)).toBe("answered");
+    // A routed refusal names no account, but with one account there is no doubt whose it was.
+    expect(refusalVerdict(refusal(until), [{ account: "a", usage: room }], 9_999)).toBe("standing");
+    // Over several, the translator benches the one it refused and routes on, so another's room still answers it.
+    expect(refusalVerdict(refusal(until), [{ account: "a", usage: room }, { account: "b", usage: room }], 9_999)).toBe("answered");
+    // Spent until the instant the provider named, not the pool's own reset.
+    expect(serviceStates([{ account: "a", usage: room }], refusal({ ...until, account: "a" }), undefined, 9_999).get("a")).toEqual({ kind: "spent", reopensAt: 10 });
+});
+
 test("a provider's accounts are judged together: a standing refusal lands only on the account it names", () => {
     const room = at(500, window({ kind: "five_hour", utilization: 40 }));
     const states = serviceStates([{ account: "a", usage: room }, { account: "b", usage: room }], refusal({ kind: "entitlement", account: "a" }));

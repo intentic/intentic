@@ -26,7 +26,7 @@ const entryFor = (conversationId: string): JournalEntry => ({
     turn: { conversationId, prompt: "go" },
 });
 
-const run = async (entries: readonly JournalEntry[], live: readonly { conversationId: string; startedAt: number }[]): Promise<void> => {
+const run = async (entries: readonly JournalEntry[], live: readonly { conversationId: string; startedAt: number; journalled?: boolean }[]): Promise<void> => {
     const [check] = checks({
         turnJournal: journalOf(entries),
         conversations: unstubbed<ConversationActors>("conversations", {}),
@@ -58,4 +58,11 @@ test("no live turns is not a finding, whatever the journal holds", async () => {
 test("an automation fire's entry does not count as a chat turn's", async () => {
     const fire: JournalEntry = { kind: "automation", startedAt: NOW, attempts: 0, automationId: "c1", conversationId: "c1" };
     await expect(run([fire], [{ conversationId: "c1", startedAt: NOW - 60_000 }])).rejects.toThrow(/c1/);
+});
+
+// A loop's iteration runs through the unjournalled door on purpose: its loop keeps its own books and starts the next one
+// after a restart, so it is no failed journal write.
+test("a run started unjournalled on purpose is not looked for", async () => {
+    await expect(run([], [{ conversationId: "loop-1", startedAt: NOW - 60_000, journalled: false }])).resolves.toBeUndefined();
+    await expect(run([], [{ conversationId: "c1", startedAt: NOW - 60_000, journalled: true }])).rejects.toThrow(/1 live turn\(s\).*c1/);
 });

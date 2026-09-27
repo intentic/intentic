@@ -18,8 +18,8 @@ const MAX_TIMEOUT_S = 1800;
 export interface SubagentWaitDeps {
     // The conversation whose children this turn may wait on; a parent supervises only its own.
     readonly conversationId: string | undefined;
-    // Where its children and background commands are held.
-    readonly conversations: Pick<ConversationActors, "holdings">;
+    // Where its children and background commands are held, and the queue a report a wait took is withdrawn from.
+    readonly conversations: Pick<ConversationActors, "holdings" | "queued" | "send">;
     // The turn's own abort; a parked wait settles when the turn is stopped.
     readonly signal: AbortSignal;
     // The child-agent engine (spawn, steer, answer); absent means the spawn/send/answer tools are not offered.
@@ -146,6 +146,24 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                           { annotations: toolAnnotations("write") },
                       ),
                       sdk().tool(
+                          "cancel",
+                          "Stop a subagent you spawned: its running turn, a start still waiting for memory, or a re-run the " +
+                              "sandbox booked for it by itself after a spent allowance or a turn that stopped short (wait shows " +
+                              "that as status `paused`). Use it when you will do the work another way, so the original never " +
+                              "resumes and duplicates it. What it already wrote stays in its worktree, and a later send carries on " +
+                              "from there. A start or message waiting on the owner's card is theirs to decline, not yours to withdraw.",
+                          { child: z.string().min(1).describe("The subagent's id, from spawn.") },
+                          async (args) => {
+                              const children = deps.children;
+                              if (children === undefined) {
+                                  return answer({ ok: false, message: "This turn cannot supervise agents." });
+                              }
+                              return answer(await children.cancel(args.child));
+                          },
+                          // Ends work in flight, and nothing gives it back but a new message.
+                          { annotations: toolAnnotations("destructive") },
+                      ),
+                      sdk().tool(
                           "answer",
                           "Answer a QUESTION a subagent you spawned is parked on (wait reports blocked and carries the question). " +
                               "Pass one entry per question: its own text, and your picks as chosen option labels or your own words. " +
@@ -178,13 +196,17 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                 "wait",
                 "Wait until work you started here needs you: a subagent you started, or a command you ran with " +
                     "run_in_background. Blocks until the target is blocked on input (a question or permission), or " +
-                    "finishes, whichever comes first. For an agent it returns its status, its last report, and " +
+                    "finishes, whichever comes first. For an agent it returns its status, its last report (whole, as " +
+                    "`report`, where the row's `summary` is only its head), and " +
                     "`verification` — whether anything actually checked the work that report describes (`verified` / " +
                     "`unproven` / `failing` / `no-code`, with the check that spoke). Read it before you build on what it " +
                     "says: an agent's own account of its work is a claim, not a result. For a command it returns the " +
                     "exit code, the tail of its output and the file holding all of it. Target a subagent your runtime's own " +
                     "tool started by that call's id, one you spawned by the id spawn returned, a background command by " +
                     'the ID its Bash call returned, or "any" for whichever of these moves first (each is reported once). ' +
+                    "An agent `paused` has not finished: its turn stopped on a spent allowance or stopped short, the sandbox " +
+                    "runs it again by itself (its `error` says when), and its report comes after that; cancel it before " +
+                    "giving its task to another agent. " +
                     "Use this instead of sleeping or polling in a loop. On timeout it returns the current state: call it " +
                     "again to keep waiting. It also returns early, with outcome `message`, when something is said into your " +
                     "turn while it waits (the owner, a watch, a subagent's report, a land of a subagent's work), so you read it " +
@@ -207,7 +229,10 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                         signal: deps.signal,
                     });
                     return answer({
-                        ...workWaitAnswer(result, (childId) => deps.children?.pendingQuestion(childId)),
+                        ...workWaitAnswer(result, {
+                            pendingQuestion: (childId) => deps.children?.pendingQuestion(childId),
+                            report: (childId) => deps.children?.report(childId),
+                        }),
                         ...(result.outcome === "unknown-target" ? { note: NOTHING_TO_WAIT_FOR } : {}),
                     });
                 },

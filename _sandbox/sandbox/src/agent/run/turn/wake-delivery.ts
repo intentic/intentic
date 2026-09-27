@@ -17,6 +17,8 @@ export interface Wake {
     // What composed words are for, and what in the sandbox sent them: the row they open says the sandbox spoke them.
     readonly errand?: TurnErrand;
     readonly source?: string;
+    // The id its words wait under while queued, so the sender can take them back out (a child's report a wait took).
+    readonly messageId?: string;
 }
 
 // The port's door a wake takes, and where it reads the session a turn of its own continues.
@@ -35,6 +37,7 @@ export const deliverWake = (doors: WakeDoors, wake: Wake): Promise<MessageReceip
             conversationId: wake.conversationId,
             prompt: wake.prompt,
             ...opt("errand", wake.errand),
+            ...opt("messageId", wake.messageId),
             ...opt("speaker", wake.voice === "sandbox" ? { kind: "sandbox" as const, ...opt("source", wake.source) } : undefined),
             ...opt("sessionId", doors.sessionIdOf(wake.conversationId)),
         },

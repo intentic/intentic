@@ -1,4 +1,5 @@
 import { RETRY_LADDER_TRIES, type TurnBreakPolicy } from "@intentic/sandbox-contract";
+import { opt } from "../../../opt.js";
 import type { LimitWay } from "../../models/limit-way.js";
 import { OUTAGE_MAX_ATTEMPTS } from "../../providers/provider-health.js";
 import {
@@ -78,8 +79,12 @@ const limit: ErrorFrame = { kind: "error", code: "rate_limit", message: "Claude 
 const died: ErrorFrame = { kind: "error", message: "the harness crashed" };
 const input = { agent: "claude", harness: "native", prompt: "ship it", conversationId: "c-1" } as const;
 
-const refused = (kind: "limit" | "auth" | "entitlement", message: string): FailureWrite[] => [
-    { kind: "provider-refusal", provider: "claude", refusal: { at: NOW, kind, message, ...attribution, model: "opus" } },
+const refused = (kind: "limit" | "auth" | "entitlement", message: string, resetsAt?: number): FailureWrite[] => [
+    {
+        kind: "provider-refusal",
+        provider: "claude",
+        refusal: { at: NOW, kind, message, ...attribution, model: "opus", ...opt("resetsAt", resetsAt) },
+    },
     { kind: "headroom-refresh", options: { scope: { providers: ["claude"], account: "acct" }, maxAgeMs: 0 } },
 ];
 
@@ -97,7 +102,8 @@ describe("a spent allowance", () => {
                 held: { ran: true, contextTokens: 9_000, handoffTokens: 1_200 },
                 autoResume: "available",
             },
-            writes: refused("limit", "Claude usage limit reached."),
+            // The refusal keeps the provider's own reset, which the next spawn listing reads as when it reopens.
+            writes: refused("limit", "Claude usage limit reached.", 1_900_000_000),
             log: {
                 level: "warn",
                 message: "turn refused",
@@ -188,7 +194,11 @@ describe("a spent allowance", () => {
             answering({ way }),
         );
         expect(plan.writes).toStrictEqual([
-            { kind: "provider-refusal", provider: "codex", refusal: { at: NOW, kind: "limit", message: "429 usage limit", model: "gpt-5.1" } },
+            {
+                kind: "provider-refusal",
+                provider: "codex",
+                refusal: { at: NOW, kind: "limit", message: "429 usage limit", model: "gpt-5.1", resetsAt: 1_900_000_000 },
+            },
             { kind: "headroom-refresh", options: { scope: { providers: ["codex"] }, maxAgeMs: 0 } },
             { kind: "model-cooldown", provider: "codex", model: "gpt-5.1", cooldown: { until: 1_900_000_000_000, message: "429 usage limit" } },
         ]);

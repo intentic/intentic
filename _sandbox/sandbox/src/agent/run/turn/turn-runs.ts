@@ -109,6 +109,8 @@ class Mailbox<T> {
 
 export class TurnRun implements LiveRun {
     readonly id = crypto.randomUUID();
+    // Whether the turn journal holds it; the unjournalled door (a loop's iteration) says otherwise as it starts it.
+    journalled = true;
     private finishedAt: number | undefined;
     private readonly fold: TranscriptFold;
     // One transcript fold per subagent, tagged by the call that spawned it; keeps only frames carrying its tag.
@@ -345,6 +347,7 @@ export function startTurnRun(
     }
     const startedAt = Date.now();
     const run = new TurnRun(opening?.(startedAt) ?? [], startedAt);
+    run.journalled = journalled;
     runs.hold(input.conversationId, input.conversationId, run);
     const provider = input.agent;
     // Told to the actor in order, which writes them in order; a failed write costs the journal, never the turn.

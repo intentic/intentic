@@ -60,6 +60,9 @@ export interface SubagentRecord {
     summarySource: SummarySource | undefined;
     // The status a wait last handed back; a wait on "any" does not report the same move twice.
     reported: SubagentStatus | undefined;
+    // The ending of the turn this record follows already reached the parent by the other door (a report said into its
+    // turn) before the record itself settled: whatever status it settles on counts as handed over.
+    reportedAhead?: true;
 }
 
 // Where the roster and everything kept beside it is held: each conversation's actor.
@@ -688,7 +691,8 @@ export interface SpawnedChildBirth {
 export const openSpawnedChild = (turn: SubagentTurn, birth: SpawnedChildBirth, replacing = false): void => {
     const roster = turn.conversations.holdings(ROSTER);
     const existing = roster.get(birth.id);
-    if (existing !== undefined && subagentRunning(existing) && !replacing) {
+    // A paused row is a turn that ended waiting for the sandbox's own re-run: the turn that opens now replaces it.
+    if (existing !== undefined && subagentRunning(existing) && existing.status !== "paused" && !replacing) {
         return;
     }
     roster.drop(birth.id);
@@ -716,10 +720,13 @@ export const noteSpawnedChild = (
     actors: ParentActors,
     id: string,
     move: {
-        // `pending` is a child queued for memory before its turn starts.
-        readonly status?: "pending" | "running" | "blocked";
-        // On `blocked` or `pending`, what it waits on; unset source so the real report replaces it once unblocked.
+        // `pending` is a child queued for memory before its turn starts; `paused` one whose turn ended on a wall the
+        // sandbox re-runs it past by itself, still live since its report is still to come.
+        readonly status?: "pending" | "running" | "blocked" | "paused";
+        // On `blocked`, `pending` or `paused`, what it waits on; unset source so the real report replaces it later.
         readonly summary?: string;
+        // On `paused`, the wall its turn stopped at.
+        readonly error?: string;
         readonly lastTool?: string;
         readonly toolUses?: number;
         readonly tokens?: number;
@@ -729,7 +736,19 @@ export const noteSpawnedChild = (
     if (record === undefined || !subagentRunning(record)) {
         return;
     }
+    if (move.status === "paused") {
+        takeReportedAhead(record, "paused");
+    }
     toParent(actors, record.conversationId, patch(actors, id, move));
+};
+
+// A record whose turn's ending already reached its parent as a report: the status it now takes is filed as handed over
+// before any wait can see it, so a wait on "any" does not hand the same ending over again.
+const takeReportedAhead = (record: SubagentRecord, status: SubagentStatus): void => {
+    if (record.reportedAhead === true) {
+        record.reported = status;
+        delete record.reportedAhead;
+    }
 };
 
 /**
@@ -746,6 +765,9 @@ export const settleSpawnedChild = (
         return;
     }
     const summary = outcome.report.trim().slice(0, REPORT_TAIL).trim();
+    if (subagentRunning(record)) {
+        takeReportedAhead(record, outcome.status);
+    }
     toParent(
         actors,
         record.conversationId,
@@ -786,7 +808,9 @@ const waitMatch = (record: SubagentRecord, until: readonly SubagentWaitUntil[], 
     if (any && record.reported === record.status) {
         return undefined;
     }
-    if (until.includes("blocked") && record.status === "blocked") {
+    // A spawned child paused for the sandbox's own re-run is a move its parent acts on (it may cancel the re-run), not
+    // an ending: its report is still to come, so a wait for `finished` alone keeps waiting through it.
+    if (until.includes("blocked") && (record.status === "blocked" || (record.kind === "spawned" && record.status === "paused"))) {
         return "blocked";
     }
     if (until.includes("finished") && !subagentRunning(record)) {
@@ -847,7 +871,7 @@ export const waitForSubagent = (actors: Actors, conversationId: string, options:
 /** Whether a wait already handed this child's ending to its parent. */
 export const subagentEndingReported = (actors: Actors, id: string): boolean => {
     const reported = actors.holdings(ROSTER).get(id)?.reported;
-    return reported !== undefined && !LIVE.has(reported);
+    return reported !== undefined && (!LIVE.has(reported) || reported === "paused");
 };
 
 /**
@@ -856,9 +880,29 @@ export const subagentEndingReported = (actors: Actors, id: string): boolean => {
  */
 export const markSubagentEndingReported = (actors: Actors, id: string): void => {
     const record = actors.holdings(ROSTER).get(id);
-    if (record !== undefined && !subagentRunning(record)) {
+    if (record !== undefined && (!subagentRunning(record) || record.status === "paused")) {
         record.reported = record.status;
     }
+};
+
+/**
+ * The same, for a report whose delivery started while the record it is about was the one in the roster: taken as the
+ * delivery ends, it files that record's ending as handed over, now if it has settled, else as it settles (the turn's own
+ * ending can reach its parent a moment before the record does). A follow-up that has since replaced the record is left
+ * alone: its ending is still to be told.
+ */
+export const subagentEndingReporter = (actors: Actors, id: string): (() => void) => {
+    const record = actors.holdings(ROSTER).get(id);
+    return () => {
+        if (record === undefined || actors.holdings(ROSTER).get(id) !== record) {
+            return;
+        }
+        if (!subagentRunning(record) || record.status === "paused") {
+            record.reported = record.status;
+            return;
+        }
+        record.reportedAhead = true;
+    };
 };
 
 /**

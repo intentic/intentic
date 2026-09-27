@@ -62,6 +62,8 @@ const supervisor = (over: Partial<ChildSupervisor> = {}): ChildSupervisor => ({
     answer: async () => ({ ok: true }),
     providers: async () => [],
     pendingQuestion: () => undefined,
+    report: () => undefined,
+    cancel: async () => ({ ok: true }),
     wait: (options) => waitForWork(actors, "conv-cursor", options),
     ...over,
 });
@@ -85,6 +87,7 @@ describe("which tools mount", () => {
             "wait",
             "send",
             "answer",
+            "cancel",
         ]);
         expect(Object.keys(cursorCustomTools(request({ hooks: { children }, policy: { unattended: true } }), guard(allowing()), push()))).toEqual([
             "spawn",
@@ -92,6 +95,7 @@ describe("which tools mount", () => {
             "wait",
             "send",
             "answer",
+            "cancel",
         ]);
     });
 

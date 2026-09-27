@@ -1,6 +1,8 @@
-import type { AccountUsage, UsageWindow } from "@intentic/sandbox-contract";
+import type { AccountUsage, ProviderRefusal, UsageWindow } from "@intentic/sandbox-contract";
 import { codexConnectedProxy, services, withTranslator } from "../../harness/route-services.testing.js";
 import { spawnableProviders, spawnCatalogText } from "./spawn-catalog.js";
+import { unstubbed } from "@intentic/testing";
+import type { ProviderRefusalStore } from "../../usage/provider-refusals.js";
 
 // Pins the three account states this listing must tell apart: measured with room, measured and full (excluded, but
 // keeps the reopen instant), and unmeasured (listed, since no reading isn't no allowance).
@@ -26,7 +28,8 @@ test("reports the most headroom any one account has, and names only a pool the p
     );
     const claude = rows.find((row) => row.id === "claude");
     // The best account answers: one with room is enough to run the turn.
-    expect(claude?.models[0]?.headroom).toEqual({ percentLeft: 60 });
+    // Says whose figure it is and when it was read, since the two accounts read very differently.
+    expect(claude?.models[0]?.headroom).toEqual({ percentLeft: 60, account: "fresh", readAt: 1_000 });
     expect(claude?.spent).toBe(0);
 });
 
@@ -34,7 +37,7 @@ test("names a pool the plan meters separately, so the number says which allowanc
     const rows = await spawnableProviders(
         claudeOnly({ one: usage(window({ kind: "opus_weekly", label: "Opus", gates: { models: ["opus"] }, utilization: 25 })) }),
     );
-    expect(rows.find((row) => row.id === "claude")?.models[0]?.headroom).toEqual({ percentLeft: 75, pool: "Opus" });
+    expect(rows.find((row) => row.id === "claude")?.models[0]?.headroom).toEqual({ percentLeft: 75, pool: "Opus", account: "one", readAt: 1_000 });
 });
 
 test("leaves out a model whose every account is at the cap, and keeps when it comes back", async () => {
@@ -102,4 +105,106 @@ test("renders each of the three states in its own words", () => {
     // Unmetered is said as itself: Cursor publishes no quota, and inventing a number would be a lie.
     expect(text).toContain("cursor: auto (not metered)");
     expect(text).toContain("codex: every model is out of allowance, renews in about 3h");
+});
+
+// Codex once listed at 100% left minutes before every turn failed "You've hit your usage limit… try again at 3:38 PM":
+// its usage endpoint kept reading room. The refusal the failed turn files is what the next listing believes.
+describe("a provider's refusal, read in the very next listing", () => {
+    const NOW_S = Math.floor(Date.now() / 1000);
+    const roomy = (measuredAt: number) => ({ windows: [window({ kind: "five_hour", label: "5h", gates: "all", utilization: 0 })], measuredAt });
+    const codexWith = (refusal: ProviderRefusal | undefined, measuredAt = Date.now()) =>
+        services({
+            // SAFETY: an empty list satisfies every account row type the store's `list` could be typed to return.
+            claudeStore: { list: async () => [] as never },
+            config: withTranslator,
+            providerRefusals: unstubbed<ProviderRefusalStore>("providerRefusals", { read: async () => (refusal === undefined ? {} : { codex: refusal }) }),
+            cliProxy: {
+                ...codexConnectedProxy,
+                accounts: async () => ({
+                    codex: [{ name: "codex-user.json", label: "user@example.com", usage: roomy(measuredAt) }],
+                    grok: [],
+                    kimi: [],
+                    gemini: [],
+                }),
+            },
+        });
+
+    it("lists a provider whose plan just refused as spent until the instant it named, over a reading of room", async () => {
+        const refusal: ProviderRefusal = { at: Date.now() - 60_000, kind: "limit", message: "You've hit your usage limit.", resetsAt: NOW_S + 3 * 3_600 };
+        // Even a reading taken after the refusal, still showing 0% used, does not answer the provider's own words.
+        const codex = (await spawnableProviders(codexWith(refusal))).find((row) => row.id === "codex");
+        expect(codex?.models).toEqual([]);
+        expect(codex?.spent).toBe(1);
+        expect(codex?.reopensAt).toBe(NOW_S + 3 * 3_600);
+        expect(spawnCatalogText(codex === undefined ? [] : [codex])).toBe("codex: every model is out of allowance, renews in about 3h");
+    });
+
+    it("lets the provider back once the instant it named has passed", async () => {
+        const refusal: ProviderRefusal = { at: Date.now() - 4 * 3_600_000, kind: "limit", message: "You've hit your usage limit.", resetsAt: NOW_S - 60 };
+        const codex = (await spawnableProviders(codexWith(refusal))).find((row) => row.id === "codex");
+        expect(codex?.models[0]?.headroom).toMatchObject({ percentLeft: 100, account: "user@example.com" });
+        expect(codex?.spent).toBe(0);
+    });
+
+    it("lists as before with no refusal on file", async () => {
+        const codex = (await spawnableProviders(codexWith(undefined))).find((row) => row.id === "codex");
+        expect(codex?.models[0]?.headroom).toMatchObject({ percentLeft: 100, account: "user@example.com" });
+    });
+});
+
+// Claude once sat at "17% left" for hours on a reading that could no longer be re-read.
+describe("whose figure it is, and how old", () => {
+    const weekly = (utilization: number) => window({ kind: "seven_day", label: "Weekly", gates: "all", utilization });
+
+    it("quotes a reading that can still be re-read over a roomier one that cannot", async () => {
+        const rows = await spawnableProviders(
+            claudeOnly({
+                stuck: { windows: [weekly(10)], measuredAt: 1_000, unread: { since: 2_000, reason: "Verify your account to continue." } },
+                live: { windows: [weekly(83)], measuredAt: 5_000 },
+            }),
+        );
+        expect(rows.find((row) => row.id === "claude")?.models[0]?.headroom).toEqual({ percentLeft: 17, account: "live", readAt: 5_000 });
+    });
+
+    it("marks a stale figure stale, with how long re-reading it has failed, when it is all there is", async () => {
+        const rows = await spawnableProviders(
+            claudeOnly({ stuck: { windows: [weekly(83)], measuredAt: 1_000, unread: { since: 2_000, reason: "Verify your account to continue." } } }),
+        );
+        expect(rows.find((row) => row.id === "claude")?.models[0]?.headroom).toEqual({
+            percentLeft: 17,
+            account: "stuck",
+            readAt: 1_000,
+            stale: { since: 2_000, reason: "Verify your account to continue." },
+        });
+    });
+
+    it("says whose figure it is and how old its reading is, and a stale one as stale", () => {
+        const now = Date.UTC(2026, 8, 27, 12, 0);
+        const text = spawnCatalogText(
+            [
+                {
+                    id: "claude",
+                    label: "Claude",
+                    models: [
+                        { id: "opus", label: "Opus", headroom: { percentLeft: 17, account: "work@example.com", readAt: now - 3 * 3_600_000 } },
+                        {
+                            id: "sonnet",
+                            label: "Sonnet",
+                            headroom: {
+                                percentLeft: 17,
+                                account: "home@example.com",
+                                readAt: now - 5 * 3_600_000,
+                                stale: { since: now - 4 * 3_600_000, reason: "Verify your account to continue." },
+                            },
+                        },
+                    ],
+                    spent: 0,
+                },
+            ],
+            now,
+        );
+        expect(text).toBe(
+            "claude: opus (17% left on work@example.com, read 3h ago), sonnet (17% left on home@example.com, read 5h ago, STALE: re-reading it has failed since 4h ago (Verify your account to continue.))",
+        );
+    });
 });

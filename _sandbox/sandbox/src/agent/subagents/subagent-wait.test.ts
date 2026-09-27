@@ -57,7 +57,7 @@ const toolNames = async (server: McpSdkServerConfigWithInstance): Promise<readon
 
 // One schema the SDK cannot convert fails the whole listing, and the CLI then mounts the server with no tools at all.
 test("a delegating turn's server lists wait and keep beside every supervision tool", async () => {
-    await expect(toolNames(serverWith(unstubbed<ChildSupervisor>("children", {})))).resolves.toEqual(["providers", "spawn", "send", "answer", "wait", "keep"]);
+    await expect(toolNames(serverWith(unstubbed<ChildSupervisor>("children", {})))).resolves.toEqual(["providers", "spawn", "send", "cancel", "answer", "wait", "keep"]);
 });
 
 test("a turn that may not delegate still lists wait and keep", async () => {

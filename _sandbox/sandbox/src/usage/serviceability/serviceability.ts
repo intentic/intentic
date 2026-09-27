@@ -27,9 +27,10 @@ const nativeFacts = (account: OauthAccount): ServiceFacts => ({
     detail: account.detail,
     seatRefusal: account.seatRefusal,
     usage: account.usage,
+    label: account.label,
 });
 
-const routedFacts = (account: TranslatorAccount): ServiceFacts => ({ account: account.name, usage: account.usage, cooling: account.cooling });
+const routedFacts = (account: TranslatorAccount): ServiceFacts => ({ account: account.name, label: account.label, usage: account.usage, cooling: account.cooling });
 
 // Claude's accounts from its own store with their seat marks joined in (the store's rows carry none, which is how the
 // limit move once landed on a seatless account); a routed provider's from the translator, bench included.

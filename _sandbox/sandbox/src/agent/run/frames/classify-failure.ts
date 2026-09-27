@@ -134,7 +134,17 @@ const refusalWrites = (event: ErrorFrame, context: FailureContext): FailureWrite
     const { provider, account, now } = context;
     const model = named(context.model);
     // Routed turns have no account to name; the model, so the refusal reads the pool it spends.
-    const refusal: ProviderRefusal = { at: now, kind: refusalKind(event), message: event.message, ...context.attribution, ...opt("model", model) };
+    const kind = refusalKind(event);
+    // A spent allowance keeps the provider's own "try again at", so the listing a parent reads next shows it spent
+    // until then rather than whatever the forced re-read below reports.
+    const refusal: ProviderRefusal = {
+        at: now,
+        kind,
+        message: event.message,
+        ...context.attribution,
+        ...opt("model", model),
+        ...opt("resetsAt", kind === "limit" ? (context.limitReset ?? event.resetsAt) : undefined),
+    };
     const observed: FailureWrite[] =
         event.code === "rate_limit" && account !== undefined && model !== undefined && !reportsPlanLimits(provider)
             ? [{ kind: "observed-limit", provider, account, model, limit: { at: now, message: event.message } }]

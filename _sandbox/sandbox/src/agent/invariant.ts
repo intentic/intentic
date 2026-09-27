@@ -6,7 +6,9 @@ import type { TurnJournal } from "./run/turn/turn-journal.js";
 // Ensures every live turn is journaled: intentic's own flows (updates, approvals, dev swaps) recreate the container,
 // and a turn missing from the journal simply ends, work lost. Journal writes are deliberately best-effort; this checks
 // for one that failed silently, from the other side, comparing two independent records: the journal directory and the
-// runs the conversation actors hold.
+// runs the conversation actors hold. A run started through the unjournalled door on purpose (a loop's iteration, whose
+// loop keeps its own books) is not one this looks for; a spawned child's turn is journalled like any other, since its
+// parent keeps waiting on it across a recreate.
 
 // How long before a journal entry is expected; kept generous, since the failure sought is permanent, not slow.
 const JOURNAL_GRACE_MS = 10_000;
@@ -16,7 +18,7 @@ export interface TurnJournalDeps {
     // Where the live runs are held: each conversation's actor.
     readonly conversations: Pick<ConversationActors, "holdings">;
     // Overridden by tests; production reads the runs the actors hold.
-    readonly live?: () => readonly { readonly conversationId: string; readonly startedAt: number }[];
+    readonly live?: () => readonly { readonly conversationId: string; readonly startedAt: number; readonly journalled?: boolean }[];
     readonly now?: () => number;
 }
 
@@ -34,7 +36,7 @@ export const checks = ({
         // `turn-settled`, since a turn ending is when a container recreate is most likely imminent.
         on: ["sweep", "turn-settled"],
         run: async ({ fail }) => {
-            const due = live().filter((run) => now() - run.startedAt > JOURNAL_GRACE_MS);
+            const due = live().filter((run) => run.journalled !== false && now() - run.startedAt > JOURNAL_GRACE_MS);
             if (due.length === 0) {
                 return;
             }

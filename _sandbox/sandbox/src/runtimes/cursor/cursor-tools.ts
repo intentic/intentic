@@ -1,5 +1,6 @@
 import type { McpServerConfig as CursorMcpServer, SDKCustomTool, SDKJsonValue, ToolName } from "@cursor/sdk";
 import type { AgentEvent, AskQuestion } from "@intentic/sandbox-contract";
+import { z } from "zod";
 import type { AgentRequest, TurnHooks, TurnTools } from "../../agent/providers/agent-request.js";
 import { formatAnswers } from "../../agent/tools/question-answers.js";
 import type { SubagentWaitUntil } from "../../agent/subagents/subagents.js";
@@ -177,6 +178,27 @@ const sendTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool =
     },
 });
 
+const CancelArgsSchema = z.object({ child: z.string().min(1) });
+
+const cancelTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool => ({
+    description:
+        "Stop a subagent you spawned: its running turn, a start still waiting for memory, or a re-run the sandbox booked " +
+        "for it by itself after a spent allowance or a turn that stopped short (the wait tool shows that as status " +
+        "`paused`). Use it when you will do the work another way, so the original never resumes and duplicates it.",
+    inputSchema: {
+        type: "object",
+        properties: { child: { type: "string", description: "The subagent's id, from spawn." } },
+        required: ["child"],
+    },
+    execute: async (args) => {
+        const parsed = CancelArgsSchema.safeParse(args);
+        if (!parsed.success) {
+            return JSON.stringify({ ok: false, message: "Pass the subagent's id." });
+        }
+        return JSON.stringify(await children.cancel(parsed.data.child));
+    },
+});
+
 const answerTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool => ({
     description:
         "Answer a QUESTION a subagent you spawned is parked on (the wait tool reports blocked and carries the " +
@@ -212,7 +234,9 @@ const answerTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool
 const waitTool = (request: AgentRequest, children: NonNullable<TurnHooks["children"]>): SDKCustomTool => ({
     description:
         "Wait until a subagent you started needs you. Blocks until the target is blocked on input or finishes, " +
-        'whichever comes first, then returns its status and last report. Target a subagent by its id, or "any" ' +
+        "whichever comes first, then returns its status and last report (whole, as `report`, where the summary cuts it). " +
+        "A `paused` one has not finished: the sandbox runs it again by itself, and cancel stops that. " +
+        'Target a subagent by its id, or "any" ' +
         "for whichever of this conversation's subagents moves first (each is reported once). On timeout it returns the current state: call " +
         "it again to keep waiting. It returns early, with outcome `message`, when something is said into your turn while it waits.",
     inputSchema: {
@@ -239,7 +263,9 @@ const waitTool = (request: AgentRequest, children: NonNullable<TurnHooks["childr
             timeoutMs: Math.round(seconds * 1000),
             signal: request.signal,
         });
-        return JSON.stringify(workWaitAnswer(result, (childId) => children.pendingQuestion(childId)));
+        return JSON.stringify(
+            workWaitAnswer(result, { pendingQuestion: (childId) => children.pendingQuestion(childId), report: (childId) => children.report(childId) }),
+        );
     },
 });
 
@@ -314,6 +340,7 @@ export const cursorCustomTools = (request: AgentRequest, guard: CursorGuard, pus
               wait: waitTool(request, request.hooks.children),
               send: sendTool(request.hooks.children),
               answer: answerTool(request.hooks.children),
+              cancel: cancelTool(request.hooks.children),
           }
         : {}),
 });

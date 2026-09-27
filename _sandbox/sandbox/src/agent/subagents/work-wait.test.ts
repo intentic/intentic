@@ -3,8 +3,9 @@ import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { SteeringQueue } from "../checkpoints/agent-steering.js";
 import { type BackgroundJob, noteJobShell, openBackgroundJob } from "../tools/jobs/background-jobs.js";
-import { openSpawnedChild, resetSubagents, settleSpawnedChild } from "./subagents.js";
-import { waitForWork } from "./work-wait.js";
+import { noteSpawnedChild, openSpawnedChild, resetSubagents, settleSpawnedChild, subagentEndingReporter } from "./subagents.js";
+import { noteQueuedReport } from "./queued-reports.js";
+import { waitForWork, workWaitAnswer } from "./work-wait.js";
 import { memoryFleet } from "../../testing.js";
 
 // One fleet's actors, which hold every record the registry under test files.
@@ -120,5 +121,87 @@ describe("waitForWork", () => {
         const wait = waitForWork(actors, "conv-w6", { target: "bsh-w6", until: ["finished"], timeoutMs: 5_000, signal: controller.signal });
         controller.abort();
         expect(await wait).toMatchObject({ outcome: "aborted" });
+    });
+});
+
+describe("a child's ending reaches its parent once", () => {
+    const opened = (conversationId: string, id: string): void =>
+        openSpawnedChild(
+            { conversationId, conversations: actors, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
+            { id, description: "port it" },
+        );
+
+    // The parent was busy with a turn that takes no words, so the report waited in its queue; a wait that hands the same
+    // ending over takes the queued copy back out.
+    it("a wait that hands over an ending takes the copy of its report still queued for the parent back out", async () => {
+        opened("conv-q1", "sub-q1");
+        await actors.send("conv-q1", {
+            kind: "queue-joined",
+            item: { id: "child-report-1", voice: "sandbox", queuedAt: 1, turn: { conversationId: "conv-q1", prompt: "Report from a subagent", messageId: "child-report-1" } },
+        }).settled;
+        noteQueuedReport(actors, "sub-q1", { parent: "conv-q1", messageId: "child-report-1" });
+        settleSpawnedChild(actors, "sub-q1", { status: "completed", report: "ported" });
+        expect(await waitForWork(actors, "conv-q1", { until: ["finished"], timeoutMs: 5_000 })).toMatchObject({ outcome: "finished", agent: { id: "sub-q1" } });
+        expect(actors.queued("conv-q1").items.map((item) => item.id)).toEqual([]);
+    });
+
+    // The turn's own ending can reach the parent as a report a moment before the child's row settles: the row then
+    // settles as handed over, and a wait on "any" does not hand it over a second time.
+    it("a report delivered before the row settles files its ending as handed over when it does", async () => {
+        opened("conv-q2", "sub-q2");
+        subagentEndingReporter(actors, "sub-q2")();
+        settleSpawnedChild(actors, "sub-q2", { status: "failed", report: "", error: "boom" });
+        expect(await waitForWork(actors, "conv-q2", { until: ["finished"], timeoutMs: 20 })).toMatchObject({ outcome: "unknown-target" });
+    });
+
+    it("a report about a turn a follow-up has since replaced leaves the follow-up's ending to be told", async () => {
+        opened("conv-q3", "sub-q3");
+        const reported = subagentEndingReporter(actors, "sub-q3");
+        settleSpawnedChild(actors, "sub-q3", { status: "completed", report: "first" });
+        // The follow-up reopens the row before the first turn's report finished its delivery.
+        openSpawnedChild(
+            { conversationId: "conv-q3", conversations: actors, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
+            { id: "sub-q3", description: "port it", again: true },
+        );
+        reported();
+        settleSpawnedChild(actors, "sub-q3", { status: "completed", report: "second" });
+        expect(await waitForWork(actors, "conv-q3", { until: ["finished"], timeoutMs: 5_000 })).toMatchObject({
+            outcome: "finished",
+            agent: { id: "sub-q3", summary: "second" },
+        });
+    });
+
+    it("a paused child is a move a wait hands over, never an ending: a wait for `finished` alone keeps parking", async () => {
+        opened("conv-q4", "sub-q4");
+        noteSpawnedChild(actors, "sub-q4", { status: "paused", summary: "Paused, not finished.", error: "out of usage" });
+        expect(await waitForWork(actors, "conv-q4", { until: ["finished"], timeoutMs: 20 })).toMatchObject({ outcome: "timeout" });
+        expect(await waitForWork(actors, "conv-q4", { until: ["blocked", "finished"], timeoutMs: 5_000 })).toMatchObject({
+            outcome: "blocked",
+            agent: { id: "sub-q4", status: "paused", error: "out of usage" },
+        });
+    });
+});
+
+describe("what a wait answers with", () => {
+    const agent = { id: "sub-a", kind: "spawned", conversationId: "conv-a", startedAt: 1, activityAt: 2, summary: "Head of it" } as const;
+    const lookups = (report: string | undefined) => ({ pendingQuestion: () => undefined, report: () => report });
+
+    it("hands an ended child's whole report over where its row's summary cut it", () => {
+        expect(workWaitAnswer({ outcome: "finished", agent: { ...agent, status: "completed" } }, lookups("Head of it, and the whole rest of it."))).toEqual({
+            outcome: "finished",
+            agent: { ...agent, status: "completed" },
+            report: "Head of it, and the whole rest of it.",
+        });
+    });
+
+    it("adds nothing where the summary already is the whole report, or the child has not ended", () => {
+        expect(workWaitAnswer({ outcome: "finished", agent: { ...agent, status: "completed" } }, lookups("Head of it"))).toEqual({
+            outcome: "finished",
+            agent: { ...agent, status: "completed" },
+        });
+        expect(workWaitAnswer({ outcome: "timeout", agent: { ...agent, status: "running" } }, lookups("Head of it, and more."))).toEqual({
+            outcome: "timeout",
+            agent: { ...agent, status: "running" },
+        });
     });
 });

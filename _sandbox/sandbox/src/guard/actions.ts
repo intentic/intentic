@@ -152,6 +152,11 @@ export interface ChildSpawnInput {
     readonly outsideSource?: string;
 }
 
+// Where outside content came from, in the words the card and the parent read: a child on a runtime with no rulebook of
+// its own taints its parent as `agent:<provider>` (children.ts), which only this says plainly.
+const outsideWords = (source: string): string =>
+    source.startsWith("agent:") ? `the report of a subagent on ${source.slice("agent:".length)}, a runtime with no permission rules of its own` : source;
+
 // Consulted on every supervisor mutation. A hold raises a card on the parent's turn since there's no held form of a
 // spawn; it refuses only when nobody can ask. The taint floor applies only when the owner set no explicit rule.
 export const childSpawn = defineGuardedAction<ChildSpawnInput>({
@@ -166,7 +171,7 @@ export const childSpawn = defineGuardedAction<ChildSpawnInput>({
         }
         if (rule === undefined && outsideSource !== undefined) {
             return HOLD(
-                `this turn has taken in content from outside (${outsideSource}), and a subagent would spend the owner's accounts on its say-so`,
+                `this turn has taken in content from outside (${outsideWords(outsideSource)}), and a subagent would spend the owner's accounts on its say-so`,
             );
         }
         return ALLOW(`no action rule restricts spawning subagents on ${provider}`);

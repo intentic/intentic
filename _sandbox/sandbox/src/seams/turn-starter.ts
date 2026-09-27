@@ -103,6 +103,11 @@ export interface StartOptions {
     readonly senderKeeps?: boolean;
 }
 
+export interface DetachedRunOptions {
+    // Held in the turn journal, so a container recreate resumes it at the next boot like any turn `start` begins.
+    readonly journalled?: boolean;
+}
+
 export interface TurnStarter {
     // The detached start every daemon-started turn takes: journalled, recorded, announced; the refusal instead while a
     // turn already runs on the conversation, or while it is archived. Whoever starts a turn on a person's say-so reopens
@@ -111,9 +116,11 @@ export interface TurnStarter {
     // Re-runs the turn a wall holds for the conversation, re-routed where `routing` names it; undefined when none is held
     // or its start was refused.
     readonly resume: (conversationId: string, routing?: ResumeRouting) => Promise<StartedRun | undefined>;
-    // A detached run its starter reads, recorded to the conversation but neither journalled, pinned nor announced: a
-    // loop keeps those books itself.
-    readonly run: (turn: TurnInput & { readonly conversationId: string }) => StartedRun | BeginRefusal;
+    // A detached run its starter reads, recorded to the conversation but neither pinned nor announced, and started at once
+    // so its starter follows it from its first frame. Unjournalled unless `journalled`: a loop keeps those books itself
+    // (its run is marked so, and the journal invariant does not count it); a spawned child's turn is journalled, since
+    // its parent keeps waiting on it across a container recreate.
+    readonly run: (turn: TurnInput & { readonly conversationId: string }, options?: DetachedRunOptions) => StartedRun | BeginRefusal;
     // The turn itself, for a caller folding its own frames (an automation's fire, a runner's dispatched turn).
     readonly stream: (turn: TurnInput, signal: AbortSignal | undefined) => AsyncGenerator<AgentEvent>;
     // Words into the live turn: `invalid` names a reference escaping the workspace, false means no steerable turn.

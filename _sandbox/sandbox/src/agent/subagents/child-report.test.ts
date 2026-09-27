@@ -106,8 +106,9 @@ describe("a spawned child's report", () => {
             doors.deps,
             settledOf({ failure: "You've hit your usage limit.", closing: "Halfway through.", rerun: { at: Date.UTC(2026, 8, 26, 15, 38) / 1000 } }),
         );
+        // The re-run leads, so the parent reads that the child is paused, not finished, before it reads the failure.
         expect(doors.started[0]?.prompt).toContain(
-            "The turn failed: You've hit your usage limit.\n\nThe sandbox runs this same turn again by itself at 15:38 UTC, and its report reaches you when that ends: do not send it the task again or give the task to another agent meanwhile.",
+            "Paused, not finished. The sandbox runs this same turn again by itself at 15:38 UTC, and its report reaches you when that ends: do not send it the task again or give the task to another agent meanwhile. To have it not run again, cancel it (the cancel tool, or `agents cancel sub-1`), then decide yourself.\n\nHalfway through.\n\nThe turn failed: You've hit your usage limit.",
         );
     });
 
@@ -116,7 +117,8 @@ describe("a spawned child's report", () => {
         await reportChildTurn(doors.deps, settledOf({ closing: `${"a".repeat(4_000)}TAIL` }));
         const prompt = doors.started[0]?.prompt ?? "";
         expect(prompt).not.toContain("TAIL");
-        expect(prompt).toContain("(the rest is in its own chat)");
+        // Names the door that hands over the rest, rather than a chat the parent would have to go and read.
+        expect(prompt).toContain('… (cut here: wait(target: "sub-1") returns its whole report)');
     });
 
     it("stays quiet when a parked wait of the parent's already took the ending", async () => {

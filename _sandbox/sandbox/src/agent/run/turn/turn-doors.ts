@@ -48,12 +48,13 @@ export const turnDoors = (services: () => Services, body: TurnStarter["stream"])
     return {
         start,
         resume: (conversationId, routing) => fireHeldResume(services(), conversationId, routing),
-        run: (sent) => {
+        run: (sent, options) => {
             const daemon = services();
             const turn = withRuntimeDefaults(sent);
             // Opened before the provider runs, matching the send path's own order.
             const opened = openTurnTranscript(daemon, turn);
             const run = startTurnRun(daemon, body, turn, {
+                journalled: options?.journalled === true,
                 before: opened,
                 opening: (startedAt) => openingRows(turn, daemon.workspace.root, startedAt),
                 transcript: (rows, steerRows) => recordTurnTranscript(daemon, turn, rows, steerRows),

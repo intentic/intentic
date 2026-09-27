@@ -5,7 +5,7 @@ import { waitForWork, workWaitAnswer } from "./work-wait.js";
 import { soleLiveConversation } from "../../conversations/actor/conversation-holdings.js";
 import type { AppEnv } from "../../app-env.js";
 import type { Services } from "../../composition.js";
-import { pendingQuestionOf, supervisorFor } from "./children.js";
+import { childReportOf, pendingQuestionOf, supervisorFor } from "./children.js";
 import { spawnCatalogText, spawnableProviders } from "./spawn-catalog.js";
 
 // The `agents` CLI's shell door onto the child-agent service, using the same engine as the in-process tool calls.
@@ -32,6 +32,8 @@ const SpawnBodySchema = z.object({
 // Wait's default and ceiling: long enough for a real child, short enough that a forgotten wait still returns.
 const WAIT_DEFAULT_S = 600;
 const WAIT_MAX_S = 1800;
+
+const CancelBodySchema = z.object({ child: z.string().min(1) });
 
 const SendBodySchema = z.object({
     child: z.string().min(1),
@@ -127,7 +129,12 @@ export const createChildrenRoutes = (services: Services) => ({
             timeoutMs: Math.round((parsed.data.timeoutSeconds ?? WAIT_DEFAULT_S) * 1000),
             signal: c.req.raw.signal,
         });
-        return c.json(workWaitAnswer(result, (childId) => pendingQuestionOf(services.conversations, childId)));
+        return c.json(
+            workWaitAnswer(result, {
+                pendingQuestion: (childId) => pendingQuestionOf(services.conversations, childId),
+                report: (childId) => childReportOf(services.conversations, childId),
+            }),
+        );
     },
     /** POST /children/send — steer a working child, or run a follow-up turn on a settled one. */
     send: async (c: Context<AppEnv>): Promise<Response> => {
@@ -144,6 +151,24 @@ export const createChildrenRoutes = (services: Services) => ({
             return c.json({ ok: false, message: 'Pass JSON like {"child": "sub-…", "message": "…"}.' }, 400);
         }
         const result = await supervisor.send(parsed.data.child, parsed.data.message);
+        return c.json(result, result.ok ? 200 : 409);
+    },
+    /** POST /children/cancel — stop a child's running turn, its pending start, or the re-run the sandbox booked for it. */
+    cancel: async (c: Context<AppEnv>): Promise<Response> => {
+        const conversationId = conversationOf(services, c);
+        if (conversationId === undefined) {
+            return c.json({ ok: false, message: "No conversation: this shell carries no turn stamp and nothing is live." }, 400);
+        }
+        const supervisor = supervisorFor(services.conversations, conversationId);
+        if (supervisor === undefined) {
+            return c.json({ ok: false, message: "This conversation may not supervise agents: no turn with full agency has run on it." }, 403);
+        }
+        // allow(silent-catch): a body that is not JSON is answered as a malformed one, just below.
+        const parsed = CancelBodySchema.safeParse(await c.req.json().catch(() => undefined));
+        if (!parsed.success) {
+            return c.json({ ok: false, message: 'Pass JSON like {"child": "sub-…"}.' }, 400);
+        }
+        const result = await supervisor.cancel(parsed.data.child);
         return c.json(result, result.ok ? 200 : 409);
     },
     /** POST /children/answer — settle a child's question; consent cards refuse, they are the owner's. */
