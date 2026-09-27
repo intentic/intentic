@@ -1,7 +1,7 @@
 <!-- One folder's cover on the home: the chosen file read and drawn in place, or, when the folder has none, where one is. -->
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { Code, explorerColorClass, formatBytes, iconForEntry, Markdown, ui, useLatest, useLoadingReveal } from "@intentic/ui";
+import { Code, formatBytes, Markdown, ui, useLatest, useLoadingReveal } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import { fileLinkDecorator } from "../../../lib/markdown/renderMarkdown";
@@ -173,9 +173,6 @@ const undrawable = computed(
 // Relative links resolve against the file's own folder, and open in the reader's own scope, as the tab's do.
 const decorate = computed(() => fileLinkDecorator({ dir: folder === `` ? `` : `${folder}/`, agent: workspaceAgent.value }));
 
-const icon = computed(() => (entry === undefined ? `file` : iconForEntry(entry.name, entry.type)));
-const color = computed(() => (entry === undefined ? `` : explorerColorClass(`colorful`, entry.name, entry.type, false)));
-const size = computed(() => formatBytes(entry?.size));
 const open = (): void => {
     if (entry !== undefined) {
         openFile(entry.path, `keep`);
@@ -189,17 +186,6 @@ watch([() => folder, () => entry?.path], () => scroller.value?.scrollTo({ top: 0
 
 <template>
     <section class="flex min-h-0 min-w-0 flex-1 flex-col" :aria-label="t(`workspace.homeCover.document`, { name: entry?.name ?? name, here })">
-        <!-- The file's own line: which file answered (README.rst, where README.md was asked for), its size, and the way into
-             its tab. Absent with no file to name. -->
-        <div v-if="entry !== undefined" class="flex h-9 shrink-0 items-center gap-2 border-b border-line px-5">
-            <Icon :name="icon" class="shrink-0 text-sm" :class="color" aria-hidden="true" />
-            <span class="min-w-0 truncate text-xs font-medium text-content">{{ entry.name }}</span>
-            <span class="ml-auto shrink-0 pl-2 text-2xs tabular-nums text-subtle">{{ size }}</span>
-            <button type="button" :class="ui.textAction(`shrink-0 text-2xs`)" @click="open">
-                {{ t(`ui.action.open`) }}
-            </button>
-        </div>
-
         <!-- Takes focus on a click but is no tab stop, so the arrows and Space then scroll the page, as in any document; the
              tree beside it is where the keys move between folders. -->
         <div ref="scroller" class="ui-softscroll min-h-0 flex-1 overflow-auto focus:outline-none" tabindex="-1">
