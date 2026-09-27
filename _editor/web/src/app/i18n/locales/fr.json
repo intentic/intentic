@@ -4398,6 +4398,9 @@
             "closeSplitTabsMove": "Fermer la division · ces onglets reviennent dans un seul panneau"
         },
         "entryMenu": {
+            "download": "Télécharger",
+            "downloadItems": "Télécharger {count} éléments en ZIP",
+            "downloadZip": "Télécharger en ZIP",
             "extract": "Extraire",
             "keepFolder": "Garder le dossier",
             "newFile": "Nouveau fichier",

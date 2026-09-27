@@ -20,6 +20,14 @@ import { syncWorkspaceRepos } from "./layout/sync-repos.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "./layout/templates-config.js";
 import { isControlPlanePath, resolveWithin } from "./files/workspace-files-paths.js";
 import { UnknownArchiveError } from "./files/workspace-extract.js";
+import {
+    DOWNLOAD_TICKET_TTL_MS,
+    type DownloadItem,
+    type DownloadPlan,
+    downloadBinding,
+    nameSelection,
+    pathExists,
+} from "./files/workspace-download.js";
 import { TrashMissError } from "./files/trash/workspace-trash.js";
 import { mainlineStatus } from "./deps/mainline-status.js";
 import { childrenForRead, containedForRead, containedIn, insideArchive, scopedTarget, workspaceRootFor } from "./layout/workspace-scope.js";
@@ -186,6 +194,21 @@ export const createWorkspaceRoutes = (services: Services) => {
                 throw new ORPCError("NOT_FOUND", { message: "not found" });
             }
             return services.mediaTickets.mint(target);
+        }),
+        // Mints the ticket GET /workspace/download redeems: every path guarded like a read and resolved now, so the plan
+        // the ticket carries names only what this caller could already open, in the copy they asked for.
+        downloadTicket: i.downloadTicket.handler(async ({ input, context }) => {
+            const { names, filename } = nameSelection(input.paths, "workspace");
+            const items: DownloadItem[] = [];
+            for (const [path, name] of names) {
+                const { target, shared } = await scopedRead(context, input.agent, path);
+                if (!(await pathExists(target))) {
+                    throw new ORPCError("NOT_FOUND", { message: `${path} is not there any more` });
+                }
+                items.push({ target, name, root: shared ? scope.main : await workspaceRootFor(scope, input.agent) });
+            }
+            const plan: DownloadPlan = { items, filename };
+            return { ...services.mediaTickets.mint(downloadBinding(plan), DOWNLOAD_TICKET_TTL_MS), filename };
         }),
         // Resolves which workspace file a named reference means (chat prose, terminal output, a tool chip); wires
         // resolveReference to the workspace's guards and to iq's in-memory glob.

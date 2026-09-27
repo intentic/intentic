@@ -21,6 +21,8 @@ export interface EntryVerbs {
     readonly paste: () => void;
     // Starts a shell in the right-clicked folder.
     readonly openTerminal: () => void;
+    // Saves the entry, or the whole selection, onto this computer; a folder or several entries come as one ZIP.
+    readonly download: () => void;
 }
 
 export interface EntryMenuInput {
@@ -54,7 +56,24 @@ const archiveNote = (): MenuItem => ({ label: t(`workspace.words.insideArchiveEx
 
 const withSeparator = (items: readonly MenuItem[]): MenuItem[] => (items.length === 0 ? [] : [{ separator: true }, ...items]);
 
-const readOnlyMenu = ({ head = [], lead = [], tail = [] }: EntryMenuInput): MenuItem[] => joinGroups(head, lead, tail, [readOnlyNote()]);
+// Says up front that a folder or a selection arrives zipped, so the file that lands is the one the row promised.
+const downloadRow = ({ target, multi, count, verbs }: EntryMenuInput): MenuItem[] => {
+    if (target === undefined) {
+        return [];
+    }
+    const label = multi
+        ? t(`workspace.entryMenu.downloadItems`, { count })
+        : target.type === `dir`
+          ? t(`workspace.entryMenu.downloadZip`)
+          : t(`workspace.entryMenu.download`);
+    return [{ label, icon: `download`, command: verbs.download }];
+};
+
+// A download changes nothing, so a reader keeps it.
+const readOnlyMenu = (input: EntryMenuInput): MenuItem[] => {
+    const { head = [], lead = [], tail = [] } = input;
+    return joinGroups(head, lead, downloadRow(input), tail, [readOnlyNote()]);
+};
 
 // Joins the groups that have rows, a rule between them, so a menu never opens or closes on a separator.
 const joinGroups = (...groups: readonly (readonly MenuItem[])[]): MenuItem[] =>
@@ -62,10 +81,12 @@ const joinGroups = (...groups: readonly (readonly MenuItem[])[]): MenuItem[] =>
 
 // An archive's contents: what can be read, plus the one verb that gets something out of it. A folder's own rows
 // (`lead`) are dropped with the rest, since none of them mean anything about a copy the daemon keeps out of sight.
-const archiveMenu = ({ target, multi, count, head = [], tail = [], verbs }: EntryMenuInput): MenuItem[] =>
-    joinGroups(head, target === undefined ? [] : [{ label: multi ? `Copy ${count} items` : `Copy`, icon: `copy`, command: verbs.copy }], tail, [
-        archiveNote(),
-    ]);
+const archiveMenu = (input: EntryMenuInput): MenuItem[] => {
+    const { target, multi, count, head = [], tail = [], verbs } = input;
+    const reads: MenuItem[] =
+        target === undefined ? [] : [{ label: multi ? `Copy ${count} items` : `Copy`, icon: `copy`, command: verbs.copy }, ...downloadRow(input)];
+    return joinGroups(head, reads, tail, [archiveNote()]);
+};
 
 // The rows that can only ever name one entry, which is why a bulk selection has none of them.
 const soleVerbs = (target: WorkspaceTreeEntry, barren: boolean, verbs: EntryVerbs): MenuItem[] => {
@@ -82,7 +103,8 @@ const soleVerbs = (target: WorkspaceTreeEntry, barren: boolean, verbs: EntryVerb
     return items;
 };
 
-const entryVerbs = ({ target, multi, count, barren, verbs }: EntryMenuInput): MenuItem[] => {
+const entryVerbs = (input: EntryMenuInput): MenuItem[] => {
+    const { target, multi, count, barren, verbs } = input;
     if (target === undefined) {
         return [];
     }
@@ -93,6 +115,7 @@ const entryVerbs = ({ target, multi, count, barren, verbs }: EntryMenuInput): Me
         { separator: true },
         { label: multi ? `Cut ${count} items` : `Cut`, icon: `arrows-h`, command: verbs.cut },
         { label: multi ? `Copy ${count} items` : `Copy`, icon: `copy`, command: verbs.copy },
+        ...downloadRow(input),
     ];
 };
 

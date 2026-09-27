@@ -4439,6 +4439,9 @@
             "closeSplitTabsMove": "Zamknij podział · te karty wracają do jednego panelu"
         },
         "entryMenu": {
+            "download": "Pobierz",
+            "downloadItems": "Pobierz jako ZIP ({count})",
+            "downloadZip": "Pobierz jako ZIP",
             "extract": "Wypakuj",
             "keepFolder": "Zostaw folder",
             "newFile": "Nowy plik",

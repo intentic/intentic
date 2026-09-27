@@ -4408,6 +4408,9 @@
             "closeSplitTabsMove": "Die Teilung schließen · diese Tabs wandern zurück in einen Bereich"
         },
         "entryMenu": {
+            "download": "Herunterladen",
+            "downloadItems": "{count} Elemente als ZIP herunterladen",
+            "downloadZip": "Als ZIP herunterladen",
             "extract": "Entpacken",
             "keepFolder": "Ordner behalten",
             "newFile": "Neue Datei",

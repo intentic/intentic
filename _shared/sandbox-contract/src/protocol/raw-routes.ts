@@ -18,6 +18,8 @@ export const RAW_ROUTES = {
     "GET /workspace/thumb": { guest: true },
     // Fetched by a <video>/<audio> tag, which sends no header: its scoped ticket is checked in the handler.
     "GET /workspace/media": { auth: "door", guest: true, lane: "bulk" },
+    // Navigated to for a ZIP of a selection, so no header either: the ticket it carries names the selection.
+    "GET /workspace/download": { auth: "door", guest: true, lane: "bulk" },
     // An attachment is part of the message it rides with; any other target edits the shared tree.
     "POST /workspace/upload": { floor: "writer", attachmentFloor: "collaborator", lane: "bulk" },
     "POST /workspace/upload-diff": {},

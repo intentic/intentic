@@ -4437,6 +4437,9 @@
             "closeSplitTabsMove": "Cerrar la división · estas pestañas vuelven a un solo panel"
         },
         "entryMenu": {
+            "download": "Descargar",
+            "downloadItems": "Descargar {count} elementos como ZIP",
+            "downloadZip": "Descargar como ZIP",
             "extract": "Extraer",
             "keepFolder": "Conservar la carpeta",
             "newFile": "Archivo nuevo",

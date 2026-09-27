@@ -7,6 +7,10 @@ import { computeUploadSkip, type UploadManifestEntry } from "./workspace-diff.js
 import { sha256Text } from "./workspace-files.js";
 import { MAX_RAW_BYTES, contentTypeForPath, openWorkspaceFileRange, parseByteRange } from "./workspace-files-download.js";
 import { isControlPlanePath, resolveWithin } from "./workspace-files-paths.js";
+import { planEntries, planOfBinding } from "./workspace-download.js";
+import { type ZipEntry, zipChunks, zipLength } from "./workspace-zip.js";
+import { Readable } from "node:stream";
+import { webStream } from "@intentic/base/web-stream";
 import { MAX_UPLOAD_BYTES, UploadTooLargeError } from "./workspace-files-upload.js";
 import { isRendition, thumbnailable, workspaceThumbnail } from "./workspace-thumbnail.js";
 import { insideArchive, scopedTarget } from "../layout/workspace-scope.js";
@@ -200,6 +204,32 @@ export const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) =
             return c.body(null, 200, headers);
         }
         return c.body(openWorkspaceFileRange(target, range.start, range.end), range.partial ? 206 : 200, headers);
+    },
+
+    // GET /workspace/download: several files and folders as one ZIP, streamed as it is read so the browser's download
+    // manager writes it to disk while the daemon holds one read buffer. Navigated to, so no header: the ticket is the
+    // credential AND the selection, resolved and guarded when workspace.downloadTicket minted it.
+    download: async (c: Context<AppEnv>): Promise<Response> => {
+        const plan = planOfBinding(services.mediaTickets.bound(c.req.query("ticket") ?? ""));
+        if (plan === undefined) {
+            return c.json({ error: "this download link has expired; start the download again" }, 401);
+        }
+        let entries: ZipEntry[];
+        try {
+            entries = await planEntries(plan);
+        } catch {
+            return c.json({ error: "something selected is not there any more" }, 404);
+        }
+        // Known up front only when nothing deflates; then the browser shows real progress and time left.
+        const length = zipLength(entries);
+        const headers: Record<string, string> = {
+            "Content-Type": "application/zip",
+            "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(plan.filename)}`,
+            "Cache-Control": "no-store",
+            ...(length === undefined ? {} : { "Content-Length": String(length) }),
+        };
+        const chunks = zipChunks(entries, length !== undefined);
+        return c.body(webStream<Uint8Array>(Readable.toWeb(Readable.from(chunks, { objectMode: false }))), 200, headers);
     },
 
     // POST /workspace/upload: writes one file under /work; drag-drop and the editor's save both post here.

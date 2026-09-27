@@ -1,5 +1,6 @@
 import { useNotifications } from "../../../../shell/notifications/notifications";
 import { useTerminalPanel } from "../../../terminal/useTerminalPanel";
+import { downloadEntries } from "../../files/downloadEntries";
 import { useUploadQueue } from "../../files/upload/useUploadQueue";
 import { useDeleteUndo } from "../undo/useDeleteUndo";
 import { useWorkspaceTree } from "../useWorkspaceTree";
@@ -15,5 +16,6 @@ export const fileVerbSeams = (): FileVerbSeams & { readonly store: ReturnType<ty
         say: useNotifications().say,
         sayDeleted: useDeleteUndo().sayDeleted,
         openTerminal: (dir) => terminalPanel.spawnShell(dir),
+        download: downloadEntries,
     };
 };

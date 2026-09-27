@@ -132,6 +132,21 @@ export const WorkspaceMediaTicketSchema = z.object({
     ticket: z.string().describe("Hand this to the streaming route in the query string. It buys exactly the one file it was minted for."),
     expiresAt: z.number().describe("When it stops working, in milliseconds, so a player can tell a dead ticket from a dead file."),
 });
+// Credential for GET /workspace/download, which the browser navigates to so its own download manager streams the archive
+// to disk. The ticket carries the whole selection, resolved when minted, so however many entries it names the URL stays
+// short.
+export const WorkspaceDownloadTicketQuerySchema = WorkspaceScopeSchema.extend({
+    paths: z
+        .array(z.string().min(1))
+        .min(1)
+        .max(10_000)
+        .describe("The files and folders to download together, as workspace paths. A folder brings everything inside it."),
+});
+export const WorkspaceDownloadTicketSchema = z.object({
+    ticket: z.string().describe("Hand this to the download route in the query string. It buys exactly the selection it was minted for, once resolved."),
+    expiresAt: z.number().describe("When it stops working, in milliseconds. It is meant to be used at once."),
+    filename: z.string().describe("What the archive is saved as, so a caller can say what is on its way."),
+});
 // A read of a window: offset negative reads that many bytes from the end (for following a growing log); limit is
 // clamped to the daemon's own cap. Coerced from query strings.
 export const WorkspaceFileReadQuerySchema = WorkspaceScopeSchema.extend({

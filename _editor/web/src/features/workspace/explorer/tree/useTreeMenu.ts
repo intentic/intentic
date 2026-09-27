@@ -31,6 +31,8 @@ export interface TreeMenuHost {
     readonly paste: (dir: string) => Promise<void>;
     // `dir` is workspace-relative.
     readonly openTerminal: (dir: string) => void;
+    // Saves these workspace paths onto this computer.
+    readonly download: (paths: readonly string[]) => void;
 }
 
 export const useTreeMenu = (host: TreeMenuHost) => {
@@ -50,7 +52,7 @@ export const useTreeMenu = (host: TreeMenuHost) => {
             ? host.rowActions(target.path).map((action) => ({ label: action.tooltip, icon: action.icon, command: () => runAction(target, action) }))
             : [];
     // The verbs of a menu opened on `target` (undefined for the background), acting in `dir`.
-    const verbsFor = (target: WorkspaceTreeEntry | undefined, dir: string): EntryVerbs => ({
+    const verbsFor = (target: WorkspaceTreeEntry | undefined, dir: string, multi: boolean): EntryVerbs => ({
         newFile: () => host.beginCreate(dir, `file`),
         newFolder: () => host.beginCreate(dir, `dir`),
         rename: () => {
@@ -77,6 +79,12 @@ export const useTreeMenu = (host: TreeMenuHost) => {
         },
         paste: () => void host.paste(dir),
         openTerminal: () => host.openTerminal(dir),
+        // The selection it was opened in, the private entries left out as every bulk verb leaves them; else the one row.
+        download: () => {
+            if (target !== undefined) {
+                host.download(multi ? host.rules.unlockedOnly([...selection.value]) : [target.path]);
+            }
+        },
     });
     // A right-click on empty space acts in the tree's OWN root: `` would aim every verb at /work from inside a project.
     const dirOf = (target: WorkspaceTreeEntry | undefined): string => {
@@ -102,7 +110,7 @@ export const useTreeMenu = (host: TreeMenuHost) => {
             clipboardFull: host.store.clipboard.value !== undefined,
             lead: dirActionItems(target, multi),
             ...host.frame(target, multi),
-            verbs: verbsFor(target, dir),
+            verbs: verbsFor(target, dir, multi),
         });
     });
     // Right-clicking outside the current selection collapses it to that one row; inside a multi-selection keeps it.

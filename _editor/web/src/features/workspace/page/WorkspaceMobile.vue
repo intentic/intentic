@@ -40,6 +40,7 @@ import { useVocabulary } from "../../../core-views/vocabulary";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { filesToEntries } from "../explorer/transfer/dropEntries";
 import { opensAsFolder } from "../files/archiveEntries";
+import { downloadEntries } from "../files/downloadEntries";
 import { withProvisionalEntries } from "../files/provisionalEntries";
 import { explorerShows, technicalHidden } from "../explorer/explorerFilter";
 import { deadLink } from "../explorer/tree/treeRows";
@@ -75,22 +76,7 @@ const words = useVocabulary();
 const { maker } = useAudience();
 const changes = useChanges();
 const store = useWorkspaceTree();
-const {
-    entriesByPath,
-    entry,
-    listingOf,
-    hiddenIn,
-    keepListed,
-    error,
-    isLoading,
-    refetch,
-    readBlob,
-    run,
-    busy,
-    actionError,
-    canEditFiles,
-    lazyLoading,
-} = store;
+const { entriesByPath, entry, listingOf, hiddenIn, keepListed, error, isLoading, refetch, run, busy, actionError, canEditFiles, lazyLoading } = store;
 // The tree query reports a raw message; this view knows the user was trying to see their files.
 const treeNotice = computed<NoticeModel | undefined>(() =>
     error.value === undefined ? undefined : { tone: `danger`, title: t(`workspace.workspaceMobile.couldntLoadFiles`), detail: error.value },
@@ -297,17 +283,18 @@ const copyPath = (target: WorkspaceTreeEntry): void => {
         .then(() => say(t(`workspace.fileVerbs.pathCopied`)))
         .catch(() => undefined);
 };
+// Streamed to disk by the browser, never held in the tab: a file as itself, a folder as one ZIP.
 const download = (target: WorkspaceTreeEntry): void => {
     sheetEntry.value = undefined;
-    void run(async () => {
-        const blob = await readBlob(target.path);
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement(`a`);
-        anchor.href = url;
-        anchor.download = target.name;
-        anchor.click();
-        URL.revokeObjectURL(url);
-    }, t(`workspace.fileVerbs.couldntDownload`));
+    void run(
+        async () => {
+            const archive = await downloadEntries([{ path: target.path, type: target.type === `dir` ? `dir` : `file` }]);
+            if (archive !== undefined) {
+                say(t(`workspace.fileVerbs.downloadingArchive`, { name: archive }));
+            }
+        },
+        t(target.type === `dir` ? `workspace.fileVerbs.couldntDownloadThese` : `workspace.fileVerbs.couldntDownload`),
+    );
 };
 
 // Upload (the drag-drop replacement): a picker FAB targeting the current directory.
@@ -727,12 +714,12 @@ const onPick = (event: Event): void => {
                 </p>
                 <template v-else>
                     <button
-                        v-if="sheetEntry.type === 'file'"
                         type="button"
                         class="flex h-12 items-center gap-3 rounded-lg px-3 text-left text-sm active:bg-overlay"
                         @click="download(sheetEntry)"
                     >
-                        <Icon name="download" class="text-base text-muted" /> {{ t(`ui.action.download`) }}
+                        <Icon name="download" class="text-base text-muted" />
+                        {{ sheetEntry.type === "dir" ? t(`workspace.entryMenu.downloadZip`) : t(`ui.action.download`) }}
                     </button>
                     <!-- Rename and Delete stay gated; Download and Copy path remain available. -->
                     <template v-if="canEditFiles && !archived(sheetEntry.path)">

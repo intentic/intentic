@@ -81,6 +81,34 @@ describe(`where the verbs act`, () => {
     });
 });
 
+describe(`downloading`, () => {
+    it(`hands one file over as itself, and a folder or a selection as one ZIP, the private entries left out`, async () => {
+        const { download, say, press, select } = menuOver();
+        press(MAIN, `Download`);
+        press(SRC, `Download as ZIP`);
+        select(`app/src/main.ts`, SECRET.path, `app/web`);
+        press(MAIN, `Download 2 items as ZIP`);
+        await drain();
+        expect(download.mock.calls.map(([targets]) => targets)).toEqual([
+            [{ path: `app/src/main.ts`, type: `file` }],
+            [{ path: `app/src`, type: `dir` }],
+            [
+                { path: `app/src/main.ts`, type: `file` },
+                { path: `app/web`, type: `dir` },
+            ],
+        ]);
+        // Only an archive is announced: a single file shows up in the browser's downloads at once.
+        expect(say.mock.calls.map(([message]) => message)).toEqual([`Downloading selection.zip`, `Downloading selection.zip`]);
+    });
+
+    it(`lets a read-only member download too, since it changes nothing`, async () => {
+        const { download, press } = menuOver({ canWrite: false });
+        press(SRC, `Download as ZIP`);
+        await drain();
+        expect(download).toHaveBeenCalledTimes(1);
+    });
+});
+
 describe(`what the menu offers`, () => {
     it(`collapses the selection to an entry outside it, keeps a multi-selection it is part of, and counts what the verbs would touch`, () => {
         const { menu, selecting, show, press, select } = menuOver();
@@ -88,7 +116,16 @@ describe(`what the menu offers`, () => {
 
         press(MAIN);
         expect([[...selecting.selection.value], show.mock.calls.length]).toEqual([[`app/src/main.ts`, SECRET.path, `app/web`], 1]);
-        expect(labels(menu.menuItems.value)).toEqual([`New File`, `New Folder`, `—`, `Delete 2 items`, `—`, `Cut 2 items`, `Copy 2 items`]);
+        expect(labels(menu.menuItems.value)).toEqual([
+            `New File`,
+            `New Folder`,
+            `—`,
+            `Delete 2 items`,
+            `—`,
+            `Cut 2 items`,
+            `Copy 2 items`,
+            `Download 2 items as ZIP`,
+        ]);
 
         press(SRC);
         expect([...selecting.selection.value]).toEqual([`app/src`]);
@@ -118,9 +155,9 @@ describe(`what the menu offers`, () => {
         const reader = menuOver({ canWrite: false });
         reader.press(SRC);
         expect([archived, locked, labels(reader.menu.menuItems.value)]).toEqual([
-            [`Copy`, `—`, `Inside an archive: extract it to change anything`],
+            [`Copy`, `Download`, `—`, `Inside an archive: extract it to change anything`],
             [`Kept private by the sandbox`],
-            [`What src is`, `—`, `Read-only: changing files needs writer access`],
+            [`What src is`, `—`, `Download as ZIP`, `—`, `Read-only: changing files needs writer access`],
         ]);
     });
 });

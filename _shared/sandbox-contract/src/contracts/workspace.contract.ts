@@ -42,6 +42,8 @@ import {
     WorkspaceFileSchema,
     WorkspaceMediaTicketQuerySchema,
     WorkspaceMediaTicketSchema,
+    WorkspaceDownloadTicketQuerySchema,
+    WorkspaceDownloadTicketSchema,
     WorkspaceMoveSchema,
     WorkspaceResolveQuerySchema,
     WorkspaceResolveSchema,
@@ -138,6 +140,19 @@ export const workspaceContract = {
         .meta({ floor: "viewer", guest: true })
         .input(WorkspaceMediaTicketQuerySchema)
         .output(WorkspaceMediaTicketSchema),
+    // Mints the ticket GET /workspace/download (a plain Hono route streaming a ZIP, no oRPC shape) requires.
+    downloadTicket: procedure
+        .route({
+            method: "POST",
+            path: "/workspace/download-ticket",
+            summary: "Get a pass for downloading files and folders together",
+            description:
+                "Mints the short-lived ticket the download route takes, bound to a selection of files and folders. The route answers one ZIP streamed straight from disk: folders whole, already-compressed formats stored as they are and everything else deflated. Minting it first means a missing or unreadable path is refused here, before the browser starts a download that cannot finish.",
+        })
+        // Downloading is a read, and the ticket is strictly narrower than the bearer.
+        .meta({ floor: "viewer", guest: true })
+        .input(WorkspaceDownloadTicketQuerySchema)
+        .output(WorkspaceDownloadTicketSchema),
     // Matches a prose-written path, often just a suffix, against the tree rather than trusting it as root-relative.
     resolve: procedure
         .route({

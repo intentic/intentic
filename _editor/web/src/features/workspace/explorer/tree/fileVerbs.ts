@@ -4,6 +4,7 @@ import { basename } from "@intentic/ui/path";
 import type { Ref } from "vue";
 import { type MultiSelect, useMultiSelect } from "../../../../lib/multiSelect";
 import type { useNotifications } from "../../../../shell/notifications/notifications";
+import type { DownloadTarget } from "../../files/downloadEntries";
 import type { useUploadQueue } from "../../files/upload/useUploadQueue";
 import type { LandedEntry } from "../fileNesting";
 import type { RowAction } from "../rowActions";
@@ -45,6 +46,8 @@ export interface FileVerbSeams {
     readonly sayDeleted: (receipt: string, batch: DeleteBatch) => void;
     // `dir` is workspace-relative.
     readonly openTerminal: (dir: string) => void;
+    // Hands entries to the browser's own download manager; answers the archive's name when they come zipped.
+    readonly download: (targets: readonly DownloadTarget[]) => Promise<string | undefined>;
 }
 
 export interface FileVerbsOptions {
@@ -156,6 +159,20 @@ export const createFileVerbs = (options: FileVerbsOptions) => {
         paste: transfer.paste,
         // Read when the row is chosen, so a surface that never opens a terminal (a test's) need not supply one.
         openTerminal: (dir) => seams.openTerminal(dir),
+        download: (paths) => {
+            const targets = paths.map((path): DownloadTarget => ({ path, type: byPath.value.get(path)?.type === `dir` ? `dir` : `file` }));
+            const one = targets.length === 1 && targets[0]?.type === `file`;
+            void store.run(
+                async () => {
+                    const archive = await seams.download(targets);
+                    // A ZIP starts once the daemon has walked the selection; saying so covers the wait before the browser shows it.
+                    if (archive !== undefined) {
+                        say(t(`workspace.fileVerbs.downloadingArchive`, { name: archive }));
+                    }
+                },
+                one ? t(`workspace.fileVerbs.couldntDownload`) : t(`workspace.fileVerbs.couldntDownloadThese`),
+            );
+        },
     });
 
     return { rules, selecting, inline, edits, deleting, transfer, menu };

@@ -16,6 +16,7 @@ const verbs = (): EntryVerbs => ({
     copy: jest.fn(),
     paste: jest.fn(),
     openTerminal: jest.fn(),
+    download: jest.fn(),
 });
 const input = (over: Partial<EntryMenuInput> = {}): EntryMenuInput => ({
     target: file,
@@ -34,7 +35,7 @@ const labels = (items: readonly MenuItem[]): string[] => items.map((item) => (it
 
 describe(`the entry menu`, () => {
     it(`offers a file its verbs, with the creates first`, () => {
-        expect(labels(entryMenuItems(input()))).toEqual([`New File`, `New Folder`, `—`, `Rename`, `Delete`, `—`, `Cut`, `Copy`]);
+        expect(labels(entryMenuItems(input()))).toEqual([`New File`, `New Folder`, `—`, `Rename`, `Delete`, `—`, `Cut`, `Copy`, `Download`]);
     });
 
     it(`counts a bulk verb and drops Rename, which only ever names one`, () => {
@@ -46,6 +47,7 @@ describe(`the entry menu`, () => {
             `—`,
             `Cut 3 items`,
             `Copy 3 items`,
+            `Download 3 items as ZIP`,
         ]);
     });
 
@@ -82,6 +84,7 @@ describe(`the entry menu`, () => {
             `—`,
             `Cut`,
             `Copy`,
+            `Download`,
         ]);
         expect(labels(entryMenuItems(input({ target: zip, multi: true, count: 2 })))).not.toContain(`Extract`);
         expect(labels(entryMenuItems(input({ target: { ...zip, name: `site.7z`, path: `drops/site.7z` } })))).not.toContain(`Extract`);
@@ -106,6 +109,7 @@ describe(`the entry menu`, () => {
             `—`,
             `Cut`,
             `Copy`,
+            `Download as ZIP`,
             `—`,
             `Collapse Folders`,
         ]);
@@ -113,19 +117,28 @@ describe(`the entry menu`, () => {
 
     it(`keeps a read-only member to the readable rows and says why`, () => {
         const items = entryMenuItems(input({ canEdit: false, lead: [{ label: `Open management panel` }] }));
-        expect(labels(items)).toEqual([`Open management panel`, `—`, `Read-only: changing files needs writer access`]);
+        expect(labels(items)).toEqual([`Open management panel`, `—`, `Download`, `—`, `Read-only: changing files needs writer access`]);
         expect(items.at(-1)?.disabled).toBe(true);
     });
 
     it(`does not lead a read-only menu with a separator when nothing else is readable`, () => {
         const items = entryMenuItems(input({ canEdit: false }));
-        expect(labels(items)).toEqual([`Read-only: changing files needs writer access`]);
+        expect(labels(items)).toEqual([`Download`, `—`, `Read-only: changing files needs writer access`]);
         expect(items[0]?.separator).not.toBe(true);
     });
 
     it(`inside an archive keeps the read verbs and the one that gets something out`, () => {
         const items = entryMenuItems(input({ archived: true, head: [{ label: `Open` }], tail: [{ label: `Collapse Folders` }] }));
-        expect(labels(items)).toEqual([`Open`, `—`, `Copy`, `—`, `Collapse Folders`, `—`, `Inside an archive: extract it to change anything`]);
+        expect(labels(items)).toEqual([
+            `Open`,
+            `—`,
+            `Copy`,
+            `Download`,
+            `—`,
+            `Collapse Folders`,
+            `—`,
+            `Inside an archive: extract it to change anything`,
+        ]);
         expect(items.at(-1)?.disabled).toBe(true);
     });
 
@@ -141,6 +154,19 @@ describe(`the entry menu`, () => {
         expect(labels(entryMenuItems(input({ archived: true, target: dir, lead: [{ label: `Open management panel` }] })))).not.toContain(
             `Open management panel`,
         );
+    });
+
+    it(`offers Download to anything readable, saying when it comes zipped, and never on the background`, () => {
+        expect(labels(entryMenuItems(input({ target: dir })))).toContain(`Download as ZIP`);
+        expect(labels(entryMenuItems(input({ target: dir, canEdit: false })))).toContain(`Download as ZIP`);
+        expect(labels(entryMenuItems(input({ archived: true, multi: true, count: 2 })))).toContain(`Download 2 items as ZIP`);
+        expect(labels(entryMenuItems(input({ target: undefined }))).some((label) => label.startsWith(`Download`))).toBe(false);
+        expect(labels(entryMenuItems(input({ target: undefined, canEdit: false }))).some((label) => label.startsWith(`Download`))).toBe(false);
+        const spec = input({ multi: true, count: 4 });
+        entryMenuItems(spec)
+            .find((item) => item.label === `Download 4 items as ZIP`)
+            ?.command?.({} as never);
+        expect(spec.verbs.download).toHaveBeenCalledTimes(1);
     });
 
     it(`explains a locked entry and offers nothing else`, () => {

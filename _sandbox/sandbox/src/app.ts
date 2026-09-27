@@ -270,12 +270,13 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // Composer voice input, a WAV in, text out; off oRPC since the contract carries no audio.
     app.route("/", createSpeechRoute(services));
 
-    // The workspace's byte routes: raw file read, the ranged media read a <video> talks to, and the three upload doors.
+    // The workspace's byte routes: raw file read, the ranged media read a <video> talks to, the ZIP download of a selection, and the three upload doors.
     // Off oRPC since their bodies are streamed bytes; registered before the catch-all, like /health.
     const workspaceBytes = createWorkspaceBytesRoutes(services);
     serve("GET /workspace/raw", workspaceBytes.raw);
     serve("GET /workspace/thumb", workspaceBytes.thumb);
     serve("GET /workspace/media", workspaceBytes.media);
+    serve("GET /workspace/download", workspaceBytes.download);
     serve("POST /workspace/upload", workspaceBytes.upload);
     serve("POST /workspace/upload-diff", workspaceBytes.uploadDiff);
     serve("POST /workspace/upload-archive", workspaceBytes.uploadArchive);
