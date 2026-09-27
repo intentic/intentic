@@ -132,8 +132,9 @@ answer_confirm() {
     local id
     id=$(window_titled "$CONFIRM_TITLE" | head -1)
     [ -n "$id" ] || return 1
-    # Activated, then a real XTEST keypress — GTK ignores the synthetic event `xdotool key --window` sends.
-    xdotool windowactivate --sync "$id" 2>/dev/null || true
+    # Xvfb has no window manager to answer windowactivate's EWMH request. Focus the dialog directly
+    # before the real XTEST keypress; otherwise Return can land on the workspace behind it.
+    xdotool windowfocus --sync "$id"
     xdotool key --clearmodifiers Return
 }
 
@@ -182,9 +183,8 @@ memory_report() {
 # bugs, and a bare "it died" tells a CI log's reader none of them. Runs in this shell, never a subshell — `wait`
 # in one knows nothing of this shell's jobs.
 app_died() {
-    local status
-    wait "$APP_PID"
-    status=$?
+    local status=0
+    wait "$APP_PID" || status=$?
     if [ "$status" -gt 128 ]; then
         fail "$1 (killed by SIG$(kill -l "$((status - 128))"))"
     else
@@ -396,7 +396,9 @@ one_window_showing_setup() {
 }
 until_true 15 "the setup screen took the workspace's window rather than opening a second one" one_window_showing_setup || {
     echo "--- mapped windows ---" >&2
-    mapped_windows | while read -r id; do
+    # A vanished window is the most useful failure to diagnose. Do not let the empty search's
+    # status escape through pipefail before the process-survival check below can report it.
+    (mapped_windows || true) | while read -r id; do
         echo "$id $(xdotool getwindowname "$id" 2>/dev/null) $(xdotool getwindowgeometry --shell "$id" 2>/dev/null | tr '\n' ' ')" >&2
     done
 }

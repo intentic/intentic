@@ -23,6 +23,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      desktop_smoke:
+        description: Build and smoke-test the Linux desktop artifacts on the desktop runner
+        type: boolean
+        default: false
 
 # Supersede a running pipeline on a pull request; never on main, where the release job must be allowed to
 # finish. This is `interruptible: true` — which every verify job carried and the release deliberately did not.
@@ -1032,10 +1037,11 @@ jobs:
   # the release's, by design), gating nothing. Four release-profile Tauri builds for one commit, and the two
   # Windows halves serialized on the ONE Windows machine, with the redundant one ahead of the release's in the
   # queue. The empty-version check is what keeps this job to the pushes where it is the only desktop coverage
-  # there is; the release's own jobs are the coverage on every other one.
+  # there is; the release's own jobs are the coverage on every other one. A manual dispatch with desktop_smoke
+  # also runs this job on a branch, to check a CI-only fix on the same desktop runner before it reaches main.
   desktop-verify:
     needs: [changes, preflight, ci-base, ci-desktop, release]
-    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.changes.outputs.desktop == 'true' && needs.release.outputs.version == '' && needs.preflight.result == 'success' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
+    if: ${{ !cancelled() && ((github.ref == 'refs/heads/main' && needs.changes.outputs.desktop == 'true' && needs.release.outputs.version == '' && needs.preflight.result == 'success' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure') || (github.event_name == 'workflow_dispatch' && inputs.desktop_smoke)) }}
     runs-on: [self-hosted, intentic, desktop]
     container:
       image: ghcr.io/intentic/ci-desktop:latest
