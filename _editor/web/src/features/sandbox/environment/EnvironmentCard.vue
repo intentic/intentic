@@ -21,9 +21,10 @@ import DiffView from "../../workspace/viewers/DiffView.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // The sandbox's environment, read two ways: contents leads as the approval surface, the Dockerfile diff
-// sits behind a pill. The decision (and its rebuild) sits below both views since it concerns the
-// environment's state, not its display; approval pins the content's hash, and the rebuild itself runs
-// outside the container (see HostRecreate).
+// sits behind a pill. The decision (and its rebuild) is the card's first row, above both views: it
+// concerns the environment's state, not its display, and the header badge it answers sits right above
+// it. Approval pins the content's hash, and the rebuild itself runs outside the container (see
+// HostRecreate).
 
 const t = useT();
 
@@ -82,13 +83,34 @@ const load = async (): Promise<void> => {
 // Entries not yet dismissed; a dismissed install is a decided one and no longer a reason to show this card.
 const awaiting = computed(() => recurring.value.filter((entry) => entry.declined !== true));
 
-const decide = (path: string, body?: object): Promise<void> =>
-    run(async () => {
+// Where the last decision was pressed, so a refusal is said beside that button: the proposal's decision is on the
+// card's first row, a runtime install's at the foot of its own list, and one spot for both is far from one of them.
+// One action between them, still, so the two never race each other's write.
+const decidedAt = ref<`step` | `installs`>(`step`);
+const decide = (at: `step` | `installs`, path: string, body?: object): Promise<void> => {
+    decidedAt.value = at;
+    return run(async () => {
         const next = EnvironmentSchema.parse(await sandboxJson(path, jsonBody(`POST`, body ?? {})));
         queryClient.setQueryData(ENVIRONMENT_KEY, next);
     }, `Could not update the environment.`);
-const approve = (): Promise<void> => decide(`/environment/approve`, { hash: proposal.value?.hash });
-const reject = (): Promise<void> => decide(`/environment/reject`);
+};
+const approve = (): Promise<void> => decide(`step`, `/environment/approve`, { hash: proposal.value?.hash });
+const reject = (): Promise<void> => decide(`step`, `/environment/reject`);
+
+// A base compiled from a checkout rebuilds from that checkout, and that rebuild applies the approved recipe as well
+// (ic rebases the overlay onto the image it builds), so on this sandbox it is the card's ONE rebuild. The quicker
+// recipe-only rebuild beside it was the same step offered twice, and the paragraphs it took to tell them apart were
+// most of what the card said.
+const fromCheckout = computed(() => localImage.value !== undefined && slug.value !== undefined && canOperate.value);
+
+// Whether the first row has anything to hold: a proposal to decide, an approved recipe with a way to build it, or a
+// checkout to rebuild from.
+const step = computed(
+    () =>
+        proposal.value !== undefined ||
+        fromCheckout.value ||
+        (pending.value !== undefined && (hosted.value !== undefined || serverManaged.value || slug.value !== undefined)),
+);
 </script>
 
 <template>
@@ -111,6 +133,69 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
                 </button>
             </div>
         </template>
+
+        <!-- THE NEXT STEP LEADS THE CARD, under the badge that names it. It used to trail the longest list here, where
+             it sat under "Installed at runtime" and read as an action on those rows, which have decisions of their
+             own. No sentences around the buttons: the badge says what is waiting, the rows say what arrives, and
+             each button's confirmation says what it costs. -->
+        <RowNote v-if="step" variant="block" class="flex flex-col gap-3">
+            <!-- Deciding comes first: approving changes what the rebuild builds, so it is the step that goes before.
+                 Spinning only for its own press: a runtime install dismissed at the foot of the card holds these too,
+                 but a wait drawn up here would be pinned to the wrong button. -->
+            <template v-if="proposal">
+                <div v-if="canOperate" class="flex flex-wrap items-center gap-2">
+                    <Button :label="t(`ui.action.approve`)" size="small" :disabled="busy" :loading="busy && decidedAt === `step`" @click="approve">
+                        <template #icon><Icon name="check" /></template>
+                    </Button>
+                    <Button
+                        :label="t(`sandbox.environmentCard.reject`)"
+                        size="small"
+                        severity="danger"
+                        :text="true"
+                        :disabled="busy"
+                        :loading="busy && decidedAt === `step`"
+                        @click="reject"
+                    >
+                        <template #icon><Icon name="times" /></template>
+                    </Button>
+                </div>
+                <p v-else class="text-2xs text-subtle">{{ t(`sandbox.environmentCard.onlySandboxOwnerApprove`) }}</p>
+            </template>
+
+            <!-- The platform builds it; owner-gated there, so a member sees the build with no button. -->
+            <template v-if="pending && hosted">
+                <HostedRebuild v-if="canOperate" :sandbox-id="hosted" :hash="pending.hash" :content="pending.content" />
+                <p v-else class="text-2xs text-subtle">{{ t(`sandbox.environmentCard.onlySandboxOwnerRebuild`) }}</p>
+            </template>
+            <p v-else-if="pending && serverManaged" class="text-2xs text-subtle">
+                {{ t(`sandbox.environmentCard.appliesOnNext`) }}
+                <span class="font-mono">intentic deploy apply</span>
+                {{ t(`sandbox.environmentCard.againstSandboxsHost`) }}
+            </p>
+            <!-- Offered with nothing pending too, a tier down: there it picks up code, and the card isn't asking for it.
+                 A tier down as well while a proposal waits, since deciding is the step before it. -->
+            <DevRebuild
+                v-else-if="localImage && slug && canOperate"
+                :slug="slug"
+                :base="localImage.base"
+                :root="localImage.root"
+                :recipe-pending="pending !== undefined"
+                :secondary="pending === undefined || proposal !== undefined"
+            />
+            <!-- `bare`: no paragraph under the button, since its confirmation says what the rebuild costs; the class
+                 puts back the column `bare` drops, so a running log keeps its gap. -->
+            <HostRecreate
+                v-else-if="pending && slug"
+                :slug="slug"
+                :hash="pending.hash"
+                action="Rebuild"
+                bare
+                :text="proposal !== undefined"
+                class="flex flex-col gap-2"
+            />
+
+            <Notice v-if="actionNotice && decidedAt === `step`" :of="actionNotice" />
+        </RowNote>
 
         <!-- `gap-5` must match the section spacing in <EnvironmentContents>, so sections keep one rhythm. -->
         <RowNote variant="block" class="flex flex-col gap-5">
@@ -142,61 +227,17 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
                 {{ t(`sandbox.environmentCard.sandboxsImageOlderThan`) }}
             </p>
 
-            <!-- Runtime installs sessions keep making, cross-session and drift-corroborated; fixable ones are usually already drafted into the proposal above. -->
+            <!-- Runtime installs sessions keep making, cross-session and drift-corroborated; fixable ones are usually already drafted into the proposal above.
+                 The card ends on this list: its rows carry their own decisions, and nothing card-wide follows them. -->
             <RuntimeInstalls
                 v-if="recurring.length"
                 :entries="recurring"
                 :can-operate="canOperate"
                 :busy="busy"
-                @decide="(tool, decision) => decide(`/environment/runtime-install`, { tool, decision })"
+                @decide="(tool, decision) => decide(`installs`, `/environment/runtime-install`, { tool, decision })"
             />
 
-            <!-- The decision, under both views: it concerns the environment's state, not how it's displayed. -->
-            <template v-if="proposal">
-                <div v-if="canOperate" class="flex items-center justify-end gap-2">
-                    <Button :label="t(`sandbox.environmentCard.reject`)" size="small" severity="danger" :text="true" :loading="busy" @click="reject">
-                        <template #icon><Icon name="times" /></template>
-                    </Button>
-                    <Button :label="t(`ui.action.approve`)" size="small" :loading="busy" @click="approve">
-                        <template #icon><Icon name="check" /></template>
-                    </Button>
-                </div>
-                <p v-else class="text-2xs text-subtle">{{ t(`sandbox.environmentCard.onlySandboxOwnerApprove`) }}</p>
-            </template>
-
-            <template v-if="pending">
-                <!-- The platform builds it; owner-gated there, so a member sees the build with no button. -->
-                <template v-if="hosted">
-                    <HostedRebuild v-if="canOperate" :sandbox-id="hosted" :hash="pending.hash" :content="pending.content" />
-                    <p v-else class="text-2xs text-subtle">{{ t(`sandbox.environmentCard.onlySandboxOwnerRebuild`) }}</p>
-                </template>
-                <template v-else-if="serverManaged">
-                    <p class="text-2xs text-subtle">
-                        {{ t(`sandbox.environmentCard.appliesOnNext`) }}
-                        <span class="font-mono">intentic deploy apply</span>
-                        {{ t(`sandbox.environmentCard.againstSandboxsHost`) }}
-                    </p>
-                </template>
-                <template v-else-if="slug">
-                    <p class="text-xs font-medium text-content">{{ t(`sandbox.environmentCard.toFinishRebuildSandbox`) }}</p>
-                    <HostRecreate :slug="slug" :hash="pending.hash" action="Rebuild" />
-                </template>
-            </template>
-
-            <!-- A base compiled from a checkout: what a newer image contains comes from there, not from a release. On a
-                 pending recipe that makes two rebuilds on one card, and the second is a SUPERSET of the first — it
-                 applies the same recipe on a base it rebuilds first. That fact is told by the offer itself
-                 (`recipePending`), never by a sentence under the other button, which is where a reader attaches it to
-                 the wrong one. -->
-            <DevRebuild
-                v-if="localImage && slug && canOperate"
-                :slug="slug"
-                :base="localImage.base"
-                :root="localImage.root"
-                :recipe-pending="pending !== undefined"
-            />
-
-            <Notice v-if="actionNotice" :of="actionNotice" />
+            <Notice v-if="actionNotice && decidedAt === `installs`" :of="actionNotice" />
         </RowNote>
     </RowGroup>
 </template>

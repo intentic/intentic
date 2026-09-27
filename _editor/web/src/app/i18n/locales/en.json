@@ -2358,7 +2358,6 @@
             "hostCommand": "Host command",
             "keepWorking": "You keep working",
             "makesButtonOn": "makes this a button from then on.",
-            "orRebuildFromCheckout": "Or rebuild from your checkout: that applies this same recipe, on a base rebuilt from your code — so it also picks up what you've written since. It rebuilds the whole image first, so it takes longer than the rebuild above.",
             "rebuildCheckout": "Rebuild from checkout",
             "rebuildCheckout2": "Rebuild from checkout?",
             "rebuildCommand": "Rebuild command",
@@ -2576,7 +2575,6 @@
             "recipe": "Recipe",
             "reject": "Reject",
             "sandboxsImageOlderThan": "This sandbox's image is older than the plain-language contents list. Update the sandbox and the list appears beside the recipe.",
-            "toFinishRebuildSandbox": "To finish, rebuild your sandbox:",
             "whatSandboxInstalled": "What this sandbox has installed"
         },
         "environmentContents": {
@@ -2709,7 +2707,6 @@
             "buildMinutesCountAgainst": "Build minutes count against this sandbox's awake hours. Your files in /work are kept.",
             "buildingEnvironmentOnMachine": "Building your environment on a machine we run. This takes a few minutes; your sandbox keeps working meanwhile and restarts onto the result when it is ready.",
             "builtSandboxRestartingOnto": "Built. Your sandbox is restarting onto the new image; this panel updates when it is back.",
-            "toFinishBuildOn": "To finish, build it on the machine we host for you:",
             "tryBuildAgain": "Try the build again"
         },
         "importCard": {

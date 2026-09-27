@@ -2165,7 +2165,6 @@
             "hostCommand": "Polecenie na hoście",
             "keepWorking": "Ty pracujesz dalej",
             "makesButtonOn": "robi z tego od tej pory przycisk.",
-            "orRebuildFromCheckout": "Albo przebuduj z checkoutu: to stosuje ten sam przepis na bazie przebudowanej z Twojego kodu — więc bierze też to, co napisałeś od tamtej pory. Najpierw przebudowuje cały obraz, więc trwa dłużej niż przebudowa powyżej.",
             "rebuildCheckout": "Przebuduj z checkoutu",
             "rebuildCheckout2": "Przebudować z checkoutu?",
             "rebuildCommand": "Polecenie przebudowy",
@@ -2379,7 +2378,6 @@
             "recipe": "Przepis",
             "reject": "Odrzuć",
             "sandboxsImageOlderThan": "Obraz tego sandboxa jest starszy niż lista zawartości pisana prostym językiem. Zaktualizuj sandbox, a lista pojawi się obok przepisu.",
-            "toFinishRebuildSandbox": "Żeby zakończyć, przebuduj swój sandbox:",
             "whatSandboxInstalled": "Co ten sandbox ma zainstalowane"
         },
         "environmentContents": {
@@ -2512,7 +2510,6 @@
             "buildMinutesCountAgainst": "Minuty budowania liczą się do godzin czuwania tego sandboxa. Twoje pliki w /work zostają.",
             "buildingEnvironmentOnMachine": "Budujemy Twoje środowisko na maszynie, którą prowadzimy. Zajmuje to kilka minut; Twój sandbox pracuje w tym czasie dalej i restartuje na wyniku, gdy będzie gotowy.",
             "builtSandboxRestartingOnto": "Zbudowane. Twój sandbox restartuje na nowym obrazie; ten panel zaktualizuje się, gdy wróci.",
-            "toFinishBuildOn": "Żeby zakończyć, zbuduj to na maszynie, którą dla Ciebie hostujemy:",
             "tryBuildAgain": "Spróbuj zbudować jeszcze raz"
         },
         "importCard": {

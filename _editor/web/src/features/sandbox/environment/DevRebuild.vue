@@ -38,8 +38,10 @@ const props = defineProps<{
     // Host path of that checkout; absent on a sandbox handed a local image without one, which leaves only the command.
     root?: string | undefined;
     // Whether an approved recipe is waiting to be built. This rebuild applies it either way — the overlay rides the
-    // image it builds — so the offer says so, and stands down to the quicker button that does only that.
+    // image it builds — so the confirmation says so, at the moment the reader weighs it.
     recipePending?: boolean;
+    // Drawn a tier down: an offer on a card that isn't asking for it, rather than the step that finishes one.
+    secondary?: boolean;
 }>();
 
 // The door that can reach `root`, not merely one that reports the container: a PC answers through its Windows side
@@ -156,10 +158,6 @@ const checkout = computed(() => {
 
 <template>
     <div class="flex flex-col gap-2">
-        <!-- Above the button it describes, not under the other one: the reader's question at this moment is whether
-             this rebuild also settles the recipe, and the answer is the first thing it reads. -->
-        <p v-if="recipePending && !live" class="text-xs text-content">{{ t(`sandbox.devRebuild.orRebuildFromCheckout`) }}</p>
-
         <!-- The machine holding the checkout is reachable from here, so this is a button wherever you're reading it. -->
         <template v-if="hostId && root">
             <div
@@ -171,12 +169,11 @@ const checkout = computed(() => {
                 @focusin="onFocus"
                 @focusout="onBlur"
             >
-                <!-- A hammer, never the bolt the recipe's own rebuild wears: two identical glyphs on one card is what
-                     made these read as one action offered twice. -->
+                <!-- A hammer, not the bolt a swap onto an image that already exists wears: this one builds it first. -->
                 <Button
                     :label="t(`sandbox.devRebuild.rebuildCheckout`)"
                     size="small"
-                    :severity="recipePending ? `secondary` : undefined"
+                    :severity="secondary ? `secondary` : undefined"
                     @click="onButtonClick"
                 >
                     <template #icon><Icon name="hammer" /></template>
@@ -244,7 +241,8 @@ const checkout = computed(() => {
                         <span>/work is kept. Nothing else on that device is touched.</span>
                     </p>
 
-                    <!-- At the moment of asking, since this is what the reader is weighing against the quicker button. -->
+                    <!-- Said here and nowhere on the card: whether this also settles the pending recipe is the question
+                         at the moment of asking, and the card's badge already says one is waiting. -->
                     <p v-if="recipePending" class="flex items-center gap-2 text-2xs text-muted">
                         <Icon name="check" class="shrink-0 text-success" />
                         <span>{{ t(`sandbox.devRebuild.approvedRecipeAppliedPart`) }}</span>

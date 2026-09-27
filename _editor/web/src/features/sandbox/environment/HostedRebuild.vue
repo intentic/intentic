@@ -48,8 +48,9 @@ const start = (): Promise<void> =>
                 <p class="text-xs text-danger">{{ t(`sandbox.hostedRebuild.buildFailed`, { error: failed.error }) }}</p>
                 <Code v-if="failed.log" :code="failed.log" :label="t(`sandbox.hostedRebuild.buildLogTail`)" />
             </template>
-            <p class="text-xs font-medium text-content">{{ t(`sandbox.hostedRebuild.toFinishBuildOn`) }}</p>
-            <!-- Wraps without shrinking the button: in a narrow column the sentence drops below it instead of squeezing the label. -->
+            <!-- No "to finish" line above it: it leads the Environment card, under the badge that already says a rebuild
+                 is waiting. Wraps without shrinking the button: in a narrow column the sentence drops below it instead
+                 of squeezing the label. -->
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <div class="shrink-0">
                     <Button

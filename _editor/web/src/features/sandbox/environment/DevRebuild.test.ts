@@ -37,7 +37,7 @@ const { useDevRebuild } = await import("./useDevRebuild");
 
 let app: App | undefined;
 
-const mount = (props: { slug: string; base: string; root?: string; recipePending?: boolean }): HTMLElement => {
+const mount = (props: { slug: string; base: string; root?: string; recipePending?: boolean; secondary?: boolean }): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(DevRebuild, props) });
@@ -136,16 +136,17 @@ it(`renders rebuild command in fallback when device is absent`, () => {
     expect(el.textContent).not.toContain(`Runs intentic-sandbox:dev from your checkout, not a published release.`);
 });
 
-// WHAT SENT A READER DOWN THE SLOW PATH BELIEVING IT WAS THE QUICK ONE. Both buttons on the Environment card apply the
-// approved recipe, and this one is the superset — it rebuilds the base first. The card used to say that in a sentence
-// under the OTHER button, where a reader attaches it to the button above it, so the relationship is stated here
-// instead: on the offer, and again in the dialog that asks.
-it(`says it applies the waiting recipe, at the offer and at the confirmation`, async () => {
+// THE OFFER IS A BUTTON, NOT A PARAGRAPH. This rebuild applies the waiting recipe too — it rebases the overlay onto
+// the base it builds — and on a checkout-built sandbox it is the Environment card's only rebuild. The sentence that
+// once sat above it to tell it apart from a second, quicker one is gone with that second button; the fact is said
+// where it is weighed, in the dialog that asks.
+it(`says it applies the waiting recipe at the confirmation, and nowhere on the card`, async () => {
     const el = mount({ slug: nextSlug(), base: `intentic-sandbox:dev`, root: `/home/ada/intentic`, recipePending: true });
 
-    expect(el.textContent).toContain(`that applies this same recipe`);
-    expect(el.textContent).toContain(`takes longer than the rebuild above`);
-    // Not the bolt the recipe's own rebuild wears: one glyph per action, or the card offers one action twice.
+    expect(el.textContent).not.toContain(`that applies this same recipe`);
+    expect(el.textContent).not.toContain(`takes longer than the rebuild above`);
+    expect(el.textContent).toBe(`Rebuild from checkout`);
+    // A hammer, not the bolt a swap onto an existing image wears: this one builds the image first.
     expect(el.querySelector(`button [data-icon]`)?.getAttribute(`data-icon`)).toBe(`hammer`);
 
     buttonSaying(`Rebuild from checkout`)?.click();
@@ -153,6 +154,18 @@ it(`says it applies the waiting recipe, at the offer and at the confirmation`, a
 
     expect(document.body.textContent).toContain(`Your approved recipe is applied as part of this`);
     expect(document.body.textContent).toContain(`the pending rebuild clears once the sandbox is back`);
+});
+
+// The same offer is the step that finishes a pending recipe, and a standing one when nothing is waiting: the caller
+// says which, and the tier follows.
+it(`draws the offer a tier down when the card isn't asking for it`, () => {
+    const step = mount({ slug: nextSlug(), base: `intentic-sandbox:dev`, root: `/home/ada/intentic`, recipePending: true });
+    expect(step.querySelector(`button`)?.classList.contains(`p-button-secondary`)).toBe(false);
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    const offer = mount({ slug: nextSlug(), base: `intentic-sandbox:dev`, root: `/home/ada/intentic`, secondary: true });
+    expect(offer.querySelector(`button`)?.classList.contains(`p-button-secondary`)).toBe(true);
 });
 
 // Nothing pending is the dev loop's ordinary state. Promising to apply a recipe there would be the same misdirection

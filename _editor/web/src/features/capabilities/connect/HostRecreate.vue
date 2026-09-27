@@ -46,8 +46,10 @@ const props = defineProps<{
     // Whether the needed image is already on that machine, so the wait is just the restart; supplied by the update
     // tile.
     ready?: boolean;
-    // Text button without the cost line beneath; the update tile lays out download beside update.
+    // A text button, a tier below the step it sits beside; the update tile lays out download beside update.
     text?: boolean;
+    // No cost line beneath the button and no column of its own: the caller says the cost once (the update tile) or
+    // leaves it to the confirmation (the Environment card), and lays the pieces out itself.
     bare?: boolean;
 }>();
 
@@ -70,8 +72,7 @@ const cost = computed(() => {
     if (props.action === `Download`) {
         return t(`capabilities.hostRecreate.costDownload`);
     }
-    // A rebuild downloads nothing — it builds the approved recipe on the image already there. Saying which image is
-    // also what tells it apart from the checkout rebuild that shares the Environment tile.
+    // A rebuild downloads nothing — it builds the approved recipe on the image already there.
     if (props.action === `Rebuild`) {
         return t(`capabilities.hostRecreate.costRebuild`);
     }

@@ -2155,7 +2155,6 @@
             "hostCommand": "Host-Befehl",
             "keepWorking": "Sie arbeiten weiter",
             "makesButtonOn": "macht das von da an zu einem Knopf.",
-            "orRebuildFromCheckout": "Oder bauen Sie aus Ihrem Checkout neu: das wendet dasselbe Rezept an, auf einer Basis, die aus Ihrem Code neu gebaut wurde — es übernimmt also auch, was Sie seither geschrieben haben. Es baut zuerst das ganze Image neu und dauert deshalb länger als der Neubau oben.",
             "rebuildCheckout": "Aus Checkout neu bauen",
             "rebuildCheckout2": "Aus Checkout neu bauen?",
             "rebuildCommand": "Neubau-Befehl",
@@ -2368,7 +2367,6 @@
             "recipe": "Rezept",
             "reject": "Ablehnen",
             "sandboxsImageOlderThan": "Das Image dieser Sandbox ist älter als die Inhaltsliste in einfacher Sprache. Aktualisieren Sie die Sandbox, dann erscheint die Liste neben dem Rezept.",
-            "toFinishRebuildSandbox": "Zum Abschließen bauen Sie Ihre Sandbox neu:",
             "whatSandboxInstalled": "Was diese Sandbox installiert hat"
         },
         "environmentContents": {
@@ -2501,7 +2499,6 @@
             "buildMinutesCountAgainst": "Build-Minuten zählen gegen die Wachstunden dieser Sandbox. Ihre Dateien in /work bleiben erhalten.",
             "buildingEnvironmentOnMachine": "Ihre Umgebung wird auf einer Maschine gebaut, die wir betreiben. Das dauert ein paar Minuten; Ihre Sandbox arbeitet währenddessen weiter und startet auf dem Ergebnis neu, sobald es bereit ist.",
             "builtSandboxRestartingOnto": "Gebaut. Ihre Sandbox startet auf dem neuen Image neu; dieses Panel aktualisiert sich, sobald sie zurück ist.",
-            "toFinishBuildOn": "Zum Abschließen bauen Sie es auf der Maschine, die wir für Sie betreiben:",
             "tryBuildAgain": "Den Build erneut versuchen"
         },
         "importCard": {

@@ -2166,7 +2166,6 @@
             "hostCommand": "Comando del host",
             "keepWorking": "Tú sigues trabajando",
             "makesButtonOn": "convierte esto en un botón a partir de entonces.",
-            "orRebuildFromCheckout": "O reconstruye desde tu checkout: eso aplica esta misma receta sobre una base reconstruida a partir de tu código, así que también recoge lo que hayas escrito desde entonces. Reconstruye la imagen entera primero, así que tarda más que la reconstrucción de arriba.",
             "rebuildCheckout": "Reconstruir desde el checkout",
             "rebuildCheckout2": "¿Reconstruir desde el checkout?",
             "rebuildCommand": "Comando de reconstrucción",
@@ -2381,7 +2380,6 @@
             "recipe": "Receta",
             "reject": "Rechazar",
             "sandboxsImageOlderThan": "La imagen de este sandbox es más antigua que la lista de contenidos en lenguaje llano. Actualiza el sandbox y la lista aparecerá junto a la receta.",
-            "toFinishRebuildSandbox": "Para terminar, reconstruye tu sandbox:",
             "whatSandboxInstalled": "Lo que este sandbox tiene instalado"
         },
         "environmentContents": {
@@ -2514,7 +2512,6 @@
             "buildMinutesCountAgainst": "Los minutos de compilación cuentan contra las horas despierto de este sandbox. Tus archivos en /work se conservan.",
             "buildingEnvironmentOnMachine": "Construyendo tu entorno en una máquina que llevamos nosotros. Esto tarda unos minutos; tu sandbox sigue funcionando mientras tanto y se reinicia sobre el resultado cuando esté listo.",
             "builtSandboxRestartingOnto": "Construido. Tu sandbox se está reiniciando sobre la imagen nueva; este panel se actualiza cuando vuelva.",
-            "toFinishBuildOn": "Para terminar, constrúyelo en la máquina que alojamos para ti:",
             "tryBuildAgain": "Intentar la compilación de nuevo"
         },
         "importCard": {
