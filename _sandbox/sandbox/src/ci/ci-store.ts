@@ -108,9 +108,9 @@ export const fileCiStore = (path: string): CiStore => {
     return {
         secret: async () => (await file.update(minted)).secret,
         lastConclusion: async (repo, branch) => (await file.read()).conclusions[keyOf(repo, branch)]?.status,
-        recordConclusion: async (repo, branch, status, at) => {
+        recordConclusion: async (repo, branch, status, now) => {
             await file.update((state) => {
-                const conclusions = { ...state.conclusions, [keyOf(repo, branch)]: { status, at } };
+                const conclusions = { ...state.conclusions, [keyOf(repo, branch)]: { status, at: now } };
                 const keys = Object.keys(conclusions);
                 for (const stale of keys
                     .toSorted((a, b) => (conclusions[a]?.at ?? 0) - (conclusions[b]?.at ?? 0))

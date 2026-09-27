@@ -908,9 +908,16 @@ it(`folds the WEB_ORIGIN cause away until the checks anyone can make have been t
     field.value = `sandbox.example.com`;
     field.dispatchEvent(new Event(`input`));
     await nextTick();
-    // Nothing is listening in a unit run, so the probe's own verdict is the `unreachable` this notice is for.
-    buttonLabelled(`Connect`)!.click();
-    await waitFor(() => expect(el.textContent).toContain(`Nothing answered at that address.`));
+    // The probe refused the way a failed lookup refuses, which is the `unreachable` this notice is for. Stubbed rather
+    // than left to a real lookup of the address: on a loaded CI runner that outlasted the wait (run 36352451277).
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (() => Promise.reject(new TypeError(`fetch failed`))) as unknown as typeof fetch;
+    try {
+        buttonLabelled(`Connect`)!.click();
+        await waitFor(() => expect(el.textContent).toContain(`Nothing answered at that address.`));
+    } finally {
+        globalThis.fetch = realFetch;
+    }
 
     expect(el.textContent).toContain(`Check the sandbox is running`);
     expect(el.textContent).not.toContain(`WEB_ORIGIN`);
