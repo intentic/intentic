@@ -183,6 +183,7 @@ const samplesOf = ({ fleet, automations, ci, workflows, loops, devices }: Awaite
             fileDiff: { id: fleet.REVIEW_AGENT_ID, repo: `api`, path: `src/db/schema.ts` },
             rename: { id: fleet.AWAITING_AGENT_ID, title: `Renamed by the smoke run` },
             seen: { id: fleet.AWAITING_AGENT_ID },
+            unsent: { id: fleet.AWAITING_AGENT_ID, at: 1_700_000_000_000 },
             react: { id: fleet.AWAITING_AGENT_ID, emoji: `👍`, on: true },
             assign: { id: fleet.AWAITING_AGENT_ID, to: `grace@acme.dev` },
             autoLand: { id: fleet.AWAITING_AGENT_ID, autoLand: true },

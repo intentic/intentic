@@ -122,17 +122,19 @@ const runsOnBoard = (now: number): WorkflowRun[] =>
         run.steps.every((step) => step.state !== `running` || roster.agents.some((agent) => agent.id === step.conversationId)),
     );
 
-const patchAgent = (id: string, patch: Partial<AgentSummary>): AgentSummary | undefined => {
+const amendAgent = (id: string, amend: (agent: AgentSummary) => AgentSummary): AgentSummary | undefined => {
     const index = roster.agents.findIndex((agent) => agent.id === id);
     const found = roster.agents[index];
     if (found === undefined) {
         return undefined;
     }
-    const next = { ...found, ...patch };
+    const next = amend(found);
     roster.agents = roster.agents.with(index, next);
     broadcastRoster();
     return next;
 };
+
+const patchAgent = (id: string, patch: Partial<AgentSummary>): AgentSummary | undefined => amendAgent(id, (found) => ({ ...found, ...patch }));
 
 // The answer every card route gives: the card as it now stands, or the daemon's refusal for an id it does not hold.
 const agentAnswer = (agent: AgentSummary | undefined): AgentSummary => agent ?? refuse(`No such agent.`, 404);
@@ -548,6 +550,8 @@ export const procedures = {
         fileDiff: ({ repo, path }) => fileDiff(repo, path),
         rename: ({ id, title }) => agentAnswer(patchAgent(id, { title })),
         seen: ({ id }) => agentAnswer(patchAgent(id, { seenAt: Date.now() })),
+        // As the daemon does: records since when a composer holds unsent words (the words stay in the tab), null clears it.
+        unsent: ({ id, at }) => agentAnswer(amendAgent(id, ({ unsentAt: _cleared, ...card }) => (at === null ? card : { ...card, unsentAt: at }))),
         react: reactToAgent,
         assign: assignAgent,
         autoLand: ({ id }) => agentAnswer(patchAgent(id, {})),
