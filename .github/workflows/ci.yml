@@ -23,6 +23,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      desktop_smoke:
+        description: Build and smoke-test the Linux desktop artifacts on the desktop runner
+        type: boolean
+        default: false
 
 # Supersede a running pipeline on a pull request; never on main, where the release job must be allowed to
 # finish. This is `interruptible: true` — which every verify job carried and the release deliberately did not.
@@ -1035,7 +1040,7 @@ jobs:
   # there is; the release's own jobs are the coverage on every other one.
   desktop-verify:
     needs: [changes, preflight, ci-base, ci-desktop, release]
-    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.changes.outputs.desktop == 'true' && needs.release.outputs.version == '' && needs.preflight.result == 'success' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
+    if: ${{ !cancelled() && ((github.ref == 'refs/heads/main' && needs.changes.outputs.desktop == 'true' && needs.release.outputs.version == '' && needs.preflight.result == 'success' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure') || (github.event_name == 'workflow_dispatch' && inputs.desktop_smoke)) }}
     runs-on: [self-hosted, intentic, desktop]
     container:
       image: ghcr.io/intentic/ci-desktop:latest
