@@ -1,4 +1,4 @@
-import { queuePrefixFor, queueWhole } from "./agent/tools/agent-terminals.js";
+import { queueWhole } from "./agent/tools/agent-terminals.js";
 import { join } from "node:path";
 import type { DeviceFacts, DeviceScopes, IntenticLine } from "@intentic/sandbox-contract";
 import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
@@ -25,7 +25,6 @@ import { areasDocument, type AreasStore, fileAreasStore } from "./areas/areas-st
 import { deriveBytes } from "./derived/derived-blob.js";
 import { deriveText, readDerivedText } from "./derived/derived-text.js";
 import { sidecarStatus } from "./derived/sidecar-service.js";
-import { landCheckOf, type LandCheckWiring } from "./conversations/land/verify-landed.js";
 import { createBrowserRouters } from "./browser/tools/browser-prepare.js";
 import type { BrowserRouterFactory } from "./browser/tools/browser-router.js";
 
@@ -110,7 +109,7 @@ import { createExtensionsSlice, type ExtensionsSlice } from "./extensions/extens
 import { type AutomationsSlice, createAutomationsSlice, type IntakeMembers } from "./automations/automations-slice.js";
 import { createLoopsSlice, type LoopsSlice, type WorkflowsMembers } from "./loops/loops-slice.js";
 import { type CiSlice, createCiSlice } from "./ci/ci-slice.js";
-import { createMainlineSlice, type LandMembers, type MainlineSlice } from "./workspace/deps/mainline-slice.js";
+import { createDepsSlice, type DepsSlice, type QueueMembers } from "./workspace/deps/deps-slice.js";
 import { createResourcesSlice, type ResourcesSlice } from "./system/resources/resources-slice.js";
 import { createProvidersSlice, type ProvidersSlice } from "./agent/providers/providers-slice.js";
 import { createConversationsSlice, type ConversationsSlice } from "./conversations/conversations-slice.js";
@@ -141,7 +140,7 @@ export interface Services
         AutomationsSlice,
         LoopsSlice,
         CiSlice,
-        MainlineSlice,
+        DepsSlice,
         ResourcesSlice,
         ProvidersSlice,
         ConversationsSlice,
@@ -356,9 +355,9 @@ const scanPortsWith =
 // Slice members a slice builder leaves out, each because the builder importing it would close a cycle between
 // subsystems (daemon-boundaries): the builder's Omit<…> type names them, and this Pick of the same names is checked
 // against it, so leaving one out fails to compile.
-type BridgedMembers = DerivedMembers | PortsMembers | LandMembers | IntakeMembers | WorkflowsMembers | AgentToolsMember;
+type BridgedMembers = DerivedMembers | PortsMembers | QueueMembers | IntakeMembers | WorkflowsMembers | AgentToolsMember;
 const createBridgedMembers = (
-    deps: Pick<Services, "config" | "logger" | "workspace" | "heavyCommands"> & { readonly landCheck: LandCheckWiring },
+    deps: Pick<Services, "config" | "logger" | "workspace" | "heavyCommands">,
 ): Pick<Services, BridgedMembers> => {
     const { config, logger, workspace } = deps;
     const webchatOutbox = fileWebchatOutbox(join(workspace.root, webchatOutboxDocument.path));
@@ -371,10 +370,8 @@ const createBridgedMembers = (
         // a port's hostname can't be guessed from the sandbox id.
         portForwards: createPortForwards(portSlotsFromToken(config.connectToken)),
         scanPorts: scanPortsWith(logger),
-        // MainlineSlice: the land check routes a red run into conversations/, the heavy queue is agent/'s terminal lane.
-        landCheck: landCheckOf(deps.landCheck),
+        // DepsSlice: the heavy queue is agent/'s terminal lane.
         queueHeavy: queueWhole(deps.heavyCommands.read),
-        heavyPrefix: queuePrefixFor(deps.heavyCommands.read),
         // AutomationsSlice: issues/ and webchat/ import automations/ back.
         webchatOutbox,
         outboxStreamFor: (origin) => outboxStreamFor({ webchatOutbox, logger }, origin),
@@ -463,7 +460,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const processesSlice = createProcessesSlice({ config, logger });
     // The ACP connection pool implements ACP terminal/* over the processes' terminal runner, so both share one instance.
     const acpConnections = createAcpConnections(logger, processesSlice.terminalRun);
-    const mainlineSlice = createMainlineSlice({ workspace, historyRoot: config.historyRoot, processes: processesSlice.processes, logger });
+    const depsSlice = createDepsSlice({ workspace, historyRoot: config.historyRoot, processes: processesSlice.processes, logger });
     // Hoisted: the store and the sender reading it must be the same instance, or a subscription would go unseen.
     const push = filePushStore(join(config.historyRoot, pushDocument.path));
     // A reaction's failure is its own; the announcement it answered has already been made.
@@ -503,7 +500,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const runtimeInstalls = fileRuntimeInstallsStore(join(workspace.root, runtimeInstallsDocument.path));
     // Hoisted: the background probe runner writes the same cache the /chores route reads.
     const chores = fileChoresStore(join(workspace.root, PROBES_FILE), join(workspace.root, LEDGER_FILE));
-    // Hoisted: the land check files into the same log and reads the same settings the routes do.
+    // Hoisted: the CI fixer files into the same log and reads the same settings the routes do.
     const activity = fileActivityStore(join(config.historyRoot, "activity.jsonl"));
     const sandboxSettings = fileSandboxSettingsStore(join(workspace.root, settingsDocument.path));
     // Transcripts, session files and phrase search, and what a conversation's purge takes with it.
@@ -524,8 +521,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         config,
         logger,
         workspace,
-        heavyCommands: mainlineSlice.heavyCommands,
-        landCheck: { ...mainlineSlice, workspace, processes: processesSlice.processes, logger, activity, events, sandboxSettings, agents, whole },
+        heavyCommands: depsSlice.heavyCommands,
     });
 
     const services: Services = {
@@ -533,7 +529,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ...sessionsSlice.slice,
         ...workspaceSlice,
         ...processesSlice,
-        ...mainlineSlice,
+        ...depsSlice,
         ...conversationsParts.slice,
         ...capabilitiesParts.slice,
         ...secretsSlice,

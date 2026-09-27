@@ -126,7 +126,6 @@ const PATH_RULES: readonly StoragePathRule[] = [
     { root: "workspace", prefix: folder(stateRelPath(".intentic/local/.pnpm-store/")), category: "packageStores", depth: 0 },
     { root: "workspace", prefix: folder(stateRelPath(".intentic/local/tmp/")), category: "scratch", depth: 1 },
     { root: "workspace", prefix: folder(stateRelPath(".intentic/local/trash/")), category: "scratch", depth: 1 },
-    { root: "workspace", prefix: folder(stateRelPath(".intentic/local/verify/")), category: "scratch", depth: 1 },
     { root: "workspace", prefix: folder(stateRelPath(".intentic/local/extensions/")), category: "extensions", depth: 1 },
     { root: "workspace", prefix: folder(stateRelPath(".intentic/local/runtime/")), category: "extensions", depth: 1 },
     { root: "volume", prefix: ".pnpm-store/", category: "packageStores", depth: 0 },

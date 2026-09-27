@@ -83,7 +83,7 @@ test("files a push only once its head is on the remote-tracking ref it moved, an
     ];
     expect(await store.read()).toEqual({
         pushes: [{ project: "app", id: "p1", at, remote: "origin", branch: "main", base, head, commits: 1, findings }],
-        reds: { app: { since: at, findings, suspects: [], named: false, decisions: [] } },
+        reds: { app: { since: at, findings, decisions: [] } },
         ended: {},
         seen: ["p1"],
     });

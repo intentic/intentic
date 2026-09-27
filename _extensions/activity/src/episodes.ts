@@ -94,9 +94,11 @@ const TYPE_LABELS: Readonly<Record<string, string>> = {
     "voice.session_ended": `Voice session ended`,
     "automation.run": `Automation run`,
     "automation.pending": `Automation held for approval`,
-    // The dependency verifier's chain (workspace/verify-deps.ts): each step after a land leaves one of these.
+    // A dependency install the daemon starts when a change leaves the installed tree behind (bootstrap/deps-coordination.ts).
     "deps.install_started": `Installing dependencies`,
     "deps.install_failed": `Dependency install failed`,
+    // The rest were the steps of the check that ran over the main tree after every land, retired with it: nothing emits
+    // them any more, and they keep their labels because the activity history still holds rows of them.
     "deps.install_lost": `Dependency install unwatched`,
     "deps.verify_green": `Checks green`,
     "deps.verify_red": `Checks failed`,

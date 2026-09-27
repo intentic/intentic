@@ -2,12 +2,12 @@ import { execFile } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
-import type { MainlinePushRecheckResult } from "@intentic/sandbox-contract";
+import type { PushRecheckResult } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Logger } from "pino";
 import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 import { isValidRepoId } from "../layout/repo-discovery.js";
-import { openCount, owedIn, parsePushReport, type PushChecksStore, type PushRefusal, type PushReportEntry } from "./push-checks-store.js";
+import { openCount, parsePushReport, type PushChecksStore, type PushRefusal, type PushReportEntry } from "./push-checks-store.js";
 
 // Files what the pre-push hook leaves in a repository's git common dir (`intentic-push-report.json`, newest first, at most
 // ten entries) into the push-checks store, and measures a project again on request. A push is filed only once its head
@@ -31,7 +31,7 @@ export interface PushChecksDeps {
 
 // What one read of a project's report filed.
 export interface PushIngest {
-    // Whether any entry was filed or set aside, which is when the main line's readers are told.
+    // Whether any entry was filed or set aside, which is when its readers are told.
     readonly changed: boolean;
     // How many recheck entries were filed.
     readonly rechecks: number;
@@ -44,12 +44,7 @@ export interface PushChecks {
     // Files whatever the project's report holds that is new.
     readonly ingest: (project: string) => Promise<PushIngest>;
     // Runs the project's own recheck over its main tree and files what it measured; one at a time per project.
-    readonly recheck: (project: string) => Promise<MainlinePushRecheckResult>;
-    // The same, only when the project has an open finding to measure; undefined when it has none.
-    readonly recheckIfOpen: (project: string) => Promise<MainlinePushRecheckResult | undefined>;
-    // After a land check: files the measurement the check itself left of the checks (verify.mjs), and runs the recheck
-    // only for what it did not measure (an open linter finding, or a repository whose check leaves none).
-    readonly afterLandCheck: (project: string) => Promise<PushIngest | MainlinePushRecheckResult>;
+    readonly recheck: (project: string) => Promise<PushRecheckResult>;
     // Sets open findings aside, or opens named dismissed ones again; how many changed.
     readonly dismiss: (project: string, ids: readonly string[] | undefined, restore: boolean) => Promise<number>;
     // The daemon's own push runs (git/ops/push-run.ts): one the repository's hook refused is filed as a push whose
@@ -171,7 +166,7 @@ export const createPushChecks = (deps: PushChecksDeps): PushChecks => {
             changed = true;
         }
         if (changed) {
-            publishRuntimeChange("mainline");
+            publishRuntimeChange("pushes");
         }
         return { changed, rechecks, resolved };
     };
@@ -196,7 +191,7 @@ export const createPushChecks = (deps: PushChecksDeps): PushChecks => {
 
     const openIn = async (project: string): Promise<number> => openCount(await deps.store.read(), project);
 
-    const recheckNow = async (project: string): Promise<MainlinePushRecheckResult> => {
+    const recheckNow = async (project: string): Promise<PushRecheckResult> => {
         const report = await reportOf(project);
         // The newest entry's command: the hook that wrote it knows how this repository measures itself today.
         const argv = report?.entries.at(-1)?.recheck ?? [];
@@ -217,8 +212,8 @@ export const createPushChecks = (deps: PushChecksDeps): PushChecks => {
         return { measured: filed.rechecks > 0, resolved: filed.resolved, open: await openIn(project) };
     };
 
-    const rechecking = new Map<string, Promise<MainlinePushRecheckResult>>();
-    const recheck = (project: string): Promise<MainlinePushRecheckResult> => {
+    const rechecking = new Map<string, Promise<PushRecheckResult>>();
+    const recheck = (project: string): Promise<PushRecheckResult> => {
         const running = rechecking.get(project);
         if (running !== undefined) {
             return running;
@@ -232,23 +227,13 @@ export const createPushChecks = (deps: PushChecksDeps): PushChecks => {
         store: deps.store,
         ingest,
         recheck,
-        recheckIfOpen: async (project) => ((await openIn(project)) === 0 ? undefined : recheck(project)),
-        afterLandCheck: async (project) => {
-            const filed = await ingest(project);
-            const open = owedIn(await deps.store.read(), project).filter((finding) => finding.recheckable);
-            // Measured already: the check left a measurement of every check, and nothing owed waits on the linter.
-            if (open.length === 0 || (filed.rechecks > 0 && open.every((finding) => finding.source !== "lint"))) {
-                return filed;
-            }
-            return recheck(project);
-        },
         refused: async (project, refusal) => {
             await deps.store.refuse(project, refusal);
-            publishRuntimeChange("mainline");
+            publishRuntimeChange("pushes");
         },
         pushed: async (project, at) => {
             await deps.store.pushed(project, at);
-            publishRuntimeChange("mainline");
+            publishRuntimeChange("pushes");
         },
         handed: async (project, conversationId) => {
             const red = (await deps.store.read()).reds[project];
@@ -256,12 +241,12 @@ export const createPushChecks = (deps: PushChecksDeps): PushChecks => {
                 return;
             }
             await deps.store.decide(project, { kind: "fix-up", conversationId, at: now() });
-            publishRuntimeChange("mainline");
+            publishRuntimeChange("pushes");
         },
         dismiss: async (project, ids, restore) => {
             const changed = await deps.store.dismiss(project, ids, restore);
             if (changed > 0) {
-                publishRuntimeChange("mainline");
+                publishRuntimeChange("pushes");
             }
             return changed;
         },

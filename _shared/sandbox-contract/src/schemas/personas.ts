@@ -141,8 +141,8 @@ export const TURN_BRIEFING_NOTES: readonly TurnBriefingNote[] = [
     {
         id: "checks",
         label: "Checks after landing",
-        when: "First message and after a compaction, and again whenever the main tree's own check turns red or back to green: what runs after its work lands, and which failures the main tree already has.",
-        cost: "The agent does not know which failures are the main tree's own and not its doing, so it may spend a turn chasing one somebody else is already fixing.",
+        when: "First message and after a compaction: that nothing checks its work when it finishes or after it lands, which checks are its to run, and that CI checks what the owner pushes.",
+        cost: "The agent does not know what checks its work, so it may run the whole repository's suite on a shared machine, or chase a failure main already has.",
     },
     {
         id: "dependencies",

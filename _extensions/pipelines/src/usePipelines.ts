@@ -42,7 +42,7 @@ export function usePipelines() {
     // Resolves to the fix conversation id (the fleet's card id) the view focuses. `pick` absent uses the run button's
     // own named default; effort travels with the model so a pick can't silently drop to the provider's default tier.
     // `mode` is the verb the picker's bar was ended with over an attempt that already exists; absent is the plain
-    // press, which the daemon reads by the same rule the push card does (contract, planFixAttempt).
+    // press, which the daemon reads by the same rule the push hand-over does (contract, planFixAttempt).
     const fix = useMutation({
         mutationFn: ({ run, pick, mode }: { run: PipelineRun; pick?: AgentRunChoice | undefined; mode?: FixResume | undefined }): Promise<CiFixResponse> =>
             api.sandbox.rpc.ci.fix({
@@ -56,6 +56,9 @@ export function usePipelines() {
     return {
         repos: computed(() => query.data.value?.repos ?? []),
         runs: computed(() => query.data.value?.runs ?? []),
+        // Main-line branches red right now, each with the one fix agent the daemon put on it; absent from a daemon that
+        // keeps none, which reads the same as none being red.
+        reds: computed(() => query.data.value?.reds ?? []),
         error: computed(() => query.error.value?.message),
         // isPending, not isLoading: true until the first response, including while `enabled` still gates the fetch.
         isPending: query.isPending,

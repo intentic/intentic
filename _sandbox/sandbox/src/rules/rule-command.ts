@@ -5,7 +5,7 @@ import { plainText } from "@intentic/base/plain-text";
 import { markCheckRunning } from "../workspace/deps/checks-in-flight.js";
 
 // Engine under the push run (git/ops/push-run.ts), the one command the daemon runs in a watched terminal now that nothing
-// runs when a turn ends (an edit check runs in file-edited.ts, the land check in verify-deps.ts): a real tmux terminal, a
+// runs when a turn ends or after it lands (an edit check runs in file-edited.ts): a real tmux terminal, a
 // ceiling that times out to `failed` rather than silence, a kill that tags itself timeout or cancel while the difference
 // is visible, and a plain-text tail with escape codes resolved before the cap.
 

@@ -95,9 +95,9 @@ it(`refreshes every open agent review when a commit moves the refs`, () => {
 });
 
 // A turn's writes are named, and scanning per name would spend a `git status` per repo on each one — but an unnamed
-// batch is the daemon saying it cannot name what moved. The post-land check's build rewrites tracked files under
-// `dist/`, which the watcher prunes, so this frame is the only word a browser gets that they came back; dropping it
-// leaves whatever was read mid-build standing as the review's answer until something remounts the panel.
+// batch is the daemon saying it cannot name what moved. A build rewrites tracked files under `dist/`, which the watcher
+// prunes, so this frame is the only word a browser gets that they came back; dropping it leaves whatever was read
+// mid-build standing as the review's answer until something remounts the panel.
 it(`re-reads the review on an unnamed batch mid-turn, and still not on a named one`, () => {
     streaming.value = true;
 

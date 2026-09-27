@@ -2,6 +2,59 @@
     "extension": {
         "pipelines": "Pipelines"
     },
+    "leftAtPush": {
+        "attempt": "Attempt {count}",
+        "clean": "clean",
+        "close": "Close",
+        "commits": "{count} commit | {count} commits",
+        "continue": "Continue",
+        "dismissAll": "Dismiss all",
+        "dismissFailed": "Couldn't dismiss that",
+        "dismissHint": "Dismiss: it will not be fixed",
+        "dismissOne": "Dismiss {source}",
+        "dismissed": "Dismissed {count} finding | Dismissed {count} findings",
+        "earlier": "+{count} earlier push | +{count} earlier pushes",
+        "earlierPushes": "Show {count} earlier push | Show {count} earlier pushes",
+        "endsWhenDismissed": "No later measurement can see this one gone: it ends when you dismiss it.",
+        "explain": "The push went; its check let these through. Each waits here until a later measurement no longer finds it or you dismiss it. Nobody is sent after them unless you hand them over.",
+        "fewer": "Show fewer",
+        "from": "from {sha} {subject}",
+        "handFailed": "Couldn't hand these to an agent",
+        "handHint": "Opens an isolated conversation with every open finding here, the command that shows each again and the commits that brought it.",
+        "handOver": "Hand to an agent",
+        "handled": "handled",
+        "hint": "What the pre-push check found in your pushes. It never stops a push.",
+        "lastPush": "Last push",
+        "left": "{count} left | {count} left",
+        "more": "+{count} more | +{count} more",
+        "nothingLeft": "Nothing left at push",
+        "openAttempt": "{label}: open the conversation",
+        "recent": "Recent pushes",
+        "recheck": "Measure again",
+        "rechecked": "Measured {project} again: {resolved} gone, {open} still open",
+        "refused": "refused",
+        "refusedHint": "The repository's own pre-push hook refused this push, so nothing reached the remote. What it said is owed like any other finding.",
+        "restoreFailed": "Couldn't open those again",
+        "stillOpen": "{count} finding still open | {count} findings still open",
+        "title": "Left at push",
+        "undo": "Undo",
+        "unmeasured": "Couldn't measure {project}; nothing changed",
+        "workspace": "workspace"
+    },
+    "mainRed": {
+        "failing": "Failing",
+        "fixAgent": "Fix agent",
+        "fixAgentHint": "Every failure on {branch} goes to this one agent until a run passes.",
+        "newestRun": "newest red run #{runId}",
+        "open": "Open",
+        "openFixer": "Open the fix agent's conversation",
+        "reported": "Repairs are switched off, so nobody was sent.",
+        "since": "since {when}",
+        "spent": "The fix agent has had its turns, or it finished without changing anything.",
+        "title": "{branch} is red",
+        "unassigned": "No fix agent on it yet.",
+        "waitsForYou": "Waits for you"
+    },
     "pipelineDagGraph": {
         "expand": "Expand",
         "failingRunsInRow": "Failing for {name} runs in a row",
@@ -52,5 +105,8 @@
         "repository": "Repository",
         "runs": "{runs} runs",
         "thisRepo": "this repo"
+    },
+    "rail": {
+        "leftAtPush": "{count} finding left at push | {count} findings left at push"
     }
 }

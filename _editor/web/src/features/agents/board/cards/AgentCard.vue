@@ -42,9 +42,8 @@ import {
     unreadHint,
     unregistered,
 } from "../../fleet/agentStatus";
-import CardSeal from "../../mainline/CardSeal.vue";
-import { type CardChecks as CardChecksView, cardChecks } from "../../mainline/landCheck";
-import { injectMainline } from "../../mainline/useMainline";
+import CardSeal from "./CardSeal.vue";
+import { cardProof, type ProofMark } from "./proofSeal";
 import KeepWarmPanel from "../../fleet/KeepWarmPanel.vue";
 // Not an emit: the destination is the same for every host this card has, and the review panel's own ladder sends the
 // user to exactly this place for exactly this refusal.
@@ -305,25 +304,26 @@ const reactionsStrip = useTemplateRef<{ open: (from: HTMLElement) => void }>(`re
 // One wrapping line (stats left, standing/time right) rather than two rows, so a lane fits more cards.
 const summary = computed(() => stats.value || review.value !== undefined || completed.value || dated.value || working.value || reactable.value);
 const loopLine = computed(() => (props.agent.loop === undefined ? undefined : loopMeta(props.agent.loop)));
-// What main's own check made of its latest land and what its last turn showed of its work, off the board's one read.
-// Held while value-equal, so a push about some other card's land redraws none of this one.
-const mainline = injectMainline();
-let heldChecks: { readonly print: string; readonly value: CardChecksView | undefined } = { print: ``, value: undefined };
-const checks = computed(() => {
-    const next = cardChecks(props.agent, mainline?.value, turnInFlight(props.agent));
+// What its last turn showed of its own work (proofSeal.ts). Held while value-equal, so a roster frame that moved
+// something else on this card (its activity, its clock) redraws none of the seal.
+let heldPrint = ``;
+let heldProof: ProofMark | undefined;
+const proof = computed(() => {
+    const next = cardProof(props.agent, turnInFlight(props.agent));
     const print = JSON.stringify(next ?? null);
-    if (print !== heldChecks.print) {
-        heldChecks = { print, value: next };
+    if (print !== heldPrint) {
+        heldPrint = print;
+        heldProof = next;
     }
-    return heldChecks.value;
+    return heldProof;
 });
-// THE SEAL IS THE CORNER'S LAST MARK, beside the chip or the status glyph, never under either: a card that just landed is
-// almost always unread, so a seal that gave way to "Updated" would hide exactly when its check is being answered.
+// THE SEAL IS THE CORNER'S LAST MARK, beside the chip or the status glyph, never under either: a card whose turn just
+// ended is almost always unread, so a seal that gave way to "Updated" would hide exactly when its proof is news.
 // It STANDS IN for a resting glyph (landed's octagon, which it is when closed, and idle's dot), since those say only that
 // nothing is going on and the seal says that and more; its hover leads with the word the glyph wore. A status that
 // says something of its own (running, ready, an error) keeps its glyph and gets the seal beside it.
 const SEAL_STANDS_IN: ReadonlySet<string> = new Set([`landed`, `idle`]);
-const sealStandsIn = computed(() => checks.value !== undefined && SEAL_STANDS_IN.has(props.agent.status));
+const sealStandsIn = computed(() => proof.value !== undefined && SEAL_STANDS_IN.has(props.agent.status));
 // Either mark opens the same question the chat's status bar asks, answered for this card.
 const warmOpen = ref(false);
 const warmAnchor = ref<HTMLElement>();
@@ -617,15 +617,8 @@ const grab = (event: PointerEvent): void => {
                 class="shrink-0 text-sm"
                 :class="statusMeta.class"
             />
-            <!-- How far its work got: main's check of its land and its last turn's own proof, one glyph, their words in its hover (CardSeal). -->
-            <CardSeal
-                v-if="checks !== undefined"
-                :checks="checks"
-                :quiet="receipt"
-                :status="sealStandsIn ? statusMeta.label : undefined"
-                :still="statusMeta.spin === true"
-                class="text-sm"
-            />
+            <!-- What its last turn showed of its own work, one glyph, its words in its hover (CardSeal). -->
+            <CardSeal v-if="proof !== undefined" :proof="proof" :quiet="receipt" :status="sealStandsIn ? statusMeta.label : undefined" class="text-sm" />
         </div>
         <p v-if="edit.error !== undefined" class="text-2xs text-danger">{{ edit.error }}</p>
 

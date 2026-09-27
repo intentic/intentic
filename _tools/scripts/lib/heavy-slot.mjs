@@ -1,7 +1,7 @@
 // The sandbox's heavy slot, taken by the script itself rather than left to whoever launched it. The daemon queues a
 // command it recognises (`pnpm verify`: system/resources/heavy-commands.ts wraps it in `queue-run --pool heavy`), but
 // `node _tools/scripts/verify/verify.mjs`, a `cd … &&` chain or a script calling
-// another is not recognised, and one of those ran beside the post-land check on 2026-09-25 until the machine swapped.
+// another is not recognised, and one of those ran beside another heavy run on 2026-09-25 until the machine swapped.
 // So a heavy script calls `runInHeavySlot()` first: inside a slot it returns and the script goes on; outside one it runs
 // itself again under queue-run, which waits for the slot (and for memory) exactly as a recognised command does, and
 // exits with that run's code. Off the sandbox (a laptop, CI) there is no queue-run and it returns at once.

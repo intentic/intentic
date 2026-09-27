@@ -7,9 +7,8 @@ import SandboxMetricsDetails from "../metrics/SandboxMetricsDetails.vue";
 import SandboxMetricsSummary from "../metrics/SandboxMetricsSummary.vue";
 import { openPanel, PANEL_DEFAULT_HEIGHT, PANEL_MIN_HEIGHT, panelHeight, panelMaxHeight } from "./statusBarState";
 
-// THE BOARD'S STATUS BAR: the sandbox's geek metrics at the board's foot, saying at rest how full the box is. The main
-// tree's check is not here: it has a board of its own (the Main line view, the rail's Main line tile), whose tile badges
-// a red and turns while a check runs, so the board's foot carries only what is read while the agents above it work.
+// THE BOARD'S STATUS BAR: the sandbox's geek metrics at the board's foot, saying at rest how full the box is: only what
+// is read while the agents above it work.
 //
 // The segment opens its panel above the bar, in the layout rather than over it, so the board moves up instead of being
 // covered, and nothing but the reader closes it again (its segment, its ×, or Escape inside it). It stays: its figures

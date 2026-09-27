@@ -2,7 +2,8 @@ import type { PipelineRun, ListenerMessage } from "@intentic/sandbox-contract";
 import { CI_PROVIDER } from "../automations/catalog.js";
 import { dispatchListenerMessage } from "../automations/listeners.js";
 import type { Services } from "../composition.js";
-import { observeCiRun } from "./repair-gate.js";
+import { runFinished } from "./main-fixer.js";
+import type { FetchFn } from "./providers.js";
 
 // Turns a finished PipelineRun into `ci` listener messages for the webhook (ci/webhook.routes.ts) and the poller
 // (ci/poller.ts); the previous-conclusion memory is written only here. Canceled and skipped runs produce nothing.
@@ -74,7 +75,12 @@ export const rememberCiRun = async (services: Services, run: PipelineRun): Promi
 // Records the run's conclusion and dispatches the matching listener messages; returns the dispatched event types, empty
 // if not a result. Conclusion is recorded before dispatch, so a wake cannot be replayed as the previous state by the
 // next run.
-export const dispatchCiRun = async (services: Services, run: PipelineRun, author: { id: string; name: string }): Promise<readonly string[]> => {
+export const dispatchCiRun = async (
+    services: Services,
+    run: PipelineRun,
+    author: { id: string; name: string },
+    fetchFn: FetchFn = fetch,
+): Promise<readonly string[]> => {
     const result = ciResultOf(run);
     if (result === undefined) {
         return [];
@@ -83,7 +89,7 @@ export const dispatchCiRun = async (services: Services, run: PipelineRun, author
     for (const type of types) {
         await dispatchListenerMessage(services, ciMessageOf(run, type, author));
     }
-    // Off the webhook's clock: deciding whether main's red is ripe for a fix fetches logs and lists runs.
-    void observeCiRun(services, run).catch((error: unknown) => services.logger.warn({ err: error, runId: run.runId }, "ci repair: observing the run failed"));
+    // Off the webhook's clock: main's fix agent reads the failed jobs and their logs (main-fixer.ts).
+    void runFinished(services, run, fetchFn).catch((error: unknown) => services.logger.warn({ err: error, runId: run.runId }, "ci repair: the finished run could not be read"));
     return types;
 };

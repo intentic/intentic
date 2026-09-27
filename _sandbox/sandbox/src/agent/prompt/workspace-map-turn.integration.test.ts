@@ -8,7 +8,7 @@ import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { conversationAfter, testConfig, memoryFleet, testTurnMounts } from "../../testing.js";
 import { workspaceSetup } from "../../workspace/layout/workspace-setup.js";
-import { LANDING_CHECKS_NOTE_TITLE, landingChecksNote } from "../../workspace/deps/mainline-note.js";
+import { LANDING_CHECKS_NOTE_TITLE, LANDING_CHECKS_NOTE } from "./checks-note.js";
 import type { AgentRequest } from "../providers/agent-request.js";
 import type { TurnContext } from "../providers/adapter.js";
 import { planTurn } from "../run/turn/turn-plan.js";
@@ -22,7 +22,7 @@ import { parkedCards } from "../../conversations/actor/parked-cards.js";
 const cards = parkedCards(memoryFleet().conversations);
 
 // What every opening message is told of the checks that run after its work lands, with the main tree green.
-const OPENING_CHECKS_NOTE = landingChecksNote([], false);
+const OPENING_CHECKS_NOTE = LANDING_CHECKS_NOTE;
 
 // Pins the four turn-plan gates around the workspace map (the generator itself has its own suite): off must mean off,
 // sent once per conversation, honoured on every runtime, and built against the run's actual tree, not the shared
@@ -87,8 +87,6 @@ const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, ov
             sessionStore: (entry) => claudeStoreOf(root, testConfig.historyRoot, entry),
         }),
         perf: unstubbed<Services["perf"]>("perf", { track: (_op, _fields, run) => run() }),
-        // The main line's verdicts, read for the checks-after-landing note an opening turn is sent: nothing checked yet.
-        verifyStore: unstubbed<Services["verifyStore"]>("verifyStore", { read: async () => ({ projects: {}, runs: [] }) }),
         config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
             accounts: async () => ({ codex: [{ name: "sub", label: "sub" }], grok: [], kimi: [], gemini: [] }),

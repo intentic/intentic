@@ -1,7 +1,7 @@
-// ONE DEFINITION OF A RED STREAK, for every source that goes red: a land check's project (verify-store.ts), main's CI
-// (repair-gate.ts), a pipeline branch on the board (the pipelines extension's ciStreaks.ts) and the Main line's older
-// daemons (the editor's mainlineView.ts). A streak is the unbroken run of red at the head: a red extends it, anything
-// else ends it, and `since` is where it began, which is what names one failure across every red that continues it.
+// ONE DEFINITION OF A RED STREAK, for every source that goes red: what a project's pushes left (push-checks-store.ts)
+// and a pipeline branch on the board (the pipelines extension's ciStreaks.ts). A streak is the unbroken run of red at
+// the head: a red extends it, anything else ends it, and `since` is where it began, which is what names one failure
+// across every red that continues it.
 
 export interface Streak {
     // When (or at which run) the streak began: the first red of the unbroken run.

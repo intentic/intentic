@@ -3,10 +3,9 @@
 //
 // Runs one heavy command on a runner on one of the owner's machines instead of in this sandbox (settings `offload`). It
 // is put in front of the line by the daemon, never typed: by the agent's Bash hook when the line matches a heavy-command
-// rule the owner sends somewhere (src/agent/tools/agent-terminals.ts), and by the check after landing when that is sent
-// (src/workspace/deps/verify-deps.ts). To whoever runs it, it is the command itself: the output streams as it comes, the
-// exit code is the command's, a stop stops it on the runner, and every file the command changed comes back into this
-// tree, as if it had run here.
+// rule the owner sends somewhere (src/agent/tools/agent-terminals.ts). To whoever runs it, it is the command itself: the
+// output streams as it comes, the exit code is the command's, a stop stops it on the runner, and every file the command
+// changed comes back into this tree, as if it had run here.
 //
 // 1. Asks the daemon whether the runner can take it (connected, able); if not, runs the command HERE, behind the local
 //    heavy queue it was handed (--here), after one line saying why.

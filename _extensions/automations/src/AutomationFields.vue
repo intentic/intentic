@@ -264,14 +264,18 @@ const WORKSPACE_EVENTS = computed(
         [
             { value: `turn.settled`, label: t(`automationFields.turnSettles`), hint: t(`automationFields.afterEveryIsolatedAgent`) },
             { value: `agent.landed`, label: t(`automationFields.workLands`), hint: t(`automationFields.onlyAgentsWorkActually`) },
-            {
-                value: `deps.broken`,
-                label: t(`automationFields.checksBreak`),
-                hint: t(`automationFields.landedChangeDriftedDependencies`),
-            },
-            { value: `deps.fixed`, label: t(`automationFields.checksRecover`), hint: t(`automationFields.laterLandTurnedThose`) },
         ] as const,
 );
+
+// RETIRED MOMENTS, never offered: `deps.broken` and `deps.fixed` were the edges of the check that ran after every land,
+// which is gone, so nothing emits them. An automation written for one still opens as what it is, its moment drawn
+// pressed and marked retired, with the sentence that it never fires, rather than as a form with nothing chosen.
+const retiredEvent = computed(() => {
+    if (form.workspaceEvent === `deps.broken`) {
+        return { label: t(`automationFields.checksBreak`) };
+    }
+    return form.workspaceEvent === `deps.fixed` ? { label: t(`automationFields.checksRecover`) } : undefined;
+});
 
 // An ordered ladder of picks, walked at fire time; row 1 is preferred, the rest catch it when that account has nothing
 // left. No longer defaultable: `modelsError` requires at least one.
@@ -446,8 +450,14 @@ const setProvider = (provider: string): void => {
                             >
                                 {{ option.label }}
                             </button>
+                            <!-- Not a choice: the moment this automation already names, which nothing sends any more. -->
+                            <span v-if="retiredEvent !== undefined" data-retired-trigger class="ui-chip ui-chip-on gap-1.5 text-subtle">
+                                <span class="line-through">{{ retiredEvent.label }}</span>
+                                <span class="text-2xs">{{ t(`automationFields.retired`) }}</span>
+                            </span>
                         </div>
-                        <span class="text-2xs text-subtle">
+                        <span v-if="retiredEvent !== undefined" class="text-2xs text-warning">{{ t(`automationFields.retiredNeverFires`) }}</span>
+                        <span v-else class="text-2xs text-subtle">
                             {{ WORKSPACE_EVENTS.find((option) => option.value === form.workspaceEvent)?.hint }}
                         </span>
                     </div>

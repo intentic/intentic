@@ -4,9 +4,9 @@ import { isLinkedWorktree, root, subjectScope } from "./repo.mjs";
 
 /* A RATCHET READS ITS BASELINE AND NEVER WRITES IT DURING A CHECK. Three explicit commands write one, each naming what
    earned the move:
-   - `--tighten a,b,c` lowers the entries those paths touch to what the tree holds. The check after a land runs it with
-     the land's own paths (verify.mjs, fixers.mjs), so a lower count is written by the land that earned it and by
-     nothing else; a whole-tree check run only says the tree beats the baseline.
+   - `--tighten a,b,c` lowers the entries those paths touch to what the tree holds. The fixers a conversation's
+     worktree runs before its land pass the change's own paths (fixers.mjs), so a lower count is written by the change
+     that earned it and by nothing else. A whole-tree check run only says the tree beats the baseline.
    - `--write-baseline --reason "<why>"` adopts the whole tree's findings, in the primary checkout only.
    - `layout.mjs --allow <dir> --reason "<why>"` records one key (`allowOne`).
    Growth is always declared: an entry raised by adoption or `--allow` carries its reason in the baseline. */
@@ -25,7 +25,7 @@ const reasonGiven = () => {
     return reason === undefined || reason === "" || reason.startsWith("--") ? undefined : reason;
 };
 
-// `--tighten a,b,c`: the repo-relative paths a land changed. Undefined means this is a check run, which writes nothing.
+// `--tighten a,b,c`: the repo-relative paths a change touched. Undefined means this is a check run, which writes nothing.
 const tightenPaths = () => {
     const listed = argAfter("--tighten");
     if (listed === undefined) {
@@ -77,7 +77,7 @@ const entryOf = (before, count, reason) => {
     return count === 1 ? stated : { count, why: stated };
 };
 
-// A key names a path (a file, a directory, a package); a land touches it when it changed that path or anything under it.
+// A key names a path (a file, a directory, a package). A change touches it when it changed that path or anything under it.
 const underKey = (key, path) => path === key || path.startsWith(`${key}/`);
 
 // The baseline with every entry in `scope` the tree has beaten lowered to what it holds, dropped at zero.
@@ -158,7 +158,7 @@ export const ratchet = (check, name, found, { touchedBy = underKey } = {}) => {
     // A scoped run knows nothing of the files it skipped, so it speaks only for the keys it read.
     const { lowered: beaten } = tightenedOf(baseline, found, (key) => scope === undefined || scope.has(key));
     if (beaten.length > 0) {
-        console.log(`${check}: the tree beats baselines/${name}.json (${beaten.join(", ")}); the check after the land that changed them lowers it (--tighten)`);
+        console.log(`${check}: the tree beats baselines/${name}.json (${beaten.join(", ")}), and \`--tighten <the paths that shrank them>\` lowers it, which fixers.mjs runs before a worktree's land`);
     }
     return { grown, baseline, beaten };
 };

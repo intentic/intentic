@@ -5,14 +5,13 @@ The rules the repository's own checks and linter hold every change to, grouped b
 ```mermaid
 flowchart LR
     list(["_tools/checks/manifest.mjs<br/>one list of checks"]) --> edit["each edit<br/>scoped checks · lint-edit"]
-    list --> land["after a land<br/>pnpm verify"]
     list --> push["pre-push<br/>verify-push, reports only"]
     list --> ci["CI preflight<br/>and nightly tidy"]
 ```
 
 ## How a rule is enforced
 
-- [`manifest.mjs`](../../_tools/checks/manifest.mjs) lists every check once and [`run.mjs`](../../_tools/checks/run.mjs) runs them, with node and git only. A `code` check means the tree is broken: it fails the check after a land and CI's preflight. A `tidy` check is a cost to readers: it fails the check after a land only for the lines that land added, and fails CI's nightly tidy job. The pre-push hook reports both kinds and refuses nothing.
+- [`manifest.mjs`](../../_tools/checks/manifest.mjs) lists every check once and [`run.mjs`](../../_tools/checks/run.mjs) runs them, with node and git only. A `code` check means the tree is broken: it fails CI's preflight and `pnpm verify`. A `tidy` check is a cost to readers: it fails CI's nightly tidy job, and the push counts only the lines its range added. The pre-push hook reports both kinds and refuses nothing.
 - A `scoped` check can judge one file, so [`.intentic/checks.json`](../../.intentic/checks.json) runs it the moment an agent writes that file, together with the linter. What they find returns with the edit and never stops the turn.
 - Ratcheted checks keep their standing backlog in [`_tools/checks/baselines`](../../_tools/checks/baselines), which may only shrink.
 
@@ -51,5 +50,5 @@ A catch names the one failure it expects and lets the rest through: `isMissing` 
 ## Code style
 
 - oxlint ([`.oxlintrc.json`](../../.oxlintrc.json)) runs on every edit through [`lint-edit.mjs`](../../_tools/oxlint/lint-edit.mjs), which fixes what it can and reports only what the edit added.
-- [`.oxlintrc.plugins.json`](../../.oxlintrc.plugins.json) adds the vendored [`anti-slop`](../../_tools/oxlint/anti-slop) type rules and cognitive complexity. Main carries a backlog of them, so [`added.mjs`](../../_tools/oxlint/added.mjs) holds them to what a change adds: per edit, and over a land's own files after it lands. `pnpm lint:plugins` lists the backlog.
+- [`.oxlintrc.plugins.json`](../../.oxlintrc.plugins.json) adds the vendored [`anti-slop`](../../_tools/oxlint/anti-slop) type rules and cognitive complexity. Main carries a backlog of them, so [`added.mjs`](../../_tools/oxlint/added.mjs) holds them to what each edit adds. `pnpm lint:plugins` lists the backlog.
 - A check's finding that is right where it stands says so with `// allow(<check>): <reason>` at the site or an `Allow: <check> — <reason>` commit trailer ([`_tools/checks`](../../_tools/checks/README.md#exceptions)). Test conventions are in [testing.md](testing.md).

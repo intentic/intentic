@@ -28,12 +28,22 @@ import { drivenBy } from "../testing.js";
 const { published } = { published: [] as string[] };
 jest.mock("../seams/runtime-feed.js", () => ({ publishRuntimeChange: (...domains: string[]) => published.push(...domains) }));
 
-const run = (id: number, conclusion: string, branch = "main") => ({
+// The runs still going that reach main's fix agent, recorded at its door: what it does with them is
+// main-fixer.integration.test.ts's.
+const inFlight: number[] = [];
+jest.mock("./main-fixer.js", () => ({
+    runInFlight: async (_services: unknown, _project: unknown, pipeline: { runId: number }) => {
+        inFlight.push(pipeline.runId);
+    },
+    runFinished: async () => {},
+}));
+
+const run = (id: number, conclusion: string | null, branch = "main", status = "completed") => ({
     id,
     display_title: `run ${id}`,
     head_branch: branch,
     head_sha: `sha${id}`,
-    status: "completed",
+    status,
     conclusion,
     html_url: `https://github.com/acme/web/actions/runs/${id}`,
     created_at: "2026-07-29T10:00:00Z",
@@ -135,4 +145,15 @@ test("the branch filter applies on the polled path exactly as on the webhook pat
     await poller.poll();
     await new Promise((resolve) => setTimeout(resolve, 1200));
     expect(prompts).toEqual([]);
+});
+
+// Where no job webhook is live, the poller is how a job that failed in a run still going is heard.
+test("a run still going is handed to main's fix agent, which reads the jobs it already failed; the first pass adopts it", async () => {
+    const { poller, publish } = await harness(true);
+    inFlight.length = 0;
+    publish([run(3, null, "main", "in_progress"), run(1, "success")]);
+    await poller.poll();
+    expect(inFlight).toEqual([]);
+    await poller.poll();
+    expect(inFlight).toEqual([3]);
 });

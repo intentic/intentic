@@ -426,110 +426,13 @@
             "label": "Stan tablicy",
             "close": "Zamknij {title}"
         },
-        "mainline": {
-            "title": "Główna linia",
-            "root": "przestrzeń robocza",
-            "projectFailing": "{project} nie przechodzi",
-            "projectsFailing": "{count} projekt nie przechodzi | {count} projekty nie przechodzą | {count} projektów nie przechodzi",
-            "queued": "{count} w kolejce",
-            "columnQueued": "W kolejce",
-            "columnChecking": "Sprawdzanie",
-            "columnResult": "Wynik",
-            "columnHistory": "Historia",
-            "nothingQueued": "Kolejka jest pusta",
-            "noResults": "Brak wyników",
-            "outdatedMissing": "Do czasu aktualizacji ten panel nie powie, komu przypisano nieudane sprawdzenie ani kto je naprawia, nie otworzy logów sprawdzenia i nie pokaże, co zostawiły twoje pushe.",
-            "logs": "Logi",
-            "moreFailures": "+{count} więcej",
-            "noFailureList": "Brak listy błędów",
-            "likelyCause": "Prawdopodobna przyczyna",
-            "andMore": "{title} +{count}",
-            "passed": "zaliczone",
-            "failed": "niezaliczone",
-            "recheck": "Ponowne sprawdzenie",
-            "routingFixing": "W naprawie",
-            "leadFixing": "Naprawiane w",
-            "routingHeld": "Czeka, aż inny czat skończy",
-            "leadHeld": "Czeka na",
-            "routingWaiting": "Czeka na następne sprawdzenie",
-            "routingReported": "Nikt tego nie naprawia",
-            "routingSpent": "Wyczerpane próby naprawy",
-            "routingResolved": "Naprawione przy następnym sprawdzeniu",
-            "routingDismissed": "Odłożone przez ciebie",
-            "routingDeciding": "Trwa decyzja, kto to naprawi",
-            "shortFixing": "w naprawie",
-            "shortOnHold": "wstrzymane",
-            "shortNeedsYou": "czeka na ciebie",
-            "shortFixed": "naprawione",
-            "shortDismissed": "odłożone",
-            "push": {
-                "explain": "Push poszedł; jego sprawdzenie przepuściło to, co tu widać. Każde znalezisko czeka tu, aż późniejszy pomiar go nie znajdzie albo je odrzucisz. Nikt się tym nie zajmie, dopóki go nie przekażesz.",
-                "commits": "{count} commit | {count} commity | {count} commitów",
-                "earlier": "+{count} wcześniejszy push | +{count} wcześniejsze pushe | +{count} wcześniejszych pushy",
-                "more": "+{count} więcej | +{count} więcej | +{count} więcej",
-                "fewer": "Pokaż mniej",
-                "from": "z {sha} {subject}",
-                "endsWhenDismissed": "Żaden późniejszy pomiar nie zobaczy, że zniknęło: kończy się, gdy je odrzucisz.",
-                "recheck": "Zmierz ponownie",
-                "rechecked": "Ponownie zmierzono {project}: zniknęło {resolved}, otwartych {open}",
-                "unmeasured": "Nie udało się zmierzyć {project}; nic się nie zmieniło",
-                "dismissHint": "Odrzuć: nie zostanie naprawione",
-                "dismissOne": "Odrzuć {source}",
-                "dismissAll": "Odrzuć wszystkie",
-                "dismissed": "Odrzucono {count} znalezisko | Odrzucono {count} znaleziska | Odrzucono {count} znalezisk",
-                "dismissFailed": "Nie udało się tego odrzucić",
-                "handOver": "Przekaż agentowi",
-                "continue": "Kontynuuj",
-                "handHint": "Otwiera odizolowaną rozmowę z każdym otwartym znaleziskiem stąd, poleceniem, które pokazuje je ponownie, i commitami, które je wniosły.",
-                "handFailed": "Nie udało się przekazać ich agentowi",
-                "attempt": "Próba {count}",
-                "left": "zostało {count} | zostały {count} | zostało {count}",
-                "clean": "czysto",
-                "handled": "załatwione"
-            },
-            "board": {
-                "idle": "Żadne sprawdzenie nie trwa",
-                "waiting": "{count} scalenie czeka na następne sprawdzenie | {count} scalenia czekają na następne sprawdzenie | {count} scaleń czeka na następne sprawdzenie",
-                "measuring": "Mierzy {count} scalenie | Mierzy {count} scalenia | Mierzy {count} scaleń",
-                "on": "na {machine}",
-                "queuedLands": "Scalenia czekające w {project}",
-                "measuredLands": "Scalenia mierzone przez sprawdzenie {project}",
-                "failingSince": "Nie przechodzi od {time}",
-                "more": "+{count} więcej",
-                "backToResults": "Wróć do wyników",
-                "openHistory": "Otwórz historię ({count})",
-                "historyHint": "Każde sprawdzenie po scaleniu, od najnowszych",
-                "queuedHint": "Scalona praca czeka na następne sprawdzenie swojego projektu",
-                "checkingHint": "Sprawdzenie, które teraz działa na głównym drzewie",
-                "resultHint": "Ostatnie sprawdzenie każdego projektu po scaleniu",
-                "pushedHint": "Co sprawdzenie przed pushem znalazło w Twoich pushach. Nigdy nie wstrzymuje pusha.",
-                "leftAtPush": "Zostało po pushu",
-                "nothingLeft": "Nic nie zostało po pushu",
-                "command": "Polecenie",
-                "fix": "Naprawa",
-                "failures": "{count} błąd | {count} błędy | {count} błędów",
-                "after": "po {work}",
-                "stillOpen": "{count} znalezisko wciąż otwarte | {count} znaleziska wciąż otwarte | {count} znalezisk wciąż otwartych",
-                "lastPush": "Ostatni push"
-            }
-        },
-        "landCheck": {
-            "broke": "Zepsuło {count}",
-            "brokeMain": "Zepsuło main",
-            "openFixUp": "Otwórz rozmowę, która nad tym pracuje",
+        "cardSeal": {
             "unviewed": "Zmienił {count} plik interfejsu bez patrzenia | Zmienił {count} pliki interfejsu bez patrzenia | Zmienił {count} plików interfejsu bez patrzenia",
-            "seal": {
-                "checking": "Sprawdzenie main w {project}: trwa od {time}",
-                "waiting": "Sprawdzenie main w {project}: w kolejce od {time}",
-                "passed": "Sprawdzenie main w {project}: przeszło o {time}",
-                "checkedRed": "Sprawdzenie main w {project}: nadal czerwone, przez inną pracę",
-                "broke": "Sprawdzenie main w {project}: {broke}",
-                "verified": "Własne sprawdzenie: {check} przeszło",
-                "verifiedBare": "Własne sprawdzenie: przeszło po ostatniej zmianie",
-                "failed": "Własne sprawdzenie: {check} nie przeszło",
-                "failedBare": "Własne sprawdzenie: nie przeszło",
-                "unproven": "Własne sprawdzenie: brak od ostatniej zmiany"
-            }
+            "verified": "Własne sprawdzenie: {check} przeszło",
+            "verifiedBare": "Własne sprawdzenie: przeszło po ostatniej zmianie",
+            "failed": "Własne sprawdzenie: {check} nie przeszło",
+            "failedBare": "Własne sprawdzenie: nie przeszło",
+            "unproven": "Własne sprawdzenie: brak od ostatniej zmiany"
         },
         "words": {
             "new": "Nowy",
@@ -1776,9 +1679,9 @@
             "includeReleaseNoteEach": "Dołączaj notatkę wydania do każdego commita."
         },
         "agentChecks": {
-            "repairAfterLanding": "Naprawiaj to, co psuje się po scaleniu",
-            "repairAfterLandingNote": "Gdy po scaleniu sprawdzenia się nie powiodą, wysyłany jest agent naprawczy. To samo, gdy CI na main utknie na błędzie.",
-            "afterLanding": "Po scaleniu pracy"
+            "repairMainCi": "Naprawiaj main, gdy jego CI zawiedzie",
+            "repairMainCiNote": "Pierwsze zadanie, które nie powiedzie się na main, uruchamia jednego agenta naprawczego, a każdy kolejny błąd trafia do niego, aż main znów będzie zielony. Gdy wyczerpie swoje tury albo niczego nie zmieni, przekazuje sprawę Tobie. Przebieg, który zawiódł przez same maszyny CI, jest zamiast tego raz ponawiany.",
+            "mainCi": "CI na main"
         },
         "agentClock": {
             "clock": "Zegar",
@@ -1903,7 +1806,7 @@
             "readingWhatWorkspacesRepositories": "Odczytywanie, co deklarują repozytoria tej przestrzeni roboczej…",
             "repositoriesWaitingOnUntil": "{waiting} repozytoria czekają na Ciebie. Dopóki ich nie włączysz, ich własne sprawdzenia nie działają.",
             "repositoryChecks": "Sprawdzenia repozytorium",
-            "repositoryDeclaresOwnChecks": "Repozytorium deklaruje w .intentic/checks.json, co działa na jego własnym kodzie: po każdej zmianie albo po scaleniu jego pracy. Nic, co deklaruje, nigdy nie blokuje scalenia, commita ani pusha."
+            "repositoryDeclaresOwnChecks": "Repozytorium deklaruje w .intentic/checks.json, co działa na jego własnym kodzie po każdej zmianie. Nic, co deklaruje, nigdy nie blokuje scalenia, commita ani pusha."
         },
         "agentSafetyJudge": {
             "changeInModels": "Zmień w Modelach",
@@ -2730,11 +2633,10 @@
             "declaredNotRunningNothing": "Wyłączone. Nic, co deklaruje repozytorium, nie działa, dopóki tego nie włączysz.",
             "runChecksDeclares": "Uruchom sprawdzenia, które deklaruje {name}",
             "afterEachEdit": "Po każdej zmianie",
-            "afterItLands": "Po scaleniu",
-            "turnRetired": "Zanim tura się skończy — już nie działa; sprawdzenia działają po scaleniu",
+            "landRetired": "Po scaleniu — już nie działa; CI sprawdza to, co zostało wypchnięte",
+            "turnRetired": "Zanim tura się skończy — już nie działa; CI sprawdza to, co zostało wypchnięte",
             "lastFlagged": "ostatnio zgłosił {ago}",
             "neverFlagged": "nigdy nic nie zgłosił",
-            "packageScript": "skrypt pakietu",
             "running": "Działa"
         },
         "restartWatch": {
@@ -4608,7 +4510,7 @@
             "unstaged": "Poza indeksem",
             "untrackedLeave": "{count} nieśledzony plik znika z dysku: nigdy nie był zacommitowany, więc git nie ma kopii: | {count} nieśledzone pliki znikają z dysku: nigdy nie były zacommitowane, więc git nie ma kopii: | {count} nieśledzonych plików znika z dysku: nigdy nie były zacommitowane, więc git nie ma kopii:",
             "watchRun": "Obejrzyj, jak działa",
-            "leftInMainLine": "{count} zostało w głównej linii | {count} zostały w głównej linii | {count} zostało w głównej linii",
+            "leftAtPush": "{count} zostało po pushu | {count} zostały po pushu | {count} zostało po pushu",
             "you": "Ty",
             "pushOutdated": "zaktualizuj sandbox, by zobaczyć, co zostawił"
         },
@@ -4676,7 +4578,8 @@
         },
         "usePushFlow": {
             "failed": "{verb} nie powiodło się",
-            "reposRefusedEachRow": "{count} repozytoriów to odrzuciło, każdy wiersz mówi dlaczego."
+            "reposRefusedEachRow": "{count} repozytoriów to odrzuciło, każdy wiersz mówi dlaczego.",
+            "handFailed": "Nie udało się przekazać tego agentowi"
         },
         "usePushRun": {
             "pushing": "Push: {repo}"

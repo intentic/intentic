@@ -15,8 +15,8 @@ import type { TurnHooks } from "../../providers/agent-request.js";
 import { opt } from "../../../opt.js";
 
 // What the daemon answers while a turn runs: the checks at every edit, the safety judge and its log, and the ledgers a
-// turn feeds. Nothing runs when the turn ends: the model decides when it is done, and the whole-tree check runs after
-// its work lands (workspace/deps/verify-deps.ts). Every write here is best-effort, since the turn must settle regardless.
+// turn feeds. Nothing runs when the turn ends: the model decides when it is done, and CI checks what the owner pushes.
+// Every write here is best-effort, since the turn must settle regardless.
 
 // What the harness's hooks reach for: the per-edit reviewers' deps, the ledgers they stamp, and the judge.
 export type HarnessHooksDeps = Pick<

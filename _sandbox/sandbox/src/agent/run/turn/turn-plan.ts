@@ -74,8 +74,8 @@ export const planTurn = async (services: Services, sent: TurnInput, context: Tur
     if (decision.accountMove !== undefined && input.conversationId !== undefined) {
         await services.agents.switchAccount(input.conversationId, decision.accountMove);
     }
-    // Nothing is planned for the turn's end: no check runs there and nothing sends the model back. Its work is checked
-    // after it lands (workspace/deps/verify-deps.ts), off everyone's clock.
+    // Nothing is planned for the turn's end: no check runs there and nothing sends the model back. CI checks what the
+    // owner pushes, off everyone's clock.
     const base: TurnBase = {
         ...decision.context.base,
         hooks: {

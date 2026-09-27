@@ -1,4 +1,4 @@
-import { type AgentSummary, nextDayStartIn, UTC } from "@intentic/sandbox-contract";
+import { type AgentSummary, ciFixConversationId, nextDayStartIn, UTC } from "@intentic/sandbox-contract";
 import { SUPPORT_SWEEP_PATH } from "./browserShots";
 
 // One afternoon across two repos, with a card in every lane `laneOf` distinguishes: attention (awaiting a parked
@@ -15,14 +15,15 @@ export const AWAITING_AGENT_ID = `cnv_flaky_signup`;
 export const REVIEW_AGENT_ID = `cnv_soft_deletes`;
 // Agent whose land refuses: half the delta diverged, half is held by the owner's own edits.
 export const CONFLICT_AGENT_ID = `cnv_auth_middleware`;
-// The fresh conversation the sandbox started when the release notes' land turned `web`'s check red and the conversation
-// that landed it had gone cold (fixture/mainline.ts). Its id is the daemon's own shape (landFixConversationId): the
-// project, then the second its red streak began, in base 36.
-export const LAND_FIX_AGENT_ID = `land-fix-web-t2k9qx`;
 // A chat whose last message the sandbox turned away for low memory: the words wait in its queue, held for one press.
 export const HELD_AGENT_ID = `cnv_support_card`;
 // That message, as the queue holds it; its picture is the sweep capture the workspace carries (fixture/browserShots.ts).
 export const HELD_MESSAGE_ID = `msg_01j9supportcard`;
+// The one fix agent the sandbox put on each red main line (fixture/ci.ts), at the first failed job of the run that turned
+// it red. Their ids are the daemon's own shape (ciFixConversationId): the repository, then that run's id, which a later
+// red run on the same branch does not share.
+export const WEB_MAIN_FIXER_ID = ciFixConversationId(`web`, 4_818);
+export const API_MAIN_FIXER_ID = ciFixConversationId(`api`, 90_314);
 
 const minutes = (count: number): number => count * 60_000;
 
@@ -471,7 +472,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         turns: 2,
         toolUses: 11,
         diff: { files: 1, insertions: 22, deletions: 3 },
-        // It reworded the changelog page's headings and never ran or opened it: the land that turned `web` red.
+        // It reworded the changelog page's headings and never ran or opened it: pushed, it is what turned `web`'s main CI red.
         proof: { at: now - minutes(34), verification: `unproven`, unviewed: 1 },
     },
     {
@@ -501,33 +502,60 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         diff: { files: 3, insertions: 14, deletions: 9 },
         proof: { at: now - minutes(392), verification: `verified`, check: `pnpm -C api test` },
     },
-    // Started by the sandbox, not by anyone on the team, on the failures the release notes' land left in `web`.
+    // Started by the sandbox, not by anyone on the team, at the first failed job of the release notes' push to `web`'s
+    // main, and sent the next push's failures on main too: its second turn is working on both.
     {
-        id: LAND_FIX_AGENT_ID,
+        id: WEB_MAIN_FIXER_ID,
         startIn: `web`,
-        sessionId: `ses_01j9landfix`,
-        title: `Fix main after "Draft the release notes for 2.4"`,
+        sessionId: `ses_01j9cifixweb`,
+        title: `Fix CI: Draft the release notes for 2.4`,
         status: `running`,
         provider: `claude`,
         harness: `claude-code`,
         model: `claude-sonnet-5`,
         effort: `high`,
         account: `acc_claude_demo`,
-        branch: `agent/${LAND_FIX_AGENT_ID}`,
-        base: `4f1c8ab`,
-        costUsd: 0.07,
-        inputTokens: 12_400,
-        outputTokens: 1_060,
-        contextTokens: 9_800,
+        branch: `agent/${WEB_MAIN_FIXER_ID}`,
+        base: `9d20f6b`,
+        costUsd: 0.11,
+        inputTokens: 18_900,
+        outputTokens: 1_640,
+        contextTokens: 14_200,
         contextWindow: 200_000,
         activity: { tool: `Bash`, target: `pnpm -C web vitest run src/pages/changelog.test.ts`, todo: `Re-run only the failing tests` },
-        startedAt: now - minutes(3),
+        startedAt: now - minutes(6),
         updatedAt: now - 1_300,
-        seenAt: now - minutes(3),
+        seenAt: now - minutes(6),
         attention: NO_ATTENTION,
-        turns: 1,
-        toolUses: 17,
+        turns: 2,
+        toolUses: 23,
         diff: { files: 1, insertions: 6, deletions: 4 },
+    },
+    // `api`'s: it read the logs, found the failure outside the code, and finished without changing anything, so main's red
+    // was handed back and waits for you.
+    {
+        id: API_MAIN_FIXER_ID,
+        startIn: `api`,
+        sessionId: `ses_01j9cifixapi`,
+        title: `Fix CI: Bump the Stripe SDK to 17`,
+        status: `idle`,
+        provider: `claude`,
+        harness: `claude-code`,
+        model: `claude-sonnet-5`,
+        effort: `high`,
+        account: `acc_claude_demo`,
+        branch: `agent/${API_MAIN_FIXER_ID}`,
+        base: `b3e9a07`,
+        costUsd: 0.09,
+        inputTokens: 15_300,
+        outputTokens: 1_210,
+        contextTokens: 11_800,
+        contextWindow: 200_000,
+        updatedAt: now - minutes(19),
+        seenAt: now - minutes(40),
+        attention: NO_ATTENTION,
+        turns: 3,
+        toolUses: 29,
     },
     {
         id: HELD_AGENT_ID,

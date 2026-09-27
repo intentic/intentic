@@ -10,8 +10,7 @@ flowchart LR
     run -->|"frames"| feed["transcript<br/>/agent stream"]
     run --> settle["settle<br/>land rules · proof"]
     settle --> land["land<br/>patch into /work"]
-    land --> verify["verify-deps<br/>land check, in the background"]
-    verify -->|"red"| route["land-breakage<br/>send back or fix-up"]
+    land --> reconcile["reconcile-deps<br/>install if a manifest moved"]
     settle -->|"domain events"| react["push · chores · history"]
 ```
 
@@ -27,7 +26,7 @@ built in composition instead: the builder returns `Omit<Slice, …>` over an exp
 composition's `createBridgedMembers` returns the `Pick` of the same union.
 
 Nothing is filled in after construction but one binding: `whole`, the finished `Services`, read per call by the few
-services whose work reaches most of the daemon (a turn, a land's breakage route, the provider catalogs and readiness,
+services whose work reaches most of the daemon (a turn, the provider catalogs and readiness,
 the safety judge, filing a browser account, recomposing the environment, a host's reach). None of them is called before
 `createServices` returns. `runnerParent` is the one holder left, filled when runner mode enrolls after the boot gate.
 A module takes `Pick<Services, …>` of the seams it uses, so its dependencies are visible in its signature.
@@ -63,14 +62,13 @@ Subsystems that react to each other never import each other:
 ## Who spoke a row
 
 A turn's words carry who spoke them (`TurnSpeaker`, `seams/turn-speaker.ts`) and, when the sandbox or the editor
-composed them, the errand they are (`TurnErrand`, contract `schemas/speaker.ts`): a land's breakage sent back, a red
-held on a conversation still working, a land, push or CI fix attempt and its nudge, a land conflict. Both ride the
-turn input, the conversation's queue and a live steer onto the transcript row, so no reader shows the sandbox's words
-as the owner's. A wake (`agent/run/turn/wake-delivery.ts`) is the sandbox's by construction; a fix attempt
-(`conversations/fix/fix-attempts.ts`) names its errand for the opening prompt and the nudge, and is the sandbox's own
-when nobody pressed for it. Over HTTP a client may name only `land-conflict`. Rows written before rows named an errand
-are still read by the prompt's opening paragraph (`errandOfRow`, contract `events/errands.ts`), which is why every
-opening stays byte-identical.
+composed them, the errand they are (`TurnErrand`, contract `schemas/speaker.ts`): a push or CI fix attempt and its
+nudge, a land conflict. Both ride the turn input, the conversation's queue and a live steer onto the transcript row, so
+no reader shows the sandbox's words as the owner's. A wake (`agent/run/turn/wake-delivery.ts`) is the sandbox's by
+construction; a fix attempt (`conversations/fix/fix-attempts.ts`) names its errand for the opening prompt and the nudge,
+and is the sandbox's own when nobody pressed for it. Over HTTP a client may name only `land-conflict`. Rows written
+before rows named an errand are still read by the prompt's opening paragraph (`errandOfRow`, contract
+`events/errands.ts`), which is why every opening stays byte-identical.
 
 ## A turn's close
 
@@ -91,11 +89,11 @@ whose steps are named in `agent/run/placement/turn-close.ts`:
 4. **Land**, a clean turn only (`turn-landing.ts`). Nothing lands while the conversation awaits a wake, since the wake
    is the turn that finishes the work. Otherwise the repository's own machine fixers run in the worktree on what the
    turn changed (`conversations/land/worktree-fixers.ts`, `_tools/scripts/verify/fixers.mjs` where the repository
-   ships it), so what they write rides this land; then the rules decide, and it lands under the lease. The check after
-   the land runs the same fixers on the main tree as the backstop. With the owner's version rule standing, the land's
-   claim is then committed (`conversations/land/version-landed.ts`), the one place any land (a turn's, by hand, a
-   conflict's re-land, a fix-up's) becomes a commit: a subject that narrates instead of describing a change is replaced
-   there by one built from the claimed paths (`committableSubject`), whichever path drafted or stored it.
+   ships it), so what they write rides this land. Then the rules decide, and it lands under the lease. Nothing runs
+   them on the main tree afterwards. With the owner's version rule standing, the land's claim is then committed
+   (`conversations/land/version-landed.ts`), the one place any land (a turn's, by hand, a conflict's re-land, a fix
+   agent's) becomes a commit: a subject that narrates instead of describing a change is replaced there by one built
+   from the claimed paths (`committableSubject`), whichever path drafted or stored it.
 5. **Settle.** The placement's books, then the conversation's actor.
 6. **Publish, once.** The placement announces how the turn ended (`TurnEnding`: failed, stopped, awaiting a wake, or
    finished); a worktree turn's is the workspace `turn.settled` event.

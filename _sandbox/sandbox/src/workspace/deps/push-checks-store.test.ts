@@ -1,4 +1,4 @@
-import { fnvDigest, type MainlineRouting } from "@intentic/sandbox-contract";
+import { fnvDigest, type RedDecision } from "@intentic/sandbox-contract";
 import { convertDocument } from "../../store/evolution/conversions.js";
 import {
     applyMeasured,
@@ -134,7 +134,7 @@ describe("filing a push", () => {
         expect(resolved).toBe(0);
         expect(state).toEqual({
             pushes: [{ project: "app", id: "r1", at: 10, remote: "origin", branch: "main", base: "b1", head: "h1", commits: 5, findings }],
-            reds: { app: { since: 10, findings, suspects: [], named: false, decisions: [] } },
+            reds: { app: { since: 10, findings, decisions: [] } },
             ended: {},
             seen: ["r1"],
         });
@@ -179,7 +179,7 @@ describe("filing a push", () => {
         const again = ingestPush(dismissed, "app", report({ id: "r2", at: 20, findings: [CATCH] })).state;
 
         expect(foundOf(again)).toEqual({ r2: [CATCH_ID], r1: [CATCH_ID] });
-        expect(again.reds["app"]).toEqual({ since: 20, findings: [{ ...CATCH, id: CATCH_ID }], suspects: [], named: false, decisions: [] });
+        expect(again.reds["app"]).toEqual({ since: 20, findings: [{ ...CATCH, id: CATCH_ID }], decisions: [] });
         expect(again.ended).toEqual({});
     });
 
@@ -245,8 +245,6 @@ describe("measuring again", () => {
             app: {
                 since: 10,
                 findings: [],
-                suspects: [],
-                named: false,
                 decisions: [{ kind: "resolved", at: 50, findings: [CATCH_ID], detail: "A later measurement no longer printed them." }],
             },
         });
@@ -335,8 +333,6 @@ describe("dismissing", () => {
                 { ...CATCH, id: CATCH_ID },
                 { ...LINT, id: LINT_ID },
             ],
-            suspects: [],
-            named: false,
             decisions: [],
         });
         expect(dismissIn(one, "app", undefined, true, 30).changed).toBe(0);
@@ -351,7 +347,7 @@ describe("dismissing", () => {
     // "Dismiss all" names every owed id and ends the red; its undo names the same ids and must bring back exactly that
     // red, begun when it was, with the hand-over it had, not a fresh one.
     test("an undo of the dismissal that ended the red brings the same red back", () => {
-        const handed: MainlineRouting = { kind: "fix-up", conversationId: "push-fix-app-1", at: 12 };
+        const handed: RedDecision = { kind: "fix-up", conversationId: "push-fix-app-1", at: 12 };
         const red = decidedIn(two(), "app", handed);
         const all = dismissIn(red, "app", [CATCH_ID, LINT_ID], false, 30);
 
@@ -381,8 +377,6 @@ describe("what is kept", () => {
             app: {
                 since: 1,
                 findings: pushes.flatMap((each) => each.findings).filter((finding) => ids.includes(finding.id)),
-                suspects: [],
-                named: false,
                 decisions: [],
             },
         },
@@ -431,7 +425,7 @@ describe("a refused push", () => {
         expect(state.pushes).toEqual([
             { project: "app", id: "refused-a", at: 10, remote: "origin", branch: "main", head: "head-10", commits: 0, refused: true, findings: [finding] },
         ]);
-        expect(state.reds["app"]).toEqual({ since: 10, findings: [finding], suspects: [], named: false, decisions: [] });
+        expect(state.reds["app"]).toEqual({ since: 10, findings: [finding], decisions: [] });
         expect(applyMeasured(state, "app", { checks: { [REFUSAL_SOURCE]: { ok: true, measured: true, keys: [] } } }, 20).resolved).toBe(0);
     });
 
@@ -457,7 +451,7 @@ describe("the wire", () => {
         const state = ingestPush(EMPTY, "", report({ id: "r1", at: 10, findings: [CATCH] })).state;
         const { key: _key, ...finding } = { ...CATCH, id: CATCH_ID };
 
-        expect(publicPushReds(state.reds)).toEqual([{ source: "push", scope: "", since: 10, findings: [finding], suspects: [], named: false, decisions: [] }]);
+        expect(publicPushReds(state.reds)).toEqual([{ source: "push", scope: "", since: 10, findings: [finding], decisions: [] }]);
     });
 });
 
@@ -523,7 +517,7 @@ describe("the file before push reds", () => {
                 { project: "app", id: "r1", at: 10, head: "h1", commits: 2, findings: [catchFound] },
                 { project: "lib", id: "r0", at: 5, head: "h0", commits: 1, findings: [{ id: pushFindingId({ source: "lint", key: "", text: "old" }), source: "lint", recheckable: true, text: "old", key: "" }] },
             ],
-            reds: { app: { since: 10, findings: [catchFound, lintFound], suspects: [], named: false, decisions: [] } },
+            reds: { app: { since: 10, findings: [catchFound, lintFound], decisions: [] } },
             ended: {},
             seen: ["r2", "r1", "r0"],
         });

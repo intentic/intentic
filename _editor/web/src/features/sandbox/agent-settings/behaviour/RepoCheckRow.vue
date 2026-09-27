@@ -31,14 +31,15 @@ const name = computed((): string => (entry.repo === `root` ? `This workspace` : 
 
 const MOMENTS: readonly RepoCheckMoment[] = [`edit`, `turn`, `land`];
 
-// `turn` is retired: nothing runs when a turn ends any more, and a declaration naming it still reads but runs nothing, so
-// its label says so rather than promising a check that never comes.
+// `turn` and `land` are retired: nothing runs when a turn ends or after work lands any more (CI checks what is pushed),
+// and a declaration naming either still reads but runs nothing, so its label says so rather than promising a check that
+// never comes.
 const momentWords = (when: RepoCheckMoment): string =>
     when === `edit`
         ? t(`sandbox.repoCheckRow.afterEachEdit`)
         : when === `turn`
           ? t(`sandbox.repoCheckRow.turnRetired`)
-          : t(`sandbox.repoCheckRow.afterItLands`);
+          : t(`sandbox.repoCheckRow.landRetired`);
 
 // When a check last flagged something; one that never has is either healthy or aimed at nothing, and worth a look.
 const firedWords = (at: number | null | undefined): string =>
@@ -49,28 +50,23 @@ const idle = computed(() => !entry.adopted && !entry.changed);
 
 type Line = { key: string; when: RepoCheckMoment; run: string; paths: readonly string[]; note: string | undefined; dim: boolean };
 
-// In the order they run, so one moment's checks sit together under a single label; a declared `land` check replaces
-// the package script that otherwise runs after a land.
-const lines = computed((): Line[] => {
-    const declared = entry.checks.map(
-        (check, index): Line => ({
-            key: `${index}`,
-            when: check.when,
-            run: check.run,
-            paths: check.paths ?? [],
-            // A land's verdict is the main line's (the chat rail and the board); only an edit check stamps a firing, and
-            // a retired turn check has nothing left to have flagged.
-            note: check.when === `edit` && entry.adopted ? firedWords(entry.fired[index]) : undefined,
-            // A retired check reads as inert as one nobody switched on: neither runs.
-            dim: idle.value || check.when === `turn`,
-        }),
-    );
-    const fallback: Line[] =
-        entry.landDefault === undefined || entry.checks.some((check) => check.when === `land`)
-            ? []
-            : [{ key: `package`, when: `land`, run: entry.landDefault, paths: [], note: t(`sandbox.repoCheckRow.packageScript`), dim: false }];
-    return [...declared, ...fallback].toSorted((a, b) => MOMENTS.indexOf(a.when) - MOMENTS.indexOf(b.when));
-});
+// In the order of their moments, so one moment's checks sit together under a single label.
+const lines = computed((): Line[] =>
+    entry.checks
+        .map(
+            (check, index): Line => ({
+                key: `${index}`,
+                when: check.when,
+                run: check.run,
+                paths: check.paths ?? [],
+                // Only an edit check stamps a firing; a retired one has nothing left to have flagged.
+                note: check.when === `edit` && entry.adopted ? firedWords(entry.fired[index]) : undefined,
+                // A retired check reads as inert as one nobody switched on: neither runs.
+                dim: idle.value || check.when !== `edit`,
+            }),
+        )
+        .toSorted((a, b) => MOMENTS.indexOf(a.when) - MOMENTS.indexOf(b.when)),
+);
 
 type Status = { tone: `success` | `warning` | `default`; words: string } | undefined;
 
@@ -105,7 +101,7 @@ const STATUS_TEXT = { success: `text-success`, warning: `text-warning`, default:
                 {{ status.words }}
             </span>
         </template>
-        <!-- Only a declaration has anything to adopt; the package script runs regardless. -->
+        <!-- Only a declaration has anything to adopt. -->
         <template v-if="entry.checks.length > 0" #control>
             <ToggleSwitch
                 :model-value="entry.adopted"

@@ -13,7 +13,7 @@ jest.mock("../fleet/useAgents", () => ({
             id === `a1` ? { title: `Wire the checkout`, status: `running` } : id === `b2` ? { title: `Translate the notes`, status: `running` } : undefined,
     }),
 }));
-jest.mock("../mainline/openLanded", () => ({ openLandConversation: opened }));
+jest.mock("../fleet/useAgents-actions", () => ({ openById: opened }));
 
 const { default: SessionMetrics } = await import("./SessionMetrics.vue");
 const { default: SandboxMetricsSummary } = await import("./SandboxMetricsSummary.vue");

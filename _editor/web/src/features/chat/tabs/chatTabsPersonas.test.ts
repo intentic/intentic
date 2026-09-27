@@ -2,7 +2,7 @@
 // with every row verb the Agents cut has. Mounted via ChatTabList, since the cut switch is part of what's tested.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { AgentSummary, MainlineStatus } from "@intentic/sandbox-contract";
+import { type AgentSummary, SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
 import { installUi } from "@intentic/ui";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick } from "vue";
@@ -10,6 +10,7 @@ import { setAgents } from "../../agents/fleet/useAgents-registry";
 import { useChatGrouping } from "../transcript/chatGrouping";
 import { useChat } from "../run/useChat";
 import { openAgentConversation } from "../panel/useChat-reveal";
+import { setDaemonRoutes } from "../../sandbox/overview/useDaemonRoutes";
 import { queryClient } from "../../../lib/queryPersistence";
 import { rpcKey } from "../../../lib/queryKeys";
 import { router } from "../../../router";
@@ -355,9 +356,10 @@ it(`hands the column back to the lanes when the switch is flipped`, async () => 
     expect(el.querySelector(`[aria-label="Filter chats by your messages or id"]`)).not.toBeNull();
 });
 
-// A SANDBOX FROM BEFORE 2026-09-25 says only who a conversation's first turn acted as (`actsAs`), never who it speaks as
-// now (`lastActsAs`), and its main line serves no `reds`. Nothing is guessed from the first turn: the rail says the sandbox
-// needs an update, and a current sandbox's rail says nothing of the kind.
+// A SANDBOX FROM BEFORE 2026-09-25 (v1.312 and older) says only who a conversation's first turn acted as (`actsAs`),
+// never who it speaks as now (`lastActsAs`), and its daemon advertises no `agent.switchAccount`, which arrived with the
+// field. Nothing is guessed from the first turn: the rail says the sandbox needs an update, and a current sandbox's rail
+// says nothing of the kind.
 describe(`on a sandbox too old to say who a conversation speaks as`, () => {
     // What an older sandbox says of a conversation working as Work: its first turn's persona, and nothing about now.
     const olderBusy: AgentSummary = {
@@ -371,11 +373,12 @@ describe(`on a sandbox too old to say who a conversation speaks as`, () => {
         attention: NO_ATTENTION,
     };
     const busyAsWork = (current: boolean): AgentSummary => (current ? { ...olderBusy, lastActsAs: `work` } : olderBusy);
-    const mainline = (current: boolean): MainlineStatus => (current ? { projects: [], recent: [], reds: [] } : { projects: [], recent: [] });
+    const advertise = (current: boolean): void =>
+        setDaemonRoutes(current ? SANDBOX_ROUTE_NAMES : SANDBOX_ROUTE_NAMES.filter((name) => name !== `agent.switchAccount`));
     const note = (el: HTMLElement): HTMLElement | null => el.querySelector<HTMLElement>(`[data-outdated]`);
 
     it(`groups nothing under a persona from the first turn alone, and says the sandbox needs an update`, async () => {
-        queryClient.setQueryData(rpcKey(`workspace.mainline`), mainline(false));
+        advertise(false);
         setAgents([busyAsWork(false)], 100);
         const el = await mountList();
         expect(headers(el)).toEqual([]);
@@ -385,7 +388,7 @@ describe(`on a sandbox too old to say who a conversation speaks as`, () => {
     });
 
     it(`says nothing of the kind on a current sandbox, which groups by who the conversation speaks as now`, async () => {
-        queryClient.setQueryData(rpcKey(`workspace.mainline`), mainline(true));
+        advertise(true);
         setAgents([busyAsWork(true)], 100);
         const el = await mountList();
         expect(headers(el)).toEqual([`Work`]);

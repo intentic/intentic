@@ -33,7 +33,7 @@ import { resourcesSliceFake } from "../system/resources/resources-slice.testing.
 import { testConfig, testTurnMounts } from "../testing.js";
 import { outboxStreamFor } from "../webchat/webchat-outbox.js";
 import { webextSliceFake } from "../webext/webext-slice.testing.js";
-import { mainlineSliceFake } from "../workspace/deps/mainline-slice.testing.js";
+import { depsSliceFake } from "../workspace/deps/deps-slice.testing.js";
 import { type WorkspaceFakeOverrides, workspaceSliceFake } from "../workspace/workspace-slice.testing.js";
 import { fakeHistory } from "./route-fakes.testing.js";
 import { memoryAreasStore, memoryPersonasStore } from "./route-stores.testing.js";
@@ -106,7 +106,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         ...extensionsSliceFake(),
         ...gitSliceFake({ git }),
         ...hostsSliceFake(context),
-        ...mainlineSliceFake(),
+        ...depsSliceFake(),
         ...processesSliceFake(),
         ...providersSliceFake(context, { usage, cliProxy }),
         ...resourcesSliceFake(),

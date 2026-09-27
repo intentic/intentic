@@ -43,7 +43,8 @@ const SHIPPED_HEAVY_COMMANDS = Object.freeze({
         // A repo-wide verification, one at a time in the same pool: two of them are the most expensive thing that can
         // happen to a sandbox at once (measured: 24.9 GiB against a 16 GiB cap), and the second is usually the same
         // work over the same tree, which turbo's cache makes nearly free once the first is done. Never two at once,
-        // not even after the wait: a verification that did not run costs a check the next land repeats.
+        // not even after the wait: a verification that did not run costs one more run later, and two at once cost the
+        // sandbox its memory.
         { id: "repo-verify", pattern: "\\b(pnpm|npm|yarn|bun)\\s+(run\\s+)?verify(:\\S+)?\\b", limit: 1, onDeadline: "skip" },
         // A program's name joined to `.` or `-` is another word (`check-tsc`), not the program.
         { id: "vitest", pattern: "(?<![-.])\\b(vitest|jest)\\b(?![-.])" },

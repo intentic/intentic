@@ -31,7 +31,6 @@ import ChildRows from "./cards/ChildRows.vue";
 import { CHILD_ROWS } from "./cards/childRows";
 import BoardStatusBar from "../status-bar/BoardStatusBar.vue";
 import { LIVE_METRICS_KEY, useLiveMetrics } from "../metrics/liveMetrics";
-import { provideMainline } from "../mainline/useMainline";
 import HeldWakeCard from "./cards/HeldWakeCard.vue";
 import WorkflowRunCard from "./cards/WorkflowRunCard.vue";
 import { useArchiveDoor } from "./view/archiveDoor";
@@ -58,9 +57,6 @@ const { archived, archiveLoading, archiveFailure, archive, restore, notice, dism
 // Read only while this board is mounted and the reader opted in (liveMetrics.ts); the cards take theirs from here.
 const liveMetrics = useLiveMetrics();
 provide(LIVE_METRICS_KEY, liveMetrics);
-// The main tree's own check: one read for the board, drawn on every card from here (CardSeal). Its own board is the Main
-// line view, on the rail.
-provideMainline();
 const drag = useAgentDrag();
 const { dragged, dragging, draggedId, over, action, accepts, ghostStyle, pendingResolve, confirmResolve, cancelResolve } = drag;
 const { resolveNow, landNow, relandNow, unwatchNow } = drag;

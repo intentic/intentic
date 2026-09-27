@@ -12,7 +12,6 @@ import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { QUEUE_RUN_BIN, queueRunEnabled, TMUX_RUN_BIN } from "../../terminal/terminal-run.js";
 import { OFFLOAD_RUN_BIN } from "../../offload/offload-prefix.js";
 import { type HeavyCommands, heavyEnvPrefix } from "../../system/resources/heavy-commands.js";
-import { queueArgs, ruleById } from "@intentic/constants/heavy-rules";
 import { shellPrefix } from "../../workload/workload-class.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { type BackgroundJob, backgroundJobOf, type BackgroundJobSeed, jobCommandLine, openBackgroundJob, stopBackgroundJob } from "./jobs/background-jobs.js";
@@ -79,27 +78,6 @@ export const PIPESTATUS_TRAP = `trap 'printf "%s " "\${PIPESTATUS[@]}" 2>/dev/nu
 // line only carries the table down. Queueing is only on where queue-run is, and a program that matches keeps its
 // toolchain class whether or not it queues.
 const queueRunOf = (): string | undefined => (queueRunEnabled() ? QUEUE_RUN_BIN : undefined);
-
-// The check after landing's queue prefix: the daemon knows which line that is, so it takes the `repo-verify` rule by
-// name rather than recognising it; "" when that rule is disabled or nothing queues. The line waits for its slot here, so
-// the time it waits is never charged to its own ceiling (workspace/deps/verify-deps.ts).
-export const queuePrefixFor =
-    (heavy: () => Promise<HeavyCommands>) =>
-    async (_command: string): Promise<string> => {
-        const config = await heavy();
-        const rule = ruleById(config, "repo-verify");
-        if (!queueRunEnabled() || !config.queue || rule === undefined) {
-            return "";
-        }
-        const match = {
-            id: rule.id,
-            pool: rule.pool ?? config.defaultPool,
-            limit: rule.limit ?? config.limit,
-            maxHold: rule.maxHoldSeconds ?? config.maxHoldSeconds,
-            onDeadline: rule.onDeadline ?? config.onDeadline,
-        };
-        return `${QUEUE_RUN_BIN} ${queueArgs(match, config).map(shellQuote).join(" ")} -- ${shellPrefix({ class: "toolchain" })}`;
-    };
 
 // A whole line run under the heavy table, for a caller that runs one command directly rather than rewriting an agent's
 // (a runner running a line its parent offloaded): its programs queue here as they start, and none goes on elsewhere.

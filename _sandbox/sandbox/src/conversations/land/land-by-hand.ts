@@ -5,14 +5,12 @@ import { opt } from "../../opt.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import { landAgent, reportLockfileFailures } from "./land.js";
 import { syncBeforeLand } from "./sync.js";
-import { verifyLandedTree } from "./verify-landed.js";
 import { settleLandingInBackground, versionCommitsSettled } from "./version-landed.js";
 
-// A land a person pressed: the same pre-land rebase an automatic land takes, then the whole repository's check queued
-// behind it. Runs inside the conversation's land lease, which the route holds.
+// A land a person pressed: the same pre-land rebase an automatic land takes, then the installed tree reconciled behind
+// it, as an automatic land does. Runs inside the conversation's land lease, which the route holds.
 
-export type LandByHandDeps = Pick<Services, "agentWorktrees" | "agents" | "conversations" | "events" | "history" | "logger" | "perf" | "turns"> &
-    Parameters<typeof verifyLandedTree>[0] &
+export type LandByHandDeps = Pick<Services, "agentWorktrees" | "agents" | "conversations" | "dependencies" | "events" | "history" | "logger" | "perf" | "turns"> &
     Parameters<typeof settleLandingInBackground>[0];
 
 // The composition a manual land applies: the same pre-land rebase as auto-land, with `base` moved onto what each
@@ -80,18 +78,16 @@ export const landByHand = async (services: LandByHandDeps, entry: IsolatedAgent,
     }
     if (result.landed && result.changed) {
         announceLanded(services, entry, span);
-        // The whole repository's check, the same one an auto-land queues; the Land button used to skip it, which
-        // is how a week of lands produced a dozen verdicts.
-        void verifyLandedTree(
-            services,
-            {
+        // The install a moved manifest owes, the same one an auto-land reconciles.
+        void services.dependencies
+            .reconcileLand({
                 kind: "land",
                 agentId: entry.id,
                 ...opt("title", entry.social.title?.text),
                 branch: entry.placement.branch,
                 repos: [...span],
-            },
-        ).catch((error: unknown) => services.logger.warn({ err: error, id: entry.id }, "agents: land verify could not be queued"));
+            })
+            .catch((error: unknown) => services.logger.warn({ err: error, id: entry.id }, "agents: the installed tree could not be reconciled after the land"));
     }
     return {
         landed: result.landed,

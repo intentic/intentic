@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // One page for the whole chain, per day: turns and how many ended unproven, follow-ups and what they bought, held work,
-// refused pushes, land verdicts, commits and the fix-shaped ones among them, and CI's green rate and wall clock. Reads
+// refused pushes, the fix agent on main's CI red, commits and the fix-shaped ones among them, and CI's green rate and
+// wall clock. Reads
 // the daemon's own records (`<history>/activity.jsonl`, `<history>/usage.jsonl`), this repository's git log, and the
 // GitHub API (anonymously, or with GITHUB_TOKEN/GH_TOKEN). Computed the same way every time, so a drift between two of
 // them is seen the week it happens.
@@ -64,11 +65,10 @@ const blank = () => ({
     followUpsActed: 0,
     held: 0,
     pushesRefused: 0,
-    landGreen: 0,
-    landRed: 0,
     installsFailed: 0,
     repairs: 0,
-    resolved: 0,
+    needsYou: 0,
+    retired: 0,
     fleetReruns: 0,
     commits: 0,
     fixCommits: 0,
@@ -102,13 +102,12 @@ const ACTIVITY_COUNTERS = {
     "rule.blocked_push": "pushesRefused",
     "git.push_refused": "pushesRefused",
     "deps.install_failed": "installsFailed",
-    // Repairs started without a press: a land's new failures sent back to it or handed to a fresh fix-up, and main's CI
-    // red given a fix agent. Since checks stopped running inside turns, these are the whole cost of a red main line.
-    "deps.breakage_routed": "repairs",
-    "deps.breakage_fixup": "repairs",
+    // Main's CI red and its one fix agent per red streak (ci/main-fixer.ts): streaks it was started on, streaks handed
+    // back to the owner, and streaks a green run ended. What each fixer cost is on the daemon's `ci repair: streak ended`
+    // log line.
     "ci.repair_started": "repairs",
-    // Reds that needed nobody: gone at the next check, which is the saving the post-land-only design bets on.
-    "deps.breakage_resolved": "resolved",
+    "ci.repair_needs_you": "needsYou",
+    "ci.repair_retired": "retired",
     "ci.fleet_rerun": "fleetReruns",
 };
 for (const event of activity) {
@@ -119,11 +118,6 @@ for (const event of activity) {
     const counter = ACTIVITY_COUNTERS[event.type];
     if (counter !== undefined) {
         row[counter] += 1;
-    } else if (event.type === "deps.verify_green" || event.type === "deps.verify_red") {
-        // Only the repository's own verdicts: an extension's `pnpm test` is not the land's whole-tree check.
-        if (/for intentic\b/.test(event.content ?? "")) {
-            row[event.type === "deps.verify_green" ? "landGreen" : "landRed"] += 1;
-        }
     } else if (event.type === "rule.followup_outcome") {
         row.followUps += 1;
         const outcome = event.extra ?? {};
@@ -223,10 +217,10 @@ const shape = (day, row) => ({
     followUpsActed: row.followUps === 0 ? "-" : `${row.followUpsActed}/${row.followUps}`,
     held: row.held,
     pushesRefused: row.pushesRefused,
-    land: `${row.landGreen}/${row.landRed}`,
     installsFailed: row.installsFailed,
     repairs: row.repairs,
-    resolved: row.resolved,
+    needsYou: row.needsYou,
+    retired: row.retired,
     fleetReruns: row.fleetReruns,
     commits: row.commits,
     fixCommits: row.fixCommits,
@@ -244,13 +238,13 @@ if (asJson) {
 console.log(`## The chain, per day: last ${days} days to ${new Date(now).toISOString().slice(0, 16)}Z`);
 console.log("");
 console.log(
-    "| day | turns | unproven/editing | continued | follow-ups acted on | held | pushes refused | land green/red | installs failed | repairs | resolved unsent | fleet re-runs | commits | fix-shaped | lockfile-only | CI green/red/cancelled | CI wall p50 |",
+    "| day | turns | unproven/editing | continued | follow-ups acted on | held | pushes refused | installs failed | CI repairs | handed back | streaks ended | fleet re-runs | commits | fix-shaped | lockfile-only | CI green/red/cancelled | CI wall p50 |",
 );
 console.log("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
 for (const row of table) {
     console.log(
-        `| ${row.day} | ${row.turns} | ${row.unproven} | ${row.continued} | ${row.followUpsActed} | ${row.held} | ${row.pushesRefused} | ${row.land} | ` +
-            `${row.installsFailed} | ${row.repairs} | ${row.resolved} | ${row.fleetReruns} | ${row.commits} | ${row.fixCommits} | ${row.lockfileOnly} | ${row.ci} | ${row.ciWall} |`,
+        `| ${row.day} | ${row.turns} | ${row.unproven} | ${row.continued} | ${row.followUpsActed} | ${row.held} | ${row.pushesRefused} | ` +
+            `${row.installsFailed} | ${row.repairs} | ${row.needsYou} | ${row.retired} | ${row.fleetReruns} | ${row.commits} | ${row.fixCommits} | ${row.lockfileOnly} | ${row.ci} | ${row.ciWall} |`,
     );
 }
 console.log("");
@@ -258,8 +252,8 @@ console.log(
     [
         "unproven: turns that edited code and ended with nothing having checked it, over turns that edited at all.",
         "continued: turn.ending rules that sent a turn back, and follow-ups acted on: those answered with an edit, a look or a command. Both are retired (nothing runs at a turn's end since 2026-09-25) and read zero from then on.",
-        `pushes refused: the app's push check and the git hook together. land: whole-repository \`pnpm verify\` verdicts after a land. fix-shaped: subjects of ${FIX_SUBJECT_CHARS} characters or fewer.`,
-        "repairs: new failures after a land sent back to it or handed to a fresh fix-up, plus fix agents started on main's CI red; resolved unsent: reds gone at the next check before anybody was sent; fleet re-runs: CI runs re-run because they died on the runners.",
+        `pushes refused: the app's push check and the git hook together. fix-shaped: subjects of ${FIX_SUBJECT_CHARS} characters or fewer.`,
+        "CI repairs: fix agents started on main's CI red, one per red streak. handed back: streaks the fix agent left to the owner. streaks ended: main's red streaks a passing run ended. fleet re-runs: CI runs re-run because they died on the runners.",
         ...(ciNote === "" ? [] : [ciNote]),
     ].join("\n"),
 );

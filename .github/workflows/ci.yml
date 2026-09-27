@@ -228,9 +228,9 @@ jobs:
 
   # The checks that read the checkout and nothing else, ahead of the install every other job starts with.
   #
-  # `_tools/checks/run.mjs` is the checkout half of what the fleet runs before landing: every test file sits in
-  # a type-check program, every machine-touching suite is named as one, and every package.json specifier is the
-  # one pnpm-lock.yaml recorded, among nineteen others. No node_modules, seconds of actual work.
+  # `_tools/checks/run.mjs` is the checkout half of `pnpm verify`: every test file sits in a type-check program,
+  # every machine-touching suite is named as one, and every package.json specifier is the one pnpm-lock.yaml
+  # recorded, among nineteen others. No node_modules, seconds of actual work.
   #
   # The measurement that put it first: across 40 main pipelines, 22 verify jobs failed and 10 died on one of
   # three of these invariants — and every one of those failed AFTER a 0.6-2.0 minute frozen-lockfile install, in
@@ -279,9 +279,9 @@ jobs:
       # lockfile against the manifests, every test file in a type-check program and under a budget, the workflow
       # policy (fork boundary, permission ceilings, provenance runners, tag triggers), the byte scan, the
       # daemon's structural gates, the publish set, the UI tiers and the rest. One list, read by this job, by the
-      # pre-push hook and by the check after each land, so a check cannot again be right and unrun: five of these
-      # were red for weeks inside a `pnpm check` chain that no job and no hook ran. Checkout only, no
-      # node_modules, no network, under two seconds.
+      # pre-push hook and by the sandbox after each file an agent writes, so a check cannot again be right and
+      # unrun: five of these were red for weeks inside a `pnpm check` chain that no job and no hook ran. Checkout
+      # only, no node_modules, no network, under two seconds.
       #
       # `--tidy=warn` BECAUSE THIS JOB IS A DAG ROOT. Every verify group and e2e-hermetic hangs off it, so a
       # failure here does not report one problem, it HIDES the rest of the pipeline: the day this flag was added,
@@ -297,6 +297,102 @@ jobs:
       # repository suppresses on purpose (.github/zizmor.yml, each with its reason and what would retire it).
       - shell: bash
         run: bash _tools/scripts/verify/lint-workflows.sh
+
+  # THE FIRST ANSWER A PUSH GETS, a few minutes after it: the packages it changed type-checked and the files it
+  # changed linted. The sandbox gives main's CI one fix agent, started on the first job that fails rather than on
+  # the finished run (_sandbox/sandbox/src/ci/main-fixer.ts), so a type error this finds starts the repair while
+  # the verify groups are still building. It gates nothing and no job needs it: the verify groups still type-check
+  # and test each whole closure, dependents included.
+  #
+  # The range is the one `changes` reads, from the same event fields. `[<base>...HEAD]` selects the packages with a
+  # file changed between the two commits and reads nothing of the working tree, and `--only` leaves their
+  # dependencies' typecheck out: the declarations those read come from the emit, the same one verify.yml's prepass
+  # runs. The lint is `pnpm lint`, the rules the push reports, over the changed files and without autofix.
+  #
+  # The typecheck runs before the lint so that a failure stays in the log's tail, which is what the fix agent is
+  # handed: a lint that passes prints a few lines, and turbo's output is cut to the tasks that failed.
+  quick:
+    needs: [changes, preflight]
+    if: ${{ !cancelled() && needs.preflight.result == 'success' }}
+    runs-on: [self-hosted, intentic]
+    timeout-minutes: 20
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      PNPM_STORE: /ci-cache/pnpm-store
+      TURBO_CACHE_DIR: /ci-cache/turbo
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The base can sit any distance back, the same reason `changes` takes the full history.
+          fetch-depth: 0
+          clean: false
+      # THROUGH THE ENVIRONMENT, for the reason the `changes` job's filter step spells out. A first push names the
+      # all-zero sha, a force push can name a commit this clone no longer holds, and a dispatch names none: each of
+      # those measures what the checked-out commit adds over main instead (its merge base with origin/main, or on
+      # main itself the commit before it). With no base at all the job says so and checks nothing.
+      - id: base
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_PR: ${{ github.event.pull_request.base.sha }}
+          BASE_PUSH: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request) base="$BASE_PR" ;;
+            push) base="$BASE_PUSH" ;;
+            *) base="" ;;
+          esac
+          if [ -z "$base" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            base="$(git merge-base origin/main HEAD 2>/dev/null || true)"
+            if [ -n "$base" ] && [ "$base" = "$(git rev-parse HEAD)" ]; then
+              base="$(git rev-parse --verify --quiet 'HEAD^' || true)"
+            fi
+          fi
+          if [ -z "$base" ]; then
+            echo "nothing to measure this commit against, so this job checks nothing"
+          else
+            echo "measuring what $(git rev-parse --short HEAD) changed since $(git rev-parse --short "$base")"
+          fi
+          echo "sha=$base" >> "$GITHUB_OUTPUT"
+      - id: setup
+        if: steps.base.outputs.sha != ''
+        uses: ./.github/actions/pnpm-setup
+      - id: declarations
+        if: steps.base.outputs.sha != ''
+        run: node _tools/scripts/build/emit-declarations.mjs
+      # Through the environment, quoted: the filter is one argument. The task count is sized to the free memory the
+      # way the root `typecheck` script sizes it, since this box is shared with five other jobs.
+      - name: Typecheck the packages the push changed
+        if: ${{ !cancelled() && steps.declarations.outcome == 'success' }}
+        shell: bash
+        env:
+          BASE: ${{ steps.base.outputs.sha }}
+        run: >-
+          pnpm turbo run typecheck "--filter=[$BASE...HEAD]" --only --continue=dependencies-successful
+          --output-logs=errors-only --concurrency="$(node _tools/scripts/verify/test-workers.mjs --typecheck-concurrency)"
+      # Every file oxlint reads that the push added or changed, deletions left out. `--no-error-on-unmatched-pattern`
+      # passes a push whose every file the config ignores, which oxlint would otherwise fail for having nothing to read.
+      - name: Lint the files the push changed
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        shell: bash
+        env:
+          BASE: ${{ steps.base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          list="$RUNNER_TEMP/quick-lint-files"
+          git diff -z --name-only --diff-filter=d "$BASE" HEAD -- \
+            '*.js' '*.jsx' '*.mjs' '*.cjs' '*.ts' '*.tsx' '*.mts' '*.cts' '*.vue' '*.astro' > "$list"
+          echo "$(tr -cd '\0' < "$list" | wc -c) changed file(s) for oxlint"
+          xargs -0 -r pnpm lint --no-error-on-unmatched-pattern < "$list"
 
   # THE THINGS ABOUT THE DATABASE NO OTHER JOB CAN SEE — that the migration history is append-only, that every
   # new entry on it can apply to a database which already holds rows, and that replaying the lot produces

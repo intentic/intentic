@@ -1,5 +1,5 @@
 // Runs every independent step of a gate rather than stopping at the first failure, since a run takes minutes and
-// whoever is sent its failures (a conversation, after a land) should get all of them at once. A step depending on a
+// whoever reads its failures should get all of them at once. A step depending on a
 // failed one is skipped, not run against a broken tree; `finish` prints every failure and skip in one block at the end
 // of the output, where a reader of its tail finds it.
 import { spawnSync } from "node:child_process";

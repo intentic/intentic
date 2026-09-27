@@ -1,11 +1,10 @@
-// WHAT A CHANGE ADDED TO THE LINT, read against the file as it was: the per-edit hook (lint-edit.mjs) asks it of one file
-// against HEAD, and the check after a land (land-tiers.mjs) asks it of every file the land changed against the commit it
-// left. A rule set with a backlog (.oxlintrc.plugins.json) is enforced this way, on what a change adds and never on what
-// it found.
+// WHAT AN EDIT ADDED TO THE LINT, read against the file as it was: the per-edit hook (lint-edit.mjs) asks it of the file
+// it was handed, against HEAD. A rule set with a backlog (.oxlintrc.plugins.json) is enforced this way, on what an edit
+// adds and never on what it found.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { basename, join } from "node:path";
 import { repoRoot } from "../constants/src/node.mjs";
 
 /** The extensions `pnpm lint` reads. */
@@ -132,71 +131,6 @@ export const diagnosticsOf = (oxlint, checkout, config, rel, content) => {
         const copy = join(scratch, basename(rel));
         writeFileSync(copy, content);
         return report(oxlint, checkout, config, copy)?.diagnostics;
-    } finally {
-        rmSync(scratch, { recursive: true, force: true });
-    }
-};
-
-const gitShow = (checkout, rev, rel) => {
-    try {
-        return execFileSync(`git`, [`show`, `${rev}:${rel}`], { cwd: checkout, encoding: `buffer`, stdio: [`ignore`, `pipe`, `ignore`], maxBuffer: 64 * 1024 * 1024 });
-    } catch {
-        // allow(silent-catch): absent at `rev`, so every finding in the file is the change's
-        return undefined;
-    }
-};
-
-// Plugin-rule diagnostics per file, keyed by path relative to `under`, from ONE oxlint run over `paths`: a land can touch
-// hundreds of files, and a process each would cost minutes of the check after it. Undefined when oxlint did not answer.
-const pluginFindingsOf = (oxlint, checkout, paths, under) => {
-    const found = report(oxlint, checkout, PLUGINS_CONFIG, ...paths);
-    if (found === undefined) {
-        return undefined;
-    }
-    const byFile = new Map();
-    for (const d of found.diagnostics.filter((each) => PLUGIN_RULE.test(each.code))) {
-        const rel = relative(under, resolve(checkout, d.filename));
-        byFile.set(rel, [...(byFile.get(rel) ?? []), d]);
-    }
-    return byFile;
-};
-
-/**
- * Plugin-rule findings the tree's `files` (repo-relative, present) have that they did not have at `base`, as units
- * `lint <file>: <rule> <message>`. Files the config ignores are skipped, as `pnpm lint` skips them; oxlint failing to
- * answer is one unit saying so, since "nothing added" is not what it said.
- */
-export const addedPluginFindings = (checkout, base, files) => {
-    const oxlint = oxlintIn(checkout);
-    if (files.length === 0 || oxlint === undefined || !existsSync(join(checkout, PLUGINS_CONFIG))) {
-        return [];
-    }
-    const now = pluginFindingsOf(oxlint, checkout, files, checkout);
-    if (now === undefined) {
-        return [`lint-plugins could not run on the ${files.length} file(s) the change touched`];
-    }
-    if (now.size === 0) {
-        return [];
-    }
-    // The same files as `base` holds them, at the same relative paths so path-shaped overrides still apply, outside the tree.
-    const scratch = mkdtempSync(join(tmpdir(), `oxlint-base-`));
-    try {
-        const held = [...now.keys()].flatMap((rel) => {
-            const content = gitShow(checkout, base, rel);
-            if (content === undefined) {
-                return [];
-            }
-            mkdirSync(dirname(join(scratch, rel)), { recursive: true });
-            writeFileSync(join(scratch, rel), content);
-            return [join(scratch, rel)];
-        });
-        const before = held.length === 0 ? new Map() : pluginFindingsOf(oxlint, checkout, held, scratch);
-        if (before === undefined) {
-            return [`lint-plugins could not run on the touched files as ${base.slice(0, 9)} holds them`];
-        }
-        return [...now].flatMap(([rel, diagnostics]) =>
-            introduced(diagnostics, before.get(rel) ?? []).map((d) => `lint ${rel}: ${d.code} ${d.message.replaceAll(`\n`, ` `)}`),
-        );
     } finally {
         rmSync(scratch, { recursive: true, force: true });
     }

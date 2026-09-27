@@ -10,8 +10,9 @@ import { stateRelPath } from "../../state-paths.js";
 import { workflowGateTokensStep, workflowsDocument } from "../../workflows/workflows-store.js";
 import type { DocumentSpec } from "./documents.js";
 import { clearNewestRun } from "../newest-run.js";
-import { convergeState, resetStateStatus, type StateRoots } from "./state-convergence.js";
+import { commitState, convergeState, resetStateStatus, type StateRoots } from "./state-convergence.js";
 import type { StructuralStep } from "./state-steps.js";
+import { landCheckLeftoversStep } from "./steps/land-check-leftovers.js";
 import { stateRegroupStep } from "./steps/state-regroup.js";
 
 // The conversions each document declares for the breaks its history holds, run over workspaces laid out the way the
@@ -171,4 +172,28 @@ test("a release gate's token moves out of the tracked design into the door store
     await converge(roots, [workflowsDocument], [workflowGateTokensStep]);
     expect(await json(designs)).toEqual([{ id: "ship", name: "Ship", gate: { passes: ["pass"] } }]);
     expect(await json(join(roots.workspace, stateRelPath(".intentic/secrets/doors.json")))).toEqual({ gate: { ship: "gate-9" } });
+});
+
+test("what the retired check after landing kept is deleted, its folder with it, and nothing else is touched", async () => {
+    const roots = await volumes();
+    const verdicts = join(roots.workspace, STATE_DIR, "records", "verify.json");
+    const runs = join(roots.workspace, STATE_DIR, "local", "verify");
+    const kept = join(roots.workspace, STATE_DIR, "records", "push-checks.json");
+    await put(verdicts, { projects: {}, runs: [] });
+    await put(join(runs, "root.log"), "pnpm verify\n");
+    await put(join(runs, "root.status"), 0);
+    await put(kept, { pushes: [] });
+
+    const outcome = await converge(roots, [], [landCheckLeftoversStep]);
+
+    expect(outcome.plan?.steps).toEqual([{ document: "land-check-leftovers", change: "deletes 3 file(s) the retired check after landing left behind" }]);
+    // The conversion ledger records what the boot did; the push record is untouched.
+    expect((await readdir(join(roots.workspace, STATE_DIR, "records"))).toSorted()).toEqual(["conversions.json", "push-checks.json"]);
+    // The runs' folder went with its last file.
+    expect(await readdir(join(roots.workspace, STATE_DIR, "local"))).not.toContain("verify");
+    expect(await json(kept)).toEqual({ pushes: [] });
+    // Its own output is nothing to do, for the next boot as for this one.
+    await commitState(roots);
+    clearNewestRun();
+    expect((await converge(roots, [], [landCheckLeftoversStep])).plan?.steps ?? []).toEqual([]);
 });

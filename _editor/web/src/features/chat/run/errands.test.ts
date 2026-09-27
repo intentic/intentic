@@ -1,4 +1,4 @@
-import { LAND_FIX_OPENING, landFixPrompt, RESUME_NOTES, TurnErrandSchema, VERIFY_NUDGE_OPENING, verifyNudgePrompt, withResumeNote } from "@intentic/sandbox-contract";
+import { LAND_FIX_OPENING, RESUME_NOTES, TurnErrandSchema, VERIFY_NUDGE_OPENING, verifyNudgePrompt, withResumeNote } from "@intentic/sandbox-contract";
 import { type Errand, errands, errandOf, errandPrompt } from "./errands";
 
 /* Errand classification keeps app-generated prose out of user turns. */
@@ -27,10 +27,11 @@ describe(`errandOf`, () => {
     });
 });
 
-// The first prompt of a fresh conversation the DAEMON starts on a red main line (land-fix.ts), composed here the way the
-// daemon composes it, so a reworded opening on either side fails rather than filing the brief as the user's words.
-it(`recognises the brief a fresh fix-up is started with, through the contract's own reader`, () => {
-    const brief = landFixPrompt([`\`pnpm verify\` in \`web\` failed on:`, `- web/src/pages/changelog.test.ts › lists every release`]);
+// The first prompt of a fresh conversation the DAEMON used to start on a red check after a land. Nothing starts one any
+// more, but transcripts hold them: composed here the way the daemon composed it (its opening, then the evidence), so a
+// reworded opening on either side fails rather than filing the brief as the user's words.
+it(`recognises the brief a fresh fix-up was started with, through the contract's own reader`, () => {
+    const brief = [LAND_FIX_OPENING, `\`pnpm verify\` in \`web\` failed on:`, `- web/src/pages/changelog.test.ts › lists every release`].join(`\n\n`);
     const found = errandOf(user(brief));
     expect(found?.opening).toBe(LAND_FIX_OPENING);
     expect(found?.label).toBe(errands().landFix.label);

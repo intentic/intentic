@@ -41,7 +41,7 @@ afterEach(() => {
 const declaring = (over: Partial<RepoChecksSummary> = {}): RepoChecksSummary => ({
     repo: `intentic`,
     path: `intentic/.intentic/checks.json`,
-    checks: [{ when: `land`, run: `pnpm verify` }],
+    checks: [{ when: `edit`, run: `pnpm exec eslint {file}` }],
     fired: [null],
     adopted: true,
     changed: false,
@@ -53,7 +53,7 @@ const switchOf = (host: HTMLElement): HTMLElement | null => host.querySelector<H
 test(`a repository's row prints the command it declares, not a count of them`, () => {
     repos.value = [declaring()];
     const host = mount();
-    expect(host.textContent).toContain(`pnpm verify`);
+    expect(host.textContent).toContain(`pnpm exec eslint {file}`);
     expect(host.textContent).toContain(`intentic/.intentic/checks.json`);
 });
 
@@ -71,43 +71,33 @@ test(`each check is named by the moment it runs at`, () => {
     const lines = [...mount().querySelectorAll(`li`)].map((line) => line.textContent ?? ``);
     expect(lines).toHaveLength(3);
     expect(lines.find((line) => line.includes(`eslint`))).toContain(`After each edit`);
-    expect(lines.find((line) => line.includes(`pnpm test`))).toContain(`After it lands`);
+    expect(lines.find((line) => line.includes(`pnpm test`))).toContain(`After it lands — no longer runs; CI checks what is pushed`);
 });
 
-// Nothing runs when a turn ends any more: a declaration still naming that moment reads, but says it runs nothing, and
-// looks as inert as a check nobody switched on.
-test(`a declared turn check says it no longer runs, and where checks run instead`, () => {
-    repos.value = [declaring({ checks: [{ when: `turn`, run: `pnpm lint` }], fired: [FIVE_DAYS_AGO] })];
-    const line = mount().querySelector<HTMLElement>(`li`)!;
-    expect(line.textContent).toContain(`pnpm lint`);
-    expect(line.textContent).toContain(`Before a turn ends — no longer runs; checks run after landing`);
-    expect(line.textContent).not.toContain(`flagged`);
-    expect(line.classList.contains(`opacity-60`)).toBe(true);
-});
-
-// The package script runs after a land whatever the owner adopted, so the row states it, undimmed, with nothing to switch.
-test(`a repository that declares nothing shows the package script that runs after a land, with no switch`, () => {
-    repos.value = [declaring({ checks: [], fired: [], adopted: false, landDefault: `pnpm test` })];
-    const host = mount();
-    expect(host.textContent).toContain(`After it lands`);
-    expect(host.textContent).toContain(`pnpm test`);
-    expect(host.textContent).toContain(`package script`);
-    expect(switchOf(host)).toBeNull();
-    expect(host.querySelector(`.opacity-60`)).toBeNull();
-    expect(host.textContent).not.toContain(`waiting on you`);
-});
-
-test(`a declared land check replaces the package script`, () => {
-    repos.value = [declaring({ checks: [{ when: `land`, run: `pnpm test:integration` }], fired: [null], landDefault: `pnpm test` })];
-    const host = mount();
-    expect(host.textContent).toContain(`pnpm test:integration`);
-    expect(host.textContent).not.toContain(`package script`);
+// Nothing runs when a turn ends or after work lands any more: a declaration still naming either moment reads, but says it
+// runs nothing, and looks as inert as a check nobody switched on.
+test(`a declared turn or land check says it no longer runs, and what checks the work instead`, () => {
+    repos.value = [
+        declaring({
+            checks: [
+                { when: `turn`, run: `pnpm lint` },
+                { when: `land`, run: `pnpm verify` },
+            ],
+            fired: [FIVE_DAYS_AGO, FIVE_DAYS_AGO],
+        }),
+    ];
+    const [turn, land] = [...mount().querySelectorAll<HTMLElement>(`li`)];
+    expect([turn?.textContent, land?.textContent]).toEqual([
+        `Before a turn ends — no longer runs; CI checks what is pushedpnpm lint`,
+        `After it lands — no longer runs; CI checks what is pushedpnpm verify`,
+    ]);
+    expect([turn?.classList.contains(`opacity-60`), land?.classList.contains(`opacity-60`)]).toEqual([true, true]);
 });
 
 const FIVE_DAYS_AGO = Date.now() - 5 * 86_400_000;
 
 // A check that never flagged anything is either healthy or aimed at nothing; either way the row says which is the case.
-test(`a running edit check says when it last flagged something, and a land check leaves that to the main line`, () => {
+test(`a running edit check says when it last flagged something, and a retired land check claims nothing`, () => {
     repos.value = [
         declaring({
             checks: [
@@ -155,6 +145,6 @@ test(`a workspace where nothing declares anything names the file that would, and
     repos.value = [];
     const host = mount();
     expect(host.textContent).toContain(`.intentic/checks.json`);
-    expect(host.textContent).toContain(`after each edit, or after its work lands`);
+    expect(host.textContent).toContain(`what runs on its own code after each edit`);
     expect(host.textContent).toContain(`ever blocks a land, a commit or a push`);
 });

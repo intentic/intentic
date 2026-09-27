@@ -1,27 +1,26 @@
 #!/usr/bin/env node
 // Push check, from both `pnpm verify:push` and the pre-push hook. Two cheap tiers collect every finding first (the checks,
 // the assertion ratchet, the manifest/lockfile lockstep, the linter, rustfmt). The suite CI's verify groups run
-// (typecheck, build, test) is then REPLAYED from a verdict the land's `pnpm verify` or an earlier push check recorded
-// for this tree, and otherwise left to CI: a tree nobody measured is not measured here on the pusher's clock unless
-// `--suite` asks for it. Measures the working tree and every pushed commit's own tree.
+// (typecheck, build, test) is then REPLAYED from a verdict `pnpm verify` or an earlier push check recorded for this
+// tree, and otherwise left to CI: a tree nobody measured is not measured here on the pusher's clock unless `--suite`
+// asks for it. Measures the working tree and every pushed commit's own tree.
 //
 // THE HOOK IS ADVISORY (`--advisory`, which .githooks/pre-push passes): no check blocks a land, a commit or a push. The
 // two cheap tiers report what they find to whoever pushes, the suite is never run on their clock, and the push goes
-// either way; the land's own check already measured the tree, and CI measures the commit. `pnpm verify:push` by hand
-// still exits non-zero on a finding, for a person or a script that asks for a verdict.
+// either way. CI measures the commit. `pnpm verify:push` by hand still exits non-zero on a finding, for a person or a
+// script that asks for a verdict.
 //
-// WHAT THIS CHECK SEES is the pushed range: every commit that becomes main, whoever made it. The check after each land
-// sees the main tree one land at a time, and a nightly
-// measures main a day later with nobody attached. That is why tidiness is judged here against the range (the
-// checkout-gates block below).
+// WHAT THIS CHECK SEES is the pushed range: every commit that becomes main, whoever made it, while the person pushing
+// is still there. A nightly measures main a day later with nobody attached. That is why tidiness is judged here against
+// the range (the checkout-gates block below).
 //
 // WHAT IT LEAVES BEHIND. The push goes either way, so what the hook found cannot live only in the terminal git printed it
 // to, which nobody reads once the push is through. Before the digest it writes a report into the git common dir
 // (push-report.mjs): the findings the pushed range brought in, each with the pushed commit that touched the path it names
-// where it names one, and a measurement of every check and the linter. The sandbox files it once the push has reached the remote, and the
-// editor's Main line shows each finding as "Left at push" until a later measurement stops printing it or somebody
-// dismisses it. Written for a clean push too, whose measurement is what clears the findings of earlier ones; a run by hand
-// pushes nothing, so it writes the measurement alone.
+// where it names one, and a measurement of every check and the linter. The sandbox files it once the push has reached
+// the remote, and its Pipelines view shows each finding as "Left at push" until a later measurement (a push, a recheck)
+// stops printing it or somebody dismisses it. Written for a clean push too, whose measurement is what clears the
+// findings of earlier ones. A run by hand pushes nothing, so it writes the measurement alone.
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -209,14 +208,14 @@ const lockfileRewriteOnly = () => {
 //
 // WHERE THE WORK MEETS. A branch measured against its own base is a tree that never becomes main. What becomes main is
 // this push, and the difference between the two is every other conversation's work, which is exactly where a counting rule breaks: two branches that each add one
-// file to a directory of thirty are each innocent in their own worktree and over the limit together. Lands meet first on
-// the main tree, where the check after each land asks this question of what that land added (land-tiers.mjs); the push
-// asks it of the whole range, while the person pushing is still there to fix it.
+// file to a directory of thirty are each innocent in their own worktree and over the limit together. Lands meet on the
+// main tree, and the push is where their sum is first asked this question: of the whole range, while the person pushing
+// is still there to fix it.
 //
 // Judged against the merge-base rather than refused wholesale, for the reason the tidy job's own comment gives: a gate
 // that refuses a pusher for state nobody in this push produced teaches everyone that red means nothing. What refuses is
 // the lines the range ADDED (turn-findings.mjs); what was already standing is named and charged to no one. The judging
-// is measure-change.mjs's (judgeTidy), the same the check after a land does, `Allow:` trailers in the range included.
+// is measure-change.mjs's (judgeTidy), `Allow:` trailers in the range included.
 //
 // What is KEPT for later (push-report.mjs) is the same share: every line a broken check prints, and of the tidy ones
 // only what this push added. Already failing at the base, or not askable there, is shown here and recorded nowhere.
@@ -326,7 +325,7 @@ const changed = changedPaths();
 // what earlier pushes left anywhere; the findings on files this push changed are its own.
 const lint = runLint(root);
 if (!lint.ran) {
-    say(`lint skipped: ${lint.why ?? "it could not run"} (CI does not lint; each edit's own lint and the check after each land do)`);
+    say(`lint skipped: ${lint.why ?? "it could not run"} (each edit's own lint reads the file it wrote, and CI's quick job the files a push changed)`);
 } else {
     const mine = lint.findings.filter(({ path }) => changed === undefined || changed.has(path));
     if (mine.length > 0) {
@@ -389,20 +388,20 @@ const closing = () => {
     const one = kept.findings === 1;
     return kept.findings === 0
         ? undefined
-        : `${kept.findings} finding${one ? "" : "s"} left for later: ${one ? "it waits" : "they wait"} in the Main line (Left at push) until a later ` +
-              `check stops finding ${one ? "it" : "them"} or ${one ? "it is" : "they are"} dismissed`;
+        : `${kept.findings} finding${one ? "" : "s"} left for later: ${one ? "it waits" : "they wait"} in Pipelines (Left at push) until a later ` +
+              `push or a recheck stops finding ${one ? "it" : "them"} or ${one ? "it is" : "they are"} dismissed`;
 };
 
 // Prints everything both tiers found; a tree already refused cheaply doesn't go on to the ten-minute suite.
 finish(() => "the checkout gates, the assertion ratchet, the manifest/lockfile lockstep, the linter and rustfmt", { closing: closing() });
 
-// The hook stops here, whatever was found: the suite is the land check's and CI's to run, never the pusher's to wait on.
+// The hook stops here, whatever was found: the suite is CI's to run, never the pusher's to wait on.
 if (advisory) {
     const known = freshVerdicts(root, [treeHash(root)]).find((verdict) => verdict.suite === "verify");
     say(
         known === undefined
-            ? "typecheck, build and tests are not run at a push: the check after each land measures the tree, and CI measures the commit"
-            : `this tree ${known.status === "passed" ? "passed" : "FAILED"} \`pnpm verify\` after its land ${ago(known.at)}; CI measures the commit either way`,
+            ? "typecheck, build and tests are not run at a push: CI measures the commit"
+            : `this tree ${known.status === "passed" ? "passed" : "FAILED"} \`pnpm verify\` ${ago(known.at)}; CI measures the commit either way`,
     );
     process.exit(0);
 }
@@ -464,8 +463,8 @@ const suite = (buildOnly) => {
 };
 
 const tree = treeHash(root);
-// The trees a verdict may be about: the working tree (what `pnpm verify` measured after a land) and each pushed
-// commit's own (what CI checks out); a clean tree makes them one.
+// The trees a verdict may be about: the working tree (what `pnpm verify` measured) and each pushed commit's own (what CI
+// checks out). A clean tree makes them one.
 const candidates = [tree, ...pushes.map(({ local }) => commitTree(root, local))];
 const fresh = freshVerdicts(root, candidates);
 const passed = fresh.find((verdict) => verdict.status === "passed");
@@ -496,7 +495,7 @@ if (hook && !replay && failedPush !== undefined) {
 }
 if (!replay && !suiteForced) {
     say(
-        "no verdict covers this tree: the land's `pnpm verify` has not measured it and no push check has. CI's verify groups measure the " +
+        "no verdict covers this tree: neither `pnpm verify` nor a push check has measured it. CI's verify groups measure the " +
             "commit (typecheck, build, test) in minutes; to measure it here first, `pnpm verify:push --suite` or `pnpm verify`",
     );
     noteUncommitted();

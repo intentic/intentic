@@ -12,7 +12,6 @@ import {
     type RuleFirings,
 } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import { checkCommandFor } from "../workspace/deps/verify-deps.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 
 /* WHAT A REPOSITORY ASKS TO HAVE RUN ON ITS OWN CODE, read from the repository rather than from this sandbox's settings. */
@@ -20,9 +19,9 @@ import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 // Same ceiling a rule's own command gets when the form leaves it unsaid.
 const DEFAULT_TIMEOUT_MS = 900_000;
 
-// The occasions that are rule moments. `land` is not one, it is the daemon's own run after a land (verify-deps.ts); and
-// `turn` runs nothing any more: no check runs inside a conversation, so a declaration naming it still reads and is
-// shown, but becomes no rule and is no part of what the owner adopts.
+// The occasions that are rule moments. `turn` and `land` run nothing any more: no check runs inside a conversation or
+// after its work lands (CI checks what the owner pushes), so a declaration naming either still reads and is shown, but
+// becomes no rule and is no part of what the owner adopts.
 const MOMENT: Record<Exclude<RepoCheckMoment, "land" | "turn">, Rule["moment"]> = {
     edit: "file.edited",
 };
@@ -32,11 +31,11 @@ export interface RepoDeclaration {
     readonly repo: string;
     readonly checks: readonly RepoCheck[];
     // Of the checks that can run, so re-indenting the file is not a change, rewriting a command is, and a retired `turn`
-    // check is neither.
+    // or `land` check is neither.
     readonly fingerprint: string;
-    // What adoption was measured against before `turn` stopped counting, for a file that still names one: an owner who
-    // adopted it then keeps it adopted.
-    readonly formerFingerprint?: string;
+    // What adoption was measured against before `turn` stopped counting, and before `land` did, for a file that still
+    // names one: an owner who adopted it then keeps it adopted.
+    readonly formerFingerprints?: readonly string[];
     // Present when the file exists but could not be read; `checks` is then empty, so a broken file runs nothing rather
     // than half of something.
     readonly error?: string;
@@ -53,18 +52,15 @@ export const fingerprintOf = (checks: readonly RepoCheck[]): string =>
         .digest("hex")
         .slice(0, 16);
 
-// The checks that can run: every one but a retired `turn` check.
-const standing = (checks: readonly RepoCheck[]): RepoCheck[] => checks.filter((check) => check.when !== "turn");
+// The checks that can run: every one but a retired `turn` or `land` check.
+const standing = (checks: readonly RepoCheck[]): RepoCheck[] => checks.filter((check) => check.when !== "turn" && check.when !== "land");
 
 /** A repository's checks as a declaration, with what adoption is measured against. */
 export const declarationOf = (repo: string, checks: readonly RepoCheck[]): RepoDeclaration => {
-    const runnable = standing(checks);
-    return {
-        repo,
-        checks,
-        fingerprint: fingerprintOf(runnable),
-        ...(runnable.length === checks.length ? {} : { formerFingerprint: fingerprintOf(checks) }),
-    };
+    const fingerprint = fingerprintOf(standing(checks));
+    // Adoption was measured over every check until `turn` retired, then over all but `turn` until `land` did.
+    const former = [fingerprintOf(checks), fingerprintOf(checks.filter((check) => check.when !== "turn"))].filter((earlier) => earlier !== fingerprint);
+    return { repo, checks, fingerprint, ...(former.length === 0 ? {} : { formerFingerprints: [...new Set(former)] }) };
 };
 
 /** Reads one repository's declaration. Absent file ⇒ undefined: a repository that declares nothing is not a row. A
@@ -99,7 +95,7 @@ export const declaredRepoChecks = async (root: string): Promise<RepoDeclaration[
 // Whether the owner's recorded answer is to this declaration as it stands.
 const answers = (adopted: Readonly<Record<string, string>>, declaration: RepoDeclaration): boolean => {
     const recorded = adopted[declaration.repo];
-    return recorded !== undefined && (recorded === declaration.fingerprint || recorded === declaration.formerFingerprint);
+    return recorded !== undefined && (recorded === declaration.fingerprint || declaration.formerFingerprints?.includes(recorded) === true);
 };
 
 /** Whether what a repository declares now is what the owner said yes to. A changed declaration is held, not run; one
@@ -128,9 +124,9 @@ const globsOf = (repo: string, check: RepoCheck): string[] | undefined =>
         ? undefined
         : check.paths.map((glob) => (repo === "root" ? glob : `${repo}/${glob.replace(/^\.?\//, "")}`));
 
-/** One declaration as rules, its land check and any retired turn check aside. Pure, so what a repository's file means
- *  can be tested without a workspace. Ids count every check in the file, so declaring a land check shifts no other
- *  check's history. */
+/** One declaration as rules, any retired turn or land check aside. Pure, so what a repository's file means can be tested
+ *  without a workspace. Ids count every check in the file, so a retired check left in it shifts no other check's
+ *  history. */
 export const rulesOf = (declaration: RepoDeclaration): Rule[] =>
     declaration.checks.flatMap((check, index) => {
         if (check.when === "land" || check.when === "turn") {
@@ -150,61 +146,29 @@ export const rulesOf = (declaration: RepoDeclaration): Rule[] =>
         return [rule];
     });
 
-/** The land check a declaration names; at most one, which the file schema enforces. */
-export const landCheckOf = (declaration: RepoDeclaration): RepoCheck | undefined => declaration.checks.find((check) => check.when === "land");
-
-/** What an adopted declaration runs after a land in one project directory ("" is the workspace root); undefined leaves
- *  the package's own verify or test script to run, as for a directory that is no repository's root. */
-export const adoptedLandCheck = async (root: string, dir: string, adopted: Readonly<Record<string, string>>): Promise<RepoCheck | undefined> => {
-    const declaration = await readRepoDeclaration(root, dir === "" ? "root" : dir);
-    return declaration !== undefined && isAdopted(adopted, declaration) ? landCheckOf(declaration) : undefined;
-};
-
 /** The adopted declarations as rules, in repository order; what gets merged into the owner's own list. */
 export const adoptedRules = (declarations: readonly RepoDeclaration[], adopted: Readonly<Record<string, string>>): Rule[] =>
     declarations.filter((declaration) => isAdopted(adopted, declaration)).flatMap(rulesOf);
 
-/** What runs after a land in each repository whose root is a project, keyed by repo id: its package verify or test
- *  script, which a declared `land` check replaces. */
-export const landDefaultsOf = async (deps: Pick<Services, "workspace" | "dependencies">): Promise<Map<string, string>> => {
-    const [projects, repos] = await Promise.all([deps.dependencies.status(), discoverRepos(deps.workspace.root)]);
-    const found = await Promise.all(
-        projects
-            .map((project) => ({ project, repo: project.dir === "" ? "root" : project.dir }))
-            .filter(({ repo }) => repo === "root" || repos.includes(repo))
-            .map(async ({ project, repo }) => [repo, await checkCommandFor(deps.workspace.root, project.dir, project.recipe.manager)] as const),
-    );
-    return new Map(found.filter((entry): entry is readonly [string, string] => entry[1] !== undefined));
-};
-
-/** One row per repository for a screen: what it declares, where that stands with the owner, when each check last spoke,
- *  and what runs after a land when it declares none. `landDefaults` is keyed by repo id; a repository with a default and
- *  no file is a row too. */
-export const summariesOf = (
-    declarations: readonly RepoDeclaration[],
-    adopted: Readonly<Record<string, string>>,
-    landDefaults: ReadonlyMap<string, string> = new Map(),
-    firings: RuleFirings = {},
-): RepoChecksSummary[] => {
-    const declared = declarations.map((declaration): RepoChecksSummary => {
-        const landDefault = landDefaults.get(declaration.repo);
-        return {
-            repo: declaration.repo,
-            path: repoChecksPath(declaration.repo),
-            checks: [...declaration.checks],
-            fired: declaration.checks.map((check, index) => (check.when === "land" ? null : (firings[ruleId(declaration.repo, index)] ?? null))),
-            adopted: isAdopted(adopted, declaration),
-            // Only a repository adopted before can have changed; a first sighting is simply not adopted yet.
-            changed: adopted[declaration.repo] !== undefined && !answers(adopted, declaration),
-            ...(declaration.error === undefined ? {} : { error: declaration.error }),
-            ...(landDefault === undefined || landCheckOf(declaration) !== undefined ? {} : { landDefault }),
-        };
-    });
-    const undeclared = [...landDefaults]
-        .filter(([repo]) => !declarations.some((declaration) => declaration.repo === repo))
-        .map(([repo, landDefault]): RepoChecksSummary => ({ repo, path: repoChecksPath(repo), checks: [], fired: [], adopted: false, changed: false, landDefault }));
-    return [...declared, ...undeclared].sort((left, right) => (left.repo === "root" ? -1 : right.repo === "root" ? 1 : left.repo.localeCompare(right.repo)));
-};
+/** One row per repository for a screen: what it declares, where that stands with the owner, and when each check last
+ *  spoke. */
+export const summariesOf = (declarations: readonly RepoDeclaration[], adopted: Readonly<Record<string, string>>, firings: RuleFirings = {}): RepoChecksSummary[] =>
+    declarations
+        .map(
+            (declaration): RepoChecksSummary => ({
+                repo: declaration.repo,
+                path: repoChecksPath(declaration.repo),
+                checks: [...declaration.checks],
+                fired: declaration.checks.map((check, index) =>
+                    check.when === "land" || check.when === "turn" ? null : (firings[ruleId(declaration.repo, index)] ?? null),
+                ),
+                adopted: isAdopted(adopted, declaration),
+                // Only a repository adopted before can have changed; a first sighting is simply not adopted yet.
+                changed: adopted[declaration.repo] !== undefined && !answers(adopted, declaration),
+                ...(declaration.error === undefined ? {} : { error: declaration.error }),
+            }),
+        )
+        .sort((left, right) => (left.repo === "root" ? -1 : right.repo === "root" ? 1 : left.repo.localeCompare(right.repo)));
 
 export type RepoChecksDeps = Pick<Services, "workspace" | "sandboxSettings" | "logger">;
 

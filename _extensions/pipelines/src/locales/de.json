@@ -1,4 +1,57 @@
 {
+    "leftAtPush": {
+        "attempt": "Versuch {count}",
+        "clean": "sauber",
+        "close": "Schließen",
+        "commits": "{count} Commit | {count} Commits",
+        "continue": "Fortfahren",
+        "dismissAll": "Alle verwerfen",
+        "dismissFailed": "Das konnte nicht verworfen werden",
+        "dismissHint": "Verwerfen: wird nicht behoben",
+        "dismissOne": "{source} verwerfen",
+        "dismissed": "{count} Befund verworfen | {count} Befunde verworfen",
+        "earlier": "+{count} früherer Push | +{count} frühere Pushes",
+        "earlierPushes": "{count} früheren Push zeigen | {count} frühere Pushes zeigen",
+        "endsWhenDismissed": "Keine spätere Messung kann sehen, dass dieser Befund weg ist: Er endet, wenn Sie ihn verwerfen.",
+        "explain": "Der Push ist durch; seine Prüfung hat diese Befunde durchgelassen. Jeder wartet hier, bis eine spätere Messung ihn nicht mehr findet oder Sie ihn verwerfen. Niemand wird darauf angesetzt, außer Sie übergeben sie.",
+        "fewer": "Weniger zeigen",
+        "from": "aus {sha} {subject}",
+        "handFailed": "Die Befunde konnten keinem Agenten übergeben werden",
+        "handHint": "Öffnet eine isolierte Unterhaltung mit jedem offenen Befund von hier, dem Befehl, der ihn wieder zeigt, und den Commits, die ihn gebracht haben.",
+        "handOver": "An einen Agenten übergeben",
+        "handled": "erledigt",
+        "hint": "Was die Prüfung vor dem Push in Ihren Pushes gefunden hat. Sie hält keinen Push auf.",
+        "lastPush": "Letzter Push",
+        "left": "{count} übrig | {count} übrig",
+        "more": "+{count} weitere | +{count} weitere",
+        "nothingLeft": "Nichts vom Push übrig",
+        "openAttempt": "{label}: Unterhaltung öffnen",
+        "recent": "Letzte Pushes",
+        "recheck": "Erneut messen",
+        "rechecked": "{project} erneut gemessen: {resolved} weg, {open} noch offen",
+        "refused": "abgelehnt",
+        "refusedHint": "Der eigene Pre-Push-Hook des Repositorys hat diesen Push abgelehnt, also ist nichts beim Remote angekommen. Was er gemeldet hat, steht aus wie jeder andere Befund.",
+        "restoreFailed": "Die Befunde konnten nicht wieder geöffnet werden",
+        "stillOpen": "{count} Befund noch offen | {count} Befunde noch offen",
+        "title": "Vom Push übrig",
+        "undo": "Rückgängig",
+        "unmeasured": "{project} konnte nicht gemessen werden; nichts hat sich geändert",
+        "workspace": "Workspace"
+    },
+    "mainRed": {
+        "failing": "Fällt durch",
+        "fixAgent": "Reparatur-Agent",
+        "fixAgentHint": "Jeder Fehlschlag auf {branch} geht an diesen einen Agenten, bis ein Lauf grün wird.",
+        "newestRun": "neuester roter Lauf #{runId}",
+        "open": "Öffnen",
+        "openFixer": "Unterhaltung des Reparatur-Agenten öffnen",
+        "reported": "Reparaturen sind ausgeschaltet, also wurde niemand geschickt.",
+        "since": "seit {when}",
+        "spent": "Der Reparatur-Agent hat seine Runden gehabt oder ist fertig geworden, ohne etwas zu ändern.",
+        "title": "{branch} ist rot",
+        "unassigned": "Noch kein Reparatur-Agent dran.",
+        "waitsForYou": "Wartet auf Sie"
+    },
     "pipelineDagGraph": {
         "expand": "Aufklappen",
         "failingRunsInRow": "Fällt bei {name} seit mehreren Läufen in Folge durch",
@@ -47,5 +100,8 @@
         "openProjectOn": "{project} auf {host} öffnen",
         "runs": "{runs} Läufe",
         "thisRepo": "dieses Repo"
+    },
+    "rail": {
+        "leftAtPush": "{count} Befund vom Push übrig | {count} Befunde vom Push übrig"
     }
 }

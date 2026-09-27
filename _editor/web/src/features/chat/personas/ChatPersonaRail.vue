@@ -19,8 +19,7 @@ import {
     unregistered,
 } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
-import { daemonOutdated } from "../../agents/mainline/mainlineView";
-import { injectMainline } from "../../agents/mainline/useMainline";
+import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
 import SandboxOutdatedNotice from "../../sandbox/overview/version/SandboxOutdatedNotice.vue";
 import { canArchive, type FleetAgent, finishedLaneOrder } from "../../agents/fleet/useAgents-fleet";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
@@ -52,10 +51,10 @@ const BACKGROUND_SHOWN = 5;
 const known = computed(() => new Set(personas.value.map((persona) => persona.id)));
 
 // A sandbox too old to say who a conversation speaks as now (`lastActsAs`) groups every chat under Anyone. Told by the
-// main line the rail already reads (daemonOutdated: the same releases lack both), and only while there is a persona
-// whose chats that hides.
-const mainline = injectMainline();
-const outdated = computed(() => known.value.size > 0 && mainline?.value !== undefined && daemonOutdated(mainline.value));
+// routes its daemon advertises: `agent.switchAccount` arrived in the same release as the field (v1.313), so a daemon
+// that lacks the route predates the field too, and one that never said which routes it serves is taken as current
+// (useDaemonRoutes). Said only while there is a persona whose chats that hides.
+const outdated = computed(() => known.value.size > 0 && !supportsRoute(`agent.switchAccount`));
 const keyOf = (persona: string | undefined): string => persona ?? ANYONE;
 
 const LANE_RANK: Record<FleetLane, number> = { attention: 0, active: 1, finished: 2 };

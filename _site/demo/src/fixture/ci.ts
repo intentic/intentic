@@ -1,8 +1,9 @@
-import type { CiRepo, CiRunsResponse, PipelineJob, PipelineRun } from "@intentic/sandbox-contract";
+import type { CiMainRed, CiRepo, CiRunsResponse, PipelineJob, PipelineRun } from "@intentic/sandbox-contract";
+import { API_MAIN_FIXER_ID, WEB_MAIN_FIXER_ID } from "./fleet";
 
 // acme-shop's two repos on two hosts (web/GitHub, api/GitLab) as one board. Runs are a healthy afternoon: one running,
-// five green, one mixed failure (`test:integration` red, deploy skipped). GitLab jobs carry a `stage`; GitHub's don't,
-// so the view layers them by overlapping timestamps.
+// five green, one mixed failure (`test:integration` red, deploy skipped). The whole recording adds main going red on
+// both (MAIN_RED below). GitLab jobs carry a `stage`; GitHub's don't, so the view layers them by `needs`.
 
 const minutes = (count: number): number => count * 60_000;
 
@@ -120,6 +121,96 @@ const ciRuns = (now: number): PipelineRun[] => [
     },
 ];
 
+// MAIN RED, in the whole recording only, since its two fix agents are on no other roster. The release notes' push turned
+// `web`'s main red at its unit job, and the sandbox put one fix agent on it there and then (ci/main-fixer.ts); the next
+// push to main failed too, and went to the same agent, which is working on both. On `api`, main has been red on
+// test:integration for most of an hour: its fix agent read the logs, found the failure outside the code and finished
+// without changing anything, so the red waits for you.
+const mainRedRuns = (now: number): PipelineRun[] => [
+    {
+        repo: `web`,
+        host: `github`,
+        project: `acme/shop-web`,
+        runId: 4_822,
+        title: `Tighten the changelog page copy`,
+        authorName: `Ada Lovelace`,
+        trigger: `push`,
+        branch: `main`,
+        sha: `e7d41c2`,
+        status: `failed`,
+        url: `https://github.com/acme/shop-web/actions/runs/4822`,
+        createdAt: now - minutes(9),
+        durationSeconds: 214,
+        failedJobs: [`typecheck`, `unit`],
+    },
+    {
+        repo: `web`,
+        host: `github`,
+        project: `acme/shop-web`,
+        runId: 4_818,
+        title: `Draft the release notes for 2.4`,
+        authorName: `Ada Lovelace`,
+        trigger: `push`,
+        branch: `main`,
+        sha: `9d20f6b`,
+        status: `failed`,
+        url: `https://github.com/acme/shop-web/actions/runs/4818`,
+        createdAt: now - minutes(34),
+        durationSeconds: 163,
+        failedJobs: [`unit`],
+    },
+    {
+        repo: `api`,
+        host: `gitlab`,
+        project: `acme/shop-api`,
+        runId: 90_314,
+        title: `Bump the Stripe SDK to 17`,
+        authorName: `Grace Hopper`,
+        trigger: `push`,
+        branch: `main`,
+        sha: `b3e9a07`,
+        status: `failed`,
+        url: `https://gitlab.com/acme/shop-api/-/pipelines/90314`,
+        createdAt: now - minutes(58),
+        durationSeconds: 431,
+        failedJobs: [`test:integration`],
+    },
+];
+
+const mainReds = (now: number): CiMainRed[] => [
+    {
+        repo: `web`,
+        branch: `main`,
+        since: now - minutes(32),
+        runId: 4_822,
+        jobs: [`typecheck`, `unit`],
+        fixer: WEB_MAIN_FIXER_ID,
+        decision: {
+            kind: `fix-up`,
+            conversationId: WEB_MAIN_FIXER_ID,
+            at: now - minutes(32),
+            detail: `Main went red on unit: a fix agent was started at the first failed job, and every later failure on main goes to it.`,
+        },
+    },
+    {
+        repo: `api`,
+        branch: `main`,
+        since: now - minutes(51),
+        runId: 90_314,
+        jobs: [`test:integration`],
+        fixer: API_MAIN_FIXER_ID,
+        decision: {
+            kind: `spent`,
+            conversationId: API_MAIN_FIXER_ID,
+            at: now - minutes(19),
+            detail: `The fix agent finished without changing anything: test:integration fails because the CI database refuses connections, which is not in the code.`,
+        },
+    },
+];
+
+// Every run the fixture has, whichever recording lists it: a row asks for its jobs by id, and only lists what it drew.
+const allRuns = (now: number): PipelineRun[] => [...ciRuns(now), ...mainRedRuns(now)];
+
 // Both forges give every job its own page, so the fixture mints one per job rather than only for the interesting ones:
 // the graph draws each job name as a link out, and a fixture without them would under-draw the view.
 const withJobPages = (page: (index: number) => string, jobs: PipelineJob[]): PipelineJob[] =>
@@ -129,69 +220,75 @@ const withJobPages = (page: (index: number) => string, jobs: PipelineJob[]): Pip
 const gitlabJobPage = (index: number): string => `https://gitlab.com/acme/shop-api/-/jobs/${771_204 + index}`;
 const githubJobPage = (runId: number, index: number): string => `https://github.com/acme/shop-web/actions/runs/${runId}/job/${12_907 + index}`;
 
-// One run's jobs, fetched when a row expands; keyed by repo + the vendor's run id, same pair rerun/cancel use.
-const gitlabJobs = (base: number, failing: boolean): PipelineJob[] =>
-    withJobPages(gitlabJobPage, [
-        { name: `lint`, status: `success`, stage: `build`, startedAt: base, finishedAt: base + 41_000, durationSeconds: 41 },
-        { name: `build`, status: `success`, stage: `build`, startedAt: base, finishedAt: base + 96_000, durationSeconds: 96 },
-        { name: `test:unit`, status: `success`, stage: `test`, startedAt: base + 100_000, finishedAt: base + 214_000, durationSeconds: 114 },
-        {
-            name: `test:integration`,
-            status: failing ? `failed` : `success`,
-            stage: `test`,
-            startedAt: base + 100_000,
-            finishedAt: base + 412_000,
-            durationSeconds: 312,
-        },
-        { name: `deploy:staging`, status: failing ? `skipped` : `success`, stage: `deploy`, startedAt: base + 420_000, durationSeconds: 62 },
-    ]);
+// One job as the pipeline declares it: when it starts after the run does and how long it takes, in seconds.
+interface JobSpec {
+    readonly name: string;
+    readonly at: number;
+    readonly took: number;
+}
+
+// A job that ran: its verdict and its clock, from the run's own start.
+const ran = (base: number, spec: JobSpec, failed: readonly string[]): PipelineJob => ({
+    name: spec.name,
+    status: failed.includes(spec.name) ? `failed` : `success`,
+    startedAt: base + spec.at * 1000,
+    finishedAt: base + (spec.at + spec.took) * 1000,
+    durationSeconds: spec.took,
+});
+
+// One run's jobs, fetched when a row expands; keyed by repo + the vendor's run id, same pair rerun/cancel use. GitLab
+// runs stage by stage, so a stage after a failed one never starts.
+const GITLAB_STAGES = [`build`, `test`, `deploy`] as const;
+const GITLAB_JOBS: readonly (JobSpec & { readonly stage: (typeof GITLAB_STAGES)[number] })[] = [
+    { name: `lint`, stage: `build`, at: 0, took: 41 },
+    { name: `build`, stage: `build`, at: 0, took: 96 },
+    { name: `test:unit`, stage: `test`, at: 100, took: 114 },
+    { name: `test:integration`, stage: `test`, at: 100, took: 312 },
+    { name: `deploy:staging`, stage: `deploy`, at: 420, took: 62 },
+];
+const gitlabJobs = (base: number, failed: readonly string[]): PipelineJob[] => {
+    const broke = Math.min(...GITLAB_JOBS.filter((spec) => failed.includes(spec.name)).map((spec) => GITLAB_STAGES.indexOf(spec.stage)));
+    return withJobPages(
+        gitlabJobPage,
+        GITLAB_JOBS.map((spec) =>
+            GITLAB_STAGES.indexOf(spec.stage) > broke
+                ? { name: spec.name, status: `skipped`, stage: spec.stage }
+                : { ...ran(base, spec, failed), stage: spec.stage },
+        ),
+    );
+};
 
 // Branching workflow: install fans out, e2e is a matrix, deploy waits on all of them, drawn from `needs`. Timestamps
-// run one after another on purpose, so the graph must use `needs`, not wave-layering, to render right.
-const githubJobs = (base: number, failing: boolean, runId: number): PipelineJob[] =>
-    withJobPages(
+// run one after another on purpose, so the graph must use `needs`, not wave-layering, to render right. A job waiting
+// on one that failed, or on one that never ran, is skipped with no clock of its own.
+const GITHUB_JOBS: readonly (JobSpec & { readonly needs: readonly string[] })[] = [
+    { name: `install`, needs: [], at: 0, took: 31 },
+    { name: `typecheck`, needs: [`install`], at: 33, took: 74 },
+    { name: `lint`, needs: [`install`], at: 34, took: 41 },
+    { name: `unit`, needs: [`install`], at: 35, took: 119 },
+    { name: `build`, needs: [`typecheck`, `lint`], at: 110, took: 112 },
+    { name: `e2e (chromium)`, needs: [`build`], at: 225, took: 143 },
+    { name: `e2e (firefox)`, needs: [`build`], at: 226, took: 129 },
+    { name: `bundle-size`, needs: [`build`], at: 227, took: 48 },
+    // Fan-in: a single failing leg means the deploy step never runs.
+    { name: `deploy preview`, needs: [`e2e (chromium)`, `e2e (firefox)`, `bundle-size`, `unit`], at: 370, took: 62 },
+];
+const githubJobs = (base: number, failed: readonly string[], runId: number): PipelineJob[] => {
+    const stopped = new Set<string>();
+    return withJobPages(
         (index) => githubJobPage(runId, index),
-        [
-            { name: `install`, status: `success`, needs: [], startedAt: base, finishedAt: base + 31_000, durationSeconds: 31 },
-            { name: `typecheck`, status: `success`, needs: [`install`], startedAt: base + 33_000, finishedAt: base + 107_000, durationSeconds: 74 },
-            { name: `lint`, status: `success`, needs: [`install`], startedAt: base + 34_000, finishedAt: base + 75_000, durationSeconds: 41 },
-            { name: `unit`, status: `success`, needs: [`install`], startedAt: base + 35_000, finishedAt: base + 154_000, durationSeconds: 119 },
-            {
-                name: `build`,
-                status: `success`,
-                needs: [`typecheck`, `lint`],
-                startedAt: base + 110_000,
-                finishedAt: base + 222_000,
-                durationSeconds: 112,
-            },
-            {
-                name: `e2e (chromium)`,
-                status: failing ? `failed` : `success`,
-                needs: [`build`],
-                startedAt: base + 225_000,
-                finishedAt: base + 368_000,
-                durationSeconds: 143,
-            },
-            {
-                name: `e2e (firefox)`,
-                status: `success`,
-                needs: [`build`],
-                startedAt: base + 226_000,
-                finishedAt: base + 355_000,
-                durationSeconds: 129,
-            },
-            { name: `bundle-size`, status: `success`, needs: [`build`], startedAt: base + 227_000, finishedAt: base + 275_000, durationSeconds: 48 },
-            // Fan-in: a single failing leg means the deploy step never runs.
-            {
-                name: `deploy preview`,
-                status: failing ? `skipped` : `success`,
-                needs: [`e2e (chromium)`, `e2e (firefox)`, `bundle-size`, `unit`],
-                startedAt: failing ? undefined : base + 370_000,
-                finishedAt: failing ? undefined : base + 432_000,
-                durationSeconds: failing ? undefined : 62,
-            },
-        ],
+        GITHUB_JOBS.map((spec) => {
+            if (spec.needs.some((need) => stopped.has(need))) {
+                stopped.add(spec.name);
+                return { name: spec.name, status: `skipped`, needs: [...spec.needs] };
+            }
+            if (failed.includes(spec.name)) {
+                stopped.add(spec.name);
+            }
+            return { ...ran(base, spec, failed), needs: [...spec.needs] };
+        }),
     );
+};
 
 // Jobs mid-flight for a running run; not-yet-started jobs have no timestamps to layer by, so the graph needs `needs`
 // here too. `deploy preview` is placed by what it waits on, not when it ran.
@@ -220,19 +317,21 @@ const runningJobs = (base: number, runId: number): PipelineJob[] =>
     );
 
 export const ciJobs = (repo: string, runId: number, now: number): PipelineJob[] => {
-    const run = ciRuns(now).find((candidate) => candidate.repo === repo && candidate.runId === runId);
+    const run = allRuns(now).find((candidate) => candidate.repo === repo && candidate.runId === runId);
     if (run === undefined) {
         return [];
     }
     if (run.status === `running`) {
         return runningJobs(run.createdAt, run.runId);
     }
-    const failing = run.status === `failed`;
-    return run.host === `gitlab` ? gitlabJobs(run.createdAt, failing) : githubJobs(run.createdAt, failing, run.runId);
+    const failed = run.failedJobs ?? [];
+    return run.host === `gitlab` ? gitlabJobs(run.createdAt, failed) : githubJobs(run.createdAt, failed, run.runId);
 };
 
-// The failure is the newest run on its branch, so the rail badge stays lit truthfully.
-export const ciRunsResponse = (now: number): CiRunsResponse => ({
+// The feature branch's failure is the newest run on its branch, so the rail badge stays lit truthfully. `reds` as a
+// current daemon always sends it, empty or not; only the whole recording's main is red.
+export const ciRunsResponse = (now: number, mainRed = false): CiRunsResponse => ({
     repos: CI_REPOS,
-    runs: ciRuns(now),
+    runs: mainRed ? [...ciRuns(now), ...mainRedRuns(now)].toSorted((left, right) => right.createdAt - left.createdAt) : ciRuns(now),
+    reds: mainRed ? mainReds(now) : [],
 });

@@ -1,5 +1,5 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import { type AgentSummary, type MainlinePush, type MainlineStatus, type PushRun, pushFixBase, type Red } from "@intentic/sandbox-contract";
+import { type AgentSummary, type PushCheck, type PushChecks, type PushRun, pushFixBase, type Red } from "@intentic/sandbox-contract";
 import { computed, ref, shallowRef } from "vue";
 import { freshImport, mocked } from "@intentic/testing/bun";
 import { refusalSummary } from "../health/fixProposal";
@@ -51,19 +51,18 @@ jest.mock(`./usePushRun`, () => {
     };
 });
 
-// The main line as the daemon serves it, where it filed the refused push, and the hand-over the press asks it for.
-// One status for the file, like the real query's, so a case sets what was filed and the flow reads that same one.
-const mainlineStatus = shallowRef<MainlineStatus | undefined>(undefined);
-jest.mock(`../../agents/mainline/useMainline`, () => ({
-    useMainline: () => computed(() => mainlineStatus.value),
+// What pushes left as the daemon serves it, where it filed the refused push, and the hand-over the press asks it for.
+// One record for the file, like the real query's, so a case sets what was filed and the flow reads that same one.
+const pushRecord = shallowRef<PushChecks | undefined>(undefined);
+jest.mock(`./usePushChecks`, () => ({
+    usePushChecks: () => computed(() => pushRecord.value),
     handPushFindings: jest.fn(async () => `push-fix-opened`),
 }));
-jest.mock(`../../agents/mainline/openLanded`, () => ({ openLandConversation: jest.fn() }));
 
 // The fleet as the stream keeps it: what the card's attempt is read off. A shared ref, like the real module's, so a case
 // sets the roster and the flow reads that same one.
 jest.mock(`../../agents/fleet/useAgents-registry`, () => ({ registry: shallowRef<AgentSummary[]>([]) }));
-jest.mock(`../../agents/fleet/useAgents-actions`, () => ({ open: jest.fn() }));
+jest.mock(`../../agents/fleet/useAgents-actions`, () => ({ open: jest.fn(), openById: jest.fn() }));
 
 const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
 // A fix agent as the roster reports it; `status` is what each case is about.
@@ -89,8 +88,7 @@ const load = async () => {
         clearPushTerminals: () => void;
     };
     pushRuns.clearPushTerminals();
-    const mainline = await import(`../../agents/mainline/useMainline`);
-    const opened = await import(`../../agents/mainline/openLanded`);
+    const checks = await import(`./usePushChecks`);
     const live = (await import(`../changes/live/useWorkspaceLive`)) as unknown as { writeToTree: () => void; quietTree: () => void };
     // As with the seams above: the stamp is the mock's own, so each case opens on a tree nobody has written to.
     live.quietTree();
@@ -103,14 +101,14 @@ const load = async () => {
     git.failures.value = new Map();
     // As above: the fleet mocks' refs are the mocks' own, so each case starts from an empty roster.
     fleet.registry.value = [];
-    mainlineStatus.value = undefined;
+    pushRecord.value = undefined;
     return {
         git,
         writeToTree: live.writeToTree,
         fleet,
-        mainline: mainlineStatus,
-        handPushFindings: mainline.handPushFindings,
-        openConversation: opened.openLandConversation,
+        pushChecks: pushRecord,
+        handPushFindings: checks.handPushFindings,
+        openConversation: opener.openById,
         open: opener.open,
         pushTerminal: pushRuns.pushTerminal,
         flow: module.usePushFlow(),
@@ -143,10 +141,10 @@ type Loaded = Awaited<ReturnType<typeof load>>;
 // The refusal as the daemon filed it before the run read as settled (push-checks-store.ts, fileRefusal): a push whose
 // one finding is what the hook said, owed by the project's push red, which names the attempt at it (pushFixBase).
 const REFUSAL = { id: `pre-push:z`, source: `pre-push`, recheckable: false, text: `typecheck failed` };
-const REFUSED: MainlinePush = { project: `intentic`, id: `refused-x`, at: 5_000, head: `h1`, commits: 0, refused: true, findings: [REFUSAL] };
-const REFUSED_RED: Red = { source: `push`, scope: `intentic`, since: 5_000, findings: [REFUSAL], suspects: [], named: false, decisions: [] };
+const REFUSED: PushCheck = { project: `intentic`, id: `refused-x`, at: 5_000, head: `h1`, commits: 0, refused: true, findings: [REFUSAL] };
+const REFUSED_RED: Red = { source: `push`, scope: `intentic`, since: 5_000, findings: [REFUSAL], decisions: [] };
 const filed = (loaded: Loaded): string => {
-    loaded.mainline.value = { projects: [], recent: [], pushed: [REFUSED], reds: [REFUSED_RED] };
+    loaded.pushChecks.value = { pushed: [REFUSED], reds: [REFUSED_RED] };
     return pushFixBase(REFUSED_RED)!;
 };
 
@@ -338,7 +336,7 @@ test(`a push the repository's own hook refused asks with the run, and proposes t
     expect(flow.terminal.value).toBe(`job-push`);
     expect(flow.proposedFix.value).toEqual({ project: `intentic` });
     await flow.startFix();
-    // The daemon's hand-over, the same the Main line makes, and the conversation it answers is opened.
+    // The daemon's hand-over, whichever surface presses for it, and the conversation it answers is opened.
     expect(handPushFindings).toHaveBeenCalledWith(`intentic`, undefined, undefined);
     expect(openConversation).toHaveBeenCalledWith(`push-fix-opened`);
 });

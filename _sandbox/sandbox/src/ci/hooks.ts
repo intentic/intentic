@@ -22,7 +22,9 @@ const manualRecipe = (project: CiProject, url: string, secret: string): string =
             ? `https://${project.account.host}/${project.project}/settings/hooks`
             : `${project.account.apiBase.replace(/\/api\/v4$/, "")}/${project.project}/-/hooks`;
     const events =
-        project.account.provider === "github" ? `content type application/json, the "Workflow runs" event` : `the "Pipeline events" trigger`;
+        project.account.provider === "github"
+            ? `content type application/json, the "Workflow runs" and "Workflow jobs" events`
+            : `the "Pipeline events" and "Job events" triggers`;
     return `Add it manually at ${settings}: payload URL ${url}, secret ${secret}, ${events}.`;
 };
 

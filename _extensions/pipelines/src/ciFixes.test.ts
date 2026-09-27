@@ -1,31 +1,11 @@
 import { type AgentSummary, ciFixConversationId, fixAttemptId, type PipelineRun } from "@intentic/sandbox-contract";
 import { branchFixes, branchKey, fixesByRun } from "./ciFixes";
-
-const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
-
-const run = (over: Partial<PipelineRun> & { runId: number }): PipelineRun => ({
-    repo: `web`,
-    host: `github`,
-    project: `acme/shop-web`,
-    branch: `main`,
-    sha: `abc1234`,
-    status: `failed`,
-    url: `https://github.com/acme/shop-web/actions/runs/${over.runId}`,
-    createdAt: over.runId,
-    ...over,
-});
+import { agentCard, pipelineRun as run } from "./testing";
 
 // The id the daemon files the conversation under, derived the same way the row derives it: transcribing the
 // string here would let the two halves of the join drift apart without a test noticing.
-const fixAgent = (forRun: PipelineRun, over: Partial<AgentSummary> = {}): AgentSummary => ({
-    id: ciFixConversationId(forRun.repo, forRun.runId),
-    status: `running`,
-    provider: `claude`,
-    harness: `native`,
-    attention: { ...NO_ATTENTION },
-    updatedAt: 1_000,
-    ...over,
-});
+const fixAgent = (forRun: PipelineRun, over: Partial<AgentSummary> = {}): AgentSummary =>
+    agentCard(ciFixConversationId(forRun.repo, forRun.runId), over);
 
 test("a run finds the agent whose conversation was derived from it", () => {
     const failed = run({ runId: 41 });

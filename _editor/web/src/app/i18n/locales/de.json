@@ -421,110 +421,13 @@
             "label": "Board-Status",
             "close": "{title} schließen"
         },
-        "mainline": {
-            "title": "Hauptlinie",
-            "root": "Arbeitsbereich",
-            "projectFailing": "{project} schlägt fehl",
-            "projectsFailing": "{count} Projekt schlägt fehl | {count} Projekte schlagen fehl",
-            "queued": "{count} wartend",
-            "columnQueued": "Warteschlange",
-            "columnChecking": "Wird geprüft",
-            "columnResult": "Ergebnis",
-            "columnHistory": "Verlauf",
-            "nothingQueued": "Nichts in der Warteschlange",
-            "noResults": "Noch keine Ergebnisse",
-            "outdatedMissing": "Bis zum Update kann dieses Panel nicht sagen, wem eine fehlschlagende Prüfung zugeschrieben wird oder wer sie behebt, keine Logs einer Prüfung öffnen und nicht zeigen, was deine Pushes hinterlassen haben.",
-            "logs": "Logs",
-            "moreFailures": "+{count} weitere",
-            "noFailureList": "Keine Fehler aufgeführt",
-            "likelyCause": "Wahrscheinliche Ursache",
-            "andMore": "{title} +{count}",
-            "passed": "bestanden",
-            "failed": "fehlgeschlagen",
-            "recheck": "Nachprüfung",
-            "routingFixing": "Wird behoben",
-            "leadFixing": "Wird behoben in",
-            "routingHeld": "Wartet, bis ein anderer Chat fertig ist",
-            "leadHeld": "Wartet auf",
-            "routingWaiting": "Wartet auf die nächste Prüfung",
-            "routingReported": "Niemand behebt es",
-            "routingSpent": "Keine Reparaturversuche mehr",
-            "routingResolved": "Bei der nächsten Prüfung behoben",
-            "routingDismissed": "Von dir zurückgestellt",
-            "routingDeciding": "Es wird entschieden, wer es behebt",
-            "shortFixing": "wird behoben",
-            "shortOnHold": "angehalten",
-            "shortNeedsYou": "braucht Sie",
-            "shortFixed": "behoben",
-            "shortDismissed": "zurückgestellt",
-            "push": {
-                "explain": "Der Push ist durch; seine Prüfung hat diese Befunde durchgelassen. Jeder wartet hier, bis eine spätere Messung ihn nicht mehr findet oder du ihn verwirfst. Niemand wird darauf angesetzt, außer du übergibst sie.",
-                "commits": "{count} Commit | {count} Commits",
-                "earlier": "+{count} früherer Push | +{count} frühere Pushes",
-                "more": "+{count} weitere | +{count} weitere",
-                "fewer": "Weniger zeigen",
-                "from": "aus {sha} {subject}",
-                "endsWhenDismissed": "Keine spätere Messung kann sehen, dass dieser Befund weg ist: Er endet, wenn du ihn verwirfst.",
-                "recheck": "Erneut messen",
-                "rechecked": "{project} erneut gemessen: {resolved} weg, {open} noch offen",
-                "unmeasured": "{project} konnte nicht gemessen werden; nichts hat sich geändert",
-                "dismissHint": "Verwerfen: wird nicht behoben",
-                "dismissOne": "{source} verwerfen",
-                "dismissAll": "Alle verwerfen",
-                "dismissed": "{count} Befund verworfen | {count} Befunde verworfen",
-                "dismissFailed": "Das konnte nicht verworfen werden",
-                "handOver": "An einen Agenten übergeben",
-                "continue": "Fortsetzen",
-                "handHint": "Öffnet eine isolierte Unterhaltung mit jedem offenen Befund von hier, dem Befehl, der ihn wieder zeigt, und den Commits, die ihn gebracht haben.",
-                "handFailed": "Die Befunde konnten keinem Agenten übergeben werden",
-                "attempt": "Versuch {count}",
-                "left": "{count} übrig | {count} übrig",
-                "clean": "sauber",
-                "handled": "erledigt"
-            },
-            "board": {
-                "idle": "Keine Prüfung läuft",
-                "waiting": "{count} Landung wartet auf die nächste Prüfung | {count} Landungen warten auf die nächste Prüfung",
-                "measuring": "Misst {count} Landung | Misst {count} Landungen",
-                "on": "auf {machine}",
-                "queuedLands": "Wartende Landungen in {project}",
-                "measuredLands": "Landungen, die die Prüfung von {project} misst",
-                "failingSince": "Schlägt fehl seit {time}",
-                "more": "+{count} weitere",
-                "backToResults": "Zurück zu den Ergebnissen",
-                "openHistory": "Verlauf öffnen ({count})",
-                "historyHint": "Jede Prüfung nach dem Landen, neueste zuerst",
-                "queuedHint": "Gelandete Arbeit, wartet auf die nächste Prüfung ihres Projekts",
-                "checkingHint": "Die Prüfung, die gerade auf dem Hauptbaum läuft",
-                "resultHint": "Die letzte Prüfung jedes Projekts nach dem Landen",
-                "pushedHint": "Was die Prüfung vor dem Push in Ihren Pushes gefunden hat. Sie hält keinen Push auf.",
-                "leftAtPush": "Vom Push übrig",
-                "nothingLeft": "Nichts vom Push übrig",
-                "command": "Befehl",
-                "fix": "Behebung",
-                "failures": "{count} Fehler | {count} Fehler",
-                "after": "nach {work}",
-                "stillOpen": "{count} Fund noch offen | {count} Funde noch offen",
-                "lastPush": "Letzter Push"
-            }
-        },
-        "landCheck": {
-            "broke": "{count} kaputt",
-            "brokeMain": "main kaputt",
-            "openFixUp": "Die Unterhaltung öffnen, die daran arbeitet",
+        "cardSeal": {
             "unviewed": "{count} Oberflächendatei geändert, ohne hinzusehen | {count} Oberflächendateien geändert, ohne hinzusehen",
-            "seal": {
-                "checking": "Prüfung von main in {project}: läuft seit {time}",
-                "waiting": "Prüfung von main in {project}: wartet seit {time}",
-                "passed": "Prüfung von main in {project}: bestanden um {time}",
-                "checkedRed": "Prüfung von main in {project}: noch rot, wegen anderer Arbeit",
-                "broke": "Prüfung von main in {project}: {broke}",
-                "verified": "Eigene Prüfung: {check} bestanden",
-                "verifiedBare": "Eigene Prüfung: nach der letzten Änderung bestanden",
-                "failed": "Eigene Prüfung: {check} fehlgeschlagen",
-                "failedBare": "Eigene Prüfung: fehlgeschlagen",
-                "unproven": "Eigene Prüfung: keine seit der letzten Änderung"
-            }
+            "verified": "Eigene Prüfung: {check} bestanden",
+            "verifiedBare": "Eigene Prüfung: nach der letzten Änderung bestanden",
+            "failed": "Eigene Prüfung: {check} fehlgeschlagen",
+            "failedBare": "Eigene Prüfung: fehlgeschlagen",
+            "unproven": "Eigene Prüfung: keine seit der letzten Änderung"
         },
         "words": {
             "new": "Neu",
@@ -1768,9 +1671,9 @@
             "includeReleaseNoteEach": "Zu jedem Commit eine Release-Notiz hinzufügen."
         },
         "agentChecks": {
-            "repairAfterLanding": "Reparieren, was nach dem Landen kaputtgeht",
-            "repairAfterLandingNote": "Schlagen Prüfungen nach dem Landen fehl, schickt Intentic einen Agenten zur Reparatur. Dauerhaft rotes Main-CI ebenfalls.",
-            "afterLanding": "Nachdem Arbeit gelandet ist"
+            "repairMainCi": "Main reparieren, wenn das CI fehlschlägt",
+            "repairMainCiNote": "Der erste Job, der auf main fehlschlägt, startet einen Reparatur-Agenten, und jeder weitere Fehlschlag geht an ihn, bis main wieder grün ist. Sind seine Züge aufgebraucht oder ändert er nichts, übergibt er an Sie. Ein Lauf, der an den CI-Maschinen selbst scheiterte, wird stattdessen einmal neu gestartet.",
+            "mainCi": "Main-CI"
         },
         "agentClock": {
             "clock": "Uhr",
@@ -1895,7 +1798,7 @@
             "readingWhatWorkspacesRepositories": "Es wird gelesen, was die Repositorys dieses Workspace deklarieren…",
             "repositoriesWaitingOnUntil": "{waiting} Repositorys warten auf Sie. Bis Sie sie einschalten, laufen ihre eigenen Prüfungen nicht.",
             "repositoryChecks": "Repository-Prüfungen",
-            "repositoryDeclaresOwnChecks": "Ein Repository deklariert in .intentic/checks.json, was auf seinem eigenen Code läuft: nach jeder Änderung oder nachdem seine Arbeit gelandet ist. Nichts, was es deklariert, blockiert je ein Landen, einen Commit oder einen Push."
+            "repositoryDeclaresOwnChecks": "Ein Repository deklariert in .intentic/checks.json, was nach jeder Änderung auf seinem eigenen Code läuft. Nichts, was es deklariert, blockiert je ein Landen, einen Commit oder einen Push."
         },
         "agentSafetyJudge": {
             "changeInModels": "In „Modelle“ ändern",
@@ -2718,11 +2621,10 @@
             "declaredNotRunningNothing": "Aus. Nichts, was ein Repository deklariert, läuft, bis Sie es einschalten.",
             "runChecksDeclares": "Die Prüfungen ausführen, die {name} deklariert",
             "afterEachEdit": "Nach jeder Änderung",
-            "afterItLands": "Nachdem es gelandet ist",
-            "turnRetired": "Bevor ein Zug endet — läuft nicht mehr; geprüft wird nach dem Landen",
+            "landRetired": "Nachdem es gelandet ist — läuft nicht mehr; das CI prüft, was gepusht wird",
+            "turnRetired": "Bevor ein Zug endet — läuft nicht mehr; das CI prüft, was gepusht wird",
             "lastFlagged": "zuletzt gemeldet {ago}",
             "neverFlagged": "nie etwas gemeldet",
-            "packageScript": "Paket-Skript",
             "running": "Läuft"
         },
         "restartWatch": {
@@ -4575,7 +4477,7 @@
             "unstaged": "Nicht gestaged",
             "untrackedLeave": "{count} nicht verfolgte Datei verlässt die Platte: sie wurde nie committet, git hat also keine Kopie: | {count} nicht verfolgte Dateien verlassen die Platte: sie wurden nie committet, git hat also keine Kopie:",
             "watchRun": "Ihm zusehen",
-            "leftInMainLine": "{count} in der Hauptlinie übrig | {count} in der Hauptlinie übrig",
+            "leftAtPush": "{count} vom Push übrig | {count} vom Push übrig",
             "you": "Sie",
             "pushOutdated": "Sandbox aktualisieren, um zu sehen, was er hinterließ"
         },
@@ -4643,7 +4545,8 @@
         },
         "usePushFlow": {
             "failed": "{verb} fehlgeschlagen",
-            "reposRefusedEachRow": "{count} Repos haben es abgelehnt, jede Zeile sagt warum."
+            "reposRefusedEachRow": "{count} Repos haben es abgelehnt, jede Zeile sagt warum.",
+            "handFailed": "Die Übergabe an einen Agenten ist fehlgeschlagen"
         },
         "usePushRun": {
             "pushing": "{repo} wird gepusht"

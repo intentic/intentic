@@ -1,41 +1,30 @@
-// ONE MEASUREMENT OF A CHANGE: what a change added over the commit it is built on, as typed findings, asked the same way
-// by every caller. The check after a land asks it of the land (land-tiers.mjs, against the commit the land departed
-// from), the push asks it of the pushed range (verify-push.mjs, against the merge-base with the remote), and the push
-// recheck and the land check measure the tree's linter the same way (push-report.mjs, verify.mjs). Before this, lint ran
-// three ways with three regexes, and one land check ran the checks' runner three times plus a fourth for the recheck.
+// ONE READING OF WHAT A CHANGE BROUGHT IN, as typed findings: the push asks it of the pushed range (verify-push.mjs,
+// against the merge-base with the remote), and the push recheck measures the tree's linter with the same reading
+// (push-report.mjs), so the measurement that clears a finding names it the way the push that left it did.
 //
 // A finding is the push report's shape (push-report.mjs): `source` (what measured it, this repository's word), `text` as
 // printed, `key` (position-free, what a later measurement names it by), `recheckable`, and the `kind`/`check` an older
-// daemon reads. `unit` is the same finding as the land check's router reads a failure unit (failure-units.mjs).
+// daemon reads.
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { allowedInRange } from "../../checks/lib/allow.mjs";
-import { addedPluginFindings } from "../../oxlint/added.mjs";
-import { changesSince } from "../lib/git.mjs";
-import { weakenings } from "./assertion-ratchet.mjs";
-import { checkVerdicts, reportsAt } from "./check-snapshot.mjs";
-import { rustfmtAvailable, touchedCrates } from "./fixers.mjs";
+import { reportsAt } from "./check-snapshot.mjs";
 import { judgeAgainstBase, problemLines } from "./turn-findings.mjs";
-
-// What oxlint reads, the same set `pnpm lint` reads at the push.
-export const LINTABLE = /\.(m|c)?[jt]sx?$|\.vue$|\.astro$/;
 
 // `[Error/rule]` for a rule's finding, bare `[Error]` for a file oxlint could not parse at all.
 const LINT_LINE = /^(.+?):\d+:\d+: (.*) \[\w+(?:\/(.+))?\]$/;
 
 export const LINT_COMMAND = "pnpm lint";
 
-// The one reading of oxlint's `unix` lines: a finding per line, its key and unit without the position, so an edit above a
-// finding does not make it a new one.
+// The one reading of oxlint's `unix` lines: a finding per line, keyed without the position, so an edit above a finding
+// does not make it a new one.
 export const lintFindings = (output) =>
     output.split("\n").flatMap((line) => {
         const found = LINT_LINE.exec(line.trim());
         if (found === null) {
             return [];
         }
-        const unit = `lint ${found[1]}: ${found[3] ?? "parse"} ${found[2]}`;
-        return [{ kind: "lint", source: "lint", recheckable: true, text: line.trim(), key: unit, path: found[1], command: LINT_COMMAND, unit }];
+        const key = `lint ${found[1]}: ${found[3] ?? "parse"} ${found[2]}`;
+        return [{ kind: "lint", source: "lint", recheckable: true, text: line.trim(), key, path: found[1], command: LINT_COMMAND }];
     });
 
 /**
@@ -109,60 +98,5 @@ export const tidyFindings = (mine) =>
             text: line.trim(),
             key: printed.has(line) ? findingKey(line) : "",
             command: checkCommand(verdict.id),
-            unit: `tidy ${verdict.id}: ${line.trim().replace(/:\d+/g, ":#")}`,
         }));
     });
-
-// A crate the change touched that rustfmt would rewrite.
-const rustfmtFindings = (root, changed) =>
-    rustfmtAvailable(root)
-        ? touchedCrates(root, changed).flatMap((crate) => {
-              const command = `cargo fmt --manifest-path ${join(crate, "Cargo.toml")} --all --check`;
-              return spawnSync("cargo", ["fmt", "--manifest-path", join(crate, "Cargo.toml"), "--all", "--check"], { cwd: root, stdio: "ignore" }).status === 0
-                  ? []
-                  : [{ kind: "rustfmt", source: "rustfmt", recheckable: false, text: `rustfmt ${crate}`, key: `rustfmt ${crate}`, command, unit: `rustfmt ${crate}` }];
-          })
-        : [];
-
-// Test files the change made weaker without declaring it (assertion-ratchet.mjs).
-const ratchetFindings = (root, base) => {
-    const measured = weakenings(root, base);
-    if (measured === undefined) {
-        const text = `ratchet could not measure: git could not list the test files changed since ${base.slice(0, 9)}`;
-        return [{ kind: "ratchet", source: "ratchet", recheckable: false, text, key: text, unit: text }];
-    }
-    return measured.declared
-        ? []
-        : measured.findings.map((finding) => {
-              const unit = `ratchet ${finding.replace(/ \(.*\)$/, "")}`;
-              return { kind: "ratchet", source: "ratchet", recheckable: false, text: finding, key: unit, unit };
-          });
-};
-
-// A plugin-rule unit (_tools/oxlint/added.mjs) as a finding: the linter's, held to what the change added.
-const pluginFinding = (unit) => ({ kind: "lint", source: "lint-plugins", recheckable: false, text: unit, key: unit, unit });
-
-/**
- * Every finding the tree added since `base`: lint on the files it changed (the root rules whole, the plugin rules by what
- * was added), the tidy checks against `base` with the range's `Allow:` trailers applied, rustfmt on the crates it
- * touched, and the test files it weakened. `verdicts` are the checks' answers for the tree when the caller already has
- * them (checkVerdicts), so the runner is not asked twice.
- */
-export const measureChange = (root, base, { verdicts, changed } = {}) => {
-    const listed = changed === undefined ? changesSince(root, base) : { paths: changed };
-    // A change git cannot list is not an empty one: linted as nothing, it would pass every judgment built on it.
-    const paths = listed.paths ?? [];
-    const lintable = paths.filter((path) => LINTABLE.test(path) && existsSync(join(root, path)));
-    const lint =
-        listed.error === undefined
-            ? runLint(root, lintable)
-            : { ran: false, findings: [], why: `git could not list what changed since ${base.slice(0, 9)}: ${listed.error}` };
-    const untidy = (verdicts ?? checkVerdicts(root) ?? []).filter((verdict) => !verdict.ok && verdict.measured && verdict.gate === "tidy");
-    return [
-        ...(lint.ran ? lint.findings : [{ kind: "lint", source: "lint", recheckable: true, text: `lint could not run: ${lint.why}`, key: "", unit: `lint could not run: ${lint.why}` }]),
-        ...addedPluginFindings(root, base, lintable).map(pluginFinding),
-        ...tidyFindings(judgeTidy(root, base, untidy).mine),
-        ...rustfmtFindings(root, paths),
-        ...ratchetFindings(root, base),
-    ];
-};

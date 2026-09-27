@@ -2,7 +2,7 @@
 // WHAT A PUSH LEAVES BEHIND. The pre-push hook never refuses (verify-push.mjs, `--advisory`), so everything it found used
 // to scroll away with the terminal git printed it to, and the push had already gone. This writes it down instead: a
 // report in the repository's git common dir, beside the verdicts lib/tree-verdict.mjs keeps, which the sandbox files once
-// the push has reached the remote and the editor's Main line shows as "Left at push". A finding stays open until a later
+// the push has reached the remote and its Pipelines view shows as "Left at push". A finding stays open until a later
 // measurement no longer prints it, so every report also carries a measurement of every check and the linter, and the
 // argv that takes the next one (`--recheck`, which writes an entry holding the measurement alone).
 //
@@ -211,8 +211,8 @@ export const readReports = (root) => readStore(root).filter((entry) => entry.kin
 export const writeReport = (root, entry) => writeStore(root, entry);
 
 // THE RECHECK: the same measurement a push takes, without a push, so a finding fixed since can be seen to be gone. The
-// daemon runs it (RECHECK) when the owner asks and after a land check; it writes the measurement alone and exits 0 either
-// way, since what it measured is the answer and a red tree is not a failure to measure.
+// daemon runs it (RECHECK) when the owner asks. It writes the measurement alone and exits 0 either way, since what it
+// measured is the answer and a red tree is not a failure to measure.
 const recheck = (root) => {
     const verdicts = checkVerdicts(root);
     const lint = runLint(root);

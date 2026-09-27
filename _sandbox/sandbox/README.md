@@ -1,6 +1,6 @@
 # sandbox
 
-The Node daemon at the center of every sandbox: it runs coding agents in git worktrees, serves the workspace to the editor, and lands and checks their work.
+The Node daemon at the center of every sandbox: it runs coding agents in git worktrees, serves the workspace to the editor, and lands their work.
 
 ```mermaid
 flowchart LR
@@ -23,10 +23,9 @@ flowchart LR
   `/events` pushes file, git and fleet changes to the browser.
 - One turn: `agent/run/turn/turn-admission.ts` admits it, `turn-plan.ts` picks a runtime, it runs in the
   conversation's worktree (or the main tree, or a remote runner), and `conversations/land/land.ts` lands the result as
-  uncommitted changes. Nothing checks the turn when it ends. `verify-landed.ts` asks the one land check
-  (`services.landCheck`, `workspace/deps/verify-deps.ts`) to run the repository's check on the main tree in the
-  background, and `conversations/land/land-breakage.ts` decides who is sent a red one. The lands waiting for a verdict and what
-  the router holds or waits on live in the verify store, so a restart picks both up again.
+  uncommitted changes. Nothing checks the turn when it ends or its work after it lands: the dependency reconciler
+  (`workspace/deps/reconcile-deps.ts`) installs when a land moved a manifest, and CI checks what the owner pushes.
+  When main's CI goes red, `ci/main-fixer.ts` gives the red streak one fix agent and sends it every later failure.
 - Archive is sticky: only a person's message un-archives a conversation. A turn the daemon starts itself (a retry,
   a nudge, an automation's thread) is refused on an archived one (`conversations/actor/conversation-decide.ts`), and a
   thread whose conversation was archived opens a fresh one instead.
@@ -75,7 +74,8 @@ flowchart LR
   that would fail is named first. `src/state-plan.ts` is the same plan, read-only, for `ic`'s pre-flight. Both
   take every document and structural step from `bootstrap/state-registry.ts` (`main.ts` hands it to the boot step),
   never from what a process loaded; it sits in the boot wiring, above every subsystem, because it imports them all.
-  `store/shapes/write-state-shapes.ts --freeze` (the check after each land) writes it from every
+  `store/shapes/write-state-shapes.ts --freeze` (which the fixers run in a worktree before its land, when the change
+  reached a daemon or contract source: `conversations/land/worktree-fixers.ts`) writes it from every
   `export const name = defineDocument(…)` (or `defineStep`) in the source, failing on a definition in any other form,
   and records each document's shape in `store/generated/state-shapes.json` by the release that first shipped it.
   `--checks` (this package's `pretypecheck`) derives the uncommitted `state-shapes.ts` from it: every released shape

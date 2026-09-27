@@ -5,8 +5,7 @@
 # run — a repo-wide test fan-out, a type check across 74 packages — take turns instead of landing on the box at
 # once. A heavy program becomes this as it starts (heavy-turn.cjs in @intentic/constants, loaded into every program
 # an agent's command runs), with the flags its rule in the shared table gives (heavy-rules.cjs, with the owner's
-# overrides from .intentic/config/heavy-commands.json); the check after landing and the repository's own verify
-# scripts call it the same way. The defaults below are for a hand call only: every caller passes each value from that
+# overrides from .intentic/config/heavy-commands.json); the repository's own verify scripts call it the same way. The defaults below are for a hand call only: every caller passes each value from that
 # table, so none of them is a second copy of it.
 #
 # WHY A LOCK AND NOT A COUNTER IN THE DAEMON. The slot has to be released by a command that is killed, that

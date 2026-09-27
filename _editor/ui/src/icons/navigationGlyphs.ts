@@ -27,12 +27,6 @@ export const NAVIGATION_GLYPHS = {
         outline: `M10 7h10 M10 17h10 M3 16l2 2 3-4`,
         solid: `m5 4 3 3-3 3-3-3Z`,
     },
-    // The main line as a trunk, with a land's branch meeting it at a lozenge: the joint its check is made at. One solid
-    // lozenge, where a branch (`fork`) has three and Pipelines' run three open ones, so the three never share a silhouette.
-    mainline: {
-        outline: `M6 3v18 M18 3v4l-9 9`,
-        solid: `m6 13 3 3-3 3-3-3Z`,
-    },
     // Three stages along one continuous run, distinct from a workflow's fork.
     pipelines: {
         outline: `M7 6h10v3 M17 15v3H7 M3 6l2-3 2 3-2 3Z M15 12l2-3 2 3-2 3Z M3 18l2-3 2 3-2 3Z`,

@@ -13,7 +13,7 @@ import { SPAWN_NOTE_TITLE } from "../../subagents/spawn-note.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import { conversationExperimentArm } from "./experiments.js";
 import { conversationAfter } from "../../../testing.js";
-import { LANDING_CHECKS_NOTE_TITLE, landingChecksNote } from "../../../workspace/deps/mainline-note.js";
+import { LANDING_CHECKS_NOTE_TITLE, LANDING_CHECKS_NOTE } from "../../prompt/checks-note.js";
 import { base, budgetOn, context, memoryReading, ROOT, turn } from "../turn/turn-plan.testing.js";
 import { decideTurn, type TurnDecision } from "./turn-decision.js";
 import type { AdmittedTurnFacts, TurnFacts } from "./turn-facts.js";
@@ -249,7 +249,7 @@ test.each([
 // turn owes it is turn-facts.test.ts's), and never past a card that dropped it
 
 // The note as gatherTurnFacts reads it for a turn that owes it, with the main tree green.
-const LANDING_NOTE = landingChecksNote([], false);
+const LANDING_NOTE = LANDING_CHECKS_NOTE;
 const QUIET: Persona = { id: "quiet", capabilities: [], briefing: { omit: ["checks"] } };
 const IN_WORKTREE: TurnContext = { ...context, localCwd: `${ROOT}-worktree`, effectiveCwd: `${ROOT}-worktree` };
 

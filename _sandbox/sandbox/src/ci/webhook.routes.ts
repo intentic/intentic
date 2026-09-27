@@ -6,18 +6,88 @@ import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { dispatchCiRun } from "./events.js";
-import { ciClientFor, type FetchFn, type GithubRun, githubRun, type GitlabPipelineHook, gitlabHookRun, gitlabStatus } from "./providers.js";
-import { ciProjects } from "./projects.js";
+import { type FailedJob, jobFailed } from "./main-fixer.js";
+import {
+    ciClientFor,
+    type FetchFn,
+    type GithubRun,
+    githubRun,
+    githubStatus,
+    type GitlabPipelineHook,
+    gitlabHookRun,
+    gitlabStatus,
+} from "./providers.js";
+import { ciProjects, type CiProject } from "./projects.js";
 
 // Public webhook receiver, gated by the per-sandbox secret (github HMACs the body, gitlab echoes it as a token); one
 // route for both vendors. An unmapped project's delivery is acknowledged and dropped, not an error. Verifies the sender
-// and normalizes into a PipelineRun; what a finished run means is ci/events.ts, shared with the poller.
+// and normalizes into a PipelineRun, or a failed job; what a finished run means is ci/events.ts, shared with the poller,
+// and a failed job goes to main's fix agent (main-fixer.ts).
 
 interface GithubDelivery {
     readonly action?: string;
     readonly workflow_run?: GithubRun & { readonly actor?: { readonly login?: string } };
+    readonly workflow_job?: GithubJob;
     readonly repository?: { readonly full_name?: string };
 }
+
+// A `workflow_job` delivery's job, narrowed to what a failure needs.
+interface GithubJob {
+    readonly id: number;
+    readonly run_id: number;
+    readonly name: string;
+    readonly workflow_name?: string | null;
+    readonly head_branch?: string | null;
+    readonly head_sha?: string;
+    readonly html_url?: string | null;
+    readonly conclusion?: string | null;
+    readonly steps?: readonly { readonly name: string; readonly conclusion?: string | null }[];
+}
+
+// A `Job Hook` delivery, narrowed the same way.
+interface GitlabJobHook {
+    readonly build_id: number;
+    readonly pipeline_id: number;
+    readonly build_name: string;
+    readonly build_status: string;
+    readonly build_allow_failure?: boolean;
+    readonly build_failure_reason?: string;
+    readonly ref: string;
+    readonly tag?: boolean;
+    readonly sha?: string;
+    readonly project: { readonly path_with_namespace: string; readonly web_url?: string };
+}
+
+// A job that failed, as main's fix agent hears of it; undefined for any other phase or outcome, and for a GitLab job
+// allowed to fail, which fails nothing.
+const githubFailedJob = (job: GithubJob): FailedJob | undefined => {
+    if (job.conclusion === undefined || job.conclusion === null || githubStatus("completed", job.conclusion) !== "failed") {
+        return undefined;
+    }
+    return {
+        runId: job.run_id,
+        jobId: job.id,
+        name: job.name,
+        branch: job.head_branch ?? "",
+        workflow: job.workflow_name ?? undefined,
+        sha: job.head_sha,
+        url: job.html_url ?? undefined,
+        step: job.steps?.find((step) => step.conclusion === "failure")?.name,
+    };
+};
+
+const gitlabFailedJob = (hook: GitlabJobHook): FailedJob | undefined =>
+    hook.build_status !== "failed" || hook.build_allow_failure === true || hook.tag === true
+        ? undefined
+        : {
+              runId: hook.pipeline_id,
+              jobId: hook.build_id,
+              name: hook.build_name,
+              branch: hook.ref,
+              sha: hook.sha,
+              url: hook.project.web_url === undefined ? undefined : `${hook.project.web_url}/-/jobs/${hook.build_id}`,
+              reason: hook.build_failure_reason,
+          };
 
 export const createCiWebhookRoute =
     (services: Services, fetchFn: FetchFn = fetch) =>
@@ -43,17 +113,28 @@ export const createCiWebhookRoute =
             return c.json({ error: "invalid payload" }, 400);
         }
 
-        // projectPath plus a run normalizer; undefined for a ping, an in-progress phase, or an unconsumed event.
+        // projectPath plus a run normalizer or a failed job; undefined for a ping, an in-progress phase, or an unconsumed
+        // event.
         let projectPath: string | undefined;
         let author = { id: host, name: host };
         let toRun: ((project: { repo: string; project: string }) => PipelineRun) | undefined;
+        let failedJob: FailedJob | undefined;
         if (host === "github") {
             const delivery = payload as GithubDelivery;
-            if (c.req.header("x-github-event") === "workflow_run" && delivery.action === "completed" && delivery.workflow_run !== undefined) {
+            if (c.req.header("x-github-event") === "workflow_job" && delivery.action === "completed" && delivery.workflow_job !== undefined) {
+                projectPath = delivery.repository?.full_name;
+                failedJob = githubFailedJob(delivery.workflow_job);
+            } else if (c.req.header("x-github-event") === "workflow_run" && delivery.action === "completed" && delivery.workflow_run !== undefined) {
                 const run = delivery.workflow_run;
                 projectPath = delivery.repository?.full_name;
                 author = run.actor?.login !== undefined ? { id: run.actor.login, name: run.actor.login } : author;
                 toRun = (project) => githubRun(project, run);
+            }
+        } else if (c.req.header("x-gitlab-event") === "Job Hook") {
+            const delivery = payload as Partial<GitlabJobHook>;
+            if (delivery.project !== undefined && typeof delivery.build_id === "number" && typeof delivery.pipeline_id === "number") {
+                projectPath = delivery.project.path_with_namespace;
+                failedJob = gitlabFailedJob(delivery as GitlabJobHook);
             }
         } else {
             const delivery = payload as Partial<GitlabPipelineHook>;
@@ -73,15 +154,26 @@ export const createCiWebhookRoute =
                 toRun = (project) => gitlabHookRun(project, delivery as GitlabPipelineHook);
             }
         }
-        if (projectPath === undefined || toRun === undefined) {
+        if (projectPath === undefined || (toRun === undefined && failedJob === undefined)) {
             return c.json({ ok: true, ignored: true });
         }
 
         const wanted = projectPath.toLowerCase();
-        const project = (await ciProjects(services)).find(
+        const project: CiProject | undefined = (await ciProjects(services)).find(
             (candidate) => candidate.account.provider === host && candidate.project.toLowerCase() === wanted,
         );
         if (project === undefined) {
+            return c.json({ ok: true, ignored: true });
+        }
+        if (failedJob !== undefined) {
+            // Off the delivery's clock: reading the job's log and starting or telling the fix agent takes a while.
+            const job = failedJob;
+            void jobFailed(services, project, job, fetchFn).catch((error: unknown) =>
+                services.logger.warn({ err: error, repo: project.repo, jobId: job.jobId }, "ci repair: the failed job could not be handled"),
+            );
+            return c.json({ ok: true });
+        }
+        if (toRun === undefined) {
             return c.json({ ok: true, ignored: true });
         }
 
@@ -96,6 +188,6 @@ export const createCiWebhookRoute =
         services.ciRuns.upsert(run);
         // The delivery is the only moment the daemon knows a run ended; without this an open board waits out its poll.
         publishRuntimeChange("ci");
-        await dispatchCiRun(services, run, author);
+        await dispatchCiRun(services, run, author, fetchFn);
         return c.json({ ok: true });
     };

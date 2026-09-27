@@ -8,9 +8,9 @@ const kinds = [
 ];
 
 describe(`a runner's row`, () => {
-    test(`names the kinds sent there in words, the check after landing last, and nothing for a runner nothing goes to`, () => {
-        const offload = { commands: { "bun-test": `runner-omen`, "my-build": `runner-omen`, vitest: `runner-rog` }, landCheck: `runner-omen` };
-        expect(sentTo(`runner-omen`, offload, kinds)).toEqual([`Test runs (bun test)`, `my-build`, `Check after landing`]);
+    test(`names the kinds sent there in words, and nothing for a runner nothing goes to`, () => {
+        const offload = { commands: { "bun-test": `runner-omen`, "my-build": `runner-omen`, vitest: `runner-rog` } };
+        expect(sentTo(`runner-omen`, offload, kinds)).toEqual([`Test runs (bun test)`, `my-build`]);
         expect(sentTo(`runner-other`, offload, kinds)).toEqual([]);
         expect(sentTo(`runner-omen`, undefined, kinds)).toEqual([]);
     });

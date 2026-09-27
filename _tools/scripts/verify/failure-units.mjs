@@ -199,7 +199,7 @@ export const judgeUnits = (current, known) => {
     return { mine, standing };
 };
 
-// A turn's units against the land verdict for its base: `held` are its own, `unsure` fall in a task a truncated verdict cut.
+// Units measured now against a recorded verdict for their base: `held` are new, `unsure` fall in a task a truncated verdict cut.
 export const againstBaseline = (current, verdict) => {
     const { mine, standing } = judgeUnits(current, verdict?.status === "failed" ? (verdict.failures ?? []) : []);
     const cut = new Set(verdict?.truncated === true ? (verdict.failedTasks ?? []) : []);

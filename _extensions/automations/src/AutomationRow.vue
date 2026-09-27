@@ -44,6 +44,17 @@ const listenerLabel = (fires: Extract<Trigger, { kind: `listener` }>): string =>
         ...(fires.mentioned === true ? [`mentions`] : []),
     ].join(` · `);
 };
+// A workspace moment by name. The two retired ones (the edges of the check that ran after every land) say so, since an
+// automation still naming one never fires, and reading it as "Work lands" would promise that it does.
+const workspaceWhen = (event: Extract<Trigger, { kind: `workspace` }>[`event`]): string => {
+    if (event === `deps.broken`) {
+        return t(`automationRow.checksBreakRetired`);
+    }
+    if (event === `deps.fixed`) {
+        return t(`automationRow.checksRecoverRetired`);
+    }
+    return event === `turn.settled` ? `Turn settles` : `Work lands`;
+};
 const triggerLabel = computed<string>(() => {
     const fires = trigger.value;
     if (fires.kind === `schedule`) {
@@ -59,7 +70,7 @@ const triggerLabel = computed<string>(() => {
         return `Webhook`;
     }
     if (fires.kind === `workspace`) {
-        const when = fires.event === `turn.settled` ? `Turn settles` : `Work lands`;
+        const when = workspaceWhen(fires.event);
         return fires.repo !== undefined ? `${when} · ${fires.repo}` : when;
     }
     return listenerLabel(fires);

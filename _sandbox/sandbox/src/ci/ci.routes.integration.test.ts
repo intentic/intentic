@@ -13,6 +13,7 @@ import { conversationsDbPath, openConversationsDb } from "../store/conversations
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { OrpcContext } from "../app-env.js";
 import type { Services } from "../composition.js";
+import { fileCiStore } from "./ci-store.js";
 import { createCiRoutes } from "./ci.routes.js";
 import type { FetchFn } from "./providers.js";
 import { createRunsCache } from "./runs-cache.js";
@@ -57,6 +58,8 @@ const harness = async () => {
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,
         ciRuns,
+        // Where main's reds live: a press on a run of a red main is its streak's.
+        ciStore: fileCiStore(join(root, STATE_DIR, "secrets", "ci.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         agents: unstubbed<Services["agents"]>("agents", { list: () => [], listArchived: () => [], clearArchived: async () => {} }),
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
@@ -76,7 +79,7 @@ const harness = async () => {
         String(url).includes("/logs")
             ? new Response("Error: P1001: Can't reach database server at `postgres:5432`")
             : new Response(JSON.stringify(JOBS))) as unknown as FetchFn;
-    return { routes: createCiRoutes(drivenBy(services, wake), fetchFn), started };
+    return { routes: createCiRoutes(drivenBy(services, wake), fetchFn), started, services };
 };
 
 // The complaint this exists for: the turn carried `unattended`, so its own briefing told it nobody had started it, and
@@ -103,4 +106,37 @@ test("the prompt points at the host's API for a job this sandbox cannot run, nev
     expect(prompt).not.toContain("gh run watch");
     // The evidence still rides with it, which is what makes the log tail worth fetching more of.
     expect(prompt).toContain("P1001");
+});
+
+// Main's red has one fix agent: a press on any of its runs continues that one, with its turns back, rather than opening
+// a second conversation on the same red.
+test("a pressed Fix on a run of a red main continues the streak's one fix agent, with its turns back", async () => {
+    const { routes, started, services } = await harness();
+    await services.ciStore.red("web", "main", () => ({
+        since: 1,
+        findings: [{ id: "f", source: "CI", text: "onboarding", recheckable: true }],
+        decisions: [
+            {
+                kind: "spent",
+                conversationId: "ci-fix-web-40",
+                at: 2,
+                detail: "its fix agent had its 3 turns and main is still red: main's red waits for you.",
+            },
+        ],
+        firstRunId: 40,
+        runId: RUN_ID,
+        count: 2,
+        workflows: { CI: RUN_ID },
+        heard: ["40/6", "41/7"],
+        turns: 3,
+        changed: false,
+    }));
+
+    const outcome = await call(routes.fix, { repo: "web", runId: RUN_ID }, { context });
+
+    expect(outcome.conversationId).toBe("ci-fix-web-40");
+    await waitFor(() => expect(started.map(({ conversationId }) => conversationId)).toEqual(["ci-fix-web-40"]), SETTLES);
+    const red = (await services.ciStore.reds())["web\nmain"];
+    expect(red?.turns).toBe(0);
+    expect(red?.decisions.at(-1)).toMatchObject({ kind: "fix-up", conversationId: "ci-fix-web-40" });
 });

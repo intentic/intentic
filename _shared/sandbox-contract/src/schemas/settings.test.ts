@@ -48,15 +48,16 @@ describe(`where a command lives`, () => {
         expect(file([{ when: `push`, run: `pnpm verify:push` }])).toBe(false);
     });
 
-    test(`a land check is one per repository and narrows by no path`, () => {
+    // `land` is retired like `turn`: it runs nothing, so a file written while it ran reads however it spelled one.
+    test(`a retired land check still reads, however many a file names and whatever paths it gives`, () => {
         const file = (checks: unknown[]) => RepoChecksFileSchema.safeParse({ checks }).success;
         expect(
             file([
                 { when: `land`, run: `pnpm verify` },
                 { when: `land`, run: `pnpm test` },
             ]),
-        ).toBe(false);
-        expect(file([{ when: `land`, run: `pnpm verify`, paths: [`src/**`] }])).toBe(false);
+        ).toBe(true);
+        expect(file([{ when: `land`, run: `pnpm verify`, paths: [`src/**`] }])).toBe(true);
     });
 });
 

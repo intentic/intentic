@@ -1,8 +1,7 @@
 #!/usr/bin/env node
-// ASKING THE CHECKS WHAT THEY SAID BEFORE. Every run that holds an actor to its OWN findings (the check after a land
-// against the commit the land departed from, land-tiers.mjs; verify-push against the commit the push is built on) needs
-// the same two things: a check's verdicts as data rather than output, and a throwaway worktree at some earlier commit
-// to run them in again. This is that pair.
+// ASKING THE CHECKS WHAT THEY SAID BEFORE. A run that holds an actor to its OWN findings (verify-push, against the commit
+// the push is built on) needs two things: a check's verdicts as data rather than output, and a throwaway worktree at
+// that earlier commit to run them in again. This is that pair.
 // turn-findings.mjs reads the two answers against each other; nothing here interprets them.
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, rmSync, symlinkSync } from "node:fs";

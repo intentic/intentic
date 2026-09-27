@@ -1,6 +1,7 @@
 // ci: pipeline runs on the workspace repos' github/gitlab remotes
 import { z } from "zod";
 import { AgentRunPickSchema } from "./agent.js";
+import { RedDecisionSchema } from "./workspace/push-checks.js";
 // The daemon maps each workspace repo to its CI project via a connected github/gitlab capability, registers a webhook
 // to fire `ci` listener automations instantly, and serves the Pipelines rail from a webhook-freshened, poll-backfilled
 // cache. `host` names which provider API serves a repo; the listener provider is always `ci`, since a trigger narrows
@@ -39,6 +40,9 @@ export const PipelineRunSchema = z.object({
         .describe(
             "What set it off, in the forge's own word rather than flattened into a shared vocabulary, because the forge's word is the precise one.",
         ),
+    // github's workflow name: several workflows run on one push there, and one passing says nothing of another. Absent on
+    // gitlab, where a commit's pipeline is the project's one.
+    workflow: z.string().optional().describe("Which workflow it is a run of, where a push starts several. Absent where a commit has one pipeline."),
     branch: z.string().describe("Which branch."),
     sha: z.string().describe("Which commit."),
     status: PipelineStatusSchema.describe(
@@ -108,10 +112,31 @@ export type CiRepo = z.infer<typeof CiRepoSchema>;
 // Fallback poll interval when a repo's webhook couldn't register; lives here since both the poller and the automation
 // editor need it to tell the owner what a `hookWarning` actually costs (minutes' delay, not the feature).
 export const CI_POLL_INTERVAL_MS = 2 * 60_000;
+// Main's CI while it is red, as the daemon's one fix agent on it sees it (ci/main-fixer.ts): from the first job that
+// failed until a later run of every workflow that failed on it passes, whatever else failed along the way.
+export const CiMainRedSchema = z.object({
+    repo: z.string().describe("Which workspace repository."),
+    branch: z.string().describe("Which main-line branch."),
+    since: z.number().describe("When its first job failed, in milliseconds."),
+    runId: z.number().describe("The newest run that failed on it."),
+    jobs: z.array(z.string()).describe("The jobs failing on it now, by name: the newest red run's failures, and any that failed since."),
+    fixer: z
+        .string()
+        .optional()
+        .describe("The one conversation working on it, which every failure goes to until the branch is green. Absent while nobody is on it."),
+    decision: RedDecisionSchema.optional().describe(
+        "The latest thing decided about it: `fix-up` while the fix agent has it, `spent` once it waits for you (its turns are used up, or it stopped without a fix), `reported` when repairs are off.",
+    ),
+});
+export type CiMainRed = z.infer<typeof CiMainRedSchema>;
 export const CiRunsResponseSchema = z.object({
     repos: z.array(CiRepoSchema).describe("Which workspace repositories are wired to a forge, and how each one's notifications are set up."),
     // Newest first, across all mapped repos.
     runs: z.array(PipelineRunSchema).describe("Runs across all of them, newest first."),
+    reds: z
+        .array(CiMainRedSchema)
+        .optional()
+        .describe("Every main-line branch red right now, with the fix agent on it. Absent from a daemon that keeps none."),
 });
 export type CiRunsResponse = z.infer<typeof CiRunsResponseSchema>;
 // Re-resolves repo → project + token on every call, so a stale card can't act on a mapping the workspace no longer has.

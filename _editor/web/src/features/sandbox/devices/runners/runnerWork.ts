@@ -6,16 +6,13 @@ import { kindTitle } from "../../agent-settings/behaviour/offloadRows";
 // What a runner's row says about the work this sandbox sends it (settings `offload`): which kinds go there, and how the
 // last offloaded run there ended. Empty for a runner nothing is sent to, which then reads as it always did.
 
-// The kinds sent to `runner`, in words, with the check after landing last.
-export const sentTo = (runner: string, offload: SandboxSettings[`offload`] | undefined, kinds: readonly OffloadKind[]): string[] => {
-    if (offload === undefined) {
-        return [];
-    }
-    const titled = Object.entries(offload.commands)
-        .filter(([, target]) => target === runner)
-        .map(([id]) => kindTitle(kinds.find((kind) => kind.id === id) ?? { id, pattern: `` }));
-    return offload.landCheck === runner ? [...titled, t(`sandbox.agentOffload.landCheck`)] : titled;
-};
+// The kinds sent to `runner`, in words.
+export const sentTo = (runner: string, offload: SandboxSettings[`offload`] | undefined, kinds: readonly OffloadKind[]): string[] =>
+    offload === undefined
+        ? []
+        : Object.entries(offload.commands)
+              .filter(([, target]) => target === runner)
+              .map(([id]) => kindTitle(kinds.find((kind) => kind.id === id) ?? { id, pattern: `` }));
 
 // The newest run offloaded to `runner`, as one line: what it was and how it ended, or that it is still going.
 export const lastRun = (runner: string, runs: readonly OffloadRecord[]): string | undefined => {

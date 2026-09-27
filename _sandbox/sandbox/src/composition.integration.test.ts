@@ -34,7 +34,6 @@ test("the slices are built over the configured roots", () => {
 test("the late seams answer once composing has returned", async () => {
     expect(Object.keys(await services.providerReadiness()).sort()).toEqual(services.providerModules.map((module) => module.id).sort());
     expect(Object.keys(services.providerCatalogs).sort()).toEqual(services.providerModules.map((module) => module.id).sort());
-    expect(services.landCheck.current()).toBeUndefined();
     expect(await services.hostReach([])).toBeUndefined();
     expect(await services.webextReach([])).toBeUndefined();
     expect(services.outboxStreamFor(undefined)).toBeUndefined();

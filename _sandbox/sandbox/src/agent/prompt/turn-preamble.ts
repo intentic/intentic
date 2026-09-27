@@ -8,7 +8,7 @@ import {
     LANDING_CHECKS_NOTE_TITLE,
     LEGACY_TURN_ENDING_NOTE_HEADER,
     LEGACY_TURN_ENDING_NOTE_TITLE,
-} from "../../workspace/deps/mainline-note.js";
+} from "./checks-note.js";
 import { IQ_SEARCH_INSTRUCTION_HEADER } from "./iq-search-instruction.js";
 import { TURN_CONTEXT_NOTE_HEADER, TURN_CONTEXT_NOTE_TITLE } from "../run/turn/turn-context.js";
 import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";

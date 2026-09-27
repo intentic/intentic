@@ -1,5 +1,5 @@
 import { type Persona, type TurnBriefingNoteId, type TurnNote, TURN_BRIEFING_FIXTURES, TURN_BRIEFING_NOTES } from "@intentic/sandbox-contract";
-import { LANDING_CHECKS_NOTE_TITLE } from "../../workspace/deps/mainline-note.js";
+import { LANDING_CHECKS_NOTE_TITLE } from "./checks-note.js";
 import { SETUP_NOTICE_TITLE, STALE_NOTICE_TITLE } from "../../workspace/layout/workspace-setup.js";
 import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
 import { HANDOFF_STATE_NOTE_TITLE } from "./handoff-state.js";

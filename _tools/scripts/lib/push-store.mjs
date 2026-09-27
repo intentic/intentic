@@ -1,9 +1,9 @@
-// THE ONE STORE A PUSH AND A LAND CHECK LEAVE IN A REPOSITORY'S GIT COMMON DIR (`intentic-push-report.json`), shared by
-// every worktree: what each push found and let through and each recheck measured (verify/push-report.mjs), and the
-// verdict each measured tree got (lib/tree-verdict.mjs: `pnpm verify` after a land, a push check, a refusal). Once two
-// files (`intentic-push-verified` held the verdicts), which the push read twice and the sandbox read half of. A JSON
-// array, newest first; each entry carries its `kind`. The sandbox files the `push` and `recheck` entries and reads past
-// the rest.
+// THE ONE STORE THE PUSH CHECK AND `pnpm verify` LEAVE IN A REPOSITORY'S GIT COMMON DIR (`intentic-push-report.json`),
+// shared by every worktree: what each push found and let through and each recheck measured (verify/push-report.mjs), and
+// the verdict each measured tree got (lib/tree-verdict.mjs: `pnpm verify`, a push check, a refusal). Once two files
+// (`intentic-push-verified` held the verdicts), which the push read twice and the sandbox read half of. A JSON array,
+// newest first, each entry carrying its `kind`. The sandbox files the `push` and `recheck` entries and reads past the
+// rest.
 import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { git } from "./git.mjs";
@@ -13,7 +13,8 @@ export const STORE_FILE = "intentic-push-report.json";
 export const LEGACY_VERDICT_FILE = "intentic-push-verified";
 // Enough push and recheck entries for the pushes between two times the sandbox reads the file, minutes apart.
 export const REPORTS_KEPT = 10;
-// A day of lands, each writing one `verify` verdict green or red, plus the pushes between them.
+// More verdicts than a day of `pnpm verify` runs and push checks writes. None is trusted past half a day
+// (tree-verdict.mjs, VERDICT_TTL_MS).
 export const VERDICTS_KEPT = 40;
 
 const commonDir = (root) => git(root, "rev-parse", "--path-format=absolute", "--git-common-dir")?.trim();

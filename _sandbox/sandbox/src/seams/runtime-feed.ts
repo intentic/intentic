@@ -26,10 +26,10 @@ const THROTTLE_MS: Record<RuntimeDomain, number> = {
     ci: 250,
     // Update-all walks engines back to back; each start/end pair folds into one frame.
     engines: 250,
-    // A verify fan-out or a turn's start and end log in bursts; each read re-scans the whole log.
+    // A turn's start and end log in bursts; each read re-scans the whole log.
     activity: 1000,
-    // A check is minutes long; this only folds a land's queue-and-start burst into one frame.
-    mainline: 500,
+    // A push files its report once it reaches the remote; this folds a recheck's burst of resolutions into one frame.
+    pushes: 500,
 };
 
 const subscribers = new Set<(domains: RuntimeDomain[]) => void>();

@@ -15,8 +15,8 @@ export type SystemPromptMode = z.infer<typeof SystemPromptModeSchema>;
 export const BuiltinPromptSchema = z.object({ base: z.enum(["intentic", "claude"]) });
 // Rules: "at this moment, if this is true, do this". The owner's rules decide (land, hold, version); every command a
 // moment runs is a repository's own check (`<repo>/.intentic/checks.json`), compiled into this same table by the daemon,
-// so no command lives in settings. Nothing verifies inside a turn: the whole-tree check runs after work lands and never
-// holds anything (schemas/workspace/mainline.ts).
+// so no command lives in settings. Nothing verifies inside a turn or after a land: CI checks what the owner pushes, and
+// nothing here holds anything (schemas/workspace/push-checks.ts).
 export const RuleMomentSchema = z.enum([
     // A command here runs on the just-written file (`{file}` is its path); the cheapest moment to catch a defect.
     "file.edited",
@@ -436,30 +436,26 @@ export const SandboxSettingsSchema = z.object({
     ),
     // Worth it since the container is recreated on every update or environment approval — otherwise approving a
     // Dockerfile change costs the run that asked for it.
-    // What happens to breakage found after the work that caused it has left the turn. A land that turns the main tree's own
-    // check red waits for the lands queued behind it to be checked too, then goes back to the conversation that landed it
-    // while that one still has it in mind, or to a fresh conversation when nobody can be named or the one named has gone
-    // cold; main's CI staying red on one failure gets a fix agent once pushes go quiet, with a fleet failure re-run instead.
-    // Off, all of it is only reported.
+    // What happens when main's CI goes red (ci/main-fixer.ts): its first failed job starts one fix agent, which is sent
+    // every later failure on main until main is green, within a few turns, and a failure on the CI fleet itself is re-run
+    // once instead. Off, it is only reported.
     autoRepair: z
         .boolean()
         .default(true)
         .describe(
-            "Whether breakage found after the work left its turn is repaired without asking. A land that turns the main tree's check red is repaired once the work queued behind it has been checked too: by the conversation that landed it while it still has the work in mind, otherwise by a fresh conversation handed the failures and the suspects' changes. Main's CI staying red on the same failure gets a fix agent once pushes go quiet, and a failure on the CI fleet itself is re-run once instead. Off, all of it is only reported.",
+            "Whether main's CI going red is repaired without asking. The first job that fails on main starts one fix agent, without waiting for the rest of the run, and every later failure on main goes to that same agent until a run passes. It gets a few turns; when they are spent, or it finishes without changing anything (a failure that is not in the code), the red waits for you. A failure on the CI fleet itself is re-run once instead. Off, all of it is only reported.",
         ),
     // Where heavy work runs: a runner (the same image, on one of the owner's machines) instead of this sandbox. Keyed by
-    // the heavy-command rule an agent's command matched (system/resources/heavy-commands.ts), and one entry for the
-    // check after landing, each naming a runner id. A runner that is offline, outdated or full hands the work back here,
-    // which the command's output says. Never pushed to a runner itself (portability/definition.ts), which must not pass
-    // work on again.
+    // the heavy-command rule an agent's command matched (system/resources/heavy-commands.ts), each naming a runner id. A
+    // runner that is offline, outdated or full hands the work back here, which the command's output says. Never pushed
+    // to a runner itself (portability/definition.ts), which must not pass work on again.
     offload: z
         .object({
             commands: z.record(z.string().min(1), z.string().min(1)).default({}),
-            landCheck: z.string().min(1).optional(),
         })
         .default({ commands: {} })
         .describe(
-            "Which heavy work runs on a runner on one of your machines instead of this sandbox: agents' commands by the kind the heavy-command rules sort them into (tests, typechecks, verify…), and the check after landing. The code travels as it stands, uncommitted work included; the output streams back, and any file the command changed comes back with it. A machine that is offline, outdated or busy hands the work back to this sandbox, and the output says so.",
+            "Which heavy work runs on a runner on one of your machines instead of this sandbox: agents' commands by the kind the heavy-command rules sort them into (tests, typechecks, verify…). The code travels as it stands, uncommitted work included; the output streams back, and any file the command changed comes back with it. A machine that is offline, outdated or busy hands the work back to this sandbox, and the output says so.",
         ),
     autoResumeOnRestart: z
         .boolean()
@@ -665,9 +661,9 @@ export type SavingsReport = z.infer<typeof SavingsReportSchema>;
 // spelling for the daemon that reads it, the screen that names it and the demo that mimics it.
 export const REPO_CHECKS_FILE = `${STATE_DIR}/checks.json`;
 
-// Named for the occasion as a repository would say it: `edit` is `file.edited`, and `land` is the daemon's run over the
-// main tree after every land (rules/repo-checks.ts maps them). `turn` is retired: nothing runs when a turn ends any more,
-// and a declaration naming it still reads but runs nothing. No check refuses a land, a commit or a push.
+// Named for the occasion as a repository would say it: `edit` is `file.edited` (rules/repo-checks.ts maps it). `turn`
+// and `land` are retired: nothing runs when a turn ends or after work lands any more (CI checks what the owner pushes),
+// and a declaration naming either still reads but runs nothing. No check refuses a land, a commit or a push.
 // `edit` runs on one file (`{file}`) and its output rides back in the edit's own response, so a command declared there is
 // paid per edit and has to take the file.
 export const RepoCheckMomentSchema = z.enum(["edit", "turn", "land"]);
@@ -675,7 +671,7 @@ export type RepoCheckMoment = z.infer<typeof RepoCheckMomentSchema>;
 
 export const RepoCheckSchema = z.object({
     when: RepoCheckMomentSchema.describe(
-        "When to run it: `edit` on each file as it is written (`{file}` is its path), `land` on the main tree after finished work lands (absent, the package's own verify or test script runs there). `turn` is retired and runs nothing: checks no longer run while a conversation works.",
+        "When to run it: `edit` on each file as it is written (`{file}` is its path). `turn` and `land` are retired and run nothing: checks no longer run while a conversation works or after its work lands, since CI checks what is pushed.",
     ),
     run: z.string().min(1).max(500).describe("The command, run in this repository's own directory, so it reads as it would in a terminal there."),
     label: z.string().min(1).max(80).optional().describe("What to call it on screen. Absent names it after the command."),
@@ -695,11 +691,7 @@ export const RepoChecksFileSchema = z.object({
     checks: z
         .array(RepoCheckSchema)
         .max(10)
-        .default([])
-        // One land check per repository: it is THE verdict on the main tree the push hook replays, not one of several.
-        .refine((checks) => checks.filter((check) => check.when === "land").length <= 1, { message: "a repository declares at most one land check" })
-        // A land checks the whole tree an install settled, not a change, so there is nothing for a glob to narrow.
-        .refine((checks) => checks.every((check) => check.when !== "land" || check.paths === undefined), { message: "a land check takes no paths" }),
+        .default([]),
 });
 export type RepoChecksFile = z.infer<typeof RepoChecksFileSchema>;
 
@@ -711,7 +703,7 @@ export const RepoChecksSummarySchema = z.object({
     fired: z
         .array(z.number().nullable())
         .describe(
-            "When each declared check last reported something, in the file's order, as epoch milliseconds; null for one that never has, or for the land check, whose verdict the activity feed records instead.",
+            "When each declared check last reported something, in the file's order, as epoch milliseconds; null for one that never has, or for a retired one, which runs nothing.",
         ),
     adopted: z
         .boolean()
@@ -722,16 +714,10 @@ export const RepoChecksSummarySchema = z.object({
             "Whether the declaration changed since it was adopted, which holds it until the owner looks again. True only for a repository that was adopted before.",
         ),
     error: z.string().optional().describe("Why the file could not be read, when it exists but does not parse. The checks list is empty in that case."),
-    landDefault: z
-        .string()
-        .optional()
-        .describe(
-            "What runs on the main tree after a land when the file declares no `land` check: the package's own verify or test script. Absent when the repository has neither.",
-        ),
 });
 export type RepoChecksSummary = z.infer<typeof RepoChecksSummarySchema>;
 export const RepoChecksListSchema = z.object({
-    repos: z.array(RepoChecksSummarySchema).describe("Every repository that declares checks or has a package check that runs after a land, in id order."),
+    repos: z.array(RepoChecksSummarySchema).describe("Every repository that declares checks, in id order."),
 });
 export type RepoChecksList = z.infer<typeof RepoChecksListSchema>;
 export const RepoChecksAdoptSchema = z.object({

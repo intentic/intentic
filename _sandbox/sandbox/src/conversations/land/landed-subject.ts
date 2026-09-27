@@ -76,7 +76,7 @@ const breakingNote = (removed: readonly string[], written: string, wantsNote: bo
 
 // The trailers the conversation's last word ended with, each a declaration it made on purpose: a `Test-Note:` for a test
 // it weakened (the assertion ratchet reads it), and `Allow: <check> — <reason>` lines for exceptions a check should
-// grant its change (land-tiers.mjs and verify-push.mjs read them). Copied into the landed commit, where those readers look.
+// grant its change (verify-push.mjs reads them). Copied into the landed commit, where those readers look.
 export const conversationTrailers = async (
     services: Services,
     entry: PersistedAgent,

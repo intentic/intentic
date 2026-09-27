@@ -29,6 +29,16 @@ import { drivenBy } from "../testing.js";
 const { published } = { published: [] as string[] };
 jest.mock("../seams/runtime-feed.js", () => ({ publishRuntimeChange: (...domains: string[]) => published.push(...domains) }));
 
+// What reaches main's fix agent, recorded at its door: what it does with a failure is main-fixer.integration.test.ts's.
+const heardJobs: unknown[] = [];
+jest.mock("./main-fixer.js", () => ({
+    jobFailed: async (_services: unknown, _project: unknown, job: unknown) => {
+        heardJobs.push(job);
+        return "code";
+    },
+    runFinished: async () => {},
+}));
+
 // The receiver touches ciStore/ciRuns/workspace/capabilities plus the listener dispatch path
 // (automations/activity/logger); `unstubbed` keeps the fake that small: the listeners.integration.test.ts convention.
 const harness = async (automationId: string, narrow: { eventType?: string; branch?: string; channelId?: string } = {}) => {
@@ -242,4 +252,112 @@ test("a gitlab delivery authenticates by token echo and normalizes the Pipeline 
     await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain("pipeline_succeeded");
     expect(prompts[0]).toContain("gitlab.example.com/group/app/-/pipelines/42");
+});
+
+const workflowJob = (conclusion: string | null, action = "completed") => ({
+    action,
+    workflow_job: {
+        id: 70,
+        run_id: 7,
+        name: "verify-core",
+        workflow_name: "CI",
+        head_branch: "main",
+        head_sha: "abc1234def",
+        html_url: "https://github.com/acme/web/actions/runs/7/job/70",
+        status: action === "completed" ? "completed" : "in_progress",
+        conclusion,
+        steps: [
+            { name: "Set up job", conclusion: "success" },
+            { name: "Run tests", conclusion: conclusion === "failure" ? "failure" : null },
+        ],
+    },
+    repository: { full_name: "acme/web" },
+});
+
+// The whole point of hearing jobs one by one: the fix agent starts at the first failure, not when the run ends.
+test("a failed job's own delivery reaches main's fix agent at once, with the step that failed it", async () => {
+    const { app, services } = await harness("wh-job");
+    heardJobs.length = 0;
+    const response = await deliver(app, await services.ciStore.secret(), workflowJob("failure"), { "x-github-event": "workflow_job" });
+    expect(response.status).toBe(200);
+    await waitFor(() => expect(heardJobs).toHaveLength(1), SETTLES);
+    expect(heardJobs[0]).toEqual({
+        runId: 7,
+        jobId: 70,
+        name: "verify-core",
+        branch: "main",
+        workflow: "CI",
+        sha: "abc1234def",
+        url: "https://github.com/acme/web/actions/runs/7/job/70",
+        step: "Run tests",
+    });
+    // A job is no run: nothing is announced to automations until the run itself ends.
+    expect(await services.ciStore.lastConclusion("web", "main")).toBeUndefined();
+});
+
+test("a job that passed, was cancelled, or is still going is acknowledged and dropped", async () => {
+    const { app, services } = await harness("wh-job-ignored");
+    heardJobs.length = 0;
+    const secret = await services.ciStore.secret();
+    for (const payload of [workflowJob("success"), workflowJob("cancelled"), workflowJob(null, "in_progress")]) {
+        const response = await deliver(app, secret, payload, { "x-github-event": "workflow_job" });
+        expect(((await response.json()) as { ignored?: boolean }).ignored).toBe(true);
+    }
+    expect(heardJobs).toEqual([]);
+});
+
+test("a gitlab Job Hook's failure reaches the fix agent with gitlab's own reason; a job allowed to fail is none", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ci-webhook-gl-job-"));
+    const dir = join(root, "app");
+    await mkdir(dir, { recursive: true });
+    await defaultGit(dir, ["init", "--quiet"]);
+    await defaultGit(dir, ["remote", "add", "origin", "git@gitlab.example.com:group/app.git"]);
+    const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "config", "capabilities.json"));
+    await capabilities.upsert({ id: "gitlab", kind: "cli", config: { provider: "gitlab", url: "https://gitlab.example.com", token: "T" } });
+    const services = unstubbed<Services>("services", {
+        workspace: unstubbed<Services["workspace"]>("workspace", { root }),
+        capabilities,
+        ciStore: fileCiStore(join(root, `${STATE_DIR}`, "secrets", "ci.json")),
+        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
+    });
+    const app = new Hono();
+    app.post("/ci/webhook/:host", createCiWebhookRoute(services, (async () => new Response("[]")) as FetchFn));
+    const hook = (over: Record<string, unknown>) => ({
+        object_kind: "build",
+        build_id: 300,
+        pipeline_id: 42,
+        build_name: "test",
+        build_status: "failed",
+        build_allow_failure: false,
+        build_failure_reason: "script_failure",
+        ref: "main",
+        tag: false,
+        sha: "abc",
+        project: { path_with_namespace: "group/app", web_url: "https://gitlab.example.com/group/app" },
+        ...over,
+    });
+    const send = async (payload: unknown) =>
+        app.request("/ci/webhook/gitlab", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-gitlab-event": "Job Hook", "x-gitlab-token": await services.ciStore.secret() },
+            body: JSON.stringify(payload),
+        });
+    heardJobs.length = 0;
+
+    expect((await send(hook({}))).status).toBe(200);
+    await waitFor(() => expect(heardJobs).toHaveLength(1), SETTLES);
+    expect(heardJobs[0]).toEqual({
+        runId: 42,
+        jobId: 300,
+        name: "test",
+        branch: "main",
+        sha: "abc",
+        url: "https://gitlab.example.com/group/app/-/jobs/300",
+        reason: "script_failure",
+    });
+    const allowed = await send(hook({ build_allow_failure: true }));
+    expect(((await allowed.json()) as { ignored?: boolean }).ignored).toBe(true);
+    const passed = await send(hook({ build_status: "success" }));
+    expect(((await passed.json()) as { ignored?: boolean }).ignored).toBe(true);
+    expect(heardJobs).toHaveLength(1);
 });

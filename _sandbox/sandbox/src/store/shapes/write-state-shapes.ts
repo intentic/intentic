@@ -10,7 +10,7 @@ import { ANYTHING, typeFromSchema } from "./json-schema-type.js";
 import { beforeHorizon, freeze, type FrozenShape, isRelease, type Release, type Shapes } from "./shape-releases.js";
 import { type Definition, stateModules } from "./state-modules.js";
 
-// The shape generator, two modes. `--freeze` (the land check's fixer, after every land that touched daemon or contract
+// The shape generator, two modes. `--freeze` (the worktree fixer, before every land that touched daemon or contract
 // source) writes the state registry (src/bootstrap/state-registry.ts, every document and boot step the source defines,
 // which the boot step and the pre-flight read) and records each document's current shape in state-shapes.json, the
 // only one of its outputs that is committed. `--checks` (the package's `pretypecheck`) writes the shape checks from that

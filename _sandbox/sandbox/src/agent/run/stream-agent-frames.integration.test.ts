@@ -9,7 +9,7 @@ import { notedFleet } from "../../testing.js";
 import { recordProviderSuccess } from "../providers/provider-health.js";
 import type { TurnInput } from "../../seams/turn-starter.js";
 import type { AgentRequest } from "../providers/agent-request.js";
-import { landingChecksNote } from "../../workspace/deps/mainline-note.js";
+import { LANDING_CHECKS_NOTE } from "../prompt/checks-note.js";
 import { streamAgent } from "./stream-agent.js";
 
 // streamAgent's wiring with a scripted runtime: frames, settled stores, the recorded hold; the matrix is classify-failure.test.ts.
@@ -525,7 +525,7 @@ test("a routed runtime's readings are re-measured, the cache clock dropped, and 
     const stamp = { account: "codex-subscription" };
     expect(frames).toStrictEqual([
         // Planning's own notes, disclosed before the runtime says anything: how to spawn, and what runs after it lands.
-        { kind: "preamble", notes: [{ title: "Spawning subagents", text: expect.any(String) }, landingChecksNote([], false)] },
+        { kind: "preamble", notes: [{ title: "Spawning subagents", text: expect.any(String) }, LANDING_CHECKS_NOTE] },
         { kind: "session", sessionId: "thread-1", ...stamp },
         { kind: "delta", text: "on it" },
         edit,

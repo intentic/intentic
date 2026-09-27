@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // How many workers each `bun test` may fork, and how many typecheck and test tasks may run at once, sized to the memory
-// FREE when the run starts rather than to the machine's size: a sandbox runs several conversations, a local model, a
-// browser and the post-land check side by side, and a run that sized itself to the whole box while half of it was taken
+// FREE when the run starts rather than to the machine's size: a sandbox runs several conversations, a local model and a
+// browser side by side, and a run that sized itself to the whole box while half of it was taken
 // is how one check swapped a 32 GB laptop to a standstill. A bun worker on the web package (jsdom + Vue) climbs to
 // about 3 GiB, one on the daemon stays near 1.4 GiB, the other packages far below, and a run may take half of what is
 // free. Prints the worker count when run; a `TEST_WORKERS` already set wins, so a caller's own value is never

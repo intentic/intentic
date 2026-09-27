@@ -7,11 +7,11 @@ import { daemonFixAttemptDeps, type FixAttemptOutcome, startFixAttempt } from ".
 import type { CiProject } from "./projects.js";
 import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
 
-// One way to put an agent on a failed run, whoever asks: the Pipelines board's Fix press, or the repair gate once main has
-// stayed red on the same failure (repair-gate.ts).
+// One way to put an agent on a failed run, whoever asks: the Pipelines board's Fix press, or main's one fix agent at the
+// first job that fails on a main-line branch (main-fixer.ts).
 
 // Failed-job log tail seeded into a fix conversation: enough to see the error, not to flood the context.
-const FIX_LOG_BYTES = 24_000;
+export const FIX_LOG_BYTES = 24_000;
 const TITLE_MAX = 80;
 const RUNS_PER_PROJECT = 15;
 
@@ -65,11 +65,16 @@ export const ciFailureEvidence = async (project: CiProject, runId: number, logge
 export interface CiFixRequest {
     readonly project: CiProject;
     readonly runId: number;
+    // The failure the attempts are at, which the first wears as its id: the run's own (ciFixConversationId) unless the run
+    // is part of a red streak on main, whose one fix agent every failure goes to.
+    readonly base?: string;
+    // The run, when the caller already read it; looked up otherwise.
+    readonly run?: PipelineRun | undefined;
     readonly evidence: CiFailureEvidence;
     // What the turn carries besides its words: the pick, who pressed, the resume verb.
     readonly turn?: Omit<TurnInput, "prompt" | "conversationId" | "title" | "isolated" | "runRole">;
-    // Somebody pressed Fix, rather than the repair gate starting it: the door a person's words come through, so an archived
-    // attempt it continues reopens.
+    // Somebody pressed Fix, rather than main's fix agent starting by itself: the door a person's words come through, so an
+    // archived attempt it continues reopens.
     readonly pressed?: boolean;
     // Whether a model was picked for this press, which outranks re-running a turn the door kept.
     readonly picked?: boolean;
@@ -90,19 +95,23 @@ const promptOf = (request: CiFixRequest, where: string): string =>
         ...(request.evidence.logs !== "" ? [`--- failed job logs (tails) ---\n${request.evidence.logs}`] : []),
     ].join("\n\n");
 
-// Starts, continues or declines an attempt at a failed run; attempts share an id derived from the run, so the board groups them.
-export const startCiFix = async (services: Services, request: CiFixRequest, fetchFn: FetchFn = fetch): Promise<FixAttemptOutcome> => {
-    const { project, runId } = request;
-    const client = ciClientFor(project.account.provider, fetchFn);
-    // Usually already in the cache, from the view the click came from; a cold daemon re-lists instead.
-    const run: PipelineRun | undefined =
-        (services.ciRuns.sweep() ?? []).find((candidate) => candidate.repo === project.repo && candidate.runId === runId) ??
-        (
-            await client.listRuns(project, RUNS_PER_PROJECT).catch((error: unknown) => {
+// One run of a project: usually already in the cache, from the view a click came from; a cold daemon re-lists instead.
+export const runOf = async (services: Pick<Services, "ciRuns" | "logger">, project: CiProject, runId: number, fetchFn: FetchFn = fetch): Promise<PipelineRun | undefined> =>
+    (services.ciRuns.sweep() ?? []).find((candidate) => candidate.repo === project.repo && candidate.runId === runId) ??
+    (
+        await ciClientFor(project.account.provider, fetchFn)
+            .listRuns(project, RUNS_PER_PROJECT)
+            .catch((error: unknown) => {
                 services.logger.warn({ err: error, repo: project.repo, runId }, "ci fix: the project's runs could not be listed");
                 return [];
             })
-        ).find((candidate) => candidate.runId === runId);
+    ).find((candidate) => candidate.runId === runId);
+
+// Starts, continues or declines an attempt at a failed run; attempts share an id derived from the run (or the streak it is
+// part of), so the board groups them.
+export const startCiFix = async (services: Services, request: CiFixRequest, fetchFn: FetchFn = fetch): Promise<FixAttemptOutcome> => {
+    const { project, runId } = request;
+    const run = request.run ?? (await runOf(services, project, runId, fetchFn));
     const where = run !== undefined ? `on branch ${run.branch} (${run.url})` : `(run ${runId})`;
     // What a CONTINUED attempt is told: the failure is still open, the evidence is already in the conversation.
     const nudge = [
@@ -112,7 +121,7 @@ export const startCiFix = async (services: Services, request: CiFixRequest, fetc
     return startFixAttempt(
         daemonFixAttemptDeps(services, { pressed: request.pressed === true, picked: request.picked === true }),
         {
-            base: ciFixConversationId(project.repo, runId),
+            base: request.base ?? ciFixConversationId(project.repo, runId),
             prompt: promptOf(request, where),
             nudge,
             errands: { prompt: "ci-fix", nudge: "ci-fix-nudge" },

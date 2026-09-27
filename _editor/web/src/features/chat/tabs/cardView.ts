@@ -1,5 +1,5 @@
 import type { IconName } from "@intentic/ui";
-import { type MainlineStatus, type MatchSnippet, providerLabel } from "@intentic/sandbox-contract";
+import { type MatchSnippet, providerLabel } from "@intentic/sandbox-contract";
 import { sessionCategory } from "../../../app/sessionCategory";
 import {
     activityIcon,
@@ -12,8 +12,8 @@ import {
     tileRim,
     turnInFlight,
 } from "../../agents/fleet/agentStatus";
+import { cardProof, type ProofMark } from "../../agents/board/cards/proofSeal";
 import { type CacheCooling, cacheCooling, type WarmMark, warmMark } from "../../agents/fleet/promptCache";
-import { type CardChecks, cardChecks } from "../../agents/mainline/landCheck";
 import { snapshotFingerprint } from "../../agents/fleet/useAgents-registry";
 import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
 import { modelLabelFor } from "../accounts/providerCatalog";
@@ -43,9 +43,8 @@ export interface CardView {
     readonly cooling: CacheCooling | undefined;
     // A hold on the cache outranks the cooling glyph; the open chat's status bar is where it is changed.
     readonly warm: WarmMark | undefined;
-    // What main's own check made of its latest land and what its last turn showed of its work (landCheck.ts): plain
-    // data like everything here, the checking clock included, which the mark itself ticks.
-    readonly checks: CardChecks | undefined;
+    // What its last turn showed of its own work (proofSeal.ts): plain data like everything here.
+    readonly proof: ProofMark | undefined;
     readonly meta: boolean;
 }
 
@@ -97,8 +96,8 @@ const liveOf = (entry: OpenChat): CardView[`live`] => {
 
 // Whether the second line has anything to show; a fresh draft has no numbers, marks or model, so it's asked per card
 // rather than assumed. The standing is not counted here: it wears the card's corner, not this line.
-const hasMeta = (entry: OpenChat, checks: CardChecks | undefined): boolean =>
-    checks !== undefined ||
+const hasMeta = (entry: OpenChat, proof: ProofMark | undefined): boolean =>
+    proof !== undefined ||
     (entry.agent !== undefined && entry.agent.updatedAt > 0) ||
     entry.conversation.unsent.value ||
     originOf(entry.conversation) !== undefined ||
@@ -107,7 +106,7 @@ const hasMeta = (entry: OpenChat, checks: CardChecks | undefined): boolean =>
 
 export interface CardViews {
     /** This card's view model, the held one when its fields are value-equal to the last pass. */
-    readonly of: (entry: OpenChat, snippet: MatchSnippet | undefined, now: number, mainline?: MainlineStatus) => CardView;
+    readonly of: (entry: OpenChat, snippet: MatchSnippet | undefined, now: number) => CardView;
     /** Drops every card no longer drawn; call once per pass, after building them all. */
     readonly prune: (alive: ReadonlySet<string>) => void;
 }
@@ -121,9 +120,9 @@ export interface CardViews {
 export const createCardViews = (): CardViews => {
     const held = new Map<string, { print: string; view: CardView }>();
     return {
-        of: (entry, snippet, now, mainline) => {
-            // Only a roster agent has work that landed or a turn that proved anything; an unfiled chat has neither.
-            const checks = entry.agent === undefined ? undefined : cardChecks(entry.agent, mainline, turnInFlight(entry.agent));
+        of: (entry, snippet, now) => {
+            // Only a roster agent has a turn that proved anything; an unfiled chat has none.
+            const proof = entry.agent === undefined ? undefined : cardProof(entry.agent, turnInFlight(entry.agent));
             const view: CardView = {
                 status: statusOf(entry),
                 // The corner's word, from the board's own projection: why this chat needs you, else that it worked
@@ -136,8 +135,8 @@ export const createCardViews = (): CardViews => {
                 model: modelOf(entry),
                 cooling: entry.agent === undefined ? undefined : cacheCooling(entry.agent, now),
                 warm: entry.agent === undefined || turnInFlight(entry.agent) ? undefined : warmMark(entry.agent),
-                checks,
-                meta: hasMeta(entry, checks),
+                proof,
+                meta: hasMeta(entry, proof),
             };
             const print = snapshotFingerprint(view);
             const previous = held.get(entry.conversation.conversationId);

@@ -62,8 +62,7 @@ const mapDue = (briefing: TurnBriefing, settings: SandboxSettings, arm: boolean 
     briefing.sends("map") && (arm ?? EXPERIMENTS.workspaceMap.on(settings)) && input.forkOf === undefined && turns === 0;
 
 // Said once on the opening message, and again after a compaction summarizes away the history that held it. `>=`
-// inside compactedSinceLastTurn, since the turn after the one a compaction is filed under is the one that owes it. The
-// note also goes out when the main tree's reds change (mainline-note.ts), which only a read can say.
+// inside compactedSinceLastTurn, since the turn after the one a compaction is filed under is the one that owes it.
 const landingChecksDue = (input: AgentTurn, entry: ConversationEntry | undefined, turns: number): boolean =>
     (turns === 0 && input.forkOf === undefined) || compactedSinceLastTurn(entry, turns);
 

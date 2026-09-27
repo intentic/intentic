@@ -8,7 +8,8 @@ import { operatorHere } from "../auth/operator.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { AttemptRefused } from "../conversations/fix/fix-attempts.js";
-import { ciFailureEvidence, startCiFix } from "./ci-fix.js";
+import { ciFailureEvidence, runOf, startCiFix } from "./ci-fix.js";
+import { fixPressed, mainReds, streakFixerFor } from "./main-fixer.js";
 import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects, type CiProject } from "./projects.js";
 
@@ -53,9 +54,10 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
                     ...(operator && warning?.recipe !== undefined ? { hookRecipe: warning.recipe } : {}),
                 };
             });
+            const reds = await mainReds(services);
             const cached = services.ciRuns.sweep();
             if (cached !== undefined) {
-                return { repos, runs: cached };
+                return { repos, runs: cached, reds };
             }
             // One list call per project; a failing vendor drops just its own repos, not the whole view.
             const listed = await Promise.all(
@@ -68,7 +70,7 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
                         }),
                 ),
             );
-            return { repos, runs: services.ciRuns.replace(listed.flat()) };
+            return { repos, runs: services.ciRuns.replace(listed.flat()), reds };
         }),
         rerun: i.rerun.handler(async ({ input }) => {
             const project = await resolve(input.repo);
@@ -96,11 +98,16 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
                     message: `Every failed job died on the fleet${where}, not in any step of this repository: bring the runner back and re-run the pipeline; force the fix to put an agent on it anyway.`,
                 });
             }
+            // A run of a red main-line branch is its streak's: the press continues the one fix agent on it.
+            const run = await runOf(services, project, input.runId, fetchFn);
+            const streak = run === undefined ? undefined : await streakFixerFor(services, run);
             const outcome = await startCiFix(
                 services,
                 {
                     project,
                     runId: input.runId,
+                    run,
+                    ...(streak === undefined ? {} : { base: streak }),
                     evidence,
                     // Never `unattended`: somebody pressed Fix and is watching the board it started from, so this is an
                     // ordinary session with a prepared prompt. The pick's fields ARE the turn's, spread verbatim.
@@ -121,6 +128,9 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
             if (outcome.kind === "busy") {
                 // In words, not as a bug: the reader is sent to the attempt in play rather than handed a second one.
                 throw new ORPCError("CONFLICT", { message: outcome.reason });
+            }
+            if (run !== undefined && streak !== undefined) {
+                await fixPressed(services, run, outcome.conversationId);
             }
             return { conversationId: outcome.conversationId };
         }),

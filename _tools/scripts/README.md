@@ -4,19 +4,34 @@ Repo-wide maintainer scripts: the verify checks, builds, releases, image and pla
 
 ```mermaid
 flowchart LR
-    land["land on the main tree"] -->|"pnpm verify"| scripts(["_tools/scripts"])
+    hand["by hand"] -->|"pnpm verify"| scripts(["_tools/scripts"])
+    worktree["a worktree<br/>before its land"] -->|"fixers.mjs"| scripts
     push["git push<br/>pre-push hook"] -->|"verify:push --advisory"| scripts
     ci["CI workflows"] --> scripts
     semrel["semantic-release<br/>.releaserc.json"] --> scripts
     scripts --> out["GitHub Release · npm · images<br/>stores · platform deploy"]
 ```
 
-- The machine fixers also run on a conversation's own worktree before its land, so what they write rides that land:
+- The machine fixers run on a conversation's own worktree before its land, so what they write rides that land:
   `node _tools/scripts/verify/fixers.mjs --worktree <dir> --paths a,b` (or `--paths-file <file>`, or `--since <rev>`)
   runs rustfmt on the touched crates, tightens the baselines the change beat, and rewrites the contract lock and the
-  stored shapes when the change reached their sources. Each is idempotent; it prints `{"ran":[…],"wrote":[…]}` and
-  exits 0. The check after a land runs the same fixers on main as the backstop.
-- Two verify scripts, and none of them holds back a land, a commit or a push. `verify` is the check work gets: the sandbox runs it on the main tree after every land, in the background. It first writes what a machine decides (`verify/fixers.mjs`: cargo fmt on the crates the land touched, each failing check's `fix`, each ratcheted baseline lowered where the land's own paths beat it (`--tighten`), and the contract lock when the land changed the contract), then runs the whole repo and records its verdict per tree (`lib/tree-verdict.mjs`). What a change added over the commit it is built on is measured one way (`verify/measure-change.mjs`: lint on its files and the plugin rules' additions to them, the tidy checks with the range's `Allow:` trailers, rustfmt, the assertion ratchet; a change git cannot list is a finding naming git's error, never an empty change), for the land (`verify/land-tiers.mjs`) and the push alike, and the report and the tree verdicts share one file in the git common dir (`lib/push-store.mjs`). `verify:push` runs the cheap tiers. From the pre-push hook (`--advisory`) it reports and exits 0, and keeps what the pushed range brought in, with a measurement of every check and the linter, in a report in the git common dir (`verify/push-report.mjs`) that the sandbox shows in the editor's Main line as "Left at push" until a later measurement stops finding it (`push-report.mjs --recheck` takes one without a push) or it is dismissed. By hand it exits non-zero on a finding and replays the recorded verdict for the same tree, leaving an unmeasured tree to CI unless given `--suite`. `verify` waits for the sandbox's heavy slot however it is started (`lib/heavy-slot.mjs`), and sizes its workers and task counts to the memory free when they start (`verify/test-workers.mjs`). Every bun test process, in `suites` and in the re-runs of failures alone, is held under a memory ceiling (`lib/memory-ceiling.mjs`) that kills and names a runaway suite.
+  stored shapes when the change reached their sources. Each is idempotent. It prints `{"ran":[…],"wrote":[…]}` and
+  exits 0. Nothing runs them on the main tree unasked.
+- Two verify scripts, and none of them holds back a land, a commit or a push. `verify` measures the whole repository
+  the way CI's verify groups do, when someone runs it by hand: it applies no fixer, and records its verdict per tree
+  (`lib/tree-verdict.mjs`) for the push to replay. `verify:push` runs the cheap tiers. From the pre-push hook
+  (`--advisory`) it reports and exits 0, and keeps what the pushed range brought in, with a measurement of every check
+  and the linter, in a report in the git common dir (`verify/push-report.mjs`). The sandbox shows that in its
+  Pipelines view as "Left at push" until a later measurement stops finding it (`push-report.mjs --recheck` takes one
+  without a push) or it is dismissed. By hand `verify:push` exits non-zero on a finding and replays the recorded
+  verdict for the same tree, leaving an unmeasured tree to CI unless given `--suite`. What a push brought in is read
+  one way (`verify/measure-change.mjs`: oxlint's lines keyed without their positions, and the tidy checks judged
+  against the range's base with its `Allow:` trailers), and the report and the tree verdicts share one file in the git
+  common dir (`lib/push-store.mjs`).
+- `verify` waits for the sandbox's heavy slot however it is started (`lib/heavy-slot.mjs`), and sizes its workers and
+  task counts to the memory free when they start (`verify/test-workers.mjs`). Every bun test process, in `suites` and
+  in the re-runs of failures alone, is held under a memory ceiling (`lib/memory-ceiling.mjs`) that kills and names a
+  runaway suite.
 - Every verify script runs each independent step and prints all failures in one digest at the end of its output (`lib/steps.mjs`).
 - A release is semantic-release on `main`: `release-prepare.sh` checks the artifacts CI built, then `publish-github.sh`, `release-images.sh` and `ship-stable.sh`, which moves `stable` last. `rollback-stable.sh`, run from the manual `rollback.yml` workflow, moves it back.
 - Versions are stamped in CI only (`release/set-versions.sh`); the repository keeps `0.0.0`. `lib/packages.sh` is the one list of published npm packages.
@@ -39,7 +54,7 @@ flowchart LR
 ## Commands
 
 ```sh
-pnpm verify               # the whole repo; the sandbox runs it after every land
+pnpm verify               # the whole repo, the way CI's verify groups measure it
 pnpm verify:push          # the push check; the pre-push hook runs it with --advisory
 pnpm build:sandbox        # a local sandbox image, intentic-sandbox:dev
 pnpm try:onboarding       # rehearse the Windows onboarding from this branch

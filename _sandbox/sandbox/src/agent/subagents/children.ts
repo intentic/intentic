@@ -284,8 +284,8 @@ const outlast = async (services: Services, childId: string, kid: ChildRecord | u
 };
 
 // Another turn can hold the child's conversation when this one's comes: a person writing in its own chat, the land
-// conflict the owner sent it, a red land check routed back to it, a turn resumed after an allowance refused it. The
-// parent's words wait for that turn to end rather than being dropped.
+// conflict the owner sent it, a turn resumed after an allowance refused it. The parent's words wait for that turn to end
+// rather than being dropped.
 // The room admitted for the turn is held only briefly (resource-budget.ts), so a turn that waited behind another one asks
 // for room again before it starts: otherwise the door judges it afresh with its run already held, and the child reads as
 // working with nothing running for as long as that second wait lasts.
@@ -611,12 +611,8 @@ const RERUN_WHY = {
     answered: "the sandbox restarted while it waited on an answer",
 } as const satisfies Record<ResumeReason, string>;
 
-// What started a turn on a child without its parent, in words for the parent; undefined where other news already says
-// it (a red land check routed back to it).
-const startedWhy = (started: DomainEventMap["run.started"]): string | undefined => {
-    if (started.errand === "land-breakage" || started.errand === "land-held") {
-        return undefined;
-    }
+// What started a turn on a child without its parent, in words for the parent.
+const startedWhy = (started: DomainEventMap["run.started"]): string => {
     if (started.resume !== undefined) {
         return `the sandbox sent its turn again by itself because ${RERUN_WHY[started.resume]}`;
     }
@@ -629,7 +625,7 @@ const startedWhy = (started: DomainEventMap["run.started"]): string | undefined 
 
 /**
  * A turn that starts on a spawned child without its parent (a re-run the sandbox fired itself once an allowance reopened
- * or a turn stopped short, a watch it left, another conversation's message, a red check sent back to it) is still the
+ * or a turn stopped short, a watch it left, another conversation's message) is still the
  * parent's to supervise: the child's row reopens and counts as live, its ending reaches the parent like any other, and a
  * parent with a live turn hears that it is working, so it neither sends the task again nor hands it to another agent. A
  * person's own turn in the child's chat stays theirs, and a turn the parent started is already followed.
@@ -649,14 +645,11 @@ export const adoptChildTurn = (services: Services, started: DomainEventMap["run.
     seats.hold(kid.parent, kid.parent, { live: ledger.live + 1, total: ledger.total });
     openSpawnedChild(rosterHandle(services, kid.parent, kid.cwd), { ...childBirth(childId, kid.spec, kid.depth), again: true });
     void followChildRun(services, childId, kid.parent, kid, run, freshTally());
-    const why = startedWhy(started);
-    if (why !== undefined) {
-        void sayToParent(
-            services,
-            kid.parent,
-            `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") is working: ${why}. Its report reaches you when it ends, like any turn of its: do not send it the task again or give the task to another agent meanwhile.`,
-        );
-    }
+    void sayToParent(
+        services,
+        kid.parent,
+        `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") is working: ${startedWhy(started)}. Its report reaches you when it ends, like any turn of its: do not send it the task again or give the task to another agent meanwhile.`,
+    );
 };
 
 // A supervisor move let through; `run` is set only when the owner re-pointed a start on the card, and is then the whole

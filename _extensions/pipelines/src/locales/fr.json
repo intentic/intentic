@@ -1,4 +1,57 @@
 {
+    "leftAtPush": {
+        "attempt": "Tentative {count}",
+        "clean": "propre",
+        "close": "Fermer",
+        "commits": "{count} commit | {count} commits",
+        "continue": "Continuer",
+        "dismissAll": "Tout écarter",
+        "dismissFailed": "Impossible d'écarter cela",
+        "dismissHint": "Écarter : il ne sera pas corrigé",
+        "dismissOne": "Écarter {source}",
+        "dismissed": "{count} constat écarté | {count} constats écartés",
+        "earlier": "+{count} push antérieur | +{count} pushs antérieurs",
+        "earlierPushes": "Afficher {count} push antérieur | Afficher {count} pushs antérieurs",
+        "endsWhenDismissed": "Aucune mesure ultérieure ne peut voir qu'il a disparu : il prend fin quand vous l'écartez.",
+        "explain": "Le push est parti ; sa vérification a laissé passer ceci. Chaque constat attend ici jusqu'à ce qu'une mesure ultérieure ne le trouve plus ou que vous l'écartiez. Personne ne s'en occupe à moins que vous ne le confiiez.",
+        "fewer": "Afficher moins",
+        "from": "de {sha} {subject}",
+        "handFailed": "Impossible de les confier à un agent",
+        "handHint": "Ouvre une conversation isolée avec chaque constat ouvert d'ici, la commande qui le montre à nouveau et les commits qui l'ont apporté.",
+        "handOver": "Confier à un agent",
+        "handled": "traité",
+        "hint": "Ce que la vérification avant push a trouvé dans vos pushs. Elle n'arrête jamais un push.",
+        "lastPush": "Dernier push",
+        "left": "{count} restant | {count} restants",
+        "more": "+{count} de plus | +{count} de plus",
+        "nothingLeft": "Rien de laissé au push",
+        "openAttempt": "{label} : ouvrir la conversation",
+        "recent": "Pushs récents",
+        "recheck": "Mesurer à nouveau",
+        "rechecked": "{project} mesuré à nouveau : {resolved} disparus, {open} encore ouverts",
+        "refused": "refusé",
+        "refusedHint": "Le hook pre-push du dépôt lui-même a refusé ce push, donc rien n'a atteint le dépôt distant. Ce qu'il a signalé reste dû comme tout autre constat.",
+        "restoreFailed": "Impossible de les rouvrir",
+        "stillOpen": "{count} constat encore ouvert | {count} constats encore ouverts",
+        "title": "Laissé au push",
+        "undo": "Annuler",
+        "unmeasured": "Impossible de mesurer {project} ; rien n'a changé",
+        "workspace": "espace de travail"
+    },
+    "mainRed": {
+        "failing": "En échec",
+        "fixAgent": "Agent de correction",
+        "fixAgentHint": "Chaque échec sur {branch} va à ce seul agent jusqu'à ce qu'une exécution passe.",
+        "newestRun": "dernière exécution rouge #{runId}",
+        "open": "Ouvrir",
+        "openFixer": "Ouvrir la conversation de l'agent de correction",
+        "reported": "Les réparations sont désactivées, donc personne n'a été envoyé.",
+        "since": "depuis {when}",
+        "spent": "L'agent de correction a eu ses tours, ou il a terminé sans rien changer.",
+        "title": "{branch} est au rouge",
+        "unassigned": "Aucun agent de correction dessus pour l'instant.",
+        "waitsForYou": "Vous attend"
+    },
     "pipelineDagGraph": {
         "expand": "Déplier",
         "failingRunsInRow": "En échec sur {name} plusieurs exécutions d'affilée",
@@ -48,5 +101,8 @@
         "repository": "Dépôt",
         "runs": "{runs} exécutions",
         "thisRepo": "ce dépôt"
+    },
+    "rail": {
+        "leftAtPush": "{count} constat laissé au push | {count} constats laissés au push"
     }
 }

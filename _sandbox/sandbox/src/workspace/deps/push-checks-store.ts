@@ -1,15 +1,15 @@
 import {
     FindingSchema,
     fnvDigest,
-    type MainlinePush,
-    MainlinePushSchema,
-    type MainlineRouting,
+    type PushCheck,
+    PushCheckSchema,
+    type RedDecision,
     nextStreak,
     type Red,
     RedSchema,
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { isJsonObject, type JsonObject, transform } from "../../store/evolution/conversions.js";
+import { at, drop, isJsonObject, type JsonObject, mapValue, transform } from "../../store/evolution/conversions.js";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { openDocument } from "../../store/open-document.js";
 import { stateRelPath } from "../../state-paths.js";
@@ -20,12 +20,12 @@ import { opt } from "../../opt.js";
 // dir (push-checks.ts reads it). Filed here, each push keeps what it found, and each project's push Red (contract,
 // RedSchema: source `push`, scope the project) holds what is still owed, by the one streak rule (contract, nextStreak),
 // with every decision about it: what a measurement found gone, what the owner dismissed, who it was handed to. Nothing
-// is sent after one; acting on it is the owner's press (RED_POLICY, conversations/fix/push-fix.ts).
+// is sent after one; acting on it is the owner's press (conversations/fix/push-fix.ts).
 
 // A finding as filed: the one Finding shape, plus the key the hook gave it, which a later measurement names it by. The key
 // never leaves the daemon.
 const StoredFindingSchema = FindingSchema.extend({ key: z.string() });
-const StoredPushSchema = MainlinePushSchema.extend({ findings: z.array(StoredFindingSchema) });
+const StoredPushSchema = PushCheckSchema.extend({ findings: z.array(StoredFindingSchema) });
 // A project's push Red as filed: its source and scope are the file's and the key it is kept under.
 const PushRedSchema = RedSchema.omit({ source: true, scope: true }).extend({ findings: z.array(StoredFindingSchema).default([]) });
 const PushChecksStateSchema = z.object({
@@ -94,7 +94,7 @@ const convertedState = (value: LegacyState): JsonObject & { readonly pushes: Sto
     for (const push of legacy.toReversed()) {
         for (const finding of push.findings.filter((each) => each["state"] === "open")) {
             const converted = convertedFinding(finding);
-            const red = reds[push.project] ?? { since: push.at, findings: [], suspects: [], named: false, decisions: [] };
+            const red = reds[push.project] ?? { since: push.at, findings: [], decisions: [] };
             reds[push.project] = red.findings.some((owed) => owed.id === converted.id) ? red : { ...red, findings: [...red.findings, converted] };
         }
     }
@@ -105,10 +105,24 @@ const convertedState = (value: LegacyState): JsonObject & { readonly pushes: Sto
     return { ...value, pushes, reds };
 };
 
+// Decision kinds only the check after landing made (waiting on the next check, holding on a live conversation, sent back
+// to the one that landed it), retired with it on 2026-09-27.
+const RETIRED_DECISIONS = { waiting: "reported", held: "reported", original: "fix-up" } as const;
+
 export const pushChecksDocument = defineDocument({
     path: stateRelPath(".intentic/records/push-checks.json"),
     schema: PushChecksStateSchema,
-    history: [transform("files what each project's pushes left open as its push Red", isLegacyState, convertedState)],
+    history: [
+        transform("files what each project's pushes left open as its push Red", isLegacyState, convertedState),
+        // Who a red was laid at, and whether blame narrowed it (2026-09-27): nothing blames a conversation any more.
+        at("reds.*", drop("suspects")),
+        at("reds.*", drop("named")),
+        at("ended.*", drop("suspects")),
+        at("ended.*", drop("named")),
+        // The router's own decisions, which only a land check's red ever made, read as the nearest that remain.
+        at("reds.*.decisions.*", mapValue("kind", RETIRED_DECISIONS)),
+        at("ended.*.decisions.*", mapValue("kind", RETIRED_DECISIONS)),
+    ],
 });
 
 // Pushes kept across every project; one that still has an owed finding outlives this, up to the hard cap.
@@ -194,7 +208,7 @@ export const openCount = (state: PushChecksState, project: string): number => ow
 
 // THE ONE STREAK RULE (contract, nextStreak) over a project's push red: after an observation at `at` that leaves
 // `findings` owed, anything owed continues the red (or begins one), nothing owed ends it. `decided` joins its decisions.
-const observed = (state: PushChecksState, project: string, findings: readonly StoredFinding[], at: number, decided: readonly MainlineRouting[] = []): PushChecksState => {
+const observed = (state: PushChecksState, project: string, findings: readonly StoredFinding[], at: number, decided: readonly RedDecision[] = []): PushChecksState => {
     const previous = state.reds[project];
     const streak = nextStreak(previous === undefined ? undefined : { since: previous.since, count: 1 }, findings.length > 0, at);
     const { [project]: _red, ...reds } = state.reds;
@@ -205,8 +219,6 @@ const observed = (state: PushChecksState, project: string, findings: readonly St
             : { ...state, reds, ended: { ...ended, [project]: { ...previous, findings: [], decisions: [...previous.decisions, ...decided] } } };
     }
     const red: PushRed = {
-        suspects: previous?.suspects ?? [],
-        named: previous?.named ?? false,
         since: streak.since,
         findings: [...findings],
         decisions: [...(previous?.decisions ?? []), ...decided],
@@ -280,7 +292,7 @@ export const applyMeasured = (
         return { state, resolved: 0 };
     }
     const ids = gone.map((finding) => finding.id);
-    const decision: MainlineRouting = { kind: "resolved", at, findings: ids, detail: "A later measurement no longer printed them." };
+    const decision: RedDecision = { kind: "resolved", at, findings: ids, detail: "A later measurement no longer printed them." };
     return { state: observed(state, project, owed.filter((finding) => !ids.includes(finding.id)), at, [decision]), resolved: gone.length };
 };
 
@@ -375,7 +387,7 @@ export const settleRefusals = (state: PushChecksState, project: string, at: numb
     if (settled.length === 0) {
         return state;
     }
-    const decision: MainlineRouting = { kind: "resolved", at, findings: settled, detail: "A later push of the same work answered the refusal." };
+    const decision: RedDecision = { kind: "resolved", at, findings: settled, detail: "A later push of the same work answered the refusal." };
     return observed(state, project, owed.filter((finding) => !settled.includes(finding.id)), at, [decision]);
 };
 
@@ -435,7 +447,7 @@ export const dismissIn = (
         if (dismissed.length === 0) {
             return { state, changed: 0 };
         }
-        const decision: MainlineRouting = { kind: "dismissed", at: now, findings: dismissed };
+        const decision: RedDecision = { kind: "dismissed", at: now, findings: dismissed };
         return { state: observed(state, project, owed.filter((finding) => !dismissed.includes(finding.id)), now, [decision]), changed: dismissed.length };
     }
     const red = state.reds[project] ?? state.ended[project];
@@ -469,7 +481,7 @@ export const dismissIn = (
 };
 
 // A decision about the whole of a project's push red (a hand-over to an agent), filed on it; nothing when none stands.
-export const decidedIn = (state: PushChecksState, project: string, decision: MainlineRouting): PushChecksState => {
+export const decidedIn = (state: PushChecksState, project: string, decision: RedDecision): PushChecksState => {
     const red = state.reds[project];
     return red === undefined ? state : { ...state, reds: { ...state.reds, [project]: { ...red, decisions: [...red.decisions, decision] } } };
 };
@@ -477,7 +489,7 @@ export const decidedIn = (state: PushChecksState, project: string, decision: Mai
 const publicFinding = ({ key: _key, ...finding }: StoredFinding) => finding;
 
 // Every push as the wire carries it: the keys the store names findings by stay here.
-export const publicPushes = (pushes: readonly StoredPush[]): MainlinePush[] => pushes.map((push) => ({ ...push, findings: push.findings.map(publicFinding) }));
+export const publicPushes = (pushes: readonly StoredPush[]): PushCheck[] => pushes.map((push) => ({ ...push, findings: push.findings.map(publicFinding) }));
 
 // Every project's push red as the wire carries it, one Red whatever went red.
 export const publicPushReds = (reds: Readonly<Record<string, PushRed>>): Red[] =>
@@ -497,7 +509,7 @@ export interface PushChecksStore {
     // A push reached the remote: what earlier refusals said is answered.
     readonly pushed: (project: string, at: number) => Promise<void>;
     // Files a decision about the project's push red as a whole (who it was handed to).
-    readonly decide: (project: string, decision: MainlineRouting) => Promise<void>;
+    readonly decide: (project: string, decision: RedDecision) => Promise<void>;
 }
 
 export const filePushChecksStore = (path: string): PushChecksStore => {

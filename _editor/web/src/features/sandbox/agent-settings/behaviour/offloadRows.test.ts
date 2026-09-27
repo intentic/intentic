@@ -1,6 +1,6 @@
 // Pins what a pick in "Where heavy work runs" writes (settings `offload`) and how a runner is offered and named.
 import type { RunnerSummary } from "@intentic/sandbox-contract";
-import { HERE, kindTitle, runnerName, targetOptions, unavailableRunner, withCommandTarget, withLandCheckTarget } from "./offloadRows";
+import { HERE, kindTitle, runnerName, targetOptions, unavailableRunner, withCommandTarget } from "./offloadRows";
 
 const omen: RunnerSummary = { id: `runner-omen`, host: `omen`, online: true, parity: `current` };
 const asleep: RunnerSummary = { id: `runner-rog`, host: `rog`, online: false, parity: `current` };
@@ -23,12 +23,6 @@ describe(`where heavy work runs`, () => {
         const sent = withCommandTarget({ commands: { vitest: `runner-rog` } }, `bun-test`, `runner-omen`);
         expect(sent).toEqual({ commands: { vitest: `runner-rog`, "bun-test": `runner-omen` } });
         expect(withCommandTarget(sent, `vitest`, HERE)).toEqual({ commands: { "bun-test": `runner-omen` } });
-    });
-
-    test(`the check after landing is set and cleared on its own key`, () => {
-        const sent = withLandCheckTarget({ commands: { vitest: `runner-rog` } }, `runner-omen`);
-        expect(sent).toEqual({ commands: { vitest: `runner-rog` }, landCheck: `runner-omen` });
-        expect(withLandCheckTarget(sent, HERE)).toEqual({ commands: { vitest: `runner-rog` } });
     });
 
     test(`a kind the shipped rules name reads in words, one the owner added reads as its id`, () => {

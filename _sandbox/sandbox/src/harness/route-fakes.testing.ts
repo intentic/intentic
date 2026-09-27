@@ -11,14 +11,14 @@ import type { AgentWorktrees } from "../conversations/worktrees/worktrees.js";
 import type { Services } from "../composition.js";
 import { claudeStoreOf } from "../sessions/session-store.js";
 import { workspacePaths } from "../workspace/workspace.js";
-import { landingChecksNote } from "../workspace/deps/mainline-note.js";
+import { LANDING_CHECKS_NOTE } from "../agent/prompt/checks-note.js";
 
 // Route harness's recording fakes: the two process supervisors, inert history/files seams a test overrides selectively,
 // and a temp workspace for repo-discovery suites. `services` composes the inert ones.
 
-// What a conversation's opening turn discloses before its runtime says anything: the note telling it what runs after its
-// work lands (workspace/deps/mainline-note.ts), as the harness's empty verify store reads it, the main tree never red.
-export const OPENING_CHECKS_PREAMBLE: AgentEvent = { kind: "preamble", notes: [landingChecksNote([], false)] };
+// What a conversation's opening turn discloses before its runtime says anything: the note telling it what checks its
+// work (agent/prompt/checks-note.ts).
+export const OPENING_CHECKS_PREAMBLE: AgentEvent = { kind: "preamble", notes: [LANDING_CHECKS_NOTE] };
 
 // A temp workspace on disk for repo discovery: each entry is a repo dir with a `.git`, optionally an operator/ panel
 // (package.json with a dev script).

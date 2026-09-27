@@ -3,7 +3,6 @@ import { loadChunk, useDevice } from "@intentic/ui";
 import { defineAsyncComponent, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { watchAgentsScope } from "../features/agents/board/agentsTile";
-import { watchMainline } from "../features/agents/mainline/useMainline";
 import { useExtensionHost } from "../extension-host/useExtensionHost";
 import { useMainWindow } from "./window/mainWindow";
 import { openWorkspaceRef } from "../features/workspace/files/openFileRef";
@@ -26,8 +25,6 @@ useExtensionHost();
 useGuestFence();
 // Keeps other sandboxes live while the board's scope is wide; shared so both chromes need only one poll.
 watchAgentsScope();
-// The main tree's check, for the Main line tile's badge on the rail and the phone's menu alike.
-watchMainline();
 // Pulls every view's chunk in the background once the shell is up (idempotent); see router/prefetch.ts.
 onMounted(prefetchViewsAtIdle);
 const router = useRouter();

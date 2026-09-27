@@ -86,8 +86,6 @@ test("only the tidy lines the push added are recorded: not the standing ones, no
             text: NEW_CATCH.trim(),
             key: "- _sandbox/sandbox/src/browser/tools/browser-router.ts:# catch returns a literal and drops the error",
             command: "node _tools/checks/run.mjs --only silent-catch",
-            // The same finding as the land check's router names it (land-tiers.mjs, one measurement for both).
-            unit: "tidy silent-catch: - _sandbox/sandbox/src/browser/tools/browser-router.ts:#  catch returns a literal and drops the error",
         },
     ]);
 });
@@ -105,7 +103,6 @@ test("a check that passed at the base and fails with no finding lines is recorde
             text: "layout passed before this change and fails now",
             key: "",
             command: "node _tools/checks/run.mjs --only layout",
-            unit: "tidy layout: layout passed before this change and fails now",
         },
     ]);
 });

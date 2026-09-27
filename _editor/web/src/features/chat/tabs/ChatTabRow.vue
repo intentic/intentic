@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
+import CardSeal from "../../agents/board/cards/CardSeal.vue";
 import { boxNameOf } from "../../agents/fleet/fleetScope";
 import { turnInFlight } from "../../agents/fleet/agentStatus";
 import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
-import CardSeal from "../../agents/mainline/CardSeal.vue";
 import OriginMark from "../../../components/OriginMark.vue";
 import RailCard from "../../../components/RailCard.vue";
 import UnsentMark from "../../../components/UnsentMark.vue";
@@ -141,14 +141,8 @@ const act = (event: Event, verb: "close" | "keep"): void => {
                 :class="props.view.cooling.near ? 'text-link' : 'text-muted'"
                 v-tooltip.top="props.view.cooling.hint"
             />
-            <!-- Main's check of its latest land and its last turn's own proof as the board's one seal, their words in its hover the way the cache marks beside it say theirs; a red its land caused also says so in words. -->
-            <CardSeal
-                v-if="props.view.checks !== undefined"
-                :checks="props.view.checks"
-                compact
-                :still="props.agent !== undefined && turnInFlight(props.agent)"
-                class="text-2xs"
-            />
+            <!-- Its last turn's own proof as the board's one seal, its words in its hover the way the cache marks beside it say theirs. -->
+            <CardSeal v-if="props.view.proof !== undefined" :proof="props.view.proof" class="text-2xs" />
             <!-- Provenance marks (external origin, workflow), same as the board's OriginMark in the card body. -->
             <OriginMark :origin="originOf(props.conversation)" compact />
             <WorkflowMark :workflow="props.agent?.workflow" compact />

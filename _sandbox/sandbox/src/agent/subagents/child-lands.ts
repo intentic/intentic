@@ -1,14 +1,13 @@
-import type { MainlineRouting, WorkspaceEvent } from "@intentic/sandbox-contract";
+import type { WorkspaceEvent } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { parentOfActor } from "../../auth/principal.js";
 import { conversationProfile } from "../../conversations/registry/agents-store.js";
 import { deliverWake } from "../run/turn/wake-delivery.js";
 
 // What becomes of a child's work after its turn ends is its parent's news while the parent still supervises: the work
-// landed, a land hit a conflict, or the main tree's own check went red on it and the red was routed somewhere. A parent
-// sequencing its next step on those found them by polling `agents show`, git and the check's log, and relayed failures
-// the router had already sent back to the child. Said into the parent's live turn, where a parked wait hands the turn
-// back for them. A parent with no live turn is not woken: its supervising is over, and the owner is the one landing.
+// landed, or a land hit a conflict. A parent sequencing its next step on those found them by polling `agents show` and
+// git. Said into the parent's live turn, where a parked wait hands the turn back for them. A parent with no live turn is
+// not woken: its supervising is over, and the owner is the one landing.
 
 // Who started a conversation and on what it runs, whether its parent has a live turn, and the door words go through.
 export interface ChildNewsDeps {
@@ -23,8 +22,6 @@ const SOURCE = "subagents";
 
 // Paths a conflict note names before counting the rest.
 const PATHS_NAMED = 5;
-// Failures a red note names before counting the rest.
-const FAILURES_NAMED = 3;
 
 const nameOf = (childId: string, title: string | undefined): string => (title === undefined ? `\`${childId}\`` : `\`${childId}\` ("${title}")`);
 
@@ -48,7 +45,7 @@ const supervisorOf = (deps: ChildNewsDeps, childId: string): { readonly parent: 
 };
 
 // Says it into the parent's turn: whether the parent has it now (said into its turn, or a turn of its own), not merely
-// queued behind a turn that takes no words. Never throws: it runs off a land or a check, which must not fail with it.
+// queued behind a turn that takes no words. Never throws: it runs off a land, which must not fail with it.
 const tell = async (deps: ChildNewsDeps, parent: string, prompt: string): Promise<boolean> => {
     const entry = deps.agents.entry(parent);
     if (entry === undefined || entry.archivedAt !== undefined) {
@@ -83,7 +80,7 @@ export const bookedRerunWords = (rerun: { readonly at?: number | undefined }, ch
         child === undefined ? "" : ` To have it not run again, cancel it (the cancel tool, or \`agents cancel ${child}\`), then decide yourself.`
     }`;
 
-/** A child's work reached the main tree: its parent hears so, and that a red on it is routed without its help. */
+/** A child's work reached the main tree: its parent hears so. */
 export const reportChildLanded = async (deps: ChildNewsDeps, event: WorkspaceEvent): Promise<void> => {
     if (event.event !== "agent.landed" || event.outcome !== "landed") {
         return;
@@ -96,10 +93,7 @@ export const reportChildLanded = async (deps: ChildNewsDeps, event: WorkspaceEve
     await tell(
         deps,
         supervisor.parent,
-        [
-            `Your subagent ${supervisor.name} landed in the main tree${repos.length === 0 ? "" : ` (${listed(repos, repos.length)})`}.`,
-            "The main tree's own check runs on it next. If that goes red on this land you are told where its failures were sent, so leave them to that instead of relaying them yourself.",
-        ].join(" "),
+        `Your subagent ${supervisor.name} landed in the main tree${repos.length === 0 ? "" : ` (${listed(repos, repos.length)})`}.`,
     );
 };
 
@@ -117,98 +111,4 @@ export const reportChildConflict = async (deps: ChildNewsDeps, childId: string, 
             "It lands once its branch is rebased onto the main line and the conflicts are resolved. The owner can have it do that from its card, or you can tell it to; a message you send while another turn runs on it waits for that turn to end.",
         ].join(" "),
     );
-};
-
-// Lower-cases a sentence's first letter, to carry a routing's own detail on after a colon.
-const continued = (sentence: string): string => `${sentence.charAt(0).toLowerCase()}${sentence.slice(1)}`;
-
-// What a parent should do about failures somebody else now owns, and about ones nobody does.
-const LEAVE_IT = "Leave them to that instead of relaying them yourself.";
-const YOURS = "Fixing it is for you or the owner to arrange.";
-
-// Where a red's failures went, in words for the parent of work that landed; undefined for a decision that sends nobody
-// yet and settles nothing (the next check decides), which a later decision reports instead.
-export const routedWords = (routing: MainlineRouting): string | undefined => {
-    switch (routing.kind) {
-        case "original":
-            return routing.conversationId === undefined
-                ? undefined
-                : `They were sent back to \`${routing.conversationId}\` to fix in a turn of its own; you get its report when that ends. ${LEAVE_IT}`;
-        case "fix-up":
-            return routing.conversationId === undefined
-                ? undefined
-                : `They were handed to a fresh conversation, \`${routing.conversationId}\`, which fixes them in a worktree of its own. ${LEAVE_IT}`;
-        case "held":
-            return `Nobody is sent yet: ${continued(routing.detail ?? "a conversation still working touches what failed.")} ${LEAVE_IT}`;
-        case "spent":
-            return `Nobody more is sent: ${continued(routing.detail ?? "the sends and fresh attempts this red allows are used up.")} ${YOURS}`;
-        case "reported":
-            return `Nobody was sent: ${continued(routing.detail ?? "no conversation could take it.")} ${YOURS}`;
-        case "waiting":
-        case "resolved":
-        case "dismissed":
-            return undefined;
-    }
-};
-
-// Each red decision a parent was told, so a red re-routed on every run of a long streak tells it once per decision.
-// Bounded, oldest forgotten first: a forgotten decision can at worst be told twice.
-const told = new Set<string>();
-const TOLD_KEPT = 500;
-
-const firstTelling = (key: string): boolean => {
-    if (told.has(key)) {
-        return false;
-    }
-    told.add(key);
-    if (told.size > TOLD_KEPT) {
-        const [oldest] = told;
-        if (oldest !== undefined) {
-            told.delete(oldest);
-        }
-    }
-    return true;
-};
-
-/**
- * The main tree's own check went red on work that landed, and the router decided where the failures go: each parent with
- * a child among the lands it was laid at hears which children, a few of the failures, and where they went. One note per
- * parent and decision.
- */
-export const reportChildrenRed = async (
-    deps: ChildNewsDeps,
-    red: { readonly project: string; readonly redSince: number; readonly fresh: readonly string[] },
-    suspects: readonly string[],
-    routing: MainlineRouting,
-): Promise<void> => {
-    const words = routedWords(routing);
-    if (words === undefined) {
-        return;
-    }
-    const byParent = new Map<string, string[]>();
-    for (const childId of new Set(suspects)) {
-        const supervisor = supervisorOf(deps, childId);
-        if (supervisor !== undefined) {
-            byParent.set(supervisor.parent, [...(byParent.get(supervisor.parent) ?? []), supervisor.name]);
-        }
-    }
-    const where = red.project === "" ? "the workspace root" : `\`${red.project}\``;
-    for (const [parent, names] of byParent) {
-        if (!firstTelling([red.project, red.redSince, parent, routing.kind, routing.conversationId ?? ""].join("\n"))) {
-            continue;
-        }
-        await tell(
-            deps,
-            parent,
-            [
-                `The main tree's own check in ${where} went red after work from your subagent${names.length === 1 ? "" : "s"} ${names.join(", ")} landed: ${red.fresh.length} new failure${red.fresh.length === 1 ? "" : "s"}${red.fresh.length === 0 ? "" : `, such as ${listed(red.fresh, FAILURES_NAMED)}`}.`,
-                words,
-            ].join(" "),
-        );
-    }
-};
-
-// Test seam: forgets which red decisions were told.
-export const resetChildNews = (): void => {
-    told.clear();
 };

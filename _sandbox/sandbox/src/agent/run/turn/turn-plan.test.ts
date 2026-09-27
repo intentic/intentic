@@ -9,7 +9,7 @@ import { conversationAfter, testConfig } from "../../../testing.js";
 import { FIRST_RECHECK_MS } from "../../../runtimes/claude/claude-seat-check.js";
 import { BACK_ON, memorySeats, scriptedSeatCheck, STILL_OFF } from "../../../runtimes/claude/claude-seat-check.testing.js";
 import { UNATTENDED_ACCOUNTS_TITLE } from "../../../personas/personas.js";
-import { LANDING_CHECKS_NOTE_HEADER, landingChecksNote } from "../../../workspace/deps/mainline-note.js";
+import { LANDING_CHECKS_NOTE_HEADER, LANDING_CHECKS_NOTE } from "../../prompt/checks-note.js";
 import type { AgentRequest, TurnPolicy, TurnSpec } from "../../providers/agent-request.js";
 import { composeWirePrompt } from "../../prompt/turn-preamble.js";
 import type { TurnContext } from "../../providers/adapter.js";
@@ -407,11 +407,11 @@ const conversationAt = (fields: { readonly turns: number; readonly compactedTurn
             }),
     });
 
-test("what runs after the work lands is named on a conversation's opening message", async () => {
+test("what checks the work is named on a conversation's opening message", async () => {
     const plan = await planTurn(harnessServices(), turn(), context);
 
     expect(wire(plan)).toContain(LANDING_CHECKS_NOTE_HEADER);
-    expect(wire(plan)).toContain("Nothing checks your work when you finish, and nothing holds it back");
+    expect(wire(plan)).toContain("Nothing checks your work when you finish or after it lands, and nothing holds it back");
 });
 
 test("a follow-up is not charged for it again: the note stands in the session's own history", async () => {
@@ -753,7 +753,7 @@ test("a main-tree turn has no worktree to name, so it says nothing of one", asyn
     const plan = await planTurn(codexServices(), turn({ agent: "codex" }), context);
 
     // The checks note is every opening message's; nothing else stands in front of the user's words.
-    expect(wire(plan)).toBe(composeWirePrompt([landingChecksNote([], false)], "do the thing"));
+    expect(wire(plan)).toBe(composeWirePrompt([LANDING_CHECKS_NOTE], "do the thing"));
 });
 
 test("every runtime is told what runs after its work lands, on the main tree or in its own worktree", async () => {

@@ -5,7 +5,7 @@ import {
     type FixStance,
     fixStance,
     latestFixAttempt,
-    type MainlineStatus,
+    type PushChecks,
     type PushRun,
     pushFixBase,
     pushRedOf,
@@ -14,14 +14,13 @@ import type { AgentRunAttempt, AgentRunChoice } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { sandboxRef, sandboxScopeGuard, sandboxShallowRef, sandboxValue } from "@intentic/extension-api";
 import { computed, type ComputedRef, watch } from "vue";
-import { open as openAgent } from "../../agents/fleet/useAgents-actions";
+import { open as openAgent, openById } from "../../agents/fleet/useAgents-actions";
 import { registry } from "../../agents/fleet/useAgents-registry";
-import { openLandConversation } from "../../agents/mainline/openLanded";
-import { handPushFindings, useMainline } from "../../agents/mainline/useMainline";
 import { modelLabelFor } from "../../chat/accounts/providerCatalog";
 import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 import { type SyncTarget, useChanges } from "../changes/useChanges";
 import { workspaceChangedSince, workspaceChangeMark } from "../changes/live/useWorkspaceLive";
+import { handPushFindings, usePushChecks } from "./usePushChecks";
 import { usePushRun } from "./usePushRun";
 import { t } from "@intentic/ui/i18n";
 
@@ -39,7 +38,7 @@ import { t } from "@intentic/ui/i18n";
 //   so, and the same card comes back on a press. What retires it is the world changing, never a timer.
 // - a failure has ATTEMPTS, and at most one live one: the card shows what became of the latest, and a press asks the
 //   daemon, which files the hook's refusal on the project's push red (push-checks) and plans, continues or starts the
-//   attempt there (conversations/fix/push-fix.ts), the same hand-over the Main line's "Hand to an agent" makes.
+//   attempt there (conversations/fix/push-fix.ts): one hand-over, whichever surface pressed for it.
 
 // What's about to leave, named the way the control that asked for it was labelled, so the flow echoes the
 // click ("Publish", "Sync") instead of renaming it "Push".
@@ -116,8 +115,9 @@ const pushedTimer = sandboxValue<ReturnType<typeof setTimeout> | undefined>(
 // Git actions, captured once from a mounted surface. Only useChanges's module-level halves (syncAll, actionBusy,
 // failures) are read here; the query-backed halves are the panel's own.
 let git: ReturnType<typeof useChanges> | undefined;
-// The main line's status, where the daemon files a refused push and names the attempt at it; captured the same way.
-let mainline: ComputedRef<MainlineStatus | undefined> | undefined;
+// What pushes left (workspace.pushChecks), where the daemon files a refused push and names the attempt at it; captured
+// the same way.
+let pushChecks: ComputedRef<PushChecks | undefined> | undefined;
 
 // A new push supersedes whatever was being asked, standing verdict included: the hook is about to answer again.
 const enter = (push: PendingPush): void => {
@@ -212,7 +212,7 @@ const send = async (push: PendingPush): Promise<void> => {
         runs,
         at: Date.now(),
         // The daemon filed the refusal under the repository's project before the run read as settled; with several
-        // refused, the first one's is the hand-over offered, and each other one waits on the Main line.
+        // refused, the first one's is the hand-over offered, and each other one waits with what pushes left.
         ...(byHook === undefined ? {} : { fix: { project: byHook.repo === `root` ? `` : byHook.repo } }),
     });
 };
@@ -268,7 +268,7 @@ const attemptOf = (): FixAttemptState | undefined => {
     const fix = proposedFix.value;
     // Named by the daemon's own rule (contract, pushFixBase), off the push red it filed the refusal under; nothing while
     // it is unread.
-    const base = fix === undefined ? undefined : pushFixBase(pushRedOf(mainline?.value?.reds, fix.project));
+    const base = fix === undefined ? undefined : pushFixBase(pushRedOf(pushChecks?.value?.reds, fix.project));
     const latest = base === undefined ? undefined : latestFixAttempt(base, registry.value);
     if (latest === undefined) {
         return undefined;
@@ -327,14 +327,14 @@ const startFix = async (pick?: AgentRunChoice, resume?: FixResume): Promise<void
             return;
         }
         dismiss();
-        openLandConversation(conversationId);
+        openById(conversationId);
     } catch (error) {
         // An attempt already running on it: the daemon refuses a second, and the one it means is the one to watch.
         if (error instanceof SandboxHttpError && error.status === 409 && held !== undefined) {
             openAttempt();
             return;
         }
-        fixError.value = errorMessage(error, t(`agents.mainline.push.handFailed`));
+        fixError.value = errorMessage(error, t(`workspace.usePushFlow.handFailed`));
     } finally {
         fixBusy.value = false;
     }
@@ -342,7 +342,7 @@ const startFix = async (pick?: AgentRunChoice, resume?: FixResume): Promise<void
 
 export function usePushFlow() {
     git ??= useChanges();
-    mainline ??= useMainline();
+    pushChecks ??= usePushChecks();
 
     // The one door every Push, Sync and Publish arrives at, so every refusal is asked about the same way.
     const askSync = (verb: string, what: string, targets: readonly SyncTarget[]): void => {

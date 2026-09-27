@@ -380,22 +380,10 @@ const STATE_FILES = [
         note: "The target stamps its own daemon version on first boot.",
     },
     {
-        path: ".intentic/records/verify.json",
-        invalidates: [],
-        why: "The main-line check's memory: each project's last verdict and red streak, and the latest runs with what became of each red one. Read through GET /workspace/mainline, which the daemon pushes itself (the `mainline` runtime domain), so no file watch is needed.",
-        portability: "carry",
-    },
-    {
         path: ".intentic/records/push-checks.json",
         invalidates: [],
-        why: "What each push check found and let through, per project, and what became of every finding: still open, measured gone, or dismissed. Filed from the report the pre-push hook leaves in the repository's git dir; read through GET /workspace/mainline, which the daemon pushes itself (the `mainline` runtime domain).",
+        why: "What each push check found and let through, per project, and what became of every finding: still open, measured gone, or dismissed. Filed from the report the pre-push hook leaves in the repository's git dir; read through GET /workspace/push-checks, which the daemon pushes itself (the `pushes` runtime domain).",
         portability: "carry",
-    },
-    {
-        path: ".intentic/local/verify/",
-        invalidates: [],
-        why: "A running check's wrapper artifacts (log + exit status), read once by the daemon when the panel finishes.",
-        portability: "derived",
     },
     // What an update converted before it booted all the way (the sandbox daemon's state-journal.ts): a copy of every
     // file the new version changed, kept until it commits and for a grace window after. `secret` whatever the source

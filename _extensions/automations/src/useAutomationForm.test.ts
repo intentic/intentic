@@ -157,6 +157,24 @@ describe(`editing a stored automation`, () => {
 });
 
 describe(`editing preserves fields outside the changed control`, () => {
+    // `deps.broken` is retired (nothing emits it) and never offered, but the record is the owner's: the form shows the
+    // moment it names, and saving any other change must not quietly re-point it at a moment the owner never chose.
+    it(`keeps a retired workspace moment as it was stored`, () => {
+        const retired: Automation = {
+            id: `fix-broken-deps`,
+            trigger: { kind: `workspace`, event: `deps.broken`, repo: `web` },
+            prompt: `Fix what the land broke.`,
+            models: LADDER,
+            enabled: true,
+            // A workspace trigger is a chore by definition, so the stored record says so.
+            chore: true,
+        };
+        const { form, load, build } = formState();
+        load(retired);
+        expect(form.workspaceEvent).toBe(`deps.broken`);
+        expect(build()).toEqual(retired);
+    });
+
     it(`carries a schedule's sessions bar both ways, and drops it at zero`, () => {
         const nightly: Automation = {
             id: `dream`,

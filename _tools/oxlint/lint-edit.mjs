@@ -8,7 +8,7 @@ import { dirname, extname, join, relative } from "node:path";
 import { repoRoot } from "../constants/src/node.mjs";
 import { diagnosticsOf, introduced, LINTABLE, OXLINT_TIMEOUT_MS, oxlintIn, PLUGINS_CONFIG, report as lintReport, ROOT_CONFIG } from "./added.mjs";
 
-// Rules a half-written file trips honestly; `pnpm lint` still reads them in the check after the land and at the push.
+// Rules a half-written file trips honestly, which `pnpm lint` still reads at the push and in CI's quick job.
 const DEFERRED = new Set([`eslint(no-unused-vars)`]);
 
 // One fix can create what another rule repairs, so fixing repeats until a pass changes nothing, at most this often.

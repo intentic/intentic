@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { dropAll, fold, isJsonObject, mapValue, retype } from "../documents/conversions.js";
+import { at, drop, dropAll, fold, isJsonObject, mapValue, retype } from "../documents/conversions.js";
 import type { KeepWarmSettings, RuleSchema } from "./settings.js";
 
 // The conversions the settings shape has had, oldest first: what brings any earlier release's settings to
@@ -105,4 +105,6 @@ export const SETTINGS_HISTORY = [
         "drops rules at the retired turn.ending moment (and the verify-ui-edits built-in), which run nothing",
     ),
     keepWarmObject,
+    // Where the check after landing ran (2026-09-27): nothing checks work after it lands any more, CI does.
+    at("offload", drop("landCheck")),
 ] as const;

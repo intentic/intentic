@@ -6,7 +6,7 @@ import type { ServiceabilityDeps } from "../../../usage/serviceability/serviceab
 import { repoCheckRules } from "../../../rules/repo-checks.js";
 import { createCredentialGrants, type CredentialGrants } from "../../../secrets/credential-grants.js";
 import { loadedSkillCatalogNote } from "../../../store/loaded-skills.js";
-import { landingChecksNoteFor } from "../../../workspace/deps/mainline-note.js";
+import { LANDING_CHECKS_NOTE } from "../../prompt/checks-note.js";
 import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js";
 import type { ProjectSetupStatus } from "../../../workspace/layout/workspace-setup.js";
 import { contextNoteIfDue } from "../../context/conversation-context.js";
@@ -64,7 +64,7 @@ export interface AdmittedTurnFacts {
     readonly memoryNote: string | undefined;
     // Read only when the map is due, so present only on a turn that sends it.
     readonly mapNote: string | undefined;
-    // What runs after the work lands and which failures the main tree already has; present only on a turn that owes it.
+    // What checks the work (nothing here, CI after a push); present only on a turn that owes it.
     readonly landingChecksNote: TurnNote | undefined;
     readonly sessionStore: string;
     // Where a turn that names no account goes when the one its conversation remembers is blocked; absent is `keep`.
@@ -197,7 +197,6 @@ export type TurnFactsDeps = ServiceabilityDeps &
     | "perf"
     | "personas"
     | "sandboxSettings"
-    | "verifyStore"
     | "workspace"
 >;
 
@@ -231,13 +230,9 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
     );
     const [gates, accountRoute] = await Promise.all([gatesOf(services), accountRouteOf(services, input, entry)]);
     const premise = premiseOf({ entry, settings, personas, areas }, input, runtime);
-    const [iqTeaching, landingChecksNote] = await Promise.all([
-        iqTeachingFor(services, premise),
-        // A card that drops the note is never read for it.
-        premise.briefing.sends("checks")
-            ? services.perf.track("turn.plan.mainline", {}, () => landingChecksNoteFor(services, input.conversationId, premise.send.landingChecks))
-            : Promise.resolve(undefined),
-    ]);
+    const iqTeaching = await iqTeachingFor(services, premise);
+    // What checks the work, on the turns that owe it to a card that did not drop it (turn-premise.ts).
+    const landingChecksNote = premise.send.landingChecks ? LANDING_CHECKS_NOTE : undefined;
     const brief = fieldNotesFor(services, context, settings);
     const card = premise.persona.persona;
     // Only a card that asked for its own prompt is read, so an ordinary turn pays nothing for it.

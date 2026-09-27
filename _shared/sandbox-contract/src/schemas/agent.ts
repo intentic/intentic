@@ -131,7 +131,7 @@ export type ForkedFrom = z.infer<typeof ForkedFromSchema>;
 const AgentTurnFieldsSchema = z.object({
     prompt: z.string().describe("What to say to the agent. May be empty if you are only attaching files."),
     errand: TurnErrandSchema.optional().describe(
-        "What the words are for, when the app or the sandbox composed them rather than a person typing them: a land conflict to resolve, a red main line to fix. Shown as the sandbox's words, not yours. Leave it out for your own words.",
+        "What the words are for, when the app or the sandbox composed them rather than a person typing them: a land conflict to resolve, a red CI run to fix. Shown as the sandbox's words, not yours. Leave it out for your own words.",
     ),
     // Minted by the sender so a send whose answer was lost can be sent again without being delivered twice.
     messageId: z

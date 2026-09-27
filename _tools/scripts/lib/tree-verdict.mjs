@@ -1,12 +1,11 @@
 // Caches pass/fail verdicts against a hash of a tree's content (`git write-tree` over index+add -A), so identical content
 // is not re-measured. Stored as `verdict` entries of the push store in the common git dir (lib/push-store.mjs), shared
-// across worktrees and with what pushes leave, the newest VERDICTS_KEPT; `pnpm verify` writes a `verify` verdict, verify-push.mjs writes `push` and reads both, matching
-// the working tree or any pushed commit's own tree.
+// across worktrees and with what pushes leave, the newest VERDICTS_KEPT. `pnpm verify` writes a `verify` verdict, and
+// verify-push.mjs writes `push` and reads both, matching the working tree or any pushed commit's own tree.
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import { git } from "./git.mjs";
 import { legacyVerdictPath, readArray, readStore, writeStore } from "./push-store.mjs";
 
@@ -56,40 +55,15 @@ export const freshVerdicts = (root, trees, now = Date.now()) => {
     return readVerdicts(root).filter((verdict) => wanted.has(verdict.tree) && now - verdict.at < VERDICT_TTL_MS);
 };
 
-// Puts one verdict at the head of the record, replacing an older one about the same tree and suite.
-const recordVerdict = (root, entry) =>
-    writeStore(root, { version: 1, kind: "verdict", ...entry }, (each) => each.kind === "verdict" && each.tree === entry.tree && each.suite === entry.suite)
-        .ok;
-
-// Replaces an older verdict about the same tree and suite; `details` is `head` and, when red, failure-units' `verdictUnits`.
-// A run offloaded to a runner (INTENTIC_VERDICT_OUT set, bin/offload-run) also leaves the verdict there, for the tree it
-// came from to merge into its own record: the runner's git dir is not the one the push reads.
+// Puts one verdict at the head of the record, replacing an older one about the same tree and suite. `details` is `head`
+// and, when red, failure-units' `verdictUnits`.
 export const writeVerdict = (root, tree, status, suite, details = {}) => {
     if (tree === undefined) {
         return false;
     }
-    const entry = { tree, status, suite, at: Date.now(), ...details };
-    const out = process.env.INTENTIC_VERDICT_OUT;
-    if (out !== undefined && out !== "") {
-        try {
-            writeFileSync(out, `${JSON.stringify(entry)}\n`);
-        } catch {
-            // allow(silent-catch): the verdict still lands in this tree's own record below; only the copy is lost
-        }
-    }
-    return recordVerdict(root, entry);
+    const entry = { version: 1, kind: "verdict", tree, status, suite, at: Date.now(), ...details };
+    return writeStore(root, entry, (each) => each.kind === "verdict" && each.tree === tree && each.suite === suite).ok;
 };
-
-// `node tree-verdict.mjs merge <file>`: records a verdict an offloaded run brought back (see writeVerdict), in the
-// repository the command stands in.
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href && process.argv[2] === "merge") {
-    const entry = JSON.parse(readFileSync(process.argv[3] ?? "", "utf8"));
-    if (typeof entry?.tree !== "string" || typeof entry?.suite !== "string") {
-        process.stderr.write("tree-verdict: that file holds no verdict\n");
-        process.exit(1);
-    }
-    process.exit(recordVerdict(process.cwd(), entry) ? 0 : 1);
-}
 
 export const ago = (at) => {
     const seconds = Math.round((Date.now() - at) / 1000);

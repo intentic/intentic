@@ -7,11 +7,11 @@ import { rpcQuery } from "../../client/rpcQuery";
 import { useSandboxQuery } from "../../client/useSandboxQuery";
 import { useRunners } from "../../devices/runners/useRunners";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
-import { HERE, kindDetail, kindTitle, targetOptions, unavailableRunner, withCommandTarget, withLandCheckTarget } from "./offloadRows";
+import { HERE, kindDetail, kindTitle, targetOptions, unavailableRunner, withCommandTarget } from "./offloadRows";
 
-// "Where heavy work runs" (settings `offload`): each kind of heavy command an agent runs, and the check after landing,
-// either here or on a runner on one of your machines. The kinds are the heavy-command rules this sandbox queues by
-// (GET /offload/kinds), so a rule the owner adds shows up here too. A runner is added from Devices, per machine.
+// "Where heavy work runs" (settings `offload`): each kind of heavy command an agent runs, either here or on a runner on
+// one of your machines. The kinds are the heavy-command rules this sandbox queues by (GET /offload/kinds), so a rule the
+// owner adds shows up here too. A runner is added from Devices, per machine.
 const t = useT();
 
 const { settings, patch } = useSandboxSettings();
@@ -26,11 +26,6 @@ const noRunners = computed(() => runners.value.length === 0);
 const setKind = (kind: string, runner: string | undefined): void => {
     if (runner !== undefined) {
         patch({ offload: withCommandTarget(offload.value, kind, runner) });
-    }
-};
-const setLandCheck = (runner: string | undefined): void => {
-    if (runner !== undefined) {
-        patch({ offload: withLandCheckTarget(offload.value, runner) });
     }
 };
 </script>
@@ -60,24 +55,6 @@ const setLandCheck = (runner: string | undefined): void => {
             </template>
             <template v-if="unavailableRunner(offload.commands[kind.id], runners) !== undefined" #below>
                 <p class="text-2xs text-muted">{{ unavailableRunner(offload.commands[kind.id], runners) }}</p>
-            </template>
-        </Row>
-
-        <!-- The one kind the daemon runs itself rather than an agent: after every land, on the main tree. -->
-        <Row icon="check-circle" :title="t(`sandbox.agentOffload.landCheck`)" :description="t(`sandbox.agentOffload.landCheckDetail`)">
-            <template #control>
-                <Picker
-                    :model-value="offload.landCheck ?? HERE"
-                    :options="options"
-                    :disabled="settings === undefined"
-                    class="w-40 justify-between text-xs"
-                    :aria-label="t(`sandbox.agentOffload.landCheck`)"
-                    :header="t(`sandbox.agentOffload.runsOn`)"
-                    @update:model-value="setLandCheck"
-                />
-            </template>
-            <template v-if="unavailableRunner(offload.landCheck, runners) !== undefined" #below>
-                <p class="text-2xs text-muted">{{ unavailableRunner(offload.landCheck, runners) }}</p>
             </template>
         </Row>
     </RowGroup>

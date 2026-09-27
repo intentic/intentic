@@ -7,7 +7,7 @@ import { createCredentialGrants } from "../../../secrets/credential-grants.js";
 import { conversationAfter, testConfig } from "../../../testing.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import { base, budgetOn, context, memoryReading, servicesWith, turn } from "../turn/turn-plan.testing.js";
-import { LANDING_CHECKS_NOTE_TITLE } from "../../../workspace/deps/mainline-note.js";
+import { LANDING_CHECKS_NOTE_TITLE } from "../../prompt/checks-note.js";
 import { type AdmittedTurnFacts, gatherTurnFacts, type TurnFacts } from "./turn-facts.js";
 
 // Which reads a turn pays for, named by the `turn.plan.*` span each is timed under: diagnostics read those names, and
@@ -60,7 +60,6 @@ test.each([
             "turn.plan.areas",
             "turn.plan.context",
             "turn.plan.repo-checks",
-            "turn.plan.mainline",
         ],
     ],
     [
@@ -68,15 +67,7 @@ test.each([
         { agent: "claude" },
         routed,
         {},
-        [
-            "turn.plan.window",
-            "turn.plan.capabilities",
-            "turn.plan.personas",
-            "turn.plan.areas",
-            "turn.plan.context",
-            "turn.plan.repo-checks",
-            "turn.plan.mainline",
-        ],
+        ["turn.plan.window", "turn.plan.capabilities", "turn.plan.personas", "turn.plan.areas", "turn.plan.context", "turn.plan.repo-checks"],
     ],
     [
         "native Codex, told of the tree's dependencies in prose",
@@ -92,7 +83,6 @@ test.each([
             "turn.plan.areas",
             "turn.plan.context",
             "turn.plan.repo-checks",
-            "turn.plan.mainline",
         ],
     ],
     [
@@ -108,7 +98,6 @@ test.each([
             "turn.plan.areas",
             "turn.plan.context",
             "turn.plan.repo-checks",
-            "turn.plan.mainline",
         ],
     ],
     [
@@ -126,7 +115,6 @@ test.each([
             "turn.plan.skills",
             "turn.plan.context",
             "turn.plan.repo-checks",
-            "turn.plan.mainline",
         ],
     ],
     [
@@ -143,7 +131,6 @@ test.each([
             "turn.plan.areas",
             "turn.plan.context",
             "turn.plan.repo-checks",
-            "turn.plan.mainline",
         ],
     ],
     [
@@ -160,7 +147,6 @@ test.each([
             "turn.plan.context",
             "turn.plan.repo-checks",
             "turn.plan.turn-context",
-            "turn.plan.mainline",
         ],
     ],
     [
@@ -176,7 +162,6 @@ test.each([
             "turn.plan.areas",
             "turn.plan.context",
             "turn.plan.repo-checks",
-            "turn.plan.mainline",
         ],
     ],
     [
@@ -263,7 +248,7 @@ test.each([
 });
 
 // Said on the opening message and again after a compaction summarizes it away (turn-premise.ts), as every standing note
-// is; a turn in between is only told when the main tree's reds moved under it, which is mainline-note.test.ts's.
+// is, and on no turn in between: it names no failures, so nothing in it goes stale.
 const FORK = { conversationId: "parent", keep: 2, files: "now" } as const;
 
 test.each([
@@ -273,7 +258,7 @@ test.each([
     ["the turn after a compaction", "c-compacted", conversationAfter(4, { compactedTurn: 3 }), undefined, true],
     ["a fork taken right after a compaction", "c-fork-compacted", conversationAfter(4, { compactedTurn: 3 }), FORK, true],
     ["a turn three past the compaction", "c-past", conversationAfter(6, { compactedTurn: 3 }), undefined, false],
-] as const)("the checks-after-landing note is read for %s", async (_case, conversationId, entry, forkOf, sent) => {
+] as const)("the checks-after-landing note is sent on %s", async (_case, conversationId, entry, forkOf, sent) => {
     const services = servicesWith({ agents: unstubbed<Services["agents"]>("agents", { entry: () => entry }) });
 
     const facts = admitted(await gatherTurnFacts(services, turn({ conversationId, forkOf }), context));

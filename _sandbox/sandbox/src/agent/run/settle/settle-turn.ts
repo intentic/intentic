@@ -4,7 +4,7 @@ import type { SettlementPlan } from "./turn-settlement.js";
 
 // Carries a settlement plan out in the order a turn's exit always has: the resume records first, then the rows and
 // re-reads, each fire-and-forget with its own named failure line. Nothing here runs a check or sends the turn back to
-// work: the model decides when it is done, and its work is checked after it lands (workspace/deps/verify-deps.ts).
+// work: the model decides when it is done, and CI checks what the owner pushes.
 
 // Tells the conversation what the turn's exit leaves the resume pass: a held turn, or proof the run got somewhere.
 const recordResumes = (deps: Pick<Services, "conversations">, { hold }: SettlementPlan): void => {

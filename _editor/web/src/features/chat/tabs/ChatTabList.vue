@@ -7,7 +7,6 @@ import { agentDisplayTitle, type FleetLane } from "../../agents/fleet/agentStatu
 import { useAgentFilter } from "../../agents/board/useAgentFilter";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { FINISHED_WINDOW, type FleetAgent, finishedLaneOrder, windowFinished } from "../../agents/fleet/useAgents-fleet";
-import { provideMainline } from "../../agents/mainline/useMainline";
 import HoverCard from "../../../components/HoverCard.vue";
 import RailCard from "../../../components/RailCard.vue";
 import RailLane from "../../../components/RailLane.vue";
@@ -48,9 +47,6 @@ const emit = defineEmits<{
 
 const { conversations, activeId, tabReveal, panes } = useChat();
 const { agentById, fleet, loadArchived } = useAgents();
-// The main tree's check, read once for the whole list: the strip at its head draws it, and every row's card reads it
-// from here (ChatRowList) rather than asking for its own.
-const mainline = provideMainline();
 
 // One set of row verbs for both cuts; this list draws only their menu, hover card, share dialog and rename error.
 const root = ref<HTMLElement | null>(null);

@@ -1,3 +1,4 @@
+import { RUNTIME_DOMAIN_BINDINGS } from "@intentic/sandbox-contract";
 import { partialMatchKey } from "@tanstack/vue-query";
 
 // `of()` and `ofSandbox()` must produce the same key shape, since sandboxQueryPredicate finds a box's entries by
@@ -44,6 +45,10 @@ describe("pushedKeys", () => {
         expect(pushedKeys([`settings`])).toEqual([[`settings`], [`settings.get`]]);
         expect(pushedKeys([`rule-firings`])).toEqual([[`rule-firings`], [`settings.firings`]]);
         expect(pushedKeys([`secrets`])).toEqual([[`secrets`], [`secrets.list`], [`secrets.inventory`], [`secrets.gates`]]);
+        // What pushes left, by the key the contract's own `pushes` domain invalidates (runtime-state.ts), so a rename on
+        // either side fails here rather than leaving the record stale.
+        const pushes = RUNTIME_DOMAIN_BINDINGS.find((binding) => binding.domain === `pushes`);
+        expect(pushes?.invalidates.map((path) => pushedKeys(path))).toEqual([[[`push-checks`], [`workspace.pushChecks`]]]);
     });
 
     it("reads a runtime path joined, and the working tree's review whole", () => {

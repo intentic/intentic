@@ -20,18 +20,16 @@ What the daemon does around you:
   refuses the whole land and raises a conflict card naming the paths; every worktree keeps everything.
   Untracked files shaped like scratch (a new hidden folder, logs and dumps, a checkout of its own) never ride a
   land: they stay in the conversation's copy, listed on its review, until the owner includes or deletes them.
-- **Checks run after your work lands, never at the end of your turn.** You decide when the work is done:
+- **Nothing checks your work when you finish or after it lands.** You decide when the work is done:
   nothing checks it when you stop, nothing sends you back, and no check holds a land, a commit or a push. A
-  repository's per-edit checks run on each file you write and answer in that edit's result. After the
-  land, the repository's own land check runs on the main tree in the background. A failure laid at your land
-  comes back to this conversation as a message while you still have the work in mind. Otherwise the daemon
-  starts a fresh fix-up conversation with the failures, each suspect land's diff and `agents show <id>` for
-  its conversation. The "Checks after landing" note in your prompt lists what main already fails: those are
-  not yours to chase unless your task is about them. Run the checks you judge worth running while you work,
-  scoped to what you changed: the test files that cover it and its package's typecheck, never the whole
-  repository (`pnpm test`, `pnpm typecheck`, `pnpm verify`, an unfiltered `turbo run`). Several
-  conversations share the machine, and the land check runs everything anyway. Your card records whether a
-  check passed after your last edit.
+  repository's per-edit checks run on each file you write and answer in that edit's result. After the land
+  only a dependency install runs, when the land moved a manifest. CI checks what the owner commits and
+  pushes, and when main's CI goes red one fix agent (the `ci-fix-<repo>-<run>` conversation) is sent every
+  failure until it is green. So run the checks you judge worth running while you work, scoped to what you
+  changed: the test files that cover it and its package's typecheck, never the whole repository
+  (`pnpm test`, `pnpm typecheck`, `pnpm verify`, an unfiltered `turbo run`), since several conversations
+  share the machine. A failure in code you did not touch may be main's own, and it is not yours to chase
+  unless your task is about it. Your card records whether a check passed after your last edit.
 - **Runtimes.** A turn runs on Claude Code (this loop), native Codex, OpenCode (Grok, Gemini), Pi, Cursor or
   an ACP agent, chosen per conversation. Which model actually ran is recorded (`mcp__diagnostics__turns`).
 - **Capabilities** are the connections the owner made: connectors (GitHub, Notion, databases…), browser
@@ -112,17 +110,15 @@ conversation that starts there (a persona's `startIn`).
                                      environment.d fragment, a skill) reaches the daemon when the turn lands,
                                      reviewed like code. The live copy is at /mnt/intentic-main/.intentic/config/
 <repo>/.intentic/checks.json         what THAT repository asks to have run on its own code: a list of
-                                     {when: "edit"|"land", run: "<command>"}, run in the repository itself.
-                                     "edit" runs on each file as it is written ({file} is its path); "land"
-                                     runs on the main tree after work lands, and without one the repo's
-                                     verify or test script runs there. "turn" is retired and runs nothing.
+                                     {when: "edit", run: "<command>"}, run in the repository itself on each
+                                     file as it is written ({file} is its path). "land" and "turn" are
+                                     retired: a declaration naming one still parses and runs nothing.
                                      Tracked in the repository, so it travels with a clone; inert until the
                                      owner switches it on (Sandbox ▸ Agent ▸ Finishing, or the repo's own row
                                      in the tree), and held again if it changes afterwards. Propose one as an
                                      ordinary diff; never expect a check you just wrote to run this turn.
 /work/.intentic/records/             sessions/ (transcripts), artifacts/browser/ (screenshots). Shared live
-/work/.intentic/local/               cache/, tmp/, environment.approved.Dockerfile (the composed overlay),
-                                     verify/ (the last land check's log, per project). Shared live
+/work/.intentic/local/               cache/, tmp/, environment.approved.Dockerfile (the composed overlay). Shared live
 /work/.agents/skills/                the loaded skills every runtime reads (Claude links them from .claude/skills/)
 /root/.claude/skills/                the image-baked skills: this one and the task skills routed above
 /history/logs/                       daemon.log, perf.jsonl, resource-metrics.jsonl, client.jsonl (what the
@@ -146,8 +142,8 @@ over a window you choose. They cannot write, and nothing in this playbook restar
   (`only: "failed"`, or a `conversationId`): which model ran, the error code, the provider's own sentence.
 - A turn changed code and ran no check after its last edit, or its last check failed →
   `mcp__diagnostics__turns` with `only: "unproven"`. That is the turn's own record, since nothing checks a turn
-  when it ends. Whether the work passed once it landed is the main-line check's answer: the **Main line** view
-  (its rail tile), and each project's last log in `/work/.intentic/local/verify/`.
+  when it ends or after it lands. Whether main passes is CI's answer for what the owner pushed: the
+  **Pipelines** view, where a red main shows the fix agent on it above the runs.
 - Something errored in the daemon (an automation, a sync, a land, a refused provider) →
   `mcp__diagnostics__errors` (`sinceMinutes`; `contains` a conversation id, route or code; `level`).
 - The editor white-screened, stalled or felt slow → `mcp__diagnostics__errors` with `source: "browser"`.
@@ -173,20 +169,19 @@ rebuild, a daemon restart from the host). Say plainly that nothing was changed.
 ## The editor, in the owner's words
 
 - **Chat** (`/`): one conversation. Question cards (`AskUserQuestion`), plan approval, capability asks and
-  payment approvals render here. Each session card shows its land's status (checking, waiting, passed, or
-  broke N and who is fixing it) and a badge for what its last turn showed of its own work.
+  payment approvals render here. Each session card shows a badge for what its last turn showed of its own
+  work.
 - **Agents** (`/agents`): the fleet board, every conversation as an agent with its branch and status.
   **Land** applies a conversation's delta to the main tree; a conflict card names the paths. With geek metrics
   on (Settings ▸ Appearance), the board's status bar carries the sandbox's CPU, memory and disk, and opens a
   panel with every figure, memory by kind of process, and memory and CPU by session; each card shows its own
   conversation's.
-- **Main line** (`/ext/mainline`, a rail tile that counts a failing project and turns while a check runs): the
-  check main gets after every land, laid out as a board like Agents, each lane saying under its name what it
-  holds. Its lanes read left to right as the road a land travels: Queued (each project's lands, waiting) →
-  Checking (the running check, the command it runs and the lands it measures under it) → Result (each project's
-  last check after landing: the command, and for a failing one who is fixing it, the likely cause and what
-  failed). The Result lane's header opens History. A fourth lane, Left at push, holds what the pre-push check
-  found in your pushes, which never stops a push, and the pushes it measured.
+- **Pipelines** (`/ext/pipelines`, a rail tile shown once a GitHub or GitLab account is connected, counting the
+  branches whose last commit is red): the workspace repositories' CI runs, each run's jobs drawn as a graph,
+  with rerun, cancel and Fix. A red main-line branch shows above the runs with the one fix agent on it and what
+  was last decided about it: the agent has it, it waits for you, or it is only reported because the Agent tab's
+  Repair switch is off. Beside it, **Left at push** holds what the pre-push check found in your pushes and let
+  through, until a later push or a recheck no longer finds it, or you dismiss it or hand it to an agent.
 - **Capabilities** (`/capabilities`): the connections; each card is a connector, account, device or service.
 - **Sandbox** (`/sandbox/<tab>`): Overview, Status (running turns), Usage, Environment, Secrets, Agent (the
   settings above), Extensions, Discover, Access, Personas, Devices.

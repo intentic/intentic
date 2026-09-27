@@ -2,10 +2,9 @@
     // THE STANDARD PLUS anti-slop AND COGNITIVE COMPLEXITY, kept out of the root config by their backlog (about
     // 13,700 findings on main when this became a tier).
     //
-    // A TIDY TIER THAT JUDGES ONLY WHAT A CHANGE ADDS: _tools/oxlint/lint-edit.mjs reports what an edit adds over
-    // HEAD under this file, and the check after a land counts what the land added over the commit it left
-    // (_tools/scripts/verify/land-tiers.mjs, through _tools/oxlint/added.mjs). `pnpm lint:plugins` lists the whole
-    // backlog. `@oxlint/plugins` must equal the `oxlint` version exactly: the JS plugin ABI is not semver-stable.
+    // A TIDY TIER THAT JUDGES ONLY WHAT AN EDIT ADDS: _tools/oxlint/lint-edit.mjs reports what an edit adds over HEAD
+    // under this file (_tools/oxlint/added.mjs). `pnpm lint:plugins` lists the whole backlog. `@oxlint/plugins` must
+    // equal the `oxlint` version exactly: the JS plugin ABI is not semver-stable.
     "$schema": "./node_modules/oxlint/configuration_schema.json",
     "extends": ["./.oxlintrc.json"],
     "jsPlugins": [
@@ -74,7 +73,8 @@
         "anti-slop/no-module-mocking": "off"
     },
     // `extends` does not carry ignorePatterns, so the root's are repeated here: without them this config reads the
-    // generated and vendored files the root skips. A test in land-tiers.test.mjs holds the two lists equal.
+    // generated and vendored files the root skips. A test in _tools/scripts/verify/measure-change.test.mjs holds the
+    // two lists equal.
     "ignorePatterns": [
         "**/node_modules",
         "**/.cache",

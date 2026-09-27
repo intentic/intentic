@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Refuses a test file that got weaker between two commits, unless the range declares it (`test!:` subject, any scope,
 // or a `Test-Note:` trailer) — the same shape _tools/checks/contract-shrink.mjs asks of a shrinking wire contract.
-// `--since <base>` measures the working tree, committed or not, against `base` (the land verify's own range).
+// `--since <base>` measures the working tree, committed or not, against `base`.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";

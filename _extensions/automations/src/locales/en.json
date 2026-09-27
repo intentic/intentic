@@ -65,8 +65,6 @@
         "ignore": "Ignore",
         "inZone": "On the clock in",
         "invisibleMostVisitorsNeeds": "Invisible for most visitors. Needs a Cloudflare widget.",
-        "landedChangeDriftedDependencies": "A landed change drifted the dependencies, and the reinstalled tree failed its own checks.",
-        "laterLandTurnedThose": "A later land turned those failing checks green again.",
         "live": "Live",
         "minutes": "minutes",
         "minutes2": "Minutes",
@@ -148,7 +146,9 @@
         "whoChat": "Who can chat",
         "whoRunsWhatPays": "Who it runs as, and what pays for it.",
         "workLands": "Work lands",
-        "workspace": "Workspace"
+        "workspace": "Workspace",
+        "retired": "retired",
+        "retiredNeverFires": "Nothing sends this any more: the check that ran after every land is gone, so this automation never fires. Pick one of the moments above, or wake on a red CI pipeline instead."
     },
     "automationRow": {
         "alreadyFired": "Already fired; edit it to a new moment to arm it again",
@@ -188,7 +188,9 @@
         "sureEverySenderWired": "Sure? Every sender wired to this URL has to be handed the new one.",
         "urlShownToMaintainers": "Its URL is shown to maintainers and the owner.",
         "wakesOnlyOwnCheck": "Wakes only when its own check finds something",
-        "webhook": "Webhook"
+        "webhook": "Webhook",
+        "checksBreakRetired": "Checks break (retired, never fires)",
+        "checksRecoverRetired": "Checks recover (retired, never fires)"
     },
     "automationsView": {
         "addAutomation": "Add an automation",

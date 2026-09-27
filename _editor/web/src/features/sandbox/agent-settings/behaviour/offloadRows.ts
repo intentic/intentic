@@ -3,9 +3,9 @@ import type { OffloadKind, RunnerSummary } from "@intentic/sandbox-contract";
 import type { PickerOption } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 
-// The rows of "Where heavy work runs" (settings `offload`): one per kind of heavy work this sandbox queues, and one for
-// the check after landing, each picking this sandbox or a runner on one of the owner's machines. Kept apart from the
-// component so the choices and what a pick writes are pinned without mounting it.
+// The rows of "Where heavy work runs" (settings `offload`): one per kind of heavy work this sandbox queues, each picking
+// this sandbox or a runner on one of the owner's machines. Kept apart from the component so the choices and what a pick
+// writes are pinned without mounting it.
 
 type Offload = SandboxSettings[`offload`];
 
@@ -58,11 +58,6 @@ export const withCommandTarget = (offload: Offload, kind: string, runner: string
         commands[kind] = runner;
     }
     return { ...offload, commands };
-};
-
-export const withLandCheckTarget = (offload: Offload, runner: string): Offload => {
-    const { landCheck: _dropped, ...rest } = offload;
-    return runner === HERE ? rest : { ...rest, landCheck: runner };
 };
 
 // A pick naming a runner that is offline, or no longer set up: the work runs here until it is back, which the row says.

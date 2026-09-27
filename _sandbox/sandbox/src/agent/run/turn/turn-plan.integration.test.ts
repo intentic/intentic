@@ -9,7 +9,7 @@ import type { Services } from "../../../composition.js";
 import { conversationAfter, testConfig, memoryFleet, testTurnMounts } from "../../../testing.js";
 import { SKILL_CATALOG_NOTE_HEADER } from "../../../store/loaded-skills.js";
 import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER, workspaceSetup } from "../../../workspace/layout/workspace-setup.js";
-import { landingChecksNote } from "../../../workspace/deps/mainline-note.js";
+import { LANDING_CHECKS_NOTE } from "../../prompt/checks-note.js";
 import type { AgentRequest } from "../../providers/agent-request.js";
 import { composeWirePrompt } from "../../prompt/turn-preamble.js";
 import type { TurnContext } from "../../providers/adapter.js";
@@ -86,8 +86,6 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
         }),
         // A measurement seam, not a behavioural one: runs the work, times nothing.
         perf: unstubbed<Services["perf"]>("perf", { track: (_op, _fields, run) => run() }),
-        // The main line's verdicts, read for the checks-after-landing note an opening turn is sent: nothing checked yet.
-        verifyStore: unstubbed<Services["verifyStore"]>("verifyStore", { read: async () => ({ projects: {}, runs: [] }) }),
         // Snapshotted for the judge on every planned turn, so every arm below needs it too.
         safetyPolicy: unstubbed<Services["safetyPolicy"]>("safetyPolicy", { text: async () => DEFAULT_SAFETY_POLICY }),
         // No device connected in these arms, which is what the daemon answers with none granted; a turn asks on
@@ -244,7 +242,7 @@ test("an installed tree earns no notice, so an opening turn is the user's messag
     const prompt = await promptOf(services, { prompt: "do the thing", agent: "codex" } as AgentTurn, contextIn(root));
 
     // What runs after the work lands is every opening message's to hear; nothing about the tree's dependencies joins it.
-    expect(prompt).toBe(composeWirePrompt([landingChecksNote([], false)], "do the thing"));
+    expect(prompt).toBe(composeWirePrompt([LANDING_CHECKS_NOTE], "do the thing"));
 });
 
 // The probe must ask about the tree the turn itself resolves through, not the daemon's worktree view: a daemon-side

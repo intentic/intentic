@@ -6,7 +6,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { agentDisplayTitle } from "../fleet/agentStatus";
 import { useAgents } from "../fleet/useAgents";
-import { openLandConversation as openConversation } from "../mainline/openLanded";
+import { openById } from "../fleet/useAgents-actions";
 import { useSandboxReadout } from "./sandboxFigures";
 
 // The panel the board's metrics segment opens above its status bar: every figure the bar leaves out, grouped by
@@ -41,7 +41,7 @@ const titleOf = (id: string): string => {
 };
 const open = (id: string): void => {
     const agent = agentById(id);
-    openConversation(id, agent === undefined ? undefined : agentDisplayTitle(agent));
+    openById(id, agent === undefined ? undefined : agentDisplayTitle(agent));
 };
 </script>
 

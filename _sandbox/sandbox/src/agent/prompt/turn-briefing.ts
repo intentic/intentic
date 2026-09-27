@@ -6,7 +6,7 @@ import { GATED_CREDENTIALS_TITLE } from "../../secrets/credential-gating.js";
 import { SKILL_CATALOG_NOTE_TITLE } from "../../store/loaded-skills.js";
 import { REPO_SYNC_NOTE_TITLE } from "../../workspace/layout/sync-repos.js";
 import { SETUP_NOTICE_TITLE, STALE_NOTICE_TITLE } from "../../workspace/layout/workspace-setup.js";
-import { LANDING_CHECKS_NOTE_TITLE } from "../../workspace/deps/mainline-note.js";
+import { LANDING_CHECKS_NOTE_TITLE } from "./checks-note.js";
 import { HANDOFF_STATE_NOTE_TITLE } from "./handoff-state.js";
 import { IQ_SEARCH_INSTRUCTION_TITLE } from "./iq-search-instruction.js";
 import { LITERAL_SLASH_NOTE, WORKTREE_NOTE_TITLE } from "./turn-preamble.js";

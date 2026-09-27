@@ -1,5 +1,5 @@
-// Pins the one store a push and a land check leave in the git common dir: reports and tree verdicts side by side, each
-// kind kept to its own count, and the verdicts' old file still read.
+// Pins the one store the push check and `pnpm verify` leave in the git common dir: reports and tree verdicts side by
+// side, each kind kept to its own count, and the verdicts' old file still read.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";

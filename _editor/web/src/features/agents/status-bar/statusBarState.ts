@@ -5,8 +5,8 @@ import { computed, ref } from "vue";
 // panel opened to watch something is still open after a reload, a trip to another view, or a click anywhere else.
 // Nothing is open until the reader opens it: the bar says enough at rest.
 
-// The bar's one segment, which opens its panel above the bar. The main line had one too before it moved to a board of
-// its own (Mainline.vue), so a panel left open under its name reads back as closed.
+// The bar's one segment, which opens its panel above the bar. The main tree's check once had one too, so a panel left
+// open under its name reads back as closed.
 export type StatusSegment = `metrics`;
 
 export const PANEL_MIN_HEIGHT = 96;

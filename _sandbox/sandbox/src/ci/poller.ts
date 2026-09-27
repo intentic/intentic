@@ -1,14 +1,16 @@
 import { serialLock } from "@intentic/base/async";
-import { CI_POLL_INTERVAL_MS } from "@intentic/sandbox-contract";
+import { CI_POLL_INTERVAL_MS, isPipelineInFlight } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { ciResultOf, dispatchCiRun, rememberCiRun } from "./events.js";
+import { runInFlight } from "./main-fixer.js";
 import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects } from "./projects.js";
 
 // REST fallback for the `ci` trigger: polls only the repos in ciHooks.warnings() (no live webhook), never one that has
 // it. Not a general-purpose poller or a freshness mechanism for the Pipelines view; it exists only to fire the events a
-// webhook would have delivered.
+// webhook would have delivered: a finished run, and a job of a run still going that failed, which main's fix agent
+// starts on (main-fixer.ts).
 
 // Deep enough per pass that a push burst between polls can't push a finished run out of the window.
 const RUNS_PER_POLL = 20;
@@ -51,10 +53,15 @@ export const createCiPoller = (services: Services, fetchFn: FetchFn = fetch, int
                 announced.authorName !== undefined
                     ? { id: announced.authorName, name: announced.authorName }
                     : { id: project.account.provider, name: project.account.provider };
-            await dispatchCiRun(services, announced, author);
+            await dispatchCiRun(services, announced, author, fetchFn);
         }
         // Written after dispatch, so a crash mid-pass re-announces instead of silently dropping a run.
         await services.ciStore.recordAnnounced(project.repo, [...ids, ...known]);
+        // What a job webhook would have said: a job of a run still going failed. Each is heard once, however often a
+        // pass lists it.
+        for (const run of listed.filter((candidate) => isPipelineInFlight(candidate.status)).toReversed()) {
+            await runInFlight(services, project, run, fetchFn);
+        }
     };
 
     const pollOnce = async (): Promise<void> => {

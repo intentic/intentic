@@ -296,7 +296,7 @@
         // no gate or workflow called it, and oxlint-tsgolint was never installed, so it could not start. Removed
         // rather than wired in, because each run is a second whole-program type check beside `pnpm typecheck` on
         // a machine many conversations share. To bring them back: add oxlint-tsgolint, measure the backlog, and run
-        // it through _tools/oxlint/added.mjs on a land's own files, as the plugin tier is.
+        // it through _tools/oxlint/added.mjs on what each edit adds, as the plugin tier is.
         // Was the backlog, now simply the standard
         // These 21 rules were listed here as violated-by-main, with counts, and enforced only on files an
         // agent touched. The count reached zero, so they are ordinary rules now and the second config that

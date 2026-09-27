@@ -32,11 +32,11 @@ sequenceDiagram
     D->>A: starts the turn in its worktree
     A->>S: finds the right files
     A->>D: edits, each one checked
-    D->>D: lands, then checks the main tree
-    D-->>E: events, diff, verdict
+    D->>D: lands onto the main tree
+    D-->>E: events, diff, proof
 ```
 
-The turn runs detached from the browser, so closing the tab does not stop it. Nothing checks the turn when it ends. Landing writes the agent's changes into the main tree as uncommitted changes, the owner's commit is the review, and the repository's own check runs on the main tree after the land. [sandbox.md](sandbox.md) has the details.
+The turn runs detached from the browser, so closing the tab does not stop it. Nothing checks the turn when it ends or after it lands. Landing writes the agent's changes into the main tree as uncommitted changes, the owner's commit is the review, and CI checks what the owner pushes. [sandbox.md](sandbox.md) has the details.
 
 ## Where each part runs
 

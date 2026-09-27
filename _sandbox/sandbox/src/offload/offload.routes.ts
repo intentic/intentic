@@ -6,8 +6,8 @@ import type { OrpcContext } from "../app-env.js";
 /* THIS SANDBOX'S SIDE OF AN OFFLOADED COMMAND (settings `offload`). The in-sandbox `offload-run` command asks whether the
    runner a kind of heavy work goes to can take it, snapshots the tree, then runs the line through here, which relays it
    to that runner (runners/runner-command.ts) and streams its frames back unchanged. Nothing here decides WHAT goes where:
-   the Bash hook and the check after landing already put `offload-run --to <runner>` in front of the line from the
-   setting. A runner that cannot take it answers with one refusal, and `offload-run` runs the line here instead. */
+   the Bash hook already put `offload-run --to <runner>` in front of the line from the setting. A runner that cannot take
+   it answers with one refusal, and `offload-run` runs the line here instead. */
 
 export type OffloadDeps = Pick<Services, "runners" | "runnerHub" | "logger" | "heavyCommands">;
 

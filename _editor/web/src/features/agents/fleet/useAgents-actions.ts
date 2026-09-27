@@ -4,6 +4,7 @@ import { useChat } from "../../chat/run/useChat";
 import { agentTabOf, type AgentTabSeed } from "../../chat/panel/useChat-reveal";
 import { summonChat } from "../../chat/run/summon";
 import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { uuid } from "../../../lib/uuid";
 import { agentById, type FleetAgent } from "./useAgents-fleet";
 import { optimistic, underClaim } from "./useAgents-provisional";
 import { markSeen, registry } from "./useAgents-registry";
@@ -149,4 +150,23 @@ export const open = (agent: Parameters<typeof agentSeed>[0], mode: "peek" | "kee
     const seed = agentSeed(agent);
     summonChat({ kind: `reveal`, verb: `show`, entries: [agentTabOf(seed)], focus: seed.id, caret: false, peek: mode === `peek` });
     markSeen(agent.id);
+};
+
+// A conversation named by id rather than pressed on its card (the fix agent a push was handed to, a session the metrics
+// panel lists), opened the way its card would. One the roster no longer carries (archived) opens by its session, the
+// same door the board and the rail use for a conversation no card stands for.
+export const openById = (conversationId: string, title?: string): void => {
+    const agent = agentById(conversationId);
+    if (agent !== undefined) {
+        open(agent);
+        return;
+    }
+    const tab = uuid();
+    summonChat({
+        kind: `reveal`,
+        verb: `show`,
+        entries: [{ conversationId: tab, sessionRef: conversationId, ...(title === undefined ? {} : { title }) }],
+        focus: tab,
+        caret: false,
+    });
 };

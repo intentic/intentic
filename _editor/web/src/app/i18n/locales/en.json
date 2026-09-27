@@ -441,117 +441,13 @@
             "label": "Board status",
             "close": "Close {title}"
         },
-        "mainline": {
-            "title": "Main line",
-            "root": "workspace",
-            "projectFailing": "{project} failing",
-            "projectsFailing": "{count} project failing | {count} projects failing",
-            "queued": "{count} queued",
-            "columnQueued": "Queued",
-            "columnChecking": "Checking",
-            "columnResult": "Result",
-            "columnHistory": "History",
-            "nothingQueued": "Nothing queued",
-            "noResults": "No results yet",
-            "outdatedMissing": "Until it updates, this panel can't say who a failing check is laid at or who is fixing it, open a check's logs, or show what your pushes left behind.",
-            "logs": "Logs",
-            "moreFailures": "+{count} more",
-            "noFailureList": "No failures listed",
-            "likelyCause": "Likely cause",
-            "andMore": "{title} +{count}",
-            "passed": "passed",
-            "failed": "failed",
-            "recheck": "Re-check",
-            "routingFixing": "Being fixed",
-            "leadFixing": "Being fixed in",
-            "routingHeld": "Waiting for another chat to finish",
-            "leadHeld": "Waiting for",
-            "routingWaiting": "Waiting for the next check",
-            "routingReported": "Nobody is fixing it",
-            "routingSpent": "Out of fix attempts",
-            "routingResolved": "Fixed by the next check",
-            "routingDismissed": "Set aside by you",
-            "routingDeciding": "Deciding who fixes it",
-            "shortFixing": "fixing",
-            "shortOnHold": "on hold",
-            "shortNeedsYou": "needs you",
-            "shortFixed": "fixed",
-            "shortDismissed": "set aside",
-            "push": {
-                "explain": "The push went; its check let these through. Each waits here until a later measurement no longer finds it or you dismiss it. Nobody is sent after them unless you hand them over.",
-                "commits": "{count} commit | {count} commits",
-                "earlier": "+{count} earlier push | +{count} earlier pushes",
-                "more": "+{count} more | +{count} more",
-                "fewer": "Show fewer",
-                "from": "from {sha} {subject}",
-                "endsWhenDismissed": "No later measurement can see this one gone: it ends when you dismiss it.",
-                "recheck": "Measure again",
-                "rechecked": "Measured {project} again: {resolved} gone, {open} still open",
-                "unmeasured": "Couldn't measure {project}; nothing changed",
-                "dismissHint": "Dismiss: it will not be fixed",
-                "dismissOne": "Dismiss {source}",
-                "dismissAll": "Dismiss all",
-                "dismissed": "Dismissed {count} finding | Dismissed {count} findings",
-                "dismissFailed": "Couldn't dismiss that",
-                "handOver": "Hand to an agent",
-                "continue": "Continue",
-                "handHint": "Opens an isolated conversation with every open finding here, the command that shows each again and the commits that brought it.",
-                "handFailed": "Couldn't hand these to an agent",
-                "attempt": "Attempt {count}",
-                "left": "{count} left | {count} left",
-                "clean": "clean",
-                "handled": "handled"
-            },
-            "description": "Work that lands is checked on the main tree: what waits for the check, what it is measuring, what it found, and what your pushes left.",
-            "nothingChecked": "Nothing checked yet. When work lands, its check on the main tree shows here.",
-            "unservedMissing": "Until it updates, this sandbox can't show the check its main tree gets after each land.",
-            "rail": {
-                "checking": "checking {project}",
-                "checkingOn": "checking {project} on {machine}"
-            },
-            "board": {
-                "idle": "No check running",
-                "waiting": "{count} land waits for the next check | {count} lands wait for the next check",
-                "measuring": "Measuring {count} land | Measuring {count} lands",
-                "on": "on {machine}",
-                "queuedLands": "Lands waiting in {project}",
-                "measuredLands": "Lands the check on {project} is measuring",
-                "failingSince": "Failing since {time}",
-                "more": "+{count} more",
-                "backToResults": "Back to the results",
-                "openHistory": "Open the history ({count})",
-                "historyHint": "Every check after landing, newest first",
-                "queuedHint": "Landed work, waiting for its project's next check",
-                "checkingHint": "The check running on the main tree now",
-                "resultHint": "Each project's last check after work landed",
-                "pushedHint": "What the pre-push check found in your pushes. It never stops a push.",
-                "leftAtPush": "Left at push",
-                "nothingLeft": "Nothing left at push",
-                "command": "Command",
-                "fix": "Fix",
-                "failures": "{count} failure | {count} failures",
-                "after": "after {work}",
-                "stillOpen": "{count} finding still open | {count} findings still open",
-                "lastPush": "Last push"
-            }
-        },
-        "landCheck": {
-            "broke": "Broke {count}",
-            "brokeMain": "Broke main",
-            "openFixUp": "Open the conversation working on it",
+        "cardSeal": {
             "unviewed": "Changed {count} interface file without looking | Changed {count} interface files without looking",
-            "seal": {
-                "checking": "Main's check of {project}: running since {time}",
-                "waiting": "Main's check of {project}: queued since {time}",
-                "passed": "Main's check of {project}: passed at {time}",
-                "checkedRed": "Main's check of {project}: still red, from other work",
-                "broke": "Main's check of {project}: {broke}",
-                "verified": "Its own check: {check} passed",
-                "verifiedBare": "Its own check: passed after the last edit",
-                "failed": "Its own check: {check} failed",
-                "failedBare": "Its own check: failed",
-                "unproven": "Its own check: none since the last edit"
-            }
+            "verified": "Its own check: {check} passed",
+            "verifiedBare": "Its own check: passed after the last edit",
+            "failed": "Its own check: {check} failed",
+            "failedBare": "Its own check: failed",
+            "unproven": "Its own check: none since the last edit"
         },
         "words": {
             "new": "New",
@@ -1930,9 +1826,9 @@
             "includeReleaseNoteEach": "Include a release note with each commit."
         },
         "agentChecks": {
-            "repairAfterLanding": "Repair what breaks after landing",
-            "repairAfterLandingNote": "If checks fail after landing, an agent is sent to fix them. Main CI failures get the same.",
-            "afterLanding": "After work lands"
+            "repairMainCi": "Repair main when its CI fails",
+            "repairMainCiNote": "The first job that fails on main starts one fix agent, and every later failure goes to it until main is green. When its turns run out, or it changes nothing, it hands over to you. A run that failed on the CI machines themselves is re-run once instead.",
+            "mainCi": "Main's CI"
         },
         "agentClock": {
             "clock": "Clock",
@@ -2092,7 +1988,7 @@
             "readingWhatWorkspacesRepositories": "Reading what this workspace's repositories declare…",
             "repositoriesWaitingOnUntil": "{waiting} repositories are waiting on you. Until you switch them on, their own checks do not run.",
             "repositoryChecks": "Repository checks",
-            "repositoryDeclaresOwnChecks": "A repository declares what runs on its own code in .intentic/checks.json: after each edit, or after its work lands. Nothing it declares ever blocks a land, a commit or a push."
+            "repositoryDeclaresOwnChecks": "A repository declares in .intentic/checks.json what runs on its own code after each edit. Nothing it declares ever blocks a land, a commit or a push."
         },
         "agentSafetyJudge": {
             "changeInModels": "Change in Models",
@@ -2941,11 +2837,10 @@
             "declaredNotRunningNothing": "Off. Nothing a repository declares runs until you switch it on.",
             "runChecksDeclares": "Run the checks {name} declares",
             "afterEachEdit": "After each edit",
-            "afterItLands": "After it lands",
-            "turnRetired": "Before a turn ends — no longer runs; checks run after landing",
+            "landRetired": "After it lands — no longer runs; CI checks what is pushed",
+            "turnRetired": "Before a turn ends — no longer runs; CI checks what is pushed",
             "lastFlagged": "last flagged {ago}",
             "neverFlagged": "never flagged",
-            "packageScript": "package script",
             "running": "Running"
         },
         "restartWatch": {
@@ -3549,8 +3444,6 @@
             "kindVerifyDetail": "pnpm verify and its variants, the heaviest run there is.",
             "kindVitest": "Vitest runs",
             "kindVitestDetail": "vitest runs.",
-            "landCheck": "Check after landing",
-            "landCheckDetail": "The full check the sandbox runs on the main tree after every land. Its report, the fixes it writes and its verdict come back here.",
             "lastRunFailed": "Last: {command}, exited {code}",
             "lastRunGoing": "Running now: {command}",
             "lastRunPassed": "Last: {command}, passed",
@@ -4932,7 +4825,7 @@
             "unstaged": "Unstaged",
             "untrackedLeave": "{count} untracked file leaves the disk: it was never committed, so git has no copy: | {count} untracked files leave the disk: they were never committed, so git has no copy:",
             "watchRun": "Watch it run",
-            "leftInMainLine": "{count} left in Main line | {count} left in Main line",
+            "leftAtPush": "{count} left at push | {count} left at push",
             "you": "you",
             "pushOutdated": "update the sandbox to see what it left"
         },
@@ -5000,7 +4893,8 @@
         },
         "usePushFlow": {
             "failed": "{verb} failed",
-            "reposRefusedEachRow": "{count} repos refused it, each row says why."
+            "reposRefusedEachRow": "{count} repos refused it, each row says why.",
+            "handFailed": "Couldn't hand this to an agent"
         },
         "usePushRun": {
             "pushing": "Pushing {repo}"

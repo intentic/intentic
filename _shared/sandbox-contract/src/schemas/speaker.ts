@@ -68,12 +68,12 @@ export const speakerOwner = (speaker: TurnSpeaker): Pick<SessionOwner, "email" |
 /** A person, verified, at the keyboard: never a program holding a token a person minted. */
 export const spokenByPerson = (speaker: TurnSpeaker | undefined): boolean => speaker?.kind === "person";
 
-// WHAT A COMPOSED PROMPT IS FOR, when the sandbox or the app wrote it rather than whoever is named as speaking: a land's
-// breakage sent back to it, a fresh fix-up on a red main line and its later nudges, a note to a conversation still
-// working on what failed, the brief a person's press hands an agent (what a push left, main's red CI), a land conflict to
+// WHAT A COMPOSED PROMPT IS FOR, when the sandbox or the app wrote it rather than whoever is named as speaking: the brief
+// a fix agent is handed (what a push left, main's red CI, each later failure on main) and its nudges, a land conflict to
 // resolve. Carried on the turn and the row it opens, so a reader shows it as the sandbox's words, not the owner's, and
 // never has to recognise the prompt by its opening; the four openings older rows are recognised by stay what they are
-// (events/errands.ts, errandOfPrompt).
+// (events/errands.ts, errandOfPrompt). `verify-nudge` and the `land-*` errands are retired with the checks that sent them
+// and stay only because records hold them.
 export const TurnErrandSchema = z.enum([
     "land-conflict",
     "verify-nudge",

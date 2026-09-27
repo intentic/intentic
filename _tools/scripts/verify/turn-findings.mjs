@@ -1,10 +1,10 @@
-// HOW AN ACTOR IS HELD TO ITS OWN FINDINGS AND TO NO OTHERS. Every caller asks each failing check the same question
-// twice, once in the working tree and once in a snapshot of the commit the work is built on (check-snapshot.mjs), and
-// this reads the second answer against the first. The base differs by caller and nothing here depends on which it is:
-// the check after a land asks about the commit the land departed from (land-tiers.mjs), so a land answers for its own
-// change; verify-push asks about the remote tip, so a push answers for its own range. Separate from them because it is the only part with no side effects, and so the
-// only part a test can pin (turn-findings.test.mjs); getting it wrong is expensive in both directions, since a false
-// accusation sends a conversation to rewrite code it never touched and a missed one leaves a new problem to nobody.
+// HOW AN ACTOR IS HELD TO ITS OWN FINDINGS AND TO NO OTHERS. The caller asks each failing check the same question twice,
+// once in the working tree and once in a snapshot of the commit the work is built on (check-snapshot.mjs), and this
+// reads the second answer against the first. Nothing here depends on which base it is: verify-push asks about the
+// commit the push is built on, so a push answers for its own range. Separate from it because it is the only part with
+// no side effects, and so the only part a test can pin (turn-findings.test.mjs). Getting it wrong is expensive in both
+// directions, since a false accusation charges a push with code it never touched and a missed one leaves a new problem
+// to nobody.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CHECKS } from "../../checks/manifest.mjs";

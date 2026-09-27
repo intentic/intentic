@@ -454,7 +454,6 @@
     "_sandbox/sandbox/src/workflows/handover-branches.ts": 2,
     "_sandbox/sandbox/src/workspace/deps/dependency-drift.ts": 4,
     "_sandbox/sandbox/src/workspace/deps/modules.ts": 1,
-    "_sandbox/sandbox/src/workspace/deps/verify-deps.ts": 3,
     "_sandbox/sandbox/src/workspace/files/dir-reads.ts": 5,
     "_sandbox/sandbox/src/workspace/files/workspace-archive-browse.ts": 4,
     "_sandbox/sandbox/src/workspace/files/workspace-archive.ts": 1,

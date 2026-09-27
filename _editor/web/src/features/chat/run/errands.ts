@@ -44,8 +44,9 @@ export const errands = () =>
             opening: LAND_CONFLICT_OPENING,
         },
         // Composed by the DAEMON, unlike the one above, so its opening is the contract's: the two ends would drift the
-        // first time either was reworded on its own. Nothing sends it any more (checks run after landing, not inside a
-        // turn); kept so the transcripts that already hold one still read it as the sandbox's, not the user's words.
+        // first time either was reworded on its own. Nothing sends it any more (nothing checks inside a turn; CI checks
+        // what is pushed); kept so the transcripts that already hold one still read it as the sandbox's, not the user's
+        // words. So are the three `land-*` errands below, retired with the check that used to run after every land.
         verifyNudge: {
             icon: `check-circle`,
             label: t(`chat.errands.checkingWorkJustDid`),
@@ -53,7 +54,7 @@ export const errands = () =>
             kinds: [`verify-nudge`],
             opening: VERIFY_NUDGE_OPENING,
         },
-        // Composed by the daemon when this conversation's land turned the main tree's check red (land-breakage.ts).
+        // Sent back to a conversation whose land turned that check red.
         landBreakage: {
             icon: `wrench`,
             label: t(`chat.errands.fixingWhatLandBroke`),
@@ -61,8 +62,8 @@ export const errands = () =>
             kinds: [`land-breakage`],
             opening: LAND_BREAKAGE_OPENING,
         },
-        // The first prompt of a FRESH conversation the daemon starts on a red main line nobody holding the work could
-        // take (land-fix.ts): the same kind of chore as the follow-up above, handed to somebody new.
+        // The first prompt of a FRESH conversation started on a red check nobody holding the work could take: the same
+        // kind of chore as the follow-up above, handed to somebody new.
         landFix: {
             icon: `wrench`,
             label: t(`chat.errands.fixingRedMainLine`),
@@ -71,7 +72,7 @@ export const errands = () =>
             opening: LAND_FIX_OPENING,
             matches: isLandFix,
         },
-        // Told, while it still works, that main went red on what it is working on (land-breakage.ts holds the red on it).
+        // Told, while it still worked, that the check went red on what it was working on.
         landHeld: {
             icon: `wrench`,
             label: t(`chat.errands.mainRedOnItsWork`),

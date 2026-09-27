@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // No literal control characters (a NUL, etc.) in tracked text: invisible in an editor, but git, grep and every diff
-// viewer read the file as binary. Checked through the checks manifest (each edit, the check after each land, CI
-// preflight, and the pre-push hook, which reports) and by the `bytes-edit` write rule, both reading
+// viewer read the file as binary. Checked through the checks manifest (each edit, CI preflight, `pnpm verify`, and the
+// pre-push hook, which reports) and by the `bytes-edit` write rule, both reading
 // @intentic/constants/control-bytes.
 import { readFileSync, statSync } from "node:fs";
 import { byteName, escapeFor, firstForbiddenByte, isBinaryPath } from "../constants/src/control-bytes.mjs";

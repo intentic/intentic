@@ -1,7 +1,6 @@
-// What a machine can decide, done to the tree before any gate judges it, so no model is sent back to type it.
-//
-// Two callers. The check after a land runs these on the main tree (verify.mjs), the backstop. A conversation's worktree
-// runs them before its land, so what they write rides the land that caused it instead of sitting uncommitted on main:
+// What a machine can decide about a change, written into the tree so no model has to type it. A conversation's
+// worktree runs these before its land (the sandbox's worktree-fixers.ts), so what they write rides the land that caused
+// it. By hand they do the same for any checkout of this repository:
 //
 //   node _tools/scripts/verify/fixers.mjs --worktree <dir> --paths a,b,c     (or --paths-file <file>, or --since <rev>)
 //
@@ -47,24 +46,11 @@ export const formatCrates = (root, list) =>
         return git(root, "status", "--porcelain", "--", crate) !== before;
     });
 
-// Runs each failing check's own `fix` (manifest.mjs); answers the ids it ran.
-export const fixChecks = (root, verdicts) =>
-    verdicts
-        .filter((verdict) => !verdict.ok && verdict.measured)
-        .flatMap((verdict) => {
-            const check = CHECKS.find(({ id }) => id === verdict.id);
-            if (check?.fix === undefined) {
-                return [];
-            }
-            spawnSync(process.execPath, [join(root, "_tools/checks", check.file), ...check.fix], { cwd: root, stdio: "ignore" });
-            return [check.id];
-        });
-
 const BASELINES = "_tools/checks/baselines";
 
 // Lowers each ratcheted check's baseline where `changed` beat it (`--tighten`, lib/ratchet.mjs), so the lower count is
-// written for the land that earned it and no other run moves it; answers the ids whose baseline moved. Nothing when the
-// change set is unknown: an unscoped tighten would credit this land with every other change's shrinkage.
+// written for the change that earned it and no other run moves it. Answers the ids whose baseline moved, and nothing
+// when the change set is unknown: an unscoped tighten would credit this change with every other change's shrinkage.
 export const tightenBaselines = (root, changed) => {
     if (changed === undefined || changed.length === 0) {
         return [];
@@ -115,7 +101,7 @@ export const regenerateStateShapes = (root, changed) => {
 };
 
 // Emits the contract's declarations and dist, which the lock is written from and the shape writer reads, in `root`
-// alone: on the main tree the declarations emit already ran, in a worktree nothing has.
+// alone: in a worktree nothing has emitted them yet.
 const emitContract = (root) => {
     const tsgo = join(root, "node_modules/.bin/tsgo");
     if (existsSync(tsgo)) {

@@ -19,8 +19,12 @@ export interface HookSpec {
 
 export interface FailedStep {
     readonly job: string;
+    // The job's own id, which its log is read by (jobLog).
+    readonly id: number;
     // Absent where the forge has no steps (GitLab), which reads as the code's own failure.
     readonly step?: string;
+    // GitLab's word for why the job failed (`script_failure`, `runner_system_failure`, …), where it gives one.
+    readonly reason?: string;
 }
 
 export interface CiClient {
@@ -29,12 +33,15 @@ export interface CiClient {
     // Names of the run's failed jobs, the one-extra-call enrichment for failed runs.
     readonly failedJobs: (project: CiProject, runId: number) => Promise<string[]>;
     // Each failed job with the step that failed it, where the forge names steps; a runner-owned step (Set up job) says
-    // the fleet died, not the code.
+    // the fleet died, not the code. A job allowed to fail is none of them. Read while the run is still going too: a job
+    // that already failed is listed.
     readonly failedSteps: (project: CiProject, runId: number) => Promise<FailedStep[]>;
     // All jobs in a run with their individual statuses, the expanded-row enrichment for the view.
     readonly allJobs: (project: CiProject, runId: number) => Promise<PipelineJob[]>;
     // Failed jobs' log tails, concatenated and capped; each is reduced to plain text (plain-text.ts) first.
     readonly failedJobLogs: (project: CiProject, runId: number, maxBytes: number) => Promise<string>;
+    // One job's log tail, reduced to plain text and capped; an expired or unreadable log says so in its place.
+    readonly jobLog: (project: CiProject, jobId: number, maxBytes: number) => Promise<string>;
     readonly rerun: (project: CiProject, runId: number) => Promise<void>;
     readonly cancel: (project: CiProject, runId: number) => Promise<void>;
     // Idempotent: a hook already delivering to spec.url is left alone, otherwise one is created.
@@ -104,6 +111,8 @@ export interface GithubRun {
     readonly actor?: { readonly login?: string; readonly avatar_url?: string } | null;
     // push | pull_request | schedule | workflow_dispatch | …
     readonly event?: string;
+    // The workflow's name, which its jobs' webhooks name too (`workflow_name`).
+    readonly name?: string;
 }
 
 // One workflow_run object -> the normalized run; shared by the list call and the webhook receiver (same object under
@@ -121,6 +130,7 @@ export const githubRun = (project: Pick<CiProject, "repo" | "project">, run: Git
         ...(run.actor?.login !== undefined && run.actor.login !== "" ? { authorName: run.actor.login } : {}),
         ...(run.actor?.avatar_url !== undefined && run.actor.avatar_url !== "" ? { authorAvatarUrl: run.actor.avatar_url } : {}),
         ...(run.event !== undefined && run.event !== "" ? { trigger: run.event } : {}),
+        ...(run.name !== undefined && run.name !== "" ? { workflow: run.name } : {}),
         branch: run.head_branch ?? "",
         sha: run.head_sha,
         status,
@@ -149,6 +159,29 @@ const rememberWorkflowSource = (key: string, source: WorkflowSource): void => {
     if (oldest !== undefined) {
         workflowSources.delete(oldest);
     }
+};
+
+// What a sandbox's hook on a GitHub repository delivers: each finished run, and each finished job, so a failure is heard
+// the moment its job fails rather than when the whole run does.
+const GITHUB_HOOK_EVENTS = ["workflow_run", "workflow_job"];
+
+// Failed jobs' log tails in order, until the budget is spent: each under a header naming its job.
+const logTails = async (
+    jobs: readonly { readonly id: number; readonly name: string }[],
+    maxBytes: number,
+    logOf: (jobId: number, budget: number) => Promise<string>,
+): Promise<string> => {
+    const parts: string[] = [];
+    let budget = maxBytes;
+    for (const job of jobs) {
+        if (budget <= 0) {
+            break;
+        }
+        const tail = await logOf(job.id, budget);
+        budget -= tail.length;
+        parts.push(`--- job: ${job.name} (log tail) ---\n${tail}`);
+    }
+    return parts.join("\n\n");
 };
 
 const githubClient = (fetchFn: FetchFn): CiClient => {
@@ -223,6 +256,11 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
         );
         return listed.jobs.filter((job) => job.conclusion !== null && githubStatus("completed", job.conclusion) === "failed");
     };
+    // Redirects to a short-lived blob url; fetch follows it. An expired log is reported inline, not fatal.
+    const logOf = async (project: CiProject, jobId: number, maxBytes: number): Promise<string> => {
+        const response = await fetchFn(githubApi(project, `/actions/jobs/${jobId}/logs`), { headers: githubHeaders(project.account.token) });
+        return (response.ok ? plainText(await response.text()) : `(log unavailable: ${response.status})`).slice(-maxBytes);
+    };
     return {
         listRuns: async (project, limit) => {
             const listed = await json<{ workflow_runs: GithubRun[] }>(
@@ -235,7 +273,7 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
         failedSteps: async (project, runId) =>
             (await jobsOf(project, runId)).map((job) => {
                 const step = job.steps?.find((candidate) => candidate.conclusion === "failure")?.name;
-                return step === undefined ? { job: job.name } : { job: job.name, step };
+                return step === undefined ? { job: job.name, id: job.id } : { job: job.name, id: job.id, step };
             }),
         // No `stage`: Actions has no such concept. `needs` is filled only when the run's workflow file can be read,
         // fetched alongside the job list, not after; unreadable, jobs go out as before.
@@ -290,39 +328,38 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
                 return result;
             });
         },
-        failedJobLogs: async (project, runId, maxBytes) => {
-            const failed = await jobsOf(project, runId);
-            const parts: string[] = [];
-            let budget = maxBytes;
-            for (const job of failed) {
-                if (budget <= 0) {
-                    break;
-                }
-                // Redirects to a short-lived blob url; fetch follows it. An expired log is reported inline, not fatal.
-                const response = await fetchFn(githubApi(project, `/actions/jobs/${job.id}/logs`), { headers: githubHeaders(project.account.token) });
-                const text = response.ok ? plainText(await response.text()) : `(log unavailable: ${response.status})`;
-                const tail = text.slice(-budget);
-                budget -= tail.length;
-                parts.push(`--- job: ${job.name} (log tail) ---\n${tail}`);
-            }
-            return parts.join("\n\n");
-        },
+        failedJobLogs: async (project, runId, maxBytes) =>
+            logTails(await jobsOf(project, runId), maxBytes, (jobId, budget) => logOf(project, jobId, budget)),
+        jobLog: (project, jobId, maxBytes) => logOf(project, jobId, maxBytes),
         rerun: (project, runId) => post(project, `/actions/runs/${runId}/rerun`, "github rerun"),
         cancel: (project, runId) => post(project, `/actions/runs/${runId}/cancel`, "github cancel"),
         ensureHook: async (project, spec) => {
-            const hooks = await json<{ id: number; config?: { url?: string } }[]>(
+            const hooks = await json<{ id: number; events?: string[]; config?: { url?: string } }[]>(
                 await fetchFn(githubApi(project, "/hooks"), { headers: githubHeaders(project.account.token) }),
                 "github hooks list",
             );
-            if (hooks.some((hook) => hook.config?.url === spec.url)) {
+            const mine = hooks.find((hook) => hook.config?.url === spec.url);
+            if (mine === undefined) {
+                await post(project, "/hooks", "github hook create", {
+                    name: "web",
+                    active: true,
+                    events: GITHUB_HOOK_EVENTS,
+                    config: { url: spec.url, content_type: "json", secret: spec.secret },
+                });
                 return;
             }
-            await post(project, "/hooks", "github hook create", {
-                name: "web",
-                active: true,
-                events: ["workflow_run"],
-                config: { url: spec.url, content_type: "json", secret: spec.secret },
-            });
+            // A hook registered before jobs were heard one by one delivers finished runs only: it learns the rest.
+            const missing = GITHUB_HOOK_EVENTS.filter((event) => !(mine.events ?? []).includes(event));
+            if (missing.length > 0) {
+                await throwOn(
+                    await fetchFn(githubApi(project, `/hooks/${mine.id}`), {
+                        method: "PATCH",
+                        headers: { ...githubHeaders(project.account.token), "Content-Type": "application/json" },
+                        body: JSON.stringify({ add_events: missing }),
+                    }),
+                    "github hook update",
+                );
+            }
         },
         removeHook: async (project, url) => {
             const hooks = await json<{ id: number; config?: { url?: string } }[]>(
@@ -524,11 +561,18 @@ const gitlabClient = (fetchFn: FetchFn): CiClient => {
             what,
         );
     };
-    const failedJobsOf = async (project: CiProject, runId: number): Promise<{ id: number; name: string }[]> =>
-        json<{ id: number; name: string }[]>(
-            await fetchFn(gitlabApi(project, `/pipelines/${runId}/jobs?scope[]=failed&per_page=100`), { headers: gitlabHeaders(project) }),
-            "gitlab jobs list",
-        );
+    // A job allowed to fail fails nothing, so it is none of the pipeline's failures.
+    const failedJobsOf = async (project: CiProject, runId: number): Promise<{ id: number; name: string; failure_reason?: string }[]> =>
+        (
+            await json<{ id: number; name: string; allow_failure?: boolean; failure_reason?: string }[]>(
+                await fetchFn(gitlabApi(project, `/pipelines/${runId}/jobs?scope[]=failed&per_page=100`), { headers: gitlabHeaders(project) }),
+                "gitlab jobs list",
+            )
+        ).filter((job) => job.allow_failure !== true);
+    const traceOf = async (project: CiProject, jobId: number, maxBytes: number): Promise<string> => {
+        const response = await fetchFn(gitlabApi(project, `/jobs/${jobId}/trace`), { headers: gitlabHeaders(project) });
+        return (response.ok ? plainText(await response.text()) : `(log unavailable: ${response.status})`).slice(-maxBytes);
+    };
     return {
         listRuns: async (project, limit) => {
             const listed = await json<GitlabPipeline[]>(
@@ -552,7 +596,10 @@ const gitlabClient = (fetchFn: FetchFn): CiClient => {
             });
         },
         failedJobs: async (project, runId) => (await failedJobsOf(project, runId)).map((job) => job.name),
-        failedSteps: async (project, runId) => (await failedJobsOf(project, runId)).map((job) => ({ job: job.name })),
+        failedSteps: async (project, runId) =>
+            (await failedJobsOf(project, runId)).map((job) =>
+                job.failure_reason === undefined ? { job: job.name, id: job.id } : { job: job.name, id: job.id, reason: job.failure_reason },
+            ),
         // `stage` is native here; the view groups by it directly, timestamps only order stages by actual start.
         allJobs: async (project, runId) => {
             const listed = await json<
@@ -586,39 +633,42 @@ const gitlabClient = (fetchFn: FetchFn): CiClient => {
                 return result;
             });
         },
-        failedJobLogs: async (project, runId, maxBytes) => {
-            const failed = await failedJobsOf(project, runId);
-            const parts: string[] = [];
-            let budget = maxBytes;
-            for (const job of failed) {
-                if (budget <= 0) {
-                    break;
-                }
-                const response = await fetchFn(gitlabApi(project, `/jobs/${job.id}/trace`), { headers: gitlabHeaders(project) });
-                const text = response.ok ? plainText(await response.text()) : `(log unavailable: ${response.status})`;
-                const tail = text.slice(-budget);
-                budget -= tail.length;
-                parts.push(`--- job: ${job.name} (log tail) ---\n${tail}`);
-            }
-            return parts.join("\n\n");
-        },
+        failedJobLogs: async (project, runId, maxBytes) =>
+            logTails(await failedJobsOf(project, runId), maxBytes, (jobId, budget) => traceOf(project, jobId, budget)),
+        jobLog: (project, jobId, maxBytes) => traceOf(project, jobId, maxBytes),
         rerun: (project, runId) => post(project, `/pipelines/${runId}/retry`, "gitlab retry"),
         cancel: (project, runId) => post(project, `/pipelines/${runId}/cancel`, "gitlab cancel"),
         ensureHook: async (project, spec) => {
-            const hooks = await json<{ id: number; url: string }[]>(
+            const hooks = await json<{ id: number; url: string; job_events?: boolean }[]>(
                 await fetchFn(gitlabApi(project, "/hooks"), { headers: gitlabHeaders(project) }),
                 "gitlab hooks list",
             );
-            if (hooks.some((hook) => hook.url === spec.url)) {
-                return;
-            }
-            await post(project, "/hooks", "gitlab hook create", {
+            const mine = hooks.find((hook) => hook.url === spec.url);
+            // Pipelines and jobs both: a failed job is heard the moment it fails, not when its pipeline does.
+            const settings = {
                 url: spec.url,
                 token: spec.secret,
                 pipeline_events: true,
+                job_events: true,
                 push_events: false,
                 enable_ssl_verification: true,
-            });
+            };
+            if (mine === undefined) {
+                await post(project, "/hooks", "gitlab hook create", settings);
+                return;
+            }
+            // A hook registered before jobs were heard one by one learns them; the edit names the url and token again,
+            // which GitLab's edit takes whole.
+            if (mine.job_events !== true) {
+                await throwOn(
+                    await fetchFn(gitlabApi(project, `/hooks/${mine.id}`), {
+                        method: "PUT",
+                        headers: { ...gitlabHeaders(project), "Content-Type": "application/json" },
+                        body: JSON.stringify(settings),
+                    }),
+                    "gitlab hook update",
+                );
+            }
         },
         removeHook: async (project, url) => {
             const hooks = await json<{ id: number; url: string }[]>(

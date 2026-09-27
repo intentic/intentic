@@ -6,6 +6,7 @@ import { conversationProfile } from "../conversations/registry/agents-store.js";
 import { startWatchers } from "../agent/verification/watchers.js";
 import { approvalsExecutorFor } from "../approvals/approvals-executor.js";
 import { createAutomationsScheduler } from "../automations/scheduler.js";
+import { fixerSettled, resumeMainFixer } from "../ci/main-fixer.js";
 import { createCiPoller } from "../ci/poller.js";
 import { autoKeepWarm, stopKeepWarm } from "../agent/run/turn/cache-keepwarm.js";
 import type { BootPhase } from "./boot-phase.js";
@@ -61,6 +62,16 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
 
     if (role.container) {
         services.ciHooks.start();
+        // Main's CI has one fix agent (ci/main-fixer.ts): each of its settled turns may hand main's red to the owner, and
+        // what main did while the daemon was down reaches it now.
+        shutdown.push(
+            services.events.subscribe("run.settled", (settled) => {
+                void fixerSettled(services, settled).catch((error: unknown) =>
+                    logger.warn({ err: error }, "ci repair: a settled turn could not be read"),
+                );
+            }),
+        );
+        void resumeMainFixer(services).catch((error: unknown) => logger.warn({ err: error }, "ci repair: main's reds could not be resumed"));
     }
 
     // Covers repos whose CI hook could not be registered; its first pass is a silent seed.

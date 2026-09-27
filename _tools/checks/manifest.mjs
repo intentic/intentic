@@ -1,5 +1,5 @@
-// The one list of checks that read the checkout; CI, the pre-push hook, the check after each land (`pnpm verify`), the
-// per-edit run and `pnpm checks` all read it, so a check exists once and runs everywhere. Each check is its own process
+// The one list of checks that read the checkout. CI, the pre-push hook, `pnpm verify`, the per-edit run and `pnpm checks`
+// all read it, so a check exists once and runs everywhere. Each check is its own process
 // (lib/report.mjs): problems to stderr and exit 1, else what it vouched for to stdout and exit 0.
 // `needs`:
 // checkout tracked files only, no install, no network
@@ -7,19 +7,17 @@
 // node_modules optional: the check attempts what needs an install, vouches for less without it
 // `gate`:
 // code the tree is broken or unbuildable; a failure wherever this list is read (the pre-push hook only reports it)
-// tidy a cost to readers, not a break; a failure only for the lines a land or a pushed range adds, a warning otherwise,
-// and a failure in the nightly tidy job
+// tidy a cost to readers, not a break; a failure only for the lines a pushed range adds, a warning otherwise, and a
+// failure in the nightly tidy job
 // A new check enters as tidy and is promoted to code once a run record shows only true failures.
 // `scoped`: the check takes `--paths a,b,c` and judges only those files, with the same verdict on them it would reach
 // reading the whole tree. That is what lets it run on ONE file the instant it is written (.intentic/checks.json's
 // `edit` moment), which is the only moment at which the model that wrote the line is still holding it. A check whose
 // finding is a property of the tree rather than of a file — a directory's size, a link's target, a cycle between
 // subsystems — is not scopable and omits the flag; those are read whole or not at all.
-// `fix`: arguments that make the check write the tree into shape itself; the check after a land runs it on the main
-// tree before judging a failure (verify.mjs).
-// `ratchet`: the check keeps a standing backlog in baselines/ (lib/ratchet.mjs) that it reads and never writes; the
-// check after a land runs it with `--tighten <the land's paths>` (fixers.mjs), which lowers only the entries that land
-// beat, so the lower count is written for the change that earned it.
+// `ratchet`: the check keeps a standing backlog in baselines/ (lib/ratchet.mjs) that it reads and never writes. Before a
+// conversation's work lands, the fixers in its worktree (fixers.mjs) run the check with `--tighten <the change's
+// paths>`, which lowers only the entries that change beat, so the lower count is written for the change that earned it.
 export const CHECKS = [
     { id: "control-chars", file: "control-chars.mjs", needs: "checkout", gate: "code", scoped: true, about: "no literal control bytes in tracked text" },
     { id: "skill-descriptions", file: "skill-descriptions.mjs", needs: "checkout", gate: "tidy", about: "every skill description fits the catalog budget the prompt pays for on every call" },
@@ -28,7 +26,6 @@ export const CHECKS = [
         file: "lockfile-drift.mjs",
         needs: "checkout",
         gate: "code",
-        fix: ["--fix"],
         about: "pnpm-lock.yaml records the manifests, pins the pnpm package.json names, and carries nothing unreachable (--fix drops a package-manager pin package.json does not name)",
     },
     { id: "peer-deps", file: "peer-deps.mjs", needs: "checkout", gate: "tidy", about: "no unmet, missing or conflicting peer in any importer (read from the lockfile by pnpm, which the runner must have)" },
@@ -103,7 +100,6 @@ export const CHECKS = [
         file: "i18n-catalogs.mjs",
         needs: "checkout",
         gate: "code",
-        fix: ["--fix"],
         about: "every translation holds only keys English has, with English's placeholders and plural-ness (--fix drops the rest)",
     },
     {

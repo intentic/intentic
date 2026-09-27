@@ -275,7 +275,7 @@ if (allow !== undefined) {
     const count = (found === "fanOut" ? fanOut : collisions).get(allow);
     allowOne("layout", RATCHETS[found], allow, count);
     console.log(
-        `layout: recorded ${allow} at ${count} with its reason; the entry rides the change that needs it, and the check after a land that shrinks ${allow} lowers it again`,
+        `layout: recorded ${allow} at ${count} with its reason. The entry rides the change that needs it, and a change that shrinks ${allow} lowers it again (--tighten)`,
     );
     process.exit(0);
 }

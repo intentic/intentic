@@ -1,7 +1,15 @@
-import { type AgentHarness, type AgentProvider, landFixPrompt, type SandboxHandlerOutput, type TranscriptRow } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentProvider, SandboxHandlerOutput, TranscriptRow } from "@intentic/sandbox-contract";
 import { SUPPORT_SWEEP_PATH } from "./browserShots";
 import { DESK_REVIEW_ID, SEPTEMBER_AFTER, SEPTEMBER_BEFORE } from "./desk";
-import { HELD_AGENT_ID, LAND_FIX_AGENT_ID, REVIEW_AGENT_ID, SOFT_DELETES_JOBS, SOFT_E2E_JOB, SOFT_TYPECHECK_JOB } from "./fleet";
+import {
+    API_MAIN_FIXER_ID,
+    HELD_AGENT_ID,
+    REVIEW_AGENT_ID,
+    SOFT_DELETES_JOBS,
+    SOFT_E2E_JOB,
+    SOFT_TYPECHECK_JOB,
+    WEB_MAIN_FIXER_ID,
+} from "./fleet";
 import { MAYA_CHAT_ID, OWEN_CHAT_ID, PRIYA_CHAT_ID } from "./openChats";
 
 // Transcript route body: messages plus the session id, provider, harness and account they're bound to. A reopened tab
@@ -15,8 +23,8 @@ interface AgentTranscript {
 }
 
 // /agents/{id}/transcript returns the restored transcript for a finished agent; other cards return empty, honestly.
-// Diffs match the review panel's. Four are fixtured: one finished-delta agent, one per persona; persona chats touch no
-// files, only their accounts.
+// Diffs match the review panel's. Fixtured: the finished-delta agent, main's two CI fix agents, the desk's review and
+// one per persona; persona chats touch no files, only their accounts.
 
 const SCHEMA_BEFORE = `export const users = pgTable("users", {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -295,38 +303,69 @@ const SEPTEMBER_TEMPLATE: AgentTranscript = {
     ],
 };
 
-// The fresh conversation the sandbox started on `web`'s red main line (fixture/mainline.ts). Its first prompt is the
-// daemon's own brief, composed through the contract as the daemon composes it, so the chat folds it into an errand row
-// rather than showing it as something a person typed.
-const LAND_FIX: AgentTranscript = {
-    sessionId: `ses_01j9landfix`,
+// The one fix agent the sandbox put on `web`'s red main line (fixture/ci.ts), in the words the daemon composes for a CI
+// failure (ci/ci-fix.ts), then the next red run on main sent to the same conversation. Both rows carry the errand they
+// are, so the chat shows them as the sandbox's brief rather than as something a person typed.
+const WEB_MAIN_FIX: AgentTranscript = {
+    sessionId: `ses_01j9cifixweb`,
     provider: `claude`,
     harness: `claude-code`,
     account: `acc_claude_demo`,
     messages: [
         {
             role: `user`,
-            text: landFixPrompt([
-                `\`pnpm verify\` in \`web\` failed on:`,
+            errand: `ci-fix`,
+            text: [
+                `The CI pipeline for the workspace repo "web" failed on branch main (https://github.com/acme/shop-web/actions/runs/4818). Investigate and fix it.`,
+                `Failed jobs: unit.`,
+                `The logs below are the evidence — read them first; they are usually enough to name the cause.`,
+                `You are in an isolated worktree: commit your fix and it goes through review.`,
                 [
-                    `- web/src/pages/changelog.test.ts › lists every release under its own heading`,
-                    `- web/src/pages/changelog.test.ts › links each release to its tag`,
-                    `- web typecheck: src/pages/changelog.ts(41,7): Property 'tag' does not exist on type 'Release'`,
+                    `--- failed job logs (tails) ---`,
+                    ` FAIL  src/pages/changelog.test.ts > lists every release under its own heading`,
+                    `TypeError: Cannot read properties of undefined (reading 'version')`,
+                    ` ❯ src/pages/changelog.ts:41:19`,
                 ].join(`\n`),
-                `These failures arrived with this land:`,
-                [
-                    `**"Draft the release notes for 2.4" (\`cnv_release_notes\`)**`,
-                    `- src/pages/changelog.ts`,
-                    `- CHANGELOG.md`,
-                    `What it was asked and what it did: \`agents show cnv_release_notes\``,
-                ].join(`\n`),
-                `The conversation that landed it ("Draft the release notes for 2.4") has gone cold or is nearly full, so reading all of it again would cost more than starting fresh.`,
-                `Start by re-running only the failing tests, not the whole suite; they fail on the main tree now, and your worktree starts from it.`,
-            ]),
+            ].join(`\n\n`),
         },
         {
             role: `assistant`,
             text: `The release notes renamed \`version\` to \`tag\` in each entry of the changelog, but \`Release\` still types it as \`version\`, so the page drops every heading and every link. Re-running the two changelog tests on their own before touching the type.`,
+        },
+        {
+            role: `user`,
+            errand: `ci-fix-nudge`,
+            text: `Main failed again on web (https://github.com/acme/shop-web/actions/runs/4822): typecheck, unit. It is the same red, and this conversation has it until a run of main passes.`,
+        },
+    ],
+};
+
+// `api`'s fix agent: it read the logs, found the failure outside the code, and said so rather than change anything.
+const API_MAIN_FIX: AgentTranscript = {
+    sessionId: `ses_01j9cifixapi`,
+    provider: `claude`,
+    harness: `claude-code`,
+    account: `acc_claude_demo`,
+    messages: [
+        {
+            role: `user`,
+            errand: `ci-fix`,
+            text: [
+                `The CI pipeline for the workspace repo "api" failed on branch main (https://gitlab.com/acme/shop-api/-/pipelines/90314). Investigate and fix it.`,
+                `Failed jobs: test:integration.`,
+                `The logs below are the evidence — read them first; they are usually enough to name the cause.`,
+                `You are in an isolated worktree: commit your fix and it goes through review.`,
+                [
+                    `--- failed job logs (tails) ---`,
+                    `Error: connect ECONNREFUSED 10.0.14.7:5432`,
+                    `    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1607:16)`,
+                    `FATAL: sorry, too many clients already`,
+                ].join(`\n`),
+            ].join(`\n\n`),
+        },
+        {
+            role: `assistant`,
+            text: `Nothing to change in the code: every test:integration failure is the CI database refusing connections ("too many clients already"), and the Stripe SDK bump touches none of the database code. The runner's Postgres service needs a higher max_connections, or the suite a smaller pool; both are settings on your CI, not in this repository.`,
         },
     ],
 };
@@ -353,7 +392,8 @@ const SUPPORT_CARD: AgentTranscript = {
 
 const TRANSCRIPTS: Record<string, AgentTranscript> = {
     [REVIEW_AGENT_ID]: SOFT_DELETES,
-    [LAND_FIX_AGENT_ID]: LAND_FIX,
+    [WEB_MAIN_FIXER_ID]: WEB_MAIN_FIX,
+    [API_MAIN_FIXER_ID]: API_MAIN_FIX,
     [HELD_AGENT_ID]: SUPPORT_CARD,
     [DESK_REVIEW_ID]: SEPTEMBER_TEMPLATE,
     [MAYA_CHAT_ID]: MAYA_SUPPORT,

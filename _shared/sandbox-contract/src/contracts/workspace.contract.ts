@@ -17,12 +17,12 @@ import {
     WorkspaceSyncSchema,
 } from "../schemas/workspace/workspace-repos.js";
 import {
-    MainlinePushDismissResultSchema,
-    MainlinePushDismissSchema,
-    MainlinePushRecheckResultSchema,
-    MainlinePushRecheckSchema,
-    MainlineStatusSchema,
-} from "../schemas/workspace/mainline.js";
+    PushChecksSchema,
+    PushDismissResultSchema,
+    PushDismissSchema,
+    PushRecheckResultSchema,
+    PushRecheckSchema,
+} from "../schemas/workspace/push-checks.js";
 import { WorkspaceSearchQuerySchema, WorkspaceSearchResultSchema } from "../schemas/workspace/workspace-search.js";
 import { WorkspaceInstallResultSchema, WorkspaceInstallSchema, WorkspaceSetupSchema } from "../schemas/workspace/workspace-setup.js";
 import {
@@ -283,37 +283,36 @@ export const workspaceContract = {
         })
         .input(WorkspaceInstallSchema)
         .output(WorkspaceInstallResultSchema),
-    // Nothing is checked inside a turn; this is the check that runs instead, over the main tree after work lands.
-    mainline: procedure
+    // What the pre-push hook found and let through waits here until measured gone or dismissed; with the two hands on it.
+    pushChecks: procedure
         .route({
             method: "GET",
-            path: "/workspace/mainline",
-            summary: "The checks that run after work lands",
+            path: "/workspace/push-checks",
+            summary: "What pushes left behind",
             description:
-                "What the main tree's own check is measuring right now, which landed work waits for the next run, what the last run in each project said, and what became of a red one: sent back to the conversation that landed it, handed to a fresh conversation, or waiting on one still working. Nothing here ever holds a land, a commit or a push.",
+                "Every push the pre-push hook measured, newest first, with what each brought in, and what is still owed per project. The hook never refuses a push, so this is where its findings wait. Nothing here is ever sent to an agent by itself.",
         })
-        .output(MainlineStatusSchema),
-    // What a push check found and let through waits here until measured gone or dismissed; these are the two hands on it.
-    mainlinePushDismiss: procedure
+        .output(PushChecksSchema),
+    pushDismiss: procedure
         .route({
             method: "POST",
-            path: "/workspace/mainline/push/dismiss",
+            path: "/workspace/push-checks/dismiss",
             summary: "Set aside what a push left behind",
             description:
                 "Marks findings a push check let through as not to be fixed, so they stop counting against the project, or opens dismissed ones again. Nothing is changed in the code.",
         })
-        .input(MainlinePushDismissSchema)
-        .output(MainlinePushDismissResultSchema),
-    mainlinePushRecheck: procedure
+        .input(PushDismissSchema)
+        .output(PushDismissResultSchema),
+    pushRecheck: procedure
         .route({
             method: "POST",
-            path: "/workspace/mainline/push/recheck",
+            path: "/workspace/push-checks/recheck",
             summary: "Measure what a push left behind again",
             description:
                 "Runs the project's own push measurement over its main tree now and resolves every open finding it no longer prints. A few seconds; nothing is pushed.",
         })
-        .input(MainlinePushRecheckSchema)
-        .output(MainlinePushRecheckResultSchema),
+        .input(PushRecheckSchema)
+        .output(PushRecheckResultSchema),
     repos: procedure
         .route({
             method: "GET",

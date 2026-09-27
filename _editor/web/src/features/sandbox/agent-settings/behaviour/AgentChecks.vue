@@ -4,9 +4,9 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 
-// What happens to breakage found once the work has left its turn. Nothing checks inside a turn any more, and nothing
-// asks the model to prove or look at anything when one ends: the main tree's own check runs after work lands, and a
-// card says what that check and the turn itself showed (landCheck.ts). The one decision left here is who repairs a red.
+// What happens when main's CI goes red. Nothing checks work inside a turn or after it lands any more, and nothing asks
+// the model to prove or look at anything when a turn ends: CI checks what is pushed, and a card says what the turn itself
+// showed (proofSeal.ts). The one decision left here is whether a red main gets a fix agent by itself (`autoRepair`).
 
 const t = useT();
 
@@ -14,10 +14,10 @@ const { settings, patch } = useSandboxSettings();
 </script>
 
 <template>
-    <RowGroup :label="t(`sandbox.agentChecks.afterLanding`)">
-        <!-- A land that turns main red waits for the lands queued behind it, then goes back to its conversation or to a fresh
-             one; main's CI red on one failure gets a fix agent once pushes go quiet. -->
-        <Row icon="wrench" :title="t(`sandbox.agentChecks.repairAfterLanding`)" :description="t(`sandbox.agentChecks.repairAfterLandingNote`)">
+    <RowGroup :label="t(`sandbox.agentChecks.mainCi`)">
+        <!-- Main's first failed job starts one fix agent, which is sent every later failure on main until a run passes; a
+             failure of the CI fleet itself is re-run once instead. -->
+        <Row icon="wrench" :title="t(`sandbox.agentChecks.repairMainCi`)" :description="t(`sandbox.agentChecks.repairMainCiNote`)">
             <template #control>
                 <ToggleSwitch
                     :model-value="settings?.autoRepair ?? true"

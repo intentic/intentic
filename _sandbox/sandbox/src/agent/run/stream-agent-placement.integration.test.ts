@@ -2,7 +2,6 @@ import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type AgentEvent, type Rule, SandboxSettingsSchema, type WorkspaceEvent } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import * as verifyLanded from "../../conversations/land/verify-landed.js";
 import * as versionLanded from "../../conversations/land/version-landed.js";
 import type { Services } from "../../composition.js";
 import { collect } from "../../harness/route-client.testing.js";
@@ -10,6 +9,7 @@ import { gitOut, OPENING_CHECKS_PREAMBLE, realCheckout, recordingLogger } from "
 import { recordingTurnStores, services } from "../../harness/route-services.testing.js";
 import { beginTurn } from "../../testing.js";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
+import { depsSliceFake } from "../../workspace/deps/deps-slice.testing.js";
 import type { AgentRequest } from "../providers/agent-request.js";
 import type { TurnInput } from "../../seams/turn-starter.js";
 import { streamAgent } from "./stream-agent.js";
@@ -17,20 +17,13 @@ import { streamAgent } from "./stream-agent.js";
 // Pins where a conversation's turn runs and what happens after it: the runner, the main tree and the worktree, each
 // with its own frames around the body, its land or its books, and the events a settled turn raises.
 
-// The land's three hand-offs leave this process (a chore, the whole-repo check, the drafted message), so each is
-// recorded at the door instead: the chore's announcement off the bus (placedServices), the other two by their modules.
-const landed = { ...verifyLanded };
+// The land's three hand-offs leave this process (a chore, the install a land owes, the drafted message), so each is
+// recorded at the door instead: the chore's announcement off the bus and the install at the dependency coordinator
+// (placedServices), the drafted message by its module.
 const versioned = { ...versionLanded };
 const emitted = [] as WorkspaceEvent[];
-const verified = [] as DependencyLandOrigin[];
+const reconciled = [] as DependencyLandOrigin[];
 const drafted = [] as string[];
-jest.mock("../../conversations/land/verify-landed.js", () => ({
-    ...landed,
-    verifyLandedTree: async (_services: unknown, origin: DependencyLandOrigin) => {
-        verified.push(origin);
-        return { missing: 1, started: ["root"], deferred: false };
-    },
-}));
 jest.mock("../../conversations/land/version-landed.js", () => ({
     ...versioned,
     settleLandingInBackground: (_services: unknown, id: string) => void drafted.push(id),
@@ -39,7 +32,7 @@ jest.mock("../../conversations/land/version-landed.js", () => ({
 const tempDirs: string[] = [];
 afterEach(async () => {
     emitted.length = 0;
-    verified.length = 0;
+    reconciled.length = 0;
     drafted.length = 0;
     for (const dir of tempDirs.splice(0)) {
         await rm(dir, { recursive: true, force: true });
@@ -61,7 +54,14 @@ const placedServices = (
 ): { readonly services: Services; readonly writes: ReturnType<typeof recordingTurnStores>["writes"]; readonly lines: Record<string, unknown>[] } => {
     const recorded = recordingTurnStores(snapshot === undefined ? {} : { snapshot });
     const { lines, logger } = recordingLogger();
-    const placed = services({ ...recorded.overrides, logger, git: { sync: async () => ({ status: "current" }) }, agent, ...extra });
+    const dependencies: Services["dependencies"] = {
+        ...depsSliceFake().dependencies,
+        reconcileLand: async (origin) => {
+            reconciled.push(origin);
+            return { missing: 1, started: ["root"], deferred: false };
+        },
+    };
+    const placed = services({ ...recorded.overrides, logger, git: { sync: async () => ({ status: "current" }) }, agent, dependencies, ...extra });
     // Heard beside composition's own reactions, whose chores match no automation here.
     placed.events.subscribe("workspace", (event) => void emitted.push(event));
     return { services: placed, writes: recorded.writes, lines };
@@ -227,7 +227,7 @@ test("a runtime that throws is observed as the turn's failure, and the throw rea
     expect(s.agents.entry("placed-throws")).toMatchObject({ ending: { kind: "failed" } });
 });
 
-test("a clean isolated turn rebases onto the main line, lands into the main tree, checks it, and says so to every reader", async () => {
+test("a clean isolated turn rebases onto the main line, lands into the main tree, reconciles its install, and says so to every reader", async () => {
     const { work, worktree, worktrees } = await checkout("placed-lands");
     // The main line moved on after the branch was cut, so the turn starts by rebasing onto it.
     await writeFile(join(work, "other.ts"), "someone else's work\n");
@@ -253,7 +253,7 @@ test("a clean isolated turn rebases onto the main line, lands into the main tree
     expect(await gitOut(work, "diff")).toContain("+the agent's work");
     expect(lands(writes)).toStrictEqual([{ name: "agent.land", attrs: { id: "placed-lands", mode: "check", span: "outstanding" } }]);
     const repos = [{ repo: "root", from: base, dir: worktree }];
-    expect(verified).toStrictEqual([{ kind: "land", agentId: "placed-lands", title: "Ship the parser", branch: "agent/placed-lands", repos }]);
+    expect(reconciled).toStrictEqual([{ kind: "land", agentId: "placed-lands", title: "Ship the parser", branch: "agent/placed-lands", repos }]);
     expect(drafted).toStrictEqual(["placed-lands"]);
     // The main tree moved: History gets a turn checkpoint; the worktree turn itself never snapshots.
     expect(writes.snapshots).toStrictEqual([{ trigger: "turn", label: "ship the parser" }]);
@@ -276,7 +276,7 @@ test("a clean isolated turn with auto-land off is measured and held on its branc
     expect(frames.at(-1)).toStrictEqual({ kind: "landed", landed: false, held: true });
     expect(lands(writes)).toStrictEqual([{ name: "agent.land", attrs: { id: "placed-held", mode: "measure", span: "outstanding" } }]);
     expect(await gitOut(work, "status", "--porcelain")).toBe("");
-    expect(verified).toStrictEqual([]);
+    expect(reconciled).toStrictEqual([]);
     expect(drafted).toStrictEqual([]);
     expect(emitted).toStrictEqual([
         {
@@ -320,8 +320,8 @@ test("a rule that holds work narrowed by path is read against the turn's own cha
     expect(emitted.map(({ event, outcome }) => ({ event, outcome }))).toStrictEqual([{ event: "turn.settled", outcome: "ready" }]);
 });
 
-// Nothing a turn checks can hold its work: the whole-tree check runs after it lands (verify-deps.ts), and what the turn
-// showed of its own work is only recorded on its card.
+// Nothing a turn checks can hold its work: CI checks what the owner pushes, and what the turn showed of its own work is
+// only recorded on its card.
 test("a turn whose own check failed still lands, and its card records the check that failed", async () => {
     const { work, worktree, worktrees } = await checkout("placed-checks");
     const { services: s, writes } = placedServices(

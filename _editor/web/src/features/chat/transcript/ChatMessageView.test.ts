@@ -10,7 +10,7 @@ import {
     type TranscriptPermission,
     agentWordsRow,
     childReportPrompt,
-    landFixPrompt,
+    LAND_FIX_OPENING,
     peerMessagePrompt,
     verifyNudgePrompt,
     watchWakePrompt,
@@ -827,8 +827,8 @@ describe(`ChatMessageView errand row`, () => {
         expect(shownText(element)).toContain(`src/auth/session.ts`);
     });
 
-    // An errand the DAEMON composes rather than this app (verify-nudge.ts). Nothing sends it any more, since checks run
-    // after landing, but transcripts hold it. Built here the way the daemon built it, through the contract both ends
+    // An errand the DAEMON composes rather than this app (verify-nudge.ts). Nothing sends it any more, since nothing
+    // checks inside a turn, but transcripts hold it. Built here the way the daemon built it, through the contract both ends
     // share, so a reworded opening on either side fails rather than quietly un-recognising the nudge and filing it as
     // something the user typed.
     it(`recognises the sandbox's own follow-up, composed the way the daemon composes it`, () => {
@@ -842,10 +842,12 @@ describe(`ChatMessageView errand row`, () => {
         expect(shownText(element)).not.toContain(`src/parser.ts`);
     });
 
-    // The brief a fresh conversation opens on when a red main line had nobody holding the work to take it (land-fix.ts):
-    // the whole first turn is the sandbox's, so it reads as the sandbox's errand, never as the user's own words.
+    // The brief a fresh conversation opened on when the check after a land went red with nobody holding the work to take
+    // it. Nothing starts one any more, but transcripts hold them: the whole first turn is the sandbox's, so it reads as the
+    // sandbox's errand, never as the user's own words. Composed the way the daemon composed it: its opening, then the
+    // evidence.
     it(`shows a fresh fix-up's brief as the sandbox's errand, its failures one press away`, () => {
-        const brief = landFixPrompt([`\`pnpm verify\` in \`web\` failed on:`, `- web/src/pages/changelog.test.ts › lists every release`]);
+        const brief = [LAND_FIX_OPENING, `\`pnpm verify\` in \`web\` failed on:`, `- web/src/pages/changelog.test.ts › lists every release`].join(`\n\n`);
         const element = mount({ id: 5, role: `user`, text: brief });
 
         expect(element.textContent).toContain(errands().landFix.label);

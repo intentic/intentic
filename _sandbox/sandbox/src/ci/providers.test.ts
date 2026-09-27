@@ -90,12 +90,14 @@ test("githubRun normalizes a workflow_run object: duration only once terminal", 
         run_started_at: "2026-07-29T10:00:10Z",
         updated_at: "2026-07-29T10:02:10Z",
         actor: { login: "octocat", avatar_url: "https://avatars.github.com/u/1" },
+        name: "CI",
     });
     expect(run).toMatchObject({
         repo: "web",
         host: "github",
         runId: 7,
         title: "fix: the thing",
+        workflow: "CI",
         branch: "main",
         status: "failed",
         durationSeconds: 120,
@@ -185,11 +187,12 @@ test("ensureHook is idempotent by delivery url; removeHook deletes exactly the m
     await ciClientFor("github", scriptedFetch({ "GET /hooks": [], "POST /hooks": {} }, creating)).ensureHook(githubProject, spec);
     const created = creating.find((call) => call.method === "POST");
     expect(created?.body).toContain(spec.url);
-    expect(created?.body).toContain("workflow_run");
+    expect(JSON.parse(created?.body ?? "{}").events).toEqual(["workflow_run", "workflow_job"]);
 
     const existing: { method: string; url: string }[] = [];
-    await ciClientFor("github", scriptedFetch({ "GET /hooks": [{ id: 9, config: { url: spec.url } }] }, existing)).ensureHook(githubProject, spec);
-    expect(existing.some((call) => call.method === "POST")).toBe(false);
+    const wired = [{ id: 9, events: ["workflow_run", "workflow_job"], config: { url: spec.url } }];
+    await ciClientFor("github", scriptedFetch({ "GET /hooks": wired }, existing)).ensureHook(githubProject, spec);
+    expect(existing.map((call) => call.method)).toEqual(["GET"]);
 
     const removing: { method: string; url: string }[] = [];
     await ciClientFor("github", scriptedFetch({ "GET /hooks": [{ id: 9, config: { url: spec.url } }], "DELETE /hooks/9": {} }, removing)).removeHook(
@@ -272,6 +275,60 @@ test("gitlab listRuns still lists when both enrichments are refused", async () =
     expect(runs[0]?.authorAvatarUrl).toBeUndefined();
 });
 
+// A hook registered before each job was heard on its own delivers finished runs only; it learns the job events in place,
+// keeping its id, rather than being duplicated.
+test("a hook that delivers only finished runs learns the job events, on both forges", async () => {
+    const github: { method: string; url: string; body?: string }[] = [];
+    const githubSpec = { url: "https://sandbox.example.com/ci/webhook/github", secret: "S" };
+    await ciClientFor(
+        "github",
+        scriptedFetch({ "GET /hooks": [{ id: 9, events: ["workflow_run"], config: { url: githubSpec.url } }], "PATCH /hooks/9": {} }, github),
+    ).ensureHook(githubProject, githubSpec);
+    expect(github.map((call) => call.method)).toEqual(["GET", "PATCH"]);
+    expect(JSON.parse(github[1]?.body ?? "{}")).toEqual({ add_events: ["workflow_job"] });
+
+    const gitlab: { method: string; url: string; body?: string }[] = [];
+    const gitlabSpec = { url: "https://sandbox.example.com/ci/webhook/gitlab", secret: "S" };
+    await ciClientFor(
+        "gitlab",
+        scriptedFetch({ "GET /hooks": [{ id: 4, url: gitlabSpec.url, job_events: false }], "PUT /hooks/4": {} }, gitlab),
+    ).ensureHook(gitlabProject, gitlabSpec);
+    expect(gitlab.map((call) => call.method)).toEqual(["GET", "PUT"]);
+    expect(JSON.parse(gitlab[1]?.body ?? "{}")).toMatchObject({ url: gitlabSpec.url, token: "S", pipeline_events: true, job_events: true });
+});
+
+test("a failed job names its id, the step that failed it, and gitlab's own reason; a gitlab job allowed to fail is none", async () => {
+    const github = await ciClientFor(
+        "github",
+        scriptedFetch(
+            {
+                "GET /actions/runs/41/jobs": {
+                    jobs: [
+                        { id: 7, name: "verify-core", conclusion: "failure", steps: [{ name: "Run tests", conclusion: "failure" }] },
+                        { id: 8, name: "lint", conclusion: "success", steps: [] },
+                    ],
+                },
+            },
+            [],
+        ),
+    ).failedSteps(githubProject, 41);
+    expect(github).toEqual([{ job: "verify-core", id: 7, step: "Run tests" }]);
+
+    const gitlab = await ciClientFor(
+        "gitlab",
+        scriptedFetch(
+            {
+                "GET /pipelines/42/jobs": [
+                    { id: 3, name: "test", allow_failure: false, failure_reason: "script_failure" },
+                    { id: 4, name: "flaky-e2e", allow_failure: true, failure_reason: "script_failure" },
+                ],
+            },
+            [],
+        ),
+    ).failedSteps(gitlabProject, 42);
+    expect(gitlab).toEqual([{ job: "test", id: 3, reason: "script_failure" }]);
+});
+
 test("gitlab client addresses the project by its url-encoded path", async () => {
     const calls: { method: string; url: string; body?: string }[] = [];
     const client = ciClientFor("gitlab", scriptedFetch({ "GET /hooks": [], "POST /hooks": {} }, calls));
@@ -279,6 +336,7 @@ test("gitlab client addresses the project by its url-encoded path", async () => 
     expect(calls[0]?.url).toContain("/projects/group%2Fapp/hooks");
     const created = calls.find((call) => call.method === "POST");
     expect(created?.body).toContain(`"pipeline_events":true`);
+    expect(created?.body).toContain(`"job_events":true`);
     expect(created?.body).toContain(`"token":"S"`);
 });
 

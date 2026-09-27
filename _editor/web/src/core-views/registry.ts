@@ -88,13 +88,12 @@ export const WORKSPACE_VIEW_ID = `workspace`;
 // Every tile here badges when it needs the owner, and lights while a run of its own is in flight; being
 // on the rail by lighting up costs them nothing. acceptance, deployments, maintenance and documentation (below) are LISTED
 // first-party extensions, installed from the registry: their tiles are declared here so an install lands them in the
-// band a product decision put them in, not at the end of the column like an unlisted stranger. The Main line sits
-// directly above Pipelines, so the band reads down the road a change travels: checked on the main tree after it lands,
-// then by CI after it is pushed, then deployed.
+// band a product decision put them in, not at the end of the column like an unlisted stranger. Pipelines sits directly
+// above Deployments, so the band reads down the road a change travels: checked by CI once it is pushed, then deployed.
 const judge = (): RailGroup => ({
     id: `judge`,
     label: t(`views.registry.judge`),
-    items: [signal(`approvals`), signal(`acceptance`), signal(`mainline`), signal(`pipelines`), signal(`deployments`), signal(`maintenance`)],
+    items: [signal(`approvals`), signal(`acceptance`), signal(`pipelines`), signal(`deployments`), signal(`maintenance`)],
 });
 // Authored once, then left alone. Automations never badges: a held wake is counted by Approvals instead.
 const setup = (): RailGroup => ({ id: `setup`, label: t(`views.words.setUp`), items: [signal(`workflows`), signal(`automations`)] });

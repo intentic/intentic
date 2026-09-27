@@ -422,110 +422,13 @@
             "label": "État du tableau",
             "close": "Fermer {title}"
         },
-        "mainline": {
-            "title": "Ligne principale",
-            "root": "espace de travail",
-            "projectFailing": "{project} en échec",
-            "projectsFailing": "{count} projet en échec | {count} projets en échec",
-            "queued": "{count} en attente",
-            "columnQueued": "En attente",
-            "columnChecking": "Vérification",
-            "columnResult": "Résultat",
-            "columnHistory": "Historique",
-            "nothingQueued": "Rien en attente",
-            "noResults": "Pas encore de résultat",
-            "outdatedMissing": "Tant qu'elle n'est pas à jour, ce panneau ne peut pas dire à qui un contrôle en échec est imputé ni qui le corrige, ouvrir les journaux d'un contrôle, ni montrer ce que vos pushs ont laissé.",
-            "logs": "Journaux",
-            "moreFailures": "+{count} de plus",
-            "noFailureList": "Aucun échec listé",
-            "likelyCause": "Cause probable",
-            "andMore": "{title} +{count}",
-            "passed": "réussie",
-            "failed": "échouée",
-            "recheck": "Revérification",
-            "routingFixing": "En cours de correction",
-            "leadFixing": "En cours de correction dans",
-            "routingHeld": "En attente de la fin d'un autre chat",
-            "leadHeld": "En attente de",
-            "routingWaiting": "En attente de la prochaine vérification",
-            "routingReported": "Personne ne le corrige",
-            "routingSpent": "Plus de tentatives de correction",
-            "routingResolved": "Corrigé à la vérification suivante",
-            "routingDismissed": "Mis de côté par vous",
-            "routingDeciding": "Choix en cours de qui le répare",
-            "shortFixing": "en correction",
-            "shortOnHold": "en pause",
-            "shortNeedsYou": "vous attend",
-            "shortFixed": "corrigé",
-            "shortDismissed": "mis de côté",
-            "push": {
-                "explain": "Le push est parti ; sa vérification a laissé passer ceci. Chaque constat attend ici jusqu'à ce qu'une mesure ultérieure ne le trouve plus ou que vous l'écartiez. Personne ne s'en occupe à moins que vous ne le confiiez.",
-                "commits": "{count} commit | {count} commits",
-                "earlier": "+{count} push antérieur | +{count} pushs antérieurs",
-                "more": "+{count} de plus | +{count} de plus",
-                "fewer": "Afficher moins",
-                "from": "de {sha} {subject}",
-                "endsWhenDismissed": "Aucune mesure ultérieure ne peut voir qu'il a disparu : il prend fin quand vous l'écartez.",
-                "recheck": "Mesurer à nouveau",
-                "rechecked": "{project} mesuré à nouveau : {resolved} disparus, {open} encore ouverts",
-                "unmeasured": "Impossible de mesurer {project} ; rien n'a changé",
-                "dismissHint": "Écarter : il ne sera pas corrigé",
-                "dismissOne": "Écarter {source}",
-                "dismissAll": "Tout écarter",
-                "dismissed": "{count} constat écarté | {count} constats écartés",
-                "dismissFailed": "Impossible d'écarter cela",
-                "handOver": "Confier à un agent",
-                "continue": "Continuer",
-                "handHint": "Ouvre une conversation isolée avec chaque constat ouvert d'ici, la commande qui le montre à nouveau et les commits qui l'ont apporté.",
-                "handFailed": "Impossible de les confier à un agent",
-                "attempt": "Tentative {count}",
-                "left": "{count} restant | {count} restants",
-                "clean": "propre",
-                "handled": "traité"
-            },
-            "board": {
-                "idle": "Aucune vérification en cours",
-                "waiting": "{count} intégration attend la prochaine vérification | {count} intégrations attendent la prochaine vérification",
-                "measuring": "Mesure {count} intégration | Mesure {count} intégrations",
-                "on": "sur {machine}",
-                "queuedLands": "Intégrations en attente dans {project}",
-                "measuredLands": "Intégrations que mesure la vérification de {project}",
-                "failingSince": "En échec depuis {time}",
-                "more": "+{count} de plus",
-                "backToResults": "Retour aux résultats",
-                "openHistory": "Ouvrir l'historique ({count})",
-                "historyHint": "Chaque vérification après intégration, de la plus récente à la plus ancienne",
-                "queuedHint": "Travail intégré, en attente de la prochaine vérification de son projet",
-                "checkingHint": "La vérification qui tourne en ce moment sur l'arbre principal",
-                "resultHint": "La dernière vérification de chaque projet après intégration",
-                "pushedHint": "Ce que la vérification avant push a trouvé dans vos pushes. Elle n'arrête jamais un push.",
-                "leftAtPush": "Laissé au push",
-                "nothingLeft": "Rien de laissé au push",
-                "command": "Commande",
-                "fix": "Correction",
-                "failures": "{count} échec | {count} échecs",
-                "after": "après {work}",
-                "stillOpen": "{count} problème encore ouvert | {count} problèmes encore ouverts",
-                "lastPush": "Dernier push"
-            }
-        },
-        "landCheck": {
-            "broke": "A cassé {count}",
-            "brokeMain": "A cassé main",
-            "openFixUp": "Ouvrir la conversation qui y travaille",
+        "cardSeal": {
             "unviewed": "{count} fichier d'interface modifié sans le regarder | {count} fichiers d'interface modifiés sans les regarder",
-            "seal": {
-                "checking": "Vérification de main dans {project} : en cours depuis {time}",
-                "waiting": "Vérification de main dans {project} : en file depuis {time}",
-                "passed": "Vérification de main dans {project} : réussie à {time}",
-                "checkedRed": "Vérification de main dans {project} : toujours rouge, à cause d'un autre travail",
-                "broke": "Vérification de main dans {project} : {broke}",
-                "verified": "Sa propre vérification : {check} réussie",
-                "verifiedBare": "Sa propre vérification : réussie après la dernière modification",
-                "failed": "Sa propre vérification : {check} en échec",
-                "failedBare": "Sa propre vérification : en échec",
-                "unproven": "Sa propre vérification : aucune depuis la dernière modification"
-            }
+            "verified": "Sa propre vérification : {check} réussie",
+            "verifiedBare": "Sa propre vérification : réussie après la dernière modification",
+            "failed": "Sa propre vérification : {check} en échec",
+            "failedBare": "Sa propre vérification : en échec",
+            "unproven": "Sa propre vérification : aucune depuis la dernière modification"
         },
         "words": {
             "new": "Nouveau",
@@ -1767,9 +1670,9 @@
             "includeReleaseNoteEach": "Inclure une note de version avec chaque commit."
         },
         "agentChecks": {
-            "repairAfterLanding": "Réparer ce qui casse après l'intégration",
-            "repairAfterLandingNote": "Si les vérifications échouent après une intégration, un agent part les corriger. Pareil si la CI de main reste en échec.",
-            "afterLanding": "Après l'intégration du travail"
+            "repairMainCi": "Réparer main quand sa CI échoue",
+            "repairMainCiNote": "Le premier job qui échoue sur main lance un agent de correction, et chaque échec suivant lui est confié jusqu'à ce que main repasse au vert. Quand ses tours sont épuisés, ou s'il ne change rien, il vous passe la main. Une exécution qui a échoué à cause des machines de CI elles-mêmes est relancée une fois à la place.",
+            "mainCi": "CI de main"
         },
         "agentClock": {
             "clock": "Horloge",
@@ -1893,7 +1796,7 @@
             "readingWhatWorkspacesRepositories": "Lecture de ce que déclarent les dépôts de cet espace de travail…",
             "repositoriesWaitingOnUntil": "{waiting} dépôts vous attendent. Tant que vous ne les activez pas, leurs propres vérifications ne tournent pas.",
             "repositoryChecks": "Vérifications du dépôt",
-            "repositoryDeclaresOwnChecks": "Un dépôt déclare dans .intentic/checks.json ce qui tourne sur son propre code : après chaque modification, ou après l'intégration de son travail. Rien de ce qu'il déclare ne bloque jamais une intégration, un commit ou un push."
+            "repositoryDeclaresOwnChecks": "Un dépôt déclare dans .intentic/checks.json ce qui tourne sur son propre code après chaque modification. Rien de ce qu'il déclare ne bloque jamais une intégration, un commit ou un push."
         },
         "agentSafetyJudge": {
             "changeInModels": "Changer dans Modèles",
@@ -2719,11 +2622,10 @@
             "declaredNotRunningNothing": "Désactivé. Rien de ce qu'un dépôt déclare ne tourne tant que vous ne l'avez pas activé.",
             "runChecksDeclares": "Lancer les vérifications que {name} déclare",
             "afterEachEdit": "Après chaque modification",
-            "afterItLands": "Après son intégration",
-            "turnRetired": "Avant la fin d'un tour — ne tourne plus ; la vérification se fait après l'intégration",
+            "landRetired": "Après son intégration — ne tourne plus ; la CI vérifie ce qui est poussé",
+            "turnRetired": "Avant la fin d'un tour — ne tourne plus ; la CI vérifie ce qui est poussé",
             "lastFlagged": "dernier signalement {ago}",
             "neverFlagged": "jamais rien signalé",
-            "packageScript": "script du paquet",
             "running": "En cours"
         },
         "restartWatch": {
@@ -4564,7 +4466,7 @@
             "unstaged": "Non indexé",
             "untrackedLeave": "{count} fichier non suivi quitte le disque : il n'a jamais été committé, git n'en a donc aucune copie : | {count} fichiers non suivis quittent le disque : ils n'ont jamais été committés, git n'en a donc aucune copie :",
             "watchRun": "Le regarder tourner",
-            "leftInMainLine": "{count} restant dans la ligne principale | {count} restants dans la ligne principale",
+            "leftAtPush": "{count} laissé au push | {count} laissés au push",
             "you": "vous",
             "pushOutdated": "mettez à jour le sandbox pour voir ce qu'il a laissé"
         },
@@ -4631,7 +4533,8 @@
         },
         "usePushFlow": {
             "failed": "{verb} a échoué",
-            "reposRefusedEachRow": "{count} dépôts l'ont refusé, chaque ligne dit pourquoi."
+            "reposRefusedEachRow": "{count} dépôts l'ont refusé, chaque ligne dit pourquoi.",
+            "handFailed": "Impossible de le confier à un agent"
         },
         "usePushRun": {
             "pushing": "Push de {repo}"

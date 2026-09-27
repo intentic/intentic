@@ -148,7 +148,7 @@ const DEMO_DISK: Readonly<Partial<Record<StorageCategoryId, DemoCategory>>> = {
         bytes: 120 * MIB,
         files: 15,
         cleanable: 0,
-        items: [[`${STATE}/local/verify/shop--verify.log`, 110 * MIB]],
+        items: [[`${STATE}/local/tmp/web-build.log`, 110 * MIB]],
     },
     state: { bytes: 20 * MIB, files: 120, items: [[`${HISTORY_ROOT}/activity.jsonl`, 5 * MIB]] },
 };

@@ -88,11 +88,11 @@ export const UnfinishedWorkSchema = z.object({
     check: z
         .string()
         .optional()
-        .describe("The end-of-turn check that was still failing when the turn ended, by name. No longer written: checks run after work lands."),
+        .describe("The end-of-turn check that was still failing when the turn ended, by name. No longer written: nothing checks inside a turn."),
 });
 export type UnfinishedWork = z.infer<typeof UnfinishedWorkSchema>;
 // What the last turn showed of its own work, read off its tool calls and never asked of the model: the record a card
-// badges instead of sending the turn back to prove anything. Checks run after the work lands (mainline.ts).
+// badges instead of sending the turn back to prove anything. CI checks what the owner pushes (push-checks.ts).
 export const TurnProofSchema = z.object({
     at: z.number().describe("When the turn that left this ended, in milliseconds."),
     verification: z
@@ -137,7 +137,7 @@ export const LandedMessageSchema = z.object({
         .optional()
         .describe("Why a test this change weakened is meant to be weaker, in the conversation's own words. Nearly always absent."),
     // Present only when the conversation declared an exception a check should grant this change (`Allow: <check> — <reason>`);
-    // the check after the land and the push read it off the commit.
+    // the push reads it off the commit.
     allows: z
         .array(z.string())
         .optional()

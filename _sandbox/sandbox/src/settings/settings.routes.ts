@@ -5,7 +5,7 @@ import { presetSystemPrompt } from "../agent/prompt/preset-prompt.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { readInputSavings } from "../logs/filter-stats.js";
-import { declaredRepoChecks, landDefaultsOf, readRepoDeclaration, summariesOf } from "../rules/repo-checks.js";
+import { declaredRepoChecks, readRepoDeclaration, summariesOf } from "../rules/repo-checks.js";
 import { ManifestUnreadableError } from "../store/json-file.js";
 import { readTurnExperiments } from "../usage/turn-experiments.js";
 import { fieldNotesStatus } from "./field-notes-status.js";
@@ -60,13 +60,12 @@ export const createSettingsRoutes = (services: Services) => {
         // Read off the repositories every time rather than cached: the declaration is a tracked file that a commit, a
         // pull or an agent can change between two openings of this screen.
         repoChecks: i.repoChecks.handler(async () => {
-            const [declarations, settings, landDefaults, firings] = await Promise.all([
+            const [declarations, settings, firings] = await Promise.all([
                 declaredRepoChecks(services.workspace.root),
                 services.sandboxSettings.get(),
-                landDefaultsOf(services),
                 services.ruleFirings.get(),
             ]);
-            return { repos: summariesOf(declarations, settings.adoptedChecks, landDefaults, firings) };
+            return { repos: summariesOf(declarations, settings.adoptedChecks, firings) };
         }),
 /* ADOPTION: the owner's answer to what a repository asks for, recorded against the fingerprint of what it asks for NOW. */
         adoptRepoChecks: i.adoptRepoChecks.handler(async ({ input }) => {

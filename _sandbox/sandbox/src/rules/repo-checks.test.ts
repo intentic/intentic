@@ -4,7 +4,6 @@ import {
     declarationOf,
     fingerprintOf,
     isAdopted,
-    landCheckOf,
     type RepoDeclaration,
     repoChecksPath,
     rulesOf,
@@ -60,7 +59,6 @@ describe(`a declaration as rules`, () => {
         );
         expect(retiredBetween.map((rule) => rule.id)).toEqual(landBetween.map((rule) => rule.id));
         expect(retiredBetween).toHaveLength(2);
-        expect(landCheckOf(declaring(`intentic`, { when: `turn`, run: `b` }, { when: `land`, run: `c` }))?.run).toBe(`c`);
     });
 
     test(`ids are a rule id's own alphabet, so a repository with slashes in its name still makes one`, () => {
@@ -106,25 +104,31 @@ describe(`adoption`, () => {
         ]);
     });
 
-    // Adopted before `turn` stopped counting: the answer was recorded against every check, the turn one included.
-    test(`an adopted declaration still naming the retired turn moment stays adopted, and runs nothing for it`, () => {
+    // Adopted before `turn` stopped counting, the answer was recorded against every check; adopted before `land` did,
+    // against every check but the turn one. Either answer still stands.
+    test(`an adopted declaration still naming the retired moments stays adopted, and runs nothing for them`, () => {
+        const edit = { when: `edit` as const, run: `pnpm lint {file}` };
         const turn = { when: `turn` as const, run: `pnpm verify:turn` };
         const land = { when: `land` as const, run: `pnpm verify` };
-        const retired = declaring(`intentic`, turn, land);
-        const adopted = { intentic: fingerprintOf([turn, land]) };
-        expect(isAdopted(adopted, retired)).toBe(true);
-        expect(summariesOf([retired], adopted)[0]).toMatchObject({ adopted: true, changed: false });
-        expect(adoptedRules([retired], adopted)).toEqual([]);
+        const retired = declaring(`intentic`, edit, turn, land);
+        for (const adopted of [{ intentic: fingerprintOf([edit, turn, land]) }, { intentic: fingerprintOf([edit, land]) }]) {
+            expect(isAdopted(adopted, retired)).toBe(true);
+            expect(summariesOf([retired], adopted)[0]).toMatchObject({ adopted: true, changed: false, fired: [null, null, null] });
+            expect(adoptedRules([retired], adopted).map((rule) => rule.action)).toEqual([
+                { kind: `command`, command: `pnpm lint {file}`, timeoutMs: 900_000 },
+            ]);
+        }
     });
 
-    test(`a retired turn check is no part of what is adopted: rewriting it holds nothing, and alone it offers nothing`, () => {
-        const land = { when: `land` as const, run: `pnpm verify` };
-        const before = declaring(`intentic`, { when: `turn`, run: `pnpm verify:turn` }, land);
-        const after = declaring(`intentic`, { when: `turn`, run: `pnpm something-else` }, land);
+    test(`a retired check is no part of what is adopted: rewriting it holds nothing, and alone it offers nothing`, () => {
+        const edit = { when: `edit` as const, run: `pnpm lint {file}` };
+        const before = declaring(`intentic`, edit, { when: `turn`, run: `pnpm verify:turn` }, { when: `land`, run: `pnpm verify` });
+        const after = declaring(`intentic`, edit, { when: `turn`, run: `pnpm something-else` }, { when: `land`, run: `pnpm test` });
         expect(after.fingerprint).toBe(before.fingerprint);
         expect(isAdopted({ intentic: before.fingerprint }, after)).toBe(true);
-        const onlyTurn = declaring(`intentic`, { when: `turn`, run: `pnpm verify:turn` });
-        expect(isAdopted({ intentic: onlyTurn.fingerprint }, onlyTurn)).toBe(false);
+        const onlyRetired = declaring(`intentic`, { when: `turn`, run: `pnpm verify:turn` }, { when: `land`, run: `pnpm verify` });
+        expect(isAdopted({ intentic: onlyRetired.fingerprint }, onlyRetired)).toBe(false);
+        expect(rulesOf(onlyRetired)).toEqual([]);
     });
 
     test(`a command rewritten afterwards is held, and says so, rather than running under the old answer`, () => {
@@ -138,21 +142,6 @@ describe(`adoption`, () => {
     test(`a first sighting is waiting, not changed: nobody has been asked yet`, () => {
         const [summary] = summariesOf([declaration], {});
         expect(summary).toMatchObject({ adopted: false, changed: false });
-    });
-
-    test(`the package's own land check is shown where the file declares none, and a repository with only that is a row`, () => {
-        const landDefaults = new Map([
-            [`intentic`, `pnpm run verify`],
-            [`extensions/logs`, `pnpm run test`],
-        ]);
-        const summaries = summariesOf([declaration], {}, landDefaults);
-        expect(summaries.map((summary) => [summary.repo, summary.landDefault])).toEqual([
-            [`extensions/logs`, `pnpm run test`],
-            [`intentic`, `pnpm run verify`],
-        ]);
-        expect(summaries[0]).toMatchObject({ checks: [], adopted: false, changed: false, path: `extensions/logs/.intentic/checks.json` });
-        const declaresLand = declaring(`intentic`, { when: `land`, run: `pnpm verify` });
-        expect(summariesOf([declaresLand], {}, landDefaults).find((summary) => summary.repo === `intentic`)?.landDefault).toBeUndefined();
     });
 
     test(`the fingerprint is over what the checks say, not how the file is written`, () => {

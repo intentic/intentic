@@ -31,7 +31,7 @@ const allow: Rule = {
 // Written when a check could still hold work; a turn that reaches its land always ended clean now, so this matches none.
 const allowRed: Rule = { ...allow, id: "allow-red", label: "Land red work", when: { outcome: ["checks-failed"] } };
 
-// No check takes part: checks run over the main tree after the work lands, and never hold it (verify-deps.ts).
+// No check takes part: nothing checks the work when it lands, and CI checks what the owner pushes.
 describe("a land decision", () => {
     const decisions: [string, readonly Rule[], boolean | undefined, LandingDecision][] = [
         ["with no rule and no override holds, quietly", [], undefined, { mode: "measure", writes: [] }],

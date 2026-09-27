@@ -1,11 +1,11 @@
-import { type Finding, type MainlinePush, pushFixBase, pushFixConversationId, type Red } from "@intentic/sandbox-contract";
+import { type Finding, type PushCheck, pushFixBase, pushFixConversationId, type Red } from "@intentic/sandbox-contract";
 import { pushFixBrief } from "./push-fix.js";
 
 // What an agent handed a project's push findings opens on: it knows nothing else, so the words are the subject here.
 // The linter's finding keeps the "- " bullet some checks print, as the hook reports it verbatim.
 // Which conversation it lands in (continue, start over, busy) is fix-attempts.test.ts's.
 
-const PUSHES: readonly MainlinePush[] = [
+const PUSHES: readonly PushCheck[] = [
     {
         project: "app",
         id: "r2",
@@ -59,7 +59,7 @@ const PUSHES: readonly MainlinePush[] = [
 ];
 
 // A project's push red as the store keeps it: what its pushes found and still owe, in the order they were filed.
-const redOf = (pushes: readonly MainlinePush[], project: string, since: number, settled: readonly string[] = []): Red => ({
+const redOf = (pushes: readonly PushCheck[], project: string, since: number, settled: readonly string[] = []): Red => ({
     source: "push",
     scope: project,
     since,
@@ -68,8 +68,6 @@ const redOf = (pushes: readonly MainlinePush[], project: string, since: number, 
         .toReversed()
         .flatMap((push): Finding[] => push.findings)
         .filter((finding) => !settled.includes(finding.id)),
-    suspects: [],
-    named: false,
     decisions: [],
 });
 // `app` owes all but what a measurement found gone.
@@ -96,7 +94,7 @@ describe("the brief a push-fix conversation opens on", () => {
     // Any repository's tooling names what measured a finding: the brief groups by that name and whether a measurement can
     // clear it, never by a list of this repository's own checks.
     test("groups a finding by the source its repository named, and by whether a measurement can clear it", () => {
-        const generic: MainlinePush = {
+        const generic: PushCheck = {
             project: "svc",
             id: "g1",
             at: 30,
@@ -117,7 +115,7 @@ describe("the brief a push-fix conversation opens on", () => {
     // The push the repository's own hook refused is filed beside what pushes left (push-checks-store.ts, fileRefusal), so
     // its fix is the same hand-over, opening on what the hook said.
     test("opens on a refused push with the hook's own words and how to confirm the fix without sending anything", () => {
-        const refused: MainlinePush = {
+        const refused: PushCheck = {
             project: "app",
             id: "refused-x",
             at: 40,

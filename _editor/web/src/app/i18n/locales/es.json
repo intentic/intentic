@@ -426,110 +426,13 @@
             "label": "Estado del tablero",
             "close": "Cerrar {title}"
         },
-        "mainline": {
-            "title": "Línea principal",
-            "root": "espacio de trabajo",
-            "projectFailing": "{project} con fallos",
-            "projectsFailing": "{count} proyecto con fallos | {count} proyectos con fallos",
-            "queued": "{count} en cola",
-            "columnQueued": "En cola",
-            "columnChecking": "Comprobando",
-            "columnResult": "Resultado",
-            "columnHistory": "Historial",
-            "nothingQueued": "Nada en cola",
-            "noResults": "Aún no hay resultados",
-            "outdatedMissing": "Hasta que se actualice, este panel no puede decir a quién se atribuye una comprobación fallida ni quién la está arreglando, abrir los registros de una comprobación ni mostrar lo que dejaron tus pushes.",
-            "logs": "Registros",
-            "moreFailures": "+{count} más",
-            "noFailureList": "No se listaron fallos",
-            "likelyCause": "Causa probable",
-            "andMore": "{title} +{count}",
-            "passed": "superada",
-            "failed": "fallida",
-            "recheck": "Recomprobación",
-            "routingFixing": "Se está arreglando",
-            "leadFixing": "Se está arreglando en",
-            "routingHeld": "Esperando a que termine otro chat",
-            "leadHeld": "Esperando a",
-            "routingWaiting": "Esperando la próxima comprobación",
-            "routingReported": "Nadie lo está arreglando",
-            "routingSpent": "Sin más intentos de arreglo",
-            "routingResolved": "Arreglado en la siguiente comprobación",
-            "routingDismissed": "Apartado por ti",
-            "routingDeciding": "Decidiendo quién lo arregla",
-            "shortFixing": "arreglando",
-            "shortOnHold": "en pausa",
-            "shortNeedsYou": "te necesita",
-            "shortFixed": "arreglado",
-            "shortDismissed": "apartado",
-            "push": {
-                "explain": "El push se hizo; su comprobación dejó pasar esto. Cada hallazgo espera aquí hasta que una medición posterior ya no lo encuentre o lo descartes. Nadie se pone con ellos a menos que los entregues.",
-                "commits": "{count} commit | {count} commits",
-                "earlier": "+{count} push anterior | +{count} pushes anteriores",
-                "more": "+{count} más | +{count} más",
-                "fewer": "Mostrar menos",
-                "from": "de {sha} {subject}",
-                "endsWhenDismissed": "Ninguna medición posterior puede ver que ha desaparecido: termina cuando lo descartas.",
-                "recheck": "Medir de nuevo",
-                "rechecked": "{project} medido de nuevo: {resolved} resueltos, {open} aún abiertos",
-                "unmeasured": "No se pudo medir {project}; no ha cambiado nada",
-                "dismissHint": "Descartar: no se arreglará",
-                "dismissOne": "Descartar {source}",
-                "dismissAll": "Descartar todo",
-                "dismissed": "{count} hallazgo descartado | {count} hallazgos descartados",
-                "dismissFailed": "No se pudo descartar",
-                "handOver": "Entregar a un agente",
-                "continue": "Continuar",
-                "handHint": "Abre una conversación aislada con cada hallazgo abierto de aquí, el comando que lo vuelve a mostrar y los commits que lo trajeron.",
-                "handFailed": "No se pudieron entregar a un agente",
-                "attempt": "Intento {count}",
-                "left": "{count} pendiente | {count} pendientes",
-                "clean": "limpio",
-                "handled": "atendido"
-            },
-            "board": {
-                "idle": "Ninguna comprobación en curso",
-                "waiting": "{count} integración espera la próxima comprobación | {count} integraciones esperan la próxima comprobación",
-                "measuring": "Midiendo {count} integración | Midiendo {count} integraciones",
-                "on": "en {machine}",
-                "queuedLands": "Integraciones en espera en {project}",
-                "measuredLands": "Integraciones que mide la comprobación de {project}",
-                "failingSince": "Con fallos desde {time}",
-                "more": "+{count} más",
-                "backToResults": "Volver a los resultados",
-                "openHistory": "Abrir el historial ({count})",
-                "historyHint": "Cada comprobación tras integrar, lo más reciente primero",
-                "queuedHint": "Trabajo integrado, esperando la próxima comprobación de su proyecto",
-                "checkingHint": "La comprobación que se ejecuta ahora en el árbol principal",
-                "resultHint": "La última comprobación de cada proyecto tras integrar trabajo",
-                "pushedHint": "Lo que encontró la comprobación previa al push en tus pushes. Nunca detiene un push.",
-                "leftAtPush": "Pendiente del push",
-                "nothingLeft": "Nada pendiente del push",
-                "command": "Comando",
-                "fix": "Arreglo",
-                "failures": "{count} fallo | {count} fallos",
-                "after": "tras {work}",
-                "stillOpen": "{count} hallazgo aún abierto | {count} hallazgos aún abiertos",
-                "lastPush": "Último push"
-            }
-        },
-        "landCheck": {
-            "broke": "Rompió {count}",
-            "brokeMain": "Rompió main",
-            "openFixUp": "Abrir la conversación que trabaja en ello",
+        "cardSeal": {
             "unviewed": "Cambió {count} archivo de interfaz sin mirarlo | Cambió {count} archivos de interfaz sin mirarlos",
-            "seal": {
-                "checking": "Comprobación de main en {project}: en marcha desde las {time}",
-                "waiting": "Comprobación de main en {project}: en cola desde las {time}",
-                "passed": "Comprobación de main en {project}: superada a las {time}",
-                "checkedRed": "Comprobación de main en {project}: sigue en rojo, por otro trabajo",
-                "broke": "Comprobación de main en {project}: {broke}",
-                "verified": "Su propia comprobación: {check} superada",
-                "verifiedBare": "Su propia comprobación: superada tras la última edición",
-                "failed": "Su propia comprobación: {check} falló",
-                "failedBare": "Su propia comprobación: falló",
-                "unproven": "Su propia comprobación: ninguna desde la última edición"
-            }
+            "verified": "Su propia comprobación: {check} superada",
+            "verifiedBare": "Su propia comprobación: superada tras la última edición",
+            "failed": "Su propia comprobación: {check} falló",
+            "failedBare": "Su propia comprobación: falló",
+            "unproven": "Su propia comprobación: ninguna desde la última edición"
         },
         "words": {
             "new": "Nuevo",
@@ -1777,9 +1680,9 @@
             "includeReleaseNoteEach": "Incluir una nota de versión con cada commit."
         },
         "agentChecks": {
-            "repairAfterLanding": "Reparar lo que se rompe tras integrar",
-            "repairAfterLandingNote": "Si fallan las comprobaciones tras integrar, se envía un agente a corregirlo. Lo mismo si la CI de main sigue rota.",
-            "afterLanding": "Tras integrar el trabajo"
+            "repairMainCi": "Reparar main cuando falle su CI",
+            "repairMainCiNote": "El primer job que falla en main arranca un agente de corrección, y cada fallo posterior va a él hasta que main vuelva a estar en verde. Cuando se le acaben los turnos, o no cambie nada, te lo deja a ti. Una ejecución que falló por las propias máquinas de CI se relanza una vez en su lugar.",
+            "mainCi": "CI de main"
         },
         "agentClock": {
             "clock": "Reloj",
@@ -1904,7 +1807,7 @@
             "readingWhatWorkspacesRepositories": "Leyendo qué declaran los repositorios de este espacio de trabajo…",
             "repositoriesWaitingOnUntil": "{waiting} repositorios te están esperando. Hasta que los actives, sus propias comprobaciones no se ejecutan.",
             "repositoryChecks": "Comprobaciones del repositorio",
-            "repositoryDeclaresOwnChecks": "Un repositorio declara en .intentic/checks.json qué se ejecuta sobre su propio código: tras cada edición o después de que su trabajo se integre. Nada de lo que declara bloquea nunca una integración, un commit ni un push."
+            "repositoryDeclaresOwnChecks": "Un repositorio declara en .intentic/checks.json qué se ejecuta sobre su propio código tras cada edición. Nada de lo que declara bloquea nunca una integración, un commit ni un push."
         },
         "agentSafetyJudge": {
             "changeInModels": "Cambiar en Modelos",
@@ -2731,11 +2634,10 @@
             "declaredNotRunningNothing": "Desactivado. Nada de lo que declara un repositorio se ejecuta hasta que lo actives.",
             "runChecksDeclares": "Ejecutar las comprobaciones que declara {name}",
             "afterEachEdit": "Tras cada edición",
-            "afterItLands": "Tras integrarse",
-            "turnRetired": "Antes de que acabe un turno — ya no se ejecuta; se comprueba tras integrar",
+            "landRetired": "Tras integrarse — ya no se ejecuta; la CI comprueba lo que se envía",
+            "turnRetired": "Antes de que acabe un turno — ya no se ejecuta; la CI comprueba lo que se envía",
             "lastFlagged": "último aviso {ago}",
             "neverFlagged": "nunca avisó",
-            "packageScript": "script del paquete",
             "running": "En marcha"
         },
         "restartWatch": {
@@ -4604,7 +4506,7 @@
             "unstaged": "Sin preparar",
             "untrackedLeave": "{count} archivo sin seguimiento sale del disco: nunca se le hizo commit, así que git no tiene copia: | {count} archivos sin seguimiento salen del disco: nunca se les hizo commit, así que git no tiene copia:",
             "watchRun": "Verlo ejecutarse",
-            "leftInMainLine": "{count} pendiente en la línea principal | {count} pendientes en la línea principal",
+            "leftAtPush": "{count} pendiente del push | {count} pendientes del push",
             "you": "tú",
             "pushOutdated": "actualiza el sandbox para ver lo que dejó"
         },
@@ -4672,7 +4574,8 @@
         },
         "usePushFlow": {
             "failed": "{verb} falló",
-            "reposRefusedEachRow": "{count} repos lo rechazaron; cada fila dice por qué."
+            "reposRefusedEachRow": "{count} repos lo rechazaron; cada fila dice por qué.",
+            "handFailed": "No se pudo entregar a un agente"
         },
         "usePushRun": {
             "pushing": "Haciendo push de {repo}"

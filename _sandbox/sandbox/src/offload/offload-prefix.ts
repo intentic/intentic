@@ -5,9 +5,6 @@ import { shellQuote } from "@intentic/sandbox-run/quote";
 export const OFFLOAD_RUN_BIN = "/usr/local/bin/offload-run";
 export const offloadRunEnabled = (): boolean => existsSync(OFFLOAD_RUN_BIN);
 
-// The label the check after landing runs under on a runner, beside the heavy-command rule ids an agent's lines carry.
-export const LAND_CHECK_LABEL = "land-check";
-
 // What goes in front of a heavy line whose kind the owner sends to a runner (settings `offload`): bin/offload-run, told
 // the runner, the kind, the queue prefix it keeps for running the line here when the runner cannot take it, which of
 // this environment's variables travel, and which come back as files.

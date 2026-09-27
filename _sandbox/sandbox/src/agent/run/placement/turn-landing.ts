@@ -1,7 +1,6 @@
 import type { AgentEvent, Rule, WorkspaceEvent } from "@intentic/sandbox-contract";
 import { landAgent, type LandOutcome, reportLockfileFailures } from "../../../conversations/land/land.js";
 import { landingPaths } from "../../../conversations/land/landing-paths.js";
-import { type LandVerifier, verifyLandedTree } from "../../../conversations/land/verify-landed.js";
 import { versionCommitsSettled } from "../../../conversations/land/version-landed.js";
 import { type IsolatedAgent, isIsolated } from "../../../conversations/registry/agents-store.js";
 import type { Services } from "../../../composition.js";
@@ -12,9 +11,9 @@ import { opt } from "../../../opt.js";
 import type { FixersRepo } from "../../../conversations/land/worktree-fixers.js";
 
 // A finished isolated turn's land, step 4 of the turn's close (turn-close.ts). Whether its work reaches the main tree or
-// waits on its branch is decided purely, from the rules and the paths it touched; no check holds it, since checks run
-// after the work lands and never block. The land runs as the sequence below: the repository's fixers in the worktree,
-// decide, land under the lease, record, verify, announce.
+// waits on its branch is decided purely, from the rules and the paths it touched; no check holds it, and none runs after
+// it either: CI checks what the owner pushes. The land runs as the sequence below: the repository's fixers in the
+// worktree, decide, land under the lease, record, reconcile the installed tree, announce.
 
 // What the land did, for the turn's `turn.settled` event; the card's standing is derived elsewhere.
 export type LandedOutcome = "landed" | "conflict" | "ready";
@@ -70,9 +69,8 @@ export interface LandBooks {
 
 export type LandingDeps = Pick<
     Services,
-    "agents" | "conversations" | "sandboxSettings" | "agentWorktrees" | "logger" | "perf" | "activity" | "ruleFirings" | "events"
-> &
-    LandVerifier;
+    "agents" | "conversations" | "sandboxSettings" | "agentWorktrees" | "logger" | "perf" | "activity" | "ruleFirings" | "events" | "dependencies"
+>;
 
 // The hand-off a land makes that needs the whole daemon, bound by the caller that has it.
 export interface LandingHooks {
@@ -161,7 +159,7 @@ async function* recordLand(
     }
     // The moment a dependency change starts costing every later turn's node_modules.
     const origin: DependencyLandOrigin = { kind: "land", agentId: id, ...opt("title", finished.social.title?.text), branch: books.branch, repos: books.span };
-    const reconciled = landed.landed ? await verifyLandedTree(deps, origin) : undefined;
+    const reconciled = landed.landed ? await deps.dependencies.reconcileLand(origin) : undefined;
     yield landedFrame(landed, reconciled);
     if (!landed.landed) {
         return;

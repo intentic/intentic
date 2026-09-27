@@ -2,6 +2,59 @@
     "extension": {
         "pipelines": "Pipeline'y"
     },
+    "leftAtPush": {
+        "attempt": "Próba {count}",
+        "clean": "czysto",
+        "close": "Zamknij",
+        "commits": "{count} commit | {count} commity | {count} commitów",
+        "continue": "Kontynuuj",
+        "dismissAll": "Odrzuć wszystkie",
+        "dismissFailed": "Nie udało się tego odrzucić",
+        "dismissHint": "Odrzuć: nie zostanie naprawione",
+        "dismissOne": "Odrzuć {source}",
+        "dismissed": "Odrzucono {count} znalezisko | Odrzucono {count} znaleziska | Odrzucono {count} znalezisk",
+        "earlier": "+{count} wcześniejszy push | +{count} wcześniejsze pushe | +{count} wcześniejszych pushy",
+        "earlierPushes": "Pokaż {count} wcześniejszy push | Pokaż {count} wcześniejsze pushe | Pokaż {count} wcześniejszych pushy",
+        "endsWhenDismissed": "Żaden późniejszy pomiar nie zobaczy, że zniknęło: kończy się, gdy je odrzucisz.",
+        "explain": "Push poszedł; jego sprawdzenie przepuściło to, co tu widać. Każde znalezisko czeka tu, aż późniejszy pomiar go nie znajdzie albo je odrzucisz. Nikt się nimi nie zajmie, dopóki ich nie przekażesz.",
+        "fewer": "Pokaż mniej",
+        "from": "z {sha} {subject}",
+        "handFailed": "Nie udało się przekazać ich agentowi",
+        "handHint": "Otwiera odizolowaną rozmowę z każdym otwartym znaleziskiem stąd, poleceniem, które pokazuje je ponownie, i commitami, które je wniosły.",
+        "handOver": "Przekaż agentowi",
+        "handled": "załatwione",
+        "hint": "Co sprawdzenie przed pushem znalazło w Twoich pushach. Nigdy nie wstrzymuje pusha.",
+        "lastPush": "Ostatni push",
+        "left": "zostało {count} | zostały {count} | zostało {count}",
+        "more": "+{count} więcej | +{count} więcej | +{count} więcej",
+        "nothingLeft": "Nic nie zostało po pushu",
+        "openAttempt": "{label}: otwórz rozmowę",
+        "recent": "Ostatnie pushe",
+        "recheck": "Zmierz ponownie",
+        "rechecked": "Ponownie zmierzono {project}: zniknęło {resolved}, otwartych {open}",
+        "refused": "odrzucony",
+        "refusedHint": "Własny hook pre-push repozytorium odrzucił ten push, więc nic nie dotarło do zdalnego repozytorium. To, co zgłosił, czeka jak każde inne znalezisko.",
+        "restoreFailed": "Nie udało się ich ponownie otworzyć",
+        "stillOpen": "{count} znalezisko wciąż otwarte | {count} znaleziska wciąż otwarte | {count} znalezisk wciąż otwartych",
+        "title": "Zostało po pushu",
+        "undo": "Cofnij",
+        "unmeasured": "Nie udało się zmierzyć {project}; nic się nie zmieniło",
+        "workspace": "przestrzeń robocza"
+    },
+    "mainRed": {
+        "failing": "Pada",
+        "fixAgent": "Agent naprawczy",
+        "fixAgentHint": "Każda porażka na {branch} trafia do tego jednego agenta, dopóki przebieg nie przejdzie.",
+        "newestRun": "najnowszy czerwony przebieg #{runId}",
+        "open": "Otwórz",
+        "openFixer": "Otwórz rozmowę agenta naprawczego",
+        "reported": "Naprawy są wyłączone, więc nikogo nie wysłano.",
+        "since": "od {when}",
+        "spent": "Agent naprawczy wykorzystał swoje tury albo skończył, niczego nie zmieniając.",
+        "title": "{branch} jest czerwona",
+        "unassigned": "Nie ma jeszcze na tym agenta naprawczego.",
+        "waitsForYou": "Czeka na Ciebie"
+    },
     "pipelineDagGraph": {
         "expand": "Rozwiń",
         "failingRunsInRow": "Pada na {name} kilka przebiegów z rzędu",
@@ -52,5 +105,8 @@
         "repository": "Repozytorium",
         "runs": "{runs} przebiegów",
         "thisRepo": "to repozytorium"
+    },
+    "rail": {
+        "leftAtPush": "{count} znalezisko zostało po pushu | {count} znaleziska zostały po pushu | {count} znalezisk zostało po pushu"
     }
 }

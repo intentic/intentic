@@ -1,4 +1,4 @@
-// Pins which crates a change set touches and which failing checks may rewrite the tree, since both run unasked at the Stop.
+// Pins which crates a change set touches and which baselines a change may lower, since both run unasked before a land.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -8,7 +8,7 @@ import { test } from "node:test";
 import { CHECKS } from "../../checks/manifest.mjs";
 import { repoRoot } from "../../constants/src/node.mjs";
 import { adoptedOf, allowanceOf, tightenedOf } from "../../checks/lib/ratchet.mjs";
-import { crates, fixChange, fixChecks, tightenBaselines, touchedCrates } from "./fixers.mjs";
+import { crates, fixChange, tightenBaselines, touchedCrates } from "./fixers.mjs";
 
 test("a crate is touched only by a path inside it, and build output is never walked", () => {
     const root = mkdtempSync(join(tmpdir(), "crates-"));
@@ -25,17 +25,7 @@ test("a crate is touched only by a path inside it, and build output is never wal
     }
 });
 
-test("only a failing, measured check that declares a fix is run as a fixer", () => {
-    const withoutFix = CHECKS.find((check) => check.fix === undefined);
-    const verdicts = [
-        { id: withoutFix.id, ok: false, measured: true },
-        { id: "i18n", ok: true, measured: true },
-    ];
-    assert.deepEqual(fixChecks(tmpdir(), verdicts), []);
-    assert.ok(CHECKS.filter((check) => check.fix !== undefined).every((check) => Array.isArray(check.fix)));
-});
-
-test("every check that keeps a baseline says so in the manifest, so the check after a land can tighten it", () => {
+test("every check that keeps a baseline says so in the manifest, so the fixers before a land can tighten it", () => {
     const checks = join(repoRoot(import.meta.url), "_tools/checks");
     const keeping = CHECKS.filter((check) => /\bratchet\(/.test(readFileSync(join(checks, check.file), "utf8"))).map(({ id }) => id);
     assert.deepEqual(CHECKS.filter((check) => check.ratchet === true).map(({ id }) => id), keeping);

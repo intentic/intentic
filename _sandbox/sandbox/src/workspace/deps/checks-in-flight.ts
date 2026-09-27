@@ -1,9 +1,10 @@
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
 
 // Which projects the daemon is running a check for right now, so the review can tell the build's writes from the
-// owner's. A check runs the project's own build (verify-deps.ts), which empties an output dir the repo may track and
-// rewrites it file by file; a scan landing in that window reads tracked files that are simply not there yet. Nothing
-// else can correct it either: those dirs are exactly what the watcher prunes, so no path batch says they came back.
+// owner's. A check (the push run's, rules/rule-command.ts) runs the project's own build, which empties an output dir the
+// repo may track and rewrites it file by file; a scan landing in that window reads tracked files that are simply not
+// there yet. Nothing else can correct it either: those dirs are exactly what the watcher prunes, so no path batch says
+// they came back.
 
 // Workspace-relative project dirs, "" being the root project. Counted, not a set: the same dir can be under a second
 // check before the first releases, and one release must not clear the other's window.

@@ -89,8 +89,8 @@ const rebaser =
 
 // Where a repo stood before this turn, as a commit its branch descends from: where a rebase this turn moved it, else
 // its last land's tip while the branch still descends from it, else where the branch sits on main (checkpointOf, the
-// anchor the review measures from too). A last tip a rebase by hand orphaned is no such commit: the land check measured
-// from one once and charged the land with everything main had gained since.
+// anchor the review measures from too). A last tip a rebase by hand orphaned is no such commit: measuring from one
+// would charge the land with everything main had gained since.
 const spanFrom = async (
     deps: Pick<Services, "agentWorktrees">,
     conversationId: string,

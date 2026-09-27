@@ -1,6 +1,6 @@
 // The checks' one door to the two exception forms (the site pragma and the `Allow:` trailer, parsed in
 // @intentic/constants/allow so a guard suite reads them the same way). A check reads a site with `allowedAt`; a run
-// that judges a range (the check after a land, the push) asks `allowedInRange` which checks that range excused.
+// that judges a range (the push) asks `allowedInRange` which checks that range excused.
 import { spawnSync } from "node:child_process";
 import { allowTrailers } from "../../constants/src/allow.mjs";
 

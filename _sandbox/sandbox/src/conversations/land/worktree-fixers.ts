@@ -9,9 +9,9 @@ import { z } from "zod";
 // What a machine decides about a turn's change (formatting, a ratcheted baseline it beat, the contract lock and stored
 // shapes it moved), written in the conversation's own worktree before its land, so it rides the land that caused it
 // instead of sitting uncommitted on the main tree. The fixers are the repository's own (`fixers.mjs`, scoped to the
-// change and idempotent); a repository that ships none gets nothing here. The check after the land runs the same
-// fixers on the main tree as the backstop (verify.mjs). Never fails a land: a fixer that cannot run leaves the change as
-// the turn wrote it.
+// change and idempotent); a repository that ships none gets nothing here. Nothing runs them after the land, so work
+// that reaches the main tree another way gets them by hand (`fixers.mjs --worktree . --since <rev>`). Never fails a
+// land: a fixer that cannot run leaves the change as the turn wrote it.
 
 export const WORKTREE_FIXERS = "_tools/scripts/verify/fixers.mjs";
 

@@ -3,8 +3,7 @@ import type { SandboxMetrics } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, createApp, h, nextTick } from "vue";
 
-// The seam's dragging is the kit's own suite; here only what the status bar draws and when. The main line has a board of
-// its own (mainline/Mainline.test.ts) and nothing of it is drawn here.
+// The seam's dragging is the kit's own suite; here only what the status bar draws and when.
 jest.mock("@intentic/ui", async () => {
     const vue = await import("vue");
     return {
@@ -20,7 +19,7 @@ jest.mock("@intentic/ui", async () => {
 });
 // The metrics panel's session rows name conversations the way the board does; none are open in this suite.
 jest.mock("../fleet/useAgents", () => ({ useAgents: () => ({ agentById: (_id: string) => undefined }) }));
-jest.mock("../mainline/openLanded", () => ({ openLandConversation: () => undefined }));
+jest.mock("../fleet/useAgents-actions", () => ({ openById: () => undefined }));
 
 const { default: BoardStatusBar } = await import("./BoardStatusBar.vue");
 const { openPanel, panelHeight } = await import("./statusBarState");
@@ -92,8 +91,8 @@ describe(`the board's status bar`, () => {
         expect(openPanel.value).toBe(`metrics`);
     });
 
-    // The main tree's check is its own board's to say (the Main line view): the bar carries the metrics and nothing else.
-    it(`carries the geek metrics and nothing of the main line, and opens their panel above it`, async () => {
+    // The bar carries the metrics and nothing else: no segment of any check.
+    it(`carries the geek metrics and nothing else, and opens their panel above it`, async () => {
         const element = mount({ metrics: metrics() });
         expect(element.querySelector(`[role="region"]`)?.getAttribute(`aria-label`)).toBe(`Board status`);
         const segments = [...element.querySelectorAll<HTMLElement>(`[data-segment]`)].map((control) => control.dataset[`segment`]);

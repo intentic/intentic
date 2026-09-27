@@ -59,9 +59,8 @@ const RUNTIME_DOMAINS = [
     // The audit log grew or a gateway's status moved or aged out; the log lives outside /work, so no file push carries it.
     { domain: "activity", invalidates: [["activity"], ["activity-status"]] },
 
-    // The main tree's own check after a land: queued, started, settled, or its red handed to somebody. Held in the
-    // daemon's memory as much as in a file, so a push is the only way a watcher hears it move.
-    { domain: "mainline", invalidates: [["mainline"]] },
+    // What the pre-push hook left behind: a push filed, a finding measured gone, dismissed or handed to an agent.
+    { domain: "pushes", invalidates: [["push-checks"]] },
 ] as const satisfies readonly RuntimeDomainBinding[];
 
 export const RUNTIME_DOMAIN_BINDINGS: readonly RuntimeDomainBinding[] = RUNTIME_DOMAINS;
