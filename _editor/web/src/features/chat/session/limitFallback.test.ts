@@ -1,6 +1,7 @@
 // Pins which account fallbackAccount may offer a refused turn, and every case where it must offer none.
 import type { AccountUsage, OauthAccount } from "@intentic/sandbox-contract";
-import { fallbackAccount, fallbackLabel } from "./limitFallback";
+import { fallbackAccount as offer, fallbackLabel } from "./limitFallback";
+import { judgedOauth } from "../../../testing/judgedAccounts";
 import { providerRefusals, setAccountUsage, usageByAccount } from "../accounts/providerAccounts";
 import { SPENT_UTILIZATION } from "@intentic/sandbox-contract";
 
@@ -19,6 +20,10 @@ const reading = (percent: number): AccountUsage => ({
 });
 
 const ACCOUNTS = [account(`a`), account(`b`), account(`c`)];
+
+// What is offered from a list as a current daemon sends it: every row carrying the verdict it was judged by.
+const fallbackAccount = (...[provider, current, accounts, model]: Parameters<typeof offer>): ReturnType<typeof offer> =>
+    offer(provider, current, judgedOauth(accounts, providerRefusals.value[provider]), model);
 
 beforeEach(() => {
     usageByAccount.value = {};
@@ -92,4 +97,13 @@ it(`offers nothing when the refused account is the only connection`, () => {
 it(`names an account by the part of its address a person recognises`, () => {
     expect(fallbackLabel(account(`b`, { email: `radarsu@gmail.com` }))).toBe(`radarsu`);
     expect(fallbackLabel({ id: `x`, label: `Work key`, connectedAt: 1 })).toBe(`Work key`);
+});
+
+// A daemon older than the verdict sends rows without `state`: nothing is judged from their other fields, so no account is
+// offered to move to, however much room its reading shows (the continue card says the sandbox needs an update).
+it(`offers nothing from an older daemon's rows, which carry no verdict`, () => {
+    setAccountUsage(`claude`, `a`, reading(99));
+    setAccountUsage(`claude`, `b`, reading(10));
+
+    expect(offer(`claude`, `a`, ACCOUNTS)).toBeUndefined();
 });

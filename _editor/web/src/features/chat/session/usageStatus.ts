@@ -12,7 +12,6 @@ import {
     reportsPlanLimits,
     scopedWindow,
     type ServiceFacts,
-    serviceStates,
     SPENT_UTILIZATION,
     type TranslatorAccounts,
     type UsageUnread,
@@ -460,14 +459,7 @@ const providerFacts = (provider: AgentProvider): readonly AccountFacts[] =>
         usage: freshest(provider, facts.account, facts.usage),
     }));
 
-// FALLBACK for a daemon older than `AccountState`: the contract's own rule (the one the daemon runs) over the fields
-// that daemon did send. Delete once no supported daemon lacks `state`.
-const legacyState = (provider: AgentProvider, facts: AccountFacts, now: number): AccountState => {
-    // The row's own facts first: the lists a caller holds can be newer than the module's copy.
-    const own = { ...facts, usage: freshest(provider, facts.account, facts.usage) };
-    const judged = [own, ...providerFacts(provider).filter((entry) => entry.account !== facts.account)];
-    return serviceStates(judged, providerRefusals.value[provider], undefined, now).get(facts.account) ?? { kind: `unknown` };
-};
+const UNJUDGED: AccountState = { kind: `unknown` };
 
 // A bench whose instant has passed has lifted, whatever the list that reported it said.
 const stillBlocked = (state: AccountState, now: number): boolean =>
@@ -480,7 +472,11 @@ const stillBlocked = (state: AccountState, now: number): boolean =>
  * and a question about one model asks about the pools that model spends.
  */
 export const accountState = (provider: AgentProvider, facts: AccountFacts, model?: ModelRef, now: number = Date.now()): AccountState => {
-    const verdict = facts.state ?? legacyState(provider, facts, now);
+    const verdict = facts.state;
+    // No `state` is a daemon older than the verdict (accountsOutdated): unknown, never rebuilt from the other fields.
+    if (verdict === undefined) {
+        return UNJUDGED;
+    }
     if (stillBlocked(verdict, now)) {
         return verdict;
     }

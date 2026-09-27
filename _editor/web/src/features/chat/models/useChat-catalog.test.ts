@@ -90,16 +90,14 @@ test(`takes the providers this box adds from the daemon's own answer`, async () 
 
 // The bug this guards: an invited member whose tier can drive turns but not read the box's connections was left with
 // "Checking your AI accounts…" over the composer for as long as the tab stayed open, since the gate waits on this half.
-test(`a refused or unserved read is an answer, so the account gate stops waiting`, async () => {
-    for (const status of [403, 404]) {
-        endpointsLoaded.value = false;
-        refuses(status);
+test(`a refused read is an answer, so the account gate stops waiting`, async () => {
+    endpointsLoaded.value = false;
+    refuses(403);
 
-        await loadRunnableProviders().settled;
+    await loadRunnableProviders().settled;
 
-        expect(endpointProviders.value, `${status}`).toEqual([]);
-        expect(endpointsLoaded.value, `${status}`).toBe(true);
-    }
+    expect(endpointProviders.value).toEqual([]);
+    expect(endpointsLoaded.value).toBe(true);
 });
 
 test(`a daemon that may yet answer leaves the half unknown for the next reachable load`, async () => {

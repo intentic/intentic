@@ -133,6 +133,9 @@ const connectionsOf =
                 return { commands: [] };
             case `endpoints.trial`:
                 return NO_TRIAL;
+            // Every supported daemon serves the runnable list; nothing beyond the fixed native list runs here.
+            case `providers.list`:
+                return { native: [], agents: [], endpoints: [] };
             default:
                 throw daemonRefusal(404);
         }
@@ -145,7 +148,6 @@ const mockConnections = (connections: Connections = {}): void => {
 const daemonAnswers = (own: (procedure: string, input?: unknown, options?: CallOptions) => Promise<unknown> | undefined): void => {
     daemon.mockImplementation((procedure, input, options) => own(procedure, input, options) ?? connectionReads(procedure, input));
 };
-const { setDaemonRoutes } = await import("../../sandbox/overview/useDaemonRoutes");
 const { useChat } = await import("./useChat");
 const { agentTabOf, draftConversation, openAgentConversation, reveal } = await import("../panel/useChat-reveal");
 const { hydrateOnce } = await import("./useChat-sessions");
@@ -1757,18 +1759,6 @@ describe(`a tab whose agent the fleet no longer has`, () => {
 
         expect(chat.conversations.value).toContain(kept);
         expect(kept.transcript.messages.value).toHaveLength(1);
-    });
-
-    it(`believes a 404 only from a daemon that advertises the route`, async () => {
-        // Simulates an older daemon lacking the route; must not be read as the agent being gone.
-        setDaemonRoutes([`agents.list`]);
-        const stale = openAgentConversation({ id: `still-there`, provider: `claude`, harness: `claude-code` });
-
-        await waitFor(() => expect(daemon).toHaveBeenCalledWith(`agents.transcript`, { id: `still-there` }, { context: { at: undefined } }));
-        await nextTick();
-
-        expect(stale.registered.value).toBe(true);
-        setDaemonRoutes(undefined);
     });
 });
 

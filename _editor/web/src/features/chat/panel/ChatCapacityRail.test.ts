@@ -16,6 +16,7 @@ const { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts }
 const { heldAccounts } = await import("../accounts/useChat-accounts");
 // The app's own reset formatter, not a copy: assertions check it carries the reset, not a fixed timezone string.
 const { formatReset } = await import("../session/usageStatus");
+const { judgeAccountStores } = await import("../../../testing/judgedAccounts");
 
 const NO_ROUTED: TranslatorAccounts = { codex: [], grok: [], kimi: [], gemini: [] };
 const MEASURED_AT = Date.now() - 60_000;
@@ -29,6 +30,8 @@ let app: App | undefined;
 const mount = (accounts: Partial<OauthAccount>[], routed: TranslatorAccounts = NO_ROUTED): HTMLElement => {
     providerAccounts.value = { claude: accounts.map(claude) };
     translatorAccounts.value = routed;
+    // As a current daemon lists them: every row carrying the verdict it was judged by.
+    judgeAccountStores();
     accountsLoaded.value = true;
     const el = document.createElement(`div`);
     document.body.append(el);

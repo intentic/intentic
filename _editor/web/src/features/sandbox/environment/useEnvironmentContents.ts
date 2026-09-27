@@ -7,8 +7,7 @@ import { useSandboxQuery } from "../client/useSandboxQuery";
 import { t } from "@intentic/ui/i18n";
 
 // This sandbox's contents, grouped by whose decision put it there. A separate, on-demand query from useEnvironment,
-// since probing every tool's version costs process spawns. `unsupported` reads a 404 as an older daemon lacking this
-// hand-written route (not gated through supportsRoute), not a fault.
+// since probing every tool's version costs process spawns.
 
 const ENVIRONMENT_CONTENTS_KEY = ENVIRONMENT_CONTENTS.of();
 
@@ -37,9 +36,6 @@ export function useEnvironmentContents(enabled: () => boolean) {
         retry: (attempts, failure) => !(failure instanceof SandboxHttpError && failure.status >= 400 && failure.status < 500) && attempts < 1,
     });
 
-    // Sticky for the query's life, so a later reachability blip can't reoffer a tab already found missing.
-    const unsupported = computed(() => query.error.value instanceof SandboxHttpError && query.error.value.status === 404);
-
     const items = computed(() => query.data.value?.items ?? []);
     // Kept distinct from 'the answer is empty': probing takes a moment, and reading that gap as empty would flash a
     // full sandbox as stock.
@@ -61,5 +57,5 @@ export function useEnvironmentContents(enabled: () => boolean) {
         void query.refetch();
     };
 
-    return { groups, awaiting, loading, error, unsupported, refresh };
+    return { groups, awaiting, loading, error, refresh };
 }

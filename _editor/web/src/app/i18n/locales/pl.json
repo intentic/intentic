@@ -997,6 +997,7 @@
             "continueOnFresh": "Kontynuuj na {model}, w świeżej sesji",
             "continueOnKeepingSession": "Kontynuuj na {fallback}, zachowując tę sesję",
             "otherWaysOn": "Inne sposoby na",
+            "outdatedMissing": "Do czasu aktualizacji tury wstrzymanej przez wyczerpany limit nie da się stąd przenieść na inne Twoje konto. Kontynuuj czeka na to konto.",
             "reopenAccountsSessionLimit": "Otwórz teraz ponownie limit sesji tego konta — zużywa to jeden z jego tygodniowych resetów. Twój tygodniowy przydział pozostaje nietknięty i wciąż obowiązuje",
             "resetLimitNow": "Zresetuj limit teraz",
             "resetting": "Resetowanie…"
@@ -1513,6 +1514,7 @@
             "allAccounts": "Wszystkie konta ({count})",
             "filterSubscriptionAccounts": "Filtruj konta subskrypcyjne",
             "noAccountsMatch": "Żadne konto nie pasuje.",
+            "outdatedMissing": "Do czasu aktualizacji konta poniżej nie pokażą, czy mogą przyjąć turę (utracone logowanie lub miejsce, wyczerpana lub wstrzymana pula), a wybór konta zadziała dopiero od następnej wiadomości.",
             "reMeasureEveryAccounts": "Zmierz teraz ponownie limity planu każdego konta",
             "session": "Sesja {provider}",
             "subscription": "Subskrypcja",
@@ -1991,6 +1993,7 @@
             "free": "Darmowe",
             "googleAccount": "Konto Google",
             "kimiCodeSubscription": "Subskrypcja Kimi Code",
+            "outdatedMissing": "Do czasu aktualizacji te konta nie pokażą, czy mogą przyjąć turę: utracone logowanie lub miejsce albo wyczerpana lub wstrzymana pula wyglądają jak nieznane.",
             "plan": "Który plan {managedLabel}",
             "restingFor": "Wstrzymane: {reason}.",
             "restingUntil": "Wstrzymane do {when}: {reason}.",
@@ -2383,7 +2386,6 @@
             "pendingRebuild": "oczekuje na przebudowę",
             "recipe": "Przepis",
             "reject": "Odrzuć",
-            "sandboxsImageOlderThan": "Obraz tego sandboxa jest starszy niż lista zawartości pisana prostym językiem. Zaktualizuj sandbox, a lista pojawi się obok przepisu.",
             "whatSandboxInstalled": "Co ten sandbox ma zainstalowane"
         },
         "environmentContents": {

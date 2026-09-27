@@ -30,7 +30,13 @@ flowchart LR
   send. It shows what was served as served, and `SandboxOutdatedNotice.vue` says the sandbox needs an update, what the
   view lacks until then, and how to update: the sandbox page's Update card, or `ic sandbox update` for a sandbox
   installed by hand. The main line and the persona rail read "older" off the main line's missing `reds`
-  (`daemonOutdated`), which every release after v1.312 sends.
+  (`daemonOutdated`), which every release after v1.312 sends. The chat's accounts read it off a missing
+  `agent.switchAccount` route (`accountsOutdated`), from the same release: such a sandbox's account rows carry no
+  verdict (`state`) and read as unknown, no held turn is offered another account, and the model picker, the continue
+  card and the AI account section say it needs an update. The editor sends a session id only for a conversation the
+  daemon has no record of (a past session opened from the history menu), and reads the account a failed turn ran on
+  only off its error frame. Nothing else is guessed either: a card without `awaitingWake` is not waiting on a wake, a
+  reading without `memoryRoom` warns of nothing, and a device row's card is its own `card`, never parsed out of its key.
 - **Routes.** `/login` and `/setup` sit outside the shell. Everything else lives under `/` in
   `WorkspaceShell.vue`, guarded by `requireAuth` and `requireSetup`, which renders `ShellDesktop.vue` (rail, docked
   chat and terminal) or `ShellMobile.vue` (tab bar, full-screen views).

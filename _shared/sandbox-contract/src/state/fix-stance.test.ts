@@ -50,7 +50,8 @@ test.each([
     ["holding nothing yet", undefined],
 ] as const)("a turn that ended waiting on its own watch, %s, is still working", (_case, diff) => {
     const watches = [{ id: `watch-a1b2`, note: `CI on the pushed branch`, intervalSeconds: 60, deadlineAt: 9_000 }];
-    expect(fixStance(agent({ status: `idle`, watches, ...(diff === undefined ? {} : { diff }) }))).toStrictEqual({
+    // The daemon reads the armed watch as a wake to come (awaitingWake); the stance reads that, never the watch list.
+    expect(fixStance(agent({ status: `idle`, watches, awaitingWake: true, ...(diff === undefined ? {} : { diff }) }))).toStrictEqual({
         kind: `working`,
         ongoing: true,
         retry: false,

@@ -37,7 +37,8 @@ test("a full-looking gauge with room for a turn does not warn, since the gate wo
     expect(memoryShort(sandbox(room(3), 15.5 * GIB))).toBe(false);
 });
 
-test("a daemon that sends no room falls back to how full the gauge is", () => {
-    expect(memoryShort(sandbox(undefined, 14.4 * GIB))).toBe(true);
-    expect(memoryShort(sandbox(undefined, 14 * GIB))).toBe(false);
+// A daemon older than `memoryRoom` gives no verdict, and none is guessed from how full the gauge is.
+test("a reading without room warns of nothing, however full the gauge", () => {
+    expect(memoryShort(sandbox(undefined, 15.9 * GIB))).toBe(false);
+    expect(memoryShort(sandbox(undefined, 4 * GIB))).toBe(false);
 });

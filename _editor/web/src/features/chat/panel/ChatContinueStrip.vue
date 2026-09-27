@@ -4,6 +4,8 @@ import { Button, formatTokens, Icon, type IconName, ResponsiveOverlay, Segmented
 import { errorMessage, useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useAgents } from "../../agents/fleet/useAgents";
+import SandboxOutdatedNotice from "../../sandbox/overview/version/SandboxOutdatedNotice.vue";
+import { accountsOutdated } from "../accounts/accountsOutdated";
 import { fallbackAccount, fallbackLabel } from "../session/limitFallback";
 import { askLimitReset, claimLimitReset, limitResetFor, limitResetNote } from "../session/limitReset";
 import { pickUpNext, pickUpStatus, pressCost } from "../run/pickUp";
@@ -66,12 +68,15 @@ const continueHint = computed(() => {
 });
 
 // The way on that skips waiting entirely: read off the reason since this needs only another pool with room.
-// limitFallback.ts judges which account may be offered, and the same reading names the `move` answer below.
+// limitFallback.ts judges which account may be offered, and the same reading names the `move` answer below. A sandbox too
+// old to move a conversation (accountsOutdated) is offered none: the card says it needs an update instead.
 const fallback = computed(() =>
-    ending.value !== `limit`
+    ending.value !== `limit` || accountsOutdated.value
         ? undefined
         : fallbackAccount(provider.value, account.value, accounts.value, model.value === `` ? undefined : { id: model.value }),
 );
+// Said only where another account is connected, the one case the move would have been offered.
+const outdated = computed(() => ending.value === `limit` && accountsOutdated.value && accounts.value.length > 1);
 
 // The one question, and this conversation's current answer to it. Read through the same fold every other surface uses
 // (this agent's override, else the sandbox-wide policy), so the card, the settings row and this control cannot
@@ -171,7 +176,7 @@ watch(
 
 // One daemon command (switchAccount) moves the conversation and re-runs the held turn on the new credential. `carry`
 // keeps the provider session (re-reads once, cold); fresh reseeds from the record (a short hand-off, and anything not
-// recorded is lost). Where that command cannot answer, the two steps an older daemon understood: the pick, then the press.
+// recorded is lost). Where no held turn is this sandbox's to move (nothing held, another box), the pick then the press.
 const continueOnFallback = async (carry: boolean): Promise<void> => {
     const target = fallback.value;
     if (target === undefined || !reachable.value) {
@@ -289,6 +294,8 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
         <span v-if="answerRefused !== undefined" role="alert" class="text-2xs text-danger">{{ answerRefused }}</span>
         <!-- What came back when the reset changed nothing: these are full sentences, so they get their own line. -->
         <span v-if="resetNote !== undefined" class="text-2xs text-subtle">{{ resetNote }}</span>
+        <!-- A sandbox too old to move a conversation: no other account is offered, and this says why and how to update. -->
+        <SandboxOutdatedNotice v-if="outdated" :missing="t(`chat.chatContinueStrip.outdatedMissing`)" />
     </div>
     <!-- The press's variants, shown in the dropdown when another account could take this turn. -->
     <ResponsiveOverlay v-model="waysOpen" :anchor="waysAnchor" cross="end" :header="t(`chat.chatContinueStrip.otherWaysOn`)" panel-class="w-80 p-1">

@@ -1,5 +1,6 @@
 import type { AccountUsage, OauthAccount, TranslatorAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
-import { CAPACITY_RAIL_PX, chatCapacity, hasCapacity, railFitsBeside } from "./chatCapacity";
+import { CAPACITY_RAIL_PX, chatCapacity as readCapacity, hasCapacity, railFitsBeside } from "./chatCapacity";
+import { judgeAccountStores } from "../../../testing/judgedAccounts";
 import { providerAccounts, providerRefusals, translatorAccounts, usageByAccount } from "../accounts/providerAccounts";
 
 // The rail's offers must all still serve a turn, and everything it withholds must be accounted for: spent, refused,
@@ -24,6 +25,12 @@ const google = (index: number, percent: number): TranslatorAccount => ({
     label: `radarsuspam${index}@gmail.com`,
     usage: usage(percent),
 });
+
+// The rail as it reads the stores a current daemon filled: every account row carrying the verdict it was judged by.
+const chatCapacity = (...args: Parameters<typeof readCapacity>): ReturnType<typeof readCapacity> => {
+    judgeAccountStores(args[1]);
+    return readCapacity(...args);
+};
 
 afterEach(() => {
     providerAccounts.value = {};

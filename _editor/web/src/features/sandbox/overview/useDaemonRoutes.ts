@@ -8,8 +8,8 @@ import { contractUncompiled } from "./contractFreshness";
 // error; this turns a silent 404 into a named gap, so features can gate on `supportsRoute` instead of finding out
 // by breaking. Two kinds of gap: a route the daemon lacks, or one it shapes differently; both are non-blocking.
 
-// Route names the daemon advertises; undefined means unknown (not connected, or predates the hello field) and is
-// read as fully supported. Sandbox-scoped, not dropped with a connection, so one sandbox's surface isn't attributed to
+// Route names the daemon advertises; undefined means unknown (not connected yet, no hello read) and is read as fully
+// supported. Sandbox-scoped, not dropped with a connection, so one sandbox's surface isn't attributed to
 // another.
 const advertised = sandboxRef<ReadonlySet<string> | undefined>(() => undefined);
 
@@ -33,10 +33,6 @@ export const ourRouteCount = SANDBOX_ROUTE_NAMES.length;
 
 // This build's own route names, as a set, for the two directions of comparison below.
 const OURS: ReadonlySet<string> = new Set(SANDBOX_ROUTE_NAMES);
-
-// The undivided true/false/undefined answer, for useSandboxSession's fallback: a definite yes clears
-// learned-by-404, a definite no skips probing.
-export const routeAdvertised = (name: string): boolean | undefined => advertised.value?.has(name);
 
 // How far behind the sandbox is; empty when the daemon is level or newer (extra daemon routes are never asked about).
 export const missingRoutes = computed<string[]>(() => {

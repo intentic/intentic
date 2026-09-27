@@ -2165,7 +2165,10 @@ describe(`Conversation`, () => {
         const conversation = new Conversation(`c1`);
         conversation.selection.apply({ kind: `set`, picks: { account: `acct-1` } });
         providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acct-1`, label: `Claude`, connectedAt: 0 }] };
-        daemon.mockImplementation(turnDaemon([{ kind: `error`, code: `claude-token-refused`, message: `401 revoked` }, { kind: `done` }]));
+        // The frame names the account the turn ran on, as every current daemon's does; the badge lights on that one.
+        daemon.mockImplementation(
+            turnDaemon([{ kind: `error`, code: `claude-token-refused`, message: `401 revoked`, account: `acct-1` }, { kind: `done` }]),
+        );
         await conversation.turn.send(`hello`, settings);
 
         const notice = conversation.transcript.messages.value.at(-1)!;

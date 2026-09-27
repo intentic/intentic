@@ -1,3 +1,4 @@
+import { listedDevice } from "../../../testing/listedDevice";
 import type { Device } from "@intentic/sandbox-contract";
 import {
     agentBehind,
@@ -21,11 +22,12 @@ import {
 const NOW = 1_700_000_000_000;
 
 // Covers the two arrival doors, including rows with no report at all (no sync agent installed, or asleep).
-const device = (overrides: Partial<Device> = {}): Device => ({
-    key: `my-pc`,
-    label: `my-pc`,
-    ...overrides,
-});
+const device = (overrides: Partial<Device> = {}): Device =>
+    listedDevice({
+        key: `my-pc`,
+        label: `my-pc`,
+        ...overrides,
+    });
 
 // One desktop-sync enrollment: which half the device holds, and when it last checked in.
 const enrolled = (mode: `sync` | `mirror` = `sync`, seenAt?: number): Device[`sync`] => ({

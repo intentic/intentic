@@ -1,12 +1,5 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import {
-    REQUEST_ID_EVIDENCE_ROUTE,
-    REQUEST_ID_HEADER,
-    SANDBOX_ROUTE_NAMES,
-    SANDBOX_ROUTE_SHAPES,
-    SandboxSettingsSchema,
-    type SystemEvent,
-} from "@intentic/sandbox-contract";
+import { REQUEST_ID_HEADER, SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES, SandboxSettingsSchema, type SystemEvent } from "@intentic/sandbox-contract";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { readFailure, setDaemonRoutes } from "../overview/useDaemonRoutes";
 import { SandboxHttpError } from "./sandboxHttpError";
@@ -123,24 +116,10 @@ it(`surfaces the daemon's status so a refusal can be told from a failure to conn
     expect(daemonErrorMessage(failure)).toBe(`not a member`);
 });
 
-// A custom header forces a CORS preflight; a daemon that hasn't advertised REQUEST_ID_HEADER in allowHeaders
-// fails the whole request, not just the header, so it's only sent once advertised.
-it(`withholds the correlation header from a daemon that has not advertised it`, async () => {
+// Every call to this sandbox carries its own join key for the daemon's http.request line, from the first call on: every
+// supported daemon's CORS accepts the header, so nothing waits for its hello to send it.
+it(`sends a fresh correlation header on every call to this sandbox`, async () => {
     resetSandboxScope();
-    const fetchMock = jest.fn(async (_request: Request) => eventStream([{ kind: `heartbeat` }]));
-    stubGlobal(`fetch`, fetchMock);
-    await (await sandboxRpc.system.events({ clientId: `c1` }))[Symbol.asyncIterator]().next();
-    expect(fetchMock.mock.calls[0]![0].headers.get(REQUEST_ID_HEADER)).toBeNull();
-
-    // An older daemon that advertises other routes but not this one is still evidence of the wrong thing.
-    setDaemonRoutes([`system.info`, `system.events`]);
-    await (await sandboxRpc.system.events({ clientId: `c2` }))[Symbol.asyncIterator]().next();
-    expect(fetchMock.mock.calls[1]![0].headers.get(REQUEST_ID_HEADER)).toBeNull();
-    resetSandboxScope();
-});
-
-it(`sends the correlation header once the daemon advertises the route that ships with it`, async () => {
-    setDaemonRoutes([`system.events`, REQUEST_ID_EVIDENCE_ROUTE]);
     const fetchMock = jest.fn(async (_request: Request) => eventStream([{ kind: `heartbeat` }]));
     stubGlobal(`fetch`, fetchMock);
     await (await sandboxRpc.system.events({ clientId: `c1` }))[Symbol.asyncIterator]().next();
@@ -269,7 +248,6 @@ it(`keeps another box's refusal in its own words, since this daemon's routes say
 });
 
 it(`never sends the correlation header to another box, whose support this daemon cannot vouch for`, async () => {
-    setDaemonRoutes([`settings.get`, REQUEST_ID_EVIDENCE_ROUTE]);
     const fetchMock = jest.fn(async (_request: Request) => json(200, {}));
     stubGlobal(`fetch`, fetchMock);
     await sandboxRpc.settings.get(undefined, { context: { at: `s2` } });

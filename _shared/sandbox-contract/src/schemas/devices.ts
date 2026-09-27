@@ -505,7 +505,7 @@ export const DeviceSchema = z.object({
     // The host connection's key, when this machine is also a connected device. Absent otherwise.
     hostId: z.string().optional(),
     // The card that connection is of, beside the key rather than parsed out of it: the machine's name, a label. Absent
-    // with `hostId`, and from a daemon older than the field (`deviceCard` reads the key then).
+    // with `hostId`.
     card: z.string().optional(),
     // The computer this row is an environment of, from whichever door has said (MachineIdSchema): what `machinesOf`
     // groups by. Absent when no door has, which leaves the row a computer of its own.
@@ -563,20 +563,15 @@ export const deviceDistro = (device: Device): string | undefined => {
 const byEnvironment = (a: Device, b: Device): number =>
     Number(isWslDevice(a)) - Number(isWslDevice(b)) || (deviceDistro(a) ?? a.label).localeCompare(deviceDistro(b) ?? b.label);
 
-// The card a device's door hangs off: one card is one computer, so two doors naming the same card are one machine
-// whatever either has said about itself — which is the whole of what an environment that has never connected says.
-// The row's own label, else its key read by the one parser there is (a row from a daemon older than `card`).
-export const deviceCard = (device: Pick<Device, "card" | "hostId">): string | undefined =>
-    device.card ?? (device.hostId === undefined ? undefined : parseHostConnection(device.hostId).card);
-
 // The computer a device is on, by whichever door said: its row, its connect-time facts, its report, its sync enrollment.
 export const deviceMachineId = (device: Device): string | undefined =>
     device.machineId ?? device.facts?.machineId ?? device.report?.machineId ?? device.sync?.machineId;
 
-// What makes two devices one computer: a shared card, or a shared machine id. Nothing else: a hostname is shared by a
-// PC and its WSL distros and by two unrelated machines with the same name, so it joined things by accident.
+// What makes two devices one computer: a shared card (the row's own `card`, never parsed back out of its key: one card
+// is one computer, whatever either door has said about itself), or a shared machine id. Nothing else: a hostname is
+// shared by a PC and its WSL distros and by two unrelated machines with the same name, so it joined things by accident.
 const tokensOf = (device: Device): string[] => {
-    const card = deviceCard(device);
+    const { card } = device;
     const machine = deviceMachineId(device);
     return [...(card === undefined ? [] : [`card:${card.toLowerCase()}`]), ...(machine === undefined ? [] : [`machine:${machine}`])];
 };
@@ -621,8 +616,9 @@ const machineOf = (environments: readonly Device[]): Machine => {
     if (first === undefined) {
         return { key: "", label: "", environments };
     }
-    const named = environments.map(deviceCard).find((key) => key !== undefined) ?? (rest.length === 0 ? undefined : deviceMachineId(first));
-    const label = first.label === first.hostId ? (deviceCard(first) ?? first.label) : first.label;
+    const named =
+        environments.map((device) => device.card).find((key) => key !== undefined) ?? (rest.length === 0 ? undefined : deviceMachineId(first));
+    const label = first.label === first.hostId ? (first.card ?? first.label) : first.label;
     return { key: named ?? first.key, label, environments };
 };
 

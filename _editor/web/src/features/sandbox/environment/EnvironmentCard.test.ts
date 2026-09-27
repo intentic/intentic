@@ -41,15 +41,12 @@ jest.mock(`./useEnvironment`, () => ({
     }),
 }));
 
-// Whether this sandbox's daemon knows the contents route; the one flag each test sets.
-const unsupported = ref(false);
 jest.mock(`./useEnvironmentContents`, () => ({
     useEnvironmentContents: () => ({
         groups: ref([]),
         awaiting: ref(0),
         loading: ref(false),
-        error: ref(unsupported.value ? `Request failed (404).` : undefined),
-        unsupported,
+        error: ref(undefined),
         refresh: () => {},
     }),
 }));
@@ -111,7 +108,6 @@ const mount = (): HTMLElement => {
 };
 
 afterEach(() => {
-    unsupported.value = false;
     pending.value = undefined;
     proposal.value = undefined;
     sandboxJson.mockClear();
@@ -128,17 +124,6 @@ it(`offers both reads when the daemon can answer for its contents`, () => {
     const el = mount();
     expect([...el.querySelectorAll(`[role="tab"]`)].map((tab) => tab.textContent?.trim())).toEqual([`Contents`, `Recipe`]);
     expect(el.textContent).not.toContain(`Active overlay`);
-});
-
-it(`falls back to the recipe on a daemon that predates the contents route, and stops offering the tab`, () => {
-    unsupported.value = true;
-    const el = mount();
-    expect(el.querySelectorAll(`[role="tab"]`)).toHaveLength(0);
-    expect(el.textContent).toContain(`Active overlay`);
-    expect(el.textContent).toContain(`image is older than the plain-language contents list`);
-    expect(el.textContent).toContain(`Update the sandbox`);
-    expect(el.textContent).not.toContain(`404`);
-    expect(el.textContent).not.toContain(`Could not read what the sandbox has installed`);
 });
 
 it(`hands a pending overlay to the host executor on a sandbox the owner runs`, () => {

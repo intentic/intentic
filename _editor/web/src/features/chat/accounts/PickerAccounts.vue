@@ -7,6 +7,8 @@ import { ACCOUNT_LIST_LIMIT, matchAccounts, usePickerAccounts } from "./pickerAc
 import { providerDisplayLabel } from "./providerCatalog";
 import { formatAge } from "../session/usageStatus";
 import ProviderLogo from "./ProviderLogo.vue";
+import SandboxOutdatedNotice from "../../sandbox/overview/version/SandboxOutdatedNotice.vue";
+import { accountsOutdated } from "./accountsOutdated";
 import { useT } from "@intentic/ui/i18n";
 
 // Footer of the model picker: which connected account, and which agentic loop. Used by both the
@@ -166,6 +168,9 @@ const pickAccount = (id: string): void => {
             </button>
         </span>
     </div>
+
+    <!-- A sandbox too old to judge its accounts: every row reads unknown, and this says why and how to update. -->
+    <SandboxOutdatedNotice v-if="accountsOutdated" :missing="t(`chat.pickerAccounts.outdatedMissing`)" />
 
     <!-- The refusal belonging to this selection but no single row (`unplacedRefusal`); shown above every control it qualifies. -->
     <p v-if="unplacedRefusal" class="flex items-start gap-1.5 text-2xs text-warning" v-tooltip.top="unplacedRefusal">

@@ -231,7 +231,7 @@ describe("doneWith", () => {
         expect(doneWith(settled({ status: `error` }))).toBe(false);
         expect(doneWith(settled({ status: `running` }))).toBe(false);
         expect(doneWith(settled({ status: `idle`, attention: { ...none, question: true } }))).toBe(false);
-        expect(doneWith(settled({ watches: [{ id: `w1`, note: `CI`, intervalSeconds: 60, deadlineAt: 2_000 }] }))).toBe(false);
+        expect(doneWith(settled({ watches: [{ id: `w1`, note: `CI`, intervalSeconds: 60, deadlineAt: 2_000 }], awaitingWake: true }))).toBe(false);
     });
 
     // No registry entry means no account of whether the work is over, only this browser's guess.

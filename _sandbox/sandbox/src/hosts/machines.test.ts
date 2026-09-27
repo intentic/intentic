@@ -20,7 +20,11 @@ import {
 // join: a PC and its distros share one, and so can two unrelated computers. Tested beside the daemon's reader of it, like hostRunningSandbox; the contract directory holding it is at its
 // layout cap.
 
-const device = (key: string, over: Partial<Device> = {}): Device => ({ key, label: key, ...over });
+// A row as the daemon lists it: one with a door names that door's card beside its key (device-reports.ts).
+const device = (key: string, over: Partial<Device> = {}): Device => {
+    const row: Device = { key, label: key, ...over };
+    return row.hostId === undefined || row.card !== undefined ? row : { ...row, card: parseHostConnection(row.hostId).card };
+};
 
 const WINDOWS = { os: "Microsoft Windows 11 Home", arch: "x64", shell: "PowerShell 7", home: "C:\\Users\\radar", roots: ["C:\\Users\\radar"] };
 const ARCH = { os: "Arch Linux", arch: "x64", shell: "/usr/bin/zsh", home: "/home/radarsu", roots: ["/home/radarsu"] };

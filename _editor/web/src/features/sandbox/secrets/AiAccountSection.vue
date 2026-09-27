@@ -11,7 +11,7 @@ import {
     providerLabel,
     providerSpec,
 } from "@intentic/sandbox-contract";
-import { Button, formatTokens, Notice, type NoticeModel, Row, RowGroup } from "@intentic/ui";
+import { Button, formatTokens, Notice, type NoticeModel, Row, RowGroup, RowNote } from "@intentic/ui";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { hasSignIn, providerReady } from "../../chat/session/access";
@@ -33,6 +33,8 @@ import { useSandbox } from "../client/useSandbox";
 import ConnectFlow from "./ConnectFlow.vue";
 import EstatePicker from "./EstatePicker.vue";
 import ConnectionRow from "./ConnectionRow.vue";
+import SandboxOutdatedNotice from "../overview/version/SandboxOutdatedNotice.vue";
+import { accountsOutdated } from "../../chat/accounts/accountsOutdated";
 import { useT } from "@intentic/ui/i18n";
 
 // The Agent tab's AI-accounts section: where a credential is added or dropped, across five providers and two
@@ -389,6 +391,10 @@ watch(() => route.query[`connect`], focusConnect);
 
         <!-- Native accounts and translator subscriptions render as one list of the same row shape, since both answer "what am I signed in with, can I drop it?". -->
         <template v-else>
+            <!-- A sandbox too old to judge its accounts: every row reads unknown, and this says why and how to update. -->
+            <RowNote v-if="accountsOutdated && totalAccountCount > 0" variant="block">
+                <SandboxOutdatedNotice :missing="t(`sandbox.aiAccountSection.outdatedMissing`)" />
+            </RowNote>
             <!-- Native accounts: Claude and Grok only. Codex, Kimi and Gemini skip straight to the subscription row below. -->
             <template v-if="hasNativeAccounts">
                 <ConnectionRow

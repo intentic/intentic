@@ -1,5 +1,13 @@
 import { STATE_DIR } from "@intentic/constants";
-import { type AttachFrame, type ConversationQueue, deriveTitle, LAND_CONFLICT_OPENING, type MessageReceipt, type TranscriptRow } from "@intentic/sandbox-contract";
+import {
+    type AttachFrame,
+    type ConversationQueue,
+    deriveTitle,
+    LAND_CONFLICT_OPENING,
+    type MessageReceipt,
+    SANDBOX_ROUTE_NAMES,
+    type TranscriptRow,
+} from "@intentic/sandbox-contract";
 import { userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { unstubbed } from "@intentic/testing";
 import { AsyncIteratorClass } from "@orpc/client";
@@ -17,6 +25,7 @@ import type { ForkLink, SessionRef, TurnSettings } from "../run/turnRequest";
 import type { ChatMessage } from "../transcript/transcript";
 import type { ComposerSelection } from "./composerSelection";
 import { IDLE } from "./runPhase";
+import { setDaemonRoutes } from "../../sandbox/overview/useDaemonRoutes";
 
 // One conversation's runs through their phases (runPhase.ts), and the doors into the daemon's queue they share, against
 // a host that is nothing but the refs a run reads and writes and a daemon that is the procedures a run calls. Whole
@@ -29,8 +38,9 @@ const resume = jest.fn<SandboxRpc["agent"]["resume"]>();
 const queueResume = jest.fn<SandboxRpc["agent"]["queueResume"]>();
 const queueRemove = jest.fn<SandboxRpc["agent"]["queueRemove"]>();
 const queueEdit = jest.fn<SandboxRpc["agent"]["queueEdit"]>();
+const switchAccount = jest.fn<SandboxRpc["agent"]["switchAccount"]>();
 jest.mock("../../sandbox/client/sandboxRpc", () => ({
-    sandboxRpc: fakeSandboxRpc({ agent: { run, attach, stop, resume, queueResume, queueRemove, queueEdit } }),
+    sandboxRpc: fakeSandboxRpc({ agent: { run, attach, stop, resume, queueResume, queueRemove, queueEdit, switchAccount } }),
 }));
 
 const { TurnClient } = await import("./turnClient");
@@ -389,8 +399,8 @@ describe(`a run's lifecycle`, () => {
     });
 
     // The composer's account follows the daemon's session (bindSession), so a plain Continue on it names none and keeps
-    // the session. One that differs is a pick the daemon has not taken yet (a daemon too old for switchAccount), and the
-    // press names it, as intent, like a send would.
+    // the session. One that differs is a pick the daemon has not taken yet (refused while a turn ran), and the press
+    // names it, as intent, like a send would.
     it(`presses Continue naming no account on the one the conversation runs on, and a pick that leaves it`, async () => {
         const session: SessionRef = { id: `s-1`, provider: `claude`, account: `acct-now`, harness: `native` };
         resume.mockImplementation(async () => ({ run: `r-press` }));
@@ -414,6 +424,24 @@ describe(`a run's lifecycle`, () => {
             conversationId: `c1`,
             routing: { agent: `claude`, harness: `native`, account: `acct-other`, model: `opus`, carry: true },
         });
+    });
+
+    // A pick on a conversation the daemon holds is a move (switchAccount). A sandbox too old for the route is asked
+    // nothing: no request that would 404, and the picker's notice says it needs an update.
+    it(`moves a conversation the daemon holds, and asks a sandbox too old for the move nothing`, () => {
+        switchAccount.mockReset();
+        switchAccount.mockImplementation(async () => ({}));
+        const { client, host } = clientOf();
+        host.registered.value = true;
+
+        setDaemonRoutes(SANDBOX_ROUTE_NAMES.filter((name) => name !== `agent.switchAccount`));
+        client.moveAccount(`acct-other`);
+        expect(switchAccount).not.toHaveBeenCalled();
+
+        setDaemonRoutes([...SANDBOX_ROUTE_NAMES]);
+        client.moveAccount(`acct-other`);
+        expect(switchAccount.mock.calls.map(([input]) => input)).toEqual([{ conversationId: `c1`, account: `acct-other` }]);
+        setDaemonRoutes(undefined);
     });
 
     it(`re-runs nothing the daemon is not holding, and nothing while a turn is live`, async () => {

@@ -2,7 +2,7 @@ import type { AgentHarness, AgentProvider, EditorContext, PermissionMode, TurnEr
 import type { ProcedureInput } from "../../sandbox/client/sandboxRpc";
 
 // The turn body the daemon receives: what a send carries and the shape that states it on the wire. Which session a turn
-// goes on in is the daemon's to decide (routing.ts); the session id rides only as a fallback for an older daemon.
+// goes on in is the daemon's to decide (routing.ts); a session id rides only for a conversation it has no record of.
 
 // Where a fork was cut from, carried by its first turn: `keep` rows of `conversationId`, over `files` then or now.
 export type ForkLink = NonNullable<ProcedureInput<`agent.run`>["forkOf"]>;
@@ -54,8 +54,8 @@ export const boundSession = (
 ): SessionRef => ({ id: sessionId, provider: turn.provider, account: resolvedAccount ?? turn.account, harness: turn.harness });
 
 // This window's reading of the daemon's continuation rule (routing.ts `continues`: same runtime, account and harness),
-// for two things only: the words of the "switched" divider, and the session id a daemon older than daemon-side
-// continuation needs sent (fallbackSessionId). The daemon decides which session a turn goes on in; nothing here routes.
+// for two things only: the words of the "switched" divider, and whether a past session opened from the history menu
+// resumes (resumedSessionId). The daemon decides which session a turn goes on in; nothing here routes.
 // A selection on auto names no account, so it continues wherever the daemon runs the session.
 export const readsAsContinuing = (
     session: SessionRef | undefined,
@@ -66,20 +66,22 @@ export const readsAsContinuing = (
     (selection.account === undefined || session.account === selection.account) &&
     session.harness === selection.harness;
 
-// FALLBACK for a daemon older than daemon-side continuation, which resumes exactly the session it is sent: the one this
-// window holds, while the selection still reads as continuing it. A current daemon ignores it on a conversation it
-// holds (routingFor decides) and takes it only for a conversation not on record yet: a past session resumed from the
-// history menu. Remove once no supported daemon predates that.
-export const fallbackSessionId = (session: SessionRef | undefined, settings: Pick<TurnSettings, "agent" | "account" | "harness">): string | undefined =>
-    readsAsContinuing(session, settings) ? session?.id : undefined;
+// The session a turn names: only on a conversation the daemon has no record of, which is a past session resumed from the
+// history menu, and only while the selection still reads as continuing it. On a conversation it holds the daemon picks
+// the session itself (turn-admission.ts sessionFor) and ignores any it is sent, so none is sent.
+export const resumedSessionId = (
+    session: SessionRef | undefined,
+    settings: Pick<TurnSettings, "agent" | "account" | "harness">,
+    registered: boolean,
+): string | undefined => (!registered && readsAsContinuing(session, settings) ? session?.id : undefined);
 
 // The account a request names: a pick the daemon has not taken yet, or a pick made by hand for this turn. Where a
 // conversation runs is the daemon's record (routingFor), moved by `switchAccount` and reported back on each session
 // frame (`session`), so a turn naming none runs there, and is moved off it by the daemon when that account can no
 // longer serve (blocked-account.ts), or held when no other can. Named, and so run whatever the account's state, only
 // where the selection holds something that record does not: a chat's first turn (undefined there too is auto), a turn
-// onto another provider than the conversation's, an account other than the one the daemon last reported (a pick a
-// daemon too old for `switchAccount`, or busy with a turn, has not taken), or the account the person just picked by
+// onto another provider than the conversation's, an account other than the one the daemon last reported (a pick the
+// daemon, busy with a turn, refused to move to), or the account the person just picked by
 // hand (`accountPicked`), even the recorded one: picking an account the daemon holds turns off for is an attempt on
 // it, not another hold, and its answer lifts the daemon's mark.
 export const accountIntent = (
@@ -131,7 +133,7 @@ export const turnRequestBody = (input: {
     // The daemon has this conversation on record, so a turn naming no account runs on the one it is on (accountIntent).
     readonly registered: boolean;
     // The session this window holds, as the daemon last reported it (bindSession). Not which one the turn resumes: the
-    // daemon decides that; this is only what the account intent and an older daemon's fallback are read against.
+    // daemon decides that; this is only what the account intent and a history-menu resume are read against.
     readonly session: SessionRef | undefined;
     readonly forkOf: ForkLink | undefined;
     // Files the user staged as chips. A path the daemon can't resolve refuses the send, since the user chose it.
@@ -166,8 +168,8 @@ export const turnRequestBody = (input: {
         ...(here && input.settings.actsAs !== undefined ? { actsAs: input.settings.actsAs } : {}),
         // Omitted for another box, whose projects are its own.
         ...(here && input.settings.startIn !== undefined ? { startIn: input.settings.startIn } : {}),
-        // FALLBACK only (fallbackSessionId): a current daemon picks the session itself.
-        sessionId: fallbackSessionId(input.session, input.settings),
+        // Only for a conversation the daemon has no record of (resumedSessionId); otherwise it picks the session itself.
+        sessionId: resumedSessionId(input.session, input.settings, input.registered),
         errand: input.errand,
         ...(input.forkOf !== undefined ? { forkOf: input.forkOf } : {}),
         // Empty selection (catalog not yet loaded) is dropped; the daemon resolves its own live default.

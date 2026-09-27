@@ -1,11 +1,11 @@
 import { errorMessage } from "@intentic/base/errors";
-import { REQUEST_ID_EVIDENCE_ROUTE, REQUEST_ID_HEADER, sandboxAnswerSchema, sandboxContract } from "@intentic/sandbox-contract";
+import { REQUEST_ID_HEADER, sandboxAnswerSchema, sandboxContract } from "@intentic/sandbox-contract";
 import { createORPCClient, type InferClientInputs, type InferClientOutputs, ORPCError } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { OpenAPILink, type OpenAPILinkOptions } from "@orpc/openapi-client/fetch";
 import { trackPerf } from "../../../app/perf";
 import { uuid } from "../../../lib/uuid";
-import { driftedRouteReason, routeAdvertised, staleDaemonReason } from "../overview/useDaemonRoutes";
+import { driftedRouteReason, staleDaemonReason } from "../overview/useDaemonRoutes";
 import { sandboxAuthenticatedFetch, SandboxUnaddressedError } from "./sandboxAuthFetch";
 import { refusalText, SandboxHttpError, wordsOf } from "./sandboxHttpError";
 import { currentSandboxTarget, type SandboxTarget, targetFor } from "./sandboxTarget";
@@ -73,9 +73,8 @@ const linkOptions: OpenAPILinkOptions<SandboxCallContext> = {
     // Resolved per request, not captured at construction, so a fetch replaced later (a test stub, instrumentation)
     // still applies. Timed on the same rpc.request span as the raw client, session renewal included.
     fetch: (request, _init, { context }) => {
-        // Correlates this call with the daemon's own http.request line, sent only once the active daemon advertises
-        // support: unconditionally, it forces a CORS preflight that fails the whole request on an older daemon.
-        const requestId = context.at === undefined && routeAdvertised(REQUEST_ID_EVIDENCE_ROUTE) === true ? uuid() : undefined;
+        // Correlates this call with the daemon's own http.request line; this sandbox's only, whose CORS accepts the header.
+        const requestId = context.at === undefined ? uuid() : undefined;
         const headers = new Headers(request.headers);
         if (requestId !== undefined) {
             headers.set(REQUEST_ID_HEADER, requestId);

@@ -986,6 +986,7 @@
             "continueOnFresh": "Auf {model} fortsetzen, in einer frischen Session",
             "continueOnKeepingSession": "Auf {fallback} fortsetzen, diese Session behalten",
             "otherWaysOn": "Andere Wege auf",
+            "outdatedMissing": "Bis zur Aktualisierung kann ein durch ein aufgebrauchtes Kontingent angehaltener Zug von hier aus nicht auf ein anderes deiner Konten wechseln. Fortsetzen wartet auf dieses.",
             "reopenAccountsSessionLimit": "Das Session-Limit dieses Kontos jetzt neu öffnen — das verbraucht einen seiner wöchentlichen Resets. Ihr Wochenkontingent bleibt unberührt und gilt weiter",
             "resetLimitNow": "Limit jetzt zurücksetzen",
             "resetting": "Wird zurückgesetzt…"
@@ -1504,6 +1505,7 @@
             "allAccounts": "Alle {count} Konten",
             "filterSubscriptionAccounts": "Abo-Konten filtern",
             "noAccountsMatch": "Keine Konten passen.",
+            "outdatedMissing": "Bis zur Aktualisierung können die Konten unten nicht anzeigen, ob sie einen Zug übernehmen können (verlorene Anmeldung oder Lizenz, aufgebrauchtes oder gesperrtes Kontingent), und eine Auswahl wirkt erst ab der nächsten Nachricht.",
             "reMeasureEveryAccounts": "Die Tarifgrenzen jedes Kontos jetzt neu messen",
             "session": "{provider}-Session",
             "subscription": "Abo",
@@ -1981,6 +1983,7 @@
             "free": "Gratis",
             "googleAccount": "Google-Konto",
             "kimiCodeSubscription": "Kimi-Code-Abo",
+            "outdatedMissing": "Bis zur Aktualisierung können diese Konten nicht anzeigen, ob sie einen Zug übernehmen können: eine verlorene Anmeldung oder Lizenz oder ein aufgebrauchtes oder gesperrtes Kontingent erscheint als unbekannt.",
             "plan": "Welcher {managedLabel}-Tarif",
             "restingFor": "Pausiert: {reason}.",
             "restingUntil": "Pausiert bis {when}: {reason}.",
@@ -2372,7 +2375,6 @@
             "pendingRebuild": "Neubau ausstehend",
             "recipe": "Rezept",
             "reject": "Ablehnen",
-            "sandboxsImageOlderThan": "Das Image dieser Sandbox ist älter als die Inhaltsliste in einfacher Sprache. Aktualisieren Sie die Sandbox, dann erscheint die Liste neben dem Rezept.",
             "whatSandboxInstalled": "Was diese Sandbox installiert hat"
         },
         "environmentContents": {

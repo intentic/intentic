@@ -995,6 +995,7 @@
             "continueOnFresh": "Continuar en {model}, en una sesión nueva",
             "continueOnKeepingSession": "Continuar en {fallback}, conservando esta sesión",
             "otherWaysOn": "Otras formas en",
+            "outdatedMissing": "Hasta que se actualice, un turno retenido por un cupo agotado no puede pasar desde aquí a otra de tus cuentas. Continuar espera a esta.",
             "reopenAccountsSessionLimit": "Reabre ahora el límite de sesión de esta cuenta: gasta uno de sus reinicios semanales. Tu asignación semanal no se toca y sigue aplicándose",
             "resetLimitNow": "Reiniciar el límite ahora",
             "resetting": "Reiniciando…"
@@ -1513,6 +1514,7 @@
             "allAccounts": "Las {count} cuentas",
             "filterSubscriptionAccounts": "Filtrar cuentas de suscripción",
             "noAccountsMatch": "Ninguna cuenta coincide.",
+            "outdatedMissing": "Hasta que se actualice, las cuentas de abajo no pueden indicar si pueden atender un turno (un inicio de sesión o puesto perdido, un cupo agotado o en pausa), y elegir una solo surte efecto en el siguiente mensaje.",
             "reMeasureEveryAccounts": "Volver a medir ahora los límites de plan de cada cuenta",
             "session": "Sesión de {provider}",
             "subscription": "Suscripción",
@@ -1991,6 +1993,7 @@
             "free": "Gratis",
             "googleAccount": "Cuenta de Google",
             "kimiCodeSubscription": "Suscripción de Kimi Code",
+            "outdatedMissing": "Hasta que se actualice, estas cuentas no pueden indicar si pueden atender un turno: un inicio de sesión o puesto perdido, o un cupo agotado o en pausa, aparece como desconocido.",
             "plan": "Qué plan de {managedLabel}",
             "restingFor": "En pausa: {reason}.",
             "restingUntil": "En pausa hasta {when}: {reason}.",
@@ -2385,7 +2388,6 @@
             "pendingRebuild": "reconstrucción pendiente",
             "recipe": "Receta",
             "reject": "Rechazar",
-            "sandboxsImageOlderThan": "La imagen de este sandbox es más antigua que la lista de contenidos en lenguaje llano. Actualiza el sandbox y la lista aparecerá junto a la receta.",
             "whatSandboxInstalled": "Lo que este sandbox tiene instalado"
         },
         "environmentContents": {

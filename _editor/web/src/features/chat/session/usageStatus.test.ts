@@ -639,21 +639,28 @@ describe(`planLimitRows`, () => {
     it(`carries the translator's own bench of a routed credential onto its row, as a verdict waiting lifts`, () => {
         const rows = planLimitRows(
             {},
-            { ...noRouted, kimi: [{ name: `kimi-1`, label: `Kimi Code`, cooling: { until: 4_000_000_000, reason: `quota exceeded` } }] },
+            {
+                ...noRouted,
+                kimi: [
+                    {
+                        name: `kimi-1`,
+                        label: `Kimi Code`,
+                        cooling: { until: 4_000_000_000, reason: `quota exceeded` },
+                        state: { kind: `blocked`, fix: `wait`, reason: `quota exceeded`, until: 4_000_000_000 },
+                    },
+                ],
+            },
         );
         expect(rows[0]?.state).toEqual({ kind: `blocked`, fix: `wait`, reason: `quota exceeded`, until: 4_000_000_000 });
     });
 
-    it(`reads the daemon's verdict when it sends one, and the same rule over the old fields when it does not`, () => {
+    it(`reads the daemon's verdict when it sends one, and an older daemon's row without one as unknown`, () => {
         const seat = `Your organization has disabled Claude Code`;
         const [published] = planLimitRows({ claude: [account({ usage: usage(), state: { kind: `blocked`, fix: `admin`, reason: seat } })] }, noRouted);
         expect(published?.state).toEqual({ kind: `blocked`, fix: `admin`, reason: seat });
-        // A daemon older than `state` still sends the seat mark; the fallback reaches the same verdict from it.
-        const [legacy] = planLimitRows({ claude: [account({ usage: usage(), seatRefusal: seat })] }, noRouted);
-        expect(legacy?.state).toEqual({ kind: `blocked`, fix: `admin`, reason: seat });
-        // A revoked sign-in outranks the seat, in the fallback as on the daemon.
-        const [both] = planLimitRows({ claude: [account({ usage: usage(), seatRefusal: seat, needsReauth: true })] }, noRouted);
-        expect(both?.state).toEqual({ kind: `blocked`, fix: `reconnect`, reason: `sign-in expired` });
+        // A daemon older than `state` still sends the seat mark and the sign-in flag; nothing rebuilds a verdict from them.
+        const [older] = planLimitRows({ claude: [account({ usage: usage(), seatRefusal: seat, needsReauth: true })] }, noRouted);
+        expect(older?.state).toEqual({ kind: `unknown` });
     });
 });
 
@@ -684,8 +691,9 @@ describe(`accountState`, () => {
 
     it(`answers for the model asked about, not the account's tightest pool`, () => {
         const opusSpent = usage({ windows: [window({ utilization: 30 }), window({ kind: `model:Opus`, utilization: 100, gates: { models: [`Opus`] } })], measuredAt: 500 });
-        expect(accountState(`claude`, row({ usage: opusSpent }))).toEqual({ kind: `ready`, room: 70 });
-        expect(accountState(`claude`, row({ usage: opusSpent }), { id: `claude-opus-4-6` })).toEqual({ kind: `spent` });
+        const judged = row({ usage: opusSpent, state: { kind: `ready`, room: 70 } });
+        expect(accountState(`claude`, judged)).toEqual({ kind: `ready`, room: 70 });
+        expect(accountState(`claude`, judged, { id: `claude-opus-4-6` })).toEqual({ kind: `spent` });
     });
 });
 

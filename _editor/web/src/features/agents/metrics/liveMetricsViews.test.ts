@@ -23,6 +23,15 @@ const { LIVE_METRICS_KEY } = await import("./liveMetrics");
 const GIB = 2 ** 30;
 const MIB = 2 ** 20;
 
+// The daemon's verdict on memory for a person's turn: this much free against the gibibyte it needs.
+const room = (freeBytes: number): SandboxMetrics[`sandbox`][`memoryRoom`] => ({
+    freeBytes,
+    reservedBytes: 0,
+    personNeedBytes: GIB,
+    stallPercent: 0,
+    stallLimitPercent: 20,
+});
+
 const reading = (patch: { sandbox?: Partial<SandboxMetrics[`sandbox`]>; daemon?: Partial<SandboxMetrics[`daemon`]> } = {}): SandboxMetrics => ({
     at: 1,
     windowMs: 3_000,
@@ -38,6 +47,7 @@ const reading = (patch: { sandbox?: Partial<SandboxMetrics[`sandbox`]>; daemon?:
         machineCores: 32,
         processes: 104,
         pressure: { cpu: 0.2, memory: 0, io: 0.1 },
+        memoryRoom: room(10 * GIB),
         ...patch.sandbox,
     },
     daemon: { rssBytes: 412 * MIB, heapUsedBytes: 100 * MIB, cpuPercent: 2, eventLoopPercent: 4.5, ...patch.daemon },
@@ -144,7 +154,10 @@ describe("the sandbox segment", () => {
 
     it("raises a figure past its limit onto the line, tinted, so it needs no click to be seen", () => {
         const el = mount(SandboxMetricsSummary, {
-            metrics: reading({ sandbox: { memoryBytes: 15 * GIB, pressure: { cpu: 0, memory: 30, io: 0 } }, daemon: { eventLoopPercent: 95 } }),
+            metrics: reading({
+                sandbox: { memoryBytes: 15 * GIB, memoryRoom: room(GIB / 2), pressure: { cpu: 0, memory: 30, io: 0 } },
+                daemon: { eventLoopPercent: 95 },
+            }),
         });
         expect(figuresOf(el)).toEqual([
             `CPU 23%`,
@@ -283,7 +296,10 @@ describe("the sandbox panel", () => {
 
     it("tints only the figures near their limit", () => {
         const el = mount(SandboxMetricsDetails, {
-            metrics: reading({ sandbox: { memoryBytes: 15 * GIB, pressure: { cpu: 0, memory: 30, io: 0 } }, daemon: { eventLoopPercent: 95 } }),
+            metrics: reading({
+                sandbox: { memoryBytes: 15 * GIB, memoryRoom: room(GIB / 2), pressure: { cpu: 0, memory: 30, io: 0 } },
+                daemon: { eventLoopPercent: 95 },
+            }),
         });
         const warned = [...el.querySelectorAll(`.text-warning`)].map((value) => value.previousElementSibling?.textContent?.trim());
         expect(warned).toEqual([`Memory`, `Pressure`, `Daemon`]);

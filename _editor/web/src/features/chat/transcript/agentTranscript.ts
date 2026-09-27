@@ -2,7 +2,6 @@ import type { AgentHarness, AgentProvider, TranscriptRow, TranscriptTool } from 
 import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
 import { orRefusal, SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
-import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
 import { AGENTS } from "../../../lib/queryKeys";
 import { type PickUp, pickUpOf } from "../run/pickUp";
 import type { SessionRef } from "../run/turnRequest";
@@ -37,8 +36,8 @@ const boundSession = (body: { sessionId?: string; provider?: AgentProvider; harn
 const read = async (conversationId: string, at: string | undefined, before?: number): Promise<AgentTranscript> => {
     const page = await orRefusal(sandboxRpc.agents.transcript({ id: conversationId, before }, { context: { at } }));
     if (page instanceof SandboxHttpError) {
-        // 404 is trusted only when the daemon advertises this route; an older one's 404 just means no such route.
-        if (page.status === 404 && supportsRoute(`agents.transcript`)) {
+        // Every supported daemon serves the route, so a 404 is the conversation, not the route.
+        if (page.status === 404) {
             return `gone`;
         }
         throw new Error(`Could not open that conversation.`);

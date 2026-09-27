@@ -193,9 +193,10 @@ it(`says the list could not be read, and draws no rule, rather than showing a sa
     expect(buttonLabelled(`Require a passkey`)).toBeUndefined();
 });
 
-it(`reads a daemon without the route as having no passkeys, and says nothing about it`, async () => {
+// Every supported daemon serves the list, so a 404 is a read that failed like any other, never a quiet "no passkeys".
+it(`says a 404 on the list could not be read, like any other failure`, async () => {
     state.listFails = new SandboxHttpError(404, `Not found.`);
     await mount();
-    expect(shown()).not.toContain(`Couldn't read this sandbox's passkeys.`);
-    expect(shown()).toContain(`Off. A Google sign-in opens the sandbox`);
+    expect(shown()).toContain(`Couldn't read this sandbox's passkeys.`);
+    expect(shown()).not.toContain(`Off. A Google sign-in opens the sandbox`);
 });

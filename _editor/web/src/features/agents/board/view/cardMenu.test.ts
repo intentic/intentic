@@ -83,14 +83,14 @@ describe(`what a card's menu offers`, () => {
     });
 
     it(`ends every armed watch in one row, counting them past one`, () => {
-        const one = card(`w1`, { status: `running`, watches: [WATCH] });
-        const three = card(`w3`, { status: `running`, watches: [WATCH, WATCH, WATCH] });
+        const one = card(`w1`, { status: `running`, watches: [WATCH], awaitingWake: true });
+        const three = card(`w3`, { status: `running`, watches: [WATCH, WATCH, WATCH], awaitingWake: true });
         expect(rows(menuItemsFor(one, facts(), actions()))).toEqual([t(`ui.action.open`), `—`, `Stop watching`]);
         expect(rows(menuItemsFor(three, facts(), actions()))).toEqual([t(`ui.action.open`), `—`, `Stop watching (3)`]);
     });
 
     it(`offers another box's card the crossing to it by name, and nothing that writes through this box`, () => {
-        const far = card(`far`, { sandboxId: `laptop`, archivedAt: 3, watches: [WATCH] });
+        const far = card(`far`, { sandboxId: `laptop`, archivedAt: 3, watches: [WATCH], awaitingWake: true });
         expect(rows(menuItemsFor(far, facts({ here: false, boxName: `Laptop` }), actions()))).toEqual([t(`ui.action.open`), `—`, `Open in Laptop`]);
         expect(rows(menuItemsFor(far, facts({ here: false }), actions()))).toEqual([t(`ui.action.open`), `—`, `Open in its sandbox`]);
     });

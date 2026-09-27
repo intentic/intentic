@@ -62,11 +62,12 @@ describe(`turnRequestBody`, () => {
         expect(wire(turnRequestBody({ ...base, isolated: true }))).toMatchObject({ isolated: true });
     });
 
-    // Which session a turn goes on in is the daemon's to say (routing.ts). The id rides only for a daemon older than that,
-    // which resumes exactly what it is sent, and for a past session resumed from history, which no record holds yet.
-    it(`carries the held session id as a fallback while the selection reads as continuing it, and nothing otherwise`, () => {
+    // Which session a turn goes on in is the daemon's to say (routing.ts). The id rides only for a past session resumed
+    // from history, which no record holds yet; on a conversation the daemon holds, it picks the session itself.
+    it(`names a session only for a conversation the daemon has no record of, while the selection reads as continuing it`, () => {
         const session = { id: `s-1`, provider: `claude`, account: undefined, harness: `native` } as const;
         expect(wire(turnRequestBody({ ...base, session }))).toMatchObject({ sessionId: `s-1` });
+        expect(wire(turnRequestBody({ ...base, registered: true, session }))).not.toHaveProperty(`sessionId`);
 
         expect(wire(turnRequestBody(base))).not.toHaveProperty(`sessionId`);
         expect(wire(turnRequestBody({ ...base, session, settings: { ...settings, harness: `claude-code` } }))).not.toHaveProperty(`sessionId`);

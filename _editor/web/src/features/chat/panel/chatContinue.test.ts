@@ -6,6 +6,9 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import type { Conversation } from "../session/conversation";
 import { providerAccounts, setAccountUsage } from "../accounts/providerAccounts";
+import { judgedOauth } from "../../../testing/judgedAccounts";
+import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
+import { setDaemonRoutes } from "../../sandbox/overview/useDaemonRoutes";
 import { CONTINUATIONS } from "../transcript/transcript";
 import { useChat } from "../run/useChat";
 import { queryClient } from "../../../lib/queryPersistence";
@@ -461,15 +464,14 @@ it(`names a wait that has outlasted the busy threshold`, async () => {
 // A second connected subscription lets a spent allowance's held turn move there in one press, instead of switching
 // accounts and pressing Continue separately.
 
-// Two connections: the first spent, the second with room, the state this offer exists for.
-const twoAccounts = (spentPercent: number, roomPercent: number): void => {
-    providerAccounts.value = {
-        ...providerAccounts.value,
-        claude: [
-            { id: `acc-1`, email: `first@b.c` },
-            { id: `acc-2`, email: `second@b.c` },
-        ] as never,
-    };
+// Two connections: the first spent, the second with room, the state this offer exists for. Listed as a current daemon
+// lists them, each with its verdict; an older daemon's rows (`judged: false`) carry none.
+const twoAccounts = (spentPercent: number, roomPercent: number, judged = true): void => {
+    const rows = [
+        { id: `acc-1`, email: `first@b.c` },
+        { id: `acc-2`, email: `second@b.c` },
+    ] as never;
+    providerAccounts.value = { ...providerAccounts.value, claude: judged ? judgedOauth(rows) : rows };
     setAccountUsage(`claude`, `acc-1`, { windows: [{ kind: `five_hour`, utilization: spentPercent, gates: `all` }], measuredAt: Date.now() });
     setAccountUsage(`claude`, `acc-2`, { windows: [{ kind: `five_hour`, utilization: roomPercent, gates: `all` }], measuredAt: Date.now() });
 };
@@ -483,7 +485,7 @@ const limitChat = (): Conversation => {
 };
 
 // A conversation the daemon holds moves in one command (switchAccount), which re-runs the held turn there; the two-step
-// press below is only for a daemon that cannot take that command.
+// press below is only for a held turn that is not this sandbox's to move (a chat it has no record of yet).
 it(`continues on the other account in one daemon command when the conversation is the daemon's`, async () => {
     twoAccounts(100, 10);
     const conversation = limitChat();
@@ -515,6 +517,33 @@ it(`offers the other account by name on a spent allowance, and re-runs the held 
 
     expect(conversation.selection.account.value).toBe(`acc-2`);
     expect(resume).toHaveBeenCalledTimes(1);
+});
+
+// A sandbox too old for switchAccount can't move the conversation: nothing is offered to move to, not even the pick and
+// press an older editor fell back on, and the card says the sandbox needs an update and how.
+it(`offers no other account on a sandbox too old to move a conversation, and says it needs an update`, async () => {
+    setDaemonRoutes(SANDBOX_ROUTE_NAMES.filter((name) => name !== `agent.switchAccount`));
+    twoAccounts(99, 10, false);
+    const conversation = limitChat();
+    conversation.registered.value = true;
+    const moved = jest.spyOn(conversation.turn, `continueOn`);
+    await mountPanel();
+
+    expect(document.querySelector(`[data-outdated]`)?.textContent).toContain(`can't move to another of your accounts`);
+    expect(waysButton()).toBeUndefined();
+    expect(answerPill(`Move to`)).toBeUndefined();
+    expect(moved).not.toHaveBeenCalled();
+});
+
+// On a current sandbox the card says nothing about updating.
+it(`says nothing about updating on a sandbox that serves switchAccount`, async () => {
+    setDaemonRoutes([...SANDBOX_ROUTE_NAMES]);
+    twoAccounts(99, 10);
+    limitChat();
+    await mountPanel();
+
+    expect(document.querySelector(`[data-outdated]`)).toBeNull();
+    expect(waysButton()).toEqual(expect.any(Object));
 });
 
 // The common case: one subscription, no second pool to move to.

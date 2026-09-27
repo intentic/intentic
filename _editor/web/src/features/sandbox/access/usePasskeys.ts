@@ -2,7 +2,6 @@ import { type PasskeysList, PasskeysListSchema, type RegistrationOptionsJSON } f
 import { type NoticeModel, noticeFrom, useAsyncAction } from "@intentic/ui/async";
 import { ref, watch } from "vue";
 import { jsonBody } from "../client/jsonBody";
-import { SandboxHttpError } from "../client/sandboxHttpError";
 import { browserSupportsPasskeys, createPasskey, type PasskeyRegistered } from "../session/passkeySignIn";
 import { sandboxJson } from "../client/sandboxClient";
 import { useSandboxSession } from "../session/sandboxSession";
@@ -26,14 +25,15 @@ export function usePasskeys() {
     // Why the list could not be read; the rule's state is then unknown, so the section must not draw it as off.
     const unread = ref<NoticeModel | undefined>(undefined);
 
-    // A daemon that predates the route (404), or answers something else, reads as no passkeys rather than a broken tab.
+    // A list that cannot be read, or one in a shape this page does not know, reads as no passkeys rather than a broken
+    // tab; one that cannot be read says so (`unread`).
     const refresh = async (): Promise<void> => {
         let body: unknown;
         try {
             body = await sandboxJson<unknown>(`/system/passkeys`);
         } catch (caught) {
             list.value = EMPTY;
-            unread.value = caught instanceof SandboxHttpError && caught.status === 404 ? undefined : noticeFrom(caught, `Couldn't read this sandbox's passkeys.`);
+            unread.value = noticeFrom(caught, `Couldn't read this sandbox's passkeys.`);
             return;
         }
         unread.value = undefined;

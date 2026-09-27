@@ -989,6 +989,7 @@
             "continueOnFresh": "Continuer sur {model}, dans une nouvelle session",
             "continueOnKeepingSession": "Continuer sur {fallback}, en gardant cette session",
             "otherWaysOn": "Autres façons sur",
+            "outdatedMissing": "Tant qu'il n'est pas mis à jour, un tour retenu par un quota épuisé ne peut pas passer d'ici sur un autre de vos comptes. Continuer attend celui-ci.",
             "reopenAccountsSessionLimit": "Rouvrir maintenant la limite de session de ce compte — cela dépense une de ses réinitialisations hebdomadaires. Votre quota hebdomadaire n'est pas touché et s'applique toujours",
             "resetLimitNow": "Réinitialiser la limite maintenant",
             "resetting": "Réinitialisation…"
@@ -1505,6 +1506,7 @@
             "allAccounts": "Les {count} comptes",
             "filterSubscriptionAccounts": "Filtrer les comptes d'abonnement",
             "noAccountsMatch": "Aucun compte ne correspond.",
+            "outdatedMissing": "Tant qu'il n'est pas mis à jour, les comptes ci-dessous ne peuvent pas dire s'ils peuvent prendre un tour (connexion ou siège perdu, quota épuisé ou suspendu), et en choisir un ne prend effet qu'au message suivant.",
             "reMeasureEveryAccounts": "Remesurer maintenant les limites d'offre de chaque compte",
             "session": "Session {provider}",
             "subscription": "Abonnement",
@@ -1980,6 +1982,7 @@
             "free": "Gratuit",
             "googleAccount": "Compte Google",
             "kimiCodeSubscription": "Abonnement Kimi Code",
+            "outdatedMissing": "Tant qu'il n'est pas mis à jour, ces comptes ne peuvent pas dire s'ils peuvent prendre un tour : une connexion ou un siège perdu, ou un quota épuisé ou suspendu, apparaît comme inconnu.",
             "plan": "Quelle offre {managedLabel}",
             "restingFor": "En pause : {reason}.",
             "restingUntil": "En pause jusqu'à {when} : {reason}.",
@@ -2374,7 +2377,6 @@
             "pendingRebuild": "reconstruction en attente",
             "recipe": "Recette",
             "reject": "Refuser",
-            "sandboxsImageOlderThan": "L'image de ce sandbox est plus ancienne que la liste de contenu en langage clair. Mettez le sandbox à jour et la liste apparaîtra à côté de la recette.",
             "whatSandboxInstalled": "Ce que ce sandbox a installé"
         },
         "environmentContents": {

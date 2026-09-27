@@ -100,29 +100,29 @@ describe("dropActionFor", () => {
     // An armed watch is what keeps the card out of Finished, so disarming it is the drop's action, exactly as a running
     // turn's drop invokes the stop that ends it.
     it("stops the watches of a card dropped on finished", () => {
-        expect(dropActionFor(agent({ status: `idle`, watches: [watch] }), `finished`)).toBe(`unwatch`);
+        expect(dropActionFor(agent({ status: `idle`, watches: [watch], awaitingWake: true }), `finished`)).toBe(`unwatch`);
     });
 
     // A watch is a timer, not a worktree: a workspace conversation arms one as readily and has no land, resolve or
     // discard to refuse.
     it("stops the watches of a workspace conversation too, which has no branch to act on", () => {
-        expect(dropActionFor(agent({ status: `idle`, branch: undefined, watches: [watch] }), `finished`)).toBe(`unwatch`);
+        expect(dropActionFor(agent({ status: `idle`, branch: undefined, watches: [watch], awaitingWake: true }), `finished`)).toBe(`unwatch`);
     });
 
     // Something more pressing outranks a watch on any blocked card; a watch never speaks over an unanswered question or
     // a refused land.
     it("yields to whatever else the card is blocked on", () => {
-        expect(dropActionFor(agent({ status: `error`, watches: [watch] }), `finished`)).toBe(`land`);
-        expect(dropActionFor(agent({ status: `conflict`, watches: [watch] }), `finished`)).toBe(`resolve`);
-        expect(dropActionFor(agent({ status: `idle`, attention: { ...none, question: true }, watches: [watch] }), `finished`)).toBeUndefined();
+        expect(dropActionFor(agent({ status: `error`, watches: [watch], awaitingWake: true }), `finished`)).toBe(`land`);
+        expect(dropActionFor(agent({ status: `conflict`, watches: [watch], awaitingWake: true }), `finished`)).toBe(`resolve`);
+        expect(dropActionFor(agent({ status: `idle`, attention: { ...none, question: true }, watches: [watch], awaitingWake: true }), `finished`)).toBeUndefined();
     });
 
     // A running turn still outranks the watch: the stop is what that drop has always meant, and the watch stays armed
     // underneath it.
     it("yields to a live turn, whose drop is still the stop or a refusal", () => {
-        expect(dropActionFor(agent({ status: `running`, watches: [watch] }), `finished`)).toBe(`stop`);
-        expect(dropActionFor(agent({ status: `resuming`, watches: [watch] }), `finished`)).toBeUndefined();
-        expect(dropRejection(agent({ status: `resuming`, watches: [watch] }), `finished`)).toContain(`picking itself back up`);
+        expect(dropActionFor(agent({ status: `running`, watches: [watch], awaitingWake: true }), `finished`)).toBe(`stop`);
+        expect(dropActionFor(agent({ status: `resuming`, watches: [watch], awaitingWake: true }), `finished`)).toBeUndefined();
+        expect(dropRejection(agent({ status: `resuming`, watches: [watch], awaitingWake: true }), `finished`)).toContain(`picking itself back up`);
     });
 
     it("discards anything that isn't running, the daemon refuses a running turn's worktree", () => {
@@ -166,9 +166,9 @@ describe("dropActionFor", () => {
             agent({ status: `idle` }),
             agent({ status: `idle`, attention: { ...none, plan: true } }),
             agent({ status: `idle`, attention: { ...none, conflict: true } }),
-            agent({ status: `idle`, watches: [watch] }),
-            agent({ status: `idle`, branch: undefined, watches: [watch] }),
-            agent({ status: `idle`, attention: { ...none, question: true }, watches: [watch] }),
+            agent({ status: `idle`, watches: [watch], awaitingWake: true }),
+            agent({ status: `idle`, branch: undefined, watches: [watch], awaitingWake: true }),
+            agent({ status: `idle`, attention: { ...none, question: true }, watches: [watch], awaitingWake: true }),
         ];
         for (const card of cases) {
             for (const target of [`attention`, `active`, `finished`, `discard`] as const) {
@@ -232,7 +232,7 @@ describe("a card whose agent is in another sandbox", () => {
     // Ending a watch writes through the fleet store, which is the active daemon's roster and has no entry for this
     // agent.
     it("refuses to end a watch, and says the sandbox is why", () => {
-        const watching = elsewhere({ status: `idle`, watches: [watch] });
+        const watching = elsewhere({ status: `idle`, watches: [watch], awaitingWake: true });
         const conflicted = elsewhere({ status: `conflict`, attention: { ...none, conflict: true } });
         expect(dropActionFor({ ...watching, sandboxId: undefined }, `finished`)).toBe(`unwatch`);
         expect(dropActionFor(watching, `finished`)).toBeUndefined();

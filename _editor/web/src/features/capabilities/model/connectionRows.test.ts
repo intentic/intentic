@@ -102,10 +102,10 @@ const sources = (live: Live = {}): ConnectionSources => ({
 const tileOf = (entry: CapabilityCatalogEntry, instances: readonly CapabilitySummary[]): CatalogTile =>
     catalogTiles([entry], instances, () => undefined)[0]!;
 
-// One PC reached through two doors of one card: its Windows install and a WSL distro on it.
+// One PC reached through two doors of one card: its Windows install and a WSL distro on it, each row naming the card.
 const ONE_PC: Device[] = [
-    { key: `omen`, label: `omen`, hostId: `omen`, online: true, platform: `windows` },
-    { key: `omen::wsl:arch`, label: `omen::wsl:arch`, hostId: `omen::wsl:arch`, online: true, platform: `linux` },
+    { key: `omen`, label: `omen`, hostId: `omen`, card: `omen`, online: true, platform: `windows` },
+    { key: `omen::wsl:arch`, label: `omen::wsl:arch`, hostId: `omen::wsl:arch`, card: `omen`, online: true, platform: `linux` },
 ];
 
 describe(`a connection's state`, () => {

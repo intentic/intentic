@@ -1,5 +1,6 @@
 // jsdom because the subject is what a row puts on screen, not the derivation behind it (see deviceFacts.test.ts).
 import "@intentic/testing/dom";
+import { listedDevice } from "../../../testing/listedDevice";
 import type { Device } from "@intentic/sandbox-contract";
 import type { RouteLocationRaw } from "vue-router";
 import PrimeVue from "primevue/config";
@@ -185,7 +186,7 @@ const mount = (rows: Device[], at: Record<string, string> = {}): HTMLElement => 
     document.body.innerHTML = ``;
     // A mount is an arrival at the tab; `at` is the deep link it arrived on.
     route.query = { ...at };
-    devices.value = rows;
+    devices.value = rows.map(listedDevice);
     // A mount is also a reading landing, which is the clock every row is judged against.
     readAt.value = Date.now();
     const el = document.createElement(`div`);

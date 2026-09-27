@@ -188,12 +188,11 @@ const readRunnableProviders = async (): Promise<RunnableProviders["endpoints"] |
     try {
         listing = await sandboxRpc.providers.list();
     } catch (error) {
-        // Only a read that may yet succeed is worth waiting on. 403 (this member's tier doesn't reach it), 404 (a daemon
-        // that doesn't serve it) and a body this build can't read (the client's parse refused it) answer the same way
-        // every time, so they leave the half known and empty rather than holding a spinner over every gated surface for
-        // as long as the tab is open. A 5xx or an unreachable daemon leaves it unknown, and the next reachable seam asks
-        // again.
-        const settled = (error instanceof SandboxHttpError && (error.status === 403 || error.status === 404)) || error instanceof z.core.$ZodError;
+        // Only a read that may yet succeed is worth waiting on. 403 (this member's tier doesn't reach it) and a body this
+        // build can't read (the client's parse refused it) answer the same way every time, so they leave the half known
+        // and empty rather than holding a spinner over every gated surface for as long as the tab is open. A 5xx or an
+        // unreachable daemon leaves it unknown, and the next reachable seam asks again.
+        const settled = (error instanceof SandboxHttpError && error.status === 403) || error instanceof z.core.$ZodError;
         return settled ? [] : undefined;
     }
     // The outgoing sandbox's list: this one's readiness is unknown still, and its own read will say.

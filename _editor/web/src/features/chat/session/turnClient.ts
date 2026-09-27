@@ -19,7 +19,7 @@ import { orRefusal, SandboxHttpError } from "../../sandbox/client/sandboxHttpErr
 import { type ProcedureInput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
 import { accountIntent, type SessionRef, type TurnSettings, turnRequestBody } from "../run/turnRequest";
-import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
+import { accountsOutdated } from "../accounts/accountsOutdated";
 import { type AttachHead, followRun, type SentMessage, type TurnContext } from "../run/turnStream";
 import { invalidateAgentTranscript } from "../transcript/agentTranscript";
 import { type ChatAttachment, continuationFor, isNudgeText } from "../transcript/transcript";
@@ -32,7 +32,7 @@ import { accepted, advance, IDLE, phaseEnding, type RunEvent, type RunPhase, typ
 // queue, the same for every window (Conversation.queue); nothing here holds words of its own.
 
 // A turn this window has opened and not yet handed to the daemon: its drawn bubble, its abort, and the session this
-// window held when it opened, which the account intent and an older daemon's fallback are read against.
+// window held when it opened, which the account intent and a history-menu resume are read against.
 interface OpenedTurn {
     readonly bubble: number;
     readonly controller: AbortController;
@@ -656,11 +656,12 @@ export class TurnClient {
 
     // Asks the daemon to move this conversation to `account` (switchAccount), the one way a conversation it holds changes
     // who pays. It only moves: without `run` a turn the daemon holds stays held, since a pick in the picker is a choice,
-    // never a press. A chat it does not hold yet, another box, or a daemon too old for the route leaves the pick to ride
-    // the next turn instead (accountIntent), and so does a turn running now (409): the pick stays on the selection either way.
+    // never a press. A chat it does not hold yet, or another box, leaves the pick to ride the next turn instead
+    // (accountIntent), and so does a turn running now (409): the pick stays on the selection either way. A sandbox too old
+    // for the route is asked nothing: the picker says it needs an update (accountsOutdated).
     moveAccount(account: string): void {
         const { host } = this;
-        if (!host.registered.value || host.box.value !== undefined || !supportsRoute(`agent.switchAccount`)) {
+        if (!host.registered.value || host.box.value !== undefined || accountsOutdated.value) {
             return;
         }
         // A refusal (a turn running) or an unreachable daemon leaves the pick on the selection, where the next turn names it.
@@ -671,12 +672,13 @@ export class TurnClient {
 
     // Continues a held turn on another account: one command, the daemon moving the conversation and re-running the turn
     // there (switchAccount with `run`). `carry` keeps the provider session (re-reads once, cold); fresh reseeds from the record.
-    // False, having done nothing, where that command cannot answer (nothing held, another box, a daemon too old for the
-    // route): the caller then takes the two steps an older daemon understood, the pick and the press naming it.
+    // False, having done nothing, where no held turn is this sandbox's to move (nothing held, or another box): the caller
+    // then picks the account and presses, which names it on the turn. Never offered by a sandbox too old for the command
+    // (accountsOutdated), whose continue card says it needs an update instead.
     async continueOn(account: string, carry: boolean): Promise<boolean> {
         const { host } = this;
         const held = host.registered.value && host.pickUp.value?.held !== undefined;
-        if (this.streaming.value || !held || host.box.value !== undefined || !supportsRoute(`agent.switchAccount`)) {
+        if (this.streaming.value || !held || host.box.value !== undefined) {
             return false;
         }
         if (this.stopping !== undefined) {

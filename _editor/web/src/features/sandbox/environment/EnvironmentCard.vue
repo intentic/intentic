@@ -57,8 +57,8 @@ const VIEWS = computed(
         ] as const,
 );
 
-// Runs only while Contents is selected (probing versions spawns processes), not gated on what ends up shown.
-const { groups, loading, error: contentsError, unsupported, refresh: reprobe } = useEnvironmentContents(() => view.value === `contents`);
+// Runs only while Contents is selected (probing versions spawns processes).
+const { groups, loading, error: contentsError, refresh: reprobe } = useEnvironmentContents(() => view.value === `contents`);
 
 // Each item's state (awaiting approval, arrives after rebuild) derives from the recipe, so a decision made here, or a
 // proposal an agent drafts, must re-read contents; otherwise it shows stale until the tab is toggled off and on.
@@ -70,9 +70,6 @@ watch(
         }
     },
 );
-
-// Falls back to recipe when the daemon can't answer for contents; hides that tab entirely.
-const shown = computed(() => (unsupported.value ? `recipe` : view.value));
 
 // Refreshes both reads and forces a re-probe, so a newly installed tool doesn't need a restart to show up.
 const load = async (): Promise<void> => {
@@ -117,7 +114,7 @@ const step = computed(
     <RowGroup v-if="proposal || pending || applied || awaiting.length" :label="t(`sandbox.words.environment`)">
         <template #actions>
             <div class="flex flex-wrap items-center justify-end gap-2">
-                <SegmentedControl v-if="!unsupported" v-model="view" :options="VIEWS" />
+                <SegmentedControl v-model="view" :options="VIEWS" />
                 <StatusBadge v-if="applied && !proposal && !pending" variant="success" :label="t(`sandbox.environmentCard.applied`)" dot />
                 <StatusBadge v-else-if="pending && !proposal" variant="warning" :label="t(`sandbox.environmentCard.pendingRebuild`)" dot />
                 <StatusBadge v-else variant="warning" :label="t(`sandbox.environmentCard.awaitingReview`)" dot />
@@ -200,7 +197,7 @@ const step = computed(
         <!-- `gap-5` must match the section spacing in <EnvironmentContents>, so sections keep one rhythm. -->
         <RowNote variant="block" class="flex flex-col gap-5">
             <!-- Leads in every state, including a pending proposal (incoming entries show marked as awaiting approval). -->
-            <EnvironmentContents v-if="shown === `contents`" :groups="groups" :loading="loading" :error="contentsError" />
+            <EnvironmentContents v-if="view === `contents`" :groups="groups" :loading="loading" :error="contentsError" />
 
             <!-- A proposal awaiting the owner's decision, diffed against the approved custom section; capability fragments are daemon-owned and not up for review here. -->
             <template v-else-if="proposal">
@@ -221,11 +218,6 @@ const step = computed(
 
             <!-- The active overlay the running container was built from. -->
             <Code v-else-if="applied" :code="applied.content" lang="docker" :label="t(`sandbox.environmentCard.activeOverlay`)" />
-
-            <!-- Points to Update, not rebuild: an environment rebuild builds on the image already running, so it wouldn't fix an outdated image. -->
-            <p v-if="unsupported" class="text-2xs text-subtle">
-                {{ t(`sandbox.environmentCard.sandboxsImageOlderThan`) }}
-            </p>
 
             <!-- Runtime installs sessions keep making, cross-session and drift-corroborated; fixable ones are usually already drafted into the proposal above.
                  The card ends on this list: its rows carry their own decisions, and nothing card-wide follows them. -->

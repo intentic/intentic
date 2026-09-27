@@ -574,10 +574,8 @@ export const AgentSummarySchema = z.object({
         ),
 });
 export type AgentSummary = z.infer<typeof AgentSummarySchema>;
-// Whether a conversation runs again by itself: the daemon's own reading, or, from a daemon older than it, whether a watch
-// is armed, which was all that one could say.
-export const awaitsWake = (agent: { readonly awaitingWake?: boolean | undefined; readonly watches?: readonly unknown[] | undefined }): boolean =>
-    agent.awaitingWake ?? (agent.watches?.length ?? 0) > 0;
+// Whether a conversation runs again by itself: the daemon's own reading, never guessed from its armed watches.
+export const awaitsWake = (agent: { readonly awaitingWake?: boolean | undefined }): boolean => agent.awaitingWake === true;
 // One armed watch as a card carries it; derived from AgentSummarySchema.watches so the two shapes can't drift apart.
 export type AgentWatch = NonNullable<AgentSummary["watches"]>[number];
 // One background job as a card carries it.

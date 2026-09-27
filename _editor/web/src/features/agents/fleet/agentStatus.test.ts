@@ -117,9 +117,10 @@ describe("laneOf", () => {
 
     // An agent with an armed watch ended its turn and files idle, but it will run again by itself: active, not
     // attention, since nothing is owed by the user here.
+    // The daemon reads an armed watch as a wake to come, and says so (awaitingWake).
     it("keeps an idle agent with an armed watch in active: it will run again by itself", () => {
-        expect(laneOf({ status: `idle`, attention: none, watches: [watch()] })).toBe(`active`);
-        expect(laneOf({ status: `landed`, attention: none, watches: [watch()] })).toBe(`active`);
+        expect(laneOf({ status: `idle`, attention: none, watches: [watch()], awaitingWake: true })).toBe(`active`);
+        expect(laneOf({ status: `landed`, attention: none, watches: [watch()], awaitingWake: true })).toBe(`active`);
     });
 
     // The daemon's own reading decides where it says: a wake waiting in the queue keeps a card active with no watch at
@@ -271,8 +272,8 @@ describe("unfinishedMark", () => {
     // The one active card that isn't working: "Still working" would be false for an agent waiting on someone else's CI,
     // so the mark names which kind of unfinished it is.
     it("tells a card waiting on a condition apart from one still working", () => {
-        const waiting = unfinishedMark({ status: `idle`, attention: none, watches: [watch()] });
-        const working = unfinishedMark({ status: `running`, attention: none, watches: [watch()] });
+        const waiting = unfinishedMark({ status: `idle`, attention: none, watches: [watch()], awaitingWake: true });
+        const working = unfinishedMark({ status: `running`, attention: none, watches: [watch()], awaitingWake: true });
         expect(waiting?.label).toContain(`condition`);
         expect(working?.label).toContain(`working`);
         expect(waiting?.label).not.toEqual(working?.label);

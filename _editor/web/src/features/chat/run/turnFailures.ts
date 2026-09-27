@@ -147,11 +147,10 @@ export class TurnFailures {
     }
 
     // Lights the reauth badge at once, on the account the frame names as having served the turn: the daemon's word, never
-    // a guess. A daemon too old to name it leaves the conversation's own account (the daemon's record, bindSession).
+    // a guess. A frame naming none (a turn on no stored account) lights nothing; the account list says it on its next read.
     private markReauth(error: Pick<TurnError, "account">, detail: string): void {
-        const account = error.account ?? this.host.selection.account.value;
-        if (account !== undefined) {
-            markNeedsReauth(this.host.selection.provider.value, account, detail);
+        if (error.account !== undefined) {
+            markNeedsReauth(this.host.selection.provider.value, error.account, detail);
         }
     }
 
@@ -159,9 +158,8 @@ export class TurnFailures {
     // answer for the ending says so. `held` means continuing resends the same turn, not a new message.
     private applyLimitError(error: TurnError): void {
         const model = this.host.selection.model.value === `` ? undefined : { id: this.host.selection.model.value };
-        // The account the frame names served the turn; this window's selection is only the fallback for an older daemon.
-        const account = error.account ?? this.host.selection.account.value;
-        const resetsAt = error.resetsAt ?? bindingWindow(usageStatusFor(this.host.selection.provider.value, account, model), model)?.resetsAt;
+        // The account the frame names served the turn; one naming none has no reading of its own to guess a reset from.
+        const resetsAt = error.resetsAt ?? bindingWindow(usageStatusFor(this.host.selection.provider.value, error.account, model), model)?.resetsAt;
         this.host.pickUp.value = {
             reason: `limit`,
             // `resetsAt` always comes from the frame, never the store's fallback; `nextAt` is the daemon's own booking.

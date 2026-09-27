@@ -1039,6 +1039,7 @@
             "keepsSessionUnmeasured": "Keeps this session: the model keeps everything, and re-reads all of it once on their allowance.",
             "opensFreshSession": " Fresh session (~{tokens}-token hand-off).",
             "otherWaysOn": "Other ways on",
+            "outdatedMissing": "Until it updates, a turn held by a spent allowance can't move to another of your accounts from here. Continue waits for this one.",
             "pickUpWithoutRetyping": "Pick up where it left off, without retyping{keyHint}",
             "reopenAccountsSessionLimit": "Reopen this account's session limit now — spends one of its weekly resets. Your weekly allowance is untouched and still applies",
             "rereadsCold": " Re-reads ~{tokens} tokens.",
@@ -1572,6 +1573,7 @@
             "allAccounts": "All {count} accounts",
             "filterSubscriptionAccounts": "Filter subscription accounts",
             "noAccountsMatch": "No accounts match.",
+            "outdatedMissing": "Until it updates, the accounts below can't say whether they can take a turn (a lost sign-in or seat, a spent or benched pool), and picking one only takes effect on the next message.",
             "reMeasureEveryAccounts": "Re-measure every account's plan limits now",
             "session": "{provider} session",
             "subscription": "Subscription",
@@ -2180,6 +2182,7 @@
             "free": "Free",
             "googleAccount": "Google account",
             "kimiCodeSubscription": "Kimi Code subscription",
+            "outdatedMissing": "Until it updates, these accounts can't say whether they can take a turn: a lost sign-in or seat, or a spent or benched pool, shows as unknown.",
             "plan": "Which {managedLabel} plan",
             "restingFor": "Resting: {reason}.",
             "restingUntil": "Resting until {when}: {reason}.",
@@ -2580,7 +2583,6 @@
             "pendingRebuild": "pending rebuild",
             "recipe": "Recipe",
             "reject": "Reject",
-            "sandboxsImageOlderThan": "This sandbox's image is older than the plain-language contents list. Update the sandbox and the list appears beside the recipe.",
             "whatSandboxInstalled": "What this sandbox has installed"
         },
         "environmentContents": {

@@ -119,13 +119,12 @@ export const sessionLine = (
     ].join(` · `);
 
 // Warned exactly when the daemon would hold a person's turn: the same figures and the same thresholds, read off one
-// reading. A daemon that predates `memoryRoom` sends neither, and its gauge falls back to how full it is.
+// reading. A reading without `memoryRoom` (a daemon older than it) warns of nothing: no threshold is guessed here.
 export const memoryShort = (sandbox: SandboxMetrics[`sandbox`]): boolean => {
     const room = sandbox.memoryRoom;
-    if (room === undefined) {
-        return sandbox.memoryBytes >= NEAR_LIMIT * sandbox.memoryLimitBytes;
-    }
-    return (room.freeBytes !== undefined && room.freeBytes < room.personNeedBytes) || room.stallPercent >= room.stallLimitPercent;
+    return (
+        room !== undefined && ((room.freeBytes !== undefined && room.freeBytes < room.personNeedBytes) || room.stallPercent >= room.stallLimitPercent)
+    );
 };
 
 export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<SandboxReadout> {

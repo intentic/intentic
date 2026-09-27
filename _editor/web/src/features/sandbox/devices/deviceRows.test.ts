@@ -1,3 +1,4 @@
+import { listedDevice } from "../../../testing/listedDevice";
 import type { Device } from "@intentic/sandbox-contract";
 import { deviceAttention } from "./health/deviceAttention";
 import {
@@ -47,14 +48,15 @@ const report = (overrides: Partial<Report> = {}): Report => ({
 });
 
 // A connected, reachable, currently-reporting machine: the shape every case below varies one fact of.
-const device = (overrides: Partial<Device> = {}): Device => ({
-    key: `rog`,
-    label: `rog`,
-    hostId: `host-rog`,
-    online: true,
-    report: report(),
-    ...overrides,
-});
+const device = (overrides: Partial<Device> = {}): Device =>
+    listedDevice({
+        key: `rog`,
+        label: `rog`,
+        hostId: `host-rog`,
+        online: true,
+        report: report(),
+        ...overrides,
+    });
 
 // What the machine said about itself, across both of its answers: folders and ports from its report, containers from
 // the host door's own list, which rides the row because it answers to its own switch.
