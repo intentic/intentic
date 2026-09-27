@@ -490,14 +490,14 @@ const twoPairings = (overrides: { paused?: boolean; mirroring?: `on` | `off` } =
 
 test(`points each switch whichever way the machine currently says`, () => {
     const on = deviceSwitches(row({}, twoPairings()));
-    expect(on.map((half) => [half.label, half.word, half.actions.map((action) => action.label)])).toEqual([
-        [`File syncing`, `on`, [`Pause all`]],
-        [`Port mirroring`, `on`, [`Stop all`]],
+    expect(on.map((half) => [half.label, half.summary, half.actions.map((action) => action.label)])).toEqual([
+        [`File syncing`, `On for all 2 sandboxes`, [`Pause all`]],
+        [`Port mirroring`, `On for all 2 sandboxes`, [`Turn all off`]],
     ]);
     const off = deviceSwitches(row({}, twoPairings({ paused: true, mirroring: `off` })));
-    expect(off.map((half) => [half.word, half.actions.map((action) => action.label)])).toEqual([
-        [`paused`, [`Resume all`]],
-        [`off`, [`Start all`]],
+    expect(off.map((half) => [half.summary, half.actions.map((action) => action.label)])).toEqual([
+        [`Paused for all 2 sandboxes`, [`Resume all`]],
+        [`Off for all 2 sandboxes`, [`Turn all on`]],
     ]);
 });
 
@@ -508,10 +508,12 @@ test(`says which pairings disagree and offers both directions`, () => {
             { sandboxId: `b`, mode: `sync`, localDir: `/w/b` },
         ],
     };
-    const [sync] = deviceSwitches(row({}, mixed));
-    expect(sync?.note).toBe(`1 of 2 paused`);
-    expect(sync?.scope).toBe(`all 2 sandboxes`);
+    const [sync, mirror] = deviceSwitches(row({}, mixed));
+    // One sentence says both the position and how much of the machine it covers.
+    expect(sync?.summary).toBe(`Paused for 1 of 2 sandboxes`);
     expect(sync?.actions.map((action) => action.label)).toEqual([`Resume all`, `Pause all`]);
+    // The half the pairings agree on stays settled beside it.
+    expect(mirror?.summary).toBe(`On for all 2 sandboxes`);
 });
 
 test(`drops the machine-wide switches over a single pairing, where a row's own button says it better`, () => {

@@ -503,21 +503,22 @@ export const portHolder = (groups: readonly DeviceSandboxGroup[], port: DevicePo
 // Why a port isn't on localhost, each state naming a different remedy: a contested port is freed by
 // stopping the sandbox holding it, a busy one by quitting the local process, and an ignored one by the
 // button beside this sentence.
-// The program's name is the useful part of the sentence, so it goes where the sentence says "who".
 // A port lost to another paired sandbox links to the row that holds it, where its Stop button is; one
 // lost to a local program has no such remedy to offer.
-export const portNote = (port: DevicePortRow, holder?: DeviceSandboxGroup | undefined, program?: string | undefined): string | undefined => {
+export const portNote = (port: DevicePortRow, holder?: DeviceSandboxGroup | undefined): string | undefined => {
     if (port.state === `mirrored`) {
         return undefined;
     }
     // Said as somebody's decision rather than as an outcome: nothing failed, and no reader should go looking for
     // what did.
     if (port.state === `ignored`) {
-        return `not on localhost: this device is set to leave this port alone`;
+        return `not on localhost: left alone on purpose`;
     }
-    // The command on a contended port belongs to the sandbox's own listener, never to whoever won the number.
+    // Names no program. The command a port carries is the SANDBOX's own listener, never whoever won the number, so
+    // the sentence that used to put it where it says "who" named the loser as the holder. The listener is the port
+    // number's hover instead, as what the port is for.
     if (port.heldBy === undefined) {
-        return `not on localhost: ${program ?? `another program here`} has it, and keeps it until it stops`;
+        return `not on localhost: another program here already uses it`;
     }
     return `not on localhost: ${holder?.title ?? port.heldBy} has it`;
 };

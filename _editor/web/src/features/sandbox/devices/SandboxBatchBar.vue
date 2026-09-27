@@ -41,22 +41,29 @@ const progress = computed(() => {
 
 <template>
     <div class="mb-1 flex min-h-8 flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-line-subtle pb-2">
-        <span class="flex w-5 shrink-0 items-center justify-center">
-            <Checkbox
-                :model-value="selection.allPicked.value"
-                :indeterminate="selection.chosen.value.length > 0 && !selection.allPicked.value"
-                :binary="true"
-                size="small"
-                :disabled="ops.working.value"
-                :aria-label="t(`sandbox.devicePage.selectEverySandbox`)"
-                @update:model-value="(on: boolean) => selection.pickAll(on)"
-            />
-        </span>
-        <span class="text-2xs text-muted">{{
-            selection.chosen.value.length > 0
-                ? t(`sandbox.devicePage.selected`, { count: selection.chosen.value.length })
-                : t(`sandbox.devicePage.selectAll`)
-        }}</span>
+        <!-- The words are the box's own label, so pressing "Select all" ticks it as pressing the box does: they sat
+             beside it as plain text, and a click on them did nothing. -->
+        <label
+            class="group/all flex min-w-0 select-none items-center gap-2"
+            :class="ops.working.value ? `cursor-default` : `cursor-pointer`"
+        >
+            <span class="flex w-5 shrink-0 items-center justify-center">
+                <Checkbox
+                    :model-value="selection.allPicked.value"
+                    :indeterminate="selection.chosen.value.length > 0 && !selection.allPicked.value"
+                    :binary="true"
+                    size="small"
+                    :disabled="ops.working.value"
+                    :aria-label="t(`sandbox.devicePage.selectEverySandbox`)"
+                    @update:model-value="(on: boolean) => selection.pickAll(on)"
+                />
+            </span>
+            <span class="text-xs text-muted transition-colors group-hover/all:text-content">{{
+                selection.chosen.value.length > 0
+                    ? t(`sandbox.devicePage.selected`, { count: selection.chosen.value.length })
+                    : t(`sandbox.devicePage.selectAll`)
+            }}</span>
+        </label>
         <div class="ml-auto flex flex-wrap items-center gap-0.5">
             <span v-if="progress" class="flex items-center gap-1.5 px-2 text-2xs text-muted" role="status">
                 <Icon name="spinner" spin aria-hidden="true" />{{ progress }}

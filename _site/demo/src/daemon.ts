@@ -26,7 +26,7 @@ import { KNOWLEDGE_BASE } from "../vendor/knowledge/wire-types";
 import { BROWSER_SESSIONS, browserSession } from "./browser";
 import { type DemoGrant, grantAccess, grants, revokeAccess } from "./fixture/access";
 import { automationApprovals, automationCatalog, automationsList, deleteAutomation, resolveApproval, saveAutomation } from "./fixture/automations";
-import { demoDevices, forgetDemoLinks, removeDemoSandbox, setDemoSandboxRunning } from "./fixture/devices";
+import { demoDevices, forgetDemoLinks, removeDemoSandbox, setDemoSandboxRunning, switchDemoPairings } from "./fixture/devices";
 import { demoMetrics } from "./fixture/metrics";
 import { demoStorageClean, demoStorageReport, demoStorageScan } from "./fixture/storage";
 import { demoLoops } from "./fixture/loops";
@@ -526,10 +526,8 @@ export const procedures = {
         // The container verbs and the unpair a removal ends with, answered the way a machine does, so a batch over
         // several rows can be pressed and watched rather than refused as a route nobody serves.
         manageDeviceSandbox: ({ slug, op }) => sandboxFlow(slug, op),
-        runDeviceCommand: ({ command, sandboxId }) => {
-            if (command === `sync-unpair` && sandboxId !== undefined) {
-                removeDemoSandbox(sandboxId);
-            }
+        runDeviceCommand: ({ id, command, sandboxId }) => {
+            switchDemoPairings(id, command, sandboxId);
             return { ok: true, refused: false, message: `Ran ${command}${sandboxId === undefined ? `` : ` for ${sandboxId}`}.` };
         },
         closeBrowser: () => refuse(`This is the demo workspace: the browser you are watching is a recording, so there is nothing to close.`),

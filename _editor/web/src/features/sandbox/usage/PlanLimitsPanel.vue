@@ -285,14 +285,22 @@ const roster = computed(() => {
                                             />
                                             <span class="min-w-0 truncate">{{ pool.label }}</span>
                                             <span v-if="parent !== undefined" class="sr-only">
-                                                {{ capped ? `, unusable until ${parent.label} reopens` : `, within ${parent.label}` }}
+                                                {{
+                                                    capped
+                                                        ? t(`sandbox.planLimitsPanel.cappedBy`, { pool: parent.label })
+                                                        : t(`sandbox.planLimitsPanel.insidePool`, { pool: parent.label })
+                                                }}
                                             </span>
                                         </span>
                                         <!-- Drains as turns spend it: the fill is what is left. A spent pool tints its empty track, so
                                              it can't be mistaken for one with no reading. A nested pool draws thinner, the one holding
                                              it being the headline, and fades while that one is spent: its room waits on the holder. -->
                                         <div
-                                            v-tooltip.top="capped && parent !== undefined ? `Unusable until ${parent.label} reopens` : undefined"
+                                            v-tooltip.top="
+                                                capped && parent !== undefined
+                                                    ? t(`sandbox.planLimitsPanel.unusableUntilReopens`, { pool: parent.label })
+                                                    : undefined
+                                            "
                                             class="order-last min-w-0 flex-1 basis-full overflow-hidden rounded-full @xl:order-none @xl:basis-0"
                                             :class="[meterTrack(pool.percent), depth > 0 ? `h-1` : `h-1.5`, capped ? `opacity-40` : ``]"
                                         >

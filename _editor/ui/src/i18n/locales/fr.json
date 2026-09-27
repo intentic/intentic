@@ -98,19 +98,20 @@
     },
     "deviceDetail": {
         "backup": "sauvegarde : {folder}",
+        "conflicts": "{count} conflit | {count} conflits",
+        "container": "Conteneur",
         "copyPath": "Copier le chemin",
         "deviceIsntSyncingFolder": "Cet appareil ne synchronise aucun dossier et ne retient aucun port pour ce sandbox.",
         "folder": "Dossier",
+        "imageOf": "Image : {image}",
         "localhost": "localhost :",
         "more": "… et {more} de plus",
         "noFolderDeviceOnly": "aucun dossier : cet appareil ne reflète que les ports",
         "noFolderSynced": "aucun dossier synchronisé",
         "notRunningHere": "ne tourne pas ici",
         "offDeviceIsntPutting": "Désactivé : cet appareil ne place pas les ports de ce sandbox sur son propre localhost. La synchronisation des fichiers n'est pas affectée.",
-        "share": "Part",
         "show": "l'afficher",
-        "stopped": "arrêté",
-        "sync": "Synchronisation"
+        "stopped": "arrêté"
     },
     "imageView": {
         "actualSize1": "Taille réelle (1)",

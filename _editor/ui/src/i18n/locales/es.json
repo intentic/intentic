@@ -103,20 +103,20 @@
     },
     "deviceDetail": {
         "backup": "copia de seguridad: {folder}",
+        "conflicts": "{count} conflicto | {count} conflictos",
+        "container": "Contenedor",
         "copyPath": "Copiar la ruta",
         "deviceIsntSyncingFolder": "Este dispositivo no sincroniza ninguna carpeta ni retiene puertos para este sandbox.",
         "folder": "Carpeta",
-        "image": "Imagen",
+        "imageOf": "Imagen: {image}",
         "more": "… y {more} más",
         "noFolderDeviceOnly": "sin carpeta: este dispositivo solo replica puertos",
         "noFolderSynced": "sin carpeta sincronizada",
         "notRunningHere": "no se ejecuta aquí",
         "offDeviceIsntPutting": "Desactivado: este dispositivo no pone los puertos de este sandbox en su propio localhost. La sincronización de archivos no se ve afectada.",
         "ports": "Puertos",
-        "share": "Reparto",
         "show": "verlo",
-        "stopped": "detenido",
-        "sync": "Sincronización"
+        "stopped": "detenido"
     },
     "imageView": {
         "actualSize1": "Tamaño real (1)",

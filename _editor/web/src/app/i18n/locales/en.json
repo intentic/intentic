@@ -2437,7 +2437,6 @@
             "mirrorPortAgain": "Mirror it",
             "nothingOnDeviceDeleted": "Nothing on that device is deleted and its agent stays installed, but letting it back in means running a fresh pairing command there.",
             "nothingToPick": "This machine holds no container and no synced folder for this sandbox, so there is nothing here to let go of.",
-            "on": "on {group}",
             "pairingAgainMeansRunning": "Pairing it again means running a fresh command on that device.",
             "pauseSyncing": "Pause syncing",
             "putPortBackOnLocalhost": "Put this port back on this device's localhost, unless something else here is holding it.",
@@ -2466,15 +2465,20 @@
         },
         "deviceRows": {
             "fileSyncing": "File syncing",
+            "offForAll": "Off for all {total} sandboxes",
+            "offForSome": "Off for {off} of {total} sandboxes",
+            "onForAll": "On for all {total} sandboxes",
             "pauseAll": "Pause all",
+            "pausedForAll": "Paused for all {total} sandboxes",
+            "pausedForSome": "Paused for {off} of {total} sandboxes",
             "portMirroring": "Port mirroring",
             "putEveryPairedSandboxs": "Put every paired sandbox's ports back on this device's localhost.",
             "resumeAll": "Resume all",
-            "startAll": "Start all",
             "startMovingFilesAgain": "Start moving files again for every sandbox this device syncs.",
-            "stopAll": "Stop all",
             "stopMovingFilesEither": "Stop moving files either way, for every sandbox this device syncs. Their ports keep being mirrored.",
-            "takeEveryPairedSandboxs": "Take every paired sandbox's ports off this device's localhost. Files keep syncing."
+            "takeEveryPairedSandboxs": "Take every paired sandbox's ports off this device's localhost. Files keep syncing.",
+            "turnAllOff": "Turn all off",
+            "turnAllOn": "Turn all on"
         },
         "deviceRunners": {
             "addRunner": "Add runner",
@@ -2909,6 +2913,8 @@
             "allAccounts": "All accounts",
             "bindingPool": "Binding pool",
             "cantServeTurn": "Can't serve a turn · {attentionTotal}",
+            "cappedBy": ", unusable until {pool} reopens",
+            "insidePool": ", within {pool}",
             "left": "Left",
             "more": "+{hidden} more",
             "nextPoolReopens": "next pool reopens {nextResetAt}",
@@ -2924,6 +2930,7 @@
             "resets": "resets {resetsAt}",
             "seatFromAdmin": "ask an org admin to assign it a seat | ask an org admin to assign them seats",
             "showingMostConstrained": "showing the {max_bars} most constrained of {count}",
+            "unusableUntilReopens": "Unusable until {pool} reopens",
             "verifyEachLink": "open its name to verify it | open each name to verify them",
             "viewAccounts": "View accounts"
         },
@@ -3181,11 +3188,12 @@
             "waitingIn": "{option} waiting for you in {name}"
         },
         "sandboxSyncToggles": {
+            "folderOnComputer": "Folder on this computer",
             "mirrorPortsOnly": "Mirror ports only",
+            "notSyncedHere": "Not synced to this computer yet.",
             "putSandboxsPortsOn": "Put this sandbox's ports on this computer's localhost and touch no files.",
             "startMovingSandboxsFiles": "Start moving this sandbox's files into that folder, and put its ports on this computer's localhost.",
-            "syncFilesHere": "Sync files here",
-            "syncSandboxsFilesInto": "Sync this sandbox's files into a folder on this computer. Which side runs it follows the path: a Windows folder syncs Windows, a distro folder syncs that distro."
+            "syncFilesHere": "Sync files here"
         },
         "sandboxUnauthorized": {
             "intenticAccount": ", but your intentic account is",

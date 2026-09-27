@@ -910,11 +910,11 @@ describe(`nestPools`, () => {
         resetsAt: undefined,
         gates,
     });
-    const shape = (pools: readonly PlanLimitPool[]) =>
+    const placements = (pools: readonly PlanLimitPool[]) =>
         nestPools(pools, (entry) => entry).map(({ item, depth, parent, capped }) => [item.kind, depth, parent?.kind, capped]);
 
     it(`hangs the 5-hour session under the week, whatever order they arrive in`, () => {
-        expect(shape([pool(`five_hour`, 50), pool(`seven_day`, 29)])).toEqual([
+        expect(placements([pool(`five_hour`, 50), pool(`seven_day`, 29)])).toEqual([
             [`seven_day`, 0, undefined, false],
             [`five_hour`, 1, `seven_day`, false],
         ]);
@@ -922,7 +922,7 @@ describe(`nestPools`, () => {
 
     it(`nests under the nearest holder, and holds a scoped weekly slice inside the all-models week`, () => {
         const opus = pool(`seven_day_opus`, 10, { models: [`Opus`] }, `Weekly · Opus`);
-        expect(shape([pool(`monthly`, 5), pool(`seven_day`, 20), opus, pool(`five_hour`, 30)])).toEqual([
+        expect(placements([pool(`monthly`, 5), pool(`seven_day`, 20), opus, pool(`five_hour`, 30)])).toEqual([
             [`monthly`, 0, undefined, false],
             [`seven_day`, 1, `monthly`, false],
             [`seven_day_opus`, 2, `seven_day`, false],
@@ -933,7 +933,7 @@ describe(`nestPools`, () => {
     it(`caps everything under a spent holder, and nothing beside it`, () => {
         const flash = pool(`model:Flash`, 100, { models: [`Flash`] }, `Flash · weekly`);
         const flashDaily = pool(`model:Flash:day`, 10, { models: [`Flash`] }, `Flash · daily`);
-        expect(shape([pool(`seven_day`, 100), pool(`five_hour`, 0), flash, flashDaily])).toEqual([
+        expect(placements([pool(`seven_day`, 100), pool(`five_hour`, 0), flash, flashDaily])).toEqual([
             [`seven_day`, 0, undefined, false],
             [`five_hour`, 1, `seven_day`, true],
             [`model:Flash`, 1, `seven_day`, true],
@@ -942,7 +942,7 @@ describe(`nestPools`, () => {
     });
 
     it(`leaves pools it can't place, and pools no turn spends, at the top`, () => {
-        expect(shape([pool(`seven_day`, 100), pool(`credits`, 40), pool(`five_hour`, 0, `none`)])).toEqual([
+        expect(placements([pool(`seven_day`, 100), pool(`credits`, 40), pool(`five_hour`, 0, `none`)])).toEqual([
             [`seven_day`, 0, undefined, false],
             [`credits`, 0, undefined, false],
             [`five_hour`, 0, undefined, false],

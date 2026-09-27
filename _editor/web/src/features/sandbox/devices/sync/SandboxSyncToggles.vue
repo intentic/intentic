@@ -62,6 +62,12 @@ const folders = ref<Record<string, string>>({});
 const folderFor = (environment: DeviceRow): string => folders.value[environment.device.key] ?? suggestion(environment);
 const setFolder = (environment: DeviceRow, value: string): void => void (folders.value = { ...folders.value, [environment.device.key]: value });
 
+// The field's floor: the path it holds (one monospace `ch` a character, a spare one for the caret, and the field's own
+// padding and border), never under 16rem and never past the line. A fixed floor let a typical path scroll out of its own
+// field while the button still fitted beside it.
+const fieldFloor = (environment: DeviceRow): string =>
+    `min(100%, max(16rem, calc(${folderFor(environment).length + 1}ch + 2 * var(--ui-field-padding-x-sm) + 2px)))`;
+
 const key = computed(() => ops.rowKey(group));
 
 const enable = (environment: DeviceRow, mode: "sync" | "mirror"): void => {
@@ -74,38 +80,41 @@ const enable = (environment: DeviceRow, mode: "sync" | "mirror"): void => {
 </script>
 
 <template>
-    <div v-if="door" class="mt-2 flex flex-col gap-2">
-        <p class="text-2xs text-subtle">
-            {{ t(`sandbox.sandboxSyncToggles.syncSandboxsFilesInto`) }}
-        </p>
-        <!-- The field's basis is what makes the BUTTON wrap on a narrow card rather than the input shrink: a path you
+    <div v-if="door" class="flex flex-col gap-2">
+        <!-- One button tall, so the sentence sits on the line of the name beside it. The field labels below say which
+             side each folder syncs through, so the sentence no longer has to explain the rule. -->
+        <p class="flex min-h-6.5 items-center text-xs text-muted">{{ t(`sandbox.sandboxSyncToggles.notSyncedHere`) }}</p>
+        <!-- The field's floor is what makes the BUTTON wrap on a narrow card rather than the input shrink: a path you
              cannot read while typing it is the one thing this field must never be. -->
-        <div v-for="environment in choices" :key="`sync:${environment.device.key}`" class="flex flex-wrap items-end gap-2">
-            <div class="flex min-w-64 flex-1 flex-col gap-1">
-                <label class="text-2xs font-medium text-muted" :for="`sync-folder-${environment.device.key}`">
-                    {{ environmentLabel(environment) }}
-                </label>
+        <div v-for="environment in choices" :key="`sync:${environment.device.key}`" class="flex flex-col gap-1">
+            <!-- Named only where there is a choice of side: on a machine of one environment it would name the page. -->
+            <label v-if="choices.length > 1" class="text-2xs text-subtle" :for="`sync-folder-${environment.device.key}`">
+                {{ environmentLabel(environment) }}
+            </label>
+            <div class="flex flex-wrap items-center gap-2">
                 <input
                     :id="`sync-folder-${environment.device.key}`"
                     :value="folderFor(environment)"
                     spellcheck="false"
-                    :class="ui.inputSm(`w-full font-mono`)"
+                    :aria-label="choices.length > 1 ? undefined : t(`sandbox.sandboxSyncToggles.folderOnComputer`)"
+                    :class="ui.inputSm(`flex-1 font-mono`)"
+                    :style="{ minWidth: fieldFloor(environment) }"
                     @input="setFolder(environment, ($event.target as HTMLInputElement).value)"
                 />
+                <Button
+                    size="small"
+                    :label="t(`sandbox.sandboxSyncToggles.syncFilesHere`)"
+                    :loading="ops.syncRunning(key, `sync-install`)"
+                    :disabled="ops.working.value || folderFor(environment).trim() === ``"
+                    v-tooltip.top="t(`sandbox.sandboxSyncToggles.startMovingSandboxsFiles`)"
+                    @click="enable(environment, `sync`)"
+                >
+                    <template #icon><Icon name="folder" /></template>
+                </Button>
             </div>
-            <Button
-                size="small"
-                :label="t(`sandbox.sandboxSyncToggles.syncFilesHere`)"
-                :loading="ops.syncRunning(key, `sync-install`)"
-                :disabled="ops.working.value || folderFor(environment).trim() === ``"
-                v-tooltip.top="t(`sandbox.sandboxSyncToggles.startMovingSandboxsFiles`)"
-                @click="enable(environment, `sync`)"
-            >
-                <template #icon><Icon name="folder" /></template>
-            </Button>
         </div>
         <!-- Ports without files: one machine may mirror while another holds the file sync, so this is its own act. -->
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="flex flex-wrap items-center">
             <Button
                 size="small"
                 severity="secondary"

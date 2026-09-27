@@ -39,6 +39,18 @@ const SYNCED_ELSEWHERE: NonNullable<Device[`report`]>[`pairings`][number] = {
     paused: true,
 };
 
+// The ordinary case the page is mostly read in, and the one the rows above are not: a sandbox this PC both runs and
+// keeps the files of, healthy, with a dev server on localhost. Synced on the Windows side, so the PC's two sides each
+// hold a folder and a row has to say which side its folder is on.
+const RUNS_HERE: NonNullable<Device[`report`]>[`pairings`][number] = {
+    sandboxId: `docs-site`,
+    mode: `sync`,
+    localDir: `C:\\Users\\ada\\intentic\\docs-site`,
+    mirroring: `on`,
+    mutagenStatus: `watching`,
+    backupStatus: `watching`,
+};
+
 const AGENT = { running: true, pid: 48211, build: `1.275.0`, installed: `1.275.0` };
 
 // The containers this PC's docker actually runs. Without these the fixture served a machine that hosts nothing, so
@@ -58,13 +70,61 @@ const LEFT_BEHIND: NonNullable<Device[`report`]>[`pairings`][number] = {
     mirroring: `on`,
 };
 
-// What the page has done to this PC since it loaded: the demo's containers answer Start, Stop and Remove, and its agent
-// drops the links it was dialling into nothing, so a press is followed by the reading it caused.
-const demoState = { running: new Map<string, boolean>(), removed: new Set<string>(), linksForgotten: false };
+// What the page has done to this PC since it loaded: the demo's containers answer Start, Stop and Remove, its folders
+// answer Pause, Resume, Unpair and the mirroring switch, and its agent drops the links it was dialling into nothing, so a
+// press is followed by the reading it caused.
+const demoState = {
+    running: new Map<string, boolean>(),
+    removed: new Set<string>(),
+    unpaired: new Set<string>(),
+    paused: new Map<string, boolean>(),
+    mirroring: new Map<string, `on` | `off`>(),
+    linksForgotten: false,
+};
 
 export const setDemoSandboxRunning = (slug: string, running: boolean): void => void demoState.running.set(slug, running);
 export const removeDemoSandbox = (slug: string): void => void demoState.removed.add(slug);
 export const forgetDemoLinks = (): void => void (demoState.linksForgotten = true);
+
+type Pairing = NonNullable<Device[`report`]>[`pairings`][number];
+
+// Which side of the PC keeps which folders, by the door a command is sent through: the Windows side syncs one sandbox,
+// the distro the other three.
+const PAIRED_ON = new Map<string, readonly Pairing[]>([
+    [`ada-pc`, [RUNS_HERE]],
+    [`ada-pc::wsl:archlinux`, [PAIRING, SYNCED_ELSEWHERE, LEFT_BEHIND]],
+]);
+
+// A sync command as the machine would carry it out: on the one sandbox it names, or on every folder that side keeps
+// when it names none (the page's machine-wide switches).
+export const switchDemoPairings = (hostId: string, command: string, sandboxId: string | undefined): void => {
+    for (const pairing of (PAIRED_ON.get(hostId) ?? []).filter((held) => sandboxId === undefined || held.sandboxId === sandboxId)) {
+        const id = pairing.sandboxId;
+        if (command === `sync-pause` || command === `sync-resume`) {
+            demoState.paused.set(id, command === `sync-pause`);
+        } else if (command === `mirror-off` || command === `mirror-on`) {
+            demoState.mirroring.set(id, command === `mirror-off` ? `off` : `on`);
+        } else if (command === `sync-unpair`) {
+            demoState.unpaired.add(id);
+        }
+    }
+};
+
+// One side's folders as the page last left them.
+const pairingsOn = (hostId: string): Pairing[] =>
+    (PAIRED_ON.get(hostId) ?? [])
+        .filter((pairing) => !demoState.removed.has(pairing.sandboxId) && !demoState.unpaired.has(pairing.sandboxId))
+        .map((pairing) => ({
+            ...pairing,
+            paused: demoState.paused.get(pairing.sandboxId) ?? pairing.paused,
+            mirroring: demoState.mirroring.get(pairing.sandboxId) ?? pairing.mirroring,
+        }));
+
+// A port reaches localhost only while its sandbox's folder is still paired here with mirroring on.
+const portsOn = (hostId: string, ports: NonNullable<Device[`report`]>[`ports`]): NonNullable<Device[`report`]>[`ports`] => {
+    const mirrored = new Set(pairingsOn(hostId).filter((pairing) => pairing.mirroring !== `off`).map((pairing) => pairing.sandboxId));
+    return ports.filter((port) => mirrored.has(port.sandboxId));
+};
 
 // Seven links, five of them to sandboxes deleted hours ago: the strip that offers "Forget them", until it is pressed.
 const demoLinks = (now: number): NonNullable<NonNullable<Device[`facts`]>[`links`]> =>
@@ -111,9 +171,6 @@ const SANDBOXES: NonNullable<Device[`sandboxes`]> = [
 const sandboxes = (): NonNullable<Device[`sandboxes`]> =>
     SANDBOXES.filter((box) => !demoState.removed.has(box.slug)).map((box) => ({ ...box, running: demoState.running.get(box.slug) ?? box.running }));
 
-const pairings = (): NonNullable<Device[`report`]>[`pairings`] =>
-    [PAIRING, SYNCED_ELSEWHERE, LEFT_BEHIND].filter((pairing) => !demoState.removed.has(pairing.sandboxId));
-
 export const demoDevices = (now: number): Device[] => [
     {
         key: `ada-pc`,
@@ -141,8 +198,8 @@ export const demoDevices = (now: number): Device[] => [
         report: {
             hostname: `ada-pc`,
             os: `win32`,
-            pairings: [],
-            ports: [],
+            pairings: pairingsOn(`ada-pc`),
+            ports: portsOn(`ada-pc`, [{ port: 4321, host: `127.0.0.1`, sandboxId: RUNS_HERE.sandboxId, state: `mirrored`, command: `node astro dev` }]),
             agent: AGENT,
             capturedAt: now - 4_000,
         },
@@ -176,11 +233,11 @@ export const demoDevices = (now: number): Device[] => [
             hostname: `ada-pc`,
             os: `linux`,
             wsl: { distro: `archlinux` },
-            pairings: pairings(),
-            ports: [
+            pairings: pairingsOn(`ada-pc::wsl:archlinux`),
+            ports: portsOn(`ada-pc::wsl:archlinux`, [
                 { port: 5173, host: `127.0.0.1`, sandboxId: `demo`, state: `mirrored`, command: `node vite` },
-                { port: 6379, host: `127.0.0.1`, sandboxId: `demo`, state: `busy`, command: `docker-proxy` },
-            ],
+                { port: 6379, host: `127.0.0.1`, sandboxId: `demo`, state: `busy`, command: `redis-server *:6379` },
+            ]),
             agent: AGENT,
             capturedAt: now - 3_000,
         },

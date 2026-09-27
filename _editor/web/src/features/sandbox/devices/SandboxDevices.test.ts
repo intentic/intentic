@@ -703,7 +703,8 @@ const busyMachine = (): Device => ({
     },
 });
 
-// The exact id is kept, one hover away rather than a second name on the line, and stated with a copy button once open.
+// The exact id is kept, one hover away rather than a second name on the line, and stated with a copy button once open,
+// on the line of the container it names.
 it(`titles a sandbox by its folder rather than by a blob of hex`, async () => {
     const el = mount([busyMachine()]);
     const text = el.textContent ?? ``;
@@ -712,7 +713,7 @@ it(`titles a sandbox by its folder rather than by a blob of hex`, async () => {
     expect(text).not.toContain(`sandbox-bce57bb9fe3bradarsu`);
     expect(hovers(el)).toContain(`sandbox-bce57bb9fe3b`);
     await openRow(el, `radarsu-web-platform-bce57bb9fe3b`);
-    expect(el.textContent ?? ``).toContain(`IDsandbox-bce57bb9fe3b`);
+    expect(el.textContent ?? ``).toContain(`Containersandbox-bce57bb9fe3b`);
 });
 
 // Where a sandbox stands on the machine is one glyph, its word the glyph's accessible name and hover, never a label.
@@ -1407,7 +1408,7 @@ it(`pauses file syncing for every sandbox on the device, with no sandbox named`,
 
 it(`stops port mirroring for every sandbox on the device`, async () => {
     const el = mount([twoPairings()]);
-    [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).trim() === `Stop all`)?.click();
+    [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).trim() === `Turn all off`)?.click();
     await nextTick();
     expect(mirrorCalls).toEqual([{ hostId: `host-1`, command: `mirror-off`, sandboxId: undefined }]);
 });
@@ -1417,21 +1418,21 @@ it(`stops port mirroring for every sandbox on the device`, async () => {
 it(`says which pairings disagree and offers both directions`, () => {
     const el = mount([twoPairings({ mirroring: `off` }, { mirroring: `on` })]);
     const text = el.textContent ?? ``;
-    expect(text).toContain(`1 of 2 off`);
-    expect(labels(el)).toContain(`Start all`);
-    expect(labels(el)).toContain(`Stop all`);
+    expect(text).toContain(`Off for 1 of 2 sandboxes`);
+    expect(labels(el)).toContain(`Turn all on`);
+    expect(labels(el)).toContain(`Turn all off`);
 });
 
 // Over a single pairing these buttons would run the same command as that row's own, twenty pixels away, under
 // a wider and scarier label.
 it(`drops the device-scoped switches over a single pairing, and counts them above one`, () => {
     const one = labels(mount([{ ...mirrorOnly(), hostId: `host-1`, online: true }]));
-    expect(one).not.toContain(`Stop all`);
+    expect(one).not.toContain(`Turn all off`);
     expect(one).toContain(`Revoke access`);
 
     const el = mount([twoPairings()]);
-    expect(labels(el)).toContain(`Stop all`);
-    expect(el.textContent ?? ``).toContain(`all 2 sandboxes`);
+    expect(labels(el)).toContain(`Turn all off`);
+    expect(el.textContent ?? ``).toContain(`On for all 2 sandboxes`);
 });
 
 // letting a machine go of a sandbox, one row or several

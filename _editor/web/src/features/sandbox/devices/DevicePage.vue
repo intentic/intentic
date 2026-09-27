@@ -145,6 +145,19 @@ const revocable = computed(() => (isOwner.value ? environments.value.filter((env
 
 // The machine's three lists as the detail kit takes them, merged across environments.
 const lists = computed(() => machineLists(environments.value));
+
+// Each environment whose pairings the machine-wide switches act on, with its halves. Usually one: a PC syncs through
+// whichever side holds its folders.
+const switching = computed(() =>
+    environments.value.map((environment) => ({ environment, halves: deviceSwitches(environment) })).filter((entry) => entry.halves.length > 0),
+);
+
+// Whose pairings a switch counts, said beside its count and only where more than one side of the machine keeps
+// folders: then no switch covers every row under it, and "8 sandboxes" over a list of nine has to say which eight. It
+// wears the same mark as the side named under each folder, so the two read as one fact. Everywhere else the count
+// scopes it alone: the OS name used to float over the switches as a caption, in every case, for nothing.
+const holders = computed(() => environments.value.filter((environment) => (environment.device.report?.pairings ?? []).length > 0).length);
+const switchScope = (environment: DeviceRow): string | undefined => (holders.value > 1 ? environmentTitle(environment) : undefined);
 const described = computed(() =>
     environments.value.some((environment) => environment.device.report !== undefined || environment.device.sandboxes !== undefined),
 );
@@ -284,7 +297,7 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
 
         <!-- One row per sandbox, the page's only disclosure: a row is a summary and its folder, ports, image and share are the evidence. -->
         <!-- Either answer draws rows: a card granting sandbox management alone lists containers and describes no folders. -->
-        <RowGroup v-if="described" :label="t(`sandbox.devicePage.sandboxes`)">
+        <RowGroup v-if="described" :label="t(`sandbox.devicePage.sandboxes`)" :count="machine.groups.length > 0 ? machine.groups.length : undefined">
             <!-- On a many-sided machine the door's block is about this list, so it is said here rather than under a row. -->
             <RowNote v-if="listBlock" variant="block">
                 <DeviceConcern
@@ -294,53 +307,48 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
                 />
             </RowNote>
 
-            <!-- The same two commands the pairing rows carry, run bare (every sandbox this environment pairs). -->
-            <template v-for="environment in environments" :key="environment.device.key">
-                <RowNote v-if="deviceSwitches(environment).length > 0" variant="block">
-                    <div class="flex flex-col gap-2">
-                        <p v-if="many" class="text-2xs text-subtle">{{ environmentTitle(environment) }}</p>
-                        <div
-                            v-for="half in deviceSwitches(environment)"
-                            :key="half.label"
-                            class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5"
-                        >
-                            <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                                <span class="text-xs font-medium text-content">{{ half.label }}</span>
-                                <span
-                                    class="inline-flex items-center rounded px-1.5 py-0.5 text-2xs font-medium"
-                                    :class="half.state === `off` ? `bg-content/5 text-subtle` : `bg-success/10 text-success`"
-                                >
-                                    {{ half.note ?? half.word }}
+            <!-- The same two commands the pairing rows carry, run bare (every sandbox this environment pairs), as rows of
+                 this list: a mark, what the switch is, where it stands, and the way to move it. -->
+            <template v-for="{ environment, halves } in switching" :key="environment.device.key">
+                <Row
+                    v-for="half in halves"
+                    :key="half.kind"
+                    :icon="half.icon"
+                    :tone="half.state === `on` ? `success` : `default`"
+                    :title="half.label"
+                >
+                    <template #description>
+                        <span class="flex min-w-0 flex-wrap items-center gap-x-1.5">
+                            <template v-if="switchScope(environment)">
+                                <span class="inline-flex min-w-0 items-center gap-1">
+                                    <Icon name="desktop" class="shrink-0" aria-hidden="true" />{{ switchScope(environment) }}
                                 </span>
-                                <!-- What "all" means: every label here says "all" without saying all of what. -->
-                                <span class="text-2xs text-subtle">{{ half.scope }}</span>
-                            </div>
-                            <div class="flex flex-wrap items-center gap-1.5">
-                                <Button
-                                    v-for="action in half.actions"
-                                    :key="action.command"
-                                    size="small"
-                                    severity="secondary"
-                                    :label="action.label"
-                                    :loading="ops.syncRunning(ops.switchKey(environment), action.command)"
-                                    :disabled="ops.working.value"
-                                    v-tooltip.top="action.hint"
-                                    @click="void ops.runSync(environment, ops.switchKey(environment), undefined, action.command)"
-                                />
-                            </div>
-                        </div>
-                        <!-- The machine's own answer to a machine-wide click, shown where the click was. -->
-                        <DeviceOpFailure
-                            v-if="ops.failure.value?.key === ops.switchKey(environment)"
-                            :of="ops.failure.value.notice"
-                            :command="ops.failure.value.command"
-                            :machine="environment.device.label"
-                        />
-                        <p v-else-if="ops.outcome.value?.key === ops.switchKey(environment)" class="text-xs text-muted">
-                            {{ ops.outcome.value.message }}
-                        </p>
-                    </div>
+                                <span class="text-subtle" aria-hidden="true">·</span>
+                            </template>
+                            <span>{{ half.summary }}</span>
+                        </span>
+                    </template>
+                    <template #control>
+                        <Button
+                            v-for="action in half.actions"
+                            :key="action.command"
+                            size="small"
+                            severity="secondary"
+                            :label="action.label"
+                            :loading="ops.syncRunning(ops.switchKey(environment), action.command)"
+                            :disabled="ops.working.value"
+                            v-tooltip.top="action.hint"
+                            @click="void ops.runSync(environment, ops.switchKey(environment), undefined, action.command)"
+                        >
+                            <template #icon><Icon :name="action.icon" /></template>
+                        </Button>
+                    </template>
+                </Row>
+                <!-- The machine's own answer to a machine-wide click, under the switch it was pressed on. -->
+                <RowNote v-if="ops.failure.value?.key === ops.switchKey(environment)" variant="block">
+                    <DeviceOpFailure :of="ops.failure.value.notice" :command="ops.failure.value.command" :machine="environment.device.label" />
                 </RowNote>
+                <RowNote v-else-if="ops.outcome.value?.key === ops.switchKey(environment)">{{ ops.outcome.value.message }}</RowNote>
             </template>
 
             <RowNote variant="block">
@@ -412,73 +420,83 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
                         />
                     </template>
                     <!-- Controls for this pairing's files, under the folder rather than up with the container verbs: Pause stops no container, only the file movement. -->
+                    <!-- Which side of a many-sided machine holds the folder, among its facts rather than as a lead-in to
+                         its buttons: the path alone says it, but not in words. -->
+                    <template #where="{ group }">
+                        <span v-if="many && ownerOf(group)" class="inline-flex min-w-0 items-center gap-1 text-2xs text-subtle">
+                            <Icon name="desktop" class="shrink-0" aria-hidden="true" />{{ environmentTitle(ownerOf(group)!) }}
+                        </span>
+                    </template>
+                    <!-- What settles a conflict, at the foot of the block that explains it. -->
+                    <template #conflicts="{ group }">
+                        <!-- Before the turn, because it is the cheaper of the two and usually the only one needed:
+                             clearing build output that blocks a deletion needs no judgement, so it costs a command
+                             rather than an agent. -->
+                        <Button
+                            v-if="ownerOf(group) && clearable(ownerOf(group)!.device, group)"
+                            size="small"
+                            severity="secondary"
+                            :label="t(`sandbox.devicePage.clearBuildOutput`)"
+                            :loading="ops.syncRunning(ops.rowKey(group), `sync-clean`)"
+                            :disabled="ops.working.value"
+                            v-tooltip.top="t(`sandbox.devicePage.deleteBuildOutputDevice`)"
+                            @click="void ops.runSync(ownerOf(group)!, ops.rowKey(group), group.sandboxId, `sync-clean`)"
+                        >
+                            <template #icon><Icon name="eraser" /></template>
+                        </Button>
+                        <!-- Only for conflicts with two real copies; starts a turn rather than a command. -->
+                        <Button
+                            v-if="ownerOf(group) && fixable(ownerOf(group)!.device, group)"
+                            size="small"
+                            severity="secondary"
+                            :label="t(`sandbox.devicePage.fixAgent`)"
+                            :disabled="ops.working.value"
+                            v-tooltip.top="conflictTurn(ownerOf(group)!, group).hint"
+                            @click="startAgent(conflictTurn(ownerOf(group)!, group).prompt)"
+                        >
+                            <template #icon><Icon name="sparkles" /></template>
+                        </Button>
+                    </template>
+                    <!-- The folder's own switches, at the end of its line: Pause stops no container, only the file movement. -->
                     <template #folder="{ group }">
-                        <div class="mt-1 flex flex-wrap items-center gap-2">
-                            <!-- Which side of a many-sided machine holds the folder: the path alone says it, but not in words. -->
-                            <span v-if="many && ownerOf(group)" class="text-2xs text-subtle">{{
-                                t(`sandbox.devicePage.on`, { group: environmentTitle(ownerOf(group)!) })
-                            }}</span>
-                            <!-- Before the turn, because it is the cheaper of the two and usually the only one needed:
-                                 clearing build output that blocks a deletion needs no judgement, so it costs a command
-                                 rather than an agent. -->
-                            <Button
-                                v-if="ownerOf(group) && clearable(ownerOf(group)!.device, group)"
-                                size="small"
-                                severity="secondary"
-                                :label="t(`sandbox.devicePage.clearBuildOutput`)"
-                                :loading="ops.syncRunning(ops.rowKey(group), `sync-clean`)"
-                                :disabled="ops.working.value"
-                                v-tooltip.top="t(`sandbox.devicePage.deleteBuildOutputDevice`)"
-                                @click="void ops.runSync(ownerOf(group)!, ops.rowKey(group), group.sandboxId, `sync-clean`)"
-                            >
-                                <template #icon><Icon name="eraser" /></template>
-                            </Button>
-                            <!-- Only for conflicts with two real copies; starts a turn rather than a command. -->
-                            <Button
-                                v-if="ownerOf(group) && fixable(ownerOf(group)!.device, group)"
-                                size="small"
-                                severity="secondary"
-                                :label="t(`sandbox.devicePage.fixAgent`)"
-                                :disabled="ops.working.value"
-                                v-tooltip.top="conflictTurn(ownerOf(group)!, group).hint"
-                                @click="startAgent(conflictTurn(ownerOf(group)!, group).prompt)"
-                            >
-                                <template #icon><Icon name="sparkles" /></template>
-                            </Button>
-                            <Button
-                                v-if="ownerOf(group) && pausable(ownerOf(group)!.device, group)"
-                                size="small"
-                                severity="secondary"
-                                :label="group.folder?.paused === true ? t(`sandbox.devicePage.resumeSyncing`) : t(`sandbox.devicePage.pauseSyncing`)"
-                                :loading="ops.syncRunning(ops.rowKey(group), `sync-pause`)"
-                                :disabled="ops.working.value"
-                                v-tooltip.top="
-                                    group.folder?.paused === true
-                                        ? t(`sandbox.devicePage.startMovingFilesBetween`)
-                                        : t(`sandbox.devicePage.stopMovingFilesEither`)
-                                "
-                                @click="
-                                    void ops.runSync(
-                                        ownerOf(group)!,
-                                        ops.rowKey(group),
-                                        group.sandboxId,
-                                        group.folder?.paused === true ? `sync-resume` : `sync-pause`,
-                                    )
-                                "
-                            />
-                            <!-- The one control here nothing undoes in a click. -->
-                            <Button
-                                v-if="ownerOf(group) && commandable(ownerOf(group)!.device, group)"
-                                size="small"
-                                severity="danger"
-                                :text="true"
-                                :label="t(`sandbox.words.unpair`)"
-                                :loading="ops.syncRunning(ops.rowKey(group), `sync-unpair`)"
-                                :disabled="ops.working.value"
-                                v-tooltip.top="t(`sandbox.devicePage.stopDeviceSyncingSandbox`)"
-                                @click="ops.confirmingUnpair.value = { environment: ownerOf(group)!, group }"
-                            />
-                        </div>
+                        <Button
+                            v-if="ownerOf(group) && pausable(ownerOf(group)!.device, group)"
+                            size="small"
+                            severity="secondary"
+                            :text="true"
+                            :label="group.folder?.paused === true ? t(`sandbox.devicePage.resumeSyncing`) : t(`sandbox.devicePage.pauseSyncing`)"
+                            :loading="ops.syncRunning(ops.rowKey(group), `sync-pause`)"
+                            :disabled="ops.working.value"
+                            v-tooltip.top="
+                                group.folder?.paused === true
+                                    ? t(`sandbox.devicePage.startMovingFilesBetween`)
+                                    : t(`sandbox.devicePage.stopMovingFilesEither`)
+                            "
+                            @click="
+                                void ops.runSync(
+                                    ownerOf(group)!,
+                                    ops.rowKey(group),
+                                    group.sandboxId,
+                                    group.folder?.paused === true ? `sync-resume` : `sync-pause`,
+                                )
+                            "
+                        >
+                            <template #icon><Icon :name="group.folder?.paused === true ? `play` : `pause`" /></template>
+                        </Button>
+                        <!-- The one control here nothing undoes in a click. -->
+                        <Button
+                            v-if="ownerOf(group) && commandable(ownerOf(group)!.device, group)"
+                            size="small"
+                            severity="danger"
+                            :text="true"
+                            :label="t(`sandbox.words.unpair`)"
+                            :loading="ops.syncRunning(ops.rowKey(group), `sync-unpair`)"
+                            :disabled="ops.working.value"
+                            v-tooltip.top="t(`sandbox.devicePage.stopDeviceSyncingSandbox`)"
+                            @click="ops.confirmingUnpair.value = { environment: ownerOf(group)!, group }"
+                        >
+                            <template #icon><Icon name="link-broken" /></template>
+                        </Button>
                     </template>
                     <!-- Nothing synced here yet: the folder field and the two ways to start, for this sandbox alone —
                          a pairing belongs to one sandbox and one machine, and only this one's daemon can mint it. -->
@@ -494,7 +512,6 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
                             size="small"
                             severity="secondary"
                             :text="true"
-                            class="-my-1"
                             :label="port.state === `ignored` ? t(`sandbox.devicePage.mirrorPortAgain`) : t(`sandbox.devicePage.dontMirrorPort`)"
                             :loading="ops.syncRunning(ops.rowKey(group), `mirror-ignore`, port.port)"
                             :disabled="ops.working.value"
@@ -516,29 +533,28 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
                     </template>
                     <!-- The switch that clears the user's own localhost, under the ports it's about rather than with the container verbs. -->
                     <template #ports="{ group }">
-                        <div class="mt-1 flex flex-wrap items-center gap-2">
-                            <Button
-                                v-if="ownerOf(group) && commandable(ownerOf(group)!.device, group)"
-                                size="small"
-                                severity="secondary"
-                                :label="mirroringOff(group.folder) ? t(`sandbox.devicePage.startMirroring`) : t(`sandbox.devicePage.stopMirroring`)"
-                                :loading="ops.syncRunning(ops.rowKey(group), `mirror-off`)"
-                                :disabled="ops.working.value"
-                                v-tooltip.top="
-                                    mirroringOff(group.folder)
-                                        ? t(`sandbox.devicePage.putSandboxsPortsBack`)
-                                        : t(`sandbox.devicePage.takeSandboxsPortsOff`)
-                                "
-                                @click="
-                                    void ops.runSync(
-                                        ownerOf(group)!,
-                                        ops.rowKey(group),
-                                        group.sandboxId,
-                                        mirroringOff(group.folder) ? `mirror-on` : `mirror-off`,
-                                    )
-                                "
-                            />
-                        </div>
+                        <Button
+                            v-if="ownerOf(group) && commandable(ownerOf(group)!.device, group)"
+                            size="small"
+                            severity="secondary"
+                            :text="true"
+                            :label="mirroringOff(group.folder) ? t(`sandbox.devicePage.startMirroring`) : t(`sandbox.devicePage.stopMirroring`)"
+                            :loading="ops.syncRunning(ops.rowKey(group), `mirror-off`)"
+                            :disabled="ops.working.value"
+                            v-tooltip.top="
+                                mirroringOff(group.folder) ? t(`sandbox.devicePage.putSandboxsPortsBack`) : t(`sandbox.devicePage.takeSandboxsPortsOff`)
+                            "
+                            @click="
+                                void ops.runSync(
+                                    ownerOf(group)!,
+                                    ops.rowKey(group),
+                                    group.sandboxId,
+                                    mirroringOff(group.folder) ? `mirror-on` : `mirror-off`,
+                                )
+                            "
+                        >
+                            <template #icon><Icon :name="mirroringOff(group.folder) ? `eye` : `eye-slash`" /></template>
+                        </Button>
                     </template>
                     <!-- The machine's own output, visible while a row works and afterward for as long as its log is being read. -->
                     <template #footer="{ group }">

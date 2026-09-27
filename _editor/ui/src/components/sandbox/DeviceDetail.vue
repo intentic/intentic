@@ -1,7 +1,7 @@
 <!-- A device's synced folders, ports and containers. What its agent is doing is <DeviceAgentGroup>'s, stated
      once above this list rather than a second time riding it. -->
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, useId, watch } from "vue";
+import { Comment, computed, Fragment, isVNode, onBeforeUnmount, ref, Text, useId, type VNode, watch } from "vue";
 import CopyButton from "../primitives/CopyButton.vue";
 import Icon from "../primitives/Icon.vue";
 import {
@@ -56,33 +56,71 @@ const {
     selected?: readonly string[];
 }>();
 
-defineSlots<{
+// Each slot returns what Vue's own `Slot` returns, the nodes it drew: `offersSync` reads them to tell an offer from
+// nothing.
+const slots = defineSlots<{
     // A tick box for a caller that acts on several rows at once. Drawn outside the disclosure button, so choosing
     // a row never unfolds it, and first on the line, so a list mid-selection reads as a column of choices.
-    select?: (props: { group: DeviceSandboxGroup }) => unknown;
+    select?: (props: { group: DeviceSandboxGroup }) => VNode[];
     /** Anything else worth saying about one sandbox, beside its name. */
-    badges?: (props: { group: DeviceSandboxGroup }) => unknown;
+    badges?: (props: { group: DeviceSandboxGroup }) => VNode[];
     /** What can be done to it, right-aligned on the same line; the caller owns the verbs. */
-    actions?: (props: { group: DeviceSandboxGroup }) => unknown;
-    // Verbs for this row's file sync, under the folder line (the twin of `ports` below): pausing a sync and
-    // stopping a container are different acts and must not share one button cluster.
-    folder?: (props: { group: DeviceSandboxGroup }) => unknown;
+    actions?: (props: { group: DeviceSandboxGroup }) => VNode[];
+    // Verbs for this row's file sync, at the end of the folder's line (the twin of `ports` below): pausing a sync
+    // and stopping a container are different acts and must not share one button cluster.
+    folder?: (props: { group: DeviceSandboxGroup }) => VNode[];
+    // Which side of a many-sided machine holds the folder, said among the folder's own facts under its path: the
+    // path alone says it, but not in words.
+    where?: (props: { group: DeviceSandboxGroup }) => VNode[];
+    // The verbs that settle this folder's conflicts, at the foot of the block that explains them: they answer that
+    // block, not the folder as a whole.
+    conflicts?: (props: { group: DeviceSandboxGroup }) => VNode[];
     // Verbs for this row's ports, at the end of the ports line rather than in `actions`: a mirroring toggle
     // beside the container's own Stop would read as the same stop.
-    ports?: (props: { group: DeviceSandboxGroup }) => unknown;
+    ports?: (props: { group: DeviceSandboxGroup }) => VNode[];
     // One port's own verb, at the end of that port's line. Its own slot rather than another button under the
     // block: what it acts on is the number beside it, and a switch for 5440 sitting under a list of six ports
     // would be a switch for none of them.
-    port?: (props: { group: DeviceSandboxGroup; port: DevicePortRow }) => unknown;
+    port?: (props: { group: DeviceSandboxGroup; port: DevicePortRow }) => VNode[];
     // Turning file sync ON, for a row that has no pairing to hang `folder` under. Its own slot because the
     // emptiness is the prompt: a reader looking at a sandbox this device does not sync wants the folder field,
     // not a line telling them there is no folder.
-    sync?: (props: { group: DeviceSandboxGroup }) => unknown;
+    sync?: (props: { group: DeviceSandboxGroup }) => VNode[];
     /** What follows the row while it's working: a run log, the result of the last action. */
-    footer?: (props: { group: DeviceSandboxGroup }) => unknown;
+    footer?: (props: { group: DeviceSandboxGroup }) => VNode[];
 }>();
 
 const groups = computed(() => sandboxGroups(pairings, ports, sandboxes));
+
+// The open row's geometry, read in one place. A name column wide enough for its longest name ("Container"), each
+// value's first line one small button tall (26px) so a value, its name and the verbs beside it share a centre, and
+// the verbs at the right edge of the line they act on. A value keeps a floor where it is drawn (a path its own width,
+// prose `min-w-48`), so a narrow card moves the verbs onto a line of their own rather than squeezing a path to a word
+// per line; `ml-auto` keeps them at the right edge there too.
+const SECTION = `flex min-w-0 items-start gap-3`;
+const LABEL = `flex h-6.5 w-16 shrink-0 items-center text-2xs text-subtle`;
+const LINE = `flex min-h-6.5 min-w-0 items-center`;
+const VERBS = `ml-auto flex min-h-6.5 shrink-0 flex-wrap items-center justify-end gap-1 empty:hidden`;
+
+// Everything under the header starts under the NAME: past the tick box when there is one, then the status glyph.
+const indent = (): string => (slots.select === undefined ? `pl-6` : `pl-13`);
+
+// Whether a slot, rendered for this row, draws anything. A caller's `v-if` that came up false still renders, as a
+// comment, so "the caller passed #sync" is not "this row has an offer": every other row drew its name over nothing.
+const draws = (nodes: readonly VNode[]): boolean =>
+    nodes.some((node) =>
+        node.type === Comment
+            ? false
+            : node.type === Text
+              ? String(node.children ?? ``).trim() !== ``
+              : node.type === Fragment
+                ? Array.isArray(node.children) && draws(node.children.filter(isVNode))
+                : true,
+    );
+const offersSync = (group: DeviceSandboxGroup): boolean => draws(slots.sync?.({ group }) ?? []);
+
+// The image a container runs, for the hover over its line.
+const imageOf = (sandbox: DeviceSandboxRow): string => t(`ui.deviceDetail.imageOf`, { image: sandbox.image });
 
 // Ink by outcome, not by whether the port reached localhost: one somebody told this device to leave alone is a
 // quiet fact, and colouring it like a port that wanted localhost and lost would undo the whole distinction.
@@ -238,100 +276,131 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                     <span v-if="$slots[`actions`]" class="flex shrink-0 items-center gap-0.5"><slot name="actions" :group="group" /></span>
                 </div>
 
-                <!-- Facts start at one x, so a folder, ports and an image read as one block rather than loose lines. -->
-                <div
-                    v-if="isOpen(group)"
-                    :id="`${blockId(group)}-detail`"
-                    class="grid grid-cols-[3.25rem_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1.5 pb-1"
-                    :class="$slots[`select`] ? `pl-[3.25rem]` : `pl-6`"
-                >
-                    <template v-if="group.folder">
-                        <span class="text-2xs text-subtle">{{ t(`ui.deviceDetail.folder`) }}</span>
-                        <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                            <!-- The answer this whole view exists for: which folder on this device is this sandbox's /work. -->
-                            <!-- Wraps rather than truncates: the end of a path is what identifies it, which an ellipsis would eat first. -->
-                            <span v-if="group.folder.localDir" class="break-all font-mono text-xs text-content">{{ group.folder.localDir }}</span>
-                            <span v-else-if="group.folder.mode === `mirror`" class="text-xs text-subtle">
-                                {{ t(`ui.deviceDetail.noFolderDeviceOnly`) }}
-                            </span>
-                            <span v-else class="text-xs text-subtle">{{ t(`ui.deviceDetail.noFolderSynced`) }}</span>
-                            <CopyButton v-if="group.folder.localDir" :text="group.folder.localDir" v-tooltip.top="t(`ui.deviceDetail.copyPath`)" />
-                            <!-- Silent when healthy (`watching`): the agent group above this list already says the sync is alive. -->
-                            <StatusBadge
-                                v-if="folderState(group.folder) && !restingSync(group.folder)"
-                                :variant="folderTone(folderState(group.folder))"
-                                size="xs"
-                                :label="folderState(group.folder) ?? ``"
-                            />
-                            <!-- Silent when healthy, spoken when not: a stopped backup costs nothing until the sandbox is gone, so it's named rather than left to be noticed. -->
-                            <StatusBadge
-                                v-if="backupState(group.folder) && !restingBackup(group.folder)"
-                                :variant="backupTone(backupState(group.folder))"
-                                size="xs"
-                                :label="t(`ui.deviceDetail.backup`, { folder: backupState(group.folder) })"
-                            />
-                            <!-- Two-way-safe flags conflicts rather than clobbering; nothing else in the product has ever surfaced one waiting. -->
-                            <StatusBadge
-                                v-if="group.folder.conflicts"
-                                variant="warning"
-                                size="xs"
-                                :label="`${group.folder.conflicts} ${group.folder.conflicts === 1 ? `conflict` : `conflicts`}`"
-                            />
-                        </div>
-                        <!-- The count expands to show sync impact and the recovery action. -->
-                        <div v-if="conflicts.get(group.sandboxId)" class="col-start-2 flex min-w-0 flex-col gap-1">
-                            <p class="text-xs text-muted">{{ conflicts.get(group.sandboxId)?.lead }}</p>
-                            <!-- Each entry is a path plus what happened to it; a tight gap on a narrow card would run one entry into the next. -->
-                            <ul class="flex min-w-0 flex-col gap-1">
-                                <li
-                                    v-for="row in conflicts.get(group.sandboxId)?.rows ?? []"
-                                    :key="row.path"
-                                    class="flex min-w-0 flex-wrap items-baseline gap-x-2"
-                                >
-                                    <span class="break-all font-mono text-2xs text-content">{{ row.path }}</span>
-                                    <span v-if="row.note !== ``" class="text-2xs text-subtle">{{ row.note }}</span>
-                                </li>
-                            </ul>
-                            <!-- Counted against the machine's own total, shown only under a real list; a too-old agent gets a note instead. -->
-                            <p
-                                v-if="(conflicts.get(group.sandboxId)?.rows.length ?? 0) > 0 && (conflicts.get(group.sandboxId)?.more ?? 0) > 0"
-                                class="text-2xs text-subtle"
-                            >
-                                {{ t(`ui.deviceDetail.more`, { more: conflicts.get(group.sandboxId)?.more }) }}
-                            </p>
-                            <p v-if="conflicts.get(group.sandboxId)?.note" class="text-2xs text-subtle">
-                                {{ conflicts.get(group.sandboxId)?.note }}
-                            </p>
-                        </div>
-                        <!-- What to do about this folder, under it rather than in the row's own verbs, which act on the container. -->
-                        <span v-if="$slots[`folder`]" class="empty:hidden col-start-2 -ml-2.5 flex flex-wrap items-center gap-x-1 gap-y-1">
-                            <slot name="folder" :group="group" />
-                        </span>
-                    </template>
+                <!--
+                    THE OPEN ROW, AS ONE TABLE: a column of names and a column of values, each value's first line as tall as
+                    a button, and the verbs for a line at that line's own right edge. The block this replaced gave every
+                    verb a line of its own under its value, pulled left by a margin meant for text buttons, so a folder's
+                    buttons, a ports switch and the side holding the folder each started at a different x; and it spent
+                    three lines on what the reader rarely wants (an id, an image tag, a share), one of them under a label
+                    nobody could decode.
+                -->
+                <dl v-if="isOpen(group)" :id="`${blockId(group)}-detail`" class="flex min-w-0 flex-col gap-1.5 pb-2" :class="indent()">
+                    <div v-if="group.folder" :class="SECTION">
+                        <dt :class="LABEL">{{ t(`ui.deviceDetail.folder`) }}</dt>
+                        <dd class="flex min-w-0 flex-1 flex-col gap-2">
+                            <div class="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+                                <!-- Its own width, never less: a path that fits the line beside the verbs stays whole and
+                                     the verbs take the next line instead, so a path breaks only where it is longer than
+                                     the whole line. -->
+                                <div class="flex max-w-full shrink-0 grow flex-col gap-1">
+                                    <div :class="LINE" class="gap-1.5">
+                                        <!-- The answer this whole view exists for: which folder on this device is this sandbox's /work. -->
+                                        <!-- Wraps rather than truncates: the end of a path is what identifies it, which an ellipsis would eat first. -->
+                                        <span v-if="group.folder.localDir" class="break-all font-mono text-xs text-content">{{
+                                            group.folder.localDir
+                                        }}</span>
+                                        <span v-else-if="group.folder.mode === `mirror`" class="text-xs text-muted">
+                                            {{ t(`ui.deviceDetail.noFolderDeviceOnly`) }}
+                                        </span>
+                                        <span v-else class="text-xs text-muted">{{ t(`ui.deviceDetail.noFolderSynced`) }}</span>
+                                        <CopyButton
+                                            v-if="group.folder.localDir"
+                                            :text="group.folder.localDir"
+                                            v-tooltip.top="t(`ui.deviceDetail.copyPath`)"
+                                        />
+                                    </div>
+                                    <!-- Where the folder stands, only when that is news, and which side of the machine holds it. -->
+                                    <div class="flex min-w-0 flex-wrap items-center gap-1.5 empty:hidden">
+                                        <!-- Silent when healthy (`watching`): the agent group above this list already says the sync is alive. -->
+                                        <StatusBadge
+                                            v-if="folderState(group.folder) && !restingSync(group.folder)"
+                                            :variant="folderTone(folderState(group.folder))"
+                                            size="xs"
+                                            :label="folderState(group.folder) ?? ``"
+                                        />
+                                        <!-- Silent when healthy, spoken when not: a stopped backup costs nothing until the sandbox is gone, so it's named rather than left to be noticed. -->
+                                        <StatusBadge
+                                            v-if="backupState(group.folder) && !restingBackup(group.folder)"
+                                            :variant="backupTone(backupState(group.folder))"
+                                            size="xs"
+                                            :label="t(`ui.deviceDetail.backup`, { folder: backupState(group.folder) })"
+                                        />
+                                        <slot name="where" :group="group" />
+                                    </div>
+                                </div>
+                                <!-- What to do about this folder, at its own line's end rather than with the row's verbs, which act on the container. -->
+                                <div v-if="$slots[`folder`]" :class="VERBS"><slot name="folder" :group="group" /></div>
+                            </div>
 
-                    <!-- Nothing synced yet: the offer to start, in the same value column the folder would have used. -->
-                    <template v-if="!group.folder && $slots[`sync`]">
-                        <span class="text-2xs text-subtle">{{ t(`ui.deviceDetail.sync`) }}</span>
-                        <div class="min-w-0"><slot name="sync" :group="group" /></div>
-                    </template>
+                            <!-- Two-way-safe flags conflicts rather than clobbering, and a bare count names no file, cause or
+                                 remedy: so it opens into a block of its own, set apart from the folder's facts by its ink,
+                                 with the verbs that settle it at its foot. -->
+                            <div
+                                v-if="conflicts.get(group.sandboxId)"
+                                class="flex min-w-0 flex-col gap-2 rounded-lg border border-warning/25 bg-warning/5 px-3 py-2.5"
+                            >
+                                <p class="flex items-center gap-1.5 text-xs font-medium text-warning">
+                                    <Icon name="exclamation-triangle" class="shrink-0" aria-hidden="true" />
+                                    {{ t(`ui.deviceDetail.conflicts`, { count: group.folder.conflicts ?? 0 }, group.folder.conflicts ?? 0) }}
+                                </p>
+                                <p class="text-xs text-muted">{{ conflicts.get(group.sandboxId)?.lead }}</p>
+                                <!-- Each entry is a path plus what happened to it; a tight gap on a narrow card would run one entry into the next. -->
+                                <ul class="flex min-w-0 flex-col gap-1">
+                                    <li
+                                        v-for="row in conflicts.get(group.sandboxId)?.rows ?? []"
+                                        :key="row.path"
+                                        class="flex min-w-0 flex-wrap items-baseline gap-x-2"
+                                    >
+                                        <span class="break-all font-mono text-2xs text-content">{{ row.path }}</span>
+                                        <span v-if="row.note !== ``" class="text-2xs text-subtle">{{ row.note }}</span>
+                                    </li>
+                                </ul>
+                                <!-- Counted against the machine's own total, shown only under a real list; a too-old agent gets a note instead. -->
+                                <p
+                                    v-if="(conflicts.get(group.sandboxId)?.rows.length ?? 0) > 0 && (conflicts.get(group.sandboxId)?.more ?? 0) > 0"
+                                    class="text-2xs text-subtle"
+                                >
+                                    {{ t(`ui.deviceDetail.more`, { more: conflicts.get(group.sandboxId)?.more }) }}
+                                </p>
+                                <p v-if="conflicts.get(group.sandboxId)?.note" class="text-2xs text-subtle">
+                                    {{ conflicts.get(group.sandboxId)?.note }}
+                                </p>
+                                <div v-if="$slots[`conflicts`]" class="flex flex-wrap items-center gap-1.5 empty:hidden">
+                                    <slot name="conflicts" :group="group" />
+                                </div>
+                            </div>
+                        </dd>
+                    </div>
+
+                    <!-- Nothing synced yet: the offer to start, under the same name the folder would have had. Only where the
+                         caller has an offer for this row: a label over nothing was every other row's second line. -->
+                    <div v-else-if="offersSync(group)" :class="SECTION">
+                        <dt :class="LABEL">{{ t(`ui.deviceDetail.folder`) }}</dt>
+                        <dd class="min-w-0 flex-1"><slot name="sync" :group="group" /></dd>
+                    </div>
 
                     <!-- Survives having no ports: an empty list has two causes (nothing served, or mirroring off). -->
-                    <template v-if="group.ports.length > 0 || mirroringOff(group.folder)">
-                        <span class="text-2xs text-subtle">{{ t(`ui.deviceDetail.ports`) }}</span>
-                        <div class="flex min-w-0 flex-col gap-1">
+                    <div v-if="group.ports.length > 0 || mirroringOff(group.folder)" :class="SECTION">
+                        <dt :class="LABEL">{{ t(`ui.deviceDetail.ports`) }}</dt>
+                        <dd class="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-4 gap-y-1">
                             <!-- Said as a state, not a fault: quiet ink, no badge, since somebody threw this switch on purpose. -->
-                            <p v-if="mirroringOff(group.folder)" class="text-xs text-muted">
+                            <!-- Suppressed while mirroring is off: a stale `localhost:` reading here would contradict it. -->
+                            <p v-if="mirroringOff(group.folder)" :class="LINE" class="min-w-48 flex-1 text-xs text-muted">
                                 {{ t(`ui.deviceDetail.offDeviceIsntPutting`) }}
                             </p>
-                            <!-- Ports use aligned address and status columns; colour marks unreachable ports. -->
-                            <!-- Suppressed while mirroring is off: a stale `localhost:` reading here would contradict the sentence above it. -->
-                            <div v-else class="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1">
+                            <!-- An address column and a what's-there column; ink marks only a port that didn't reach localhost. -->
+                            <div v-else class="grid min-w-64 flex-1 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4">
                                 <template v-for="port in group.ports" :key="`${port.port}:${port.state}`">
-                                    <!-- Only a port that reached localhost is prefixed with it; one that didn't is a bare number. -->
-                                    <span class="shrink-0 font-mono text-xs" :class="portInk(port)"
+                                    <!-- Only a port that reached localhost is prefixed with it; one that didn't is a bare
+                                         number, with what the sandbox serves on it one hover away rather than read as its
+                                         holder in the sentence beside it. -->
+                                    <span
+                                        :class="[LINE, portInk(port)]"
+                                        class="font-mono text-xs"
+                                        :title="port.state === `mirrored` ? undefined : port.command"
                                         >{{ port.state === `mirrored` ? t(`ui.deviceDetail.localhost`) : `` }}{{ port.port }}</span
                                     >
-                                    <span class="flex min-w-0 items-baseline gap-1">
+                                    <span :class="LINE" class="flex-wrap gap-x-2">
                                         <!-- What's listening, named rather than quoted in full; the whole command line is one hover away. -->
                                         <span
                                             v-if="port.state === `mirrored`"
@@ -340,7 +409,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                             >{{ shortCommand(port.command) }}</span
                                         >
                                         <span v-else class="min-w-0 text-xs text-muted">
-                                            {{ portNote(port, portHolder(groups, port), shortCommand(port.command)) }}
+                                            {{ portNote(port, portHolder(groups, port)) }}
                                             <!-- Goes to the holder's own block, where its Stop button lives, rather than naming a winner with nowhere to go. -->
                                             <button
                                                 v-if="portHolder(groups, port)"
@@ -356,37 +425,42 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                     </span>
                                 </template>
                             </div>
-                            <!-- Cancels the small text button's own padding, so its words land back in the block's one value column. -->
-                            <span v-if="$slots[`ports`]" class="-ml-2.5 flex flex-wrap items-center gap-x-1 gap-y-1 empty:hidden">
-                                <slot name="ports" :group="group" />
+                            <div v-if="$slots[`ports`]" :class="VERBS"><slot name="ports" :group="group" /></div>
+                        </dd>
+                    </div>
+
+                    <!-- The container on this machine in one line: the exact id somebody types into a terminal, with a copy
+                         button, and the share docker enforces. The image tag is a hover: it is the least-read fact here,
+                         and a local build's tag ran longer than everything else in the block. -->
+                    <div v-if="group.sandbox" :class="SECTION">
+                        <dt :class="LABEL">{{ t(`ui.deviceDetail.container`) }}</dt>
+                        <dd :class="LINE" class="flex-1 flex-wrap gap-x-2 gap-y-1">
+                            <span v-if="group.subtitle" class="flex min-w-0 items-center gap-1.5">
+                                <span class="truncate font-mono text-xs text-muted" v-tooltip.top="imageOf(group.sandbox)">{{ group.subtitle }}</span>
+                                <CopyButton :text="group.subtitle" v-tooltip.top="t(`ui.deviceDetail.copyId`)" />
                             </span>
-                        </div>
-                    </template>
-
-                    <!-- The exact id the line only carries on hover: what gets typed into a terminal, so it can be copied. -->
-                    <template v-if="group.subtitle">
-                        <span class="text-2xs text-subtle">{{ t(`ui.deviceDetail.id`) }}</span>
-                        <div class="flex min-w-0 items-center gap-x-2">
-                            <span class="truncate font-mono text-xs text-subtle">{{ group.subtitle }}</span>
+                            <span v-if="group.subtitle && resourcesSummary(group.sandbox)" class="text-2xs text-subtle" aria-hidden="true">·</span>
+                            <span v-if="resourcesSummary(group.sandbox)" class="text-xs text-muted" v-tooltip.top="imageOf(group.sandbox)">{{
+                                resourcesSummary(group.sandbox)
+                            }}</span>
+                            <!-- With neither to say, the image is all there is, and it stands in rather than leave the line blank. -->
+                            <span v-if="!group.subtitle && !resourcesSummary(group.sandbox)" class="truncate font-mono text-xs text-subtle">{{
+                                group.sandbox.image
+                            }}</span>
+                        </dd>
+                    </div>
+                    <!-- No container here: the exact id the line only carries on hover, what gets typed into a terminal. -->
+                    <div v-else-if="group.subtitle" :class="SECTION">
+                        <dt :class="LABEL">{{ t(`ui.deviceDetail.id`) }}</dt>
+                        <dd :class="LINE" class="flex-1 gap-1.5">
+                            <span class="truncate font-mono text-xs text-muted">{{ group.subtitle }}</span>
                             <CopyButton :text="group.subtitle" v-tooltip.top="t(`ui.deviceDetail.copyId`)" />
-                        </div>
-                    </template>
-
-                    <!-- Last, and quietest: the least-often-read fact, at the block's one value size rather than its own. -->
-                    <template v-if="group.sandbox">
-                        <span class="text-2xs text-subtle">{{ t(`ui.deviceDetail.image`) }}</span>
-                        <span class="truncate font-mono text-xs text-subtle" :title="group.sandbox.image">{{ group.sandbox.image }}</span>
-                    </template>
-
-                    <!-- The caps and privileges docker enforces, only when the caller inspected the container for them. -->
-                    <template v-if="group.sandbox && resourcesSummary(group.sandbox)">
-                        <span class="text-2xs text-subtle">{{ t(`ui.deviceDetail.share`) }}</span>
-                        <span class="truncate text-xs text-subtle">{{ resourcesSummary(group.sandbox) }}</span>
-                    </template>
-                </div>
+                        </dd>
+                    </div>
+                </dl>
 
                 <!-- Outside the disclosure: a verb pressed on a folded row must still show what it's doing. -->
-                <div v-if="$slots[`footer`]" class="empty:hidden" :class="$slots[`select`] ? `pl-[3.25rem]` : `pl-6`">
+                <div v-if="$slots[`footer`]" class="empty:hidden" :class="indent()">
                     <slot name="footer" :group="group" />
                 </div>
             </div>

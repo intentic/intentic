@@ -2235,7 +2235,6 @@
             "mirrorPortAgain": "Spiegeln",
             "nothingOnDeviceDeleted": "Auf diesem Gerät wird nichts gelöscht, und sein Agent bleibt installiert, aber es wieder hereinzulassen heißt, dort einen frischen Kopplungsbefehl auszuführen.",
             "nothingToPick": "Diese Maschine hält für diese Sandbox weder einen Container noch einen synchronisierten Ordner, hier gibt es also nichts freizugeben.",
-            "on": "auf {group}",
             "pairingAgainMeansRunning": "Es erneut zu koppeln heißt, auf diesem Gerät einen frischen Befehl auszuführen.",
             "pauseSyncing": "Synchronisierung pausieren",
             "putPortBackOnLocalhost": "Diesen Port wieder auf den localhost dieses Geräts legen, sofern ihn hier nicht etwas anderes hält.",
@@ -2261,15 +2260,20 @@
         },
         "deviceRows": {
             "fileSyncing": "Dateisynchronisierung",
+            "offForAll": "Aus für alle {total} Sandboxes",
+            "offForSome": "Aus für {off} von {total} Sandboxes",
+            "onForAll": "An für alle {total} Sandboxes",
             "pauseAll": "Alle pausieren",
+            "pausedForAll": "Pausiert für alle {total} Sandboxes",
+            "pausedForSome": "Pausiert für {off} von {total} Sandboxes",
             "portMirroring": "Portspiegelung",
             "putEveryPairedSandboxs": "Die Ports jeder gekoppelten Sandbox wieder auf den localhost dieses Geräts legen.",
             "resumeAll": "Alle fortsetzen",
-            "startAll": "Alle starten",
             "startMovingFilesAgain": "Für jede Sandbox, die dieses Gerät synchronisiert, wieder Dateien bewegen.",
-            "stopAll": "Alle stoppen",
             "stopMovingFilesEither": "Für jede Sandbox, die dieses Gerät synchronisiert, Dateien in beide Richtungen nicht mehr bewegen. Ihre Ports werden weiter gespiegelt.",
-            "takeEveryPairedSandboxs": "Die Ports jeder gekoppelten Sandbox vom localhost dieses Geräts nehmen. Dateien werden weiter synchronisiert."
+            "takeEveryPairedSandboxs": "Die Ports jeder gekoppelten Sandbox vom localhost dieses Geräts nehmen. Dateien werden weiter synchronisiert.",
+            "turnAllOff": "Alle ausschalten",
+            "turnAllOn": "Alle einschalten"
         },
         "deviceRunners": {
             "addRunner": "Runner hinzufügen",
@@ -2686,6 +2690,8 @@
             "allAccounts": "Alle Konten",
             "bindingPool": "Bindender Topf",
             "cantServeTurn": "Kann keinen Zug bedienen · {attentionTotal}",
+            "cappedBy": ", nicht nutzbar, bis {pool} wieder öffnet",
+            "insidePool": ", innerhalb von {pool}",
             "left": "Übrig",
             "more": "+{hidden} weitere",
             "nextPoolReopens": "nächster Topf öffnet {nextResetAt}",
@@ -2701,6 +2707,7 @@
             "resets": "setzt sich zurück {resetsAt}",
             "seatFromAdmin": "bitten Sie einen Org-Admin, ihm einen Sitz zuzuweisen | bitten Sie einen Org-Admin, ihnen Sitze zuzuweisen",
             "showingMostConstrained": "es werden die {max_bars} engsten von {count} gezeigt",
+            "unusableUntilReopens": "Nicht nutzbar, bis {pool} wieder öffnet",
             "verifyEachLink": "öffnen Sie den Namen, um es zu bestätigen | öffnen Sie jeden Namen, um sie zu bestätigen",
             "viewAccounts": "Konten ansehen"
         },
@@ -3004,11 +3011,12 @@
             "waitingIn": "{option} wartet in {name} auf Sie"
         },
         "sandboxSyncToggles": {
+            "folderOnComputer": "Ordner auf diesem Computer",
             "mirrorPortsOnly": "Nur Ports spiegeln",
+            "notSyncedHere": "Noch nicht mit diesem Computer synchronisiert.",
             "putSandboxsPortsOn": "Die Ports dieser Sandbox auf den localhost dieses Computers legen und keine Datei anrühren.",
             "startMovingSandboxsFiles": "Anfangen, die Dateien dieser Sandbox in diesen Ordner zu bewegen, und ihre Ports auf den localhost dieses Computers legen.",
-            "syncFilesHere": "Dateien hierher synchronisieren",
-            "syncSandboxsFilesInto": "Die Dateien dieser Sandbox in einen Ordner auf diesem Computer synchronisieren. Welche Seite das ausführt, folgt dem Pfad: ein Windows-Ordner synchronisiert Windows, ein Distro-Ordner synchronisiert diese Distro."
+            "syncFilesHere": "Dateien hierher synchronisieren"
         },
         "sandboxUnauthorized": {
             "intenticAccount": ", aber Ihr intentic-Konto ist",

@@ -9,7 +9,7 @@ import {
     type Machine,
     machinesOf,
 } from "@intentic/sandbox-contract";
-import type { StatusVariant } from "@intentic/ui";
+import type { IconName, StatusVariant } from "@intentic/ui";
 import {
     type DeviceFolderRow,
     type DeviceSandboxGroup,
@@ -477,23 +477,26 @@ export const mirrorHalf = (row: DeviceRow): DeviceHalf =>
 const switchable = (row: DeviceRow, half: DeviceHalf): boolean =>
     row.device.hostId !== undefined && row.device.online === true && row.device.gap === undefined && half.total > 1;
 
-// Both halves are the same shape (a state, a word, one or two commands), so one table serves both. A mixed
-// state offers both directions rather than guessing which the reader meant.
+// Both halves are the same shape (a glyph, a state, one sentence, one or two commands), so one table serves both. A
+// mixed state offers both directions rather than guessing which the reader meant.
 export interface HalfAction {
     readonly command: DeviceSyncSwitch;
     readonly label: string;
     readonly hint: string;
+    /** What the button leads with, so a pause reads as a pause before its word does. */
+    readonly icon: IconName;
 }
 
 export interface DeviceSwitch {
+    readonly kind: `sync` | `mirror`;
     readonly label: string;
+    /** The half's own mark, the lead of its row. */
+    readonly icon: IconName;
     readonly state: HalfState;
-    /** The state in one word, for the settled positions. */
-    readonly word: string;
-    /** What disagrees, when the pairings do; replaces the word rather than joining it. */
-    readonly note: string | undefined;
-    /** How much this switch touches: every label says "all" without saying all of what. */
-    readonly scope: string;
+    // The position and how much of the machine it covers, as ONE sentence ("Paused for 6 of 8 sandboxes"). The row
+    // used to say it in three loose pieces — a word, a tinted "6 of 8 paused" and "all 8 sandboxes" — that each read
+    // as a label of its own, with the paused count tinted like a healthy one.
+    readonly summary: string;
     readonly actions: readonly HalfAction[];
 }
 
@@ -501,52 +504,69 @@ const pause = (): HalfAction => ({
     command: `sync-pause`,
     label: t(`sandbox.deviceRows.pauseAll`),
     hint: t(`sandbox.deviceRows.stopMovingFilesEither`),
+    icon: `pause`,
 });
 const resume = (): HalfAction => ({
     command: `sync-resume`,
     label: t(`sandbox.deviceRows.resumeAll`),
     hint: t(`sandbox.deviceRows.startMovingFilesAgain`),
+    icon: `play`,
 });
+// "Turn … off", never "Stop all": on a list whose rows carry a container's own Stop, a bare Stop reads as stopping
+// the sandboxes, when all this does is take their ports off this machine's localhost.
 const mirrorOff = (): HalfAction => ({
     command: `mirror-off`,
-    label: t(`sandbox.deviceRows.stopAll`),
+    label: t(`sandbox.deviceRows.turnAllOff`),
     hint: t(`sandbox.deviceRows.takeEveryPairedSandboxs`),
+    icon: `eye-slash`,
 });
 const mirrorOn = (): HalfAction => ({
     command: `mirror-on`,
-    label: t(`sandbox.deviceRows.startAll`),
+    label: t(`sandbox.deviceRows.turnAllOn`),
     hint: t(`sandbox.deviceRows.putEveryPairedSandboxs`),
+    icon: `eye`,
 });
 
 // A settled switch offers the way out; a mixed one offers both, rather than choosing for the reader.
 const actionsFor = (position: HalfState, toOff: HalfAction, toOn: HalfAction): HalfAction[] =>
     position === `on` ? [toOff] : position === `off` ? [toOn] : [toOn, toOff];
 
-// What a mixed half says, in the machine's own units ("2 of 3 paused").
-const halfNote = (half: DeviceHalf, offWord: string): string | undefined =>
-    half.state === `mixed` ? `${half.off} of ${half.total} ${offWord}` : undefined;
+// Counted in the machine's own units. Never over one pairing (see `switchable`), so the noun is always plural.
+const syncSummary = ({ state, off, total }: DeviceHalf): string =>
+    state === `on`
+        ? t(`sandbox.deviceRows.onForAll`, { total })
+        : state === `off`
+          ? t(`sandbox.deviceRows.pausedForAll`, { total })
+          : t(`sandbox.deviceRows.pausedForSome`, { off, total });
+
+const mirrorSummary = ({ state, off, total }: DeviceHalf): string =>
+    state === `on`
+        ? t(`sandbox.deviceRows.onForAll`, { total })
+        : state === `off`
+          ? t(`sandbox.deviceRows.offForAll`, { total })
+          : t(`sandbox.deviceRows.offForSome`, { off, total });
 
 export const deviceSwitches = (row: DeviceRow): DeviceSwitch[] => {
     const switches: DeviceSwitch[] = [];
     const sync = syncHalf(row);
     if (switchable(row, sync)) {
         switches.push({
+            kind: `sync`,
             label: t(`sandbox.deviceRows.fileSyncing`),
+            icon: `sync`,
             state: sync.state,
-            word: sync.state === `off` ? `paused` : `on`,
-            note: halfNote(sync, `paused`),
-            scope: `all ${sync.total} sandboxes`,
+            summary: syncSummary(sync),
             actions: actionsFor(sync.state, pause(), resume()),
         });
     }
     const mirror = mirrorHalf(row);
     if (switchable(row, mirror)) {
         switches.push({
+            kind: `mirror`,
             label: t(`sandbox.deviceRows.portMirroring`),
+            icon: `ports`,
             state: mirror.state,
-            word: mirror.state === `off` ? `off` : `on`,
-            note: halfNote(mirror, `off`),
-            scope: `all ${mirror.total} sandboxes`,
+            summary: mirrorSummary(mirror),
             actions: actionsFor(mirror.state, mirrorOff(), mirrorOn()),
         });
     }
