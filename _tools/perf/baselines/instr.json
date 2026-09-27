@@ -8,28 +8,31 @@
     },
     "scenarios": {
         "code-lines": {
-            "instructions": 1473484762
+            "instructions": 1473553171
         },
         "code-lines-appended": {
-            "instructions": 1545523603
+            "instructions": 1545392029
+        },
+        "code-recount": {
+            "instructions": 1653354
         },
         "fuzzy-rank": {
-            "instructions": 1476158498
+            "instructions": 1475993123
         },
         "fuzzy-typing": {
-            "instructions": 640867692
+            "instructions": 640693889
         },
         "ignore-rewalk": {
-            "instructions": 54603636
+            "instructions": 51688153
         },
         "ignore-walk": {
-            "instructions": 761653835
+            "instructions": 656225354
         },
         "transcript-fold": {
-            "instructions": 163408947
+            "instructions": 164982742
         },
         "transcript-rows": {
-            "instructions": 246421002
+            "instructions": 261005948
         }
     }
 }
