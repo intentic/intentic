@@ -5,3 +5,4 @@ export const SUITE_KINDS: readonly SuiteKind[];
 export const INTEGRATION_NAME: RegExp;
 export function suiteKindOf(file: string): SuiteKind;
 export const STOOD_DOWN_FILE: string;
+export const CI_LANE: string;

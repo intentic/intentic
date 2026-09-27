@@ -15,6 +15,7 @@ flowchart LR
 
 - Every Linux instance carries the labels `intentic` and `desktop`; jobs ask for `[self-hosted, intentic]` or `[self-hosted, intentic, desktop]`. [`.github/actionlint.yaml`](../../.github/actionlint.yaml) declares the labels, so a job asking for one no runner carries fails the lint. The Windows machine carries only `windows-desktop` ([ci-runner-windows.md](ci-runner-windows.md)).
 - Jobs run in `ghcr.io/intentic/ci-base` or `ci-desktop` and mount `/ci-cache` and, where they drive Docker, the host docker socket. `/ci-cache` sits on the same filesystem as the runners' work directories so pnpm can hard-link from its store.
+- One job, `verify-machine`, starts its container `--privileged` with a tmpfs at `/history`: the worktree-isolation suites need `unshare --mount` and an overlay mount, as a sandbox has them. It needs nothing of the host beyond what Docker Desktop grants any privileged container, and a job mounting the docker socket already holds as much.
 - Nothing inside a container can see that six jobs share the box, so `CI_HOST_JOBS: "6"` in `ci.yml`, `verify.yml` and `nightly.yml` tells [`test-workers.mjs`](../../_tools/scripts/verify/test-workers.mjs) to divide memory by it. Change all three with the fleet.
 - The host's Docker Desktop also runs the owner's sandboxes, so nothing here prunes a tagged image or a volume.
 - Off the fleet: CodeQL, Scorecard, npm publish (provenance needs a GitHub-hosted builder), the arm64 sandbox image, the mobile builds and the engines bump.

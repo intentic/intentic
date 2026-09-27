@@ -7,3 +7,6 @@ export const suiteKindOf = (file) => (INTEGRATION_NAME.test(file) ? "integration
 // The env var naming the file where requires() (@intentic/testing/requires) records each test that stood down, for
 // `suites` to count once the run ends.
 export const STOOD_DOWN_FILE = "SUITES_STOOD_DOWN_FILE";
+// The env var a CI job sets to the lane it is: the job that provides what a `requires(…, { lane })` test needs, where
+// that test then fails if the need goes missing (the workflow-policy check holds each lane to a job that runs it).
+export const CI_LANE = "INTENTIC_CI_LANE";

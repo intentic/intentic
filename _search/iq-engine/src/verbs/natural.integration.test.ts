@@ -1,6 +1,13 @@
+import { existsSync } from "node:fs";
+import { requires } from "@intentic/testing/requires";
 import { createEngine } from "../index.js";
 import { makeFixtureWorkspace } from "../testing.js";
 import type { QueryRequest } from "../types.js";
+
+// The models scripts/fetch-model.mjs bakes into the sandbox image, where IQ_MODEL_DIR names them. CI's verify-machine job
+// restores them from the images' own cache and runs this file (ci.yml); every other CI job stands these tests down.
+const MODEL_DIR = process.env["IQ_MODEL_DIR"] ?? "";
+const models = requires(MODEL_DIR !== "" && existsSync(MODEL_DIR), "the iq models at IQ_MODEL_DIR (scripts/fetch-model.mjs)", { lane: "machine" });
 
 let root: string;
 let cleanup: () => Promise<void>;
@@ -28,11 +35,11 @@ test("a natural-language query without a model runs BM25-ranked and says so", as
     expect(outcome.result.groups.flatMap((group) => group.hits).some((hit) => hit.tags.some((tag) => tag.kind === "bm25"))).toBe(true);
 });
 
-// Real-model coverage, gated on a baked model dir (CI image job sets IQ_MODEL_DIR).
-test.skipIf(process.env["IQ_MODEL_DIR"] === undefined)(
-    "a natural-language query with baked models returns [sem]+[rerank]-tagged hits",
+// Real-model coverage, against the baked models.
+test.skipIf(!models.runs)(
+    models.title("a natural-language query with baked models returns [sem]+[rerank]-tagged hits"),
     async () => {
-        const engine = createEngine({ root, modelDir: process.env["IQ_MODEL_DIR"]! });
+        const engine = createEngine({ root, modelDir: MODEL_DIR });
         const outcome = await engine.run(request("q", "where is a widget created?"));
         expect(outcome.exitCode).toBe(0);
         const tags = outcome.result.groups.flatMap((group) => group.hits).flatMap((hit) => hit.tags.map((tag) => tag.kind));

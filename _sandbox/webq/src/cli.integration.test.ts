@@ -167,9 +167,8 @@ describe("webq cache", () => {
     });
 });
 
-const chromium = requires(await chromiumAvailable(), "Playwright's Chromium (playwright install chromium)", {
-    absentOnCi: "the ci-base image carries no browser, and the verify jobs install none",
-});
+// CI's verify-machine job installs it (ci.yml); ci-base carries no browser, so a stray one cannot wake other suites.
+const chromium = requires(await chromiumAvailable(), "Playwright's Chromium (playwright install chromium)", { lane: "machine" });
 
 describe("browser fallback", () => {
     it.skipIf(!chromium.runs)(chromium.title("renders an app-shell page through Chromium"), async () => {

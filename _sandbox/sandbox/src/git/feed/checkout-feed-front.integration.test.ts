@@ -15,11 +15,11 @@ import { frontCheckoutFeed, useCheckoutFeed } from "./checkout-feed.js";
 // socket, and a status taken while the checkout's count stands still spawns no git.
 
 const exec = promisify(execFile);
-const FRONT = join(repoRoot(import.meta.url), "_sandbox/front/target/debug/intentic-front");
-// CI's verify jobs build no Rust: the front's crates are checked by their own cargo job, which runs no Node suite.
-const built = requires(existsSync(FRONT), "the front's debug build (cargo build in _sandbox/front)", {
-    absentOnCi: "the verify jobs build no Rust; the front's own cargo job runs no Node suite",
-});
+// INTENTIC_FRONT_BINARY names a build outside the checkout's own target dir: CI's front-check job, which builds the front
+// with cargo into a cache directory, runs this file against that binary as its `front` lane (ci.yml). The verify jobs
+// build no Rust, so there it stands down.
+const FRONT = process.env["INTENTIC_FRONT_BINARY"] ?? join(repoRoot(import.meta.url), "_sandbox/front/target/debug/intentic-front");
+const built = requires(existsSync(FRONT), `the front's debug build at ${FRONT} (cargo build in _sandbox/front)`, { lane: "front" });
 
 let runDir: string;
 let front: ChildProcess;

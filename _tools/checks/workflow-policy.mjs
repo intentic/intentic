@@ -13,10 +13,13 @@
 //    token)
 // 5. no job bootstraps pnpm with corepack: ci-base installs pnpm natively and pnpm 12 honours `packageManager` itself,
 //    so corepack only adds one unretried registry fetch that the whole job's success then hangs on
+// 6. a test whose `requires(…, { lane })` names a CI lane is run by a job that sets that lane: it stands down in every
+//    other CI job, so without one it runs nowhere and nothing says so
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
+import { CI_LANE } from "../constants/src/test-suites.mjs";
 import { finish } from "./lib/report.mjs";
-import { root } from "./lib/repo.mjs";
+import { packages, root, walk } from "./lib/repo.mjs";
 import { jobsOf, permissionsOf, stepsOf, workflowFiles, workflowText } from "./lib/workflows.mjs";
 
 // The fork boundary.
@@ -164,6 +167,44 @@ for (const file of workflowFiles()) {
     }
 }
 
+// The lane nobody runs.
+// Each job's block (its env and steps) names the lane it is and the files it runs; a test file is named by its path in
+// its package, which is how `suites` takes it.
+const LANE_OF_JOB = new RegExp(`\\b${CI_LANE}:[ \\t]*["']?([\\w-]+)`, "g");
+const LANE_OF_TEST = /\brequires\([^;]*?\blane:\s*"([\w-]+)"/g;
+const laneJobs = [];
+for (const file of workflowFiles()) {
+    for (const [job, block] of stepsOf(workflowText(file))) {
+        for (const [, lane] of block.matchAll(LANE_OF_JOB)) {
+            laneJobs.push({ lane, block, where: `.github/workflows/${file} job \`${job}\`` });
+        }
+    }
+}
+const unrun = [];
+for (const { dir } of packages) {
+    for (const test of walk(dir)) {
+        const text = readFileSync(test, "utf8");
+        if (!text.includes("@intentic/testing/requires")) {
+            continue;
+        }
+        const named = relative(dir, test);
+        // Whole, so `a.test.ts` is not run by a job naming `a.test.tsx`.
+        const runsIt = new RegExp(`(?<![\\w./-])${named.replaceAll(/[.*+?^${}()|[\]\\/]/g, "\\$&")}(?![\\w.-])`);
+        for (const lane of new Set([...text.matchAll(LANE_OF_TEST)].map((match) => match[1]))) {
+            const jobs = laneJobs.filter((job) => job.lane === lane);
+            if (!jobs.some(({ block }) => runsIt.test(block))) {
+                const setters = jobs.map(({ where }) => where).join(", ");
+                unrun.push(
+                    `${relative(root, test)} waits on CI's \`${lane}\` lane, which ${ 
+                        setters === ""
+                            ? `no job sets (\`${CI_LANE}: ${lane}\`), so it stands down in every CI job; give it a job that provides what it requires and runs it`
+                            : `${setters} sets without running \`${named}\`, so it stands down in every CI job; name the file in that job's test step`}`,
+                );
+            }
+        }
+    }
+}
+
 finish(
     [
         ["Self-hosted CI is reachable from a fork's pull request (docs/ops/ci-runner.md, 'The fork boundary')", exposed],
@@ -171,6 +212,7 @@ finish(
         ["A publish with provenance is on a runner npm's registry will not attest", unattestable],
         ["A workflow is triggered by a tag push GitHub will never deliver (dispatch it instead)", tagTriggered],
         ["A job bootstraps pnpm with corepack rather than taking it from the action or the image", corepacked],
+        ["A test waits on a CI lane no job runs it in (@intentic/testing/requires, `lane`)", unrun],
     ],
     [
         "fork boundary: no self-hosted job is reachable from a fork's pull request",
@@ -178,5 +220,6 @@ finish(
         "npm provenance: no job publishes an attested tarball from the self-hosted fleet",
         "publish triggers: no workflow waits on a tag push GITHUB_TOKEN can never deliver",
         "pnpm bootstrap: no job's success hangs on corepack's unretried fetch of the `packageManager` tarball",
+        `CI lanes: every test naming a \`lane\` is run by a job that sets ${CI_LANE} to it`,
     ],
 );

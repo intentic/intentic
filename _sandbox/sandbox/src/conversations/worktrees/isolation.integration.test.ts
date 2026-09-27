@@ -365,8 +365,9 @@ const overlayScratch = (): string | undefined => {
 };
 
 const OVERLAY_SCRATCH = overlayScratch();
+// CI's verify-machine job runs it, in a privileged container with a tmpfs at /history (ci.yml).
 const overlay = requires(OVERLAY_SCRATCH !== undefined, `CAP_SYS_ADMIN (an overlay mount) and the history volume at ${HISTORY_ROOT}`, {
-    absentOnCi: "CI's containers are unprivileged and have no history volume; a sandbox has both",
+    lane: "machine",
 });
 const listing = (output: string, label: string): string[] =>
     (output.split("\n").find((line) => line.startsWith(`${label}:`)) ?? "")

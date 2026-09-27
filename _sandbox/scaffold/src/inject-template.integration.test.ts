@@ -9,10 +9,11 @@ import { addAppsToMonorepo, injectApps, injectMonorepoShell } from "./inject-tem
 import { readTemplateManifest, type TemplateManifest } from "./template-manifest.js";
 
 // Runs against the real canonical template repo (the injector's whole job is to copy its packages into a repo),
-// so it only runs where that checkout is present: otherwise there is nothing to inject.
+// so it only runs where that checkout is present: otherwise there is nothing to inject. CI's verify-machine job clones
+// it at a pinned commit (ci.yml).
 const CANONICAL = process.env["INTENTIC_CANONICAL_DIR"] ?? "/home/radarsu/radarsu/repositories/00-canonical-repo";
 const canonical = requires(existsSync(join(CANONICAL, "templates.json")), `the canonical template checkout at ${CANONICAL} (INTENTIC_CANONICAL_DIR)`, {
-    absentOnCi: "the canonical template repository is a separate checkout CI does not clone",
+    lane: "machine",
 });
 const readJson = async (path: string): Promise<{ name: string; scripts?: Record<string, string> }> => JSON.parse(await readFile(path, "utf8"));
 

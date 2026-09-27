@@ -47,7 +47,8 @@ test("an isolated conversation whose worktree is gone is a broken check", async 
 const namespace = requires(
     existsSync(HISTORY_ROOT) && spawnSync("unshare", ["--mount", "--propagation", "private", "true"], { timeout: 10_000 }).status === 0,
     `CAP_SYS_ADMIN (unshare --mount) and the history volume at ${HISTORY_ROOT}`,
-    { absentOnCi: "CI's containers are unprivileged and have no history volume; a sandbox has both" },
+    // CI's verify-machine job runs it, in a privileged container with a tmpfs at /history (ci.yml).
+    { lane: "machine" },
 );
 
 interface World {

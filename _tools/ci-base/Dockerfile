@@ -41,10 +41,14 @@ LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 #                           proves the rewrite with a real pgrep; the sandbox runtime installs the same package
 #   zstd                    transcripts are compressed logs, so the transcript/record suites verify with zstdcat
 #   docker-ce-cli + buildx  the images/release jobs drive the dind service and export a mode=max registry cache
+#   tesseract-ocr, poppler-utils, fonts-dejavu-core, python3-pil
+#                           fileq's OCR tier (tesseract over pdftoppm's page images), proved by derivers.integration
+#                           on a scan it draws with Pillow in DejaVu; ~106 MB and ~10s of build, measured on this base
 # The docker apt repo is added the same way the sandbox's docker feature pack adds it
 # (_sandbox/sandbox/image-packs/docker.Dockerfile); resolved once, here, instead of in three jobs at runtime.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl git python3 make g++ ripgrep openssh-client tmux zip unzip procps zstd \
+        tesseract-ocr poppler-utils fonts-dejavu-core python3-pil \
     && install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
     && chmod a+r /etc/apt/keyrings/docker.asc \
@@ -74,6 +78,22 @@ RUN git config --system --add safe.directory '*'
 # stable -slim tag of the catalog's bun existed).
 COPY --from=oven/bun:1.4.2-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52d95a519631e2fc61 /usr/local/bin/bun /usr/local/bin/bun
 
+# ruff and pyright, the two binaries the daemon's python check runs on every `.py` edit
+# (_sandbox/sandbox/src/agent/verification/python/python-diagnostics.ts). Its integration suite spawns the real ones,
+# because only that proves the parsers read what the binaries print, and pyright's `--outputjson` is a wire format.
+# So CI runs the SAME versions the sandbox image ships, fetched the same way (~62 MB, ~6s of build).
+# ponytail: keep both versions in lockstep with _sandbox/sandbox/image-packs/python.Dockerfile.
+RUN ruff_version=0.16.9 \
+    && case "$(dpkg --print-architecture)" in \
+        amd64) triple=x86_64-unknown-linux-gnu ;; \
+        arm64) triple=aarch64-unknown-linux-gnu ;; \
+        *) echo "ci-base: unsupported architecture $(dpkg --print-architecture)" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL "https://github.com/astral-sh/ruff/releases/download/${ruff_version}/ruff-${triple}.tar.gz" \
+        | tar -xz -C /usr/local/bin --strip-components=1 "ruff-${triple}/ruff" \
+    && npm install -g pyright@1.1.414 \
+    && npm cache clean --force
+
 # pnpm INSTALLED NATIVELY, not through corepack, because pnpm 12 already does corepack's job: it is a Rust
 # binary that needs no Node, and `pmOnFail` defaults to `download`, so it fetches whatever version the
 # `packageManager` field names. Running corepack in front of that pinned the same version twice.
@@ -93,4 +113,6 @@ RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.6.0 SHELL=/b
 # Fail the image build, not some pipeline three days later, if any of the baked tooling is missing.
 RUN node --version && pnpm --version && git --version && docker --version && docker buildx version \
     && bun --version && rg --version && tmux -V && python3 --version && make --version | head -1 && g++ --version | head -1 \
-    && command -v ssh-keygen && command -v zip && command -v unzip && command -v tar && command -v gzip && command -v zstdcat
+    && command -v ssh-keygen && command -v zip && command -v unzip && command -v tar && command -v gzip && command -v zstdcat \
+    && tesseract --version && pdftoppm -v && test -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf && python3 -c 'import PIL' \
+    && ruff --version && pyright --version

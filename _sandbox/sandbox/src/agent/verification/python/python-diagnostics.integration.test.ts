@@ -18,9 +18,9 @@ const installed = (binary: string): boolean => {
     }
 };
 
-const ABSENT_ON_CI = { absentOnCi: "the ci-base image carries no Python linters (_tools/ci-base/Dockerfile)" };
-const ruff = requires(installed("ruff"), "ruff on PATH", ABSENT_ON_CI);
-const pyright = requires(installed("pyright"), "pyright on PATH", ABSENT_ON_CI);
+// ci-base carries both, at the versions the sandbox image ships (_tools/ci-base/Dockerfile), so CI fails without them.
+const ruff = requires(installed("ruff"), "ruff on PATH");
+const pyright = requires(installed("pyright"), "pyright on PATH");
 
 const tempDirs: string[] = [];
 afterAll(async () => {

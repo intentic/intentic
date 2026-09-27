@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { STOOD_DOWN_FILE } from "../../constants/src/test-suites.mjs";
+import { CI_LANE, STOOD_DOWN_FILE } from "../../constants/src/test-suites.mjs";
 import { requirementOf } from "./requires.js";
 
 const never = (): void => {
@@ -37,6 +37,30 @@ test("unmet on CI where CI goes without it on purpose: stands down, saying why C
 test("declared absent on CI, a machine that has it still runs the tests", () => {
     const needs = requirementOf(true, "ruff on PATH", { CI: "true" }, never, { absentOnCi: "the ci-base image carries no Python linters" });
     expect(needs.runs).toBe(true);
+});
+
+test("unmet in the CI lane that provides it: a failing test naming the requirement and the lane", () => {
+    const registered: { title: string; body: () => void }[] = [];
+    const env = { CI: "true", [CI_LANE]: "machine" };
+    const needs = requirementOf(false, "the iq models", env, (title, body) => registered.push({ title, body }), { lane: "machine" });
+    expect(needs.runs).toBe(false);
+    expect(registered.map(({ title }) => title)).toEqual(["requires the iq models"]);
+    expect(registered[0]?.body).toThrow("this machine lacks the iq models, which CI provides on purpose in this job, its machine lane");
+});
+
+test("unmet in any other CI job: stands down, naming the lane that runs it", () => {
+    for (const env of [{ CI: "true" }, { CI: "true", [CI_LANE]: "front" }]) {
+        const needs = requirementOf(false, "the iq models", env, never, { lane: "machine" });
+        expect({ runs: needs.runs, title: needs.title("ranks") }).toEqual({
+            runs: false,
+            title: "ranks (stood down: needs the iq models, which CI provides in its machine lane)",
+        });
+    }
+});
+
+test("a lane is a CI word: unmet on a developer's machine, it stands down like any requirement", () => {
+    const needs = requirementOf(false, "the iq models", { [CI_LANE]: "machine" }, never, { lane: "machine" });
+    expect({ runs: needs.runs, title: needs.title("ranks") }).toEqual({ runs: false, title: "ranks (stood down: needs the iq models)" });
 });
 
 test("each test that stands down is written for suites to count", () => {

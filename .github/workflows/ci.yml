@@ -544,8 +544,15 @@ jobs:
   # — and each of the three verify jobs below was spelled as one of them. One repository publishing under three
   # scopes was worth less than it cost (a package's name said which job ran it and nothing else), so there is
   # now one scope and each job NAMES the set it owns. This one is everything, minus what a job below owns.
+  #
+  # AFTER ci-base, WHICH IT ONLY WAITS FOR. The suites here spawn tools the image carries on purpose (ruff, pyright,
+  # tesseract, poppler: _tools/ci-base/Dockerfile) and fail on CI without them, so on the push that adds one this job
+  # must pull the image that push built, not the `latest` it replaces. `needs` orders it; the `if` runs it whatever
+  # ci-base did (skipped on almost every push, and a failed build leaves the previous image, which the suites then
+  # measure). The wait is `changes` plus a skip on an ordinary push, which runs beside preflight.
   verify-core:
-    needs: preflight
+    needs: [preflight, ci-base]
+    if: ${{ !cancelled() && needs.preflight.result == 'success' }}
     uses: ./.github/workflows/verify.yml
     with:
       filters: "--filter=@intentic/*... --filter=!@intentic/desktop-app --filter=!@intentic/desktop-smoke --filter=!@intentic/web"
@@ -623,7 +630,8 @@ jobs:
   # filter when another one starts doing so — `_tools/checks/time-zones.mjs` is what notices the code, this is what
   # notices the behaviour.
   verify-clocks:
-    needs: preflight
+    # After ci-base for verify-core's reason: @intentic/sandbox's suites need the tools the image carries.
+    needs: [preflight, ci-base]
     if: ${{ !cancelled() && needs.preflight.result == 'success' }}
     runs-on: [self-hosted, intentic]
     timeout-minutes: 20
@@ -673,6 +681,104 @@ jobs:
       # TEST_WORKERS for the reason verify.yml spells out: turbo is invoked directly, so nothing else sizes the fan-out
       # to a box this job shares with five others.
       - run: TEST_WORKERS=$(node _tools/scripts/verify/test-workers.mjs) pnpm turbo run test --filter=@intentic/sandbox --filter=@intentic/sandbox-contract --filter=@intentic/ext-automations --filter=@intentic/web --continue=dependencies-successful
+
+  # THE SUITES THAT NEED MORE OF THE MACHINE THAN A VERIFY GROUP HAS, run where it is provided on purpose. Each one
+  # asks for its need with `requires(…, { lane: "machine" })` (@intentic/testing/requires): in this job, which names the
+  # lane in INTENTIC_CI_LANE, a missing need FAILS; in every other CI job the test stands down, titled with this lane.
+  # The workflow-policy check refuses a test naming a lane no job both sets and runs the file of, so a suite cannot be
+  # dropped from here and go quiet everywhere.
+  #
+  #   watch-check, isolation   CAP_SYS_ADMIN (unshare --mount, an overlay mount) and a history volume at /history,
+  #                            which a sandbox has: `--privileged`, and a tmpfs there, since an overlay's upperdir
+  #                            cannot sit on the container's own overlayfs root. `exec` because checks run from
+  #                            worktrees under it. Privileged adds nothing the host docker socket other jobs mount
+  #                            does not already hand a job, and the fork boundary holds as everywhere (`needs`).
+  #   webq cli                 Playwright's Chromium, into the shared browser cache perf-browser also fills (the same
+  #                            catalog playwright), with its shared libraries installed per run. Not baked into
+  #                            ci-base: ~400 MB for one suite, and a browser every job could see wakes suites that
+  #                            stand down without one (images-platform's PLAYWRIGHT_BROWSERS_PATH note).
+  #   inject-template          the canonical template checkout, cloned at a pinned commit (~1 MB, a second).
+  #   iq-engine models         the models fetch-model.mjs bakes into the sandbox image, restored from the cache the
+  #                            `images` job keys and fills; a miss fetches them once and saves them for both.
+  #
+  # Only those files, not their packages: every other suite in them already runs in verify-core. Ordered after ci-base
+  # for verify-core's reason. A required success for `images` and the release, like verify-core.
+  verify-machine:
+    needs: [preflight, ci-base]
+    if: ${{ !cancelled() && needs.preflight.result == 'success' }}
+    runs-on: [self-hosted, intentic]
+    timeout-minutes: 30
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      options: --privileged --tmpfs /history:rw,exec,size=2g
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      PNPM_STORE: /ci-cache/pnpm-store
+      TURBO_CACHE_DIR: /ci-cache/turbo
+      INTENTIC_CI_LANE: machine
+      # Not $HOME, which a job container maps to a throwaway /github/home (images-platform says what a browser left
+      # there cost).
+      PLAYWRIGHT_BROWSERS_PATH: /ci-cache/ms-playwright
+      # ponytail: the template commit inject-template is proved against; move it when the injector needs a newer
+      # template (git ls-remote https://github.com/radarsu/00-canonical-repo main).
+      CANONICAL_REPO: https://github.com/radarsu/00-canonical-repo
+      CANONICAL_COMMIT: 1ddb300d7f0c5dcaaf105255ab7e29ed0df4907d
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      # The same key and paths as `images`, so each fills the cache for the other.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .image-out/iq-models
+            .image-out/.iq-models-complete
+          key: iq-models-${{ hashFiles('_search/iq-engine/scripts/fetch-model.mjs') }}
+      # A miss fetches exactly what prepare-image-trees.sh would, behind the same marker.
+      - name: The iq models
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f .image-out/.iq-models-complete ]; then
+            rm -rf .image-out/iq-models
+            node _search/iq-engine/scripts/fetch-model.mjs .image-out/iq-models
+            touch .image-out/.iq-models-complete
+          fi
+      - run: pnpm --filter @intentic/webq exec playwright install --with-deps chromium
+      # On a branch named `main`, because the suite hands the checkout's own branch to the generator as the ref it
+      # clones.
+      - name: The canonical template checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/canonical"
+          rm -rf "$dir"
+          git init -q -b main "$dir"
+          git -C "$dir" fetch -q --depth 1 "$CANONICAL_REPO" "$CANONICAL_COMMIT"
+          git -C "$dir" checkout -q -B main FETCH_HEAD
+          echo "INTENTIC_CANONICAL_DIR=$dir" >> "$GITHUB_ENV"
+      # The query worker runs dist/query/query-worker.js on a worker thread, which has no TypeScript loader; everything
+      # else here runs from source under bun's @intentic/src condition.
+      - run: pnpm turbo run build --filter=@intentic/iq-engine...
+      # One step, every package run whatever the one before it did, so a red run names every failure at once.
+      - name: The suites this lane exists for
+        shell: bash
+        run: |
+          set -uo pipefail
+          export IQ_MODEL_DIR="$PWD/.image-out/iq-models"
+          failed=0
+          pnpm --filter @intentic/sandbox exec suites src/agent/verification/watch-check.integration.test.ts src/conversations/worktrees/isolation.integration.test.ts || failed=1
+          pnpm --filter @intentic/webq exec suites src/cli.integration.test.ts || failed=1
+          pnpm --filter @intentic/scaffold exec suites src/inject-template.integration.test.ts || failed=1
+          pnpm --filter @intentic/iq-engine exec suites src/query/query-worker.integration.test.ts src/verbs/natural.integration.test.ts || failed=1
+          exit "$failed"
 
   # Counts, not timings (_tools/perf/README.md). Each job publishes its diff against the baseline checked into
   # _tools/perf as the job summary, and fails only on a declared budget (src/*/*-budgets.ts): a count that moved is a
@@ -851,6 +957,8 @@ jobs:
   # because cargo reads .cargo/config.toml from where it runs, not from the manifest: that config is where the wire
   # crate's TypeScript lands, and the front's last step refuses a control socket whose committed TypeScript is not
   # what the Rust types emit, since Node and the front would then disagree about every frame. images-platform waits on this job, since the edge it rolls is only tested here.
+  # It ends by running the daemon's feed suite against the front it built (the `front` lane), which is why the sandbox
+  # image and the release wait on it too, and why `front` also fires on the daemon's end of the socket (affected.mjs).
   front-check:
     needs: [changes, preflight, ci-base, ci-desktop]
     if: ${{ !cancelled() && needs.changes.outputs.front == 'true' && needs.preflight.result == 'success' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
@@ -890,6 +998,17 @@ jobs:
         working-directory: _shared/relay
       - run: cargo test --locked
         working-directory: _shared/relay
+      # THE DAEMON'S END OF THE FRONT'S SOCKET, against the binary this job builds: checkout-feed-front is the one Node
+      # suite that needs the front, and this is the one job that has it, so it runs here as the `front` lane
+      # (requires(…, { lane: "front" }) fails here without the binary and stands down in every other job). The debug
+      # bin links against what `cargo test` above already compiled; the install is the warm store every job uses.
+      - run: cargo build --locked -p intentic-front
+      - uses: ./.github/actions/pnpm-setup
+      - run: pnpm --filter @intentic/sandbox exec suites src/git/feed/checkout-feed-front.integration.test.ts
+        working-directory: .
+        env:
+          INTENTIC_CI_LANE: front
+          INTENTIC_FRONT_BINARY: ${{ env.CARGO_TARGET_DIR }}/debug/intentic-front
 
   # The desktop ARTIFACTS: build the Linux bundles exactly the way the release builds them, then verify what
   # came out. Two tiers, ordered by cost, each proving something the one before it cannot:
@@ -1126,11 +1245,13 @@ jobs:
   # uses: wait for the release call, run only when it released nothing. On a non-releasing push that wait is
   # the release's one-minute `plan`; a release that failed leaves `latest` to this job, as before.
   images:
-    needs: [changes, verify-core, release]
+    needs: [changes, verify-core, verify-machine, front-check, release]
     if: |
       !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
       && needs.changes.outputs.images == 'true'
       && needs.verify-core.result == 'success'
+      && needs.verify-machine.result == 'success'
+      && needs.front-check.result != 'failure'
       && (needs.release.outputs.version == '' || needs.release.result != 'success')
     runs-on: [self-hosted, intentic]
     container:
@@ -1209,12 +1330,14 @@ jobs:
   # registry's own arm64 tags. The release does NOT reuse these sha tags — its arm64 half is version-stamped
   # inside release.yml (sandbox-arm64 there) so a released manifest's halves never skew.
   images-arm64:
-    needs: [changes, verify-core, release]
+    needs: [changes, verify-core, verify-machine, front-check, release]
     # Gated on the release the way `images` is: the release's sandbox-arm64 builds this half on a releasing push.
     if: |
       !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
       && needs.changes.outputs.images == 'true'
       && needs.verify-core.result == 'success'
+      && needs.verify-machine.result == 'success'
+      && needs.front-check.result != 'failure'
       && (needs.release.outputs.version == '' || needs.release.result != 'success')
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
@@ -1410,12 +1533,16 @@ jobs:
   # `!= 'failure'` the two image jobs get. Those two are allowed to be skipped; this one is not, because the
   # whole point of it is that a release cannot be cut without every provider's real CLI having been driven. A
   # gate that a skip satisfies is a gate that disappears exactly when someone disables it.
+  # verify-machine is required the same way, since it runs every pipeline. front-check runs only when the front or
+  # the daemon's end of its socket moved, so it is held to `!= 'failure'`, as images-platform holds it.
   release:
-    needs: [verify-core, verify-providers, ci-base, ci-desktop]
+    needs: [verify-core, verify-providers, verify-machine, front-check, ci-base, ci-desktop]
     if: |
       !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
       && needs.verify-core.result == 'success'
       && needs.verify-providers.result == 'success'
+      && needs.verify-machine.result == 'success'
+      && needs.front-check.result != 'failure'
       && needs.ci-base.result != 'failure'
       && needs.ci-desktop.result != 'failure'
     concurrency:

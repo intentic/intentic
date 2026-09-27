@@ -114,11 +114,9 @@ describe("pdf", () => {
         }
     });
 
-    /* The OCR tier, exercised for real where the image carries tesseract + poppler (an extension's layer). */
+    /* The OCR tier, exercised for real where the image carries tesseract + poppler (an extension's layer, and ci-base). */
     const DEJAVU = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
-    const ocr = requires(ocrAvailable() && existsSync(DEJAVU), `tesseract and pdftoppm on PATH, and the DejaVu font at ${DEJAVU}`, {
-        absentOnCi: "the ci-base image carries no OCR tools (_tools/ci-base/Dockerfile)",
-    });
+    const ocr = requires(ocrAvailable() && existsSync(DEJAVU), `tesseract and pdftoppm on PATH, and the DejaVu font at ${DEJAVU}`);
     test.skipIf(!ocr.runs)(ocr.title("a scan is recognised by tesseract when the image carries it, and says so"), async () => {
         const path = join(root, "receipt.pdf");
         execFileSync("python3", [
