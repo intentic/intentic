@@ -81,6 +81,21 @@ describe(`where the verbs act`, () => {
     });
 });
 
+describe(`downloading`, () => {
+    it(`hands the right-clicked file to the browser by its path, through the runner that says a failure, to a reader too`, async () => {
+        const writer = menuOver();
+        writer.press(MAIN, `Download to computer`);
+        const reader = menuOver({ canWrite: false });
+        reader.press(MAIN, `Download to computer`);
+        await drain();
+        expect([writer.download.mock.calls, writer.store.run.mock.calls.map(([, wrote]) => wrote), reader.download.mock.calls]).toEqual([
+            [[`app/src/main.ts`]],
+            [`Couldn't download that file.`],
+            [[`app/src/main.ts`]],
+        ]);
+    });
+});
+
 describe(`what the menu offers`, () => {
     it(`collapses the selection to an entry outside it, keeps a multi-selection it is part of, and counts what the verbs would touch`, () => {
         const { menu, selecting, show, press, select } = menuOver();

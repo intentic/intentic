@@ -45,6 +45,8 @@ export interface FileVerbSeams {
     readonly sayDeleted: (receipt: string, batch: DeleteBatch) => void;
     // `dir` is workspace-relative.
     readonly openTerminal: (dir: string) => void;
+    // Hands one file to the browser's own download; `path` is workspace-relative.
+    readonly download: (path: string) => Promise<void>;
 }
 
 export interface FileVerbsOptions {
@@ -156,6 +158,8 @@ export const createFileVerbs = (options: FileVerbsOptions) => {
         paste: transfer.paste,
         // Read when the row is chosen, so a surface that never opens a terminal (a test's) need not supply one.
         openTerminal: (dir) => seams.openTerminal(dir),
+        // Read when chosen, like the terminal; a refused ticket or an unreachable sandbox is said, not dropped.
+        download: (path) => void store.run(() => seams.download(path), t(`workspace.fileVerbs.couldntDownload`)),
     });
 
     return { rules, selecting, inline, edits, deleting, transfer, menu };

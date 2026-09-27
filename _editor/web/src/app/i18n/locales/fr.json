@@ -4384,6 +4384,7 @@
             "closeSplitTabsMove": "Fermer la division · ces onglets reviennent dans un seul panneau"
         },
         "entryMenu": {
+            "download": "Télécharger sur l'ordinateur",
             "extract": "Extraire",
             "keepFolder": "Garder le dossier",
             "newFile": "Nouveau fichier",

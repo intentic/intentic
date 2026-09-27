@@ -4394,6 +4394,7 @@
             "closeSplitTabsMove": "Die Teilung schließen · diese Tabs wandern zurück in einen Bereich"
         },
         "entryMenu": {
+            "download": "Auf den Computer herunterladen",
             "extract": "Entpacken",
             "keepFolder": "Ordner behalten",
             "newFile": "Neue Datei",

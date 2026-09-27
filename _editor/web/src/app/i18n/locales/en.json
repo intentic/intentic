@@ -4774,6 +4774,7 @@
             "closeSplitTabsMove": "Close the split · these tabs move back into one pane"
         },
         "entryMenu": {
+            "download": "Download to computer",
             "extract": "Extract",
             "keepFolder": "Keep folder",
             "newFile": "New File",

@@ -4423,6 +4423,7 @@
             "closeSplitTabsMove": "Cerrar la división · estas pestañas vuelven a un solo panel"
         },
         "entryMenu": {
+            "download": "Descargar al ordenador",
             "extract": "Extraer",
             "keepFolder": "Conservar la carpeta",
             "newFile": "Archivo nuevo",

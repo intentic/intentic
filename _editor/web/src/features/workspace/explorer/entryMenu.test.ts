@@ -16,6 +16,7 @@ const verbs = (): EntryVerbs => ({
     copy: jest.fn(),
     paste: jest.fn(),
     openTerminal: jest.fn(),
+    download: jest.fn(),
 });
 const input = (over: Partial<EntryMenuInput> = {}): EntryMenuInput => ({
     target: file,
@@ -34,7 +35,17 @@ const labels = (items: readonly MenuItem[]): string[] => items.map((item) => (it
 
 describe(`the entry menu`, () => {
     it(`offers a file its verbs, with the creates first`, () => {
-        expect(labels(entryMenuItems(input()))).toEqual([`New File`, `New Folder`, `—`, `Rename`, `Delete`, `—`, `Cut`, `Copy`]);
+        expect(labels(entryMenuItems(input()))).toEqual([
+            `New File`,
+            `New Folder`,
+            `—`,
+            `Rename`,
+            `Delete`,
+            `—`,
+            `Cut`,
+            `Copy`,
+            `Download to computer`,
+        ]);
     });
 
     it(`counts a bulk verb and drops Rename, which only ever names one`, () => {
@@ -82,6 +93,7 @@ describe(`the entry menu`, () => {
             `—`,
             `Cut`,
             `Copy`,
+            `Download to computer`,
         ]);
         expect(labels(entryMenuItems(input({ target: zip, multi: true, count: 2 })))).not.toContain(`Extract`);
         expect(labels(entryMenuItems(input({ target: { ...zip, name: `site.7z`, path: `drops/site.7z` } })))).not.toContain(`Extract`);
@@ -113,12 +125,12 @@ describe(`the entry menu`, () => {
 
     it(`keeps a read-only member to the readable rows and says why`, () => {
         const items = entryMenuItems(input({ canEdit: false, lead: [{ label: `Open management panel` }] }));
-        expect(labels(items)).toEqual([`Open management panel`, `—`, `Read-only: changing files needs writer access`]);
+        expect(labels(items)).toEqual([`Open management panel`, `—`, `Download to computer`, `—`, `Read-only: changing files needs writer access`]);
         expect(items.at(-1)?.disabled).toBe(true);
     });
 
     it(`does not lead a read-only menu with a separator when nothing else is readable`, () => {
-        const items = entryMenuItems(input({ canEdit: false }));
+        const items = entryMenuItems(input({ canEdit: false, target: dir }));
         expect(labels(items)).toEqual([`Read-only: changing files needs writer access`]);
         expect(items[0]?.separator).not.toBe(true);
     });
@@ -147,6 +159,23 @@ describe(`the entry menu`, () => {
         const items = entryMenuItems(input({ locked: true }));
         expect(labels(items)).toEqual([`Kept private by the sandbox`]);
         expect(items[0]?.disabled).toBe(true);
+    });
+
+    it(`offers Download to one file, never to a folder, a bulk selection, the background, an archive's contents or a private path`, () => {
+        const spec = input();
+        const row = entryMenuItems(spec).find((item) => item.label === `Download to computer`);
+        row?.command?.({ originalEvent: new Event(`click`), item: row });
+        expect(spec.verbs.download).toHaveBeenCalledTimes(1);
+        for (const over of [
+            { target: dir },
+            { multi: true, count: 2 },
+            { target: undefined },
+            { archived: true },
+            { locked: true },
+            { canEdit: false, target: dir },
+        ] satisfies Partial<EntryMenuInput>[]) {
+            expect(labels(entryMenuItems(input(over)))).not.toContain(`Download to computer`);
+        }
     });
 
     it(`runs the closure behind a verb`, () => {

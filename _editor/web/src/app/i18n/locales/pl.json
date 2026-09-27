@@ -4425,6 +4425,7 @@
             "closeSplitTabsMove": "Zamknij podział · te karty wracają do jednego panelu"
         },
         "entryMenu": {
+            "download": "Pobierz na komputer",
             "extract": "Wypakuj",
             "keepFolder": "Zostaw folder",
             "newFile": "Nowy plik",

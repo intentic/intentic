@@ -21,6 +21,8 @@ export interface EntryVerbs {
     readonly paste: () => void;
     // Starts a shell in the right-clicked folder.
     readonly openTerminal: () => void;
+    // Saves the right-clicked file onto the computer the editor runs on.
+    readonly download: () => void;
 }
 
 export interface EntryMenuInput {
@@ -54,7 +56,15 @@ const archiveNote = (): MenuItem => ({ label: t(`workspace.words.insideArchiveEx
 
 const withSeparator = (items: readonly MenuItem[]): MenuItem[] => (items.length === 0 ? [] : [{ separator: true }, ...items]);
 
-const readOnlyMenu = ({ head = [], lead = [], tail = [] }: EntryMenuInput): MenuItem[] => joinGroups(head, lead, tail, [readOnlyNote()]);
+// One file only: a folder or a selection has no single set of bytes to hand the browser. A read, so a read-only member
+// keeps it; an archive's contents never get it, since the daemon streams only files that exist on disk.
+const downloadRow = ({ target, multi, verbs }: EntryMenuInput): MenuItem[] =>
+    target?.type === `file` && !multi ? [{ label: t(`workspace.entryMenu.download`), icon: `download`, command: verbs.download }] : [];
+
+const readOnlyMenu = (input: EntryMenuInput): MenuItem[] => {
+    const { head = [], lead = [], tail = [] } = input;
+    return joinGroups(head, lead, downloadRow(input), tail, [readOnlyNote()]);
+};
 
 // Joins the groups that have rows, a rule between them, so a menu never opens or closes on a separator.
 const joinGroups = (...groups: readonly (readonly MenuItem[])[]): MenuItem[] =>
@@ -82,7 +92,8 @@ const soleVerbs = (target: WorkspaceTreeEntry, barren: boolean, verbs: EntryVerb
     return items;
 };
 
-const entryVerbs = ({ target, multi, count, barren, verbs }: EntryMenuInput): MenuItem[] => {
+const entryVerbs = (input: EntryMenuInput): MenuItem[] => {
+    const { target, multi, count, barren, verbs } = input;
     if (target === undefined) {
         return [];
     }
@@ -93,6 +104,7 @@ const entryVerbs = ({ target, multi, count, barren, verbs }: EntryMenuInput): Me
         { separator: true },
         { label: multi ? `Cut ${count} items` : `Cut`, icon: `arrows-h`, command: verbs.cut },
         { label: multi ? `Copy ${count} items` : `Copy`, icon: `copy`, command: verbs.copy },
+        ...downloadRow(input),
     ];
 };
 

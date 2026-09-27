@@ -165,6 +165,8 @@ export const treeSurface = (
     const say = mock((message: string, undo?: () => void | Promise<void>) => [message, undo]);
     // A delete's receipt, recorded with the batch its Undo would take back.
     const sayDeleted = mock((receipt: string, batch: DeleteBatch) => [receipt, batch]);
+    // A file handed to the browser's own download, by path.
+    const download = mock((path: string): Promise<void> => Promise.resolve());
     const surface = effectScope().run(() => {
         const rows = useTreeRows({
             tree: () => store.tree.value,
@@ -178,7 +180,7 @@ export const treeSurface = (
             emptyDirs,
         });
         const verbs = createFileVerbs({
-            seams: unstubbed<FileVerbSeams>(`fileVerbSeams`, { store, uploads, say, sayDeleted }),
+            seams: unstubbed<FileVerbSeams>(`fileVerbSeams`, { store, uploads, say, sayDeleted, download }),
             byPath: rows.byPath,
             order: rows.orderedPaths,
             rootDir: () => rootDir,
@@ -203,5 +205,5 @@ export const treeSurface = (
         surface.selecting.selection.value = new Set(paths);
         surface.selecting.lead.value = paths.at(-1) ?? null;
     };
-    return { ...surface, store, calls, release, settled, uploads, say, sayDeleted, el, select };
+    return { ...surface, store, calls, release, settled, uploads, say, sayDeleted, download, el, select };
 };
