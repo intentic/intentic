@@ -50,9 +50,16 @@ Runners are not ephemeral. Fleet checkouts use `clean: false` to keep `node_modu
 1. In the distro, create `/ci-cache` and turn on Docker Desktop's WSL integration for the distro.
 2. Settings > Actions > Runners > New self-hosted runner (Linux x64) gives a token. In a new directory per instance: `./config.sh --url https://github.com/intentic --token <token> --name <host>-<n> --labels intentic,desktop --unattended`.
 3. `sudo ./svc.sh install && sudo ./svc.sh start`.
-4. On Windows, from an ordinary PowerShell, run [`setup-wsl-fleet.ps1`](../../_tools/scripts/ci/setup-wsl-fleet.ps1). The first time add `-Restart`, which applies `vmIdleTimeout=-1`.
+4. On Windows, from an ordinary PowerShell, run [`setup-wsl-fleet.ps1`](../../_tools/scripts/ci/setup-wsl-fleet.ps1). The first time add `-Restart`, which applies `vmIdleTimeout=-1`. It also points each runner's `.env` at the job-started hook (`ACTIONS_RUNNER_HOOK_JOB_STARTED`) and restarts that runner once it is idle.
 
 ## When jobs sit queued
 
 1. `setup-wsl-fleet.ps1 -Check` reports the engine, the distro, the units and the disk without changing anything; `%LOCALAPPDATA%\intentic\ci-fleet\fleet.log` has every pass.
 2. `pnpm ci:audit --logs` groups recent failures by step and marks runner-side steps as infra.
+
+## When docker is missing in the distro
+
+Docker Desktop's WSL integration puts `/var/run/docker.sock` into the distro. After a Docker Desktop restart it can fail on a distro that is still booting ("setup groups"), and then it waits for someone to click "Restart the WSL integration" while the engine keeps answering on Windows.
+
+- Each pass of the fleet task asks docker inside the distro, as the runners' user. When no daemon answers there and the engine answers on Windows, it runs `docker desktop restart`, at most once every 10 minutes and only while no job is working. The distro and its runners stay up.
+- A job that lands in the meantime waits in its job-started hook (`/usr/local/lib/intentic-ci/wait-for-docker.sh`) for up to 10 minutes. It fails only if docker is still missing after that, with an error naming the machine. A job waiting there does not count as working.
