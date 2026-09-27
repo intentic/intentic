@@ -209,7 +209,7 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
         feedback: z.string().optional().describe("Why not, which goes back to the model as the reason."),
         // Whole, not a patch: effort or an account named for one model means nothing on another.
         child: ChildRunSchema.optional().describe(
-            "For a request to start a child agent: what to start it on instead of what the agent asked for. It replaces the whole run (model, account, effort and the rest), not only the fields it names. Ignored with a no, and on any other request.",
+            "For a request to start a subagent: what to start it on instead of what the agent asked for. It replaces the whole run (model, account, effort and the rest), not only the fields it names. Ignored with a no, and on any other request.",
         ),
     }),
     z.object({

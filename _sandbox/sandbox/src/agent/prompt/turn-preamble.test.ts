@@ -1,7 +1,7 @@
 import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { setupNoticeFor, SETUP_NOTICE_HEADER } from "../../workspace/layout/workspace-setup.js";
-import { SPAWN_NOTE_HEADER } from "../subagents/spawn-note.js";
+import { LEGACY_SPAWN_NOTE_HEADER, SPAWN_NOTE_HEADER, SPAWN_NOTE_TITLE } from "../subagents/spawn-note.js";
 import { SKILL_CATALOG_NOTE_HEADER, SKILL_CATALOG_NOTE_TITLE } from "../../store/loaded-skills.js";
 import { withRuntimeHistory } from "../providers/runtime-history.js";
 import { withAttachmentNote } from "./attachment-note.js";
@@ -90,7 +90,19 @@ test("what strip removes, the split hands back: titled, whole, and in the order 
     const sent = withTurnPreamble([note, notice], "fix the bug");
 
     expect(preambleNotes(sent)).toEqual([
-        { title: "Spawning child agents", text: note },
+        { title: SPAWN_NOTE_TITLE, text: note },
+        { title: "Dependencies aren't installed yet", text: notice },
+    ]);
+    expect(stripTurnPreamble(sent)).toBe("fix the bug");
+});
+
+// Stored prompts keep the header the note had when they were sent; retitling it must not leak them back into history.
+test("a prompt stored under the spawn note's old header still reads apart, under the title it had", () => {
+    const stored = `${LEGACY_SPAWN_NOTE_HEADER}\n\nThis sandbox can start full agents on any connected provider from your shell.`;
+    const sent = withTurnPreamble([stored, notice], "fix the bug");
+
+    expect(preambleNotes(sent)).toEqual([
+        { title: "Spawning child agents", text: stored },
         { title: "Dependencies aren't installed yet", text: notice },
     ]);
     expect(stripTurnPreamble(sent)).toBe("fix the bug");
@@ -150,7 +162,7 @@ test("an ordinary prompt unwraps to itself", () => {
 describe("the envelope of a prompt as the daemon composes it", () => {
     const answered = { kind: "note", note: { title: "Picked back up after a sandbox restart", text: RESUME_NOTES.answered } } as const;
     const carried = [{ role: "user" as const, text: "pick a store" }];
-    const spawning = { title: "Spawning child agents", text: note };
+    const spawning = { title: SPAWN_NOTE_TITLE, text: note };
 
     test("every layer comes back apart, and the words come back as they were typed and as they were queued", () => {
         const queued = withResumeNote("the second option", RESUME_NOTES.answered);

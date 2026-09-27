@@ -263,6 +263,34 @@ test("a registered session's permission is judged by the policy, and a refused c
     release();
 });
 
+// OpenCode 1.18 renamed the ask and reshaped it (`permission.asked`, with `permission` and `patterns`); a watcher
+// listening only for the old name answered nothing, and every ask the config raises waited on the turn's watchdog.
+test("OpenCode 1.18's ask is judged by the same policy, command first, then its patterns", async () => {
+    const xdg = await scratch();
+    const { gate, release } = createTurnGate({
+        cards,
+        judge: async () => ({ decision: "refuse", sentence: "Discards commits the remote has." }),
+        rulebook: "refuse-only",
+        signal: new AbortController().signal,
+    });
+    registerSessionGate("ses_asked", gate);
+    streamEvents.push({
+        type: "permission.asked",
+        properties: { id: "per_5", sessionID: "ses_asked", permission: "bash", patterns: ["git push --force*"], metadata: { command: "git push --force origin main" }, always: [] },
+    });
+    streamEvents.push({ type: "permission.asked", properties: { id: "per_6", sessionID: "ses_open", permission: "bash", patterns: ["rm -rf dist"], metadata: {}, always: [] } });
+    await createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: WORKSPACE_ROOT }).client();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    // Answered concurrently, so in either order; what each got is the contract.
+    expect(permissionReplies.toSorted((left, right) => left.permissionID.localeCompare(right.permissionID))).toEqual([
+        { id: "ses_asked", permissionID: "per_5", directory: "/work", response: "reject" },
+        { id: "ses_open", permissionID: "per_6", directory: "/work", response: "always" },
+    ]);
+    releaseSessionGate("ses_asked");
+    release();
+});
+
 // `always` would stop OpenCode asking about that pattern for the rest of the session, and the next match could be one
 // the policy would refuse.
 test("a command the policy allows is approved for this call only", async () => {

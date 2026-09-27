@@ -108,9 +108,11 @@ const lanes = [
 
     <h3>Runtime subagents</h3>
     <p>
-        A runtime-native child stays inside the provider's own agent loop. The daemon listens to that harness's task and lifecycle events,
-        reads the child's transcript when the runtime exposes one, and nests its thinking and tool calls under the parent card. This is the
-        lightest way to research or divide a task when every child should work in the same checkout.
+        A runtime-native child stays inside the provider's own agent loop: Claude Code's Agent tool, Codex's multi-agent tools, and the
+        task tools of OpenCode and Cursor. The daemon follows each one through what its runtime reports (Claude Code's task events, the
+        thread Codex opens for it, the session OpenCode opens for it, Cursor's task updates), nests its thinking and tool calls under the
+        call that started it, and ends it with the parent's turn if the runtime never did. This is the lightest way to research or divide
+        a task when every child should work in the same checkout.
     </p>
 
     <h3>Full child agents: the meta-harness</h3>

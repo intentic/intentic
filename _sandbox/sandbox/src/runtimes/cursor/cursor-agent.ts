@@ -220,10 +220,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
                 errored = true;
                 yield { kind: "error", message: result.error?.message ?? "The Cursor turn failed." };
             }
-            const usage = mapper.usage();
-            if (usage !== undefined) {
-                yield usage;
-            }
+            yield* mapper.ending(settled && !errored);
         } finally {
             clearTimeout(stall);
             // One listener per phase; a plan turn runs two, so an unremoved one leaks into the next phase.

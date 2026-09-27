@@ -1038,7 +1038,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
             cards.resolve({ kind: "permission", requestId: await cardOn(), decision: "deny" });
             await until(() => told.length > 0);
             expect(told).toEqual([
-                `Your child agent \`${result.id}\` did not start: The owner declined this. Do not retry: carry on with what you can do without it, and say plainly what you left undone.`,
+                `Your subagent \`${result.id}\` did not start: The owner declined this. Do not retry: carry on with what you can do without it, and say plainly what you left undone.`,
             ]);
             // Said into its turn, so its next wait does not hand the same ending over again.
             expect(await waitForSubagent(actors, parent.conversationId, { until: ["finished"], timeoutMs: 1_000 })).toMatchObject({ outcome: "unknown-target" });
@@ -1103,7 +1103,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
             expect(listSubagentSessions(actors).find((session) => session.id === result.id)?.model).toBe("claude-haiku-4-5");
             await until(() => told.length > 0);
             expect(told).toEqual([
-                `The owner allowed your child agent \`${result.id}\` to start. The owner changed what it runs on before allowing it: it runs on claude/claude-haiku-4-5, fast speed, not on claude/claude-opus-4-6, max effort, account work as you asked.`,
+                `The owner allowed your subagent \`${result.id}\` to start. The owner changed what it runs on before allowing it: it runs on claude/claude-haiku-4-5, fast speed, not on claude/claude-opus-4-6, max effort, account work as you asked.`,
             ]);
             // The settled card reads what started, keeping what the agent asked for beside it.
             expect(cardOf(requestId)?.child).toMatchObject({ model: "claude-haiku-4-5", proposed: { model: "claude-opus-4-6", effort: "max" } });
@@ -1250,7 +1250,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
             cards.resolve({ kind: "permission", requestId: await cardOn(), decision: "deny" });
             await until(() => told.length > 0);
             expect(told).toEqual([
-                `Your message to child agent \`${first.id}\` did not go: The owner declined this. Do not retry: carry on with what you can do without it, and say plainly what you left undone.`,
+                `Your message to subagent \`${first.id}\` did not go: The owner declined this. Do not retry: carry on with what you can do without it, and say plainly what you left undone.`,
             ]);
             expect(turns).toHaveLength(1);
         } finally {
@@ -1317,7 +1317,7 @@ describe("a turn the child did not get from its parent", () => {
 
         expect(listSubagentSessions(actors).find((session) => session.id === result.id)).toMatchObject({ status: "running", description: "Port the parser" });
         expect(told).toEqual([
-            `Your child agent \`${result.id}\` ("Port the parser") is working: the sandbox sent its turn again by itself because its allowance reopened. Its report reaches you when it ends, like any turn of its: do not send it the task again or give the task to another agent meanwhile.`,
+            `Your subagent \`${result.id}\` ("Port the parser") is working: the sandbox sent its turn again by itself because its allowance reopened. Its report reaches you when it ends, like any turn of its: do not send it the task again or give the task to another agent meanwhile.`,
         ]);
         // It is the child's live turn now, as far as its parent can reach it: words steer into it, not a second turn.
         expect(await sendToChild(services, parent, result.id, "also the lexer")).toMatchObject({ ok: false, message: expect.stringContaining("mid-turn") });

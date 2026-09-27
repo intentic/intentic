@@ -4,9 +4,11 @@ import { watchWakeRow } from "./watch-wake.js";
 
 // Composer and parser of another agent's prompt (a peer's message, a child's report) are one piece of knowledge.
 
-// Anchored on by the parser, so each must stay unique and unchanged across releases.
+// Anchored on by the parser, so each must stay unique and unchanged across releases; a retired opening stays readable.
 const PEER_OPENING = "Message from another conversation in this workspace: ";
-const CHILD_OPENING = "Report from a child agent you started: ";
+const CHILD_OPENING = "Report from a subagent you started: ";
+// What a report opened with before a spawned agent was called a subagent like every other; still in stored prompts.
+const LEGACY_CHILD_OPENING = "Report from a child agent you started: ";
 
 // The parser reads the first line only, so a title may not break it.
 const oneLine = (text: string): string => text.replaceAll(/\s+/gu, " ").trim();
@@ -76,7 +78,7 @@ export const childReportPrompt = (fields: ChildReportFields): string => {
 };
 
 const PEER_LINE = /^Message from another conversation in this workspace: `([^`]+)`(?: \("(.*)"\))?\.$/u;
-const CHILD_LINE = /^Report from a child agent you started: `([^`]+)`(?: \("(.*)"\))? (finished|failed)\.$/u;
+const CHILD_LINE = /^Report from a (?:subagent|child agent) you started: `([^`]+)`(?: \("(.*)"\))? (finished|failed)\.$/u;
 
 const peerOf = (first: string, prompt: string): TranscriptAgentWords | undefined => {
     const match = first.startsWith(PEER_OPENING) ? PEER_LINE.exec(first) : null;
@@ -85,7 +87,7 @@ const peerOf = (first: string, prompt: string): TranscriptAgentWords | undefined
 };
 
 const childOf = (first: string, prompt: string): TranscriptAgentWords | undefined => {
-    const match = first.startsWith(CHILD_OPENING) ? CHILD_LINE.exec(first) : null;
+    const match = first.startsWith(CHILD_OPENING) || first.startsWith(LEGACY_CHILD_OPENING) ? CHILD_LINE.exec(first) : null;
     const from = match?.[1];
     if (from === undefined) {
         return undefined;

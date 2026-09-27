@@ -27,6 +27,7 @@ import { ensureComposedWorktree } from "../context/conversation-context.js";
 import { settleLandingInBackground, versionMainTree } from "../../conversations/land/version-landed.js";
 import { handoffHistory, turnStartIndex } from "../../sessions/turn-transcript.js";
 import { type ChildSupervisor, childSupervisor, isSpawnedChild, spawnDepthOf } from "../subagents/children.js";
+import { withRuntimeSubagents } from "../subagents/runtime-subagents.js";
 import type { AgentRequest, TurnBase, TurnHooks, TurnSpec } from "../providers/agent-request.js";
 import { composeWirePrompt } from "../prompt/turn-preamble.js";
 import { applyTrim, trimFrame, type TurnTrimState } from "../prompt/window/context-trim.js";
@@ -63,6 +64,14 @@ import { runWorktreeFixers } from "../../conversations/land/worktree-fixers.js";
 // Whether this turn enters the namespace, asked in one place so three callers can't disagree. A property of the
 // runtime: only the Claude Code loop enters it.
 const entersNamespace = (input: RoutedTurn): boolean => capabilitiesOf(input.agent, input.harness).isolation === "namespace";
+
+// A runtime's frames as the turn reads them. The Claude Code loop files its own subagents from the SDK's task stream
+// (agent.ts); every other runtime reports its own as frames, filed on their way through here, so a subagent Codex,
+// Cursor or OpenCode starts is on the roster the same way. A turn with no conversation has nowhere to file one.
+const runtimeFrames = (services: Services, input: RoutedTurn, frames: AsyncIterable<AgentEvent>, cwd: string): AsyncIterable<AgentEvent> =>
+    input.conversationId === undefined || capabilitiesOf(input.agent, input.harness).runtime === "claude-code"
+        ? frames
+        : withRuntimeSubagents(frames, { conversationId: input.conversationId, conversations: services.conversations, cwd, sessionId: undefined, subagentsDir: undefined });
 
 // What the turn was told before the user's own words, filed for the chat to show. The preamble's notes ride the
 // message and land in the transcript; the system prompt reaches the model and nothing else, so this file is the only
@@ -723,7 +732,7 @@ async function* runTurn(
     // The prefix this turn's requests were built from, as the CLI announced it; what a cache refresh must match.
     let fingerprint: PromptFingerprint | undefined;
     try {
-        for await (const raw of withSilentEnding(plan.run(request.spec), silent)) {
+        for await (const raw of withSilentEnding(runtimeFrames(services, input, plan.run(request.spec), request.spec.cwd), silent)) {
             if (abortSuppresses(raw, aborted())) {
                 continue;
             }

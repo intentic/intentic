@@ -17,7 +17,7 @@
 // child spawned from here is indistinguishable from one a tool call started.
 //
 // It owns NO policy: whether this conversation may spawn was decided when its turn was planned, where the
-// persona was in hand, and recorded daemon-side (children.ts armSpawn). This command only relays, and a
+// persona was in hand, and recorded daemon-side (children.ts armSupervisor). This command only relays, and a
 // refusal arrives as the daemon's own sentence.
 //
 // node:http rather than fetch, deliberately: `wait` holds its connection for as long as a child takes to
@@ -61,38 +61,38 @@ LOOK UP — reach for these instead of searching /history by hand
 SAY SOMETHING TO ANOTHER CONVERSATION
   agents message <handle> '<text>'     what a person does by typing into that conversation's chat: the words
                                        are steered into its live turn, or open one on its own routing if it
-                                       is idle. Any conversation, not just a child of this one — which is
+                                       is idle. Any conversation, not just a subagent of this one — which is
                                        what \`send\` below is limited to. The message is attributed to this
                                        conversation and read as a peer's words, not as its owner's
 
 SPAWN AND SUPERVISE
-  agents providers                     what a child could run on right now: every connected provider, its
+  agents providers                     what a subagent could run on right now: every connected provider, its
                                        models, and how much allowance each has left. Models whose every
                                        connected account is at its cap are left out, so what it lists is
                                        what can actually run
   agents spawn --provider <id> --model <id> [--effort <tier>] [--on <runner|here>]
                [--harness native|claude-code] [--description "one line"] '<task>'
-                                       start a child agent; prints its id and returns immediately.
-                                       --provider and --model are REQUIRED: a child spends a real
+                                       spawn a subagent; prints its id and returns immediately.
+                                       --provider and --model are REQUIRED: a subagent spends a real
                                        allowance and nothing is chosen for you. \`agents providers\`
                                        lists what you can name.
                                        --on names the machine: a runner, or "here" for this sandbox.
                                        Left out, the fleet decides, which is what spreads a fan-out
                                        across every machine you have connected
   agents wait [<id>] [--until blocked|finished] [--timeout <seconds>]
-                                       block until a child needs input or finishes (default: either,
-                                       whichever comes first); no id means whichever child moves first.
-                                       A blocked child's question is printed whole, options included
-  agents send <id> '<message>'         steer a working child, or run a follow-up turn on a finished
+                                       block until a subagent needs input or finishes (default: either,
+                                       whichever comes first); no id means whichever subagent moves first.
+                                       A blocked subagent's question is printed whole, options included
+  agents send <id> '<message>'         steer a working subagent, or run a follow-up turn on a finished
                                        one, continuing its session
-  agents answer <id> '<text>'          answer the QUESTION a child is parked on (one-question cards);
+  agents answer <id> '<text>'          answer the QUESTION a subagent is parked on (one-question cards);
   agents answer <id> --json '<obj>'    or pass picks keyed by question text: {"<question>": ["<pick>"]}.
                                        Questions only: permission and plan cards are the owner's to
                                        answer, and the daemon refuses them here
-  agents list                          the children THIS conversation started, live first. Not \`ls\`, which
+  agents list                          the subagents THIS conversation started, live first. Not \`ls\`, which
                                        is every conversation in the workspace
 
-The child runs as its own conversation in an isolated copy of the repos, on the named provider's connected
+A spawned subagent runs as its own conversation in an isolated copy of the repos, on the named provider's connected
 account (claude, codex, grok, kimi, gemini, cursor — e.g. --provider cursor --model composer-2.5), and its
 finished work lands the workspace's ordinary way. It sees nothing of this shell or its conversation: give it
 a self-contained task with every path, requirement and constraint. A provider nobody has connected fails
@@ -431,7 +431,7 @@ const spawn = async (argv) => {
     if (flags.provider === undefined || flags.model === undefined) {
         const { status, text } = await call("GET", "/children/providers");
         const listing = status === 200 ? `\n\nConnected right now:\n${JSON.parse(text).text}` : ``;
-        return die(`agents: spawn needs --provider and --model — a child spends a real allowance and nothing is chosen for you.${listing}`);
+        return die(`agents: spawn needs --provider and --model — a subagent spends a real allowance and nothing is chosen for you.${listing}`);
     }
     const body = JSON.stringify({
         prompt,
@@ -490,7 +490,7 @@ const send = async (argv) => {
     const [id, ...rest] = positional;
     const message = rest.join(" ").trim();
     if (id === undefined || message === "") {
-        return die(`agents: send needs a child id and a message\n\n${USAGE}`);
+        return die(`agents: send needs a subagent's id and a message\n\n${USAGE}`);
     }
     const { status, text } = await call("POST", "/children/send", JSON.stringify({ child: id, message }));
     if (status !== 200) {
@@ -505,7 +505,7 @@ const answerChild = async (argv) => {
     const [id, ...rest] = positional;
     const freeText = rest.join(" ").trim();
     if (id === undefined || (freeText === "" && flags.json === undefined)) {
-        return die(`agents: answer needs a child id and an answer\n\n${USAGE}`);
+        return die(`agents: answer needs a subagent's id and an answer\n\n${USAGE}`);
     }
     let body;
     if (flags.json !== undefined) {

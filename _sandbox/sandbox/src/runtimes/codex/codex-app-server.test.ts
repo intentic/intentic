@@ -107,6 +107,67 @@ const collect = async (events: AsyncIterable<CodexEvent>): Promise<CodexEvent[]>
     return collected;
 };
 
+// Codex's own subagents run in threads of their own on the turn's connection; the spawn call names the thread only as it
+// completes, and the thread may already have begun. Everything it sends reads as the spawn call's subagent, and its
+// commands answer to the same rules its parent's do rather than being waved through.
+test("a subagent's thread reads under the spawn call that started it, and its commands are asked about", async () => {
+    const spawn = (status: string, receiverThreadIds: readonly string[], agentsStates: object) => ({
+        id: "spawn-1",
+        type: "collabAgentToolCall",
+        tool: "spawnAgent",
+        status,
+        senderThreadId: "thr-new",
+        receiverThreadIds,
+        prompt: "Port the purge job\nRetire rows past 30 days.",
+        model: "gpt-5.6-luna",
+        reasoningEffort: null,
+        agentsStates,
+    });
+    const { connector, answered } = fakeAppServer([
+        { method: "item/started", params: { threadId: "thr-new", turnId: "turn-1", item: spawn("inProgress", [], {}) } },
+        {
+            method: "item/started",
+            params: { threadId: "thr-child", turnId: "turn-c1", item: { id: "cmd-c1", type: "commandExecution", command: "rg purge", status: "inProgress", aggregatedOutput: "" } },
+        },
+        { method: "item/completed", params: { threadId: "thr-new", turnId: "turn-1", item: spawn("completed", ["thr-child"], { "thr-child": { status: "pendingInit", message: null } }) } },
+        { request: "item/commandExecution/requestApproval", params: { threadId: "thr-child", turnId: "turn-c1", command: "rm -rf dist" } },
+        { method: "item/completed", params: { threadId: "thr-child", turnId: "turn-c1", item: { id: "msg-c1", type: "agentMessage", text: "Ported." } } },
+        {
+            method: "thread/tokenUsage/updated",
+            params: { threadId: "thr-child", turnId: "turn-c1", tokenUsage: { total: { inputTokens: 500, outputTokens: 50 }, last: { inputTokens: 500, outputTokens: 50 } } },
+        },
+        { method: "turn/completed", params: { threadId: "thr-child", turn: { id: "turn-c1", status: "completed" } } },
+        { method: "turn/completed", params: { threadId: "thr-new", turn: { id: "turn-1", status: "completed" } } },
+    ]);
+    const events = await collect(createCodexAppServerRunner(connector)(turn()));
+    const read = events.flatMap((event) => {
+        if (event.type === "item.started" || event.type === "item.completed") {
+            return [`${event.type} ${event.item.type} ${event.item.id} under ${event.parent ?? "the turn"}`];
+        }
+        if (event.type === "command_approval.requested") {
+            return [`asked about ${event.command}`];
+        }
+        if (event.type === "subagent.usage") {
+            return [`${event.parent} spent ${event.input}+${event.output}`];
+        }
+        return event.type === "subagent.ended" ? [`${event.parent} ended ${event.status}`] : [];
+    });
+    expect(read).toEqual([
+        "item.started collab_agent_tool_call spawn-1 under the turn",
+        "item.completed collab_agent_tool_call spawn-1 under the turn",
+        "item.started command_execution cmd-c1 under spawn-1",
+        "asked about rm -rf dist",
+        "item.completed agent_message msg-c1 under spawn-1",
+        "spawn-1 spent 500+50",
+        "spawn-1 ended completed",
+    ]);
+    // Asked, not waved through: nothing answered the subagent's command before the card did.
+    expect(answered).toEqual([]);
+    expect(events.find((event) => event.type === "item.completed" && event.item.type === "collab_agent_tool_call")).toMatchObject({
+        item: { tool: "spawnAgent", status: "completed", prompt: "Port the purge job\nRetire rows past 30 days.", model: "gpt-5.6-luna", receivers: ["thr-child"], states: { "thr-child": { status: "pendingInit" } } },
+    });
+});
+
 test("starts an app-server thread and turn with native text/image inputs and translator configuration", async () => {
     const appServer = fakeAppServer([
         { method: "turn/started", params: { threadId: "thr-new", turn: { id: "turn-1" } } },

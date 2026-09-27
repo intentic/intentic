@@ -17,6 +17,7 @@ import { planPhaseOf, toolCallOpened, type TurnCapture, usageTotals } from "../d
 import { vendorTurnGate } from "../decorators/vendor-gate.js";
 import { isChatModel, parseModelSuggestions } from "./xai-models.js";
 import { openCodeBackendLabel, type OpenCodeService, registerSessionGate, releaseSessionGate } from "./opencode.js";
+import { openCodeSubagents } from "./opencode-subagents.js";
 
 // The OpenCode loop Grok and Gemini both run on: AgentRequest in, AgentEvent frames out, over one shared `opencode serve`.
 
@@ -82,6 +83,61 @@ const refuseEarlyClose = (turn: OpenCodeTurn): void => {
     throw new Error(`${openCodeBackendLabel(turn.provider ?? XAI)} stopped sending events before the turn ended.`);
 };
 
+// `subscribe()` is lazy: the HTTP request fires only on the first read, so it must happen before the session is created
+// or `session.created` is missed. The first read is awaited here, bounded by CONNECT_MS, and what it read is kept for
+// the loop rather than dropped; unread, the same promise is still what the loop first awaits.
+const openStream = async (
+    sse: { readonly stream: AsyncIterable<Event> },
+): Promise<{ readonly iterator: AsyncIterator<Event>; readonly pending: Promise<IteratorResult<Event>>; readonly buffered: Event | undefined }> => {
+    const iterator = sse.stream[Symbol.asyncIterator]();
+    const first = iterator.next();
+    const hello = await Promise.race([first, new Promise<"unopened">((resolve) => setTimeout(() => resolve("unopened"), CONNECT_MS).unref())]);
+    return hello === "unopened" || hello.done === true
+        ? { iterator, pending: first, buffered: undefined }
+        : { iterator, pending: iterator.next(), buffered: hello.value };
+};
+
+// A turn's session and the subagent sessions its task tool opens beneath it, each naming its parent, followed the way
+// OpenCode's own `run` follows them: a subagent's work reaches the turn instead of being dropped as another session's,
+// keeps the turn's watchdog fed, and answers to the rules its parent does, since its asks carry its own session id.
+export const sessionFamily = (
+    root: string,
+    gate: CommandGuard | undefined,
+    gates: { readonly register: typeof registerSessionGate; readonly release: typeof releaseSessionGate } = {
+        register: registerSessionGate,
+        release: releaseSessionGate,
+    },
+) => {
+    const members = new Set<string>();
+    const join = (session: string): void => {
+        members.add(session);
+        if (gate !== undefined) {
+            gates.register(session, gate);
+        }
+    };
+    join(root);
+    return {
+        // Whose an event is: the turn's own session's, one of its subagents', or no concern of this turn's.
+        whose: (event: Event): "own" | "subagent" | undefined => {
+            if (event.type === "session.created" && event.properties.info.parentID !== undefined && members.has(event.properties.info.parentID)) {
+                join(event.properties.info.id);
+            }
+            const session = eventSessionId(event);
+            if (session === undefined || !members.has(session)) {
+                return undefined;
+            }
+            return session === root ? "own" : "subagent";
+        },
+        // The gates die with their phase; a later permission belongs to no session judging it and gets the standing yes
+        // (opencode.ts answerPermission).
+        release: (): void => {
+            for (const member of members) {
+                gates.release(member);
+            }
+        },
+    };
+};
+
 // Production runner: creates/resumes the session on the shared OpenCode client, fires the prompt, and yields the
 // session's events off the global SSE stream. No event for this session within the inactivity window is a stuck turn,
 // aborted; `timeouts` is injectable for tests.
@@ -94,17 +150,10 @@ export const createOpenCodeRunner = (openCode: OpenCodeService, timeouts: TurnTi
         // Registers this turn's directory for delegation watching (idempotent); an isolated turn works in a worktree
         // the boot doesn't know about.
         await openCode.watch(turn.cwd);
-        // `subscribe()` is lazy; the HTTP request fires only on first read, so it must happen before the session is
-        // created or `session.created` is missed. The first read is awaited here, bounded by CONNECT_MS, and its result
-        // is kept for the loop rather than dropped.
-        const iterator: AsyncIterator<Event> = sse.stream[Symbol.asyncIterator]();
-        let pending = iterator.next();
-        const hello = await Promise.race([pending, new Promise<"unopened">((resolve) => setTimeout(() => resolve("unopened"), CONNECT_MS).unref())]);
-        // Consumed here only if it resolved; otherwise the same promise is still what the loop first awaits.
-        const buffered = hello === "unopened" || hello.done ? undefined : hello.value;
-        if (buffered !== undefined) {
-            pending = iterator.next();
-        }
+        const opened = await openStream(sse);
+        const iterator = opened.iterator;
+        let pending = opened.pending;
+        const buffered = opened.buffered;
         let sessionId = turn.sessionId;
         if (sessionId === undefined) {
             // Named on creation so OpenCode skips auto-titling (an extra model call per unnamed session); the title
@@ -119,9 +168,7 @@ export const createOpenCodeRunner = (openCode: OpenCodeService, timeouts: TurnTi
         // added later, so the session would run to completion while the UI shows it stopped.
         // allow(silent-catch): a stop OpenCode refuses leaves the turn to end on its own events or the watchdog
         whenAborted(turn.signal, () => void c.session.abort({ path: { id: sessionId } }).catch(() => {}));
-        if (turn.gate !== undefined) {
-            registerSessionGate(sessionId, turn.gate);
-        }
+        const family = sessionFamily(sessionId, turn.gate);
         // Fires the prompt on the resolved session for a model id (empty means let OpenCode choose); reused by the
         // self-heal to re-prompt with a corrected model.
         const sendPrompt = (modelId: string | undefined): ReturnType<typeof c.session.promptAsync> =>
@@ -188,10 +235,16 @@ export const createOpenCodeRunner = (openCode: OpenCodeService, timeouts: TurnTi
                     event = result.value;
                     pending = iterator.next();
                 }
-                if (eventSessionId(event) !== sessionId) {
+                const whose = family.whose(event);
+                if (whose === undefined) {
                     continue;
                 }
                 clock.touch();
+                // A subagent's event never ends, retries or re-prompts the turn; streamTurn puts it under its task.
+                if (whose === "subagent") {
+                    yield event;
+                    continue;
+                }
                 // OpenCode announces an in-turn retry wait once, with the instant of the next attempt; the inactivity
                 // deadline moves past that instant so a long backoff isn't read as a hang, still bounded by the hard
                 // turn cap.
@@ -227,9 +280,7 @@ export const createOpenCodeRunner = (openCode: OpenCodeService, timeouts: TurnTi
         } finally {
             // allow(silent-catch): closing a stream that already failed has nothing left to report
             await iterator.return?.().catch(() => {});
-            // The gate dies with its phase; a later permission belongs to no session judging it and gets the standing
-            // yes (opencode.ts answerPermission).
-            releaseSessionGate(sessionId);
+            family.release();
         }
     };
 
@@ -268,37 +319,60 @@ const finishedToolCall = (
     state: Extract<ToolPart["state"], { status: "completed" | "error" }>,
     cwd: string,
     first: boolean,
+    parent: string | undefined,
 ): AgentEvent => {
     const failed = state.status === "error";
     const diff = failed ? undefined : editDiffContent(name, state.input, cwd);
     const content = [diff ?? { type: "text" as const, text: failed ? state.error : state.output }];
     const status = failed ? ("failed" as const) : ("completed" as const);
     return first
-        ? toolCallOpened({ id: part.callID, name, status, target: toolTarget(state.input), locations: toolLocations(state.input, cwd), content })
+        ? toolCallOpened({ id: part.callID, name, status, target: toolTarget(state.input), locations: toolLocations(state.input, cwd), content, parentToolUseId: parent })
         : { kind: "tool_call_update", id: part.callID, status, content };
 };
 
 // Frames for one tool part, kept out of streamTurn's event walk. `started` is the set of callIDs that already opened a
-// card, telling a first announcement from a later update.
-async function* toolPartFrames(part: ToolPart, cwd: string, started: Set<string>): AsyncGenerator<AgentEvent> {
+// card, telling a first announcement from a later update; `parent` is the task call whose subagent made this one.
+const toolPartFrames = (part: ToolPart, cwd: string, started: Set<string>, parent?: string): AgentEvent[] => {
     const name = displayNameOf(part.tool);
     const state = part.state;
     // `pending` is skipped: OpenCode is still streaming input args, so target/locations would read as partial.
     if (state.status === "pending") {
-        return;
+        return [];
     }
     const first = !started.has(part.callID);
     if (first) {
         started.add(part.callID);
     }
     if (state.status === "running") {
-        if (first) {
-            yield toolCallOpened({ id: part.callID, name, target: toolTarget(state.input), locations: toolLocations(state.input, cwd) });
-        }
-        return;
+        return first
+            ? [toolCallOpened({ id: part.callID, name, target: toolTarget(state.input), locations: toolLocations(state.input, cwd), parentToolUseId: parent })]
+            : [];
     }
-    yield finishedToolCall(part, name, state, cwd, first);
-}
+    return [finishedToolCall(part, name, state, cwd, first, parent)];
+};
+
+// The subagent session an event belongs to: any session but the turn's own, once that is known (the runner lets only
+// the turn's family through).
+const subagentSession = (event: Event, own: string | undefined): string | undefined => {
+    const session = eventSessionId(event);
+    return session !== undefined && own !== undefined && session !== own ? session : undefined;
+};
+
+// OpenCode's checklist as the panel's; anything past in-progress and completed reads as still to do.
+const todoStatus = (status: string): "pending" | "in_progress" | "completed" => (status === "in_progress" || status === "completed" ? status : "pending");
+const todosFrame = (todos: Extract<Event, { type: "todo.updated" }>["properties"]["todos"]): AgentEvent => ({
+    kind: "todos",
+    items: todos.map((todo) => ({ content: todo.content, status: todoStatus(todo.status) })),
+});
+
+// An in-turn provider retry, so the chat shows a wait rather than an apparent hang; `status: 429` lets the UI say it is
+// rate-limiting rather than a dead turn. No maxAttempts: OpenCode names none, so none is invented.
+const retryFrame = (status: { readonly attempt: number; readonly next: number; readonly message: string }): AgentEvent => ({
+    kind: "provider_retry",
+    attempt: status.attempt,
+    nextAttemptAt: status.next,
+    ...(isRateLimited(status.message) ? { status: 429 } : {}),
+});
 
 // Normalizes one turn's OpenCode Event stream onto AgentEvents, returning what it captured (the plan phase reads this
 // off `yield*`). `holdText` accumulates text into one `plan` frame instead of streaming deltas; ends on session.idle
@@ -321,8 +395,15 @@ async function* streamTurn(
     // Message id to role, since a text part carries no role itself; OpenCode broadcasts the user's echoed prompt on the
     // same stream, so without this it would leak into planText/delta.
     const roleOf = new Map<string, "user" | "assistant">();
+    // The subagents this turn's task calls start, and their sessions' events put under those calls.
+    const subagents = openCodeSubagents((part, parent) => toolPartFrames(part, cwd, started, parent), usage);
 
     for await (const event of events) {
+        const subagent = subagentSession(event, capture.sessionId);
+        if (subagent !== undefined) {
+            yield* subagents.child(event, subagent);
+            continue;
+        }
         if (event.type === "session.created") {
             capture.sessionId = event.properties.info.id;
             yield { kind: "session", sessionId: event.properties.info.id };
@@ -351,20 +432,10 @@ async function* streamTurn(
                 }
             } else if (part.type === "tool" && part.tool !== "todowrite") {
                 yield* toolPartFrames(part, cwd, started);
+                yield* subagents.task(part);
             }
         } else if (event.type === "todo.updated") {
-            yield {
-                kind: "todos",
-                items: event.properties.todos.map((todo) => ({
-                    content: todo.content,
-                    status:
-                        todo.status === "in_progress"
-                            ? ("in_progress" as const)
-                            : todo.status === "completed"
-                              ? ("completed" as const)
-                              : ("pending" as const),
-                })),
-            };
+            yield todosFrame(event.properties.todos);
         } else if (event.type === "message.updated") {
             const info = event.properties.info;
             // Attributes this message's role so its text parts are captured (assistant) or skipped (user) above.
@@ -382,16 +453,7 @@ async function* streamTurn(
                 );
             }
         } else if (event.type === "session.status" && event.properties.status.type === "retry") {
-            // Surfaces an in-turn provider retry so the chat shows a wait rather than an apparent hang; `status: 429`
-            // lets the UI say it's rate-limiting rather than a dead turn. No maxAttempts: OpenCode names none, so none
-            // is invented.
-            const status = event.properties.status;
-            yield {
-                kind: "provider_retry",
-                attempt: status.attempt,
-                nextAttemptAt: status.next,
-                ...(isRateLimited(status.message) ? { status: 429 } : {}),
-            };
+            yield retryFrame(event.properties.status);
         } else if (event.type === "session.error") {
             yield sessionErrorFrame(event.properties.error);
             capture.errored = true;

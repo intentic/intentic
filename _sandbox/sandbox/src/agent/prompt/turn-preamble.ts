@@ -2,7 +2,7 @@ import { type ResumeDisclosure, resumeDisclosure, type TurnNote, withoutResumeNo
 import { REPO_SYNC_NOTE_HEADER } from "../../workspace/layout/sync-repos.js";
 import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER } from "../../workspace/layout/workspace-setup.js";
 import { PERSONA_NOTE_HEADER } from "../../personas/personas.js";
-import { SPAWN_NOTE_HEADER } from "../subagents/spawn-note.js";
+import { LEGACY_SPAWN_NOTE_HEADER, LEGACY_SPAWN_NOTE_TITLE, SPAWN_NOTE_HEADER, SPAWN_NOTE_TITLE } from "../subagents/spawn-note.js";
 import {
     LANDING_CHECKS_NOTE_HEADER,
     LANDING_CHECKS_NOTE_TITLE,
@@ -64,7 +64,9 @@ export const worktreeReminder = (root: string): TurnNote => ({
 // doesn't consult this, so add an entry here only so history/search/adoption can recognize a new note too. Titles must
 // match the ones at each note's own definition site.
 const INJECTED: readonly { readonly header: string; readonly title: string }[] = [
-    { header: SPAWN_NOTE_HEADER, title: "Spawning child agents" },
+    { header: SPAWN_NOTE_HEADER, title: SPAWN_NOTE_TITLE },
+    // Retitled once a spawned agent became a subagent like any other; the prompts records hold still open with it.
+    { header: LEGACY_SPAWN_NOTE_HEADER, title: LEGACY_SPAWN_NOTE_TITLE },
     // Reaches the user message only on a runtime with no system prompt (Pi, ACP); the one note whose absence would hide
     // WHY a turn refused to touch something.
     { header: PERSONA_NOTE_HEADER, title: "Who this turn is acting as" },

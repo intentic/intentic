@@ -99,7 +99,7 @@ export const PermissionAskSchema = z.object({
         "The program this request is holding, when the request is about one. Present on a command gate's request and absent on every other permission ask.",
     ),
     child: ChildAgentAskSchema.optional().describe(
-        "The child agent this request would start or reach, and what it runs on. Present on the child-agent gate's request and absent on every other permission ask.",
+        "The subagent this request would start or reach, and what it runs on. Present on the request to start or reach a subagent and absent on every other permission ask.",
     ),
     // The judge's own sentence, present only when the title can't say it; never written by the agent being gated.
     explain: z

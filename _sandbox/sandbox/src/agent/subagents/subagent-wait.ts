@@ -29,7 +29,7 @@ export interface SubagentWaitDeps {
 const UNTIL = z.enum(["blocked", "finished"]);
 
 const NOTHING_TO_WAIT_FOR =
-    "Nothing to wait for: no child or background command of this conversation is still running under that id, or its ending was already reported.";
+    "Nothing to wait for: no subagent or background command of this conversation is still running under that id, or its ending was already reported.";
 
 const KEEP_ANSWERS = {
     kept: "Kept: it keeps running for the person after your turn ends. Give them its address in your reply.",
@@ -54,7 +54,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                 : [
                       sdk().tool(
                           "providers",
-                          "What a child agent could be started on right now: every provider this sandbox has connected, its models, " +
+                          "What a subagent could be spawned on right now: every provider this sandbox has connected, its models, " +
                               "and how much allowance each still has. Call it before spawn when you do not already know which model " +
                               "you want — spawn requires a provider and a model, and models whose every connected account is at its " +
                               "cap are left out of this list, so what it shows is what can actually run.",
@@ -70,10 +70,10 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                       ),
                       sdk().tool(
                           "spawn",
-                          "Start a full agent on any connected provider (claude, codex, grok, kimi, gemini, cursor — e.g. Cursor's " +
-                              "Composer models) to work on a task of its own. It runs as a separate conversation in its own isolated " +
+                          "Spawn a subagent: a full agent on any connected provider (claude, codex, grok, kimi, gemini, cursor — e.g. " +
+                              "Cursor's Composer models) to work on a task of its own. It runs as a separate conversation in its own isolated " +
                               "worktree, visible on the board, and keeps working after your turn ends; its finished work lands the way " +
-                              "any agent's does. Returns the child's id immediately: supervise it with the wait tool (target: that id), " +
+                              "any agent's does. Returns the subagent's id immediately: supervise it with the wait tool (target: that id), " +
                               "which returns when it is blocked on input or finished, with its report. On a sandbox short of memory it " +
                               "holds as pending until there is room, and wait covers that too. A start the owner must allow also returns " +
                               "at once, held, and waits on their card the same way; you carry on meanwhile. If your turn ends first, its " +
@@ -83,7 +83,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                               "tool for what is connected and what still has room. A provider nobody has connected fails with the " +
                               "words to say so.",
                           {
-                              prompt: z.string().min(1).describe("The child's whole task, self-contained."),
+                              prompt: z.string().min(1).describe("The subagent's whole task, self-contained."),
                               description: z.string().max(200).optional().describe("One line naming the task, for the board and the roster."),
                               provider: AgentProviderSchema.describe("Which provider serves it. Required: see the providers tool for what is connected."),
                               model: z
@@ -128,12 +128,12 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                       ),
                       sdk().tool(
                           "send",
-                          "Steer or continue an agent you started. A working child gets the message mid-turn (where its runtime " +
-                              "takes one); a finished child runs a follow-up turn on its own conversation, continuing its session, " +
+                          "Steer or continue a subagent you spawned. A working one gets the message mid-turn (where its runtime " +
+                              "takes one); a finished one runs a follow-up turn on its own conversation, continuing its session, " +
                               "so refinement costs a message rather than a fresh agent. Supervise the follow-up with wait. A message " +
                               "the owner must allow returns at once and goes when they do; you are told if it does not.",
                           {
-                              child: z.string().min(1).describe("The child's id, from spawn."),
+                              child: z.string().min(1).describe("The subagent's id, from spawn."),
                               message: z.string().min(1).describe("What to tell it, self-contained."),
                           },
                           async (args) => {
@@ -147,12 +147,12 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                       ),
                       sdk().tool(
                           "answer",
-                          "Answer a QUESTION a child you started is parked on (wait reports blocked and carries the question). " +
+                          "Answer a QUESTION a subagent you spawned is parked on (wait reports blocked and carries the question). " +
                               "Pass one entry per question: its own text, and your picks as chosen option labels or your own words. " +
                               "Only questions: a permission hold or a plan approval is the owner's consent to give, and this tool " +
                               "refuses those.",
                           {
-                              child: z.string().min(1).describe("The child's id, from spawn."),
+                              child: z.string().min(1).describe("The subagent's id, from spawn."),
                               // Never z.record: the SDK's JSON-schema converter throws on one, emptying this server's tools/list.
                               answers: z
                                   .array(
@@ -176,21 +176,21 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                   ]),
             sdk().tool(
                 "wait",
-                "Wait until work you started here needs you: an agent you started, or a command you ran with " +
+                "Wait until work you started here needs you: a subagent you started, or a command you ran with " +
                     "run_in_background. Blocks until the target is blocked on input (a question or permission), or " +
                     "finishes, whichever comes first. For an agent it returns its status, its last report, and " +
                     "`verification` — whether anything actually checked the work that report describes (`verified` / " +
                     "`unproven` / `failing` / `no-code`, with the check that spoke). Read it before you build on what it " +
                     "says: an agent's own account of its work is a claim, not a result. For a command it returns the " +
-                    "exit code, the tail of its output and the file holding all of it. Target an Agent-tool child by its " +
-                    "spawning tool call id, a spawned agent by the id the spawn tool returned, a background command by " +
+                    "exit code, the tail of its output and the file holding all of it. Target a subagent your runtime's own " +
+                    "tool started by that call's id, one you spawned by the id spawn returned, a background command by " +
                     'the ID its Bash call returned, or "any" for whichever of these moves first (each is reported once). ' +
                     "Use this instead of sleeping or polling in a loop. On timeout it returns the current state: call it " +
                     "again to keep waiting. It also returns early, with outcome `message`, when something is said into your " +
-                    "turn while it waits (the owner, a watch, a child's report, a land of your child's work), so you read it " +
+                    "turn while it waits (the owner, a watch, a subagent's report, a land of a subagent's work), so you read it " +
                     "now rather than when the wait runs out.",
                 {
-                    target: z.string().min(1).describe('The child\'s tool call id, a background command\'s ID, or "any"'),
+                    target: z.string().min(1).describe('The subagent\'s id (its call\'s, or the one spawn returned), a background command\'s ID, or "any"'),
                     until: z.array(UNTIL).min(1).optional().describe('Which states end the wait; default ["blocked","finished"]'),
                     timeoutSeconds: z.number().min(5).max(MAX_TIMEOUT_S).optional().describe(`Default ${DEFAULT_TIMEOUT_S}`),
                 },

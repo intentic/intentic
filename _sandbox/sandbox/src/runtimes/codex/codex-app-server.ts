@@ -4,6 +4,9 @@ import { createInterface } from "node:readline";
 import { whenAborted } from "@intentic/base/async";
 import { nsenterArgv } from "../../conversations/worktrees/isolation.js";
 import { CODEX_BINARY_MISSING, codexBinary } from "./codex-path.js";
+import { type CodexSubagentThreads, codexSubagentThreads } from "./codex-subagents.js";
+import { opt } from "../../opt.js";
+import { z } from "zod";
 
 // Codex client surface: the request fields Intentic sends and the item fields it renders, not the full generated
 // protocol. Unknown notifications/item kinds pass through untouched; malformed fields on a known kind fail at the
@@ -89,7 +92,20 @@ export type CodexItem =
           readonly result: string;
           readonly saved_path?: string;
       }
-    | { readonly id: string; readonly type: "context_compaction" };
+    | { readonly id: string; readonly type: "context_compaction" }
+    | {
+          readonly id: string;
+          // One of Codex's multi-agent tools: spawnAgent, wait, sendInput, resumeAgent, closeAgent, or a later one.
+          readonly type: "collab_agent_tool_call";
+          readonly tool: string;
+          readonly status: "in_progress" | "completed" | "failed";
+          readonly prompt?: string;
+          readonly model?: string;
+          // The threads the call acted on: the one it spawned, the ones it waited on or wrote to.
+          readonly receivers: readonly string[];
+          // How each of those stood as the call ended, in Codex's words, with what it said last.
+          readonly states: Readonly<Record<string, { readonly status: string; readonly message?: string }>>;
+      };
 
 interface CodexUsage {
     readonly input_tokens: number;
@@ -120,7 +136,12 @@ export interface CodexQuestion {
 export type CodexEvent =
     | { readonly type: "thread.started"; readonly thread_id: string }
     | { readonly type: "turn.started" }
-    | { readonly type: "item.started" | "item.updated" | "item.completed"; readonly item: CodexItem }
+    // `parent` is the spawn call whose subagent's thread the item came from; absent, it is the turn's own.
+    | { readonly type: "item.started" | "item.updated" | "item.completed"; readonly item: CodexItem; readonly parent?: string }
+    // A subagent's own turn ended, in its thread; `parent` is the spawn call that started it.
+    | { readonly type: "subagent.ended"; readonly parent: string; readonly status: "completed" | "failed" | "killed"; readonly error?: string }
+    // What a subagent has spent so far over its whole thread.
+    | { readonly type: "subagent.usage"; readonly parent: string; readonly input: number; readonly output: number }
     | { readonly type: "commands"; readonly skills: readonly CodexSkill[] }
     // The one server-initiated request answered as an event, so the consumer raises a card, waits, and calls respond
     // while the loop stays parked (app-server is blocked too). respond takes one entry per question id; others are
@@ -550,12 +571,60 @@ const usageFrom = (value: unknown): CodexUsage => {
     };
 };
 
+// What this client reads of Codex's multi-agent calls and of its subagents' threads, parsed at the stream, tolerantly past
+// what identifies them: a subagent's bookkeeping in another shape is left out rather than failing the turn.
+const CollabItemSchema = z.object({
+    type: z.literal("collabAgentToolCall"),
+    id: z.string(),
+    tool: z.string(),
+    status: z.string(),
+    prompt: z.string().nullish().catch(undefined),
+    model: z.string().nullish().catch(undefined),
+    receiverThreadIds: z.array(z.string()).catch([]),
+    agentsStates: z.record(z.string(), z.object({ status: z.string(), message: z.string().nullish().catch(undefined) })).catch({}),
+});
+const CollabParamsSchema = z.object({ item: CollabItemSchema });
+const ThreadParamsSchema = z.object({ threadId: z.string() });
+const RequestScopeSchema = z.object({ turnId: z.string().optional().catch(undefined), threadId: z.string().optional().catch(undefined) });
+const UsageParamsSchema = z.object({ tokenUsage: z.object({ total: z.object({ inputTokens: z.number(), outputTokens: z.number() }) }) });
+const EndingParamsSchema = z.object({ turn: z.object({ status: z.string(), error: z.object({ message: z.string() }).nullish().catch(undefined) }) });
+
+// A multi-agent call's standing; an interrupted one ended without doing what it was asked, which reads as failed.
+const collabStatus = (standing: string): "in_progress" | "completed" | "failed" => {
+    if (standing === "inProgress") {
+        return "in_progress";
+    }
+    return standing === "completed" ? "completed" : "failed";
+};
+
+// The multi-agent call an item notification carries, or undefined for any other item.
+const collabItemOf = (params: AppServerNotification["params"]): CodexItem | undefined => {
+    const parsed = CollabParamsSchema.safeParse(params);
+    if (!parsed.success) {
+        return undefined;
+    }
+    const item = parsed.data.item;
+    return {
+        id: item.id,
+        type: "collab_agent_tool_call",
+        tool: item.tool,
+        status: collabStatus(item.status),
+        ...opt("prompt", item.prompt ?? undefined),
+        ...opt("model", item.model ?? undefined),
+        receivers: item.receiverThreadIds,
+        states: Object.fromEntries(Object.entries(item.agentsStates).map(([thread, state]) => [thread, { status: state.status, ...opt("message", state.message ?? undefined) }])),
+    };
+};
+
+// Any item this client reads off a notification: a multi-agent call, or one of the kinds normalizeItem knows.
+const threadItem = (params: JsonObject): CodexItem | undefined => collabItemOf(params) ?? normalizeItem(params["item"]);
+
 const itemEvent = (method: "item/started" | "item/completed", value: unknown, turnIds: ReadonlySet<string>): CodexEvent | undefined => {
     const params = object(value, `${method} params`);
     if (!turnIds.has(string(params, "turnId", `${method} params`))) {
         return undefined;
     }
-    const item = normalizeItem(params["item"]);
+    const item = threadItem(params);
     return item === undefined ? undefined : { type: method === "item/started" ? "item.started" : "item.completed", item };
 };
 
@@ -624,16 +693,23 @@ const skillInput = (prompt: string, skills: readonly CodexSkill[]): { readonly s
     return skill === undefined ? undefined : { skill, text: prompt.slice(named[0].length) };
 };
 
+// Whether a request is this turn's to answer: raised in one of its own turns, or in a thread one of its subagents runs
+// in, which on this turn's own connection is every thread but the turn's own. A subagent's command answers to the same
+// rules its parent's does.
+const ownRequest =
+    (turnIds: ReadonlySet<string>, own: string) =>
+    (params: JsonObject): boolean => {
+        const scope = RequestScopeSchema.safeParse(params);
+        const { turnId, threadId } = scope.success ? scope.data : {};
+        return (turnId !== undefined && turnIds.has(turnId)) || (threadId !== undefined && threadId !== own);
+    };
+
 // Questions on an item/tool/requestUserInput request; undefined for another turn's, answered empty.
-// Command on an item/commandExecution/requestApproval, or undefined for another turn's request or one with no command
-// text. Tolerant of anything else in the payload, since a shape surprise here must not throw the turn.
-const commandApprovalFrom = (raw: unknown, turnIds: ReadonlySet<string>): { readonly command: string; readonly reason?: string } | undefined => {
+// Command on an item/commandExecution/requestApproval, or undefined for a request not this turn's or one with no
+// command text. Tolerant of anything else in the payload, since a shape surprise here must not throw the turn.
+const commandApprovalFrom = (raw: unknown, ours: (params: JsonObject) => boolean): { readonly command: string; readonly reason?: string } | undefined => {
     const params = maybeObject(raw);
-    if (params === undefined) {
-        return undefined;
-    }
-    const turnId = params["turnId"];
-    if (typeof turnId !== "string" || !turnIds.has(turnId)) {
+    if (params === undefined || !ours(params)) {
         return undefined;
     }
     const command = params["command"];
@@ -648,9 +724,9 @@ const commandApprovalFrom = (raw: unknown, turnIds: ReadonlySet<string>): { read
 // the frame, so the turn stays parked until a person picks.
 async function* commandApprovalFrames(
     notification: Extract<AppServerMessage, { kind: "request" }>,
-    turnIds: ReadonlySet<string>,
+    ours: (params: JsonObject) => boolean,
 ): AsyncGenerator<CodexEvent> {
-    const approval = commandApprovalFrom(notification.params, turnIds);
+    const approval = commandApprovalFrom(notification.params, ours);
     if (approval === undefined) {
         notification.respond({ decision: "accept" });
         return;
@@ -718,6 +794,96 @@ const questionsFrom = (raw: unknown, turnIds: ReadonlySet<string>): readonly Cod
     });
 };
 
+// The thread a notification names, when it names one.
+const threadOf = (notification: AppServerMessage): string | undefined => {
+    const named = ThreadParamsSchema.safeParse(notification.params);
+    return named.success ? named.data.threadId : undefined;
+};
+
+// How a subagent's own turn ended, as its record says it.
+const subagentEnding = (standing: string): "completed" | "failed" | "killed" => {
+    if (standing === "completed") {
+        return "completed";
+    }
+    return standing === "interrupted" ? "killed" : "failed";
+};
+
+// A subagent's items, as the spawn call that started it sees them.
+const subagentItems = (notification: AppServerNotification, spawn: string): CodexEvent[] => {
+    const item = threadItem(object(notification.params, `${notification.method} params`));
+    return item === undefined ? [] : [{ type: notification.method === "item/started" ? "item.started" : "item.completed", item, parent: spawn }];
+};
+
+// What a subagent has spent, and how its turn ended.
+const subagentSpend = (notification: AppServerNotification, spawn: string): CodexEvent[] => {
+    const usage = UsageParamsSchema.safeParse(notification.params);
+    return usage.success ? [{ type: "subagent.usage", parent: spawn, input: usage.data.tokenUsage.total.inputTokens, output: usage.data.tokenUsage.total.outputTokens }] : [];
+};
+const subagentEnded = (notification: AppServerNotification, spawn: string): CodexEvent[] => {
+    const ended = EndingParamsSchema.safeParse(notification.params);
+    return ended.success
+        ? [{ type: "subagent.ended", parent: spawn, status: subagentEnding(ended.data.turn.status), ...opt("error", ended.data.turn.error?.message) }]
+        : [];
+};
+
+// A subagent's notification as events of the spawn call that started it: its items, its spend, its turn's ending. Its
+// turn's start, plans and warnings say nothing the card of that call needs.
+const subagentEvents = (notification: AppServerNotification, spawn: string): CodexEvent[] => {
+    if (notification.method === "item/started" || notification.method === "item/completed") {
+        return subagentItems(notification, spawn);
+    }
+    if (notification.method === "thread/tokenUsage/updated") {
+        return subagentSpend(notification, spawn);
+    }
+    return notification.method === "turn/completed" ? subagentEnded(notification, spawn) : [];
+};
+
+// Events on their way out, naming the threads any spawn among them started; what a thread sent before it was named is
+// read as its subagent's from there.
+function* namingSpawns(events: readonly CodexEvent[], threads: CodexSubagentThreads<AppServerNotification>): Generator<CodexEvent> {
+    for (const event of events) {
+        yield event;
+        if (event.type !== "item.completed" || event.item.type !== "collab_agent_tool_call" || event.item.tool !== "spawnAgent") {
+            continue;
+        }
+        for (const replay of threads.named(event.item.id, event.item.receivers)) {
+            yield* namingSpawns(subagentEvents(replay.notification, replay.spawn), threads);
+        }
+    }
+}
+
+// A notification from one of this turn's subagents' threads, as events of the spawn call that started it (none while
+// the thread is still unnamed); undefined for one of the turn's own, handled as it always was.
+const fromSubagent = (threads: CodexSubagentThreads<AppServerNotification>, own: string, notification: AppServerMessage): readonly CodexEvent[] | undefined => {
+    const thread = notification.kind === "notification" ? threadOf(notification) : undefined;
+    if (thread === undefined || thread === own) {
+        return undefined;
+    }
+    const routed = threads.route(thread, notification);
+    return routed.kind === "subagent" ? [...namingSpawns(subagentEvents(notification, routed.spawn), threads)] : [];
+};
+
+// How the turn itself ended, or undefined for the completion of a turn it is no longer (a steer opened a newer one).
+const ownEnding = (notification: AppServerNotification, turnId: string, usage: CodexUsage | undefined): CodexEvent | undefined => {
+    const params = object(notification.params, "turn/completed params");
+    const completed = object(params["turn"], "turn/completed params.turn");
+    if (string(completed, "id", "turn/completed params.turn") !== turnId) {
+        return undefined;
+    }
+    const completedStatus = string(completed, "status", "turn/completed params.turn");
+    if (completedStatus === "failed") {
+        const error = object(completed["error"], "turn/completed params.turn.error");
+        return { type: "turn.failed", error: { message: string(error, "message", "turn/completed params.turn.error") } };
+    }
+    if (completedStatus === "completed") {
+        return { type: "turn.completed", ...opt("usage", usage) };
+    }
+    if (completedStatus === "interrupted") {
+        return { type: "turn.failed", error: { message: "Codex turn was interrupted" } };
+    }
+    throw new Error("Codex app-server sent invalid turn/completed params.turn.status");
+};
+
 // Turn a turn/steer landed on, normally the one already running. Read rather than assumed, since a steer that opened a
 // new turn would otherwise send later frames to a dead id.
 const steeredTurnId = (value: unknown): string => string(object(value, "turn/steer result"), "turnId", "turn/steer result");
@@ -778,6 +944,9 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
             // Observe every turn id so a steer cannot let an old turn win.
             const turnIds = new Set([startedTurnId]);
             let turnId = startedTurnId;
+            const ours = ownRequest(turnIds, threadId);
+            // The threads this turn's own subagents run in, each read as the spawn call that started it.
+            const threads = codexSubagentThreads<AppServerNotification>(threadId);
 
             // Best-effort: turn/steer can refuse on a race the user can't see; failing the turn loses more than a
             // message.
@@ -803,11 +972,16 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
 
             let usage: CodexUsage | undefined;
             for await (const notification of connection.messages) {
+                const delegated = fromSubagent(threads, threadId, notification);
+                if (delegated !== undefined) {
+                    yield* delegated;
+                    continue;
+                }
                 if (notification.kind === "request") {
                     // accept/decline are the schema's words; decline lets the turn carry on, unlike cancel, which
                     // interrupts it.
                     if (notification.method === COMMAND_APPROVAL_REQUEST) {
-                        yield* commandApprovalFrames(notification, turnIds);
+                        yield* commandApprovalFrames(notification, ours);
                         continue;
                     }
                     if (notification.method === FILE_CHANGE_APPROVAL_REQUEST) {
@@ -852,7 +1026,7 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
                 if (notification.method === "item/started" || notification.method === "item/completed") {
                     const event = itemEvent(notification.method, notification.params, turnIds);
                     if (event !== undefined) {
-                        yield event;
+                        yield* namingSpawns([event], threads);
                     }
                     continue;
                 }
@@ -892,22 +1066,11 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
                     continue;
                 }
                 if (notification.method === "turn/completed") {
-                    const params = object(notification.params, "turn/completed params");
-                    const completed = object(params["turn"], "turn/completed params.turn");
-                    if (string(completed, "id", "turn/completed params.turn") !== turnId) {
+                    const ending = ownEnding(notification, turnId, usage);
+                    if (ending === undefined) {
                         continue;
                     }
-                    const completedStatus = string(completed, "status", "turn/completed params.turn");
-                    if (completedStatus === "failed") {
-                        const error = object(completed["error"], "turn/completed params.turn.error");
-                        yield { type: "turn.failed", error: { message: string(error, "message", "turn/completed params.turn.error") } };
-                    } else if (completedStatus === "completed") {
-                        yield { type: "turn.completed", ...(usage !== undefined ? { usage } : {}) };
-                    } else if (completedStatus === "interrupted") {
-                        yield { type: "turn.failed", error: { message: "Codex turn was interrupted" } };
-                    } else {
-                        throw new Error("Codex app-server sent invalid turn/completed params.turn.status");
-                    }
+                    yield ending;
                     return;
                 }
             }

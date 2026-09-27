@@ -221,7 +221,7 @@ export const systemContract = {
             path: "/system/subagents",
             summary: "Subagents the agents have started",
             description:
-                "Every subagent and child agent this sandbox's conversations have delegated work to, whichever tool started it, with what each one is doing.",
+                "Every subagent this sandbox's conversations have delegated work to, whichever tool started it, with what each one is doing.",
         })
         .output(SubagentsListSchema),
     subagentTranscript: systemRoute

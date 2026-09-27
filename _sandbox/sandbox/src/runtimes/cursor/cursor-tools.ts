@@ -85,9 +85,9 @@ export const TOOLS_WITHHELD: readonly ToolName[] = ["askQuestion"];
 // own seam. The gate arrives already set on the request, so children are indistinguishable across runtimes.
 const spawnTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool => ({
     description:
-        "Start a full agent on any connected provider (claude, codex, grok, kimi, gemini, cursor) to work on a " +
-        "task of its own. It runs as a separate conversation in its own isolated worktree and keeps working " +
-        "after your turn ends; its finished work lands the way any agent's does. Returns the child's id " +
+        "Spawn a subagent: a full agent on any connected provider (claude, codex, grok, kimi, gemini, cursor) to " +
+        "work on a task of its own. It runs as a separate conversation in its own isolated worktree and keeps working " +
+        "after your turn ends; its finished work lands the way any agent's does. Returns the subagent's id " +
         "immediately: supervise it with the wait tool (target: that id); if your turn ends first, its report wakes " +
         "this conversation when it finishes. Give it a self-contained prompt with " +
         "every path, requirement, and constraint — it sees none of this conversation. You must name the provider " +
@@ -96,7 +96,7 @@ const spawnTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool 
     inputSchema: {
         type: "object",
         properties: {
-            prompt: { type: "string", description: "The child's whole task, self-contained." },
+            prompt: { type: "string", description: "The subagent's whole task, self-contained." },
             description: { type: "string", description: "One line naming the task, for the board and the roster." },
             provider: { type: "string", description: "Which provider serves it. Required: see the providers tool for what is connected." },
             model: {
@@ -119,7 +119,7 @@ const spawnTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool 
             text("effort"),
         ];
         if (prompt === undefined) {
-            return JSON.stringify({ ok: false, message: "A child needs a task: pass `prompt`." });
+            return JSON.stringify({ ok: false, message: "A subagent needs a task: pass `prompt`." });
         }
         // Refusal carries the catalogue too (children.routes.ts): finding what's reachable must not be a guess.
         if (provider === undefined || model === undefined) {
@@ -143,7 +143,7 @@ const spawnTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool 
 // Catalogue as its own tool, beside spawn: a required field is only fair if its answer is one call away.
 const providersTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool => ({
     description:
-        "What a child agent could be started on right now: every provider this sandbox has connected, its " +
+        "What a subagent could be spawned on right now: every provider this sandbox has connected, its " +
         "models, and how much allowance each still has. Models whose every connected account is at its cap are " +
         "left out, so what this shows is what can actually run.",
     inputSchema: { type: "object", properties: {}, required: [] },
@@ -156,13 +156,13 @@ const WAIT_MAX_S = 1800;
 
 const sendTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool => ({
     description:
-        "Steer or continue an agent you started. A working child gets the message mid-turn (where its runtime " +
-        "takes one); a finished child runs a follow-up turn on its own conversation, continuing its session, so " +
+        "Steer or continue a subagent you spawned. A working one gets the message mid-turn (where its runtime " +
+        "takes one); a finished one runs a follow-up turn on its own conversation, continuing its session, so " +
         "refinement costs a message rather than a fresh agent. Supervise the follow-up with the wait tool.",
     inputSchema: {
         type: "object",
         properties: {
-            child: { type: "string", description: "The child's id, from spawn." },
+            child: { type: "string", description: "The subagent's id, from spawn." },
             message: { type: "string", description: "What to tell it, self-contained." },
         },
         required: ["child", "message"],
@@ -171,7 +171,7 @@ const sendTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool =
         const child = typeof args["child"] === "string" ? args["child"] : "";
         const message = typeof args["message"] === "string" ? args["message"] : "";
         if (child === "" || message === "") {
-            return JSON.stringify({ ok: false, message: "Pass the child's id and a message." });
+            return JSON.stringify({ ok: false, message: "Pass the subagent's id and a message." });
         }
         return JSON.stringify(await children.send(child, message));
     },
@@ -179,14 +179,14 @@ const sendTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool =
 
 const answerTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool => ({
     description:
-        "Answer a QUESTION a child you started is parked on (the wait tool reports blocked and carries the " +
+        "Answer a QUESTION a subagent you spawned is parked on (the wait tool reports blocked and carries the " +
         "question). Pass your picks keyed by the question's own text, values as chosen option labels or your own " +
         "words. Only questions: a permission hold or a plan approval is the owner's consent to give, and this " +
         "tool refuses those.",
     inputSchema: {
         type: "object",
         properties: {
-            child: { type: "string", description: "The child's id, from spawn." },
+            child: { type: "string", description: "The subagent's id, from spawn." },
             answers: {
                 type: "object",
                 additionalProperties: { type: "array", items: { type: "string" } },
@@ -199,7 +199,7 @@ const answerTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool
         const child = typeof args["child"] === "string" ? args["child"] : "";
         const raw = args["answers"];
         if (child === "" || typeof raw !== "object" || raw === null) {
-            return JSON.stringify({ ok: false, message: "Pass the child's id and your answers." });
+            return JSON.stringify({ ok: false, message: "Pass the subagent's id and your answers." });
         }
         const answers: Record<string, string[]> = {};
         for (const [question, picks] of Object.entries(raw)) {
@@ -211,14 +211,14 @@ const answerTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool
 
 const waitTool = (request: AgentRequest, children: NonNullable<TurnHooks["children"]>): SDKCustomTool => ({
     description:
-        "Wait until an agent you started needs you. Blocks until the target is blocked on input or finishes, " +
-        'whichever comes first, then returns its status and last report. Target a spawned child by its id, or "any" ' +
-        "for whichever of this conversation's children moves first (each is reported once). On timeout it returns the current state: call " +
+        "Wait until a subagent you started needs you. Blocks until the target is blocked on input or finishes, " +
+        'whichever comes first, then returns its status and last report. Target a subagent by its id, or "any" ' +
+        "for whichever of this conversation's subagents moves first (each is reported once). On timeout it returns the current state: call " +
         "it again to keep waiting. It returns early, with outcome `message`, when something is said into your turn while it waits.",
     inputSchema: {
         type: "object",
         properties: {
-            target: { type: "string", description: 'The child\'s id, or "any".' },
+            target: { type: "string", description: 'The subagent\'s id, or "any".' },
             until: { type: "array", items: { type: "string", enum: ["blocked", "finished"] }, description: 'Default ["blocked","finished"].' },
             timeoutSeconds: { type: "number", description: `Default ${WAIT_DEFAULT_S}, at most ${WAIT_MAX_S}.` },
         },

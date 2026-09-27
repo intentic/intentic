@@ -157,7 +157,7 @@ export type TranscriptWatchWake = z.infer<typeof TranscriptWatchWakeSchema>;
 
 // Another agent's words that reached this conversation as a prompt; the row keeps the prompt and names the sender.
 export const TranscriptAgentWordsSchema = z.object({
-    kind: z.enum(["peer", "child"]).describe("Who sent it: another conversation in the workspace, or a child agent this one started."),
+    kind: z.enum(["peer", "child"]).describe("Who sent it: another conversation in the workspace, or a subagent this one started."),
     from: z.string().describe("The sending conversation's id."),
     title: z.string().optional().describe("The sender's title, when it had one."),
     failed: z.boolean().optional().describe("A child's report on a turn that failed rather than finished."),

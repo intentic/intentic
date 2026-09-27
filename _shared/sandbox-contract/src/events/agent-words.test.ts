@@ -53,6 +53,13 @@ describe("another agent's words", () => {
         expect(agentWordsRow(report({ failed: true }))?.text).toBe('Subagent "Port the parser" (sub-x7) failed.');
     });
 
+    // A stored transcript keeps the opening its reports were written with; it still reads as a subagent's report.
+    it("still reads a report stored under the opening it had before", () => {
+        const stored = report().replace("Report from a subagent you started: ", "Report from a child agent you started: ");
+        expect(stored.startsWith("Report from a child agent you started: ")).toBe(true);
+        expect(agentWordsOf(stored)).toMatchObject({ kind: "child", from: "sub-x7", title: "Port the parser" });
+    });
+
     it("ignores every other prompt, so any reader can ask without checking first", () => {
         expect(agentWordsOf("fix the bug")).toBeUndefined();
         expect(agentWordsOf("Message from another conversation in this workspace: nobody")).toBeUndefined();

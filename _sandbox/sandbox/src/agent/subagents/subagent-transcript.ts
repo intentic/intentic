@@ -1,4 +1,4 @@
-import type { TranscriptRow } from "@intentic/sandbox-contract";
+import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { sdk } from "../../engines/claude-sdk.js";
@@ -20,25 +20,37 @@ export interface SubagentTranscriptDeps {
     readonly conversations: Pick<ConversationActors, "holdings">;
     // Reads a spawned child's settled record as its own conversation's.
     readonly conversation: (agent: TranscriptAgent) => Promise<TranscriptRow[]>;
+    // The calls a delegation's card holds in its parent's settled record: what is left of a subagent some runtime ran
+    // in-process once its run is gone, where no SDK store of its own exists to read.
+    readonly toolChildren: (agent: TranscriptAgent, toolId: string) => Promise<TranscriptTool[]>;
 }
 
 type Source = NonNullable<ReturnType<typeof subagentSource>>;
 
-// An SDK child: while running, the parent's fold beats the file (normalized), `prompt` opening as the first user
-// bubble; finished, its own JSONL. Both ids can be missing: the session's is the turn's own; the child pairs to its
-// spawning call at read time.
-const sdkChildTranscript = async (deps: SubagentTranscriptDeps, id: string, source: Source): Promise<TranscriptRow[]> => {
-    const run = source.running ? turnRunOf(deps.conversations, source.conversationId) : undefined;
-    if (run !== undefined) {
-        const prompt = source.description;
-        return [...(prompt !== undefined && prompt.length > 0 ? [{ role: "user" as const, text: prompt }] : []), ...run.rowsOf(id)];
+// The subagent's ask, as the first user bubble; its frames carry no prompt of their own.
+const askedOf = (source: Source): TranscriptRow[] =>
+    source.description !== undefined && source.description.length > 0 ? [{ role: "user", text: source.description }] : [];
+
+// An in-process child: while running, the parent's fold beats the file (normalized); finished, the Claude SDK's own
+// JSONL. Both ids can be missing: the session's is the turn's own; the child pairs to its spawning call at read time.
+// Any other runtime keeps no such file, so a finished one reads from its parent: the run while it is still held, then
+// the calls its card kept in the parent's record.
+const inProcessTranscript = async (deps: SubagentTranscriptDeps, id: string, source: Source): Promise<TranscriptRow[]> => {
+    const run = turnRunOf(deps.conversations, source.conversationId);
+    if (source.running && run !== undefined) {
+        return [...askedOf(source), ...run.rowsOf(id)];
     }
     const agentId = await subagentAgentId(deps.conversations, id);
-    if (source.sessionId === undefined || agentId === undefined) {
-        return [];
+    if (source.sessionId !== undefined && agentId !== undefined) {
+        const messages = await sdk().getSubagentMessages(source.sessionId, agentId, { dir: source.cwd });
+        return restoredSessionMessages(messages, deps.root);
     }
-    const messages = await sdk().getSubagentMessages(source.sessionId, agentId, { dir: source.cwd });
-    return restoredSessionMessages(messages, deps.root);
+    const held = run?.rowsOf(id) ?? [];
+    if (held.length > 0) {
+        return [...askedOf(source), ...held];
+    }
+    const kept = await deps.toolChildren({ id: source.conversationId }, id);
+    return kept.length === 0 ? [] : [...askedOf(source), { role: "assistant", text: "", tools: kept }];
 };
 
 export const readSubagentTranscript = async (deps: SubagentTranscriptDeps, id: string): Promise<TranscriptRow[]> => {
@@ -47,7 +59,7 @@ export const readSubagentTranscript = async (deps: SubagentTranscriptDeps, id: s
         return [];
     }
     if (source.kind === "subagent") {
-        return sdkChildTranscript(deps, id, source);
+        return inProcessTranscript(deps, id, source);
     }
     // A spawned child's id IS its conversation's id, so both live and settled paths read the stores a conversation
     // already writes.

@@ -5,7 +5,7 @@ import type { AgentRequest, CodexCredential, TurnHooks } from "../../agent/provi
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
 import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
 import { fakeCodexRunner, memoryFleet } from "../../testing.js";
-import type { CodexEvent, CodexRunner } from "./codex-app-server.js";
+import type { CodexEvent, CodexItem, CodexRunner } from "./codex-app-server.js";
 import { createCodexAgent } from "./codex-agent.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 
@@ -84,6 +84,54 @@ test("a turn maps thread events onto session, deltas, thinking, tools, todos, us
         // Codex only reports a completed agent_message, so every delta is a whole prose block and closes one.
         { kind: "text_end" },
         { kind: "usage", inputTokens: 10, outputTokens: 5, cacheReadTokens: 3, cacheCreationTokens: 1 },
+        { kind: "done" },
+    ]);
+});
+
+// Codex's own subagents drawn as the Claude loop's are: the spawn call's card carries the subagent it started, its
+// thread's work nests under that card, and what Codex says of it moves its standing; the turn's usage counts its spend.
+test("a Codex subagent sits on its spawn call's card, its work under it, its report and spend its own", async () => {
+    type Collab = Extract<CodexItem, { type: "collab_agent_tool_call" }>;
+    const spawn = (status: Collab["status"], receivers: Collab["receivers"], states: Collab["states"]): Collab => ({
+        id: "spawn-1",
+        type: "collab_agent_tool_call",
+        tool: "spawnAgent",
+        status,
+        prompt: "Port the purge job\nRetire rows past 30 days.",
+        model: "gpt-5.6-luna",
+        receivers,
+        states,
+    });
+    const wait = (status: Collab["status"], states: Collab["states"]): Collab => ({ id: "wait-1", type: "collab_agent_tool_call", tool: "wait", status, receivers: ["thr-child"], states });
+    const { runner } = fakeCodexRunner([
+        { type: "thread.started", thread_id: "thr-1" },
+        { type: "item.started", item: spawn("in_progress", [], {}) },
+        { type: "item.completed", item: spawn("completed", ["thr-child"], { "thr-child": { status: "pendingInit" } }) },
+        { type: "item.started", item: { id: "cmd-c1", type: "command_execution", command: "rg purge", aggregated_output: "", status: "in_progress" }, parent: "spawn-1" },
+        { type: "item.completed", item: { id: "msg-c1", type: "agent_message", text: "Ported." }, parent: "spawn-1" },
+        { type: "subagent.usage", parent: "spawn-1", input: 500, output: 50 },
+        { type: "subagent.ended", parent: "spawn-1", status: "completed" },
+        { type: "item.started", item: wait("in_progress", {}) },
+        { type: "item.completed", item: wait("completed", { "thr-child": { status: "completed", message: "Ported." } }) },
+        { type: "turn.completed", usage: { input_tokens: 10, cached_input_tokens: 3, cache_write_input_tokens: 1, output_tokens: 5, reasoning_output_tokens: 2 } },
+    ]);
+    const events = await collect(createTestAgent(runner), request);
+    expect(events).toEqual([
+        { kind: "session", sessionId: "thr-1" },
+        { kind: "tool_call", id: "spawn-1", name: "Spawn agent", category: "other", status: "in_progress", target: "Port the purge job" },
+        { kind: "subagent", id: "spawn-1", subagentKind: "subagent", description: "Port the purge job", model: "gpt-5.6-luna" },
+        { kind: "tool_call_update", id: "spawn-1", status: "completed" },
+        { kind: "subagent_update", id: "spawn-1", status: "pending" },
+        { kind: "tool_call", id: "cmd-c1", name: "Bash", category: "execute", status: "in_progress", target: "rg purge", parentToolUseId: "spawn-1" },
+        { kind: "subagent_update", id: "spawn-1", toolUses: 1, lastTool: "Bash" },
+        { kind: "delta", text: "Ported.", parentToolUseId: "spawn-1" },
+        { kind: "text_end", parentToolUseId: "spawn-1" },
+        { kind: "subagent_update", id: "spawn-1", tokens: 550 },
+        { kind: "subagent_update", id: "spawn-1", status: "completed", summary: "Ported." },
+        { kind: "tool_call", id: "wait-1", name: "Wait for agents", category: "other", status: "in_progress" },
+        { kind: "tool_call_update", id: "wait-1", status: "completed" },
+        { kind: "subagent_update", id: "spawn-1", status: "completed", summary: "Ported." },
+        { kind: "usage", inputTokens: 510, outputTokens: 55, cacheReadTokens: 3, cacheCreationTokens: 1 },
         { kind: "done" },
     ]);
 });

@@ -179,7 +179,7 @@ export const SubagentSessionSchema = z.object({
     description: z.string().optional().describe("What it was asked to do, in one line."),
     model: z.string().optional().describe("Which model it runs on."),
     // Which provider serves a spawned child; an SDK subagent implies its own (its parent's).
-    provider: z.string().optional().describe("Which provider serves it, for a child agent spawned across providers."),
+    provider: z.string().optional().describe("Which provider serves it, for a subagent spawned across providers."),
     // How deep in the spawn tree; 1 means the turn itself started it. A subagent can itself delegate further.
     spawnDepth: z
         .number()

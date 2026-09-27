@@ -159,16 +159,16 @@ export const childSpawn = defineGuardedAction<ChildSpawnInput>({
     decide: ({ provider, rules, outsideSource }) => {
         const rule = rules[`agents.spawn.${provider}`] ?? rules["agents.spawn"];
         if (rule === "deny") {
-            return DENY(`spawning child agents on ${provider} is refused by the action rules`);
+            return DENY(`spawning subagents on ${provider} is refused by the action rules`);
         }
         if (rule === "hold") {
-            return HOLD(`spawning child agents on ${provider} requires owner approval`);
+            return HOLD(`spawning subagents on ${provider} requires owner approval`);
         }
         if (rule === undefined && outsideSource !== undefined) {
             return HOLD(
-                `this turn has taken in content from outside (${outsideSource}), and a child agent would spend the owner's accounts on its say-so`,
+                `this turn has taken in content from outside (${outsideSource}), and a subagent would spend the owner's accounts on its say-so`,
             );
         }
-        return ALLOW(`no action rule restricts spawning child agents on ${provider}`);
+        return ALLOW(`no action rule restricts spawning subagents on ${provider}`);
     },
 });

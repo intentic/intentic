@@ -17,6 +17,7 @@ import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 import { childVerification, childVerificationNote, forgetChild, resetChildVerification } from "./child-verification.js";
 import { ROSTER } from "./subagent-roster.js";
 import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
+import { opt } from "../../opt.js";
 
 // The registry of subagents the daemon can name, read by the Subagents area and the rail; the third registry of its
 // kind after terminal and browser sessions, with its own short retention window. An SDK child is keyed by the spawning
@@ -414,6 +415,38 @@ export const noteSubagentTask = (turn: SubagentTurn, message: SubagentTaskMessag
               });
     }
     return undefined;
+};
+
+// A runtime's own subagents as its adapter reports them, for every runtime but the Claude Code loop, whose stream this
+// module reads directly (noteSubagentTask above): the adapter says `subagent` when its delegating call starts one and
+// `subagent_update` as it moves and ends. Filed into the same roster the Claude loop's are, so its card, the Subagents
+// page, the counts and `wait` see it alike (runtime-subagents.ts wraps the stream around this).
+
+/** Files one reported subagent frame; returns what the transcript gets in its place, or nothing when nothing moved. */
+export const fileReportedSubagent = (turn: SubagentTurn, frame: Extract<AgentEvent, { kind: "subagent" | "subagent_update" }>): AgentEvent | undefined => {
+    if (frame.kind === "subagent") {
+        // A birth the roster already holds (a resumed subagent announced again) is the same subagent, not another one.
+        if (turn.conversations.holdings(ROSTER).has(frame.id)) {
+            return undefined;
+        }
+        return bornFrame(
+            open(turn, frame.id, frame.subagentKind, {
+                ...opt("agentType", frame.agentType),
+                ...opt("description", frame.description),
+                ...opt("model", namedModel(frame.model)),
+                ...opt("background", frame.background),
+            }),
+        );
+    }
+    // The roster's own update goes out, not the adapter's: it is the one that carries the verdict once the subagent ends.
+    return patch(turn.conversations, frame.id, {
+        ...opt("status", frame.status),
+        ...opt("tokens", frame.tokens),
+        ...opt("toolUses", frame.toolUses),
+        ...opt("lastTool", frame.lastTool),
+        ...opt("summary", frame.summary),
+        ...opt("error", frame.error),
+    });
 };
 
 // SubagentStart cannot read a child's meta file yet (written only once it resolves), so it just records the session's

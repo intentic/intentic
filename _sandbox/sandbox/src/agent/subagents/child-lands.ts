@@ -19,7 +19,7 @@ export interface ChildNewsDeps {
 }
 
 // What the parent's chat names as having spoken.
-const SOURCE = "child agents";
+const SOURCE = "subagents";
 
 // Paths a conflict note names before counting the rest.
 const PATHS_NAMED = 5;
@@ -95,7 +95,7 @@ export const reportChildLanded = async (deps: ChildNewsDeps, event: WorkspaceEve
         deps,
         supervisor.parent,
         [
-            `Your child agent ${supervisor.name} landed in the main tree${repos.length === 0 ? "" : ` (${listed(repos, repos.length)})`}.`,
+            `Your subagent ${supervisor.name} landed in the main tree${repos.length === 0 ? "" : ` (${listed(repos, repos.length)})`}.`,
             "The main tree's own check runs on it next. If that goes red on this land you are told where its failures were sent, so leave them to that instead of relaying them yourself.",
         ].join(" "),
     );
@@ -111,7 +111,7 @@ export const reportChildConflict = async (deps: ChildNewsDeps, childId: string, 
         deps,
         supervisor.parent,
         [
-            `The owner pressed Land on your child agent ${supervisor.name}, and it hit a merge conflict${paths.length === 0 ? "" : ` on ${listed(paths, PATHS_NAMED)}`}: nothing of it reached the main tree.`,
+            `The owner pressed Land on your subagent ${supervisor.name}, and it hit a merge conflict${paths.length === 0 ? "" : ` on ${listed(paths, PATHS_NAMED)}`}: nothing of it reached the main tree.`,
             "It lands once its branch is rebased onto the main line and the conflicts are resolved. The owner can have it do that from its card, or you can tell it to; a message you send while another turn runs on it waits for that turn to end.",
         ].join(" "),
     );
@@ -199,7 +199,7 @@ export const reportChildrenRed = async (
             deps,
             parent,
             [
-                `The main tree's own check in ${where} went red after work from your child agent${names.length === 1 ? "" : "s"} ${names.join(", ")} landed: ${red.fresh.length} new failure${red.fresh.length === 1 ? "" : "s"}${red.fresh.length === 0 ? "" : `, such as ${listed(red.fresh, FAILURES_NAMED)}`}.`,
+                `The main tree's own check in ${where} went red after work from your subagent${names.length === 1 ? "" : "s"} ${names.join(", ")} landed: ${red.fresh.length} new failure${red.fresh.length === 1 ? "" : "s"}${red.fresh.length === 0 ? "" : `, such as ${listed(red.fresh, FAILURES_NAMED)}`}.`,
                 words,
             ].join(" "),
         );

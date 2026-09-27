@@ -525,7 +525,7 @@ test("a routed runtime's readings are re-measured, the cache clock dropped, and 
     const stamp = { account: "codex-subscription" };
     expect(frames).toStrictEqual([
         // Planning's own notes, disclosed before the runtime says anything: how to spawn, and what runs after it lands.
-        { kind: "preamble", notes: [{ title: "Spawning child agents", text: expect.any(String) }, landingChecksNote([], false)] },
+        { kind: "preamble", notes: [{ title: "Spawning subagents", text: expect.any(String) }, landingChecksNote([], false)] },
         { kind: "session", sessionId: "thread-1", ...stamp },
         { kind: "delta", text: "on it" },
         edit,

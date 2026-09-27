@@ -1,7 +1,10 @@
 import { HISTORY_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Event } from "@opencode-ai/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { createOpenCodeAgent, createOpenCodeRunner, type OpenCodeRunner, type OpenCodeTurn } from "./opencode-agent.js";
+import { createOpenCodeAgent, createOpenCodeRunner, type OpenCodeRunner, type OpenCodeTurn, sessionFamily } from "./opencode-agent.js";
+import type { CommandGuard } from "../../guard/command-guard.js";
+import { unstubbed } from "@intentic/testing";
+import { opt } from "../../opt.js";
 import type { OpenCodeService } from "./opencode.js";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import { DEFAULT_TURN_TIMEOUTS } from "../decorators/turn-watchdog.js";
@@ -122,6 +125,153 @@ test("a turn maps OpenCode events onto session, thinking, tools, todos, deltas, 
         { kind: "usage", inputTokens: 1000, outputTokens: 200, cacheReadTokens: 800, cacheCreationTokens: 120, costUsd: 0.02 },
         { kind: "done" },
     ]);
+});
+
+// Session events as OpenCode sends them, whole, for the tests that read them typed.
+const sessionCreated = (id: string, parentID?: string): Event => ({
+    type: "session.created",
+    properties: { info: { id, projectID: "p1", directory: WORKSPACE_ROOT, title: id, version: "1.18.32", time: { created: 0, updated: 0 }, ...opt("parentID", parentID) } },
+});
+const sessionIdle = (sessionID: string): Event => ({ type: "session.idle", properties: { sessionID } });
+const sessionBusy = (sessionID: string): Event => ({ type: "session.status", properties: { sessionID, status: { type: "busy" } } });
+
+// OpenCode's task tool runs a subagent in a child session and names that session on the task's part; the child's own
+// events then come on the same stream. Drawn as the Claude loop's are: the subagent on its task's card, its calls,
+// prose and spend under that card, its report as the subagent's summary.
+test("a task's subagent runs under its card: its session's calls, prose and spend, then its report", async () => {
+    const task = (state: object) => ({
+        type: "message.part.updated",
+        properties: { part: { type: "tool", id: "tp-task", sessionID: "s1", messageID: "m1", callID: "task-1", tool: "task", state } },
+    });
+    const input = { description: "Map the reads", prompt: "Find every read of users.", subagent_type: "explore" };
+    const child = (part: object) => ({ type: "message.part.updated", properties: { part: { sessionID: "child-1", ...part } } });
+    const { runner } = fakeRunner([
+        { type: "session.created", properties: { info: { id: "s1" } } },
+        task({ status: "running", input, time: { start: 0 } }),
+        { type: "session.created", properties: { info: { id: "child-1", parentID: "s1" } } },
+        // Heard before its task names the session, so held; the prompt the task sent it is the subagent's user message.
+        { type: "message.updated", properties: { info: { id: "cm0", sessionID: "child-1", role: "user", time: { created: 0 } } } },
+        child({ type: "text", id: "ct0", messageID: "cm0", text: "Find every read of users." }),
+        task({ status: "running", input, title: "Map the reads", metadata: { sessionId: "child-1", parentSessionId: "s1" }, time: { start: 0 } }),
+        child({ type: "tool", id: "ctp", messageID: "cm1", callID: "cc1", tool: "grep", state: { status: "running", input: { pattern: "from(users)" }, time: { start: 0 } } }),
+        child({
+            type: "tool",
+            id: "ctp",
+            messageID: "cm1",
+            callID: "cc1",
+            tool: "grep",
+            state: { status: "completed", input: { pattern: "from(users)" }, output: "api/a.ts:3", title: "grep", metadata: {}, time: { start: 0, end: 1 } },
+        }),
+        {
+            type: "message.updated",
+            properties: {
+                info: {
+                    id: "cm1",
+                    sessionID: "child-1",
+                    role: "assistant",
+                    time: { created: 0, completed: 1 },
+                    cost: 0.01,
+                    tokens: { input: 900, output: 100, reasoning: 0, cache: { read: 0, write: 0 } },
+                },
+            },
+        },
+        child({ type: "text", id: "ct1", messageID: "cm1", text: "Found 7 reads." }),
+        { type: "session.idle", properties: { sessionID: "child-1" } },
+        task({
+            status: "completed",
+            input,
+            output: `<task id="child-1" state="completed">\n<task_result>\nFound 7 reads.\n</task_result>\n</task>`,
+            title: "Map the reads",
+            metadata: { sessionId: "child-1" },
+            time: { start: 0, end: 2 },
+        }),
+        { type: "session.idle", properties: { sessionID: "s1" } },
+    ]);
+    const events = await collect(createOpenCodeAgent(runner), request);
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s1" },
+        { kind: "tool_call", id: "task-1", name: "Task", category: "other", status: "in_progress" },
+        { kind: "subagent", id: "task-1", subagentKind: "subagent", agentType: "explore", description: "Map the reads" },
+        { kind: "tool_call", id: "cc1", name: "Grep", category: "search", status: "in_progress", target: "from(users)", parentToolUseId: "task-1" },
+        { kind: "subagent_update", id: "task-1", toolUses: 1, lastTool: "Grep" },
+        { kind: "tool_call_update", id: "cc1", status: "completed", content: [{ type: "text", text: "api/a.ts:3" }] },
+        { kind: "subagent_update", id: "task-1", tokens: 1000 },
+        { kind: "delta", text: "Found 7 reads.", parentToolUseId: "task-1" },
+        {
+            kind: "tool_call_update",
+            id: "task-1",
+            status: "completed",
+            content: [{ type: "text", text: `<task id="child-1" state="completed">\n<task_result>\nFound 7 reads.\n</task_result>\n</task>` }],
+        },
+        { kind: "subagent_update", id: "task-1", status: "completed", summary: "Found 7 reads." },
+        // The subagent's spend is the turn's: the account paid for it.
+        { kind: "usage", inputTokens: 900, outputTokens: 100, cacheReadTokens: 0, cacheCreationTokens: 0, costUsd: 0.01 },
+        { kind: "done" },
+    ]);
+});
+
+test("a task that fails ends its subagent failed, with OpenCode's own words", async () => {
+    const task = (state: object) => ({
+        type: "message.part.updated",
+        properties: { part: { type: "tool", id: "tp-task", sessionID: "s1", messageID: "m1", callID: "task-2", tool: "task", state } },
+    });
+    const input = { description: "Port the job", prompt: "…", subagent_type: "general" };
+    const { runner } = fakeRunner([
+        { type: "session.created", properties: { info: { id: "s1" } } },
+        task({ status: "running", input, time: { start: 0 } }),
+        task({ status: "error", input, error: "Subagent failed (task_id: child-2): out of credits", time: { start: 0, end: 1 } }),
+        { type: "session.idle", properties: { sessionID: "s1" } },
+    ]);
+    const events = await collect(createOpenCodeAgent(runner), request);
+    expect(events.filter((event) => event.kind === "subagent" || event.kind === "subagent_update")).toEqual([
+        { kind: "subagent", id: "task-2", subagentKind: "subagent", agentType: "general", description: "Port the job" },
+        { kind: "subagent_update", id: "task-2", status: "failed", error: "Subagent failed (task_id: child-2): out of credits" },
+    ]);
+});
+
+// A subagent's session names its parent; the family is the turn's own session and every session beneath it, and a
+// subagent answers to the rules its parent does, released with the turn.
+test("a turn's session family takes in its subagents' sessions, gates them as its own, and lets them go together", () => {
+    const gate = unstubbed<CommandGuard>("gate", {});
+    const registered: string[] = [];
+    const released: string[] = [];
+    const family = sessionFamily("s1", gate, { register: (session) => void registered.push(session), release: (session) => void released.push(session) });
+
+    expect([family.whose(sessionIdle("s1")), family.whose(sessionCreated("child-1", "s1")), family.whose(sessionIdle("child-1"))]).toEqual([
+        "own",
+        "subagent",
+        "subagent",
+    ]);
+    expect([
+        family.whose(sessionCreated("grandchild", "child-1")),
+        family.whose(sessionCreated("stranger", "elsewhere")),
+        family.whose(sessionIdle("stranger")),
+    ]).toEqual(["subagent", undefined, undefined]);
+    family.release();
+    expect({ registered, released }).toEqual({ registered: ["s1", "child-1", "grandchild"], released: ["s1", "child-1", "grandchild"] });
+});
+
+test("createOpenCodeRunner lets its subagents' sessions through and ends only on its own", async () => {
+    const { openCode } = fakeOpenCode([
+        sessionCreated("s1"),
+        sessionCreated("child-1", "s1"),
+        sessionBusy("child-1"),
+        sessionIdle("child-1"),
+        sessionBusy("someone-else"),
+        sessionIdle("s1"),
+    ]);
+    // Which session each event the turn got was about.
+    const sessionOf = (event: Event): string => {
+        if (event.type === "session.created") {
+            return event.properties.info.id;
+        }
+        return event.type === "session.idle" || event.type === "session.status" ? event.properties.sessionID : "";
+    };
+    const seen: string[] = [];
+    for await (const event of createOpenCodeRunner(openCode)(runnerTurn)) {
+        seen.push(`${event.type}:${sessionOf(event)}`);
+    }
+    expect(seen).toEqual(["session.created:s1", "session.created:child-1", "session.status:child-1", "session.idle:child-1", "session.idle:s1"]);
 });
 
 test("a build turn resumes the session on the xai provider, passes the model, and folds attachments into the prompt", async () => {

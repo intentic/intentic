@@ -164,7 +164,7 @@ const providerText = (provider: SpawnableProvider, now: number): string => {
 // tool, and the refusal for a spawn missing its provider or model.
 export const spawnCatalogText = (providers: readonly SpawnableProvider[], now: number = Date.now()): string => {
     if (providers.length === 0) {
-        return `No AI provider is connected to this sandbox, so no child agent can be started. Connect one in Sandbox ▸ Agent ▸ Accounts.`;
+        return `No AI provider is connected to this sandbox, so no subagent can be started. Connect one in Sandbox ▸ Agent ▸ Accounts.`;
     }
     return providers.map((provider) => providerText(provider, now)).join(`\n`);
 };

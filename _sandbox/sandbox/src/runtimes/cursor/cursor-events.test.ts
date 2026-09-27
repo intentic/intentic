@@ -147,6 +147,59 @@ test("a turn that ended without reporting usage sends no usage frame", () => {
     expect(mapper.usage()).toBeUndefined();
 });
 
+// Cursor's task tool runs a subagent and streams its steps nested on the task call; drawn as the Claude loop's are.
+test("a task's subagent sits on its card, its nested steps under it, its last words its report", () => {
+    const mapper = createCursorEventMapper(CWD);
+    const task = { type: "task", args: { description: "Map the reads", prompt: "Find every read of users.", subagentType: { kind: "explore" }, model: "composer-2.5" } };
+    const nested = (taskUpdate: unknown): InteractionUpdate => update({ type: "tool-call-delta", callId: "t1", modelCallId: "m1", taskUpdate });
+    const frames = [
+        ...mapper.map(update({ type: "tool-call-started", callId: "t1", modelCallId: "m1", toolCall: task })),
+        ...mapper.map(nested({ type: "thinking-delta", text: "where are the reads" })),
+        ...mapper.map(nested({ type: "tool-call-started", callId: "g1", toolCall: { type: "grep", args: { pattern: "from(users)" } } })),
+        ...mapper.map(
+            nested({ type: "tool-call-completed", callId: "g1", toolCall: { type: "grep", args: { pattern: "from(users)" }, result: { output: "api/a.ts:3" } } }),
+        ),
+        ...mapper.map(nested({ type: "tool-call-started", callId: "u1", toolCall: { type: "updateTodos", args: { todos: [] } } })),
+        ...mapper.map(nested({ type: "text-delta", text: "Found 7 reads." })),
+        ...mapper.map(
+            update({
+                type: "tool-call-completed",
+                callId: "t1",
+                modelCallId: "m1",
+                toolCall: { ...task, result: { status: "success", value: { isBackground: false, conversationSteps: [{ assistantMessage: { text: "Found 7 reads." } }] } } },
+            }),
+        ),
+    ];
+    expect(frames).toEqual([
+        { kind: "tool_call", id: "t1", name: "Task", category: "other", status: "in_progress" },
+        { kind: "subagent", id: "t1", subagentKind: "subagent", agentType: "explore", description: "Map the reads", model: "composer-2.5" },
+        { kind: "thinking", text: "where are the reads", parentToolUseId: "t1" },
+        { kind: "tool_call", id: "g1", name: "Grep", category: "search", status: "in_progress", target: "from(users)", parentToolUseId: "t1" },
+        { kind: "subagent_update", id: "t1", toolUses: 1, lastTool: "Grep" },
+        { kind: "tool_call_update", id: "g1", status: "completed", content: [{ type: "text", text: "api/a.ts:3" }] },
+        { kind: "delta", text: "Found 7 reads.", parentToolUseId: "t1" },
+        { kind: "tool_call_update", id: "t1", status: "completed" },
+        { kind: "subagent_update", id: "t1", status: "completed", summary: "Found 7 reads." },
+    ]);
+});
+
+// A background subagent's end reaches only its parent's model; the run holds until it ends, so a run that ran through
+// saw it end, and one cut short leaves it to the turn to close.
+test("a subagent sent into the background ends with the run that waited for it, and fails in the vendor's own words", () => {
+    const mapper = createCursorEventMapper(CWD);
+    const task = (callId: string) => ({ type: "task", args: { description: `task ${callId}`, prompt: "…" } });
+    mapper.map(update({ type: "tool-call-started", callId: "bg", modelCallId: "m1", toolCall: task("bg") }));
+    mapper.map(update({ type: "tool-call-started", callId: "bad", modelCallId: "m2", toolCall: task("bad") }));
+    const backgrounded = mapper.map(
+        update({ type: "tool-call-completed", callId: "bg", modelCallId: "m1", toolCall: { ...task("bg"), result: { status: "success", value: { isBackground: true, backgroundReason: "agentRequest" } } } }),
+    );
+    const failed = mapper.map(update({ type: "tool-call-completed", callId: "bad", modelCallId: "m2", toolCall: { ...task("bad"), result: { status: "error", error: { message: "Task failed" } } } }));
+    expect(backgrounded.filter((frame) => frame.kind === "subagent_update")).toEqual([]);
+    expect(failed.filter((frame) => frame.kind === "subagent_update")).toEqual([{ kind: "subagent_update", id: "bad", status: "failed", error: "Task failed" }]);
+    expect(mapper.ending(true)).toEqual([{ kind: "subagent_update", id: "bg", status: "completed" }]);
+    expect(createCursorEventMapper(CWD).ending(false)).toEqual([]);
+});
+
 test("updates with no UI meaning are dropped", () => {
     const mapper = createCursorEventMapper(CWD);
     for (const type of ["partial-tool-call", "tool-call-delta", "token-delta", "step-started", "step-completed", "summary", "thinking-completed"]) {

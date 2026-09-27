@@ -7,7 +7,6 @@ import {
     createOpencodeServer,
     type Event as OpenCodeEvent,
     type OpencodeClient,
-    type Permission as OpenCodePermission,
 } from "@opencode-ai/sdk";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
 import { idCatalog } from "../../agent/models/model-discovery.js";
@@ -17,6 +16,7 @@ import { type InputModality, OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-m
 import { type CommandGuard, consultWith, vendorSubject } from "../../guard/command-guard.js";
 import { cacheFile } from "../../store/open-document.js";
 import { discoverXaiModels, isChatModel, SEED_XAI_MODELS } from "./xai-models.js";
+import { z } from "zod";
 
 // Shared OpenCode runtime: one warm `opencode serve` per container plus its client, used by turn adapters and the Grok
 // auth routes. Two providers ride it credentialed oppositely: xai is OpenCode's own OAuth store; gemini's credential is
@@ -101,21 +101,72 @@ export const releaseSessionGate = (sessionId: string): void => {
     sessionGates.delete(sessionId);
 };
 
-// Text the classifier can read for this permission; OpenCode's Permission has no declared command field, so
-// metadata/pattern/title are read tolerantly in order. A miss defaults to allow, not refuse.
-const permissionProgram = (permission: OpenCodePermission): string | undefined => {
-    const metadata = permission.metadata as Record<string, unknown> | undefined;
-    for (const key of ["command", "cmd", "script", "input"]) {
-        const value = metadata?.[key];
-        if (typeof value === "string" && value.trim() !== "") {
-            return value;
-        }
+// A field read tolerantly: a value of another type reads as absent rather than failing the whole ask, which would then
+// go unanswered.
+const text = z.string().optional().catch(undefined);
+
+// What an ask's metadata may name as the command it is about; OpenCode's Permission declares no command field, so the
+// spellings are tried in order and every other key is left behind.
+const AskMetadataSchema = z.object({ command: text, cmd: text, script: text, input: text }).optional().catch(undefined);
+type AskMetadata = z.infer<typeof AskMetadataSchema>;
+
+// Text the classifier can read for this permission: metadata, then pattern, then title. A miss defaults to allow, not
+// refuse.
+const permissionProgram = (metadata: AskMetadata, pattern: string | readonly string[] | undefined, title: string | undefined): string | undefined => {
+    const named = [metadata?.command, metadata?.cmd, metadata?.script, metadata?.input].find((value) => value !== undefined && value.trim() !== "");
+    if (named !== undefined) {
+        return named;
     }
-    const pattern = Array.isArray(permission.pattern) ? permission.pattern.join(" ") : permission.pattern;
-    if (typeof pattern === "string" && pattern.trim() !== "") {
-        return pattern;
+    const patterns = typeof pattern === "string" ? pattern : pattern?.join(" ");
+    if (patterns !== undefined && patterns.trim() !== "") {
+        return patterns;
     }
-    return permission.title.trim() === "" ? undefined : permission.title;
+    return title === undefined || title.trim() === "" ? undefined : title;
+};
+
+// One ask, whichever event carried it: OpenCode 1.18 asks with `permission.asked`, earlier releases with
+// `permission.updated`, in two shapes. Both are answered through the per-session permissions route both still serve.
+export interface PermissionAsk {
+    readonly id: string;
+    readonly sessionID: string;
+    // Which permission: `bash`, `edit`, or a key this config does not declare.
+    readonly kind: string;
+    // What the classifier reads: the command where the ask names one, else its pattern or title.
+    readonly program: string | undefined;
+}
+
+// Both shapes read at the stream, never trusted as typed: the v1 SDK's event union names only the older one.
+const PermissionAskedSchema = z.object({
+    id: z.string(),
+    sessionID: z.string(),
+    permission: z.string(),
+    patterns: z.array(z.string()).optional().catch(undefined),
+    metadata: AskMetadataSchema,
+});
+const PermissionUpdatedSchema = z.object({
+    id: z.string(),
+    sessionID: z.string(),
+    type: z.string().catch(""),
+    pattern: z.union([z.string(), z.array(z.string())]).optional().catch(undefined),
+    title: text,
+    metadata: AskMetadataSchema,
+});
+
+/** The ask an event raises, or undefined for every other event. */
+export const permissionAskOf = (event: { readonly type: string; readonly properties?: unknown }): PermissionAsk | undefined => {
+    if (event.type === "permission.asked") {
+        const asked = PermissionAskedSchema.safeParse(event.properties);
+        return asked.success
+            ? { id: asked.data.id, sessionID: asked.data.sessionID, kind: asked.data.permission, program: permissionProgram(asked.data.metadata, asked.data.patterns, undefined) }
+            : undefined;
+    }
+    if (event.type !== "permission.updated") {
+        return undefined;
+    }
+    const updated = PermissionUpdatedSchema.safeParse(event.properties);
+    return updated.success
+        ? { id: updated.data.id, sessionID: updated.data.sessionID, kind: updated.data.type, program: permissionProgram(updated.data.metadata, updated.data.pattern, updated.data.title) }
+        : undefined;
 };
 
 // Answers a permission kind this config doesn't declare (future OpenCode keys default to `ask`) with a standing yes, so
@@ -138,20 +189,15 @@ const replyPermission = async (
 // (`canPark: false`): the two-minute inactivity watchdog would kill a turn paused on a person, so a hold comes back as
 // a refusal instead; an allowed command gets `once`, not `always`, since the next match could be one the rulebook would
 // refuse.
-const answerPermission = async (client: OpencodeClient, permission: OpenCodePermission, directory: string): Promise<void> => {
-    const gate = sessionGates.get(permission.sessionID);
-    if (gate === undefined || !gate.enforcing) {
-        await replyPermission(client, permission, directory, "always");
-        return;
-    }
-    const program = permissionProgram(permission);
-    if (program === undefined) {
-        await replyPermission(client, permission, directory, "always");
+const answerPermission = async (client: OpencodeClient, ask: PermissionAsk, directory: string): Promise<void> => {
+    const gate = sessionGates.get(ask.sessionID);
+    if (gate === undefined || !gate.enforcing || ask.program === undefined) {
+        await replyPermission(client, ask, directory, "always");
         return;
     }
     // The no-op sink: with canPark false the gate never raises a card, so consultWith has nothing to push here.
-    const outcome = await consultWith(gate, program, vendorSubject(permission.type), () => {});
-    await replyPermission(client, permission, directory, outcome.allow ? "once" : "reject");
+    const outcome = await consultWith(gate, ask.program, vendorSubject(ask.kind), () => {});
+    await replyPermission(client, ask, directory, outcome.allow ? "once" : "reject");
 };
 
 // How many times the stream may die in a row before the watcher gives up; the service never restarts a dead server
@@ -176,10 +222,11 @@ const watchSessionEvents = (client: OpencodeClient, directory: string, ended: ()
                 const sse = await subscribeEvents(client, directory);
                 for await (const event of sse.stream) {
                     failures = 0;
-                    if (event.type === "permission.updated") {
+                    const ask = permissionAskOf(event);
+                    if (ask !== undefined) {
                         // Detached: awaiting the reply here would stop reading the stream its own effects arrive on.
                         // allow(silent-catch): a failed reply just leaves the ask standing
-                        void answerPermission(client, event.properties, directory).catch(() => {});
+                        void answerPermission(client, ask, directory).catch(() => {});
                     }
                 }
             } catch {

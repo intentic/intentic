@@ -446,7 +446,12 @@ export const createSystemRoutes = (services: Services) => {
         }),
         subagentTranscript: i.subagentTranscript.handler(async ({ input }) => ({
             messages: await readSubagentTranscript(
-                { root: services.workspace.root, conversations: services.conversations, conversation: (agent) => services.transcripts.read(agent) },
+                {
+                    root: services.workspace.root,
+                    conversations: services.conversations,
+                    conversation: (agent) => services.transcripts.read(agent),
+                    toolChildren: (agent, toolId) => services.transcripts.toolChildren(agent, toolId),
+                },
                 input.id,
             ),
         })),

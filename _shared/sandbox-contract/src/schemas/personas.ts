@@ -134,7 +134,7 @@ export const TURN_BRIEFING_NOTES: readonly TurnBriefingNote[] = [
     },
     {
         id: "delegation",
-        label: "Spawning child agents",
+        label: "Spawning subagents",
         when: "First message, on a shell-only runtime, for a card that may delegate.",
         cost: "The agent does the work itself rather than handing parts of it to other conversations.",
     },

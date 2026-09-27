@@ -241,7 +241,7 @@ const ENTRIES: readonly GuidanceEntry[] = [
             "wakes this conversation when the check passes. `sleep N` in a Bash command is not a way to wait: it bills the " +
             "wait to the turn and costs a model round-trip per poll, and a sleep sized to land just under the tool timeout " +
             "is the most expensive way this harness can do nothing. If you already started work here, wait on it with the " +
-            "`wait` tool (a background command by the ID its Bash call returned, a child agent by its id) rather than " +
+            "`wait` tool (a background command by the ID its Bash call returned, a subagent by its id) rather than " +
             "re-reading its log on a timer. Do not detach a process yourself (setsid, nohup, `&` with disown): once this " +
             "conversation stops, whatever it left running outside run_in_background is reclaimed. A server you start for the " +
             "person keeps running after your turn only when you pass its ID to the `keep` tool with a reason, then give " +

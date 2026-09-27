@@ -554,7 +554,7 @@ export const adoptChildTurn = (services: Services, started: DomainEventMap["run.
         void sayToParent(
             services,
             kid.parent,
-            `Your child agent \`${childId}\` ("${taskLine(kid.spec)}") is working: ${why}. Its report reaches you when it ends, like any turn of its: do not send it the task again or give the task to another agent meanwhile.`,
+            `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") is working: ${why}. Its report reaches you when it ends, like any turn of its: do not send it the task again or give the task to another agent meanwhile.`,
         );
     }
 };
@@ -660,7 +660,7 @@ const askOwner = async (services: Services, parent: string, run: LiveRun, ask: C
         case "unanswered":
             return {
                 ok: false,
-                message: `Nobody answered the request to ${move === "spawn" ? "start" : move} a child agent, so it did not run. Carry on without it and say what you left undone.`,
+                message: `Nobody answered the request to ${move === "spawn" ? "start" : move} a subagent, so it did not run. Carry on without it and say what you left undone.`,
             };
         case "declined":
             return {
@@ -937,7 +937,7 @@ const abandonChildStart = async (services: Services, parent: string, id: string,
     if (subagentEndingReported(services.conversations, id)) {
         return;
     }
-    if (await sayToParent(services, parent, `Your child agent \`${id}\` did not start: ${message}`)) {
+    if (await sayToParent(services, parent, `Your subagent \`${id}\` did not start: ${message}`)) {
         markSubagentEndingReported(services.conversations, id);
     }
 };
@@ -958,7 +958,7 @@ const startAllowed = async (services: Services, parent: ChildParent, start: Chil
             return;
         }
         if (started.note !== undefined) {
-            void sayToParent(services, parent.conversationId, `The owner allowed your child agent \`${start.id}\` to start. ${started.note}`);
+            void sayToParent(services, parent.conversationId, `The owner allowed your subagent \`${start.id}\` to start. ${started.note}`);
         }
     } catch (error) {
         await abandonChildStart(services, parent.conversationId, start.id, errorMessage(error));
@@ -974,7 +974,7 @@ export const spawnChild = async (services: Services, parent: ChildParent, asked:
     const settings = await services.sandboxSettings.get();
     const depth = spawnDepthOf(services.conversations, parent.conversationId) + 1;
     if (depth > settings.subagentDepth) {
-        return { ok: false, message: `Spawn depth ${settings.subagentDepth} reached: this agent is itself a spawned child and may not go deeper.` };
+        return { ok: false, message: `Spawn depth ${settings.subagentDepth} reached: this agent is itself a spawned subagent and may not go deeper.` };
     }
     const verdict = await judgeMove(services, parent.conversationId, asked.provider);
     if (verdict.effect === "deny") {
@@ -1081,7 +1081,7 @@ const sendAllowed = async (services: Services, parent: ChildParent, kid: ChildRe
         sent = { ok: false, message: errorMessage(error) };
     }
     if (!sent.ok) {
-        void sayToParent(services, parent.conversationId, `Your message to child agent \`${childId}\` did not go: ${sent.message}`);
+        void sayToParent(services, parent.conversationId, `Your message to subagent \`${childId}\` did not go: ${sent.message}`);
     }
 };
 
@@ -1178,7 +1178,7 @@ export const answerChild = async (
     void askOwner(services, parent.conversationId, run, askAbout(kid, "answer", childId, picks), verdict.reason).then((admission) => {
         const answered = admission.ok ? settleAnswer(services, kid, answers) : admission;
         if (!answered.ok) {
-            void sayToParent(services, parent.conversationId, `Your answer to child agent \`${childId}\` did not go: ${answered.message}`);
+            void sayToParent(services, parent.conversationId, `Your answer to subagent \`${childId}\` did not go: ${answered.message}`);
         }
     });
     return { ok: true, note: HELD_ANSWER };

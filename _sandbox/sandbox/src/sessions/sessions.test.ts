@@ -4,7 +4,7 @@ import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { withRuntimeHistory } from "../agent/providers/runtime-history.js";
 import { withAttachmentNote } from "../agent/prompt/attachment-note.js";
 import { composeWirePrompt } from "../agent/prompt/turn-preamble.js";
-import { SPAWN_NOTE_HEADER } from "../agent/subagents/spawn-note.js";
+import { SPAWN_NOTE_HEADER, SPAWN_NOTE_TITLE } from "../agent/subagents/spawn-note.js";
 import { createRecentSessions, listWorkspaceSessions, readWorkspaceSession, readWorkspaceSessionTail, searchWorkspaceSessions } from "./sessions.js";
 import { openSearchIndex } from "./search-index.js";
 import { readSessionLines } from "./transcript-search.js";
@@ -620,7 +620,7 @@ test("a replacement runtime session keeps the conversation's original user title
 
 // The search reads a user message as its turn was queued: a re-run's note is part of that, the preamble never is.
 test("a re-run's prompt is searchable as its turn was queued, re-run note included", async () => {
-    const spawning = { title: "Spawning child agents", text: `${SPAWN_NOTE_HEADER}\n\nStart one.` };
+    const spawning = { title: SPAWN_NOTE_TITLE, text: `${SPAWN_NOTE_HEADER}\n\nStart one.` };
     const sent = composeWirePrompt([spawning], withResumeNote("ship the parser", RESUME_NOTES.restart));
     getSessionMessages.mockResolvedValue([{ type: "user", message: { content: sent } }]);
     expect(await readSessionLines(WORKSPACE_ROOT, "s0")).toEqual([{ text: `${RESUME_NOTES.restart} ship the parser`, speaker: "user" }]);

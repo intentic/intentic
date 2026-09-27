@@ -1,7 +1,9 @@
-import type { InteractionUpdate, TodoItem as CursorTodo, ToolCall } from "@cursor/sdk";
+import type { InteractionUpdate, NestedTaskUpdate, TodoItem as CursorTodo, ToolCall } from "@cursor/sdk";
 import type { AgentEvent, TodoItem, ToolCallContent } from "@intentic/sandbox-contract";
+import { z } from "zod";
 import { diffContent, displayNameOf, toolLocations, toolTarget, workspacePath } from "../../agent/tools/tool-calls.js";
 import { toolCallOpened, type TurnCapture, usageTotals, type VendorEventMapper } from "../decorators/vendor-events.js";
+import { opt } from "../../opt.js";
 
 // Pure mapping of Cursor's InteractionUpdate onto AgentEvent frames; drops updates with no UI meaning instead of
 // passing them through. Reads only the delta stream (`send({ onDelta })`), the richer of two overlapping views of a
@@ -96,6 +98,138 @@ const completedContent = (call: ToolCall): ToolCallContent[] | undefined => {
     return undefined;
 };
 
+// A call's card as it opens; `parent` is the task call whose subagent made it.
+const openedCard = (callId: string, call: ToolCall, cwd: string, parent?: string): AgentEvent =>
+    toolCallOpened({
+        id: callId,
+        name: nameOf(call),
+        target: targetOf(call, cwd),
+        locations: toolLocations(call.args, cwd),
+        content: startedContent(call, cwd),
+        parentToolUseId: parent,
+    });
+
+// A finished call's card: failed on the vendor's own error status, with what it produced.
+const ResultStatusSchema = z.object({ status: z.string().optional().catch(undefined) }).catch({});
+const closedCard = (callId: string, call: ToolCall): AgentEvent => {
+    const failed = ResultStatusSchema.parse(call.result).status === "error";
+    return { kind: "tool_call_update", id: callId, status: failed ? "failed" : "completed", ...opt("content", completedContent(call)) };
+};
+
+// Cursor's own subagents (its `task` tool): the call's card carries the subagent it starts; the subagent's own steps,
+// streamed as updates nested on that call (`tool-call-delta`, one level deep), nest under the card; the call's result
+// ends it. Read tolerantly: the task's args and result in another shape leave the subagent less described, never fail
+// the turn.
+const TaskArgsSchema = z
+    .object({
+        description: z.string().optional().catch(undefined),
+        model: z.string().optional().catch(undefined),
+        subagentType: z.object({ kind: z.string().optional().catch(undefined), name: z.string().optional().catch(undefined) }).optional().catch(undefined),
+    })
+    .catch({});
+const TaskResultSchema = z
+    .object({
+        status: z.string().optional().catch(undefined),
+        value: z.object({ isBackground: z.boolean().catch(false), conversationSteps: z.array(z.unknown()).optional().catch(undefined) }).optional().catch(undefined),
+        error: z.object({ message: z.string() }).optional().catch(undefined),
+    })
+    .catch({});
+// A step of the subagent's own conversation, as the result lists them; its prose steps are what it said.
+const SaidStepSchema = z.object({ assistantMessage: z.object({ text: z.string() }) });
+
+// What the subagent said last, from the steps its result carries.
+const lastSaid = (steps: readonly unknown[] | undefined): string | undefined =>
+    (steps ?? []).flatMap((step) => {
+        const said = SaidStepSchema.safeParse(step);
+        return said.success && said.data.assistantMessage.text.trim() !== "" ? [said.data.assistantMessage.text.trim()] : [];
+    }).at(-1);
+
+export interface CursorSubagents {
+    readonly started: (callId: string, call: ToolCall) => AgentEvent[];
+    readonly nested: (callId: string, update: NestedTaskUpdate) => AgentEvent[];
+    readonly completed: (callId: string, call: ToolCall) => AgentEvent[];
+    // The run's end. A background subagent's own end reaches only its parent's model, but the run holds until every
+    // one has ended, so a run that settled on its own saw each through.
+    readonly settled: () => AgentEvent[];
+}
+
+export const cursorSubagents = (cwd: string): CursorSubagents => {
+    // Each subagent this run's task calls started and has not seen end, with its calls so far and whether it went on in
+    // the background.
+    const open = new Map<string, { calls: number; background: boolean }>();
+
+    const nestedCall = (callId: string, update: Extract<NestedTaskUpdate, { type: "tool-call-started" | "tool-call-completed" }>): AgentEvent[] => {
+        const task = open.get(callId);
+        // A subagent's own checklist is its business, not the turn's.
+        if (task === undefined || update.toolCall.type === "updateTodos") {
+            return [];
+        }
+        if (update.type === "tool-call-completed") {
+            return [closedCard(update.callId, update.toolCall)];
+        }
+        task.calls += 1;
+        return [
+            openedCard(update.callId, update.toolCall, cwd, callId),
+            { kind: "subagent_update", id: callId, toolUses: task.calls, lastTool: nameOf(update.toolCall) },
+        ];
+    };
+
+    return {
+        started: (callId, call) => {
+            if (call.type !== "task") {
+                return [];
+            }
+            open.set(callId, { calls: 0, background: false });
+            const args = TaskArgsSchema.parse(call.args);
+            return [
+                {
+                    kind: "subagent",
+                    id: callId,
+                    subagentKind: "subagent",
+                    ...opt("agentType", args.subagentType?.name ?? args.subagentType?.kind),
+                    ...opt("description", args.description),
+                    ...opt("model", args.model),
+                },
+            ];
+        },
+        nested: (callId, update) => {
+            if (!open.has(callId)) {
+                return [];
+            }
+            if (update.type === "text-delta" || update.type === "thinking-delta") {
+                return update.text === "" ? [] : [{ kind: update.type === "text-delta" ? "delta" : "thinking", text: update.text, parentToolUseId: callId }];
+            }
+            return update.type === "tool-call-started" || update.type === "tool-call-completed" ? nestedCall(callId, update) : [];
+        },
+        completed: (callId, call) => {
+            const task = open.get(callId);
+            if (call.type !== "task" || task === undefined) {
+                return [];
+            }
+            const result = TaskResultSchema.parse(call.result);
+            if (result.status === "error") {
+                open.delete(callId);
+                return [{ kind: "subagent_update", id: callId, status: "failed", error: result.error?.message ?? "The subagent failed." }];
+            }
+            // Gone on in the background: its card is done, the subagent is not.
+            if (result.value?.isBackground === true) {
+                task.background = true;
+                return [];
+            }
+            open.delete(callId);
+            return [{ kind: "subagent_update", id: callId, status: "completed", ...opt("summary", lastSaid(result.value?.conversationSteps)) }];
+        },
+        settled: () =>
+            [...open].flatMap(([callId, task]) => {
+                if (!task.background) {
+                    return [];
+                }
+                open.delete(callId);
+                return [{ kind: "subagent_update" as const, id: callId, status: "completed" as const }];
+            }),
+    };
+};
+
 // cancelled maps to completed, not pending: the alternative leaves a checklist item that can never finish.
 const TODO_STATUS: Record<string, TodoItem["status"]> = {
     pending: "pending",
@@ -107,11 +241,15 @@ const TODO_STATUS: Record<string, TodoItem["status"]> = {
 const toTodos = (todos: readonly CursorTodo[]): TodoItem[] =>
     todos.map((todo) => ({ content: todo.content, status: TODO_STATUS[todo.status] ?? "pending" }));
 
-export const createCursorEventMapper = (cwd: string, holdText = false): VendorEventMapper<InteractionUpdate> => {
+export const createCursorEventMapper = (
+    cwd: string,
+    holdText = false,
+): VendorEventMapper<InteractionUpdate> & { readonly ending: (ranThrough: boolean) => AgentEvent[] } => {
     // Shell call in flight: output updates don't name their call; only one runs at a time, so 'last started' is it.
     let liveShell: { id: string; output: string } | undefined;
     const totals = usageTotals();
     const capture: TurnCapture = {};
+    const subagents = cursorSubagents(cwd);
 
     const map = (update: InteractionUpdate): AgentEvent[] => {
         switch (update.type) {
@@ -137,15 +275,7 @@ export const createCursorEventMapper = (cwd: string, holdText = false): VendorEv
                 if (call.type === "shell") {
                     liveShell = { id: update.callId, output: "" };
                 }
-                return [
-                    toolCallOpened({
-                        id: update.callId,
-                        name: nameOf(call),
-                        target: targetOf(call, cwd),
-                        locations: toolLocations(call.args, cwd),
-                        content: startedContent(call, cwd),
-                    }),
-                ];
+                return [openedCard(update.callId, call, cwd), ...subagents.started(update.callId, call)];
             }
             case "tool-call-completed": {
                 const call = update.toolCall;
@@ -156,17 +286,11 @@ export const createCursorEventMapper = (cwd: string, holdText = false): VendorEv
                 if (liveShell?.id === update.callId) {
                     liveShell = undefined;
                 }
-                const failed = (call.result as { status?: unknown } | undefined)?.status === "error";
-                const content = completedContent(call);
-                return [
-                    {
-                        kind: "tool_call_update",
-                        id: update.callId,
-                        status: failed ? "failed" : "completed",
-                        ...(content !== undefined ? { content } : {}),
-                    },
-                ];
+                return [closedCard(update.callId, call), ...subagents.completed(update.callId, call)];
             }
+            // A subagent's own steps, nested on the task call that started it.
+            case "tool-call-delta":
+                return subagents.nested(update.callId, update.taskUpdate);
             // Untyped passthrough: the SDK's `event` is a bare record, so field names aren't part of the contract.
             // Tries a few plausible spellings and drops the rest; the card catches up when the call completes.
             case "shell-output-delta": {
@@ -198,7 +322,7 @@ export const createCursorEventMapper = (cwd: string, holdText = false): VendorEv
                 return [];
             }
             // Silently dropped, each already covered elsewhere:
-            // partial-tool-call / tool-call-delta: argument streaming, rendered from the started frame
+            // partial-tool-call: argument streaming, rendered from the started frame
             // token-delta: a running count; usage reports properly at the end
             // step-* / summary*: the loop's own bookkeeping
             // user-message-appended: this turn's own prompt echoed back
@@ -207,9 +331,17 @@ export const createCursorEventMapper = (cwd: string, holdText = false): VendorEv
         }
     };
 
+    // What a phase ends on: the subagents it sent into the background, which ended before a run that ran through did
+    // (one cut short leaves them to the turn to close), then what the phase spent.
+    const ending = (ranThrough: boolean): AgentEvent[] => {
+        const spent = totals.frame();
+        return [...(ranThrough ? subagents.settled() : []), ...(spent === undefined ? [] : [spent])];
+    };
+
     return {
         map,
         usage: totals.frame,
         capture: () => capture,
+        ending,
     };
 };

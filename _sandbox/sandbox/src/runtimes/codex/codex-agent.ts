@@ -28,6 +28,7 @@ import {
     type JsonValue,
 } from "./codex-app-server.js";
 import { persistCodexImageArtifact } from "./codex-image-artifacts.js";
+import { aboutSubagent, codexSubagentFrames, codexSubagents, subagentSpend } from "./codex-subagent-frames.js";
 import { codexInstructionConfig } from "./codex-instructions.js";
 import { CODEX_ADVISORY, CODEX_MODEL_INVALID, CODEX_MODEL_RESUMED_ELSEWHERE } from "./codex-models.js";
 import type { ParkedCards } from "../../conversations/actor/parked-cards.js";
@@ -391,130 +392,169 @@ async function* codexCommandApproval(
     request.respond(outcome.allow);
 }
 
+type CodexItemEvent = Extract<CodexEvent, { type: "item.started" | "item.updated" | "item.completed" }>;
+type ItemOf<T extends CodexItem["type"]> = Extract<CodexItem, { type: T }>;
+
+// An agent message: whole blocks only (item.completed), text_end following at once, so later tool calls render under
+// this bubble. A plan phase holds messages one deep, flushing each the instant a newer one arrives, so only the last
+// stays held as the plan.
+function* messageFrames(event: CodexItemEvent, item: ItemOf<"agent_message">, context: CodexStreamContext, capture: TurnCapture): Generator<AgentEvent> {
+    if (event.type !== "item.completed") {
+        return;
+    }
+    if (context.holdMessages !== true) {
+        yield { kind: "delta", text: item.text };
+        yield { kind: "text_end" };
+        return;
+    }
+    if (capture.planText !== undefined) {
+        yield { kind: "delta", text: capture.planText };
+        yield { kind: "text_end" };
+    }
+    capture.planText = item.text;
+}
+
+// A command, its card opening as it starts and its output replacing as it runs (item.updated carries the full output
+// so far, matching the update frame's replace semantics).
+function* commandFrames(event: CodexItemEvent, item: ItemOf<"command_execution">): Generator<AgentEvent> {
+    if (event.type === "item.started") {
+        yield { kind: "tool_call", id: item.id, name: "Bash", category: "execute", status: "in_progress", target: item.command };
+        return;
+    }
+    const content: ToolCallContent[] = [{ type: "text", text: item.aggregated_output }];
+    if (event.type === "item.updated") {
+        yield { kind: "tool_call_update", id: item.id, content };
+        return;
+    }
+    const failed = item.status === "failed" || (item.exit_code !== undefined && item.exit_code !== 0);
+    yield { kind: "tool_call_update", id: item.id, status: failed ? "failed" : "completed", content };
+}
+
+// A patch, emitted once, success or failure; the item has paths but no diff text, so the card shows locations only.
+function* fileChangeFrames(event: CodexItemEvent, item: ItemOf<"file_change">, cwd: string): Generator<AgentEvent> {
+    if (event.type !== "item.completed") {
+        return;
+    }
+    const locations = item.changes
+        .map((change) => workspacePath(change.path, cwd))
+        .filter((path): path is string => path !== undefined)
+        .map((path): ToolCallLocation => ({ path }));
+    const allDeletes = item.changes.length > 0 && item.changes.every((change) => change.kind === "delete");
+    const failed = item.status === "failed";
+    yield {
+        kind: "tool_call",
+        id: item.id,
+        name: "Edit",
+        category: allDeletes ? "delete" : "edit",
+        status: failed ? "failed" : "completed",
+        target: item.changes.map((change) => `${change.kind} ${change.path}`).join(", "),
+        ...opt("locations", locations.length > 0 ? locations : undefined),
+        ...opt("content", failed ? [{ type: "text" as const, text: "patch failed" }] : undefined),
+    };
+}
+
+function* mcpFrames(event: CodexItemEvent, item: ItemOf<"mcp_tool_call">, context: CodexStreamContext, capture: TurnCapture): Generator<AgentEvent> {
+    const name = `${item.server}.${item.tool}`;
+    if (event.type === "item.started") {
+        attachBrowserSession(item, capture.sessionId, context.browser);
+        yield { kind: "tool_call", id: item.id, name, category: toolCategoryOf(name), status: "in_progress" };
+    } else if (event.type === "item.completed") {
+        yield { kind: "tool_call_update", id: item.id, status: item.status === "failed" ? "failed" : "completed", content: mcpResultContent(item, name, context) };
+    }
+}
+
+// A generated picture, saved into the workspace once done; nothing to say while it runs.
+async function* imageFrames(event: CodexItemEvent, item: ItemOf<"image_generation">, context: CodexStreamContext): AsyncGenerator<AgentEvent> {
+    if (event.type === "item.started") {
+        yield { kind: "tool_call", id: item.id, name: "Image generation", category: "other", status: "in_progress", ...opt("target", item.revised_prompt) };
+        return;
+    }
+    if (event.type !== "item.completed") {
+        return;
+    }
+    if (item.status !== "completed") {
+        yield { kind: "tool_call_update", id: item.id, status: "failed", content: [{ type: "text", text: "Image generation failed" }] };
+        return;
+    }
+    try {
+        const path = await persistCodexImageArtifact({ ...context.imageArtifacts, image: item });
+        yield { kind: "tool_call_update", id: item.id, status: "completed", content: [{ type: "image", path }] };
+    } catch (error) {
+        yield {
+            kind: "tool_call_update",
+            id: item.id,
+            status: "failed",
+            content: [{ type: "text", text: error instanceof Error ? error.message : "Could not save generated image" }],
+        };
+    }
+}
+
+// Items that settle in one frame, emitted as they complete: reasoning, a web search, a compaction; a checklist on every
+// report of it.
+function* settledFrames(event: CodexItemEvent, item: ItemOf<"reasoning" | "web_search" | "todo_list" | "context_compaction">): Generator<AgentEvent> {
+    if (item.type === "todo_list") {
+        yield { kind: "todos", items: item.items.map((todo) => ({ content: todo.text, status: todo.completed ? ("completed" as const) : ("pending" as const) })) };
+        return;
+    }
+    if (event.type !== "item.completed") {
+        return;
+    }
+    if (item.type === "reasoning") {
+        yield { kind: "thinking", text: item.text };
+    } else if (item.type === "web_search") {
+        yield { kind: "tool_call", id: item.id, name: "WebSearch", category: "search", status: "completed", target: item.query };
+    } else {
+        yield { kind: "compact", trigger: "auto" };
+    }
+}
+
+// One item of a thread, as frames: its prose, reasoning, commands, edits, tool calls, checklist, pictures and
+// compactions. A subagent's items come through here too (codex-subagent-frames.ts), tagged with its spawn call after;
+// its multi-agent calls are that module's alone.
+async function* itemFrames(event: CodexItemEvent, context: CodexStreamContext, capture: TurnCapture): AsyncGenerator<AgentEvent> {
+    const item = event.item;
+    switch (item.type) {
+        case "agent_message":
+            yield* messageFrames(event, item, context, capture);
+            return;
+        case "command_execution":
+            yield* commandFrames(event, item);
+            return;
+        case "file_change":
+            yield* fileChangeFrames(event, item, context.cwd);
+            return;
+        case "mcp_tool_call":
+            yield* mcpFrames(event, item, context, capture);
+            return;
+        case "image_generation":
+            yield* imageFrames(event, item, context);
+            return;
+        case "collab_agent_tool_call":
+            return;
+        default:
+            yield* settledFrames(event, item);
+    }
+}
+
 // Normalizes one Codex turn onto AgentEvents and returns what it captured (read via `yield*` by the plan phase,
 // discarded by an ordinary turn). `holdMessages` holds agent messages one-deep, flushing each as the next arrives, so
 // whatever remains at the end is the plan text.
 async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStreamContext): AsyncGenerator<AgentEvent, TurnCapture> {
-    const { cwd, imageArtifacts, browser, holdMessages = false } = context;
     const capture: TurnCapture = {};
+    // The subagents this turn's multi-agent calls start; their items read as the turn's own do, under their spawn call.
+    const subagents = codexSubagents();
+    const subagentItems = (event: Extract<CodexEvent, { type: "item.started" | "item.updated" | "item.completed" }>): AsyncIterable<AgentEvent> =>
+        itemFrames(event, { ...context, holdMessages: false }, {});
     for await (const event of events) {
+        if (aboutSubagent(event)) {
+            yield* codexSubagentFrames(event, subagents, subagentItems);
+            continue;
+        }
         if (event.type === "thread.started") {
             capture.sessionId = event.thread_id;
             yield { kind: "session", sessionId: event.thread_id };
         } else if (event.type === "item.started" || event.type === "item.updated" || event.type === "item.completed") {
-            const item = event.item;
-            if (item.type === "agent_message") {
-                if (event.type !== "item.completed") {
-                    continue;
-                }
-                // Whole blocks only (item.completed): text_end follows at once, so later tool calls render under this
-                // bubble.
-                if (!holdMessages) {
-                    yield { kind: "delta", text: item.text };
-                    yield { kind: "text_end" };
-                    continue;
-                }
-                // Held one message deep: flushed the instant a newer one arrives, so only the last stays held as the
-                // plan.
-                if (capture.planText !== undefined) {
-                    yield { kind: "delta", text: capture.planText };
-                    yield { kind: "text_end" };
-                }
-                capture.planText = item.text;
-            } else if (item.type === "reasoning") {
-                if (event.type === "item.completed") {
-                    yield { kind: "thinking", text: item.text };
-                }
-            } else if (item.type === "command_execution") {
-                if (event.type === "item.started") {
-                    yield { kind: "tool_call", id: item.id, name: "Bash", category: "execute", status: "in_progress", target: item.command };
-                } else if (event.type === "item.updated") {
-                    // item.updated carries the full output so far, matching the update frame's replace semantics.
-                    yield { kind: "tool_call_update", id: item.id, content: [{ type: "text", text: item.aggregated_output }] };
-                } else if (event.type === "item.completed") {
-                    const failed = item.status === "failed" || (item.exit_code !== undefined && item.exit_code !== 0);
-                    yield {
-                        kind: "tool_call_update",
-                        id: item.id,
-                        status: failed ? "failed" : "completed",
-                        content: [{ type: "text", text: item.aggregated_output }],
-                    };
-                }
-            } else if (item.type === "file_change") {
-                // Emitted once, success or failure; item has paths but no diff text, so the card shows locations only.
-                if (event.type === "item.completed") {
-                    const locations = item.changes
-                        .map((change) => workspacePath(change.path, cwd))
-                        .filter((path): path is string => path !== undefined)
-                        .map((path): ToolCallLocation => ({ path }));
-                    const allDeletes = item.changes.length > 0 && item.changes.every((change) => change.kind === "delete");
-                    yield {
-                        kind: "tool_call",
-                        id: item.id,
-                        name: "Edit",
-                        category: allDeletes ? "delete" : "edit",
-                        status: item.status === "failed" ? "failed" : "completed",
-                        target: item.changes.map((change) => `${change.kind} ${change.path}`).join(", "),
-                        ...(locations.length > 0 ? { locations } : {}),
-                        ...(item.status === "failed" ? { content: [{ type: "text", text: "patch failed" }] } : {}),
-                    };
-                }
-            } else if (item.type === "mcp_tool_call") {
-                const name = `${item.server}.${item.tool}`;
-                if (event.type === "item.started") {
-                    attachBrowserSession(item, capture.sessionId, browser);
-                    yield { kind: "tool_call", id: item.id, name, category: toolCategoryOf(name), status: "in_progress" };
-                } else if (event.type === "item.completed") {
-                    yield {
-                        kind: "tool_call_update",
-                        id: item.id,
-                        status: item.status === "failed" ? "failed" : "completed",
-                        content: mcpResultContent(item, name, context),
-                    };
-                }
-            } else if (item.type === "web_search") {
-                if (event.type === "item.completed") {
-                    yield { kind: "tool_call", id: item.id, name: "WebSearch", category: "search", status: "completed", target: item.query };
-                }
-            } else if (item.type === "todo_list") {
-                yield {
-                    kind: "todos",
-                    items: item.items.map((todo) => ({ content: todo.text, status: todo.completed ? ("completed" as const) : ("pending" as const) })),
-                };
-            } else if (item.type === "image_generation") {
-                if (event.type === "item.started") {
-                    yield {
-                        kind: "tool_call",
-                        id: item.id,
-                        name: "Image generation",
-                        category: "other",
-                        status: "in_progress",
-                        ...(item.revised_prompt !== undefined ? { target: item.revised_prompt } : {}),
-                    };
-                    continue;
-                }
-                // Nothing to say while running; the completion event below settles the card.
-                if (event.type !== "item.completed") {
-                    continue;
-                }
-                if (item.status !== "completed") {
-                    yield { kind: "tool_call_update", id: item.id, status: "failed", content: [{ type: "text", text: "Image generation failed" }] };
-                    continue;
-                }
-                try {
-                    const path = await persistCodexImageArtifact({ ...imageArtifacts, image: item });
-                    yield { kind: "tool_call_update", id: item.id, status: "completed", content: [{ type: "image", path }] };
-                } catch (error) {
-                    yield {
-                        kind: "tool_call_update",
-                        id: item.id,
-                        status: "failed",
-                        content: [{ type: "text", text: error instanceof Error ? error.message : "Could not save generated image" }],
-                    };
-                }
-            } else if (item.type === "context_compaction" && event.type === "item.completed") {
-                yield { kind: "compact", trigger: "auto" };
-            }
+            yield* itemFrames(event, context, capture);
         } else if (event.type === "commands") {
             // Thread's skills for the `/` popover; republished every turn so an unused conversation still shows them.
             yield { kind: "commands", items: event.skills.map((skill) => ({ name: skill.name, description: skill.description })) };
@@ -523,11 +563,13 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
         } else if (event.type === "command_approval.requested") {
             yield* codexCommandApproval(event, context);
         } else if (event.type === "turn.completed") {
+            // What the turn's own thread spent and what its subagents' threads did: the account paid for both.
+            const delegated = subagentSpend(subagents);
             if (event.usage !== undefined) {
                 yield {
                     kind: "usage",
-                    inputTokens: event.usage.input_tokens,
-                    outputTokens: event.usage.output_tokens,
+                    inputTokens: event.usage.input_tokens + delegated.input,
+                    outputTokens: event.usage.output_tokens + delegated.output,
                     cacheReadTokens: event.usage.cached_input_tokens,
                     cacheCreationTokens: event.usage.cache_write_input_tokens,
                 };

@@ -71,6 +71,7 @@ export const usageTotals = (): UsageTotals => {
 };
 
 // A tool call's opening frame: the shared taxonomy's category unless the vendor names one, and running unless it says.
+// `parentToolUseId` is the call that started the subagent making this one, which nests it under that call's card.
 export const toolCallOpened = (call: {
     readonly id: string;
     readonly name: string;
@@ -79,6 +80,7 @@ export const toolCallOpened = (call: {
     readonly target?: string | undefined;
     readonly locations?: ToolCallLocation[] | undefined;
     readonly content?: ToolCallContent[] | undefined;
+    readonly parentToolUseId?: string | undefined;
 }): Extract<AgentEvent, { kind: "tool_call" }> => ({
     kind: "tool_call",
     id: call.id,
@@ -88,4 +90,5 @@ export const toolCallOpened = (call: {
     ...opt("target", call.target),
     ...opt("locations", call.locations),
     ...opt("content", call.content),
+    ...opt("parentToolUseId", call.parentToolUseId),
 });

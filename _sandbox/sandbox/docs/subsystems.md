@@ -121,7 +121,7 @@ the pipeline instead.
 
 Every card a turn can park on is one list, `PARK_KINDS` in the contract, read by the conversation's parked state, the
 push and the silence judge. A gate that asks from outside the turn (a payment, a capability, a credential, a new
-sandbox, a command on the owner's machine, a child agent) raises its card through `raiseRequest`
+sandbox, a command on the owner's machine, a spawned subagent) raises its card through `raiseRequest`
 (`conversations/actor/card-offers.ts`, seams from `cardDeps`), which announces `turn.awaiting` and answers
 `approved`, `declined` or `unanswered`; each gate keeps only its own policy and wording.
 

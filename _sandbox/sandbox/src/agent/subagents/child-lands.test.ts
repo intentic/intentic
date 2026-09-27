@@ -62,7 +62,7 @@ describe("a child's land, told to its parent", () => {
             {
                 voice: "sandbox",
                 text:
-                    'Your child agent `sub-a` ("Land-check queue") landed in the main tree (`intentic`). The main tree\'s own check runs on it next. ' +
+                    'Your subagent `sub-a` ("Land-check queue") landed in the main tree (`intentic`). The main tree\'s own check runs on it next. ' +
                     "If that goes red on this land you are told where its failures were sent, so leave them to that instead of relaying them yourself.",
             },
         ]);
@@ -95,7 +95,7 @@ describe("a conflicted press of Land, told to the child's parent", () => {
         const world = worldOf(["orchestrator"]);
         await reportChildConflict(world.deps, "sub-a", ["intentic/a.ts", "intentic/b.ts", "intentic/c.ts", "intentic/d.ts", "intentic/e.ts", "intentic/f.ts"]);
         expect(world.steers.map(({ text }) => text)).toEqual([
-            'The owner pressed Land on your child agent `sub-a` ("Land-check queue"), and it hit a merge conflict on `intentic/a.ts`, `intentic/b.ts`, ' +
+            'The owner pressed Land on your subagent `sub-a` ("Land-check queue"), and it hit a merge conflict on `intentic/a.ts`, `intentic/b.ts`, ' +
                 "`intentic/c.ts`, `intentic/d.ts`, `intentic/e.ts` and 1 more: nothing of it reached the main tree. It lands once its branch is rebased onto the " +
                 "main line and the conflicts are resolved. The owner can have it do that from its card, or you can tell it to; a message you send while another " +
                 "turn runs on it waits for that turn to end.",
@@ -111,7 +111,7 @@ describe("a red land check on a child's work, told to its parent", () => {
         const world = worldOf(["orchestrator"]);
         await reportChildrenRed(world.deps, red, ["sub-a", "sub-b", "by-hand"], { kind: "fix-up", conversationId: "land-fix-intentic-x", at: 2_000 });
         expect(world.steers.map(({ text }) => text)).toEqual([
-            'The main tree\'s own check in `intentic` went red after work from your child agents `sub-a` ("Land-check queue"), `sub-b` ("OOM kill priority") ' +
+            'The main tree\'s own check in `intentic` went red after work from your subagents `sub-a` ("Land-check queue"), `sub-b` ("OOM kill priority") ' +
                 "landed: 4 new failures, such as `daemon-boundaries`, `tidy silent-catch: auth/grants.ts`, `lint prefer-template` and 1 more. They were handed to " +
                 "a fresh conversation, `land-fix-intentic-x`, which fixes them in a worktree of its own. Leave them to that instead of relaying them yourself.",
         ]);
