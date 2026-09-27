@@ -33,6 +33,8 @@ export interface AgentStanding {
     // allowance; both belong in Attention, but this says which so the card can tell them apart. `laneOf` reads it too,
     // so the lane, badge and chip stay in agreement.
     readonly failureCode?: string;
+    // The words that turn died on (AgentSummary.failure), cleared with the code when it runs again.
+    readonly failure?: string;
     /** When the spent allowance reopens, in epoch SECONDS (the wire's unit). Absent when nobody published one. */
     readonly limitResetsAt?: number;
     /** Whether the refused turn is held whole, so a press re-runs it rather than sending a new message after it. */

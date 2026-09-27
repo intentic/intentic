@@ -119,6 +119,12 @@
     background: color-mix(in srgb, var(--color-overlay) 55%, transparent);
     border: 1px solid color-mix(in srgb, var(--color-primary-500) 22%, var(--color-line));
 }
+/* A PROMPT THAT DID NOT GO OUT (ChatHeldBubble): the same bubble, on a dashed edge. Here rather than a `border-dashed` at
+   the call site, since this sheet is unlayered and the surface's own `border` above would beat any utility. */
+.chat-surface-held {
+    border-style: dashed;
+    background: color-mix(in srgb, var(--color-overlay) 30%, transparent);
+}
 /* The loading outline (ChatTranscriptSkeleton) fades out at its top edge. */
 .chat-skeleton {
     mask-image: linear-gradient(to bottom, transparent, black 4rem);

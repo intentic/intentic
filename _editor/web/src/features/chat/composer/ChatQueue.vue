@@ -4,15 +4,18 @@ import { Button, Icon, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { basename } from "@intentic/ui/path";
 import { computed, ref } from "vue";
+import { attachmentPreview } from "../drafts/attachmentPreviews";
 import { usePaneView } from "../panel/useChat-view";
+import ChatImageThumb from "../transcript/attachments/ChatImageThumb.vue";
 
-// What waits for this conversation's next turn: the daemon's queue, the same in every window, with each message's own
-// doors (reword, take back) and, when the queue is held, the one press that lets it go.
+// What waits for this conversation's next turn and will go by itself: the daemon's queue, the same in every window, with
+// each message's own doors (reword, take back). A HELD queue is not drawn here: nothing goes by itself then, so its
+// messages stand at the transcript's foot as the prompts that did not go out (ChatHeldMessages).
 
 const t = useT();
 const { queued, queuePaused, streaming, awaitingDecision, unqueue, reword, resumeQueue } = usePaneView();
 
-// What happens to what waits while nothing holds it: a parked turn takes it once answered, a running one ends first.
+// What happens to what waits: a parked turn takes it once answered, a running one ends first.
 const hint = computed(() => {
     if (!streaming.value) {
         return t(`chat.chatQueue.goesWhenFree`);
@@ -23,8 +26,6 @@ const hint = computed(() => {
 // The message being reworded here, and the words it is being given; one at a time.
 const rewording = ref<{ readonly id: string; text: string } | undefined>();
 
-const heldLine = computed(() => (queuePaused.value === `stopped` ? t(`chat.chatQueue.heldStopped`) : t(`chat.chatQueue.heldRefused`)));
-
 // Who a message is from when a person did not type it.
 const fromLine = (message: QueuedMessage): string | undefined => {
     if (message.voice === `person`) {
@@ -32,6 +33,15 @@ const fromLine = (message: QueuedMessage): string | undefined => {
     }
     return message.voice === `agent` ? t(`chat.chatQueue.fromAgent`) : t(`chat.chatQueue.fromSandbox`);
 };
+
+// A picture that goes with a message is drawn as one, small, the way it will be once sent; any other file by its name.
+const picturesOf = (message: QueuedMessage) =>
+    (message.attachments ?? []).flatMap((path) => {
+        const previewUrl = attachmentPreview(path);
+        return previewUrl === undefined ? [] : [{ name: basename(path), path, previewUrl }];
+    });
+const filesOf = (message: QueuedMessage): string[] =>
+    (message.attachments ?? []).filter((path) => attachmentPreview(path) === undefined).map((path) => basename(path));
 
 const save = async (message: QueuedMessage): Promise<void> => {
     const text = rewording.value?.text.trim() ?? ``;
@@ -43,17 +53,7 @@ const save = async (message: QueuedMessage): Promise<void> => {
 
 <template>
     <!-- Outside the transcript until the agent receives them; every window shows the same list. -->
-    <div v-if="queued.length > 0" class="flex flex-col gap-1">
-        <div
-            v-if="queuePaused !== undefined"
-            class="flex items-center gap-2 rounded-xl border border-line-strong bg-card px-3 py-2 text-2xs text-muted"
-        >
-            <Icon name="pause" class="shrink-0 text-2xs text-subtle" />
-            <span class="min-w-0 flex-1">{{ heldLine }}</span>
-            <Button size="small" :text="true" class="shrink-0" v-tooltip.top="t(`chat.chatQueue.resumeHint`)" @click="resumeQueue()">
-                {{ t(`chat.chatQueue.resume`) }}
-            </Button>
-        </div>
+    <div v-if="queued.length > 0 && queuePaused === undefined" class="flex flex-col gap-1">
         <div
             v-for="message in queued"
             :key="message.id"
@@ -73,13 +73,22 @@ const save = async (message: QueuedMessage): Promise<void> => {
                     <Button size="small" type="submit">{{ t(`chat.chatQueue.save`) }}</Button>
                 </div>
             </form>
-            <div v-else class="min-w-0 flex-1">
-                <p v-if="message.text" class="truncate text-2xs text-muted">{{ message.text }}</p>
-                <p v-if="(message.attachments?.length ?? 0) > 0" class="truncate text-2xs text-subtle">
-                    <Icon name="file" class="text-2xs" />
-                    {{ message.attachments?.map((path) => basename(path)).join(`, `) }}
-                </p>
-                <p v-if="fromLine(message) !== undefined" class="text-2xs text-subtle">{{ fromLine(message) }}</p>
+            <div v-else class="flex min-w-0 flex-1 items-start gap-2">
+                <ChatImageThumb
+                    v-for="picture in picturesOf(message)"
+                    :key="picture.path"
+                    :src="picture.previewUrl"
+                    :alt="picture.name"
+                    size="h-8 w-8"
+                />
+                <div class="min-w-0 flex-1">
+                    <p v-if="message.text" class="truncate text-2xs text-muted">{{ message.text }}</p>
+                    <p v-if="filesOf(message).length > 0" class="truncate text-2xs text-subtle">
+                        <Icon name="file" class="text-2xs" />
+                        {{ filesOf(message).join(`, `) }}
+                    </p>
+                    <p v-if="fromLine(message) !== undefined" class="text-2xs text-subtle">{{ fromLine(message) }}</p>
+                </div>
             </div>
             <button
                 v-if="message.voice === `person` && rewording?.id !== message.id"
@@ -101,7 +110,7 @@ const save = async (message: QueuedMessage): Promise<void> => {
                 <Icon name="times" class="text-2xs" />
             </button>
         </div>
-        <p v-if="queuePaused === undefined" class="flex items-center gap-2 px-1 text-2xs text-subtle">
+        <p class="flex items-center gap-2 px-1 text-2xs text-subtle">
             <span class="min-w-0 flex-1">{{ hint }}</span>
             <!-- Nothing runs here, yet it waits: a recovery the sandbox runs first, or a turn in another window. -->
             <Button v-if="!streaming" size="small" :text="true" class="shrink-0" @click="resumeQueue()">{{ t(`chat.chatQueue.sendNow`) }}</Button>

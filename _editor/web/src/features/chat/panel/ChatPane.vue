@@ -35,6 +35,7 @@ import ChatCommandPopover from "../composer/ChatCommandPopover.vue";
 import ChatContinueStrip from "./ChatContinueStrip.vue";
 import ChatLeftRunning from "./jobs/ChatLeftRunning.vue";
 import ChatQueue from "../composer/ChatQueue.vue";
+import ChatHeldMessages from "../transcript/held/ChatHeldMessages.vue";
 import ChatAttachmentStrip from "../composer/ChatAttachmentStrip.vue";
 import ChatMentionPopover from "../composer/ChatMentionPopover.vue";
 import ChatModelPicker from "../models/ChatModelPicker.vue";
@@ -336,6 +337,8 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                         <ChatContinueStrip :visible="continueStrip" :ready="continueOffer" @continue="continueTurn" />
                         <!-- The turn is over, but the chat is not: what it left running, and the watches it armed (ChatLeftRunning). -->
                         <ChatLeftRunning />
+                        <!-- What the queue holds is drawn at the transcript's foot (ChatPaneTurns); with no transcript, here, a line each. -->
+                        <ChatHeldMessages v-if="bare" compact />
                         <!-- What waits for the next turn: the conversation's queue, the same in every window. -->
                         <ChatQueue />
                         <!-- An armed edit, and the two ways out of it. -->

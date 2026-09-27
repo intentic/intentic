@@ -1,7 +1,7 @@
 import { type AgentHarness, type AgentProvider, landFixPrompt, type SandboxHandlerOutput, type TranscriptRow } from "@intentic/sandbox-contract";
 import { SUPPORT_SWEEP_PATH } from "./browserShots";
 import { DESK_REVIEW_ID, SEPTEMBER_AFTER, SEPTEMBER_BEFORE } from "./desk";
-import { LAND_FIX_AGENT_ID, REVIEW_AGENT_ID, SOFT_DELETES_JOBS, SOFT_E2E_JOB, SOFT_TYPECHECK_JOB } from "./fleet";
+import { HELD_AGENT_ID, LAND_FIX_AGENT_ID, REVIEW_AGENT_ID, SOFT_DELETES_JOBS, SOFT_E2E_JOB, SOFT_TYPECHECK_JOB } from "./fleet";
 import { MAYA_CHAT_ID, OWEN_CHAT_ID, PRIYA_CHAT_ID } from "./openChats";
 
 // Transcript route body: messages plus the session id, provider, harness and account they're bound to. A reopened tab
@@ -331,9 +331,30 @@ const LAND_FIX: AgentTranscript = {
     ],
 };
 
+// A finished turn, then a message the sandbox turned away at the door for low memory. A turn that ran nothing is never
+// recorded, so the record ends on the last turn that ran: the words wait in the queue and the card says why (fleet.ts).
+const SUPPORT_CARD: AgentTranscript = {
+    sessionId: `ses_01j9supportcard`,
+    provider: `claude`,
+    harness: `claude-code`,
+    account: `acc_claude_demo`,
+    messages: [
+        {
+            role: `user`,
+            text: `Give the overnight sweep a summary card: how many conversations came in, how many were routine, and what still needs a person.`,
+        },
+        {
+            role: `assistant`,
+            text: `Added \`SweepSummaryCard\` under \`web/src/support/\`: three counts from the sweep's own record, and a pill that turns green once nothing needs a person. It reads the same record the sweep writes, so it can't drift from it.`,
+        },
+        { role: `notice`, text: `Finished: the work is on this agent's branch, ready to land from its review.` },
+    ],
+};
+
 const TRANSCRIPTS: Record<string, AgentTranscript> = {
     [REVIEW_AGENT_ID]: SOFT_DELETES,
     [LAND_FIX_AGENT_ID]: LAND_FIX,
+    [HELD_AGENT_ID]: SUPPORT_CARD,
     [DESK_REVIEW_ID]: SEPTEMBER_TEMPLATE,
     [MAYA_CHAT_ID]: MAYA_SUPPORT,
     [OWEN_CHAT_ID]: OWEN_LAUNCH,

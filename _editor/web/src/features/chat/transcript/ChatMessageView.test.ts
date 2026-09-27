@@ -6,6 +6,7 @@ import {
     type AgentJob,
     type AgentWatch,
     type ChildAgentAsk,
+    type QueuePause,
     type TranscriptPermission,
     agentWordsRow,
     childReportPrompt,
@@ -40,6 +41,11 @@ const pane = {
     messages: [] as ChatMessage[],
     queued: [] as { readonly id: string; readonly text: string }[],
 };
+// Why what waits is held, if it is: a held queue's row is said by the held message's own line instead.
+interface QueueHold {
+    paused: QueuePause | undefined;
+}
+const queueHold: QueueHold = { paused: undefined };
 // The conversation's own release of a held queue, which is all a notice's send press asks of it.
 const resume = jest.fn(async () => undefined);
 // The conversation's ask that the sandbox run a turn it kept, which is what a press on a sandbox-kept refusal is.
@@ -190,6 +196,9 @@ jest.mock("../panel/useChat-view", () => {
             editing: computed(() => pane.editing),
             messages: computed(() => pane.messages),
             queued: computed(() => pane.queued),
+            queuePaused: computed(() => queueHold.paused),
+            // No card says anything about the last turn here: the rows under test say it themselves.
+            lastFailure: computed(() => undefined),
         }),
     };
 });
@@ -266,6 +275,7 @@ beforeEach(() => {
     pane.editing = undefined;
     pane.messages = [];
     pane.queued = [];
+    queueHold.paused = undefined;
     resume.mockClear();
     resendKept.mockClear();
     reply.mockClear();
@@ -1377,7 +1387,9 @@ describe(`condition watches`, () => {
     });
 });
 
-// Low memory is a warning, not a wall: the daemon lets the next send through, so the row carries the press that makes it.
+// Low memory is a warning, not a wall: the daemon lets the next send through. The row says what was short in ONE line,
+// and the press stands where the held words are: under a kept turn's message here, or under the held message itself
+// at the transcript's foot (ChatHeldMessages), where a queued one waits.
 describe(`a low-memory hold`, () => {
     const hold = (noticeAction: `sendAnyway` | `sandboxMemory` = `sendAnyway`): ChatMessage => ({
         id: 21,
@@ -1385,12 +1397,18 @@ describe(`a low-memory hold`, () => {
         text: `Sandbox memory is low: 9.5 GiB of 10.0 GiB used. Your message is held: send it again to start anyway.`,
         noticeAction,
     });
+    // A turn the sandbox kept: its message stays above the row, and nothing waits in the queue for it.
+    const opener: ChatMessage = { id: 20, role: `user`, text: `The CI pipeline failed. Investigate and fix it.`, run: `run-1` };
+    const kept = (noticeAction: `sendAnyway` | `sandboxMemory` = `sandboxMemory`): ChatMessage => ({ ...hold(noticeAction), sandboxHeld: true, run: `run-1` });
     const buttons = (element: HTMLElement): HTMLButtonElement[] => [...element.querySelectorAll<HTMLButtonElement>(`button`)];
     const sendAnyway = (element: HTMLElement): HTMLButtonElement | undefined =>
         buttons(element).find((button) => button.textContent?.trim() === `Send anyway`);
     // By its lead words, so a withdrawal cannot pass on a changed size alone.
     const raise = (element: HTMLElement): HTMLButtonElement | undefined =>
-        buttons(element).find((button) => button.textContent?.trim().startsWith(`Raise its memory to`) === true);
+        buttons(element).find((button) => button.textContent?.trim().startsWith(`Raise memory to`) === true);
+    // The row's one line, its parts apart as the gap draws them.
+    const line = (element: HTMLElement): string =>
+        [...(element.querySelector(`[role="status"]`)?.children ?? [])].map((part) => part.textContent?.trim() ?? ``).join(` `);
     const remount = (row: ChatMessage): HTMLElement => {
         app?.unmount();
         document.body.innerHTML = ``;
@@ -1399,47 +1417,66 @@ describe(`a low-memory hold`, () => {
 
     beforeEach(() => {
         pane.streaming = false;
-        pane.queued = [{ id: `held`, text: `fix the flaky test` }];
+        pane.queued = [];
+        queueHold.paused = undefined;
         selfEngine.value = ROOMY_ENGINE;
     });
 
-    it(`sends the held message on one press, with no raise on a hold that named no ceiling`, () => {
-        const row = hold();
+    // The held message's own line says all of it, at the foot; a second copy here is the three-part notice this replaced.
+    it(`leaves a live hold's row to the held message's own line, while the queue holds its words`, () => {
+        const row = hold(`sandboxMemory`);
         pane.messages = [row];
+        pane.queued = [{ id: `held`, text: `fix the flaky test` }];
+        queueHold.paused = `refused`;
         const element = mount(row);
 
+        expect(element.textContent?.trim()).toBe(``);
+        expect(sendAnyway(element)).toBeUndefined();
+        expect(raise(element)).toBeUndefined();
+    });
+
+    it(`sends a turn the sandbox kept on one press, under its message, with no raise on a hold that named no ceiling`, () => {
+        const row = kept(`sendAnyway`);
+        pane.messages = [opener, row];
+        const element = mount(row);
+
+        expect(line(element)).toBe(`Not sent · Sandbox memory is low`);
         expect(raise(element)).toBeUndefined();
         sendAnyway(element)!.click();
 
-        expect(resume).toHaveBeenCalledTimes(1);
+        expect(resendKept).toHaveBeenCalledWith({ text: opener.text, attachments: [] });
+        expect(resume).not.toHaveBeenCalled();
     });
 
-    it(`offers the send beside the raise on a hold that named a ceiling`, () => {
-        const row = hold(`sandboxMemory`);
-        pane.messages = [row];
+    // The bug this exists for: a fix press the sandbox started was turned away, and with no composer ever holding its
+    // prompt the press never showed. The sandbox keeps those words, so the press stands with nothing queued here.
+    it(`offers the send beside the raise on a kept turn whose hold named a ceiling, and asks the sandbox to run it`, () => {
+        const row = kept();
+        pane.messages = [opener, row];
         const element = mount(row);
 
         // 16 GiB now plus the component's 4 GiB step, well under this engine's 64.
-        expect(raise(element)?.textContent?.trim()).toBe(`Raise its memory to 20 GiB`);
+        expect(raise(element)?.textContent?.trim()).toBe(`Raise memory to 20 GiB`);
         sendAnyway(element)!.click();
 
-        expect(resume).toHaveBeenCalledTimes(1);
+        expect(resendKept).toHaveBeenCalledWith({ text: opener.text, attachments: [] });
+        expect(resume).not.toHaveBeenCalled();
     });
 
     // The WSL guest's 19.53 GiB engine derives exactly the 16 this box has; the raise reaches into its reserve.
     it(`offers a raise past the derived share, up to the engine's own size`, () => {
         selfEngine.value = { memoryBytes: 20479632 * 1024, cpus: 16 };
-        const row = hold(`sandboxMemory`);
-        pane.messages = [row];
+        const row = kept();
+        pane.messages = [opener, row];
         const element = mount(row);
 
-        expect(raise(element)?.textContent?.trim()).toBe(`Raise its memory to 19 GiB`);
+        expect(raise(element)?.textContent?.trim()).toBe(`Raise memory to 19 GiB`);
     });
 
     it(`withdraws the raise, and keeps the send, once the cap already reaches the engine's size`, () => {
         selfEngine.value = { memoryBytes: 16.5 * 1024 ** 3, cpus: 16 };
-        const row = hold(`sandboxMemory`);
-        pane.messages = [row];
+        const row = kept();
+        pane.messages = [opener, row];
         const element = mount(row);
 
         expect(raise(element)).toBeUndefined();
@@ -1447,33 +1484,29 @@ describe(`a low-memory hold`, () => {
     });
 
     // The raise promises the message waits through the restart: false once it has gone, and a restart kills a live turn.
-    it(`withdraws both presses once the conversation has moved past the warning`, () => {
+    it(`settles into one past-tense line once the conversation has moved past the warning`, () => {
         const row = hold(`sandboxMemory`);
         pane.messages = [row, { id: 22, role: `user`, text: `fix the flaky test` }];
+        pane.queued = [{ id: `held`, text: `fix the flaky test` }];
+        queueHold.paused = `refused`;
         const element = mount(row);
 
+        expect(element.textContent?.trim()).toBe(`Your message was held: sandbox memory was low`);
         expect(sendAnyway(element)).toBeUndefined();
         expect(raise(element)).toBeUndefined();
     });
 
-    // The bug this exists for: a fix press the sandbox started was turned away, and with no composer ever holding its
-    // prompt the press never showed. The sandbox keeps those words, so the press stands with nothing queued here.
-    it(`offers the send on a turn the sandbox kept, with nothing queued, and asks the sandbox to run it`, () => {
-        const opener: ChatMessage = { id: 20, role: `user`, text: `The CI pipeline failed. Investigate and fix it.`, run: `run-1` };
-        const row: ChatMessage = { ...hold(`sandboxMemory`), sandboxHeld: true, run: `run-1` };
-        pane.messages = [opener, row];
-        pane.queued = [];
+    it(`says a kept turn was held, once it is no longer waiting`, () => {
+        const row = kept();
+        pane.messages = [opener, row, { id: 22, role: `assistant`, text: `Looking at the failing job.` }];
         const element = mount(row);
 
-        expect(raise(element)?.textContent?.trim()).toBe(`Raise its memory to 20 GiB`);
-        sendAnyway(element)!.click();
-
-        expect(resendKept).toHaveBeenCalledWith({ text: opener.text, attachments: [] });
-        expect(resume).not.toHaveBeenCalled();
+        expect(element.textContent?.trim()).toBe(`This turn was held: sandbox memory was low`);
+        expect(sendAnyway(element)).toBeUndefined();
     });
 
     it(`offers to send again a turn the sandbox kept past a refusal no raise would clear`, () => {
-        const opener: ChatMessage = { id: 20, role: `user`, text: `Carry the parser fix`, attachments: [`notes/plan.md`], run: `run-2` };
+        const withFile: ChatMessage = { id: 20, role: `user`, text: `Carry the parser fix`, attachments: [`notes/plan.md`], run: `run-2` };
         const row: ChatMessage = {
             id: 21,
             role: `notice`,
@@ -1482,29 +1515,30 @@ describe(`a low-memory hold`, () => {
             sandboxHeld: true,
             run: `run-2`,
         };
-        pane.messages = [opener, row];
-        pane.queued = [];
+        pane.messages = [withFile, row];
         const element = mount(row);
 
         expect(sendAnyway(element)).toBeUndefined();
+        expect(element.textContent).toContain(`Claude sign-in was revoked.`);
         buttons(element)
             .find((button) => button.textContent?.trim() === `Send again`)!
             .click();
 
-        expect(resendKept).toHaveBeenCalledWith({ text: opener.text, attachments: [{ name: `plan.md`, path: `notes/plan.md` }] });
+        expect(resendKept).toHaveBeenCalledWith({ text: withFile.text, attachments: [{ name: `plan.md`, path: `notes/plan.md` }] });
     });
 
     it(`withdraws both presses with nothing held to send, or a turn already running`, () => {
         const row = hold(`sandboxMemory`);
         pane.messages = [row];
-        pane.queued = [];
         const empty = mount(row);
         expect(sendAnyway(empty)).toBeUndefined();
         expect(raise(empty)).toBeUndefined();
+        expect(empty.textContent?.trim()).toBe(`Your message was held: sandbox memory was low`);
 
-        pane.queued = [{ id: `held`, text: `fix the flaky test` }];
+        const keptRow = kept();
+        pane.messages = [opener, keptRow];
         pane.streaming = true;
-        const running = remount(row);
+        const running = remount(keptRow);
         expect(sendAnyway(running)).toBeUndefined();
         expect(raise(running)).toBeUndefined();
     });

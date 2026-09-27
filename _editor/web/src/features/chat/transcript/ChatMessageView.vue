@@ -36,6 +36,7 @@ import NoticeHeld from "./notices/NoticeHeld.vue";
 import NoticeLandHold from "./notices/NoticeLandHold.vue";
 import NoticeMemory from "./notices/NoticeMemory.vue";
 import NoticeWatchStop from "./notices/NoticeWatchStop.vue";
+import { isMemoryHold } from "./held/heldQueue";
 import { useT } from "@intentic/ui/i18n";
 
 // Renders one transcript entry (user bubble, notice line, or assistant turn stack). Card answers go through the pane's
@@ -84,15 +85,18 @@ const CARDS: Readonly<Record<RequestField, Component>> = {
 };
 const card = computed(() => REQUEST_FIELDS.find((field) => props.message[field] !== undefined));
 
-// The follow-up each notice action offers; each decides for itself whether it still stands.
-const NOTICE_ACTIONS: Readonly<Record<NonNullable<ChatMessage["noticeAction"]>, Component>> = {
+// The follow-up each notice action offers; each decides for itself whether it still stands. A low-memory hold is not
+// here: it draws its whole row (NoticeMemory), since its sentence is the sandbox's numbers and belongs a hover away.
+const NOTICE_ACTIONS: Readonly<Record<Exclude<NonNullable<ChatMessage["noticeAction"]>, `sendAnyway` | `sandboxMemory`>, Component>> = {
     landHold: NoticeLandHold,
     depsInstall: NoticeDepsInstall,
     watchStop: NoticeWatchStop,
-    sendAnyway: NoticeHeld,
     sendAgain: NoticeHeld,
-    sandboxMemory: NoticeMemory,
 };
+const noticeAction = computed(() => {
+    const action = props.message.noticeAction;
+    return action === undefined || action === `sendAnyway` || action === `sandboxMemory` ? undefined : NOTICE_ACTIONS[action];
+});
 
 const { mobile } = useDevice();
 
@@ -527,6 +531,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         </div>
         <!-- A background job's start: its own row, since what matters about it (running, done, failed) is still changing. -->
         <ChatJobRow v-else-if="message.role === 'notice' && message.backgroundJob" :job="message.backgroundJob" />
+        <!-- A low-memory hold: one line, whether it still holds a message or only says it once did. -->
+        <NoticeMemory v-else-if="isMemoryHold(message)" :message="message" />
         <div
             v-else-if="message.role === 'notice' && message.text !== ''"
             class="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 self-center py-0.5 text-2xs"
@@ -560,7 +566,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 class="chat-inset max-h-64 w-full overflow-auto px-2.5 py-1.5 text-left text-2xs leading-relaxed whitespace-pre-wrap text-subtle"
                 >{{ unspokenSent }}</pre>
             <!-- The one follow-up this notice offers, by its action's name (NOTICE_ACTIONS). -->
-            <component :is="NOTICE_ACTIONS[message.noticeAction]" v-if="message.noticeAction" :message="message" />
+            <component :is="noticeAction" v-if="noticeAction" :message="message" />
         </div>
         <template v-else>
             <!-- Shared with the Subagents area: a delegated agent's reasoning and run read as this turn's own do. -->

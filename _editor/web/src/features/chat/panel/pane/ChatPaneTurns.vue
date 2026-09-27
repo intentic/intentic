@@ -11,6 +11,8 @@ import ChatTurnStatus from "../../transcript/ChatTurnStatus.vue";
 import ChatSystemPrompt from "../../transcript/prompt/ChatSystemPrompt.vue";
 import ChatShotViewer from "../../transcript/shots/ChatShotViewer.vue";
 import ChatTurnShots from "../../transcript/shots/ChatTurnShots.vue";
+import ChatHeldMessages from "../../transcript/held/ChatHeldMessages.vue";
+import { useHeldQueue } from "../../transcript/held/heldQueue";
 import { unsaidError } from "../../transcript/transcript";
 import { useShotViewer } from "../../transcript/shots/useShotViewer";
 import { usePaneTranscript } from "./paneTranscript";
@@ -36,6 +38,10 @@ const { turns, turnShots, repeatedChecklists, isStreaming, showTurnStatus, strip
 const doomed = computed(() => conversation.value.transcript.doomed.value);
 // The red line only where it adds to the transcript: the daemon's notice already says a turn's failure.
 const error = computed(() => unsaidError(conversation.value.error.value, messages.value));
+// The low-memory row whose message is held at the foot: that message's own line says it (ChatHeldMessages), so the row
+// is not drawn a second time above it.
+const { notice: heldNotice } = useHeldQueue();
+const heldRow = computed(() => heldNotice.value?.id);
 const viewer = useShotViewer(turns, turnShots);
 provide(CHAT_SURFACE, viewingIn(useChatSurface(), viewer));
 </script>
@@ -87,13 +93,14 @@ provide(CHAT_SURFACE, viewingIn(useChatSurface(), viewer));
                             cutsAbove.get(message.id),
                             repeatedChecklists.has(message.id),
                             checklistViews.get(message.id),
+                            heldRow === message.id,
                         ]"
                         class="contents"
                     >
                         <!-- Fork marks sit between message rows because row overflow clips marks above a row. -->
                         <ChatForkCut v-if="cutsAbove.get(message.id) !== undefined" :cut="cutsAbove.get(message.id)!" />
                         <ChatMessageView
-                            v-if="!repeatedChecklists.has(message.id) || isStreaming(message)"
+                            v-if="(!repeatedChecklists.has(message.id) || isStreaming(message)) && heldRow !== message.id"
                             :message="message"
                             :streaming="isStreaming(message)"
                             :folded="message.id === turn.id ? turn.folded : undefined"
@@ -114,6 +121,8 @@ provide(CHAT_SURFACE, viewingIn(useChatSurface(), viewer));
         <slot v-else name="empty" />
         <!-- The live turn before it's written anything (showTurnStatus); outside the turn sections since it belongs to no message yet. -->
         <ChatTurnStatus v-if="showTurnStatus" />
+        <!-- What the queue holds, where the message the reader just sent would have been: after everything that ran, above the red line a press on it may leave. -->
+        <ChatHeldMessages />
         <p v-if="error !== undefined" class="text-xs text-danger">{{ error }}</p>
         <!-- Mounted only while open, so a chat nobody is looking through pictures in computes none of its filmstrip. -->
         <ChatShotViewer

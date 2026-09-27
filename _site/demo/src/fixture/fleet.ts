@@ -1,4 +1,5 @@
 import { type AgentSummary, nextDayStartIn, UTC } from "@intentic/sandbox-contract";
+import { SUPPORT_SWEEP_PATH } from "./browserShots";
 
 // One afternoon across two repos, with a card in every lane `laneOf` distinguishes: attention (awaiting a parked
 // question, conflict from a land overlap), active (running, one delegating to subagents), finished (ready, landed,
@@ -18,6 +19,10 @@ export const CONFLICT_AGENT_ID = `cnv_auth_middleware`;
 // that landed it had gone cold (fixture/mainline.ts). Its id is the daemon's own shape (landFixConversationId): the
 // project, then the second its red streak began, in base 36.
 export const LAND_FIX_AGENT_ID = `land-fix-web-t2k9qx`;
+// A chat whose last message the sandbox turned away for low memory: the words wait in its queue, held for one press.
+export const HELD_AGENT_ID = `cnv_support_card`;
+// That message, as the queue holds it; its picture is the sweep capture the workspace carries (fixture/browserShots.ts).
+export const HELD_MESSAGE_ID = `msg_01j9supportcard`;
 
 const minutes = (count: number): number => count * 60_000;
 
@@ -523,6 +528,46 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         turns: 1,
         toolUses: 17,
         diff: { files: 1, insertions: 6, deletions: 4 },
+    },
+    {
+        id: HELD_AGENT_ID,
+        startIn: `web`,
+        sessionId: `ses_01j9supportcard`,
+        title: `Summary card for the support dashboard`,
+        status: `error`,
+        failureCode: `sandbox-memory-low`,
+        failure: `Sandbox memory is low: 12.4 GiB resident + 3.6 GiB swapped, against 18.0 GiB.`,
+        provider: `claude`,
+        harness: `claude-code`,
+        model: `claude-sonnet-5`,
+        effort: `high`,
+        account: `acc_claude_demo`,
+        branch: `agent/support-card`,
+        base: `4f1c8ab`,
+        costUsd: 0.19,
+        inputTokens: 16_800,
+        outputTokens: 1_940,
+        contextTokens: 12_600,
+        contextWindow: 200_000,
+        updatedAt: now - minutes(1),
+        seenAt: now - minutes(1),
+        attention: NO_ATTENTION,
+        turns: 1,
+        toolUses: 14,
+        queue: {
+            items: [
+                {
+                    id: HELD_MESSAGE_ID,
+                    text: `Now put the same summary card on the support dashboard. Match this capture: counts on the left, the "Queue clear" pill top right.`,
+                    attachments: [SUPPORT_SWEEP_PATH],
+                    voice: `person`,
+                    queuedAt: now - minutes(1),
+                    revision: 3,
+                },
+            ],
+            revision: 3,
+            paused: `refused`,
+        },
     },
     ...spawnedChildren(now),
     ...auditFamily(now),

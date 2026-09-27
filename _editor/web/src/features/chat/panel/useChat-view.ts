@@ -35,6 +35,16 @@ const endingView = (conversation: ComputedRef<Conversation>, cardOf: CardOf | un
     ending: computed(() => endingOfTab(conversation.value, cardOf?.(conversation.value.conversationId))),
 });
 
+// How the last turn failed, as the board's card says: what a held queue was refused for once the refusal's own row is
+// gone, since a turn that ran nothing is never recorded and stays attachable for only a minute. Undefined for a view
+// handed no card, and for a turn nothing failed.
+const failureView = (conversation: ComputedRef<Conversation>, cardOf: CardOf | undefined) => ({
+    lastFailure: computed(() => {
+        const card = cardOf?.(conversation.value.conversationId);
+        return card?.failureCode === undefined ? undefined : { code: card.failureCode, text: card.failure };
+    }),
+});
+
 // One conversation, as a panel binds it: the facade every chat surface renders through. Built per pane rather than over
 // `active`, since the floating window shows several conversations at once.
 export const conversationView = (conversation: ComputedRef<Conversation>, cardOf?: CardOf) => ({
@@ -70,6 +80,7 @@ export const conversationView = (conversation: ComputedRef<Conversation>, cardOf
     // and whether the running turn can actually take words right now.
     queued: computed<readonly QueuedMessage[]>(() => conversation.value.queue.value?.items ?? []),
     queuePaused: computed(() => conversation.value.queue.value?.paused),
+    ...failureView(conversation, cardOf),
     steerable: computed(() => conversation.value.selection.steerable.value),
     // What this conversation's runtime can do, from the contract's declared record.
     capabilities: computed(() => conversation.value.selection.capabilities.value),

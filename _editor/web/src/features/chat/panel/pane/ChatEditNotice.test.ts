@@ -4,6 +4,7 @@ import { resetSandboxScope } from "@intentic/extension-api";
 import { IconStub } from "@intentic/ui/testing";
 import { type Component, computed, createApp, h, nextTick } from "vue";
 import ChatQueue from "../../composer/ChatQueue.vue";
+import { rememberMedia } from "../../drafts/attachmentPreviews";
 import type { PendingAttachment } from "../../drafts/useChatAttachments";
 import { Conversation } from "../../session/conversation";
 import type { ChatMessage } from "../../transcript/transcript";
@@ -77,5 +78,42 @@ describe(`the queue`, () => {
         chat.transcript.adopt([{ id: 1, role: `assistant`, text: ``, permission: { requestId: `p1`, toolName: `Bash`, status: `pending` } }]);
         await nextTick();
         expect(element.textContent).toContain(`Goes in once you answer the request above`);
+    });
+
+    // Held, nothing goes by itself: the words stand at the transcript's foot as the prompt that did not go out
+    // (ChatHeldMessages), so the composer's row would only be a second copy of them, with a second press.
+    it(`leaves a held queue to the transcript, and draws nothing over the composer`, async () => {
+        const chat = new Conversation(`c1`);
+        chat.queue.value = {
+            items: [{ id: `m1`, text: `and the docs`, voice: `person`, queuedAt: 1, revision: 1 }],
+            revision: 1,
+            paused: `refused`,
+        };
+        const { element } = mountOver(ChatQueue, chat);
+        await nextTick();
+        expect(element.textContent?.trim()).toBe(``);
+
+        chat.queue.value = { ...chat.queue.value, revision: 2, paused: undefined };
+        await nextTick();
+        expect(element.textContent).toContain(`and the docs`);
+        expect(element.textContent).toContain(`Goes out as soon as the agent is free`);
+    });
+
+    it(`draws a picture that waits with a message as one, and any other file by its name`, async () => {
+        const chat = new Conversation(`c1`);
+        const picture = `${STATE_DIR}/records/artifacts/attachments/a1/shot.png`;
+        // The bytes this window uploaded it from, so the picture needs no daemon to be drawn.
+        rememberMedia(picture, `image`, `blob:shot`);
+        chat.queue.value = {
+            items: [{ id: `m1`, text: `match this`, attachments: [picture, `notes/plan.md`], voice: `person`, queuedAt: 1, revision: 1 }],
+            revision: 1,
+        };
+        const { element } = mountOver(ChatQueue, chat);
+        await nextTick();
+
+        expect(element.querySelector(`img`)?.getAttribute(`src`)).toBe(`blob:shot`);
+        expect(element.querySelector(`img`)?.getAttribute(`alt`)).toBe(`shot.png`);
+        expect(element.textContent).toContain(`plan.md`);
+        expect(element.textContent).not.toContain(`shot.png`);
     });
 });
