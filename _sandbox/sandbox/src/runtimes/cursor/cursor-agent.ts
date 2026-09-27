@@ -1,4 +1,4 @@
-import type { AgentOptions, ModelSelection, Run, SDKAgent, SendOptions } from "@cursor/sdk";
+import type { AgentOptions, ModelSelection, SendOptions } from "@cursor/sdk";
 import { type AgentEvent, CURSOR } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { whenAborted } from "@intentic/base/async";
@@ -10,19 +10,24 @@ import { EXECUTE_PROMPT, PLAN_PREAMBLE, planMode } from "../decorators/plan-mode
 import { vendorTurnGate } from "../decorators/vendor-gate.js";
 import type { CursorCatalog } from "./cursor-catalog.js";
 import { createCursorEventMapper } from "./cursor-events.js";
+import { type CursorRunHandle, type CursorSession, inProcessHost, namespacedHost, type NamespacedHostInput } from "./cursor-host.js";
 import type { CursorHookService } from "./cursor-hooks.js";
 import { selectionFor } from "./cursor-models.js";
-import { CURSOR_SDK_MISSING, cursorSdk } from "./cursor-sdk.js";
+import { CURSOR_SDK_MISSING, cursorSdk, cursorSdkEntry } from "./cursor-sdk.js";
 import { cursorCustomTools, cursorMcpServers, TOOLS_WITHHELD } from "./cursor-tools.js";
 
 // Cursor provider adapter: same AgentRequest-in/AgentEvent-out seam as createCodexAgent/createOpenCodeAgent/runPiAgent,
-// over @cursor/sdk's local agent runtime. Runs in-process, not a child process, so the daemon's own functions can be
-// tools; reads only the delta stream from `send({ onDelta })`, not the overlapping `run.stream()`.
+// over @cursor/sdk's local agent runtime. The loop runs in this process, so the daemon's own functions can be tools; the
+// SDK agent itself runs here too, except for a turn anchored in a mount namespace, whose agent runs in a runtime process
+// born there (cursor-host.ts) and reaches those same tools back over its channel. Reads only the delta stream from
+// `send({ onDelta })`, not the overlapping `run.stream()`.
 
 export interface CursorAgentDeps {
     readonly catalog: CursorCatalog;
     readonly hooks: CursorHookService;
     readonly logger: Logger;
+    // How an anchored turn's runtime process is started; a suite stands in for the process here.
+    readonly runtime?: Pick<NamespacedHostInput, "spawn" | "command">;
 }
 
 // Grace period for a cancel to unwind Cursor's tool calls before frames stop; a request, not a kill.
@@ -77,13 +82,10 @@ const modeFor = (planning: boolean): "plan" | "agent" => (planning ? "plan" : "a
 // Mid-turn injection rides the live Run, not the prompt, so the pump waits for the handle `send` resolves rather than
 // racing it. Only `complete_delivered` transfers ownership; every other ack means the run would not take the message,
 // and it stays in the relay for the next phase of a plan turn (there is none after the last, so it is reported).
-// `Run.steer` ships in @cursor/sdk 1.0.31, the version engines.json blesses and every turn loads, and is declared
-// optional there; a dev checkout's node_modules can still hold an older copy whose types lack it, so it is reached by
-// shape rather than through the Run type.
-type SteerableRun = { readonly steer?: (text: string) => Promise<"complete_delivered" | "revert_to_followup"> };
+// `Run.steer` is declared optional by the SDK, so CursorRunHandle carries it optionally too.
 
 // Best-effort: the phase ends on its own timer, so a cancel the SDK refuses is only worth a trace.
-const cancelRun = async (started: Promise<Run | undefined>, logger: Logger): Promise<void> => {
+const cancelRun = async (started: Promise<CursorRunHandle | undefined>, logger: Logger): Promise<void> => {
     const handle = await started;
     try {
         await handle?.cancel();
@@ -92,9 +94,9 @@ const cancelRun = async (started: Promise<Run | undefined>, logger: Logger): Pro
     }
 };
 
-const steerInto = async (started: Promise<Run | undefined>, channel: SteeringChannel, logger: Logger): Promise<void> => {
+const steerInto = async (started: Promise<CursorRunHandle | undefined>, channel: SteeringChannel, logger: Logger): Promise<void> => {
     for await (const text of channel.steering) {
-        const run = (await started) as SteerableRun | undefined;
+        const run = await started;
         const outcome = await run?.steer?.(text).catch((error: unknown) => {
             logger.warn({ err: error }, "cursor: steering message rejected by the run");
             return undefined;
@@ -109,7 +111,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
     // Forwards one phase of the turn's queue; the caller emits `done` once, since a plan turn runs two of these.
     // While planning, the assistant's prose is captured, not streamed, becoming the plan text.
     async function* runPhase(
-        agent: SDKAgent,
+        agent: CursorSession,
         request: AgentRequest,
         queue: EventQueue<PhaseItem>,
         prompt: string,
@@ -148,7 +150,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
 
         let sendError: unknown;
         // Not awaited: frames arrive via onDelta while this resolves; awaiting first would buffer the turn's opening.
-        const started: Promise<Run | undefined> = agent.send(prompt, options).catch((error: unknown) => {
+        const started: Promise<CursorRunHandle | undefined> = agent.send(prompt, options).catch((error: unknown) => {
             sendError = error;
             endPhase();
             return undefined;
@@ -282,9 +284,25 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
             mcpServers: cursorMcpServers(request),
         };
 
-        let agent: SDKAgent | undefined;
+        // An anchored turn's agent runs in a runtime process born in its namespace, so the shell the SDK spawns and the
+        // files it edits resolve /work to the worktree, as every other isolated runtime's do. The anchor's cwd is already
+        // this request's cwd (stream-agent.ts), so the local store scopes the session the same way in either process.
+        const anchor = request.spec.isolation?.anchor;
+        const host =
+            anchor === undefined
+                ? inProcessHost(sdk)
+                : namespacedHost({
+                      namespace: { pid: anchor.pid, cwd: anchor.cwd },
+                      sdk,
+                      sdkEntry: await cursorSdkEntry(),
+                      spawnDepth: request.spec.spawnDepth ?? 0,
+                      logger: deps.logger,
+                      ...deps.runtime,
+                  });
+
+        let agent: CursorSession | undefined;
         try {
-            agent = request.spec.sessionId !== undefined ? await sdk.Agent.resume(request.spec.sessionId, options) : await sdk.Agent.create(options);
+            agent = await host(request.spec.sessionId, options);
         } catch (error) {
             release();
             yield await codedError(error, sdk);

@@ -32,7 +32,7 @@ flowchart LR
 ## Worktrees
 
 - An isolated conversation works on branch `agent/<id>`, with one git worktree per repository under `/history/worktrees/<id>/` ([`worktrees.ts`](../../_sandbox/sandbox/src/conversations/worktrees/worktrees.ts)). Parallel agents cannot collide.
-- Where the runtime supports it (`isolation: "namespace"`), [`isolation.ts`](../../_sandbox/sandbox/src/conversations/worktrees/isolation.ts) binds the worktree over `/work` in a mount namespace and puts the real tree at `/mnt/intentic-main`; other runtimes only start in the worktree. `node_modules`, `.venv` and `dist` are overlay mounts of the main tree's, so a worktree needs no install.
+- Where the runtime supports it (`isolation: "namespace"`), [`isolation.ts`](../../_sandbox/sandbox/src/conversations/worktrees/isolation.ts) binds the worktree over `/work` in a mount namespace and puts the real tree at `/mnt/intentic-main`; other runtimes (OpenCode, ACP agents, pi) only start in the worktree. Each namespace runtime's process is born there through `nsenter`: the Claude CLI, Codex's app-server, and for Cursor, whose SDK runs its shell and edits files in whatever process loads it, a runtime process ([`cursor-host.ts`](../../_sandbox/sandbox/src/runtimes/cursor/cursor-host.ts)) that drives the SDK while the daemon keeps its tools and hook gate. A container that cannot build a namespace runs every runtime cwd'd in, Cursor's SDK back in the daemon. `node_modules`, `.venv` and `dist` are overlay mounts of the main tree's, so a worktree needs no install.
 
 ## Land
 

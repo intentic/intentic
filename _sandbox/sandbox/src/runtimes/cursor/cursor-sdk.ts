@@ -36,6 +36,10 @@ let loaded: { readonly entry: string | undefined; readonly module: Promise<typeo
 
 const entryNow = async (): Promise<string | undefined> => (await resolveEngine("cursor")).paths.jsEntry ?? entryUnder(packRoot());
 
+// The entry cursorSdk() loads, for the runtime process an isolated turn starts (cursor-host.ts) to load the same copy;
+// undefined means this package's own dependency.
+export const cursorSdkEntry = entryNow;
+
 // undefined on neither a store copy nor a pack; every caller reads it as CURSOR_SDK_MISSING, an ordinary state, not an
 // error.
 export const cursorSdk = async (): Promise<typeof CursorSdk | undefined> => {

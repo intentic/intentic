@@ -181,7 +181,7 @@ export const PI: AgentCapabilities = {
     secrets: "none",
 };
 
-// Cursor's own runtime, driven through `@cursor/sdk` in this daemon's process; an embedding surface, so most seams
+// Cursor's own runtime, driven through `@cursor/sdk` from this daemon's process; an embedding surface, so most seams
 // other runtimes lack are function arguments here. The harness axis doesn't apply: the SDK is the only door.
 export const CURSOR: AgentCapabilities = {
     runtime: "cursor",
@@ -199,11 +199,12 @@ export const CURSOR: AgentCapabilities = {
     // Cursor publishes effort as model parameters, not one scale; true here just means it's forwardable at all.
     effort: true,
     fastMode: false,
-    // cwd: Cursor's loop runs inside the daemon's own process, whose /work must stay the shared checkout.
-    isolation: "cwd",
+    // The SDK agent of an anchored turn runs in a runtime process born in the turn's mount namespace (the daemon keeps
+    // the loop, the tools and the hook gate), so its shell and its edits see the worktree at /work.
+    isolation: "namespace",
     // Cursor's commands are files on disk the SDK loads but doesn't publish back, so there's no list to offer.
     commands: false,
-    // The SDK runs its shell in-process; there is no tmux session for the terminal panel to attach to.
+    // The SDK runs its shell itself, as a plain child; there is no tmux session for the terminal panel to attach to.
     terminals: false,
     // The SDK throws typed errors instead of dissolving a refusal into prose, so the adapter files coded frames.
     recovery: true,

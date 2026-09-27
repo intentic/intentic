@@ -1,11 +1,14 @@
+import { EventEmitter } from "node:events";
 import type { AgentOptions, InteractionUpdate, SDKCustomTool, SendOptions } from "@cursor/sdk";
-import { WORKSPACE_ROOT } from "@intentic/constants";
+import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Logger } from "pino";
 import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { AgentRequest, CursorCredential } from "../../agent/providers/agent-request.js";
+import { nsenterArgv } from "../../workload/namespace-entry.js";
 import { createCursorAgent, type CursorAgentDeps, FIRST_DELTA_MS } from "./cursor-agent.js";
+import type { CallResult, HostCall, HostMessage, RuntimeMessage } from "./cursor-runtime-protocol.js";
 import type { CursorHookService } from "./cursor-hooks.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../testing.js";
@@ -19,20 +22,25 @@ const cancel = jest.fn<() => Promise<void>>();
 // The SDK's catch-all for any error it cannot classify, which a test throws as the SDK would.
 class UnknownAgentError extends Error {}
 
+// The mocked SDK's error classes, reached by the anchored turns below to throw one "in the runtime".
+class AgentNotFoundError extends Error {}
+
 jest.mock("./cursor-sdk.js", () => ({
     CURSOR_SDK_MISSING: `missing sdk`,
+    cursorSdkEntry: async () => SDK_ENTRY,
     cursorSdk: async () => ({
         Agent: { create, resume },
         RateLimitError: class RateLimitError extends Error {},
         AuthenticationError: class AuthenticationError extends Error {},
         AgentBusyError: class AgentBusyError extends Error {},
-        AgentNotFoundError: class AgentNotFoundError extends Error {},
+        AgentNotFoundError,
         UnknownAgentError,
         NetworkError: class NetworkError extends Error {},
     }),
 }));
 
 const MODEL = `claude-opus-5`;
+const SDK_ENTRY = `/opt/cursor-sdk/node_modules/@cursor/sdk/dist/esm/index.js`;
 
 const deps = (): CursorAgentDeps => ({
     catalog: {
@@ -269,4 +277,185 @@ test("the SDK's catch-all error is reported as the failure it is, not as a lost 
     const events = await collect(createCursorAgent(deps())(request()));
     expect(events.filter((event) => event.kind === `error`)).toEqual([{ kind: `error`, message: wedged }]);
     expect(events.at(-1)).toEqual({ kind: `done` });
+});
+
+// An isolated turn's placement: its worktree, and the namespace anchor that makes it /work, when the container has one.
+const plan = { worktree: `${HISTORY_ROOT}/worktrees/c1/work`, root: WORKSPACE_ROOT, mirrors: [], overlays: `${HISTORY_ROOT}/overlays/c1`, fence: undefined };
+const anchored = (base = request()): AgentRequest<CursorCredential> => ({
+    ...base,
+    spec: { ...base.spec, spawnDepth: 1, isolation: { plan, anchor: { pid: 4321, cwd: WORKSPACE_ROOT, plan, dispose: () => {} } } },
+});
+
+// An SDK error as the runtime reports one: its message, and the class the daemon rebuilds it as.
+class RuntimeRefusal extends Error {
+    constructor(
+        message: string,
+        readonly coded: `AgentNotFoundError`,
+    ) {
+        super(message);
+    }
+}
+
+type RuntimeAnswer = (call: HostCall, emit: (message: RuntimeMessage) => void) => CallResult | Promise<CallResult>;
+
+// The runtime process as the daemon sees it: every call it is sent is recorded, and answered by `answer`, which can push
+// its own messages first, as the real one streams deltas and relays tool calls before it replies. `replied` settles on
+// the first message that is not a call: the answer to a tool the runtime relayed.
+const fakeRuntime = (answer: RuntimeAnswer) => {
+    const calls: HostCall[] = [];
+    const replies: HostMessage[] = [];
+    const spawned: { command: string; args: readonly string[]; spawnDepth: number }[] = [];
+    let settleReplied: () => void = () => {};
+    const replied = new Promise<void>((resolve) => {
+        settleReplied = resolve;
+    });
+    const child = Object.assign(new EventEmitter(), {
+        stdout: null,
+        stderr: null,
+        connected: true,
+        exitCode: null,
+        signalCode: null,
+        disconnect: () => {},
+        kill: () => true,
+        send: (message: HostMessage, done: (error: Error | null) => void) => {
+            done(null);
+            if (message.kind !== `call`) {
+                replies.push(message);
+                settleReplied();
+                return true;
+            }
+            calls.push(message.call);
+            const emit = (reply: RuntimeMessage): void => void child.emit(`message`, reply);
+            void Promise.resolve()
+                .then(() => answer(message.call, emit))
+                .then(
+                    (value) => emit({ kind: `reply`, seq: message.seq, ok: true, value }),
+                    (error: RuntimeRefusal) => emit({ kind: `reply`, seq: message.seq, ok: false, error: { message: error.message, coded: error.coded } }),
+                );
+            return true;
+        },
+    });
+    const runtime: NonNullable<CursorAgentDeps[`runtime`]> = {
+        command: { file: `/usr/local/bin/node`, args: [`/opt/sandbox/dist/runtimes/cursor/cursor-agent-runtime.js`] },
+        spawn: (command, args, spawnDepth) => {
+            spawned.push({ command, args, spawnDepth });
+            return child;
+        },
+    };
+    return { calls, replies, replied, spawned, runtime, child };
+};
+
+// What a runtime answers for one ordinary turn: the agent opened, one delta, the run finished.
+const oneTurn: RuntimeAnswer = (call, emit) => {
+    switch (call.method) {
+        case `open`:
+            return { agentId: `agent-ns` };
+        case `send`:
+            emit({ kind: `delta`, run: call.run, update: { type: `text-delta`, text: `from the worktree` } });
+            return { steerable: false };
+        case `wait`:
+            return { status: `finished` };
+        default:
+            return null;
+    }
+};
+
+test("an anchored turn's SDK agent is born in the turn's mount namespace, at /work as the namespace sees it", async () => {
+    const fake = fakeRuntime(oneTurn);
+
+    const events = await collect(createCursorAgent({ ...deps(), runtime: fake.runtime })(anchored()));
+
+    // nsenter into the anchor's namespace by pid, cwd resolved there, so /work is the worktree before the SDK loads.
+    expect(fake.spawned).toEqual([
+        {
+            ...nsenterArgv(4321, WORKSPACE_ROOT, `/usr/local/bin/node`, [`/opt/sandbox/dist/runtimes/cursor/cursor-agent-runtime.js`, SDK_ENTRY]),
+            spawnDepth: 1,
+        },
+    ]);
+    expect(fake.spawned[0]?.args.slice(0, 2)).toEqual([`--mount=/proc/4321/ns/mnt`, `--wdns=${WORKSPACE_ROOT}`]);
+    // Nothing of the SDK ran in the daemon: the agent was opened in the runtime, scoped to the namespace's /work.
+    expect(create).not.toHaveBeenCalled();
+    const open = fake.calls.find((call): call is Extract<HostCall, { method: `open` }> => call.method === `open`);
+    expect(open?.options.local?.cwd).toBe(WORKSPACE_ROOT);
+    expect(open?.options.apiKey).toBe(`key`);
+    expect(fake.calls.map((call) => call.method)).toEqual([`open`, `send`, `wait`, `close`]);
+    expect(events).toContainEqual({ kind: `session`, sessionId: `agent-ns` });
+    expect(events).toContainEqual({ kind: `delta`, text: `from the worktree` });
+    expect(events.some((event) => event.kind === `error`)).toBe(false);
+    expect(events.at(-1)).toEqual({ kind: `done` });
+});
+
+test("an isolated turn the container could not anchor runs its agent in this process, cwd'd into its worktree", async () => {
+    const fake = fakeRuntime(oneTurn);
+    agentThat(
+        () => {},
+        async () => ({ status: `success` }),
+    );
+    const cwdOnly = { ...request(), spec: { ...request().spec, cwd: plan.worktree, isolation: { plan } } };
+
+    await collect(createCursorAgent({ ...deps(), runtime: fake.runtime })(cwdOnly));
+
+    expect(fake.spawned).toEqual([]);
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ local: expect.objectContaining({ cwd: plan.worktree }) }));
+});
+
+test("a custom tool the SDK calls in the runtime runs in the daemon, and its answer goes back to the runtime", async () => {
+    const fake = fakeRuntime((call, emit) => {
+        if (call.method === `send`) {
+            emit({ kind: `tool`, call: 0, name: `ask`, args: { questions: [QUESTION] }, toolCallId: `t1` });
+            return { steerable: false };
+        }
+        // The run holds until the tool has been answered, as Cursor's loop does.
+        return call.method === `wait` ? fake.replied.then(() => ({ status: `finished` })) : oneTurn(call, emit);
+    });
+
+    const seen: AgentEvent[] = [];
+    const turn = (async () => {
+        for await (const event of createCursorAgent({ ...deps(), runtime: fake.runtime })(anchored())) {
+            seen.push(event);
+        }
+    })();
+    await waitFor(() => expect(seen.map((event) => event.kind)).toContain(`question`));
+    const card = seen.find((event): event is Extract<AgentEvent, { kind: `question` }> => event.kind === `question`);
+    expect(cards.resolve({ kind: `question`, requestId: card?.requestId ?? ``, answers: { [QUESTION.question]: [`SQLite`] } })).toBe(`settled`);
+    await turn;
+
+    // The open call named the tool without its handler, which stayed here.
+    const open = fake.calls.find((call): call is Extract<HostCall, { method: `open` }> => call.method === `open`);
+    expect(open?.tools.map((tool) => tool.name)).toContain(`ask`);
+    expect(open?.tools.every((tool) => !(`execute` in tool))).toBe(true);
+    expect(fake.replies).toEqual([{ kind: `tool-reply`, call: 0, ok: true, value: `The user answered:\n- Store: SQLite` }]);
+    expect(seen.at(-1)).toEqual({ kind: `done` });
+});
+
+test("an SDK error thrown in the runtime is coded as the same error thrown in this process", async () => {
+    const fake = fakeRuntime((call) => {
+        if (call.method === `open`) {
+            throw new RuntimeRefusal(`no agent here`, `AgentNotFoundError`);
+        }
+        return null;
+    });
+    const resumed = anchored({ ...request(), spec: { ...request().spec, sessionId: `agent-gone` } });
+
+    const events = await collect(createCursorAgent({ ...deps(), runtime: fake.runtime })(resumed));
+
+    expect(fake.calls[0]).toMatchObject({ method: `open`, resume: `agent-gone` });
+    expect(events).toEqual([{ kind: `error`, message: `no agent here`, code: `session-not-found` }, { kind: `done` }]);
+});
+
+test("a runtime that dies mid-turn ends the turn with its exit, rather than leaving it running", async () => {
+    const fake = fakeRuntime((call, emit) => (call.method === `wait` ? new Promise(() => {}) : oneTurn(call, emit)));
+    const seen: AgentEvent[] = [];
+    const turn = (async () => {
+        for await (const event of createCursorAgent({ ...deps(), runtime: fake.runtime })(anchored())) {
+            seen.push(event);
+        }
+    })();
+    await waitFor(() => expect(fake.calls.map((call) => call.method)).toContain(`wait`));
+
+    fake.child.emit(`exit`, 137, null);
+    await turn;
+
+    expect(seen.find((event) => event.kind === `error`)).toMatchObject({ message: expect.stringContaining(`The Cursor runtime process exited (137)`) });
+    expect(seen.at(-1)).toEqual({ kind: `done` });
 });

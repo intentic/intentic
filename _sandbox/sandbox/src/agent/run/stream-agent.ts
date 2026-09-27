@@ -62,7 +62,7 @@ import { runWorktreeFixers } from "../../conversations/land/worktree-fixers.js";
 // One turn from placement to settlement (streamAgent): placed, prepared, run on its provider, folded, settled.
 
 // Whether this turn enters the namespace, asked in one place so three callers can't disagree. A property of the
-// runtime: only the Claude Code loop enters it.
+// runtime: the Claude Code loop, Codex and Cursor enter it (agent-runtimes.ts), each with its own process born there.
 const entersNamespace = (input: RoutedTurn): boolean => capabilitiesOf(input.agent, input.harness).isolation === "namespace";
 
 // A runtime's frames as the turn reads them. The Claude Code loop files its own subagents from the SDK's task stream

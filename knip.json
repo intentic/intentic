@@ -48,6 +48,7 @@
             "entry": [
                 "src/main.ts",
                 "src/extensions/backend/backend-host-main.ts",
+                "src/runtimes/cursor/cursor-agent-runtime.ts",
                 "src/**/*.test.ts",
                 "src/fences/*.ts",
                 "bin/*.mjs",

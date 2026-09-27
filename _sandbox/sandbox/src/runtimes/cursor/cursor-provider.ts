@@ -43,7 +43,8 @@ export interface CursorSlice {
     readonly cursorModels: CursorCatalog;
     // Socket-backed command gate, live-turn registry (cursor-hooks.ts); one per daemon, hooks file is global.
     readonly cursorHooks: CursorHookService;
-    // Cursor's runtime, run in this process via @cursor/sdk, not a child; hence no spawner and cwd-based isolation.
+    // Cursor's runtime over @cursor/sdk: the SDK agent runs in this process, or, for a turn anchored in a mount namespace,
+    // in a runtime process born there (cursor-host.ts).
     readonly cursorAgent: (request: AgentRequest<CursorCredential>) => AsyncGenerator<AgentEvent>;
 }
 
