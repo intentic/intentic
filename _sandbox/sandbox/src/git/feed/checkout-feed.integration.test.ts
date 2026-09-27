@@ -34,6 +34,18 @@ const checkoutIn = async (parent: string, name: string): Promise<string> => {
     return dir;
 };
 
+// Each checkout is named only once its own `.git` has been read off the disk, so two checkouts watched together are
+// named in whichever order the filesystem answers — the arrival order of two round trips, not a contract. Messages
+// about distinct directories are read in a settled order instead; the kinds and the count stay asserted as they are.
+const dirOf = (message: FromNode): string => {
+    if (message.kind === "watch") {
+        return message.checkout.dir;
+    }
+    return message.kind === "unwatch" ? message.dir : "";
+};
+const byDir = (told: readonly FromNode[]): FromNode[] =>
+    told.toSorted((one, two) => Number(dirOf(one) > dirOf(two)) - Number(dirOf(one) < dirOf(two)));
+
 // The front's end of the socket: what it was told, the syncs it was asked, answered from `counts`.
 const standIn = (counts: Map<string, number>) => {
     const told: FromNode[] = [];
@@ -58,7 +70,7 @@ test("names each checkout once, and once they are watched asks one sync for ever
     const feed = frontCheckoutFeed(front.link);
 
     expect(await Promise.all([feed.generation(a), feed.generation(b)])).toEqual([4, undefined]);
-    expect(front.told).toEqual([
+    expect(byDir(front.told)).toEqual([
         { kind: "watch", checkout: { dir: a, gitDir: join(a, ".git"), commonDir: join(a, ".git") } },
         { kind: "watch", checkout: { dir: b, gitDir: join(b, ".git"), commonDir: join(b, ".git") } },
     ]);
