@@ -63,3 +63,10 @@ Docker Desktop's WSL integration puts `/var/run/docker.sock` into the distro. Af
 
 - Each pass of the fleet task asks docker inside the distro, as the runners' user. When no daemon answers there and the engine answers on Windows, it runs `docker desktop restart`, at most once every 10 minutes and only while no job is working. The distro and its runners stay up.
 - A job that lands in the meantime waits in its job-started hook (`/usr/local/lib/intentic-ci/wait-for-docker.sh`) for up to 10 minutes. It fails only if docker is still missing after that, with an error naming the machine. A job waiting there does not count as working.
+
+## While the disks are being compacted
+
+A WSL maintenance run (`C:\ProgramData\wsl-maintenance\wsl-maintenance.ps1` on omen) stops Docker Desktop, runs `wsl --shutdown` and compacts every VHDX, and diskpart can compact a file only while nothing has it open.
+
+- The fleet task skips its whole pass while that run's lock (`C:\ProgramData\wsl-maintenance\.lock`) exists, and logs one line saying so. Each pass would otherwise boot the distro or restart Docker Desktop under the compaction. It ignores a lock older than 3 hours, or one whose PowerShell is gone. `-MaintenanceLock ''` turns the skip off.
+- The intentic device agent does not boot a distro that WSL stopped. Its session starts again once something else starts the distro, or after 5 minutes.

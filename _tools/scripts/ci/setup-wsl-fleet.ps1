@@ -126,6 +126,13 @@ param(
     # Free space on the host volume, in GB, under which a pass reclaims rebuildable docker state. Twice this is
     # only reported; half of it takes the whole build cache rather than the stale part.
     [int]$LowDiskGb = 60,
+    # The lock a WSL maintenance run holds for its whole length, compaction included: wsl-maintenance.ps1 writes
+    # its pid here before it starts and removes the file when it ends. While it is held a pass does nothing, so
+    # it neither boots the distro nor restarts Docker Desktop under a disk being compacted. Empty turns it off.
+    [string]$MaintenanceLock = 'C:\ProgramData\wsl-maintenance\.lock',
+    # How old a held lock may be before a pass stops honouring it. The same three hours the maintenance script
+    # gives its own lock, and its scheduled tasks' ExecutionTimeLimit: a run older than that has been killed.
+    [int]$MaintenanceLockHours = 3,
     # A GUI-subsystem stub, so the reconciler never maps a window. Discovered if not passed; see the block
     # below for why `powershell -WindowStyle Hidden` is not the answer on Windows 11.
     [string]$LauncherPath,
@@ -371,6 +378,34 @@ elseif (`$freeGb -lt (`$LowDiskGb / 2)) { Say "disk: `$freeGb GB free -- CRITICA
 elseif (`$freeGb -lt `$LowDiskGb) { Say "disk: `$freeGb GB free -- UNDER the `$LowDiskGb GB floor" }
 elseif (`$freeGb -lt (`$LowDiskGb * 2)) { Say "disk: `$freeGb GB free -- approaching the `$LowDiskGb GB floor" }
 else { Say "disk: `$freeGb GB free" }
+
+# -- 0b. a WSL maintenance run in progress -----------------------------------------------------------------------
+# NOTHING BELOW MAY RUN UNDER A DISK COMPACTION. The host's maintenance task (C:\ProgramData\wsl-maintenance)
+# stops Docker Desktop, runs ``wsl --shutdown`` and then compacts every VHDX with diskpart, which needs each file
+# closed. Every pass boots the distro (section 3, and each ``wsl.exe -d`` probe does the same) and may run
+# ``docker desktop restart`` (section 3b), so a pass landing in that window holds ext4.vhdx open and the compaction
+# fails "because it is being used by another process" -- how archlinux's disk kept failing to shrink on 26 and 27
+# September -- or hands Docker Desktop a distro still booting, the "setup groups" failure section 3b exists for.
+# The maintenance run boots the distros and re-applies the integration itself when it is done.
+#
+# HONOURED WHILE IT IS FRESH AND ITS WRITER IS ALIVE. The file holds the writer's pid. A lock older than
+# $MaintenanceLockHours h, or whose pid is no PowerShell any more, is a run that was killed before it could clean up:
+# it is logged and ignored, since a dead lock honoured for ever would be the fleet down with nothing reporting it.
+`$maintenanceLock = if ('$MaintenanceLock') { Get-Item -LiteralPath '$MaintenanceLock' -Force -ErrorAction SilentlyContinue }
+if (`$maintenanceLock) {
+    `$lockAge = (Get-Date) - `$maintenanceLock.LastWriteTime
+    `$lockPid = (Get-Content -LiteralPath `$maintenanceLock.FullName -TotalCount 1 -ErrorAction SilentlyContinue) -as [int]
+    `$lockWriter = if (`$lockPid) { Get-Process -Id `$lockPid -ErrorAction SilentlyContinue }
+    `$writerGone = `$lockPid -and -not (`$lockWriter -and `$lockWriter.ProcessName -match '^(powershell|pwsh)`$')
+    `$since = `$maintenanceLock.LastWriteTime.ToString('HH:mm')
+    `$holder = if (`$lockPid) { "pid `$lockPid, " } else { '' }
+    if (`$lockAge.TotalHours -lt $MaintenanceLockHours -and -not `$writerGone) {
+        Say "maintenance: a WSL maintenance run holds `$(`$maintenanceLock.FullName) (`${holder}since `$since) and may be compacting the distro disks -- skipping this pass rather than booting `$Distro or restarting Docker Desktop under it"
+        exit 0
+    }
+    `$why = if (`$writerGone) { "pid `$lockPid is no PowerShell any more" } else { "older than $MaintenanceLockHours h" }
+    Say "maintenance: ignoring the stale lock `$(`$maintenanceLock.FullName) from `$since (`$why) -- a run that was killed before it could remove it"
+}
 
 # -- 1. the engine, BEFORE the distro --------------------------------------------------------------------------
 # Docker Desktop starts by restarting the WSL utility VM. Bringing it up after the fleet therefore kills every

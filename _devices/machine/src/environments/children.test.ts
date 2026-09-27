@@ -2,7 +2,15 @@ import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { MACHINE_ID_ENV } from "../machine-id.js";
-import { childArgv, childEnv, childVerdict, type ChildSpawner, superviseChildren } from "./children.js";
+import {
+    childArgv,
+    childEnv,
+    childVerdict,
+    type ChildSpawner,
+    STOPPED_DISTRO_BACKSTOP_MS,
+    STOPPED_DISTRO_POLL_MS,
+    superviseChildren,
+} from "./children.js";
 import { SUPERVISOR_ENV, WINDOWS_SUPERVISOR } from "./machine.js";
 import { NO_AGENT_EXIT } from "./crossing.js";
 
@@ -64,9 +72,12 @@ class FakeChild extends EventEmitter {
     }
 }
 
-const harness = (listed: readonly string[] | undefined = ["archlinux", "Ubuntu"]) => {
+// `running` is what `wsl -l --running` answers, read afresh on every ask; by default every listed distro is running.
+const harness = (listed: readonly string[] | undefined = ["archlinux", "Ubuntu"], running: { now: readonly string[] | undefined } = { now: listed }) => {
     const spawned: { distro: string; child: FakeChild }[] = [];
     const dropped: string[] = [];
+    const logged: string[] = [];
+    let runningAsks = 0;
     const spawner: ChildSpawner = {
         spawn: (distro) => {
             const child = new FakeChild();
@@ -74,10 +85,14 @@ const harness = (listed: readonly string[] | undefined = ["archlinux", "Ubuntu"]
             return child as unknown as ChildProcess;
         },
         distros: async () => await Promise.resolve(listed),
+        running: async () => {
+            runningAsks += 1;
+            return await Promise.resolve(running.now);
+        },
         now: () => Date.now(),
     };
-    const children = superviseChildren(() => undefined, async (distro) => void dropped.push(distro), spawner);
-    return { spawned, dropped, children };
+    const children = superviseChildren((line) => void logged.push(line), async (distro) => void dropped.push(distro), spawner);
+    return { spawned, dropped, logged, children, runningAsks: () => runningAsks };
 };
 
 describe("superviseChildren", () => {
@@ -129,6 +144,113 @@ describe("superviseChildren", () => {
     });
 
     // WSL that cannot be asked is not WSL saying the distro is gone.
+    // The agent died inside a distro that is still up: the ladder, exactly as before.
+    it("restarts a crash inside a running distro on the ladder", async () => {
+        jest.useFakeTimers();
+        const { spawned, logged, children } = harness();
+        children.reconcile(["archlinux"]);
+        spawned[0]?.child.exit(1);
+        await advanceTimersByTimeAsync(1_100);
+        expect(spawned).toHaveLength(2);
+        expect(logged.at(-1)).toContain("the distro is still running; starting it again in 1s");
+
+        spawned[1]?.child.exit(1);
+        await advanceTimersByTimeAsync(4_900);
+        expect(spawned).toHaveLength(2);
+        await advanceTimersByTimeAsync(200);
+        expect(spawned).toHaveLength(3);
+    });
+
+    // `wsl --shutdown` before a disk compaction: booting the distro a second later holds its VHDX open, so it waits.
+    it("waits on a distro WSL stopped, and starts its agent once something else starts the distro", async () => {
+        jest.useFakeTimers();
+        const running: { now: readonly string[] | undefined } = { now: ["archlinux"] };
+        const { spawned, logged, children } = harness(["archlinux"], running);
+        children.reconcile(["archlinux"]);
+        running.now = [];
+        spawned[0]?.child.exit(1);
+        await advanceTimersByTimeAsync(3 * STOPPED_DISTRO_POLL_MS);
+        expect(spawned).toHaveLength(1);
+        expect(logged.at(-1)).toContain("WSL stopped the distro (its session ended, exit 1); not booting it again from here");
+
+        running.now = ["archlinux"];
+        await advanceTimersByTimeAsync(STOPPED_DISTRO_POLL_MS + 100);
+        expect(spawned).toHaveLength(2);
+        expect(logged.at(-1)).toContain("running again");
+        // The backstop went with the wait: nothing more is started when it would have fired.
+        await advanceTimersByTimeAsync(STOPPED_DISTRO_BACKSTOP_MS);
+        expect(spawned).toHaveLength(2);
+    });
+
+    it("boots a stopped distro itself once the backstop runs out", async () => {
+        jest.useFakeTimers();
+        const { spawned, logged, children } = harness(["archlinux"], { now: [] });
+        children.reconcile(["archlinux"]);
+        spawned[0]?.child.exit(129);
+        await advanceTimersByTimeAsync(STOPPED_DISTRO_BACKSTOP_MS - 100);
+        expect(spawned).toHaveLength(1);
+        await advanceTimersByTimeAsync(200);
+        expect(spawned).toHaveLength(2);
+        expect(logged.at(-1)).toContain("nothing started it in 5 min, so booting it from here");
+    });
+
+    // A wait that looks while WSL cannot be asked keeps waiting: an unknown answer never boots anything either.
+    it("keeps waiting when a look at the running distros comes back empty-handed", async () => {
+        jest.useFakeTimers();
+        const running: { now: readonly string[] | undefined } = { now: [] };
+        const { spawned, children } = harness(["archlinux"], running);
+        children.reconcile(["archlinux"]);
+        spawned[0]?.child.exit(1);
+        await advanceTimersByTimeAsync(100);
+        running.now = undefined;
+        await advanceTimersByTimeAsync(3 * STOPPED_DISTRO_POLL_MS);
+        expect(spawned).toHaveLength(1);
+    });
+
+    it("cancels the wait on a stopped distro when it is let go", async () => {
+        jest.useFakeTimers();
+        const running: { now: readonly string[] | undefined } = { now: [] };
+        const { spawned, children, runningAsks } = harness(["archlinux", "Ubuntu"], running);
+        children.reconcile(["archlinux"]);
+        spawned[0]?.child.exit(1);
+        await advanceTimersByTimeAsync(STOPPED_DISTRO_POLL_MS + 100);
+        children.reconcile([]);
+        const asked = runningAsks();
+        running.now = ["archlinux"];
+        await advanceTimersByTimeAsync(STOPPED_DISTRO_BACKSTOP_MS + STOPPED_DISTRO_POLL_MS);
+
+        expect(spawned).toHaveLength(1);
+        expect(runningAsks()).toBe(asked);
+        expect(jest.getTimerCount()).toBe(0);
+    });
+
+    it("cancels the wait on a stopped distro when the root stops", async () => {
+        jest.useFakeTimers();
+        const { spawned, children, runningAsks } = harness(["archlinux"], { now: [] });
+        children.reconcile(["archlinux"]);
+        spawned[0]?.child.exit(1);
+        await advanceTimersByTimeAsync(100);
+        children.stopAll();
+        const asked = runningAsks();
+        await advanceTimersByTimeAsync(STOPPED_DISTRO_BACKSTOP_MS + STOPPED_DISTRO_POLL_MS);
+
+        expect(spawned).toHaveLength(1);
+        expect(runningAsks()).toBe(asked);
+        expect(jest.getTimerCount()).toBe(0);
+    });
+
+    // WSL that cannot say what is running is not WSL saying the distro stopped: today's ladder, not the wait.
+    it("restarts on the ladder when WSL cannot say which distros are running", async () => {
+        jest.useFakeTimers();
+        const { spawned, logged, children } = harness(["archlinux"], { now: undefined });
+        children.reconcile(["archlinux"]);
+        spawned[0]?.child.exit(1);
+        await advanceTimersByTimeAsync(1_100);
+
+        expect(spawned).toHaveLength(2);
+        expect(logged.at(-1)).toContain("WSL could not say whether the distro is still running; starting it again in 1s");
+    });
+
     it("keeps a child when WSL cannot be asked which distros exist", async () => {
         jest.useFakeTimers();
         const { spawned, dropped, children } = harness(undefined);

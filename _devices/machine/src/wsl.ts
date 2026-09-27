@@ -82,10 +82,14 @@ export const distrosFrom = (stdout: string): string[] =>
         .filter((line) => line !== "" && !WSL_SYSTEM_DISTROS.has(line));
 
 // The user's own distros as this side of the PC sees them (Windows, or a distro through interop); undefined when WSL
-// cannot be asked, so a failed listing is never read as "there are none".
-export const listDistros = async ({ running = false }: { readonly running?: boolean } = {}): Promise<string[] | undefined> => {
+// cannot be asked, so a failed listing is never read as "there are none". Listing boots nothing, but WSL answers it only
+// once a `wsl --shutdown` or `--terminate` in flight has finished, so a caller asking right after one may need longer.
+export const listDistros = async ({
+    running = false,
+    timeoutMs = 5_000,
+}: { readonly running?: boolean; readonly timeoutMs?: number } = {}): Promise<string[] | undefined> => {
     const answer = await exec("wsl.exe", ["-l", "-q", ...(running ? ["--running"] : [])], {
-        timeout: 5_000,
+        timeout: timeoutMs,
         windowsHide: true,
         env: { ...process.env, WSL_UTF8: "1" },
     }).catch(() => undefined);
