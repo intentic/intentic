@@ -132,8 +132,9 @@ answer_confirm() {
     local id
     id=$(window_titled "$CONFIRM_TITLE" | head -1)
     [ -n "$id" ] || return 1
-    # Activated, then a real XTEST keypress — GTK ignores the synthetic event `xdotool key --window` sends.
-    xdotool windowactivate --sync "$id" 2>/dev/null || true
+    # Xvfb has no window manager to answer windowactivate's EWMH request. Focus the dialog directly
+    # before the real XTEST keypress; otherwise Return can land on the workspace behind it.
+    xdotool windowfocus --sync "$id"
     xdotool key --clearmodifiers Return
 }
 
