@@ -13,8 +13,13 @@ import { halt } from "./net-probe.js";
 const MARK = "halt-probe-client";
 
 test("halt keeps the pidfile and throws when the client outlives a kill that failed, then stops it once kill works", async () => {
-    const child = spawn(process.execPath, ["-e", `setTimeout(() => {}, 60_000); // ${MARK}`], { stdio: "ignore" });
+    const child = spawn(process.execPath, ["-e", `process.stdout.write("up"); setTimeout(() => {}, 60_000); // ${MARK}`], {
+        stdio: ["ignore", "pipe", "ignore"],
+    });
     const exited = once(child, "exit");
+    // A new pid's /proc cmdline reads empty until its exec has laid out argv, and a loaded runner stretches that past
+    // the halt below, which then finds no client; the client's first write proves it runs under MARK.
+    await once(child.stdout, "data");
     const pidFile = join(mkdtempSync(join(tmpdir(), "net-probe-")), "client.pid");
     await writeFile(pidFile, String(child.pid));
 
