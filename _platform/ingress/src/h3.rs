@@ -14,7 +14,7 @@ use hyper::body::Frame;
 use tokio::sync::mpsc;
 
 use crate::body::{Body, BoxError};
-use crate::edge::{Edge, Via};
+use crate::edge::Edge;
 use crate::webtransport;
 
 /// Answers a browser's requests for as long as its connection lasts, or until a WebTransport session takes it.
@@ -75,9 +75,7 @@ pub(crate) async fn answer(
     remote: SocketAddr,
 ) {
     let (mut send, recv) = stream.split();
-    let response = edge
-        .handle(request.map(|()| sent(recv)), remote, Via::Direct)
-        .await;
+    let response = edge.handle(request.map(|()| sent(recv)), remote).await;
     let (parts, mut body) = response.into_parts();
     if send
         .send_response(Response::from_parts(parts, ()))

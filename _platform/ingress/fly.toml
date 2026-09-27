@@ -1,18 +1,29 @@
-# THE EDGE'S DEPLOYMENT, and the reason it is tracked here rather than living in somebody's shell history:
-# every value below is load-bearing, and three of them are the difference between "the workspace is quick" and
-# "the workspace hangs". The app name has to match the deployed app, because Fly injects FLY_APP_NAME and
-# src/peers.rs asks `<app>.internal` who the other machines are — that is the whole of peer discovery.
+# THE EDGE'S DEPLOYMENT, the one CI rolls on every push to main (_tools/scripts/platform/deploy-ingress.sh), and the
+# reason it is tracked here rather than living in somebody's shell history: every value below is load-bearing. The app
+# name has to match the deployed app, because Fly injects FLY_APP_NAME and src/peers.rs asks `<app>.internal` who the
+# other machines are — that is the whole of peer discovery.
 #
-# ONE MACHINE PER REGION A SANDBOX'S OWNER IS LIKELY TO BE IN. Every sandbox with a front door dials this app and
-# is served through it, a hosted machine included (the daemon's reach-posture.ts), so the placement rule holds for
-# all of them: anycast puts a browser on the machine nearest IT and a tunnel on the machine nearest the sandbox, and
-# when the two differ src/cluster.rs hands the request across. A request rides a held tunnel first; only a hosted
-# sandbox holding none (still booting, or between redials) is replayed by Fly's proxy from whichever edge answered
-# straight to its machine (src/edge.rs). Fly's own advice for a router is "close to the user", which argues for more
-# cheap machines here, not fewer.
+# THE EDGE TERMINATES TLS ITSELF (live since 2026-09-26). Fly passes raw TCP on 443 through with a PROXY v2 header naming
+# the browser (src/proxy_protocol.rs), and UDP 443 straight to the QUIC door; the process presents the certificate the
+# platform issued (src/certificate.rs, fetched with INGRESS_PLATFORM_TOKEN from PLATFORM_URL) on both, and declares on
+# /health and on every tunnel's answer that it serves QUIC, HTTP/3 and WebTransport, which is what fronts and editors go
+# by. Fly holds no certificate for *.sbx.intentic.dev any more. fly.edge-proxy.toml beside this is the old shape behind
+# Fly's HTTP proxy, kept as the emergency fallback; it is NOT a one-command rollback (README.md, "Rolling back").
 #
-# Regions are NOT expressible in this file (Fly removed the key); `fly scale count` places them, and README.md
-# ("Deploying") is the runbook. This file is the shape of a machine, not where they are.
+# NO FLY PROXY, SO NO REPLAY. Every sandbox, a hosted one included, is reached down the tunnel it dials (src/edge.rs),
+# and one that dials nothing answers the `no-tunnel` verdict, which is what the editor wakes a hosted sandbox on.
+#
+# ONE MACHINE PER REGION A SANDBOX'S OWNER IS LIKELY TO BE IN. Anycast puts a browser on the machine nearest IT and a
+# tunnel on the machine nearest the sandbox, and when the two differ src/cluster.rs hands the request across. Regions are
+# NOT expressible in this file (Fly removed the key); `fly scale count` places them, and README.md ("Deploying") is the
+# runbook. This file is the shape of a machine, not where they are.
+#
+# The ports the process binds are set as secrets, not here: INGRESS_TLS_PORT=8443 (TCP, behind the PROXY header), and
+# INGRESS_QUIC_PORT=443 with INGRESS_QUIC_HOST=fly-global-services, the only address Fly delivers UDP to. The QUIC port
+# MUST equal the public 443: Fly rewrites only the address of a UDP packet, never its port, so a QUIC door on any other
+# port receives nothing (go-live, 2026-09-26: 8443 here left HTTP/3 silent until it became 443). The plain listener
+# (INGRESS_PORT, 8080) stays up for the redirect on 80. tests/fly_configs.rs holds these services, and holds this file
+# and fly.edge-proxy.toml equal outside them.
 
 app = "intentic-ingress"
 primary_region = "iad"
@@ -21,57 +32,67 @@ primary_region = "iad"
   # Built and pushed by the `docker:release` turbo task, never by Fly. See Dockerfile.
   image = "ghcr.io/intentic/ingress:latest"
 
-[http_service]
-  internal_port = 8080
-  force_https = true
-
-  # NEVER AUTO-STOP THIS. A stopped ingress machine is not a cold start, it is every tunnel it held dropping
-  # at once: each container notices, backs off, and redials somewhere else, and for that window its owner's
-  # workspace answers 502. The process holds live connections and nothing else, so there is nothing to scale
-  # to zero for and nothing to warm up — "started" and "ready" are the same moment (Dockerfile). Hosted
-  # sandboxes hold tunnels here too, so a restart drops theirs the same way; the replay below only carries them
-  # until they redial.
+# HTTPS and the tunnels' WSS: raw TCP, TLS terminated by the process.
+[[services]]
+  internal_port = 8443
+  protocol = "tcp"
+  # NEVER AUTO-STOP THIS. A stopped edge machine is not a cold start, it is every tunnel it held dropping at once:
+  # each sandbox notices, backs off and redials somewhere else, and for that window its workspace answers 502. The
+  # process holds live connections and nothing else, so "started" and "ready" are the same moment (Dockerfile).
   auto_stop_machines = false
   auto_start_machines = false
   min_machines_running = 1
 
-  # THE REPLAY CACHE, for the one case a hosted sandbox's traffic does not come down a tunnel. A hosted sandbox
-  # dials a tunnel like every other and is served through it while one is held; when none is (no edge holds it,
-  # and it is not marked as reachable only by tunnel), src/edge.rs answers `fly-replay: app=<its app>` and Fly's
-  # proxy delivers the request there. This rule lets the
-  # proxy REMEMBER that decision per hostname (the Host header is the key, so one sandbox's route can never
-  # apply to another's name) for the TTL the response names (fly-replay-cache-ttl-secs, REPLAY_CACHE_TTL_SECS),
-  # after which every further request for that hostname goes browser → Fly → machine without asking here.
-  # Without this rule the replay still works; the edge is simply on the head of every request, ~10 ms, and
-  # a request over 1 MB cannot be replayed at all (Fly buffers what it replays). With it, the only request
-  # that ever meets that limit is the first one on a hostname per TTL, which from a browser is a GET.
-  [[http_service.http_options.replay_cache]]
-    path_prefix = "/"
-    ttl_seconds = 300
-    type = "header"
-    name = "host"
+  [[services.ports]]
+    port = 443
+    handlers = ["proxy_proto"]
+    proxy_proto_options = { version = "v2" }
 
-  [http_service.concurrency]
-    # CONNECTIONS, NOT REQUESTS, and this is the trap worth naming. Fly's default counts in-flight REQUESTS,
-    # and most of what this edge carries never finishes: one /events stream per open browser window, an attach
-    # per live agent turn, a terminal, a dev server's HMR socket. Counted as requests they are permanently
-    # in-flight, so a busy machine walks up to the hard limit and Fly's proxy stops routing to a process that
-    # is perfectly healthy. Counting connections is the honest unit for a proxy, and the numbers are high
-    # because a few hundred sandboxes with several windows each is an ordinary day, not a surge.
+  [services.concurrency]
+    # CONNECTIONS, NOT REQUESTS. Most of what this edge carries never finishes: one /events stream per open browser
+    # window, an attach per live agent turn, a terminal, a dev server's HMR socket. The numbers are high because a
+    # few hundred sandboxes with several windows each is an ordinary day, not a surge.
     type = "connections"
     soft_limit = 5000
     hard_limit = 10000
 
-  [[http_service.checks]]
-    # /health is answered by the process itself (src/edge.rs) with no tunnel, no platform call and no disk,
-    # so it proves exactly what a load balancer needs to know and nothing that could fail for someone else's
-    # reason. Deliberately NOT strict about tunnel count: a machine holding zero tunnels is a machine that was
-    # just deployed, not a broken one.
-    path = "/health"
-    method = "GET"
+  [[services.tcp_checks]]
     interval = "15s"
     timeout = "5s"
     grace_period = "5s"
+
+# Plain HTTP only to be sent to HTTPS; Fly's proxy answers the redirect itself. The check is TCP: an HTTP check on this
+# service never reported through Fly's proxy at go-live ("waiting for status update", and the deploy timed out on it),
+# while the process's own /health stays readable over TLS for deploy-ingress.sh's read-back.
+[[services]]
+  internal_port = 8080
+  protocol = "tcp"
+  auto_stop_machines = false
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "5s"
+
+# QUIC on the same public port: a front's tunnel (ALPN intentic-tunnel/1), a browser's HTTP/3 and WebTransport (h3).
+# Fly delivers UDP only to a dedicated IPv4 (`fly ips allocate-v4`), only to fly-global-services, and only on the port
+# it arrived on, so internal_port is 443 like the public one (INGRESS_QUIC_PORT=443).
+[[services]]
+  internal_port = 443
+  protocol = "udp"
+  auto_stop_machines = false
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 443
 
 [[vm]]
   # The edge carries bytes and holds sockets; it parses nothing bigger than a header and stores nothing at

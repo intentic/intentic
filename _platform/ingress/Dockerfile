@@ -12,14 +12,14 @@
 #
 # Runtime config (src/config.rs) is injected by the deployment, never baked:
 #   INGRESS_PUBLIC_KEY      the platform's Ed25519 PUBLIC key (SPKI PEM). Required: the process exits without it.
-#   PLATFORM_URL            where to ask whether a sandbox still exists. Unset: that check is off.
+#   PLATFORM_URL            where to ask whether a sandbox still exists, and where the platform's certificate is
+#                           fetched. Unset: the existence check is off, and INGRESS_PLATFORM_TOKEN alone starts no TLS.
 #   INGRESS_PORT/HOST       defaults 8080 / 0.0.0.0.
 #   INGRESS_INTERNAL_PORT   the cluster's own listener, default 8081, bound to the private address (FLY_PRIVATE_IP
 #                           when present, else INGRESS_INTERNAL_HOST, else every interface). Never publish it.
 #   INGRESS_PEERS           off Fly only: the other machines, `host[:port[:internalPort]]` comma-separated, with
 #                           INGRESS_ADVERTISE_HOST naming this one as they reach it. On Fly both are derived.
 #   INGRESS_INSTANCE_ID     this machine's name in logs and on /health; defaults to FLY_MACHINE_ID.
-#   HOSTED_APP_PREFIX       hosted sandboxes' Fly app prefix; unset replays nothing.
 #   INGRESS_TLS_PORT        where the edge terminates TLS itself; unset leaves TLS to whatever is in front of it. The
 #                           certificate is a PEM pair on disk (INGRESS_TLS_CERT_FILE, INGRESS_TLS_KEY_FILE) or the one
 #                           the platform issued (INGRESS_PLATFORM_TOKEN with PLATFORM_URL), reloaded in place.
@@ -27,6 +27,7 @@
 #   INGRESS_QUIC_PORT       the UDP door, on the same certificate: a front's QUIC tunnel and a browser's HTTP/3 and
 #                           WebTransport. Setting it is also what the edge DECLARES (x-intentic-transports on a tunnel's
 #                           answer, `transports` on /health): fronts and editors reach for UDP only where it is declared.
+#                           On Fly it MUST be the public 443: Fly never rewrites a UDP packet's port.
 #   INGRESS_QUIC_HOST       the address it binds, else INGRESS_HOST; on Fly, `fly-global-services`, the only one UDP
 #                           reaches.
 #   INGRESS_ALT_SVC         what TCP answers advertise HTTP/3 with, naming the PUBLIC UDP port: h3=":443"; ma=86400.

@@ -1,5 +1,4 @@
-import { PREVIEW_PORT } from "@intentic/constants";
-import { FLY_VOLUME_LAYOUT, FLY_VOLUME_PATH, FRONT_DOOR_CONCURRENCY, flyBuildMachineConfig, flyMachineConfig } from "./fly.js";
+import { FLY_VOLUME_LAYOUT, FLY_VOLUME_PATH, flyBuildMachineConfig, flyMachineConfig } from "./fly.js";
 
 describe(`flyMachineConfig`, () => {
     const run = {
@@ -58,54 +57,19 @@ describe(`flyMachineConfig`, () => {
     });
 });
 
-describe(`flyMachineConfig: the front door`, () => {
-    const run = {
-        name: `intentic-sbx-abcdef012345`,
-        image: `ghcr.io/intentic/sandbox:stable`,
-        baseImage: `ghcr.io/intentic/sandbox:stable`,
-        guest: { cpuKind: `shared` as const, cpus: 2, memoryMb: 4096 },
-        volumeId: `vol_123`,
-    };
-
-    it(`declares the preview proxy as the one public service when the run names a hostname`, () => {
-        const config = flyMachineConfig({ ...run, frontDoor: { hostname: `sandbox-abcdef012345.sbx.test` } });
-        expect(config.services).toHaveLength(1);
-        const service = config.services![0]!;
-        expect(service.internal_port).toBe(PREVIEW_PORT);
-        expect(service.ports.map((port) => port.port)).toEqual([443, 80]);
-        expect(service.ports[0]!.handlers).toEqual([`tls`, `http`]);
-        // h2 to the browser: a stream per window can't live inside HTTP/1.1's six-per-origin limit.
-        expect(service.ports[0]!.tls_options?.alpn).toEqual([`h2`, `http/1.1`]);
-        expect(service.ports[1]!.force_https).toBe(true);
-    });
-
-    it(`counts connections, not requests, so held streams cannot walk a healthy machine to its hard limit`, () => {
-        const config = flyMachineConfig({ ...run, frontDoor: { hostname: `sandbox-abcdef012345.sbx.test` } });
-        expect(config.services![0]!.concurrency).toEqual(FRONT_DOOR_CONCURRENCY);
-        expect(FRONT_DOOR_CONCURRENCY.type).toBe(`connections`);
-    });
-
-    // The platform's hour meter fires at wake; idle-stop is the daemon's own exit; the proxy does neither.
-    it(`leaves starting and stopping to the platform and the daemon`, () => {
-        const service = flyMachineConfig({ ...run, frontDoor: { hostname: `sandbox-abcdef012345.sbx.test` } }).services![0]!;
-        expect(service.autostart).toBe(false);
-        expect(service.autostop).toBe(`off`);
-    });
-
-    it(`checks the daemon's /health through the front door under the sandbox's own hostname`, () => {
-        const config = flyMachineConfig({ ...run, frontDoor: { hostname: `sandbox-abcdef012345.sbx.test` } });
-        const check = config.checks?.[`front-door`];
-        expect(check?.port).toBe(PREVIEW_PORT);
-        expect(check?.path).toBe(`/health`);
-        // Any other Host is a 404 from the preview proxy by design; the header is what makes this check true.
-        expect(check?.headers).toEqual([{ name: `Host`, values: [`sandbox-abcdef012345.sbx.test`] }]);
-    });
-
-    // A warm pool machine runs nothing on its one boot, so a service on it would only ever fail its check.
-    it(`declares no service and no check for a run without a hostname`, () => {
-        const config = flyMachineConfig(run);
-        expect(config.services).toBeUndefined();
-        expect(config.checks).toBeUndefined();
+// Reached only down the tunnel its daemon dials, like every sandbox: nothing on Fly routes to a hosted machine, so it
+// declares no public service and no check, which Fly would otherwise run and report against a door nobody uses.
+describe(`flyMachineConfig: no front door`, () => {
+    it(`declares no service and no check`, () => {
+        const config = flyMachineConfig({
+            name: `intentic-sbx-abcdef012345`,
+            image: `ghcr.io/intentic/sandbox:stable`,
+            baseImage: `ghcr.io/intentic/sandbox:stable`,
+            guest: { cpuKind: `shared` as const, cpus: 2, memoryMb: 4096 },
+            volumeId: `vol_123`,
+        });
+        expect(config).not.toHaveProperty(`services`);
+        expect(config).not.toHaveProperty(`checks`);
     });
 });
 
@@ -155,8 +119,8 @@ describe(`flyBuildMachineConfig`, () => {
         expect(config.restart).toEqual({ policy: `no` });
         expect(config.auto_destroy).toBe(false);
         expect(config.init).toEqual({ entrypoint: [`/bin/sh`, `/build/run.sh`] });
-        expect(config.services).toBeUndefined();
-        expect(config.checks).toBeUndefined();
+        expect(config).not.toHaveProperty(`services`);
+        expect(config).not.toHaveProperty(`checks`);
     });
 
     it(`delivers every file base64-encoded at its guest path`, () => {

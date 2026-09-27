@@ -1,7 +1,7 @@
-//! The edge's two Fly configurations: one behind Fly's HTTP proxy, and one terminating TLS itself with UDP beside it.
-//! CI deploys fly.toml on every push and the other waits beside it as `fly.edge-*.toml` (README.md, "Terminating TLS
-//! at the edge": the TLS one until the swap, the proxy one after it, for a rollback), so the two must be the same app,
-//! image and machine in every respect but their services, or a swap would change more than who holds the certificate.
+//! The edge's two Fly configurations: fly.toml, which CI deploys on every push and which terminates TLS itself with UDP
+//! beside it, and fly.edge-proxy.toml, the old shape behind Fly's HTTP proxy kept as the emergency fallback (README.md,
+//! "Rolling back"). The two must be the same app, image and machine in every respect but their services, or a fallback
+//! would change more than who holds the certificate.
 
 use std::path::{Path, PathBuf};
 
@@ -66,10 +66,8 @@ fn every_fly_config_is_the_same_app_image_and_machine_but_for_its_services() {
         .map(|(path, _)| path.file_name().unwrap().to_string_lossy().into_owned())
         .collect();
     assert!(
-        names.len() == 2
-            && names.contains(&"fly.toml".to_owned())
-            && names.iter().any(|name| name.starts_with("fly.edge-")),
-        "fly.toml and one fly.edge-*.toml beside it, not {names:?}"
+        names == ["fly.edge-proxy.toml", "fly.toml"],
+        "fly.toml and the fallback fly.edge-proxy.toml beside it, not {names:?}"
     );
     let deployed = without_services(
         &configs
@@ -77,14 +75,6 @@ fn every_fly_config_is_the_same_app_image_and_machine_but_for_its_services() {
             .find(|(path, _)| path.ends_with("fly.toml"))
             .unwrap()
             .1,
-    );
-    assert_eq!(
-        configs
-            .iter()
-            .filter(|(_, table)| table.contains_key("http_service"))
-            .count(),
-        1,
-        "one config behind Fly's proxy, one terminating TLS"
     );
     for (path, table) in &configs {
         assert_eq!(
@@ -102,16 +92,30 @@ fn every_fly_config_is_the_same_app_image_and_machine_but_for_its_services() {
 }
 
 #[test]
-fn the_tls_config_passes_443_through_with_proxy_headers_and_carries_udp_beside_it() {
+fn what_ci_deploys_passes_443_through_with_proxy_headers_and_carries_udp_beside_it() {
     let configs = configs();
-    let (_, proxied) = configs
-        .iter()
-        .find(|(_, table)| table.contains_key("http_service"))
-        .expect("fly.toml sits behind Fly's HTTP proxy");
-    let (_, tls) = configs
-        .iter()
-        .find(|(_, table)| table.contains_key("services"))
-        .expect("a config terminates TLS itself");
+    let named = |name: &str| -> &Table {
+        &configs
+            .iter()
+            .find(|(path, _)| path.file_name().is_some_and(|file| file == name))
+            .unwrap_or_else(|| panic!("no {name}"))
+            .1
+    };
+    let tls = named("fly.toml");
+    let proxied = named("fly.edge-proxy.toml");
+    assert!(
+        !tls.contains_key("http_service"),
+        "fly.toml terminates TLS itself: no Fly HTTP proxy in front of 443"
+    );
+    assert!(
+        proxied.contains_key("http_service"),
+        "the fallback sits behind Fly's HTTP proxy"
+    );
+    // The edge replays nothing any more, so the fallback must not ask Fly's proxy to cache a replay either.
+    assert_eq!(
+        at(proxied, &["http_service", "http_options", "replay_cache"]),
+        None
+    );
     let listed = services(tls);
     let on = |protocol: &str, port: i64| -> &Table {
         listed
@@ -159,6 +163,18 @@ fn the_tls_config_passes_443_through_with_proxy_headers_and_carries_udp_beside_i
         port_of(plain).get("force_https").and_then(Value::as_bool),
         Some(true)
     );
+    // TCP checks only: an HTTP check on the plain service never reported through Fly's proxy at go-live, and the
+    // deploy timed out waiting for it.
+    for service in [secure, plain] {
+        assert!(
+            service
+                .get("tcp_checks")
+                .and_then(Value::as_array)
+                .is_some_and(|checks| !checks.is_empty()),
+            "every TCP service is checked over TCP"
+        );
+        assert!(service.get("http_checks").is_none());
+    }
 
     // Fly rewrites only a UDP packet's address, never its port: the QUIC door listens on the public port itself.
     let quic = on("udp", 443);

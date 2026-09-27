@@ -48,8 +48,6 @@ const target = (image = NEW): FlyMachineConfig => ({
     mounts: [{ volume: `vol_1`, path: `/data` }],
     restart: { policy: `on-failure`, max_retries: 3 },
     auto_destroy: false,
-    services: [],
-    checks: {},
 });
 
 // A registry beside Fly: `digest` is what it says a tag names, undefined a registry that cannot be reached.
@@ -130,15 +128,15 @@ describe(`the image a machine runs`, () => {
         await expect(runningImageOf(config, MACHINE)).resolves.toBe(OLD);
     });
 
-    // The probe boots nothing: no daemon, no front door, no restart, and the marker names what to go back to. Fly mounts
+    // The probe boots nothing: no daemon, no restart, and the marker names what to go back to. Fly mounts
     // the volume read-write with a network, so the platform's credentials stay out of it: the marker is all it carries.
     it(`probes with the target image and volume, the daemon's entrypoint replaced, and no credentials`, () => {
         const probe = probeConfig(target(), OLD);
         expect(probe).toMatchObject({ image: NEW, mounts: [{ volume: `vol_1`, path: `/data` }], restart: { policy: `no` } });
         expect(probe.init?.entrypoint?.slice(0, 2)).toEqual([`/bin/sh`, `-c`]);
         expect(probe.env).toEqual({ [STATE_PROBE_ENV]: OLD });
-        expect(probe.services).toBeUndefined();
-        expect(probe.checks).toBeUndefined();
+        expect(probe).not.toHaveProperty(`services`);
+        expect(probe).not.toHaveProperty(`checks`);
     });
 });
 

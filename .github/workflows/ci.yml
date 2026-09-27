@@ -1374,7 +1374,9 @@ jobs:
       # what production was serving. Hosted sandboxes had meanwhile moved onto `fly-replay`, which the running
       # edge was too old to do, so each one answered 502 at its own address and told its owner to start it over.
       # deploy-ingress.sh rolls it and then reads the build back off the public /health, so a push that does not
-      # land is a red job rather than a silent one.
+      # land is a red job rather than a silent one. It deploys _platform/ingress/fly.toml, where the edge terminates
+      # TLS itself, refuses a config of any other shape, and ends on `edge-mode: tls — intentic-ingress declares quic,
+      # h3 and webtransport` once /health says so.
       #
       # Inert without FLY_API_TOKEN, exactly as deploy-platform.sh is without a stack: a fork sees a skip.
       - run: bash _tools/scripts/platform/deploy-ingress.sh

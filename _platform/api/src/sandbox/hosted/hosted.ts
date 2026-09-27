@@ -43,12 +43,12 @@ import { HostedImageKept, HostedMachineBusy, type HostedStrandingRecord, STATE_P
 export { startAfterUpdate } from "./gate/start-after-update.js";
 
 // Hosted lane orchestration over fly.ts: one machine and one volume in one app per sandbox, named `<prefix>-<12-hex
-// tunnel id>` always. The machine dials the edge's tunnel like every sandbox; until it has, the edge answers `sandbox-<id>`
-// with `fly-replay: app=<prefix>-<id>`, derived from the hostname with no lookup. The daemon's announce is the only up
-// signal; the platform only flips power and writes config, never dials the machine.
+// tunnel id>` always. The machine dials the edge's tunnel like every sandbox and is reached only down it; until it has,
+// the edge answers `sandbox-<id>` with the `no-tunnel` verdict, which the editor wakes it on. The daemon's announce is
+// the only up signal; the platform only flips power and writes config, never dials the machine.
 
-// Both the Fly credential and the edge are required: hosted machines are reached only via the edge's replay under its
-// wildcard.
+// Both the Fly credential and the edge are required: hosted machines are reached only through the edge, down the tunnel
+// they dial under its wildcard.
 export const hostedEnabled = (config: Config): boolean => config.hosted.flyApiToken !== `` && config.hosted.flyOrg !== `` && ingressEnabled(config);
 
 // Deployment identity: API URL plus the database's host and path, never the credential (plaintext at the provider) — a
@@ -126,8 +126,10 @@ export interface HostedProvisionArgs {
 }
 
 // Single composer for both cold-provision and pool-claim configs, so the two origins cannot drift. A hosted machine
-// dials the edge's tunnel like every sandbox, and keeps the front door a replay lands on for as long as the edge sits
-// behind Fly's HTTP proxy. Overlay is the only thing that varies; `null` on both means the stock image.
+// dials the edge's tunnel like every sandbox and declares no Fly service: the edge terminates TLS itself, so no Fly
+// proxy could route to one. A machine configured while it still declared its front door keeps it until its next config
+// apply (a claim, a restart, an overlay, a wake's heal), which removes it; until then it is inert, since the app has no
+// public address and nothing replays to it. Overlay is the only thing that varies; `null` on both means the stock image.
 export interface HostedOverlay {
     readonly image: string | null;
     readonly environmentHash: string | null;
@@ -168,11 +170,10 @@ export const hostedMachineConfig = (
                 // sign-in.
                 [ENV_PLATFORM_PUBLIC_KEY, publicKeyPemOf(config.ingress.signingKey)],
                 [`IDLE_STOP_MINUTES`, String(config.hosted.idleStopMinutes)],
-                // Replayed on every claim, overlay and restart, like the rest of this config; the daemon applies it
-                // only to a workspace that arrived empty, so a replay cannot run over work.
+                // Re-applied on every claim, overlay and restart, like the rest of this config; the daemon applies it
+                // only to a workspace that arrived empty, so re-applying it cannot run over work.
                 ...(seed === undefined ? [] : [[ENV_DEFINITION_SEED, seed] as const]),
             ],
-            frontDoor: { hostname },
         }),
         // The owner rides along: this config is replaced on every claim, overlay and restart, so the stamp stays
         // true to whoever the machine currently belongs to rather than to whoever first got it.
@@ -236,8 +237,8 @@ const healHosted = async (
 };
 
 /* A WAKE ALSO HEALS THE TUNNEL. A machine configured before hosted machines dialled the edge (71dbfb7145) carries
- * neither SANDBOX_GRANT nor INGRESS_URL, and a stop/start never changes a config, so it would stay reachable only by
- * replay, and not at all once the edge terminates TLS itself. So the wake reads the machine's environment first and,
+ * neither SANDBOX_GRANT nor INGRESS_URL, and a stop/start never changes a config, so it would never dial, and with the
+ * edge terminating TLS itself nothing else reaches it. So the wake reads the machine's environment first and,
  * when the tunnel's pair is missing or no longer what this platform would write (a moved edge, a rotated key),
  * re-applies the whole config the way a restart does, with the machine's own overlay and guest, then starts it and
  * confirms. A stock machine moves onto today's stock digest, as a restart moves it: one that old most likely runs an

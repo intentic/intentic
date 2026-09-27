@@ -6,7 +6,7 @@ mod support;
 use std::collections::HashMap;
 use std::time::Duration;
 
-use intentic_ingress::revocation::{Reach, Reachability, Revocation};
+use intentic_ingress::revocation::Revocation;
 
 use support::{SANDBOX_ID, platform};
 
@@ -76,56 +76,22 @@ async fn with_no_platform_nothing_is_asked_and_everything_exists() {
     let revocation = Revocation::new("");
     assert!(!revocation.enforced());
     assert!(revocation.allows(SANDBOX_ID).await);
-    assert_eq!(
-        revocation.lookup(SANDBOX_ID).await,
-        Reachability {
-            exists: true,
-            reach: None,
-            app: None
-        }
-    );
 }
 
+// The lane the platform names is no longer read: a hosted sandbox and a tunnel one both exist, and so does one on a
+// platform too old to name any, or one answering something that is not JSON at all.
 #[tokio::test]
-async fn a_lookup_reads_the_lane_and_the_app_and_shares_its_cache_with_the_gate() {
-    let hosted = platform(answering(
-        200,
+async fn any_success_says_the_sandbox_exists_whatever_its_body() {
+    for body in [
         r#"{"ok":true,"lane":"hosted","app":"intentic-sbx-abcdef012345"}"#,
-    ))
-    .await;
-    let revocation = Revocation::new(&hosted.url);
-    assert_eq!(
-        revocation.lookup(SANDBOX_ID).await,
-        Reachability {
-            exists: true,
-            reach: Some(Reach::Hosted),
-            app: Some("intentic-sbx-abcdef012345".into())
-        }
-    );
-    assert!(revocation.allows(SANDBOX_ID).await);
-    assert_eq!(hosted.asked.lock().unwrap().len(), 1);
-
-    let tunnel = platform(answering(200, r#"{"ok":true,"lane":"tunnel"}"#)).await;
-    assert_eq!(
-        Revocation::new(&tunnel.url).lookup(SANDBOX_ID).await.reach,
-        Some(Reach::Tunnel)
-    );
-    // An older platform answers `{ ok: true }` alone: the sandbox exists on a lane it did not name.
-    let older = platform(answering(200, r#"{"ok":true}"#)).await;
-    assert_eq!(
-        Revocation::new(&older.url).lookup(SANDBOX_ID).await,
-        Reachability {
-            exists: true,
-            reach: None,
-            app: None
-        }
-    );
-    let gone = platform(answering(404, "{}")).await;
-    assert!(!Revocation::new(&gone.url).lookup(SANDBOX_ID).await.exists);
-    assert!(
-        Revocation::new("http://127.0.0.1:1")
-            .lookup(SANDBOX_ID)
-            .await
-            .exists
-    );
+        r#"{"ok":true,"lane":"tunnel"}"#,
+        r#"{"ok":true}"#,
+        "ok",
+    ] {
+        let answering = platform(answering(200, body)).await;
+        assert!(
+            Revocation::new(&answering.url).allows(SANDBOX_ID).await,
+            "{body}"
+        );
+    }
 }

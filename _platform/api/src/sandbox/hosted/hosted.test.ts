@@ -303,8 +303,6 @@ describe(`provisionHosted`, () => {
                 env: Record<string, string>;
                 mounts: { volume: string; path: string }[];
                 metadata: Record<string, string>;
-                services: { internal_port: number }[];
-                checks: Record<string, { headers: { name: string; values: string[] }[] }>;
             };
         };
         expect(machine.config.mounts).toEqual([{ volume: `vol_1`, path: `/data` }]);
@@ -323,9 +321,9 @@ describe(`provisionHosted`, () => {
             sandboxIdFromToken(`t0k3n`),
         );
         expect(machine.config.env[`INGRESS_URL`]).toBe(testIngressConfig.url);
-        // The front door stays, checked under the replay hostname, for as long as the edge sits behind Fly's proxy.
-        expect(machine.config.services.map((service) => service.internal_port)).toEqual([5173]);
-        expect(machine.config.checks[`front-door`]?.headers).toEqual([{ name: `Host`, values: [hostnameOf(`t0k3n`)] }]);
+        // No front door: the edge terminates TLS itself, so the tunnel is the only way in and no Fly proxy routes here.
+        expect(machine.config).not.toHaveProperty(`services`);
+        expect(machine.config).not.toHaveProperty(`checks`);
         expect(machine.config.env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
         expect(machine.config.env[`IDLE_STOP_MINUTES`]).toBe(`20`);
         expect(machine.config.env[`SANDBOX_VM`]).toBe(`1`);
@@ -443,8 +441,8 @@ describe(`provisionHosted`, () => {
             intentic_platform: INSTANCE,
             intentic_owner: `owner@example.com`,
         });
-        // App was named for its build-time token, and the edge replays `sandbox-<id>` straight to app `<prefix>-<id>`:
-        // this machine's identity must become the sandbox it now serves.
+        // App was named for its build-time token, and its daemon's tunnel grant names the id that token carries: this
+        // machine's identity must become the sandbox it now serves.
         expect(update.config.env[`CONNECT_TOKEN`]).toBe(POOL_TOKEN);
         expect(update.config.env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
         expect(update.config.env[`SANDBOX_PUBLIC_URL`]).toBe(`https://${hostnameOf(POOL_TOKEN)}`);
@@ -1547,7 +1545,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
     });
 
     /* THE GO-LIVE'S STRANDING CASE. A machine configured before hosted machines dialled the edge (71dbfb7145) has no
-     * SANDBOX_GRANT and no INGRESS_URL, and once the edge terminates TLS itself there is no replay to reach it by. Its
+     * SANDBOX_GRANT and no INGRESS_URL, and with the edge terminating TLS itself its tunnel is the only way in. Its
      * next wake must hand it the tunnel, meter the wake like any other, and leave it able to say it is reachable: the
      * grant the edge will check names the id the edge reads off the machine's own address, and the daemon's report,
      * authenticated by the token in that same environment, lands. Woken by a member, so the owner's address is kept. */

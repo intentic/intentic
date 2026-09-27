@@ -1,7 +1,8 @@
 //! One server, two jobs: an upgrade to a tunnel door (`/tunnel/v2`, or the legacy `/tunnel/v1`) is a sandbox
 //! registering, found by path since the edge's own name carries no id; anything else is a browser, routed by its host
 //! per request, never per connection, since h2 coalesces names. A request rides its sandbox's tunnel here, else goes to
-//! the peer holding it, else is replayed, else refused.
+//! the peer holding it, else is refused with a verdict. A hosted sandbox is no exception: it is reached only down the
+//! tunnel it dials, and one that dials nothing answers `no-tunnel`, which is what the editor wakes it on.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -31,22 +32,11 @@ use crate::grant::GrantKey;
 use crate::legacy;
 use crate::peers::Peers;
 use crate::registry::{Held, Registry, Slot};
-use crate::revocation::{Reach, Revocation};
+use crate::revocation::Revocation;
 use crate::session::Session;
 
 // A QUIC connection that has not said who it is by now never will.
 const HELLO_PATIENCE: Duration = Duration::from_secs(10);
-
-/// How long Fly's proxy reuses a replay decision per hostname before asking again; Fly's floor is ten seconds.
-pub const REPLAY_CACHE_TTL_SECS: u32 = 300;
-
-/// How a request reached the edge: through a proxy that honours a Fly replay, or on TLS the edge terminated itself, where
-/// a replay would reach the browser as a bare 200 and a hosted sandbox is reached down its tunnel like any other.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Via {
-    Proxy,
-    Direct,
-}
 
 pub struct EdgeOptions {
     pub key: GrantKey,
@@ -57,8 +47,6 @@ pub struct EdgeOptions {
     /// For `/health` only: how many other machines this one knows of.
     pub peers: Option<Peers>,
     pub instance: String,
-    /// The Fly app-name prefix of hosted sandboxes (`<prefix>-<id>`); `None` replays nothing.
-    pub hosted_app_prefix: Option<String>,
     /// Which image this process is, baked at build; empty is an unreleased build.
     pub build: String,
     /// What this edge serves beyond HTTPS over TCP, because its own configuration binds it: declared to every front on
@@ -74,7 +62,6 @@ pub struct Edge {
     peers: Option<Peers>,
     forwarder: Forwarder,
     instance: String,
-    hosted_app_prefix: Option<String>,
     build: String,
     transports: Vec<Transport>,
 }
@@ -89,7 +76,6 @@ impl Edge {
             peers: options.peers,
             forwarder: Forwarder::default(),
             instance: options.instance,
-            hosted_app_prefix: options.hosted_app_prefix,
             build: options.build,
             transports: options.transports,
         })
@@ -103,7 +89,6 @@ impl Edge {
         self: Arc<Self>,
         request: Request<Body>,
         remote: SocketAddr,
-        via: Via,
     ) -> Response<Body> {
         let upgrade = is_upgrade(request.headers(), request.version());
         if upgrade && let Some(door) = Door::at(&request) {
@@ -160,11 +145,7 @@ impl Edge {
                 }
             });
         }
-        let (app, verdict) = self.reach(&id, hop || via == Via::Direct).await;
-        if let Some(app) = app {
-            tracing::info!(sandbox = %id, %app, upgrade, "replaying to the sandbox's app");
-            return replay(&host, &app, upgrade);
-        }
+        let verdict = self.miss(&id, hop).await;
         if upgrade {
             return refused_upgrade(verdict, &sentence(verdict, label_of(&host)));
         }
@@ -196,22 +177,14 @@ impl Edge {
         socket
     }
 
-    // What a miss answers: a hosted sandbox replays to its app, unless `unreplayable`: a hop-marked miss, since the peer
-    // that sent it believed a tunnel was held and the 502 is what lets it forget, or one on TLS the edge terminated.
-    async fn reach(&self, id: &str, unreplayable: bool) -> (Option<String>, Verdict) {
-        if unreplayable {
-            return (None, Verdict::NoTunnel);
-        }
-        let reachability = self.revocation.lookup(id).await;
-        if !reachability.exists {
-            return (None, Verdict::UnknownSandbox);
-        }
-        match &self.hosted_app_prefix {
-            Some(prefix) if reachability.reach != Some(Reach::Tunnel) => (
-                Some(reachability.app.unwrap_or_else(|| format!("{prefix}-{id}"))),
-                Verdict::NoTunnel,
-            ),
-            _ => (None, Verdict::NoTunnel),
+    // Which verdict a miss answers: a sandbox the platform no longer knows is gone, any other is not connected, hosted or
+    // not. A hop-marked miss asks nothing, since the peer that sent it believed a tunnel was held and the 502 is what
+    // lets it forget.
+    async fn miss(&self, id: &str, hop: bool) -> Verdict {
+        if hop || self.revocation.allows(id).await {
+            Verdict::NoTunnel
+        } else {
+            Verdict::UnknownSandbox
         }
     }
 
@@ -225,7 +198,6 @@ impl Edge {
                     "instance": self.instance,
                     "peers": self.peers.as_ref().map_or(0, |peers| peers.borrow().len()),
                     "remote": self.cluster.as_ref().map_or(0, |cluster| cluster.remote_count()),
-                    "replay": self.hosted_app_prefix.is_some(),
                     "build": self.build,
                     "transports": self.transports.iter().map(|transport| transport.token()).collect::<Vec<_>>(),
                     // Which tunnel doors this build serves, so nothing publishes a front ahead of the edge it dials
@@ -603,26 +575,6 @@ fn refused(status: StatusCode, sentence: &str) -> Response<Body> {
         .headers_mut()
         .insert(header::CONNECTION, HeaderValue::from_static("close"));
     response
-}
-
-/// The headers that make Fly's proxy carry the request to `app` and keep that decision per hostname. An upgrade is
-/// replayed by not taking it: the app sending the replay must not negotiate the WebSocket itself.
-fn replay(host: &str, app: &str, upgrade: bool) -> Response<Body> {
-    let named = host.split(':').next().unwrap_or(host);
-    let mut response = Response::builder()
-        .header("fly-replay", format!("app={app}"))
-        .header("fly-replay-cache", format!("{named}/*"))
-        .header(
-            "fly-replay-cache-ttl-secs",
-            REPLAY_CACHE_TTL_SECS.to_string(),
-        )
-        .header(header::CONTENT_LENGTH, "0");
-    if upgrade {
-        response = response.header(header::CONNECTION, "close");
-    }
-    response
-        .body(body::empty())
-        .expect("a replay answer builds")
 }
 
 fn text(status: StatusCode, sentence: &str) -> Response<Body> {

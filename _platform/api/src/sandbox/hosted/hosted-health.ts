@@ -36,26 +36,18 @@ export interface EdgeReading {
     readonly build: string | undefined;
     // Whether the answer carried a `build` key AT ALL. False is an edge older than the stamp itself.
     readonly stamped: boolean;
-    // Whether it replays hosted sandboxes to their Fly apps; undefined from a build with no replay lane at all.
-    readonly replay: boolean | undefined;
     // In the operator's words, already a diagnosis rather than a reading; undefined when the edge is fine.
     readonly fault: string | undefined;
 }
 
 /* THE COMPONENT WITH NO ROW, NO MIGRATION AND, UNTIL THIS, NOTHING WATCHING IT. */
 /* ABSENCE IS THE SIGNAL, and reading it is the whole point. */
-/* AND THE SAME ABSENCE ONE FIELD OVER, which is the one this check kept missing. */
-const edgeFault = (where: string, replay: boolean | undefined, stamped: boolean): string | undefined => {
-    if (replay === undefined) {
-        return `${where} is an OLD BUILD: it does not report the hosted replay lane, so it predates it and cannot route a hosted sandbox at all. Its machines were never rolled onto the image CI pushed. Every hosted sandbox answers 502 at its own address until they are.`;
-    }
-    if (!stamped) {
-        return `${where} answers with no build stamp at all, so it is running an image from before the stamp existed: nothing has rolled its machines onto what CI has pushed since. It still replays, so sandboxes are reachable today and nobody is stuck right now — but no edge change has reached production either, and the next one that matters will not land on its own. Rolling it is deploy-ingress.sh's job, which skips silently whenever FLY_API_TOKEN is empty on the branch that deploys.`;
-    }
-    return replay
+/* A hosted sandbox is reached down the tunnel it dials, like any other, so the edge has no hosted switch of its own to
+ * be missing; what is left to read is whether anything has rolled it at all. */
+const edgeFault = (where: string, stamped: boolean): string | undefined =>
+    stamped
         ? undefined
-        : `${where} is running with no HOSTED_APP_PREFIX, so it refuses every hosted sandbox's hostname instead of replaying it to that sandbox's Fly app. It must match the api's own prefix.`;
-};
+        : `${where} is an OLD BUILD: it answers with no build stamp at all, so it is running an image from before the stamp existed and nothing has rolled its machines onto what CI has pushed since. No edge change has reached production, and the next one that matters will not land on its own. Rolling it is deploy-ingress.sh's job, which skips silently whenever FLY_API_TOKEN is empty on the branch that deploys.`;
 
 // Carrying the key is the age test; its VALUE is empty on an image nobody released, which is a legitimate
 // self-built edge and not a fault. Collapsing the two is what hid a stale edge behind a healthy reading.
@@ -67,24 +59,22 @@ const edgeReading = async (config: Config): Promise<EdgeReading | undefined> => 
         return undefined;
     }
     const where = `the edge at ${config.ingress.url}`;
-    let body: { replay?: unknown; build?: unknown } | undefined;
+    let body: { build?: unknown } | undefined;
     try {
         const response = await fetch(`${config.ingress.url}/health`, { signal: AbortSignal.timeout(EDGE_TIMEOUT_MS) });
         if (!response.ok) {
-            return { build: undefined, stamped: false, replay: undefined, fault: `${where} answered ${response.status} on its own /health.` };
+            return { build: undefined, stamped: false, fault: `${where} answered ${response.status} on its own /health.` };
         }
-        body = (await response.json()) as { replay?: unknown; build?: unknown };
+        body = (await response.json()) as { build?: unknown };
     } catch {
         return {
             build: undefined,
             stamped: false,
-            replay: undefined,
             fault: `${where} could not be reached at all, so no sandbox is reachable on any lane — tunnel or hosted.`,
         };
     }
     const { stamped, build } = buildStamp(body?.build);
-    const replay = typeof body?.replay === `boolean` ? body.replay : undefined;
-    return { build, stamped, replay, fault: edgeFault(where, replay, stamped) };
+    return { build, stamped, fault: edgeFault(where, stamped) };
 };
 
 /* Lane health reads reachability reported by sandboxes, not platform configuration alone. */
@@ -101,7 +91,7 @@ export interface LaneReading {
 const laneFault = (reachable: number, unreachable: number): string | undefined =>
     reachable > 0 || unreachable < LANE_MIN_SAMPLE
         ? undefined
-        : `${unreachable} hosted sandboxes checked in over the last day and EVERY ONE of them reported that its own public address answers something other than itself, while none reported getting through. The machines are fine and their daemons are running: what is between a browser and them is not delivering. Each sandbox app sits on its own Fly private network, so the first thing to check is that the org still allows cross-network replays (\`fly orgs cross-network-replays status\`), then that the edge's HOSTED_APP_PREFIX still names these apps.`;
+        : `${unreachable} hosted sandboxes checked in over the last day and EVERY ONE of them reported that its own public address answers something other than itself, while none reported getting through. The machines are fine and their daemons are running: what is between a browser and them is not delivering. They are reached only down the tunnel each one dials, so the first thing to check is the edge's own log (\`flyctl logs -a intentic-ingress\`: \`tunnel registered\` for their ids, or \`tunnel refused\` and why), then that their config carries INGRESS_URL and SANDBOX_GRANT (a wake re-applies both).`;
 
 const laneReading = async (prisma: PrismaClient, now: () => number): Promise<LaneReading> => {
     const since = new Date(now() - LANE_WINDOW_MS);

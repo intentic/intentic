@@ -40,6 +40,8 @@ flowchart LR
 
 [`hosted.ts`](../../_platform/api/src/sandbox/hosted/hosted.ts) gives each hosted sandbox its own Fly app, machine and volume, booting the same public sandbox image every other lane runs, in a region chosen by where the owner is. The platform starts and stops machines (they stop when idle; a wake also re-applies the config of a machine whose tunnel grant or edge address is missing or stale), resizes and moves them, keeps a pool of warm machines, and meters awake time against the hosted plan ([`hosted-plan.ts`](../../_platform/api/src/sandbox/hosted/hosted-plan.ts)): a Stripe subscription for a bigger machine than the free one. The tier ladder is in [`hosted-tiers.ts`](../../_tools/constants/src/hosted-tiers.ts).
 
+A hosted machine is reached the way every sandbox is: its daemon dials the edge's tunnel with a grant the platform puts in the machine's config, and nothing on Fly routes to the machine (it declares no Fly service, and the edge terminates TLS itself, so there is no Fly proxy to replay through). A hosted sandbox that dials nothing answers the edge's `no-tunnel` verdict, and the editor's wake starts it, re-applying the config first when its grant or edge address is missing or stale. The api's health sweep ([`hosted-health.ts`](../../_platform/api/src/sandbox/hosted/hosted-health.ts)) reads the edge's `/health` for a build stamp and alarms when every hosted sandbox that checked in says its own address does not reach it.
+
 Background jobs started in [`main.ts`](../../_platform/api/src/main.ts) reap orphaned machines, refill the pool, finish builds, meter usage, watch for abuse and check health.
 
 ## What it does not do

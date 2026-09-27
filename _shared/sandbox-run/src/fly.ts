@@ -1,8 +1,9 @@
-import { type HostedShape, PREVIEW_PORT } from "@intentic/constants";
+import type { HostedShape } from "@intentic/constants";
 
 // The hosted flavor of the run contract: same sandbox, emitted as a Fly Machine config instead of docker-run argv. One
-// persistent volume replaces docker's three, linked to the canonical paths by the entrypoint's VM mode. Reached via a
-// Fly replay to one declared service, the preview proxy, since a Fly machine is already on the internet.
+// persistent volume replaces docker's three, linked to the canonical paths by the entrypoint's VM mode. It declares no
+// service: the machine is reached only down the tunnel its daemon dials to the edge, like every other sandbox, so
+// nothing on Fly routes to it.
 
 // Where the machine's one volume mounts and the dirs carved from it; exported so the entrypoint test and provisioning
 // agree.
@@ -28,37 +29,6 @@ export interface FlyMachineRun {
     readonly volumeId: string;
     // Wizard/platform env pairs, allowlist-filtered; empties dropped too, a secret must not shadow .env.
     readonly env?: readonly (readonly [string, string])[];
-    // The hostname this machine answers under; absent on a warm pool machine, whose boot runs nothing at all.
-    readonly frontDoor?: { readonly hostname: string };
-}
-
-// One public-facing service, in the Machines API's own vocabulary: the proxy terminates TLS on 443 under whichever
-// app's certificate the request arrived at, and hands plaintext to internal_port; 80 only redirects to https.
-export interface FlyMachineService {
-    readonly protocol: "tcp";
-    readonly internal_port: number;
-    // The platform starts a stopped machine, never the proxy, to respect the free plan's hour cap.
-    readonly autostart: boolean;
-    readonly autostop: "off" | "stop" | "suspend";
-    readonly concurrency: { readonly type: "connections" | "requests"; readonly soft_limit: number; readonly hard_limit: number };
-    readonly ports: readonly {
-        readonly port: number;
-        readonly handlers: readonly ("tls" | "http")[];
-        readonly force_https?: boolean;
-        readonly tls_options?: { readonly alpn: readonly string[] };
-    }[];
-}
-
-// A named, machine-level check; Fly's proxy routes to a machine only while its checks pass.
-export interface FlyMachineCheck {
-    readonly type: "http";
-    readonly port: number;
-    readonly method: "GET";
-    readonly path: string;
-    readonly interval: string;
-    readonly timeout: string;
-    readonly grace_period: string;
-    readonly headers: readonly { readonly name: string; readonly values: readonly string[] }[];
 }
 
 // A file written into the machine before its process starts: an absolute guest path, content base64-encoded.
@@ -82,39 +52,7 @@ export interface FlyMachineConfig {
     readonly files?: readonly FlyMachineFile[];
     // Fly's own key/value bag on a Machine, the only queryable label since an app can't be renamed.
     readonly metadata?: Record<string, string>;
-    // The front door (see the header). Present exactly when the run names a hostname to answer under.
-    readonly services?: readonly FlyMachineService[];
-    readonly checks?: Readonly<Record<string, FlyMachineCheck>>;
 }
-
-// Connections, not requests: most of what a sandbox serves (streams, attaches, HMR) never finishes.
-export const FRONT_DOOR_CONCURRENCY = { type: "connections", soft_limit: 1000, hard_limit: 2000 } as const;
-
-const frontDoorService = (): FlyMachineService => ({
-    protocol: "tcp",
-    internal_port: PREVIEW_PORT,
-    autostart: false,
-    autostop: "off",
-    concurrency: FRONT_DOOR_CONCURRENCY,
-    ports: [
-        // h2 first: the browser holds long-lived streams; HTTP/1.1 allows only six connections per origin.
-        { port: 443, handlers: ["tls", "http"], tls_options: { alpn: ["h2", "http/1.1"] } },
-        { port: 80, handlers: ["http"], force_https: true },
-    ],
-});
-
-// The daemon's own /health, asked through the front door under the sandbox's hostname: the proxy 404s any Host it
-// doesn't recognize, so the check needs the header to pass. The grace period covers the daemon's listen-first boot.
-const frontDoorCheck = (hostname: string): FlyMachineCheck => ({
-    type: "http",
-    port: PREVIEW_PORT,
-    method: "GET",
-    path: "/health",
-    interval: "15s",
-    timeout: "5s",
-    grace_period: "10s",
-    headers: [{ name: "Host", values: [hostname] }],
-});
 
 export const flyMachineConfig = (run: FlyMachineRun): FlyMachineConfig => ({
     image: run.image,
@@ -131,11 +69,10 @@ export const flyMachineConfig = (run: FlyMachineRun): FlyMachineConfig => ({
     mounts: [{ volume: run.volumeId, path: FLY_VOLUME_PATH }],
     restart: { policy: "on-failure", max_retries: 3 },
     auto_destroy: false,
-    ...(run.frontDoor === undefined ? {} : { services: [frontDoorService()], checks: { "front-door": frontDoorCheck(run.frontDoor.hostname) } }),
 });
 
 // The other machine a hosted sandbox runs: a builder that builds the approved overlay and pushes it to the app's
-// registry. No volume, no front door, no restart; minutes are metered like the sandbox's own.
+// registry. No volume, no restart; minutes are metered like the sandbox's own.
 export interface FlyBuildRun {
     // The buildkit image, pinned by the platform's config.
     readonly image: string;

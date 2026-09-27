@@ -11,7 +11,7 @@ use http::{Method, Response, StatusCode};
 use http_body_util::BodyExt;
 use intentic_ingress::body;
 use intentic_ingress::cluster::{self, Cluster, HOLDS_PATH, HOP_HEADER, Holds, Op, REMOTE_TTL};
-use intentic_ingress::edge::{Edge, EdgeOptions, Via};
+use intentic_ingress::edge::{Edge, EdgeOptions};
 use intentic_ingress::peers::Peer;
 use intentic_ingress::registry::{Held, Registry, Slot};
 use intentic_ingress::revocation::Revocation;
@@ -437,15 +437,12 @@ async fn machine(name: &str, keys: &Keys) -> Machine {
         cluster: Some(cluster.clone()),
         peers: Some(peers),
         instance: name.into(),
-        hosted_app_prefix: None,
         build: String::new(),
         transports: Vec::new(),
     });
     let serving = edge.clone();
     let public = serve::serve_on(public, move |request, remote| {
-        serving
-            .clone()
-            .handle(request.map(body::incoming), remote, Via::Proxy)
+        serving.clone().handle(request.map(body::incoming), remote)
     })
     .unwrap();
     Machine {

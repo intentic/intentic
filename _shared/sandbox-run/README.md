@@ -25,6 +25,8 @@ flowchart LR
 - `DATA_MOUNTS` names where a sandbox's stored data lives in its container and the state planner's flag for each; the
   update pre-flight in `ic` mounts exactly these, read-only, and its copy is held to `golden/data-mounts.json`.
 - `./quote` holds the shell, SQL and env-file quoters the daemon, providers and CLI share.
+- `flyMachineConfig` declares no Fly service or check: a hosted machine is reached only down the tunnel its daemon
+  dials to the edge, like every other sandbox, so nothing on Fly routes to it.
 
 ## Key files
 

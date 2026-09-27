@@ -35,7 +35,7 @@ import { runningImageOf } from "../gate/state-gate.js";
  *
  * A MOVE builds a new volume from a fork or a snapshot and a new machine on it. It is what a region change needs, and
  * what a host with no room for the bigger guest leaves as the only way up. The APP does not change, so the hostname,
- * the connect token, the edge's replay and the app name are all untouched: from outside, the sandbox is where it was.
+ * the connect token, its tunnel grant and the app name are all untouched: from outside, the sandbox is where it was.
  *
  * The safety rule is one sentence, and every step below is arranged around it: THE OLD DISK IS DESTROYED ONLY AFTER
  * THE NEW MACHINE HAS ANNOUNCED ITSELF ON THE NEW ONE. Before that, any failure destroys what this run built and

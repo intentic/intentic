@@ -10,11 +10,10 @@
 # because pushing an image is what it checked.
 #
 # What that cost: hosted sandboxes had moved off tunnels onto `fly-replay` (at the time the daemon on a hosted
-# machine dialled nothing; it dials the tunnel again now, reach-posture.ts, and the edge serves a held tunnel first
-# and replays only a hosted sandbox holding none). The edge that carried that decision
-# was ten days older than the sandbox image and had no replay in it, so every hosted sandbox answered 502 at
-# its own public name, probed itself for five minutes, and told its owner to start it over — which could
-# never help, because nothing about the sandbox was wrong.
+# machine dialled nothing). The edge that carried that decision was ten days older than the sandbox image and had no
+# replay in it, so every hosted sandbox answered 502 at its own public name, probed itself for five minutes, and told
+# its owner to start it over — which could never help, because nothing about the sandbox was wrong. (Replay is gone
+# since: every sandbox dials its tunnel, reach-posture.ts, and the edge terminates TLS with no Fly proxy to replay.)
 #
 # So this script's contract is deploy AND VERIFY, in deploy-platform.sh's words: "a guard whose failure
 # nobody is told about is the same silence it was written to end". A deploy that does not change the running
@@ -26,19 +25,24 @@
 #   INGRESS_APP       the Fly app, default from fly.toml's own name.
 #   INGRESS_FLY_CONFIG, or the first argument
 #                     which Fly config to deploy, relative to the repository root or absolute; default
-#                     _platform/ingress/fly.toml, the one CI deploys on every push. The edge's other shape,
-#                     _platform/ingress/fly.edge-tls.toml, is deployed by hand during the switch to terminating TLS
-#                     at the edge (ingress/README.md), and rolled back the same way with fly.toml.
+#                     _platform/ingress/fly.toml, the one CI deploys on every push, where the edge terminates TLS.
+#                     _platform/ingress/fly.edge-proxy.toml is the emergency fallback behind Fly's HTTP proxy, deployed
+#                     only by hand and only after its prerequisites (ingress/README.md, "Rolling back").
+#   INGRESS_EDGE_MODE `tls` (the default) or `proxy`: the shape this deploy is EXPECTED to roll. The shape is read off
+#                     the config (one with an [http_service] sits behind Fly's proxy), and a config that disagrees fails
+#                     before anything is deployed, so a fly.toml that somehow went back to the proxy shape cannot put
+#                     production behind a proxy holding no certificate. Only a hand-run fallback says `proxy`.
 #
-# TLS MODE is read off the config itself: one with no [http_service] has no Fly proxy in front of it, so the edge
-# holds the certificate and serves UDP beside it. Then the edge must also DECLARE that on /health
-# (`"transports":["quic","h3","webtransport"]`), since fronts and editors reach for QUIC and WebTransport only where
-# it is declared; an edge that answers without it is one whose INGRESS_QUIC_PORT is not set, and the deploy fails.
+# TLS MODE, the default: the edge holds the certificate and serves UDP beside it, and it must also DECLARE that on
+# /health (`"transports":["quic","h3","webtransport"]`), since fronts and editors reach for QUIC and WebTransport only
+# where it is declared; an edge that answers without it is one whose INGRESS_QUIC_PORT is not set, and the deploy
+# fails. Success ends in one line CI's log can be checked for: `edge-mode: tls — <app> declares quic, h3 and
+# webtransport`.
 set -euo pipefail
 
 if [ -z "${FLY_API_TOKEN:-}" ]; then
-    echo "No FLY_API_TOKEN — skipping the edge deploy. (The edge is then whatever it already was: hosted"
-    echo "sandboxes are only reachable if a build with replay in it is already running. See fly.toml.)"
+    echo "No FLY_API_TOKEN — skipping the edge deploy. (The edge is then whatever it already was, rolled by hand"
+    echo "with flyctl; see _platform/ingress/README.md, \"Deploying\".)"
     exit 0
 fi
 
@@ -55,9 +59,25 @@ if [ ! -f "$CONFIG" ]; then
     exit 1
 fi
 if grep -q '^\[http_service\]' "$CONFIG"; then
-    TLS_MODE=false
+    SHAPE=proxy
 else
-    TLS_MODE=true
+    SHAPE=tls
+fi
+MODE="${INGRESS_EDGE_MODE:-tls}"
+case "$MODE" in
+    tls | proxy) ;;
+    *)
+        echo >&2 "error: INGRESS_EDGE_MODE is '$MODE'; it is tls (the default) or proxy."
+        exit 1
+        ;;
+esac
+if [ "$SHAPE" != "$MODE" ]; then
+    echo >&2 "error: $(basename "$CONFIG") is the $SHAPE shape, but this deploy expects $MODE."
+    if [ "$SHAPE" = proxy ]; then
+        echo >&2 "  Behind Fly's HTTP proxy the edge needs a Fly certificate for *.sbx.intentic.dev, and there is none since"
+        echo >&2 "  phase 3b. Falling back is by hand, with INGRESS_EDGE_MODE=proxy, after ingress/README.md \"Rolling back\"."
+    fi
+    exit 1
 fi
 APP="${INGRESS_APP:-intentic-ingress}"
 IMAGE="${INGRESS_IMAGE:-ghcr.io/intentic/ingress:latest}"
@@ -83,7 +103,7 @@ if [ -z "$EXPECTED" ] || [ "$EXPECTED" = "unreleased" ]; then
     exit 1
 fi
 
-echo "deploying $IMAGE to Fly app '$APP' (build $EXPECTED) with $(basename "$CONFIG")$([ "$TLS_MODE" = true ] && echo ', terminating TLS at the edge')"
+echo "deploying $IMAGE to Fly app '$APP' (build $EXPECTED) with $(basename "$CONFIG")$([ "$SHAPE" = tls ] && echo ', terminating TLS at the edge')"
 flyctl deploy --config "$CONFIG" --app "$APP" --image "$IMAGE" --yes
 
 # AND THEN READ IT BACK FROM THE PUBLIC ADDRESS, not from Fly's own report of the release. Fly answering
@@ -115,29 +135,21 @@ EDGE_HEALTH_URL="$HEALTH_URL" EDGE_DOOR_WAIT=0 bash "$ROOT/_tools/scripts/image/
 # TERMINATING TLS, THE EDGE MUST SAY SO. The build answering above proves the process is up behind the new services;
 # the declaration proves it bound the QUIC door those services send UDP to, which is what every front and editor now
 # goes by. Fly accepted the UDP service either way, so nothing else here would notice an edge that never listens on it.
-if [ "$TLS_MODE" = true ]; then
+if [ "$SHAPE" = tls ]; then
     declared="$(curl -fsS --max-time 10 "$HEALTH_URL" 2>/dev/null | sed -n 's/.*"transports":\[\([^]]*\)\].*/\1/p')"
     for transport in quic h3 webtransport; do
         case "$declared" in
             *"\"$transport\""*) ;;
             *)
                 echo >&2 "error: $APP terminates TLS under $(basename "$CONFIG") but its /health declares [${declared}], not $transport."
-                echo >&2 "  The edge declares what it binds: INGRESS_QUIC_PORT (8443) and INGRESS_QUIC_HOST=fly-global-services"
+                echo >&2 "  The edge declares what it binds: INGRESS_QUIC_PORT=443 and INGRESS_QUIC_HOST=fly-global-services"
                 echo >&2 "  must be set on it ('flyctl secrets list -a $APP'). Until they are, fronts dial no QUIC and editors open"
                 echo >&2 "  no WebTransport; the WebSocket still carries everything. ingress/README.md has the runbook."
                 exit 1
                 ;;
         esac
     done
-    echo "$APP declares quic, h3 and webtransport"
-fi
-
-# The hosted lane's own switch, warned about rather than enforced: whether this deployment HAS a hosted lane
-# is the platform's fact, not this script's, and an edge with no hosted sandboxes behind it is a legitimate
-# deployment. The api knows the answer and alarms on it every health sweep (hosted-health.ts `edge`), which is
-# where a missing HOSTED_APP_PREFIX is caught. This line is just the early, cheap warning.
-# Terminating TLS, there is no replay to switch on: no Fly proxy in front of 443 acts on one.
-if [ "$TLS_MODE" = false ] && ! curl -fsS --max-time 10 "$HEALTH_URL" 2>/dev/null | grep -q '"replay":true'; then
-    echo "warning: this edge reports replay:false — HOSTED_APP_PREFIX is unset on it, so hosted sandboxes"
-    echo "         will answer 502 at their own addresses. Set it to match the api's, per ingress/README.md."
+    echo "edge-mode: tls — $APP declares quic, h3 and webtransport"
+else
+    echo "edge-mode: proxy — $APP sits behind Fly's HTTP proxy and declares no UDP transports"
 fi

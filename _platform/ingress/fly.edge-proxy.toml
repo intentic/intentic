@@ -1,0 +1,69 @@
+# THE EDGE BEHIND FLY'S HTTP PROXY: the shape it ran until 2026-09-26, kept as the documented EMERGENCY FALLBACK and
+# deployed by nobody. CI deploys fly.toml, where the edge terminates TLS itself; tests/fly_configs.rs holds the two
+# equal outside their services (the app, the image, the machine), so a fallback changes who holds the certificate and
+# nothing else.
+#
+# IT IS NO LONGER A ONE-COMMAND ROLLBACK. Under this file Fly's proxy terminates TLS, so it needs a certificate of Fly's
+# own for the wildcard, and that was removed in phase 3b: first `flyctl certs add '*.sbx.intentic.dev' -a
+# intentic-ingress` plus the `_acme-challenge.sbx.intentic.dev` CNAME to `sbx.intentic.dev.qe8e12d.flydns.net` in
+# Cloudflare, and wait for `flyctl certs show` to say it is issued. And hosted sandboxes lose QUIC and WebTransport
+# here but keep their tunnels, so they stay reachable while they dial; the replay lane that used to carry one dialling
+# nothing (`fly-replay`, HOSTED_APP_PREFIX, the hosted machines' own front door) was removed from the edge and the api
+# in the same change, and would have to come back with a revert of that commit before a stopped hosted sandbox answered
+# anything but `no-tunnel` under this file. README.md ("Rolling back") is the ordered runbook.
+#
+# Regions are NOT expressible in this file (Fly removed the key); `fly scale count` places them. This file is the
+# shape of a machine, not where they are.
+
+app = "intentic-ingress"
+primary_region = "iad"
+
+[build]
+  # Built and pushed by the `docker:release` turbo task, never by Fly. See Dockerfile.
+  image = "ghcr.io/intentic/ingress:latest"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+
+  # NEVER AUTO-STOP THIS. A stopped ingress machine is not a cold start, it is every tunnel it held dropping
+  # at once: each container notices, backs off, and redials somewhere else, and for that window its owner's
+  # workspace answers 502. The process holds live connections and nothing else, so there is nothing to scale
+  # to zero for and nothing to warm up — "started" and "ready" are the same moment (Dockerfile).
+  auto_stop_machines = false
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    # CONNECTIONS, NOT REQUESTS, and this is the trap worth naming. Fly's default counts in-flight REQUESTS,
+    # and most of what this edge carries never finishes: one /events stream per open browser window, an attach
+    # per live agent turn, a terminal, a dev server's HMR socket. Counted as requests they are permanently
+    # in-flight, so a busy machine walks up to the hard limit and Fly's proxy stops routing to a process that
+    # is perfectly healthy. Counting connections is the honest unit for a proxy, and the numbers are high
+    # because a few hundred sandboxes with several windows each is an ordinary day, not a surge.
+    type = "connections"
+    soft_limit = 5000
+    hard_limit = 10000
+
+  [[http_service.checks]]
+    # /health is answered by the process itself (src/edge.rs) with no tunnel, no platform call and no disk,
+    # so it proves exactly what a load balancer needs to know and nothing that could fail for someone else's
+    # reason. Deliberately NOT strict about tunnel count: a machine holding zero tunnels is a machine that was
+    # just deployed, not a broken one.
+    path = "/health"
+    method = "GET"
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "5s"
+
+[[vm]]
+  # The edge carries bytes and holds sockets; it parses nothing bigger than a header and stores nothing at
+  # all. Memory is the resource that matters, bounded per tunnel by what flow control lets it buffer (the h2
+  # windows, 1 MiB a stream and 2 MiB a session, and 256 KiB in the pump), a ceiling rather than an
+  # allocation; CPU is not, which is the opposite of the sandbox machines it serves.
+  size = "shared-cpu-2x"
+  memory = "2gb"
+
+# Nothing here publishes INGRESS_INTERNAL_PORT (8081). The holds protocol trusts any peer discovery knows, and
+# discovery is the only lock on it: it binds FLY_PRIVATE_IP, which is unreachable from the internet by
+# construction. Publishing it would be handing the cluster's registry to anyone who found the port.

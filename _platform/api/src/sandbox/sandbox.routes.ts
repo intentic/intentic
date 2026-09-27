@@ -207,7 +207,7 @@ const isoOrNull = (at: Date | null): string | null => (at === null ? null : at.t
 // rows are access-only. daemonUrl is what the browser needs to reach the daemon directly (plus, for the owner,
 // the connect token above); daemonUrl + lastSeenAt come from the daemon's announce.
 // `providedAddress` flags a daemonUrl under the platform's own zone, the browser reads it to tell a sandbox we
-// made reachable (through the edge, by tunnel or by replay) from one the owner attached behind a domain of
+// made reachable (through the edge, down its tunnel) from one the owner attached behind a domain of
 // their own.
 // `setupCodeClaimedAt` rides along for the setup wizard: it is the platform's only evidence that the pasted
 // command reached a machine, and the wizard's wait reads very differently before and after it.

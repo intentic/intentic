@@ -18,6 +18,14 @@ flowchart LR
   through it.
 - Reachability is a signed grant. The api holds the Ed25519 private key (`INGRESS_SIGNING_KEY`), the edge holds only
   the public half, and deleting the sandbox row revokes it (`src/sandbox/reachability.ts`).
+- A hosted machine is reached only down the tunnel it dials to the edge, with the grant and edge address
+  `hostedMachineConfig` puts in its environment; it declares no Fly service, so nothing on Fly routes to it. One that
+  dials nothing (stopped, booting) answers the edge's `no-tunnel` verdict, and the editor's wake starts it, re-applying
+  its config first when the grant or address is missing or stale (`wakeHosted`). A machine configured while it still
+  declared the old replay front door keeps that service until its next config apply, which drops it; it is inert until
+  then, since the app has no public address and the edge replays nothing. `GET /api/reachability/:id` answers
+  `{ ok, lane }` with no app name: today's edge reads only the status, and `lane` stays for an edge build from before
+  replay went, which replays anything not named `tunnel`.
 - The hosted lane is one Fly app, machine and volume per sandbox, named `<HOSTED_APP_PREFIX>-<id>`. The background
   jobs started in `src/main.ts` (warm pool, meter, abuse watch, builds, health) take a Postgres advisory lock per run
   (`src/jobs-lock.ts`), so two replicas never double-bill or double-provision.

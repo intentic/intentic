@@ -11,13 +11,13 @@ flowchart LR
     browser -- "sandbox-id hostname" --> ingress(["ingress<br/>*.sbx.intentic.dev"])
     ingress -- "does it exist?" --> api
     ingress -- "tunnel" --> own["User's sandbox<br/>own machine"]
-    ingress -- "fly-replay" --> hosted
+    hosted -- "tunnel" --> ingress
 ```
 
 | Package | Role |
 | --- | --- |
 | [api](api) | Hono + oRPC server: accounts, sandbox registry, hosted machines, billing. |
-| [ingress](ingress) | Edge routing sandbox hostnames to tunnels or Fly replays. |
+| [ingress](ingress) | Edge routing sandbox hostnames to the tunnels sandboxes dial, hosted ones included. |
 | [prisma](prisma) | Postgres schema, migrations and the generated client. |
 
 The SPA served at app.intentic.dev is [`_editor/web`](../_editor/web), and the contract between it and the api is [`@intentic/api-contract`](../_shared/api-contract).

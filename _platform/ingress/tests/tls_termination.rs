@@ -11,7 +11,7 @@ use http::{Request, Response};
 use http_body_util::{BodyExt, Empty};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use intentic_ingress::body;
-use intentic_ingress::edge::{VERDICT_HEADER, Via};
+use intentic_ingress::edge::VERDICT_HEADER;
 use intentic_ingress::revocation::Revocation;
 use intentic_ingress::serve::{self, Listening};
 use intentic_ingress::tls::{self, CertificateSlot};
@@ -86,10 +86,7 @@ async fn a_browser_reaches_a_tunnel_over_the_edges_own_tls_in_h2_and_in_http_1_1
         TcpListener::bind("127.0.0.1:0").await.unwrap(),
         tls::acceptor(slot),
         true,
-        move |request, remote| {
-            edge.clone()
-                .handle(request.map(body::incoming), remote, Via::Direct)
-        },
+        move |request, remote| edge.clone().handle(request.map(body::incoming), remote),
     )
     .unwrap();
     let _sandbox = dial(running.port, &keys.grant(SANDBOX_ID), serving("served"))
@@ -261,10 +258,11 @@ async fn a_pem_pair_on_disk_fills_the_slot() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-// A replay only means something to Fly's proxy: on TLS the edge terminated, a hosted sandbox with no tunnel is refused in
-// the verdict the editor wakes it on, and one that dialled in is served down its tunnel like any other.
+// On TLS the edge terminated, as on its plain listener, a hosted sandbox with no tunnel is refused in the verdict the
+// editor wakes it on, and one that dialled in is served down its tunnel like any other.
 #[tokio::test]
-async fn a_hosted_sandbox_replays_only_behind_the_proxy_and_is_tunnelled_on_the_edges_own_tls() {
+async fn a_hosted_sandbox_answers_no_tunnel_until_it_dials_and_is_then_tunnelled_on_the_edges_own_tls()
+ {
     const HOSTED_ID: &str = "feedfacecafe";
     let keys = Keys::default();
     let platform = platform(std::collections::HashMap::from([(
@@ -274,7 +272,6 @@ async fn a_hosted_sandbox_replays_only_behind_the_proxy_and_is_tunnelled_on_the_
     .await;
     let mut options = lone(&keys);
     options.revocation = Revocation::new(&platform.url);
-    options.hosted_app_prefix = Some("intentic-sbx".into());
     let running = start(options).await;
     let slot = Arc::new(CertificateSlot::default());
     let issued = issue();
@@ -284,18 +281,14 @@ async fn a_hosted_sandbox_replays_only_behind_the_proxy_and_is_tunnelled_on_the_
         TcpListener::bind("127.0.0.1:0").await.unwrap(),
         tls::acceptor(slot),
         false,
-        move |request, remote| {
-            edge.clone()
-                .handle(request.map(body::incoming), remote, Via::Direct)
-        },
+        move |request, remote| edge.clone().handle(request.map(body::incoming), remote),
     )
     .unwrap();
 
-    let behind_the_proxy = get(running.port, &daemon_host(HOSTED_ID), "/").await;
-    assert_eq!(
-        behind_the_proxy.headers["fly-replay"],
-        "app=intentic-sbx-feedfacecafe"
-    );
+    let plain = get(running.port, &daemon_host(HOSTED_ID), "/").await;
+    assert_eq!(plain.status, 502);
+    assert!(plain.headers.get("fly-replay").is_none());
+    assert_eq!(plain.headers[VERDICT_HEADER], "no-tunnel");
 
     let fetch = |port: u16| {
         let issued = &issued;

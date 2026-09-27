@@ -13,7 +13,7 @@ use http::{Method, Response};
 use http_body_util::{BodyExt, StreamBody};
 use hyper::body::Frame;
 use intentic_ingress::body;
-use intentic_ingress::edge::{REPLAY_CACHE_TTL_SECS, VERDICT_HEADER};
+use intentic_ingress::edge::VERDICT_HEADER;
 use intentic_ingress::revocation::Revocation;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tunnel::{DISPLACED_CODE, Ended};
@@ -346,13 +346,12 @@ async fn a_tunnel_for_a_sandbox_the_platform_deleted_is_refused() {
     );
 }
 
-// A hosted sandbox is a Fly app with no tunnel; a request for its name gets the headers that make Fly's proxy replay it
-// there. Pins which ids replay, to which app, and that a tunnel-lane sandbox still gets its 502.
-mod replay {
+// A hosted sandbox is reached down the tunnel it dials, like any other, and the edge replays nothing: with no tunnel
+// held, its name answers the `no-tunnel` verdict the editor wakes it on, whatever lane the platform names.
+mod hosted {
     use super::*;
 
     const HOSTED_ID: &str = "feedfacecafe";
-    const NAMED_ID: &str = "0badf00dbeef";
     const UNKNOWN_ID: &str = "abcdef000000";
     const GONE_ID: &str = "deadbeef0000";
 
@@ -361,13 +360,9 @@ mod replay {
         let platform = platform(HashMap::from([
             (
                 HOSTED_ID.to_owned(),
-                (200, r#"{"ok":true,"lane":"hosted"}"#.to_owned()),
-            ),
-            (
-                NAMED_ID.to_owned(),
                 (
                     200,
-                    r#"{"ok":true,"lane":"hosted","app":"renamed-app"}"#.to_owned(),
+                    r#"{"ok":true,"lane":"hosted","app":"intentic-sbx-feedfacecafe"}"#.to_owned(),
                 ),
             ),
             (
@@ -379,56 +374,23 @@ mod replay {
         .await;
         let mut options = lone(&keys);
         options.revocation = Revocation::new(&platform.url);
-        options.hosted_app_prefix = Some("intentic-sbx".into());
         options.build = "turbo-testbuild".into();
         (start(options).await, platform)
     }
 
     #[tokio::test]
-    async fn a_hosted_sandboxs_names_replay_to_its_app_each_cached_by_its_own_name() {
+    async fn a_hosted_sandbox_with_no_tunnel_is_not_connected_and_never_replayed() {
         let (edge, _platform) = router().await;
-        let answer = get(edge.port, &daemon_host(HOSTED_ID), "/events").await;
-        assert_eq!(answer.status, 200);
-        assert_eq!(
-            answer.headers["fly-replay"],
-            format!("app=intentic-sbx-{HOSTED_ID}").as_str()
-        );
-        assert_eq!(
-            answer.headers["fly-replay-cache"],
-            format!("sandbox-{HOSTED_ID}.{ZONE}/*").as_str()
-        );
-        assert_eq!(
-            answer.headers["fly-replay-cache-ttl-secs"],
-            REPLAY_CACHE_TTL_SECS.to_string().as_str()
-        );
-
-        let preview = get(
-            edge.port,
-            &format!("preview-web-{HOSTED_ID}.{ZONE}:443"),
-            "/",
-        )
-        .await;
-        assert_eq!(
-            preview.headers["fly-replay"],
-            format!("app=intentic-sbx-{HOSTED_ID}").as_str()
-        );
-        assert_eq!(
-            preview.headers["fly-replay-cache"],
-            format!("preview-web-{HOSTED_ID}.{ZONE}/*").as_str()
-        );
-    }
-
-    #[tokio::test]
-    async fn the_app_the_platform_names_wins_and_an_unnamed_lane_still_replays() {
-        let (edge, _platform) = router().await;
-        assert_eq!(
-            get(edge.port, &daemon_host(NAMED_ID), "/").await.headers["fly-replay"],
-            "app=renamed-app"
-        );
-        assert_eq!(
-            get(edge.port, &daemon_host(UNKNOWN_ID), "/").await.headers["fly-replay"],
-            format!("app=intentic-sbx-{UNKNOWN_ID}").as_str()
-        );
+        for host in [
+            daemon_host(HOSTED_ID),
+            format!("preview-web-{HOSTED_ID}.{ZONE}:443"),
+            daemon_host(UNKNOWN_ID),
+        ] {
+            let answer = get(edge.port, &host, "/events").await;
+            assert_eq!(answer.status, 502, "{host}");
+            assert_eq!(answer.headers[VERDICT_HEADER], "no-tunnel", "{host}");
+            assert!(answer.headers.get("fly-replay").is_none(), "{host}");
+        }
     }
 
     // Deleted and merely off are the same 502 on the wire; only the verdict separates "wait" from "never coming back".
@@ -441,34 +403,28 @@ mod replay {
         assert_eq!(off.headers[VERDICT_HEADER], "no-tunnel");
         let gone = get(edge.port, &daemon_host(GONE_ID), "/").await;
         assert_eq!(gone.status, 502);
-        assert!(gone.headers.get("fly-replay").is_none());
         assert_eq!(gone.headers[VERDICT_HEADER], "unknown-sandbox");
         assert!(gone.body.contains("no longer exists"));
     }
 
-    // Fly requires the app sending a replay not to negotiate the WebSocket itself: the 101 comes from the sandbox.
+    // An upgrade for a hosted sandbox with no tunnel is refused with the same verdict, never answered 200 for a proxy.
     #[tokio::test]
-    async fn an_upgrade_is_replayed_by_not_taking_it() {
+    async fn an_upgrade_is_refused_with_the_verdict() {
         let (edge, _platform) = router().await;
-        let (head, mut socket) = upgrade(
+        let (head, _socket) = upgrade(
             edge.port,
             &daemon_host(HOSTED_ID),
             "/system/terminal",
             "websocket",
         )
         .await;
-        assert!(head.starts_with("HTTP/1.1 200 OK"), "{head}");
-        assert!(
-            head.contains(&format!("fly-replay: app=intentic-sbx-{HOSTED_ID}")),
-            "{head}"
-        );
-        let mut rest = Vec::new();
-        socket.read_to_end(&mut rest).await.unwrap();
-        assert!(!head.contains("101"));
+        assert!(head.starts_with("HTTP/1.1 502"), "{head}");
+        assert!(head.contains("x-intentic-edge: no-tunnel"), "{head}");
+        assert!(!head.contains("fly-replay"), "{head}");
     }
 
     #[tokio::test]
-    async fn health_says_it_replays_and_names_its_build() {
+    async fn health_names_its_build_and_reports_no_replay() {
         let (edge, _platform) = router().await;
         let health: serde_json::Value = serde_json::from_str(
             &get(edge.port, &format!("ingress.{ZONE}"), "/health")
@@ -476,8 +432,8 @@ mod replay {
                 .body,
         )
         .unwrap();
-        assert_eq!(health["replay"], true);
         assert_eq!(health["build"], "turbo-testbuild");
+        assert!(health.get("replay").is_none(), "{health}");
     }
 }
 

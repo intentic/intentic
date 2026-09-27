@@ -19,7 +19,7 @@ use hyper::body::Incoming;
 use hyper::service::service_fn;
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use intentic_ingress::body::{self, Body};
-use intentic_ingress::edge::{Edge, EdgeOptions, Via};
+use intentic_ingress::edge::{Edge, EdgeOptions};
 use intentic_ingress::grant::GrantKey;
 use intentic_ingress::registry::Registry;
 use intentic_ingress::revocation::Revocation;
@@ -79,7 +79,7 @@ impl Keys {
     }
 }
 
-/// One machine's options with nothing around it: no platform, no cluster, no replay.
+/// One machine's options with nothing around it: no platform, no cluster.
 pub fn lone(keys: &Keys) -> EdgeOptions {
     EdgeOptions {
         key: keys.key(),
@@ -88,7 +88,6 @@ pub fn lone(keys: &Keys) -> EdgeOptions {
         cluster: None,
         peers: None,
         instance: "solo".into(),
-        hosted_app_prefix: None,
         build: String::new(),
         transports: Vec::new(),
     }
@@ -104,9 +103,7 @@ pub async fn start(options: EdgeOptions) -> Running {
     let edge = Edge::new(options);
     let serving = edge.clone();
     let listening = serve::listen("127.0.0.1:0", move |request, remote| {
-        serving
-            .clone()
-            .handle(request.map(body::incoming), remote, Via::Proxy)
+        serving.clone().handle(request.map(body::incoming), remote)
     })
     .await
     .unwrap();

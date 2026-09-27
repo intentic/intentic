@@ -9,7 +9,7 @@ use intentic_ingress::body;
 use intentic_ingress::certificate::{self, Source};
 use intentic_ingress::cluster::{self, Cluster, REMOTE_TTL, SYNC_EVERY};
 use intentic_ingress::config::Config;
-use intentic_ingress::edge::{Edge, EdgeOptions, Via, advertise};
+use intentic_ingress::edge::{Edge, EdgeOptions, advertise};
 use intentic_ingress::grant::GrantKey;
 use intentic_ingress::peers::{self, FlyPeers, Peer, Peers};
 use intentic_ingress::quic;
@@ -150,8 +150,6 @@ async fn run(config: Config, key: GrantKey) -> anyhow::Result<()> {
         cluster: Some(cluster.clone()),
         peers: Some(peers),
         instance: instance.clone(),
-        hosted_app_prefix: (!config.hosted_app_prefix.is_empty())
-            .then(|| config.hosted_app_prefix.clone()),
         build: config.build.clone(),
         transports: config.transports(),
     });
@@ -170,9 +168,7 @@ async fn run(config: Config, key: GrantKey) -> anyhow::Result<()> {
             let serving = serving.clone();
             let alt_svc = advertised.clone();
             async move {
-                let response = serving
-                    .handle(request.map(body::incoming), remote, Via::Proxy)
-                    .await;
+                let response = serving.handle(request.map(body::incoming), remote).await;
                 advertise(response, alt_svc.as_ref())
             }
         },
@@ -214,9 +210,7 @@ async fn run(config: Config, key: GrantKey) -> anyhow::Result<()> {
                     let serving = serving.clone();
                     let alt_svc = alt_svc.clone();
                     async move {
-                        let response = serving
-                            .handle(request.map(body::incoming), remote, Via::Direct)
-                            .await;
+                        let response = serving.handle(request.map(body::incoming), remote).await;
                         advertise(response, alt_svc.as_ref())
                     }
                 },
@@ -240,7 +234,6 @@ async fn run(config: Config, key: GrantKey) -> anyhow::Result<()> {
         build = if config.build.is_empty() { "(unreleased build)" } else { config.build.as_str() },
         revocation = %revoking,
         cluster = %discovery,
-        replay = if config.hosted_app_prefix.is_empty() { "off (no HOSTED_APP_PREFIX)".to_owned() } else { format!("apps {}-<id>", config.hosted_app_prefix) },
         internal = %internal.address,
         tls = %terminating,
         quic = quic.as_ref().and_then(|endpoint| endpoint.local_addr().ok()).map_or_else(|| "off (no INGRESS_QUIC_PORT)".to_owned(), |address| address.to_string()),

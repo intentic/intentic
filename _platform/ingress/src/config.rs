@@ -25,8 +25,6 @@ pub struct Config {
     pub fly_machine_id: String,
     /// Where to ask whether a sandbox still exists; empty turns revocation off (`PLATFORM_URL`).
     pub platform_url: String,
-    /// Hosted sandboxes' Fly app prefix; empty replays nothing (`HOSTED_APP_PREFIX`).
-    pub hosted_app_prefix: String,
     pub log_level: String,
     /// Human-readable lines instead of JSON (`LOG_PRETTY`).
     pub log_pretty: bool,
@@ -75,7 +73,6 @@ impl Config {
             fly_private_ip: text("FLY_PRIVATE_IP"),
             fly_machine_id: text("FLY_MACHINE_ID"),
             platform_url: text("PLATFORM_URL"),
-            hosted_app_prefix: text("HOSTED_APP_PREFIX"),
             log_level: text("LOG_LEVEL").or("info"),
             log_pretty: flag("LOG_PRETTY"),
             tls_port: match text("INGRESS_TLS_PORT").as_str() {

@@ -1,6 +1,6 @@
 //! The edge every sandbox is reached through. A sandbox on somebody's own machine dials it, presenting a grant the
 //! platform signed, and every request whose Host ends in that sandbox's id rides that tunnel; a sandbox the platform hosts
-//! on Fly is replayed to its app instead. Several machines behind one address hand a miss to whichever holds the tunnel.
+//! on Fly dials it the same way. Several machines behind one address hand a miss to whichever holds the tunnel.
 
 pub mod certificate;
 pub mod cluster;

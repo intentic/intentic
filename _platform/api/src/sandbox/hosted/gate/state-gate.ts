@@ -15,7 +15,7 @@ import { startAfterUpdate } from "./start-after-update.js";
  * The self-hosted update runs the target image's own planner (`state-plan.js`, the daemon's conversion engine run
  * without writing) over the sandbox's data before it swaps anything (_sandbox/ic/src/sandbox/preflight.rs). A Fly
  * volume attaches to one machine, so the hosted planner runs on that machine: its config is replaced by a probe (the
- * target image, the same volume, the daemon's entrypoint swapped for a sleep, no front door, no restart), the planner is
+ * target image, the same volume, the daemon's entrypoint swapped for a sleep, no restart), the planner is
  * run in it through Fly's exec, and the machine is stopped again. Then:
  *
  * - `ok: false` puts the previous config back (or, for a caller that asks `keepImage`, the target config on the image
@@ -159,14 +159,13 @@ export const pinnedImage = (image: string, digest: string | undefined): string =
     image.includes(`@sha256:`) || digest === undefined || digest === `` ? image : `${image.replace(/:[^/:@]+$/, ``)}@${digest}`;
 
 // The target config as a probe: same image and volume, the daemon's entrypoint replaced by a sleep so nothing boots and
-// nothing converts, no front door, no restart. Its environment is the marker alone: the platform's credentials (the
+// nothing converts, no restart. Its environment is the marker alone: the platform's credentials (the
 // connect token, the tunnel grant) stay out of a machine that has a network and a writable volume, and the planner reads
 // none of them, as ic's probe is given none. The marker holds the image the machine ran before, so a gate that died
 // mid-probe still knows what to go back to.
 export const probeConfig = (target: FlyMachineConfig, previousImage: string): FlyMachineConfig => {
-    const { services: _services, checks: _checks, ...rest } = target;
     return {
-        ...rest,
+        ...target,
         env: { [STATE_PROBE_ENV]: previousImage },
         // The image's CMD, if it has one, lands after `--` as the shell's positional parameters and is never run.
         init: { entrypoint: [`/bin/sh`, `-c`, `sleep ${PROBE_SECONDS}`, `--`] },

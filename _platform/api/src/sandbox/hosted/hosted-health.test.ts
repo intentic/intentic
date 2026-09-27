@@ -28,11 +28,11 @@ const config = (over: Record<string, unknown> = {}): Config =>
         },
     }) as unknown as Config;
 
-// The edge's own /health, as a CURRENT build answers it: `replay` present and true is what says this edge can
-// route a hosted sandbox at all. Every stub below answers it, because the sweep asks on every pass and a stub
-// that stayed silent would fail each fleet test for the edge's reason rather than its own.
+// The edge's own /health, as a CURRENT build answers it: a `build` key is what says something has rolled it. Every stub
+// below answers it, because the sweep asks on every pass and a stub that stayed silent would fail each fleet test for
+// the edge's reason rather than its own.
 const EDGE_URL = `https://ingress.sbx.test/health`;
-const EDGE_OK = { status: `ok`, tunnels: 0, instance: `m1`, peers: 1, remote: 0, replay: true, build: `turbo-abc` };
+const EDGE_OK = { status: `ok`, tunnels: 0, instance: `m1`, peers: 1, remote: 0, build: `turbo-abc` };
 
 const edgeAnswer = (target: string, edge: unknown): Response | undefined => (target === EDGE_URL ? new Response(JSON.stringify(edge)) : undefined);
 
@@ -211,28 +211,16 @@ describe(`hosted health`, () => {
         expect(sent[0]).not.toContain(`no sign-up anywhere`);
     });
 
-    /* A fully stocked fleet is unhealthy when its edge lacks replay support. */
-    it(`is unhealthy on a perfect fleet when the edge is an old build with no replay lane`, async () => {
+    /* THE STALE EDGE A PERFECT FLEET WOULD OTHERWISE HIDE. */
+    it(`is unhealthy on a perfect fleet when the edge carries no build stamp, so its machines never rolled`, async () => {
         const { status, tunnels } = EDGE_OK;
-        // Exactly what the pre-replay edge answered: no `replay` key at all, so absence is the only signal.
         stubFly([`intentic-sbx-a`, `intentic-sbx-pool-1`], {}, { status, tunnels });
         const prisma = prismaWith([taken(`intentic-sbx-a`)], [warm(`intentic-sbx-pool-1`)]);
         const health = await sweepHostedHealth(prisma, config({ poolSize: 1, regionEu: `` }), logger);
         expect(health?.missing).toEqual([]);
         expect(health?.strangers).toEqual([]);
-        expect(health?.edge?.replay).toBeUndefined();
-        expect(health?.edge?.fault).toContain(`OLD BUILD`);
-        expect(health?.healthy).toBe(false);
-    });
-
-    /* THE STALE EDGE THE TWO CHECKS AROUND IT BOTH LET THROUGH. */
-    it(`is unhealthy when the edge replays but carries no build stamp, so its machines never rolled`, async () => {
-        const { status, tunnels, replay } = EDGE_OK;
-        stubFly([`intentic-sbx-pool-1`], {}, { status, tunnels, replay });
-        const prisma = prismaWith([], [warm(`intentic-sbx-pool-1`)]);
-        const health = await sweepHostedHealth(prisma, config({ poolSize: 1, regionEu: `` }), logger);
-        expect(health?.edge?.replay).toBe(true);
         expect(health?.edge?.stamped).toBe(false);
+        expect(health?.edge?.fault).toContain(`OLD BUILD`);
         expect(health?.edge?.fault).toContain(`no build stamp`);
         expect(health?.healthy).toBe(false);
     });
@@ -249,14 +237,13 @@ describe(`hosted health`, () => {
         expect(health?.healthy).toBe(true);
     });
 
-    // Told apart from the old build above because the remedy differs: one variable, not a deploy.
-    it(`is unhealthy, and blames the prefix, when the edge runs with replay switched off`, async () => {
+    // The edge replays nothing any more, so a `replay` it still reports (a build from before that went) decides nothing.
+    it(`reads a stamped edge as healthy whatever it says about replay`, async () => {
         stubFly([`intentic-sbx-pool-1`], {}, { ...EDGE_OK, replay: false });
         const prisma = prismaWith([], [warm(`intentic-sbx-pool-1`)]);
         const health = await sweepHostedHealth(prisma, config({ poolSize: 1, regionEu: `` }), logger);
-        expect(health?.edge?.replay).toBe(false);
-        expect(health?.edge?.fault).toContain(`HOSTED_APP_PREFIX`);
-        expect(health?.healthy).toBe(false);
+        expect(health?.edge).toEqual({ build: `turbo-abc`, stamped: true, fault: undefined });
+        expect(health?.healthy).toBe(true);
     });
 
     // The edge unreachable means nothing is reachable, tunnel lane included; it must not read as a fleet fault.
@@ -279,7 +266,7 @@ describe(`hosted health`, () => {
         expect(health?.edge?.fault).toBeUndefined();
         expect(health?.missing).toEqual([]);
         expect(health?.lane).toMatchObject({ reachable: 0, unreachable: 3 });
-        expect(health?.lane.fault).toContain(`cross-network-replays`);
+        expect(health?.lane.fault).toContain(`tunnel registered`);
         expect(health?.healthy).toBe(false);
     });
 

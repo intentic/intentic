@@ -145,7 +145,8 @@ describe(`reconcileHostedPool`, () => {
         expect(calls.filter((entry) => entry.method === `POST` && entry.url.includes(`/machines`))).toHaveLength(2);
     });
 
-    // The edge replays to `<prefix>-<id>` with no lookup; a pool app named otherwise couldn't serve a later claim.
+    // Every hosted app is `<prefix>-<id>` for the id its token carries (the reaper and the fleet read that); a pool app
+    // named otherwise couldn't serve a later claim.
     it(`names each warm app after a connect token it mints, and keeps that token in the row, not the machine`, async () => {
         const create = jest.fn().mockResolvedValue({});
         const calls = stubFetch(builderRoutes);

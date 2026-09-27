@@ -325,12 +325,14 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         }
         const sandbox = await prisma.sandbox.findUnique({
             where: { tunnelId: sandboxId },
-            select: { id: true, hosted: { select: { appName: true } } },
+            select: { id: true, hosted: { select: { id: true } } },
         });
         if (sandbox === null) {
             return c.json({ error: `unknown sandbox` }, 404);
         }
-        return c.json(sandbox.hosted === null ? { ok: true, lane: `tunnel` } : { ok: true, lane: `hosted`, app: sandbox.hosted.appName });
+        // Today's edge reads only the status. `lane` stays for an edge build from before the replay lane went, which
+        // replays a sandbox unless it is named `tunnel`: without it, a rolled-back edge would replay tunnel sandboxes.
+        return c.json({ ok: true, lane: sandbox.hosted === null ? `tunnel` : `hosted` });
     });
 
     // The edge's certificate, to an edge machine presenting the platform token (edge-certificate.ts).

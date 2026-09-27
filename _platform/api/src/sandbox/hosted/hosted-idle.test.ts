@@ -72,7 +72,7 @@ describe(`collecting the machines nobody came back to`, () => {
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 1, dropped: 0 });
         expect(fly.calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(1);
         expect(prisma.hostedMachine.delete).toHaveBeenCalledWith({ where: { id: `h1` } });
-        // The address goes with the machine, since it was only ever the machine's; the edge would replay to a dead app.
+        // The address goes with the machine, since it was only ever the machine's.
         expect(prisma.sandbox.update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { daemonUrl: null } });
     });
 

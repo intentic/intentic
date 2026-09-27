@@ -434,15 +434,13 @@ describe(`GET /api/reachability/:sandboxId`, () => {
 
         expect(res.status).toBe(200);
         // The lookup is the assertion: a prefix match on the digest can't use the index (sequential scan per box).
-        expect(findUnique).toHaveBeenCalledWith({ where: { tunnelId: id }, select: { id: true, hosted: { select: { appName: true } } } });
+        expect(findUnique).toHaveBeenCalledWith({ where: { tunnelId: id }, select: { id: true, hosted: { select: { id: true } } } });
     });
 
-    it(`names the lane: a hosted sandbox's app to replay to, or the tunnel it must dial`, async () => {
-        const hosted = await ask(
-            fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue({ id: `s1`, hosted: { appName: `intentic-sbx-${id}` } }) } }),
-            id,
-        );
-        expect(await hosted.json()).toEqual({ ok: true, lane: `hosted`, app: `intentic-sbx-${id}` });
+    // No app to replay to any more: the lane alone, kept for an edge from before the replay lane went.
+    it(`names the lane and no app`, async () => {
+        const hosted = await ask(fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue({ id: `s1`, hosted: { id: `h1` } }) } }), id);
+        expect(await hosted.json()).toEqual({ ok: true, lane: `hosted` });
 
         const own = await ask(fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue({ id: `s1`, hosted: null }) } }), id);
         expect(await own.json()).toEqual({ ok: true, lane: `tunnel` });

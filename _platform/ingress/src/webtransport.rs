@@ -21,7 +21,7 @@ use hyper_util::rt::{TokioIo, TokioTimer};
 use tunnel::host_owner_id;
 
 use crate::body;
-use crate::edge::{Edge, Via};
+use crate::edge::Edge;
 
 /// Where a session is opened, on the address of the sandbox its streams reach.
 pub const PATH: &str = browser_wire::WEBTRANSPORT_PATH;
@@ -102,12 +102,7 @@ async fn exchange(
     let service = service_fn(move |mut request: Request<Incoming>| {
         let edge = edge.clone();
         pin(&mut request, &pinned);
-        async move {
-            Ok::<_, Infallible>(
-                edge.handle(request.map(body::incoming), remote, Via::Direct)
-                    .await,
-            )
-        }
+        async move { Ok::<_, Infallible>(edge.handle(request.map(body::incoming), remote).await) }
     });
     let _ = hyper::server::conn::http1::Builder::new()
         .timer(TokioTimer::new())
