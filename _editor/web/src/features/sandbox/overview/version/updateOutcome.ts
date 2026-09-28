@@ -35,6 +35,11 @@ export interface OutcomeNews {
     readonly failed: string | undefined;
     /** The previous version is parked and ready right now: going back takes seconds. */
     readonly probation: boolean;
+    /**
+     * Until when it stays parked, as a sentence. Not part of `text`: an update that worked is good news, and the way
+     * back belongs to the card's quiet "Having trouble?" escape, not to the headline.
+     */
+    readonly ready: string | undefined;
 }
 
 // "Updated from 1.315.0 to 1.316.0.", in the verb's own words. Undefined for a swap that moved no version (a reshape,
@@ -61,12 +66,13 @@ const updatedNews = (outcome: UpdateOutcome, now: number): OutcomeNews | undefin
     }
     const ready = probation && outcome.keepUntil !== undefined ? t(`sandbox.updateOutcome.previousReadyUntil`, { when: formatUntil(outcome.keepUntil, now) }) : undefined;
     return {
-        text: ready === undefined ? moved : `${moved} ${ready}`,
+        text: moved,
         reason: undefined,
         log: undefined,
         tone: `info`,
         failed: undefined,
         probation,
+        ready,
     };
 };
 
@@ -113,6 +119,7 @@ export const outcomeNews = (outcome: UpdateOutcome | undefined, latest: string |
         tone: `warning`,
         failed: outcome.to,
         probation: false,
+        ready: undefined,
     };
 };
 
@@ -143,8 +150,12 @@ export interface UpdateCardPlan {
     readonly skippable: string | undefined;
     /** The update on offer is the very version the machine gave up on, so the update button reads Try again. */
     readonly retry: boolean;
-    /** Why going back is said out loud rather than left as the card's quiet link, or undefined for the quiet link. */
-    readonly rollbackWhy: `withdrawn` | `probation` | undefined;
+    /**
+     * Why going back is said out loud rather than left behind the card's quiet "Having trouble?" escape. Only a
+     * withdrawn release earns that: the publisher itself says to leave it. A fresh update that worked does not, since
+     * offering the way back next to good news reads as advice to take it.
+     */
+    readonly rollbackWhy: `withdrawn` | undefined;
     /** Whether the card draws at all. */
     readonly visible: boolean;
 }
@@ -155,17 +166,8 @@ const skippedOf = (info: Info | undefined): string | undefined => {
     return skipped !== undefined && skipped === info?.latest && info.updateAvailable !== true ? skipped : undefined;
 };
 
-// Going back is said out loud only when there is a reason to: the running release was withdrawn, or an update just
-// happened and the version before it is still parked and ready.
-const rollbackWhyOf = (canRollBack: boolean, withdrawn: boolean, news: OutcomeNews | undefined): UpdateCardPlan[`rollbackWhy`] => {
-    if (!canRollBack) {
-        return undefined;
-    }
-    if (withdrawn) {
-        return `withdrawn`;
-    }
-    return news?.probation === true ? `probation` : undefined;
-};
+// Going back is said out loud only when the publisher says to: the running release was withdrawn.
+const rollbackWhyOf = (canRollBack: boolean, withdrawn: boolean): UpdateCardPlan[`rollbackWhy`] => (canRollBack && withdrawn ? `withdrawn` : undefined);
 
 // One place for "which of the card's actions apply", so the template only draws what this says.
 export const updateCardPlan = ({ info, hosted, canRollBack, skipServed, now }: UpdateCardFacts): UpdateCardPlan => {
@@ -182,7 +184,7 @@ export const updateCardPlan = ({ info, hosted, canRollBack, skipServed, now }: U
         skipped,
         skippable: skipServed && retry ? latest : undefined,
         retry,
-        rollbackWhy: rollbackWhyOf(canRollBack, withdrawn !== undefined, news),
+        rollbackWhy: rollbackWhyOf(canRollBack, withdrawn !== undefined),
         visible: offered || canRollBack || said,
     };
 };

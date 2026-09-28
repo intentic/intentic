@@ -19,20 +19,21 @@ const outcome = (over: Partial<UpdateOutcome> & Pick<UpdateOutcome, `result`>): 
 const info = (over: Partial<Info> = {}): Info => ({ version: `1.315.0`, latest: `1.316.0`, updateAvailable: true, ...over });
 
 describe(`what the machine last did, in plain words`, () => {
-    it(`says an update took and until when the version before it stays ready`, () => {
+    it(`says an update took, keeping until when the version before it stays ready out of the headline`, () => {
         expect(outcomeNews(outcome({ result: `updated`, keepUntil: TOMORROW_1405 }), `1.316.0`, NOW)).toEqual({
-            text: `Updated from 1.315.0 to 1.316.0. The previous version stays ready on this machine until 14:05 tomorrow.`,
+            text: `Updated from 1.315.0 to 1.316.0.`,
             reason: undefined,
             log: undefined,
             tone: `info`,
             failed: undefined,
             probation: true,
+            ready: `That version stays ready on this machine until 14:05 tomorrow, so going back takes seconds.`,
         });
     });
 
     it(`drops the ready line once the previous version is gone, and the whole line a day after the update`, () => {
         const ended = outcome({ result: `updated`, keepUntil: NOW - 1 });
-        expect(outcomeNews(ended, `1.316.0`, NOW)).toMatchObject({ text: `Updated from 1.315.0 to 1.316.0.`, probation: false });
+        expect(outcomeNews(ended, `1.316.0`, NOW)).toMatchObject({ text: `Updated from 1.315.0 to 1.316.0.`, probation: false, ready: undefined });
         expect(outcomeNews({ ...ended, at: NOW - 25 * HOUR }, `1.316.0`, NOW)).toBeUndefined();
         // A probation that ended quietly is the host's own "nothing to report".
         expect(outcomeNews(outcome({ result: `kept` }), `1.316.0`, NOW)).toBeUndefined();
@@ -51,6 +52,7 @@ describe(`what the machine last did, in plain words`, () => {
             tone: `warning`,
             failed: `1.316.0`,
             probation: false,
+            ready: undefined,
         });
     });
 
@@ -116,9 +118,9 @@ describe(`which of the card's actions apply`, () => {
         expect(updateCardPlan({ ...base, info: info({ updateAvailable: true, latest: `1.317.0`, skippedVersion: `1.316.0` }) }).skipped).toBeUndefined();
     });
 
-    it(`puts going back up front for a withdrawn release and during probation, and nowhere it can't happen`, () => {
+    it(`puts going back up front only for a withdrawn release, never beside an update that worked`, () => {
         const probation = outcome({ result: `updated`, keepUntil: TOMORROW_1405 });
-        expect(updateCardPlan({ ...base, info: info({ updateAvailable: false, lastUpdate: probation }) }).rollbackWhy).toBe(`probation`);
+        expect(updateCardPlan({ ...base, info: info({ updateAvailable: false, lastUpdate: probation }) }).rollbackWhy).toBeUndefined();
         expect(
             updateCardPlan({ ...base, info: info({ updateAvailable: false, lastUpdate: probation, withdrawn: { version: `1.316.0` } }) }).rollbackWhy,
         ).toBe(`withdrawn`);

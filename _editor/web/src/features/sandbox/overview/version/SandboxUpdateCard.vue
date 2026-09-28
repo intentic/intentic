@@ -119,10 +119,11 @@ const plan = computed(() =>
     }),
 );
 
-// Rollback is a recovery link in small text, not a status row, so it doesn't out-shout the all-clear state; a
-// withdrawn release or a fresh update's ready predecessor says it up front instead (`plan.rollbackWhy`).
+// Going back is an escape hatch, not a suggestion: it sits behind a quiet "Having trouble?" the owner has to go
+// looking for, and nothing on the card names it until they open that. Next to "Updated from … to …" a Roll back
+// button reads as advice to take it. Only a withdrawn release says it up front (`plan.rollbackWhy`), since there the
+// publisher itself says to leave it.
 const rollbackOpen = ref(false);
-// Named so the whole `<button>` fits one line; a wrapped line renders its underline through spaces.
 const toggleRollback = (): void => {
     rollbackOpen.value = !rollbackOpen.value;
 };
@@ -153,13 +154,10 @@ const withdrawnNotice = computed<NoticeModel | undefined>(() => {
     return plan.value.rollbackWhy === `withdrawn` ? { ...notice, action: { label: t(`capabilities.hostRecreate.rollBackVerb`), run: openRollback } } : notice;
 });
 
-// What the machine last did. Its one action: going back while the previous version is still parked, or skipping a
-// version it gave up on (Try again is the update button itself, relabelled).
+// What the machine last did. Its one action: skipping a version it gave up on (Try again is the update button
+// itself, relabelled). An update that worked gets none: the way back stays behind "Having trouble?".
 const newsAction = computed<NoticeModel[`action`]>(() => {
     const skippable = plan.value.skippable;
-    if (plan.value.news?.probation === true && plan.value.rollbackWhy === `probation`) {
-        return { label: t(`capabilities.hostRecreate.rollBackVerb`), run: openRollback };
-    }
     return skippable === undefined ? undefined : { label: t(`sandbox.sandboxUpdateCard.skipThisVersion`), run: () => void skip(skippable) };
 });
 const newsNotice = computed<NoticeModel | undefined>(() => {
@@ -248,19 +246,6 @@ const updateHeading = computed(() => {
                     <button type="button" :class="ui.textAction()" @click="skip(null)">{{ t(`sandbox.sandboxUpdateCard.showItAgain`) }}</button>
                 </p>
                 <Notice v-if="skipNotice" :of="skipNotice" />
-                <!-- Going back, opened from the notice above that gave the reason for it. -->
-                <div v-if="rollbackOpen && plan.rollbackWhy && !hosted && slug" class="flex flex-col gap-2">
-                    <p v-if="midTurn > 0" class="text-2xs text-warning">
-                        {{ t(`sandbox.sandboxUpdateCard.midTurnRollback`, { count: midTurn }, midTurn) }}
-                    </p>
-                    <p class="text-2xs text-subtle">
-                        <template v-if="rollbackDigest"
-                            >{{ t(`sandbox.sandboxUpdateCard.rollsBackTo`) }} <span class="font-mono">…{{ rollbackDigest }}</span>.
-                        </template>
-                        {{ t(`sandbox.sandboxUpdateCard.filesStay`) }}
-                    </p>
-                    <HostRecreate :slug="slug" action="Roll back" />
-                </div>
 
                 <p v-if="breaking && !localImage" class="text-xs text-muted">
                     {{ t(`sandbox.sandboxUpdateCard.updateRemovesChangesThings`) }}
@@ -408,27 +393,44 @@ const updateHeading = computed(() => {
                     <p v-if="throughIc">{{ t(`sandbox.sandboxUpdateCard.previousStaysReady`) }}</p>
                 </div>
 
-                <!-- Offered alongside an available update too, since a rollback is as likely the reason someone opened this card. -->
-                <p v-if="canRollBack && !plan.rollbackWhy" class="flex flex-wrap items-baseline gap-x-1 text-2xs text-subtle">
-                    <span>{{
-                        updateAvailable ? t(`sandbox.sandboxUpdateCard.ratherGoBack`) : t(`sandbox.sandboxUpdateCard.somethingWrongSinceLast`)
-                    }}</span>
-                    <button type="button" class="underline hover:text-content" @click="hosted ? openRollback() : toggleRollback()">
-                        {{ t(`sandbox.sandboxUpdateCard.rollBackToPrevious`) }}
+                <!-- The way back, tucked away: a quiet "Having trouble?" at the foot of the card that opens it, so it is
+                     there for whoever comes looking and never pitched to whoever doesn't. A withdrawn release opens the
+                     same panel from its notice instead. -->
+                <div v-if="canRollBack" class="flex flex-col gap-2">
+                    <button
+                        v-if="!plan.rollbackWhy"
+                        type="button"
+                        :class="ui.textAction(`self-end text-2xs text-subtle`)"
+                        :aria-expanded="rollbackOpen"
+                        @click="toggleRollback"
+                    >
+                        {{ t(`sandbox.sandboxUpdateCard.havingTrouble`) }}
                     </button>
-                </p>
-                <div v-if="canRollBack && !plan.rollbackWhy && !hosted && slug && rollbackOpen" class="flex flex-col gap-2">
-                    <!-- Lives here, in the all-clear state, since it cautions about the restart a rollback causes, not an update. -->
-                    <p v-if="midTurn > 0 && !updateAvailable" class="text-2xs text-warning">
-                        {{ t(`sandbox.sandboxUpdateCard.midTurnRollback`, { count: midTurn }, midTurn) }}
-                    </p>
-                    <p class="text-2xs text-subtle">
-                        <template v-if="rollbackDigest"
-                            >{{ t(`sandbox.sandboxUpdateCard.rollsBackTo`) }} <span class="font-mono">…{{ rollbackDigest }}</span>.
-                        </template>
-                        {{ t(`sandbox.sandboxUpdateCard.filesStay`) }}
-                    </p>
-                    <HostRecreate :slug="slug" action="Roll back" />
+                    <div v-if="rollbackOpen" class="flex flex-col gap-2 rounded-lg border border-line bg-card p-3">
+                        <p v-if="!plan.rollbackWhy" class="text-xs text-muted">
+                            {{ t(`sandbox.sandboxUpdateCard.troubleLead`) }}
+                            <template v-if="plan.news?.ready">{{ plan.news.ready }}</template>
+                        </p>
+                        <p v-if="midTurn > 0" class="text-2xs text-warning">
+                            {{ t(`sandbox.sandboxUpdateCard.midTurnRollback`, { count: midTurn }, midTurn) }}
+                        </p>
+                        <p class="text-2xs text-subtle">
+                            <template v-if="rollbackDigest && !hosted"
+                                >{{ t(`sandbox.sandboxUpdateCard.rollsBackTo`) }} <span class="font-mono">…{{ rollbackDigest }}</span>.
+                            </template>
+                            {{ t(`sandbox.sandboxUpdateCard.filesStay`) }}
+                        </p>
+                        <!-- Own block so the column's stretch doesn't draw a small button at full width. -->
+                        <div v-if="hosted">
+                            <Button
+                                :label="t(`sandbox.sandboxUpdateCard.rollBackToPrevious`)"
+                                size="small"
+                                severity="secondary"
+                                @click="hostedRollingBack = true"
+                            />
+                        </div>
+                        <HostRecreate v-else-if="slug" :slug="slug" action="Roll back" />
+                    </div>
                 </div>
             </div>
 

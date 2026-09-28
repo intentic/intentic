@@ -167,7 +167,7 @@ it(`offers going back on Windows too, where the command spells it -Rollback`, as
     useOsPreference().cmdOs.value = `windows`;
     info.value = { version: `1.54.0`, latest: LATEST, updateAvailable: false, channel: `stable`, previousImage: `ghcr.io/intentic/sandbox@sha256:abc123` };
     const el = mount();
-    await press(el, `Roll back to the previous image`);
+    await press(el, `Having trouble?`);
     expect(recreates(el)).toEqual([`Roll back`]);
 });
 
@@ -181,7 +181,7 @@ it(`says an update the machine gave up on, and turns Update into Try again with 
     expect(skipVersion).toHaveBeenCalledWith(LATEST);
 });
 
-it(`says until when the version before a fresh update stays ready, with the way back beside it`, async () => {
+it(`says a fresh update worked without pitching the way back, which waits behind "Having trouble?"`, async () => {
     const keepUntil = Date.now() + 20 * HOUR;
     info.value = {
         version: LATEST,
@@ -192,10 +192,12 @@ it(`says until when the version before a fresh update stays ready, with the way 
         lastUpdate: outcome({ result: `updated`, keepUntil }),
     };
     const el = mount();
-    expect(el.textContent).toContain(`Updated from 1.53.0 to 1.54.0. The previous version stays ready on this machine until`);
-    // One way back, said once: the quiet link stands down while the notice carries it.
-    expect(el.textContent).not.toContain(`Roll back to the previous image`);
-    await press(el, `Roll back`);
+    expect(el.textContent).toContain(`Updated from 1.53.0 to 1.54.0.`);
+    // Nothing on the card names going back until the owner goes looking for it.
+    expect(el.textContent).not.toMatch(/roll back|stays ready/i);
+    expect(recreates(el)).toEqual([]);
+    await press(el, `Having trouble?`);
+    expect(el.textContent).toContain(`That version stays ready on this machine until`);
     expect(recreates(el)).toEqual([`Roll back`]);
 });
 
@@ -229,7 +231,9 @@ it(`offers a hosted sandbox the platform's way back once it kept an image, throu
     const el = mount();
     // No host keeps a version ready for a day on the platform's machines, so that line is not said there.
     expect(el.textContent).not.toContain(`24 hours`);
-    await press(el, `Roll back to the previous image`);
+    await press(el, `Having trouble?`);
+    expect(el.querySelector(`[data-hosted-rollback]`)).toBeNull();
+    await press(el, `Roll back to the previous version`);
     expect(el.querySelector(`[data-hosted-rollback]`)?.getAttribute(`data-hosted-rollback`)).toBe(`sb1`);
     expect(recreates(el)).toEqual([]);
 });
@@ -245,7 +249,7 @@ it(`offers going back while the version before is parked, even with no previous 
         lastUpdate: outcome({ result: `updated`, keepUntil: Date.now() + 20 * HOUR }),
     };
     const el = mount();
-    await press(el, `Roll back`);
+    await press(el, `Having trouble?`);
     expect(recreates(el)).toEqual([`Roll back`]);
     expect(el.textContent).not.toContain(`Rolls back to`);
 });
