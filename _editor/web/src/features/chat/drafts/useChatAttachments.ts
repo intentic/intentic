@@ -114,15 +114,19 @@ export const useChatAttachments = (composer: {
             }
             picker.value = ``;
         },
+        // Read like a drop, synchronously while the paste's items are alive: a copied folder's bare File is an empty
+        // stand-in, so the folder is walked and attached flat instead.
         onPaste: (event: ClipboardEvent): void => {
-            const files = Array.from(event.clipboardData?.files ?? []);
-            if (files.length === 0 || !composer.reachable.value) {
+            const pasted = event.clipboardData;
+            if (pasted === null || pasted.files.length === 0 || !composer.reachable.value) {
                 return;
             }
             event.preventDefault();
-            for (const file of files) {
-                attach(file);
-            }
+            void collectDroppedFiles(pasted).then(({ files }) => {
+                for (const dropped of files) {
+                    attach(dropped.file);
+                }
+            });
         },
         onDragEnter: (event: DragEvent): void => {
             if (!takesFiles() || event.dataTransfer?.types.includes(`Files`) !== true) {

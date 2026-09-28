@@ -40,7 +40,7 @@ export interface FileVerbSeams {
         | "loadChildren"
         | "canEditFiles"
     >;
-    readonly uploads: Pick<ReturnType<typeof useUploadQueue>, "enqueue" | "enqueueFromDataTransfer">;
+    readonly uploads: Pick<ReturnType<typeof useUploadQueue>, "enqueueFromDataTransfer">;
     readonly say: ReturnType<typeof useNotifications>["say"];
     // The receipt for a delete that landed, offering to take back exactly that batch.
     readonly sayDeleted: (receipt: string, batch: DeleteBatch) => void;

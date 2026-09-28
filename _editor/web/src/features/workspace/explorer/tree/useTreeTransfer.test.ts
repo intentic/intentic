@@ -20,7 +20,7 @@ const clipboardEvent = (files: readonly File[] = []) => {
     const setData = jest.fn((format: string, text: string) => [format, text]);
     const preventDefault = jest.fn();
     const clipboardData = unstubbed<DataTransfer>(`clipboardData`, { files: files as unknown as FileList, setData });
-    return { event: unstubbed<ClipboardEvent>(`clipboardEvent`, { clipboardData, preventDefault }), setData, preventDefault };
+    return { event: unstubbed<ClipboardEvent>(`clipboardEvent`, { clipboardData, preventDefault }), clipboardData, setData, preventDefault };
 };
 // An OS drag: the platform's own, the one kind of drag an entry reads natively.
 const dragEvent = (types: readonly string[]) => {
@@ -148,12 +148,12 @@ describe(`paste`, () => {
         ]);
     });
 
+    // Handed over whole, read like a drop: a copied folder is in `files` only as an empty stand-in named after it.
     it(`takes OS files from a paste event into the lead's folder ahead of the surface's own clipboard, but not into an archive`, () => {
         const { transfer, store, uploads, select } = treeSurface(TREE);
         select(`src/main.ts`);
         store.clipboard.value = { mode: `copy`, paths: [`README.md`] };
         const shot = new File([`png`], `shot.png`);
-        Object.defineProperty(shot, `webkitRelativePath`, { value: `` });
 
         const pasted = clipboardEvent([shot]);
         transfer.onPasteEvent(pasted.event);
@@ -161,11 +161,12 @@ describe(`paste`, () => {
         const archived = clipboardEvent([shot]);
         transfer.onPasteEvent(archived.event);
 
-        expect([pasted.preventDefault.mock.calls.length, [...store.expanded.value], uploads.enqueue.mock.calls]).toEqual([
-            1,
-            [`src`],
-            [[`src`, [{ file: shot, path: `shot.png` }]]],
-        ]);
+        expect([
+            pasted.preventDefault.mock.calls.length,
+            [...store.expanded.value],
+            uploads.enqueueFromDataTransfer.mock.calls,
+            uploads.enqueue.mock.calls,
+        ]).toEqual([1, [`src`], [[`src`, pasted.clipboardData]], []]);
         expect([archived.preventDefault.mock.calls.length, store.actionError.value?.title, store.copyEntries.mock.calls]).toEqual([
             1,
             `An archive's contents are read-only. Extract it to change them.`,

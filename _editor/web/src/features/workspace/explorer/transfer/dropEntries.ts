@@ -102,8 +102,10 @@ export interface DropResult {
     readonly skipped: number;
 }
 
+// A paste reads the same way as a drop: Chromium registers pasted OS files in the same isolated file system, so a
+// copied folder resolves to a directory entry. Its bare File (in `files`) is a zero-byte stand-in named after the folder.
 export const collectDroppedFiles = async (dataTransfer: DataTransfer, onFile?: (path: string) => void, signal?: AbortSignal): Promise<DropResult> => {
-    // Must call webkitGetAsEntry synchronously, while the drop's items are still alive.
+    // Must call webkitGetAsEntry synchronously, while the drop's (or paste's) items are still alive.
     const roots: FileSystemEntry[] = [];
     let skipped = 0;
     for (const item of Array.from(dataTransfer.items)) {
@@ -117,13 +119,13 @@ export const collectDroppedFiles = async (dataTransfer: DataTransfer, onFile?: (
             skipped += 1;
         }
     }
+    // Resolved entries are the truth even when the walk yields nothing (an empty or all-ignored folder): the flat list
+    // would turn each folder into an empty file named after it.
     if (roots.length > 0) {
-        const files = await walkRoots(roots, onFile, signal);
-        if (files.length > 0) {
-            return { files, skipped };
-        }
+        return { files: await walkRoots(roots, onFile, signal), skipped };
     }
-    // No entries (some sources expose files but not the entry API): fall back to the flat file list.
+    // No entries (a pasted screenshot is image data, not a file on disk; some sources lack the entry API): fall back to
+    // the flat file list.
     const files = Array.from(dataTransfer.files)
         .filter((file) => !isSecretFile(file.name))
         .map((file): DroppedFile => ({ file, path: file.name }));

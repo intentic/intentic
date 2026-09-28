@@ -8,7 +8,6 @@ import type { useUploadQueue } from "../../files/upload/useUploadQueue";
 import { joinPath } from "../entryNames";
 import type { LandedEntry } from "../fileNesting";
 import { filesOffered } from "../transfer/dragSource";
-import { filesToEntries } from "../transfer/dropEntries";
 import { movableInto, pastePairs } from "../transfer/explorerPaste";
 import { beginEntryDrag, useEntryDrag } from "../transfer/useEntryDrag";
 import type { useWorkspaceTree } from "../useWorkspaceTree";
@@ -36,7 +35,7 @@ export interface TreeTransferHost {
     // The tree element: a clipboard write goes through its window, so a popped-out explorer writes to its own.
     readonly el: Readonly<Ref<HTMLElement | undefined>>;
     readonly store: Pick<ReturnType<typeof useWorkspaceTree>, "clipboard" | "run" | "copyEntries" | "moveIntoMany" | "extractEntry" | "loadChildren">;
-    readonly uploads: Pick<ReturnType<typeof useUploadQueue>, "enqueue" | "enqueueFromDataTransfer">;
+    readonly uploads: Pick<ReturnType<typeof useUploadQueue>, "enqueueFromDataTransfer">;
     readonly say: ReturnType<typeof useNotifications>["say"];
 }
 
@@ -130,12 +129,14 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
             return;
         }
         const dir = host.targetDir(lead.value);
-        const files = event.clipboardData?.files;
-        if (files !== undefined && files.length > 0) {
+        const pasted = event.clipboardData;
+        if (pasted !== null && pasted.files.length > 0) {
             event.preventDefault();
             if (!rules.refuseIn(dir)) {
                 host.openLanding(dir);
-                void host.uploads.enqueue(dir, filesToEntries(files));
+                // Read like a drop, synchronously while the paste's items are alive: a copied folder is walked, where
+                // its bare File in `files` would land as an empty file named after it.
+                host.uploads.enqueueFromDataTransfer(dir, pasted);
             }
             return;
         }

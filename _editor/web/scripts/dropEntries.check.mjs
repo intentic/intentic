@@ -82,6 +82,26 @@ assert.deepEqual(paths(canceled), []);
 const fallback = await collectDroppedFiles({ items: [], files: [{ name: "x.txt" }] });
 assert.deepEqual(paths(fallback), ["x.txt"]);
 
+// A copied folder pasted (or dropped) sits in `files` only as a zero-byte stand-in named after it; the walk is what
+// lands, never the stand-in.
+const standIn = { name: "clips", size: 0, type: "" };
+const pastedFolder = dirEntry("clips", [
+    fileEntry("a.mp4", "/clips/a.mp4"),
+    dirEntry("day2", [fileEntry("b.mp4", "/clips/day2/b.mp4")], "/clips/day2"),
+]);
+assert.deepEqual(paths(await collectDroppedFiles(dt([pastedFolder], [standIn]))), ["clips/a.mp4", "clips/day2/b.mp4"]);
+
+// A folder whose walk yields nothing (empty, or only ignored/secret content) lands nothing: the stand-in isn't an
+// upload.
+const emptyFolder = await collectDroppedFiles(dt([dirEntry("clips", [])], [standIn]));
+assert.deepEqual([emptyFolder.files, emptyFolder.skipped], [[], 0]);
+const ignoredOnly = await collectDroppedFiles(dt([dirEntry("deps", [dirEntry("node_modules", [], "/deps/node_modules")])], [{ name: "deps" }]));
+assert.deepEqual(paths(ignoredOnly), []);
+
+// A pasted screenshot is image data, not a file on disk: no entry resolves, so the flat list carries it.
+const screenshot = await collectDroppedFiles(dt([null], [{ name: "image.png" }]));
+assert.deepEqual([paths(screenshot), screenshot.skipped], [["image.png"], 1]);
+
 // A directory whose readEntries never calls back is skipped after a timeout; the rest of the drop still resolves.
 // Uses a tiny timeout override to stay fast.
 const neverEntry = {
