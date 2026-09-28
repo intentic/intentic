@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import { createUi, homeDir, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
@@ -10,7 +11,8 @@ import { postWhileWarming } from "../daemon-base.js";
 import { completeSetup, prepareSetup } from "../install.js";
 import { machineId } from "../machine-id.js";
 import { wslEnvironment } from "../wsl.js";
-import { ensureResident, readResidentPid } from "../resident.js";
+import { ensureResident, readResidentBuild, readResidentPid } from "../resident.js";
+import { MACHINE_VERSION } from "../version.js";
 import { machineLauncher } from "../supervision.js";
 import {
     type Pairing,
@@ -27,12 +29,12 @@ import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import { retireMirroredPort, retirePairingMirror, teardownAllForwards } from "./mirror.js";
 import {
     ensureMutagen,
-    ensureSyncSession,
     existingSyncSessions,
     healDerivedConflicts,
     registerMutagenAutostart,
     retireOrphanSessions,
     runMutagen,
+    sessionName,
     syncSessionNames,
     unregisterMutagenAutostart,
 } from "./mutagen.js";
@@ -259,9 +261,13 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     assertSshConfigVisible(ssh, alias, port);
     await probeSshTransport(ssh, alias, out);
 
-    // Start THIS pairing's file sync, or leave an already-running session exactly as it is rather than pay a full
-    // rescan for nothing. Every other pairing's session keeps running; only sessions no pairing claims are swept.
-    ensureSyncSession(mutagen, pairing, out);
+    // THIS pairing's file sync is the agent's to start (mirror.ts prepares every setup it has not seen), never this
+    // command's as well. The two used to race, and one name ended up holding two identical sessions. Waiting for it is
+    // only so the lines below can say it began. Every other pairing's session keeps running; only sessions no pairing
+    // claims are swept.
+    if (mode === "sync" && !(await syncSessionAppears(mutagen, sandboxId, SESSION_READY_MS))) {
+        out(await notStartedYet(localDir ?? sandboxId));
+    }
     retireOrphanSessions(mutagen, pairings, out);
     // One bridge pass right away, so a fresh pairing's local repos carry the sandbox's git history from the first
     // minute rather than waiting out the watcher's cadence.
@@ -296,6 +302,32 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
 // How long `setup` waits for the watcher it just started to bind this pairing's port. Bounded by process
 // startup, not by any work the watcher does.
 const TUNNEL_READY_MS = 10_000;
+
+// How long `setup` waits for the agent to create this pairing's workspace session. A first create installs Mutagen's
+// agent in the sandbox over the tunnel, which takes a while on a slow uplink.
+const SESSION_READY_MS = 90_000;
+
+// Whether the agent has created this pairing's workspace session within `withinMs`. Blocking `sync list` is fine
+// here: this is the one-shot CLI, which serves no transport (exec.ts).
+const syncSessionAppears = async (mutagen: string, sandboxId: string, withinMs: number): Promise<boolean> => {
+    const deadline = Date.now() + withinMs;
+    while (existingSyncSessions(mutagen, [sessionName(sandboxId)]).length === 0) {
+        if (Date.now() >= deadline) {
+            return false;
+        }
+        await sleep(1_000);
+    }
+    return true;
+};
+
+// Said when that wait runs out. An agent older than this one prepares only the pairings it started with, and it is
+// still running here only if setup's own update failed. Otherwise the sandbox is just answering slowly.
+const notStartedYet = async (folder: string): Promise<string> => {
+    const running = await readResidentBuild();
+    return running !== undefined && running !== MACHINE_VERSION
+        ? `note: the agent running here is ${running}, which starts file sync for ${folder} only at its next start; \`intentic-machine upgrade\` brings it to ${MACHINE_VERSION} now.`
+        : `note: this machine's agent has not started file sync for ${folder} yet; it keeps trying, and \`intentic-machine status\` shows when it is running.`;
+};
 
 // Which sandbox a command acts on, every one this machine pairs unless named. Shared by pause/resume/uninstall.
 interface SandboxFlags {

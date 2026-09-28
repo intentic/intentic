@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { REFERENCE_DIR, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 
-import { convergePlan, mutagenCreateArgs, sessionMatchesSpec, sessionName, type SyncSessionSpec } from "./mutagen.js";
+import { convergePlan, mutagenCreateArgs, sessionMatchesSpec, sessionName, surplusSessions, type SyncSessionSpec } from "./mutagen.js";
 import {
     BACKUP_IGNORES,
     IGNORES,
@@ -175,7 +175,11 @@ const spec: SyncSessionSpec = {
     mode: "two-way-safe",
     ignores: IGNORES,
     from: "local",
+    symlinks: "portable",
 };
+
+// The same pairing on a Windows PC without Developer Mode, which cannot create a link (symlinks.ts).
+const linkless: SyncSessionSpec = { ...spec, symlinks: "ignore" };
 
 // The state backup; every assertion below tests one thing: this runs alpha→beta downhill, and a reversed pair
 // would silently overwrite the sandbox's live state with the laptop's.
@@ -187,6 +191,7 @@ const backup: SyncSessionSpec = {
     mode: "one-way-replica",
     ignores: BACKUP_IGNORES,
     from: "sandbox",
+    symlinks: "portable",
 };
 
 describe("mutagenCreateArgs", () => {
@@ -259,6 +264,15 @@ describe("mutagenCreateArgs", () => {
         expect(paused).toContain("--paused");
         expect(paused.indexOf("--paused")).toBeLessThan(paused.indexOf("/home/u/proj"));
     });
+
+    // Pinned even where it is Mutagen's own default, like the sync mode: a user's global config must not be what
+    // decides whether a session tries to create links on a device that cannot.
+    it("pins the symlink mode, and leaves links out where this device cannot create them", () => {
+        expect(args[args.indexOf("--symlink-mode") + 1]).toBe("portable");
+        const without = mutagenCreateArgs(linkless, false);
+        expect(without[without.indexOf("--symlink-mode") + 1]).toBe("ignore");
+        expect(without.indexOf("--symlink-mode")).toBeLessThan(without.indexOf("/home/u/proj"));
+    });
 });
 
 describe("mutagenCreateArgs: the state backup", () => {
@@ -279,6 +293,13 @@ describe("mutagenCreateArgs: the state backup", () => {
     it("polls the sandbox fast on whichever side of this session it is", () => {
         expect(args[args.indexOf("--watch-polling-interval-alpha") + 1]).toBe("2");
         expect(args).not.toContain("--watch-polling-interval-beta");
+    });
+
+    // The backup lands on the same device, so a link in the sandbox's state dir is refused here exactly as one in the
+    // workspace would be.
+    it("leaves links out on a device that cannot create them, like the workspace session", () => {
+        const without = mutagenCreateArgs({ ...backup, symlinks: "ignore" }, false);
+        expect(without[without.indexOf("--symlink-mode") + 1]).toBe("ignore");
     });
 
     it("carries the backup's own ignores, not the workspace session's", () => {
@@ -338,6 +359,40 @@ describe("sessionMatchesSpec", () => {
             expect(convergePlan([], spec)).toBe("create");
             expect(convergePlan([live({ paths: [] })], spec)).toBe("replace");
         });
+
+        // What an upgrade does to a Windows PC without Developer Mode: the session it already had carries links, which
+        // that PC fails to create on every cycle, so it is recreated to leave them out.
+        it("replaces a session that carries links on a device that cannot create them", () => {
+            expect(convergePlan([matching], linkless)).toBe("replace");
+            expect(convergePlan([{ ...matching, symlink: { mode: "ignore" } }], linkless)).toBe("keep");
+        });
+    });
+
+    // THE DUPLICATES ARE RETIRED ONE BY ONE, NOT REPLACED AS A SET. A replacement waits for a settled pair of roots,
+    // and two synchronizers on one folder are what keep it from settling, so the old rule could wait forever. Mutagen
+    // lists by creation time: the first is the oldest, and its own record of what the two ends agreed on survives.
+    describe("surplusSessions", () => {
+        const matching = live({ paths: [...IGNORES] });
+
+        it("names every session under the name but the first, by identifier", () => {
+            const listed = [
+                { ...matching, identifier: "sync_oldest" },
+                { ...matching, identifier: "sync_second" },
+                { ...matching, identifier: "sync_third" },
+            ];
+            expect(surplusSessions(listed)).toEqual(["sync_second", "sync_third"]);
+        });
+
+        it("has nothing to retire with one session or none", () => {
+            expect(surplusSessions([{ ...matching, identifier: "sync_only" }])).toEqual([]);
+            expect(surplusSessions([])).toEqual([]);
+        });
+
+        // Without an identifier a duplicate cannot be named apart from the one kept: it is left for convergePlan to
+        // replace with the rest, as before.
+        it("never names a session it cannot tell apart from the one kept", () => {
+            expect(surplusSessions([{ ...matching, identifier: "sync_oldest" }, matching])).toEqual([]);
+        });
     });
 
     it("matches a session created by this build", () => {
@@ -357,6 +412,20 @@ describe("sessionMatchesSpec", () => {
     // Protobuf JSON omits defaults, so "no ignores at all" arrives as a bare {} rather than an empty list.
     it("rejects a session with no ignores at all", () => {
         expect(sessionMatchesSpec(live({}), spec)).toBe(false);
+    });
+
+    // Every session made before the mode was pinned carries none, which Mutagen reads as portable. Reading it as drift
+    // would recreate every paired device's sessions the first time this build starts.
+    it("reads a session with no symlink mode as the portable one it is", () => {
+        expect(sessionMatchesSpec({ ...live({ paths: [...IGNORES] }), symlink: {} }, spec)).toBe(true);
+        expect(sessionMatchesSpec({ ...live({ paths: [...IGNORES] }), symlink: { mode: "portable" } }, spec)).toBe(true);
+        expect(sessionMatchesSpec({ ...live({ paths: [...IGNORES] }), symlink: {} }, linkless)).toBe(false);
+    });
+
+    it("rejects a session whose symlink mode is not this device's", () => {
+        expect(sessionMatchesSpec({ ...live({ paths: [...IGNORES] }), symlink: { mode: "ignore" } }, spec)).toBe(false);
+        expect(sessionMatchesSpec({ ...live({ paths: [...IGNORES] }), symlink: { mode: "posix-raw" } }, linkless)).toBe(false);
+        expect(sessionMatchesSpec({ ...live({ paths: [...IGNORES] }), symlink: { mode: "ignore" } }, linkless)).toBe(true);
     });
 
     it("rejects a session whose endpoints moved", () => {

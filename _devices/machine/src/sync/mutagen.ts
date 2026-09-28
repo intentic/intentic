@@ -21,6 +21,7 @@ import { mutagenDaemonLogPath, type Pairing } from "./config.js";
 import { runProcess } from "./exec.js";
 import { clearConflictResidue, type ResidueOutcome, sweepDerivedResidue } from "./residue.js";
 import { BACKUP_IGNORES, IGNORES, mutagenSshPath, sanitizeId, sshAlias, sshTransportAnswers } from "./ssh.js";
+import { deviceSymlinks, type SymlinkMode } from "./symlinks.js";
 
 // The pinned Mutagen version this agent downloads when the machine has no install of its own.
 const MUTAGEN_VERSION = "0.18.1";
@@ -134,10 +135,13 @@ export interface SyncSessionSpec {
     // first. Getting this backwards would not fail loudly, it would silently overwrite the sandbox's state with the
     // laptop's.
     readonly from: "local" | "sandbox";
+    // Links are carried only where this device can create them (symlinks.ts). Where it cannot, they are left out
+    // rather than failed on every cycle.
+    readonly symlinks: SymlinkMode;
 }
 
 // The workspace session for a pairing: name and alias namespace on the sandbox id; remote side is always /work.
-const sessionSpec = (pairing: Pairing & { readonly localDir: string }): SyncSessionSpec => ({
+const sessionSpec = (pairing: Pairing & { readonly localDir: string }, symlinks: SymlinkMode): SyncSessionSpec => ({
     name: sessionName(pairing.sandboxId),
     localDir: pairing.localDir,
     alias: sshAlias(pairing.sandboxId),
@@ -145,12 +149,13 @@ const sessionSpec = (pairing: Pairing & { readonly localDir: string }): SyncSess
     mode: "two-way-safe",
     ignores: IGNORES,
     from: "local",
+    symlinks,
 });
 
 // Mirrors the sandbox's state dir into `<localDir>/.intentic`, one-way, sandbox first — the daemon is the only
 // writer. Halts rather than emptying beta when alpha's root disappears, so a mid-rebuild sandbox isn't read as a
 // deleted backup.
-const backupSpec = (pairing: Pairing & { readonly localDir: string }): SyncSessionSpec => ({
+const backupSpec = (pairing: Pairing & { readonly localDir: string }, symlinks: SymlinkMode): SyncSessionSpec => ({
     name: backupSessionName(pairing.sandboxId),
     localDir: join(pairing.localDir, STATE_DIR),
     alias: sshAlias(pairing.sandboxId),
@@ -158,6 +163,7 @@ const backupSpec = (pairing: Pairing & { readonly localDir: string }): SyncSessi
     mode: "one-way-replica",
     ignores: BACKUP_IGNORES,
     from: "sandbox",
+    symlinks,
 });
 
 // Seconds between the sandbox endpoint's own scans. Mutagen's default is 10, and that number is the whole latency of a
@@ -181,6 +187,10 @@ export const mutagenCreateArgs = (spec: SyncSessionSpec, paused: boolean): strin
         spec.name,
         "--sync-mode",
         spec.mode,
+        // Pinned for the same reason, and even where it is Mutagen's default: a user's global config must not decide
+        // whether this session tries to create links on a device that cannot.
+        "--symlink-mode",
+        spec.symlinks,
         ...(paused ? ["--paused"] : []),
         ...spec.ignores.flatMap((pattern) => ["--ignore", pattern]),
         `--watch-polling-interval-${sandboxSide}`,
@@ -221,11 +231,15 @@ interface LiveConflict {
 }
 
 interface LiveSession {
+    // What tells one session from another under a shared name. Names are not unique; identifiers are.
+    readonly identifier?: string;
     // Both ends carry an optional host since a session may run either way (the backup's alpha is the sandbox);
     // protobuf omits a local endpoint's host, so undefined means "this machine".
     readonly alpha: { readonly host?: string; readonly path?: string };
     readonly beta: { readonly host?: string; readonly path?: string };
     readonly ignore: { readonly paths?: readonly string[]; readonly vcs?: boolean };
+    // No mode means the session was created without `--symlink-mode`, which every Mutagen version reads as portable.
+    readonly symlink?: { readonly mode?: string };
     readonly paused?: boolean;
     readonly status?: string;
     readonly conflicts?: readonly LiveConflict[];
@@ -422,23 +436,56 @@ export const sessionMatchesSpec = (session: LiveSession, spec: SyncSessionSpec):
         session.beta.path === beta.path &&
         session.beta.host === beta.host &&
         session.ignore.vcs !== true &&
-        (session.ignore.paths ?? []).join("\n") === spec.ignores.join("\n")
+        (session.ignore.paths ?? []).join("\n") === spec.ignores.join("\n") &&
+        // A session made before the mode was pinned carries none, and that is portable. It must still match a portable
+        // spec: otherwise every paired device would recreate its sessions on the first start of this build.
+        (session.symlink?.mode ?? "portable") === spec.symlinks
     );
 };
 
 // Converges the session to this build's spec: creates if missing, recreates if drifted, since recreating is the
 // only way to change ignores. Cheap when content already matches (a rescan, not a re-download); a paused session stays
-// paused.
-export const ensureSyncSession = async (mutagen: string, pairing: Pairing, log: Log): Promise<void> => {
+// paused. Answers whether both sessions now ARE the spec: false means something was put off (a create that failed is
+// thrown instead), and the watcher tries again on its cadence rather than at its next start.
+export const ensureSyncSession = async (mutagen: string, pairing: Pairing, log: Log): Promise<boolean> => {
     if (pairing.mode !== "sync" || pairing.localDir === undefined) {
-        return; // a mirror-only enrollment has no file sync at all: just port forwards
+        return true; // a mirror-only enrollment has no file sync at all: just port forwards
     }
     const held = { ...pairing, localDir: pairing.localDir };
+    const symlinks = await deviceSymlinks();
+    if (symlinks.refusal !== undefined) {
+        log(
+            `${pairing.sandboxId}: this device cannot create symbolic links (${symlinks.refusal}), so its file sync leaves them out instead of failing on each one every cycle. On Windows, turning on Developer Mode lets the next start of this agent carry them.`,
+        );
+    }
     // Both sessions, converged in order, sequential since they share one ssh transport and daemon; workspace first
     // since that's what the user is waiting on. An unreachable sandbox leaves both alone, never half-converged.
-    for (const spec of [sessionSpec(held), backupSpec(held)]) {
-        await convergeSession(mutagen, spec, log);
+    let converged = true;
+    for (const spec of [sessionSpec(held, symlinks.mode), backupSpec(held, symlinks.mode)]) {
+        converged = (await convergeSession(mutagen, spec, log)) && converged;
     }
+    return converged;
+};
+
+// Every session under one name except the oldest, by identifier. Mutagen lists sessions by creation time. Terminating
+// a duplicate loses nothing, because the one kept holds its own record of what the two ends last agreed on. Replacing
+// them all at once instead waits for a settled pair of roots, and duplicates are what keep one from settling: each
+// flags the other's writes as conflicts.
+export const surplusSessions = (sessions: readonly LiveSession[]): string[] =>
+    sessions.slice(1).flatMap((session) => (session.identifier === undefined ? [] : [session.identifier]));
+
+// One synchronizer per name before anything else is decided. The list is read again rather than assumed: if a
+// terminate did not take, the duplicates are still there, and convergePlan replaces them all from a settled state as
+// it did before.
+const retireSurplus = (mutagen: string, name: string, log: Log): LiveSession[] => {
+    const sessions = readSessions(mutagen, name);
+    const surplus = surplusSessions(sessions);
+    if (surplus.length === 0) {
+        return sessions;
+    }
+    spawnSync(mutagen, ["sync", "terminate", ...surplus], { stdio: "ignore", windowsHide: true });
+    log(`${name}: ${sessions.length} sync sessions shared this name and flagged each other's writes as conflicts; kept the oldest and terminated the rest.`);
+    return readSessions(mutagen, name);
 };
 
 // What to do with what `sync list <name>` answered. Kept pure and beside `sessionMatchesSpec` so the one case that
@@ -496,11 +543,11 @@ const sshAnswer = async (command: string, args: readonly string[]): Promise<stri
     return result.status === 0 ? result.stdout : undefined;
 };
 
-const convergeSession = async (mutagen: string, spec: SyncSessionSpec, log: Log): Promise<void> => {
-    const sessions = readSessions(mutagen, spec.name);
+const convergeSession = async (mutagen: string, spec: SyncSessionSpec, log: Log): Promise<boolean> => {
+    const sessions = retireSurplus(mutagen, spec.name, log);
     const plan = convergePlan(sessions, spec);
     if (plan === "keep") {
-        return;
+        return true;
     }
     const live = sessions.length === 1 ? sessions[0] : undefined;
     if (sessions.length > 1) {
@@ -508,23 +555,24 @@ const convergeSession = async (mutagen: string, spec: SyncSessionSpec, log: Log)
     }
     if (plan === "replace") {
         // Never tears down a session it can't replace: `sync create` needs the sandbox to answer, so the transport is
-        // probed first, and an unreachable sandbox keeps its drifted session (retried next pass) rather than losing
-        // sync entirely.
+        // probed first, and an unreachable sandbox keeps its drifted session (retried on the watcher's cadence) rather
+        // than losing sync entirely.
         if (!(await sshTransportAnswers(mutagenSshPath(process.platform, process.env["MUTAGEN_SSH_PATH"]), spec.alias))) {
             log(
                 `${spec.name}: the sandbox is not answering, so its existing file sync is left running as it is rather than terminated for a replacement that cannot be created. Retrying later.`,
             );
-            return;
+            return false;
         }
         if (!(await readyForReplacement(mutagen, spec, log))) {
-            return;
+            return false;
         }
         log(
-            "the running sync session does not match this build's spec: recreating it so the current rules apply (no .git file-syncs; commits arrive via the git bridge instead). This starts the comparison from scratch, which is why it only happens from a settled state.",
+            `${spec.name}: the running sync session does not match this build's rules (its ignores, its folder, or what it does with symbolic links): recreating it so they apply. This starts the comparison from scratch, which is why it only happens from a settled state.`,
         );
         spawnSync(mutagen, ["sync", "terminate", spec.name], { stdio: "ignore", windowsHide: true });
     }
     await runMutagenAsync(mutagen, mutagenCreateArgs(spec, live?.paused === true), log);
+    return true;
 };
 
 // One ssh round trip asking whether a handful of directories still exist; generous enough for a loaded laptop, bounded

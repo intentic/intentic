@@ -21,6 +21,7 @@ import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import {
     ensureMutagen,
     ensureSyncSession,
+    existingSyncSessions,
     forwardedPorts,
     forwardSessionName,
     healDerivedConflicts,
@@ -30,6 +31,7 @@ import {
     retireOrphanSessions,
     resumeAutoPausedSync,
     runMutagenAsync,
+    syncSessionNames,
 } from "./mutagen.js";
 import { quieted } from "./repeats.js";
 import { deviceReport, scopedReport } from "./report.js";
@@ -377,7 +379,7 @@ const guard = async (log: Log, what: string, step: () => void | Promise<void>): 
     }
 };
 
-// How often a failed file-sync setup retries; other pairings aren't rechecked every tick.
+// How often file sync that has not reached this build's rules tries again; other pairings aren't rechecked every tick.
 const SESSION_RETRY_EVERY_TICKS = 60;
 
 // How often the heal reads a pairing's conflicts. Slower than POLL_MS because it costs a `mutagen sync list` per
@@ -461,23 +463,61 @@ const healPairing = async (mutagen: string, pairing: Pairing, tick: number, log:
     await guard(log, `${pairing.sandboxId}: clearing derived residue`, async () => void (await healDerivedConflicts(mutagen, pairing, log)));
 };
 
-// Every pairing's file sync, prepared once at startup: this is where an upgraded agent's inherited sessions pick up
-// the new rules, since Mutagen bakes a session's ignores in at creation. Per pairing, so one dead sandbox costs only
-// itself; what fails comes back as the pending set and is retried on the cadence below.
-const prepareSessions = async (mutagen: string, pairings: readonly Pairing[], say: Log): Promise<Set<string>> => {
-    const pending = new Set<string>();
-    for (const pairing of pairings) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one session at a time; the guard is what makes the order safe
-        const ready = await guard(say, `${pairing.sandboxId}: preparing its file sync`, async () => await ensureSyncSession(mutagen, pairing, say));
-        if (!ready) {
-            pending.add(pairing.sandboxId);
-        }
+// Which setup of a pairing this is. Every `setup` mints a fresh sync token, so a pairing set up again (another folder,
+// a takeover, a re-pair after an unpair) reads as new here and is prepared again; one that is merely re-read does not.
+const setupOf = (pairing: Pairing): string => [pairing.sandboxId, pairing.localDir ?? "", pairing.syncToken ?? ""].join("\n");
+
+// The pairings this pass has to prepare: every setup the watcher has not seen. Pure, so "each setup exactly once" is a
+// rule with a test rather than a branch in the loop.
+export const unpreparedSetups = (pairings: readonly Pairing[], prepared: ReadonlySet<string>): Pairing[] =>
+    pairings.filter((held) => !prepared.has(setupOf(held)));
+
+export const markPrepared = (prepared: Set<string>, pairing: Pairing): void => void prepared.add(setupOf(pairing));
+
+// One pairing's sessions brought to this build's rules. Whatever did not get there (a create that failed, or a
+// replacement put off until the sandbox answers or its conflicts settle) is pending, and retried on the cadence below.
+const prepareSession = async (mutagen: string, pairing: Pairing, pending: Set<string>, say: Log): Promise<boolean> => {
+    let converged = false;
+    await guard(say, `${pairing.sandboxId}: preparing its file sync`, async () => {
+        converged = await ensureSyncSession(mutagen, pairing, say);
+    });
+    if (converged) {
+        pending.delete(pairing.sandboxId);
+    } else {
+        pending.add(pairing.sandboxId);
     }
-    return pending;
+    return converged;
 };
 
-// The same work on a cadence, for the pairings whose file sync did not come up: asleep, mid-rebuild, or behind a
-// transport that was not yet open. The common case is an empty set and no work at all.
+// A pairing whose sessions this watcher paused because its sandbox stopped answering. Paused sessions do nothing, so
+// bringing them to new rules can wait: a replacement dials the sandbox first, once per session, and against one that
+// has been gone for an hour each dial can run to the tunnel's ten-second timeout. A dogfooding PC had 6 of its 8
+// pairings in this state: twelve such dials at every agent start, before mirroring or reporting began. Only while its
+// sessions exist, since a pairing that has none is not syncing anything and nothing else would create them.
+const dormant = (mutagen: string, pairing: Pairing): boolean =>
+    pairing.fileSyncAutoPaused === true && existingSyncSessions(mutagen, syncSessionNames(pairing.sandboxId)).length > 0;
+
+// Every pairing this watcher has not prepared yet. At startup that is all of them, which is where an upgraded agent's
+// inherited sessions pick up the new rules, since Mutagen bakes them in at creation. After that it is each pairing a
+// `setup` adds or sets up again while the watcher runs. Per pairing, so one dead sandbox costs only itself; a dormant
+// one is left pending for the cadence below.
+// THE WATCHER IS THE ONLY THING THAT CREATES SESSIONS. `setup` used to create them too, at the same moment the agent it
+// had just started was preparing the same pairing, so each create found no session and both went ahead: one name came
+// to hold two identical sessions over the same folder, each flagging the other's writes as conflicts.
+const prepareSessions = async (mutagen: string, pairings: readonly Pairing[], prepared: Set<string>, pending: Set<string>, say: Log): Promise<void> => {
+    for (const pairing of unpreparedSetups(pairings, prepared)) {
+        markPrepared(prepared, pairing);
+        if (dormant(mutagen, pairing)) {
+            pending.add(pairing.sandboxId);
+            continue;
+        }
+        await prepareSession(mutagen, pairing, pending, say);
+    }
+};
+
+// The same work on a cadence, for the pairings whose file sync has not reached this build's rules: asleep,
+// mid-rebuild, behind a transport that was not yet open, or holding conflicts a replacement has to wait out. A dormant
+// one waits until its sandbox answers again and the pause is lifted. The common case is an empty set and no work.
 const retryPendingSessions = async (
     mutagen: string,
     pairings: readonly Pairing[],
@@ -488,12 +528,9 @@ const retryPendingSessions = async (
     if (sessionsPending.size === 0 || tick % SESSION_RETRY_EVERY_TICKS !== 0) {
         return;
     }
-    for (const pairing of pairings.filter((held) => sessionsPending.has(held.sandboxId))) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- one session at a time, as at startup
-        const ready = await guard(say, `${pairing.sandboxId}: preparing its file sync`, async () => await ensureSyncSession(mutagen, pairing, say));
-        if (ready) {
-            sessionsPending.delete(pairing.sandboxId);
-            say(`  ${pairing.sandboxId}: file sync is running again`);
+    for (const pairing of pairings.filter((held) => sessionsPending.has(held.sandboxId) && !dormant(mutagen, held))) {
+        if (await prepareSession(mutagen, pairing, sessionsPending, say)) {
+            say(`  ${pairing.sandboxId}: file sync is running on this build's rules`);
         }
     }
 };
@@ -520,9 +557,9 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
         const mirrored = await servePairing(mutagen, pairing, base, claimedBy, say);
         rejectedPolls.delete(pairing.sandboxId);
         unreachable.delete(pairing.sandboxId);
+        // Still pending if it was: a replacement put off while the sandbox slept is owed now that it answers.
         if (resumeAutoPausedSync(mutagen, pairing)) {
             await setFileSyncAutoPaused(pairing.sandboxId, false);
-            sessionsPending.delete(pairing.sandboxId);
             say(`  ${pairing.sandboxId}: reachable again; resumed its automatically paused file sync`);
         }
         for (const port of mirrored) {
@@ -592,7 +629,9 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
         "opening the sync transports",
         async () => await tunnels.reconcile(tunnelTargets(await dialedPairings(initial.pairings, bases))),
     );
-    const sessionsPending = await prepareSessions(mutagen, initial.pairings, say);
+    const sessionsPending = new Set<string>();
+    const sessionsPrepared = new Set<string>();
+    await prepareSessions(mutagen, initial.pairings, sessionsPrepared, sessionsPending, say);
     await guard(say, "retiring orphaned sessions", () => retireOrphanSessions(mutagen, initial.pairings, say));
     log(`sync started; polling ${plural(initial.pairings.length, "paired sandbox")} every ${POLL_MS / 1000}s`);
 
@@ -629,7 +668,9 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
         // Runs before the port reconcile and git bridge, both of which ride this transport; a newly added pairing needs
         // its listener up first, and a moved base gets rebound here too.
         await guard(say, "reconciling the sync transports", async () => await tunnels.reconcile(tunnelTargets(dialed)));
-        // After the transport reconcile above, which is what a session that failed to create was usually waiting on.
+        // After the transport reconcile above, which is what a new pairing's sessions ride, and what a session that
+        // failed to create was usually waiting on.
+        await prepareSessions(mutagen, state.pairings, sessionsPrepared, sessionsPending, say);
         await retryPendingSessions(mutagen, state.pairings, sessionsPending, tick, say);
         // Ports this tick's earlier pairings already own, so a later one is told who holds a port it wanted.
         const claimedBy = new Map<number, string>();

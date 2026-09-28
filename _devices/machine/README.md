@@ -32,6 +32,12 @@ flowchart LR
 - **sync** (`src/sync/`): `sync setup` enrolls an SSH key and runs Mutagen against the sandbox's sshd, reached
   through a loopback port tunnelled over a WebSocket. It keeps a folder two-way synced, forwards every workspace
   port to the same localhost port, and fast-forwards local git clones from the sandbox.
+- Only the resident agent creates Mutagen sessions: `setup` records the pairing and waits for the session to
+  appear, since two creators racing left one name holding two identical sessions. The agent keeps one session per
+  name, terminating any extras, and recreates a session whose rules drifted once there are no conflicts left.
+- Symbolic links travel only where the device can create them ([`sync/symlinks.ts`](src/sync/symlinks.ts)). A
+  Windows PC without Developer Mode refuses every link, and Mutagen would try again on every cycle, so its sessions
+  use `--symlink-mode ignore`. Turning Developer Mode on brings them back at the agent's next start.
 - **Which computer this is** ([`machine-id.ts`](src/machine-id.ts)): a `machineId` minted once at install and kept
   in `~/.intentic/machine/machine-id`, sent in the connect-time facts, the sync report and the sync enrollment. The
   Windows side hands its own to the agent it starts in each distro, so every OS install of one PC answers with one id;

@@ -16,6 +16,7 @@ process.env["USERPROFILE"] = process.env["HOME"];
 const { runPidPath } = await import("../config.js");
 const {
     fetchWorkspacePorts,
+    markPrepared,
     pollBackoffMs,
     pollDue,
     reconcileForwards,
@@ -24,6 +25,7 @@ const {
     shouldAutoPauseFileSync,
     strandedForwards,
     SyncAuthError,
+    unpreparedSetups,
 } = await import("./mirror.js");
 const { readState, upsertPairing } = await import("./config.js");
 const { readResidentPid, runForeground, signalExitCode } = await import("../resident.js");
@@ -56,6 +58,40 @@ describe("failing-pairing backoff", () => {
         // Failing for a day: still probed, but not 240 times an hour.
         expect(pollDue({ since: now - 86_400_000, lastTried: now - 60_000 }, now)).toBe(false);
         expect(pollDue({ since: now - 86_400_000, lastTried: now - 5 * 60_001 }, now)).toBe(true);
+    });
+});
+
+// THE WATCHER IS THE ONLY THING THAT CREATES SESSIONS, so it has to notice every setup, including one made while it
+// runs. `setup` used to create the session itself while the agent it had just started prepared the same pairing, and
+// a user's PC ended up with two identical sessions for every folder.
+describe("unpreparedSetups", () => {
+    const pairing = { sandboxUrl: "https://s.example.dev", sandboxId: "sandbox-a", mode: "sync", localDir: "/home/u/a", syncToken: "t1" } as const;
+
+    it("prepares a pairing the watcher has not seen, and never the same setup twice", () => {
+        const prepared = new Set<string>();
+        expect(unpreparedSetups([pairing], prepared)).toEqual([pairing]);
+        markPrepared(prepared, pairing);
+        expect(unpreparedSetups([pairing], prepared)).toEqual([]);
+        // Re-read every tick with its ports and switches rewritten: still the same setup.
+        expect(unpreparedSetups([{ ...pairing, mirrorOff: true, mirroredPorts: [{ port: 5173, host: "127.0.0.1" }] }], prepared)).toEqual([]);
+    });
+
+    // Every `setup` mints a new token, so running it again (a takeover, a re-pair after an unpair) or pointing it at
+    // another folder is prepared again, and a session left on the old folder gets replaced.
+    it("prepares a pairing again once setup ran again or moved its folder", () => {
+        const prepared = new Set<string>();
+        markPrepared(prepared, pairing);
+        const again = { ...pairing, syncToken: "t2" };
+        const moved = { ...pairing, localDir: "/home/u/elsewhere" };
+        expect(unpreparedSetups([again], prepared)).toEqual([again]);
+        expect(unpreparedSetups([moved], prepared)).toEqual([moved]);
+    });
+
+    it("prepares a second pairing added while the first is already served", () => {
+        const prepared = new Set<string>();
+        markPrepared(prepared, pairing);
+        const second = { ...pairing, sandboxId: "sandbox-b", localDir: "/home/u/b", syncToken: "t3" };
+        expect(unpreparedSetups([pairing, second], prepared)).toEqual([second]);
     });
 });
 
