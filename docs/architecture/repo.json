@@ -42,6 +42,7 @@
                 "_shared/api-contract",
                 "_shared/capability-catalog",
                 "_shared/connector-runtime",
+                "_shared/contract-serve",
                 "_shared/extension-api",
                 "_shared/extension-manifest",
                 "_shared/extension-ui",
@@ -91,6 +92,7 @@
                 "_devices/browser",
                 "_devices/desktop-automation",
                 "_devices/local-agent",
+                "_devices/local-files",
                 "_devices/machine",
                 "_devices/webext",
                 "_devices/win-launcher"

@@ -1,12 +1,15 @@
 # desktop-app
 
-The Tauri app for Windows and Linux that sets up and runs an intentic sandbox on the user's own computer and opens the hosted workspace in its window.
+The Tauri app for Windows and Linux that sets up and runs an intentic sandbox on the user's own computer, opens the hosted workspace in its window, and opens the user's own folders and documents in windows of their own.
 
 ```mermaid
 flowchart LR
     spa["Workspace face<br/>hosted editor, no IPC"] -->|"intentic:// navigation"| app(["desktop-app<br/>Rust shell"])
     os["OS link handler<br/>browser, second launch"] -->|"intentic://"| app
     launcher["Launcher face<br/>src/ Vue bundle"] -->|"Tauri commands"| app
+    local["Local windows<br/>the editor on a folder"] -->|"intentic://window, local"| app
+    app -->|"stdin: grants"| files["intentic-files<br/>sidecar"]
+    local -->|"HTTP on loopback, token"| files
     app -->|"spawns"| scripts["Staged scripts<br/>connect, sync, recreate"]
     app -->|"list --json"| ic(["ic"])
     scripts --> ic
@@ -37,8 +40,23 @@ flowchart LR
   deb and rpm installs cannot replace themselves and link to the download page instead.
 - **Sign-in runs in the default browser**, because Google refuses OAuth inside an embedded webview. The credential
   returns over `intentic://auth`.
-- A launch opens the workspace, unless a setup is parked across a Windows restart or a machine that hosts a sandbox
-  has no Docker engine listening. Then the launcher opens first (`opening` in `src-tauri/src/lib.rs`).
+- A launch opens the workspace, unless a setup is parked across a Windows restart, a machine that hosts a sandbox
+  has no Docker engine listening, or this install has never shown the workspace. Then the launcher opens first
+  (`opening` in `src-tauri/src/lib.rs`), where Home leads with opening a folder or a file of this computer.
+- **Local windows.** A folder or a document opened from Home, the tray, a double-click ("Open with Intentic" on
+  documents, folders and the space inside one), a drop on Home or a second launch gets a window of its own
+  (`files-<n>`, `src-tauri/src/local.rs`). It shows the local face: the editor itself, built from
+  `_editor/web` into `dist/files/` (`vite.local.config.ts`, entered through `local/main.ts`), with its file reads
+  answered by the `intentic-files` sidecar ([local-files](../../_devices/local-files)) instead of a sandbox. The app
+  starts the sidecar, grants each window one folder by a random token on the sidecar's stdin, and revokes it when
+  the window closes. A local window holds no capability: every app command is a permission granted by name
+  (`build.rs`), and its only links are its own title bar and `local`. No sandbox, account or Docker is involved.
+- **A folder's own sandbox.** "Work on this with an agent" in a folder's window (`src-tauri/src/project.rs`) refuses
+  a disk, a home folder, a system folder and one inside or around a folder that already has a sandbox, says what
+  syncs and what stays, then parks the folder and opens the workspace's `/setup?project=<name>`. The code comes back
+  as `intentic://setup?…&project=<name>`, bound here to the parked folder (never to a path on the link), and the
+  setup runs with `SYNC_DIR` and `SYNC_REMOTE_DIR=/work/<name>`: the folder becomes a project inside the sandbox's
+  `/work`, synced both ways, and `projects.json` remembers it so opening the folder again reaches the same sandbox.
 
 ## The link surface
 
@@ -57,15 +75,19 @@ every link and drops what an outside sender may not ask for. The editor builds t
 | `recreate?slug=…[&hash=…][&rollback=1]` | app windows | Moves the sandbox to the `:stable` base, a pinned overlay, or its previous image. |
 | `update` | app windows | Installs the downloaded update and restarts. |
 | `launcher` | app windows | Brings the launcher face back. |
-| `window?do=…` | app windows | The editor's own title bar: `ready`, `minimize`, `maximize`, `close`, `drag`, `raise`, `fit`, `mode`. |
+| `window?do=…` | app and local windows | The editor's own title bar: `ready`, `minimize`, `maximize`, `close`, `drag`, `raise`, `fit`, `mode`. |
+| `local?do=…[&path=…]` | local windows only | `open-folder` and `open-file` in the system dialog, `reveal` an entry of the window's own folder. |
+
+A local window is heard on those two links and nothing else: never a setup, a sync, a recreate or a sign-in, since it
+draws documents nobody vouched for (`Source::Files` in `setup_link.rs`).
 
 ## Key files
 
 - [src-tauri/src/lib.rs](src-tauri/src/lib.rs) — startup: plugins, the command list, the tray and what a launch opens onto.
 - [src-tauri/src/setup_link.rs](src-tauri/src/setup_link.rs) — every `intentic://` link and which senders it is believed from.
 - [src-tauri/src/commands.rs](src-tauri/src/commands.rs) — the Tauri commands the launcher calls, and the script each run starts.
+- [src-tauri/src/local.rs](src-tauri/src/local.rs) — the local windows: the sidecar's lifetime, each window's grant, launch arguments.
 - [src/App.vue](src/App.vue) — the launcher face: a handed-over setup, requirements, Docker, this device's sandboxes and sync.
-- [src/desktop.ts](src/desktop.ts) — typed wrappers over the Rust commands and run events.
 - [src-tauri/tauri.conf.json](src-tauri/tauri.conf.json) — bundle targets, updater endpoint and the deep-link scheme.
 
 ## Building
@@ -77,6 +99,7 @@ release artifacts.
 
 ```sh
 pnpm --filter @intentic/desktop-app tauri:dev        # launcher on :47146, workspace from INTENTIC_APP_URL
+pnpm --filter @intentic/desktop-app dev:local        # the local face on :47147, proxied under the launcher's /files
 pnpm --filter @intentic/desktop-app check:rust       # rustfmt, clippy, cargo test
 pnpm --filter @intentic/desktop-app stage:downloads  # local installers into _site/site/public/desktop/
 ```

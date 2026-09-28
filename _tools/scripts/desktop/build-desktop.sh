@@ -190,6 +190,13 @@ if [ "$ASSEMBLE" -eq 0 ]; then
     # for both bundle passes — and a release that stages nothing would bundle a directory that is empty or a
     # release older than this build.
     bash "$ROOT/_tools/scripts/desktop/stage-desktop-scripts.sh"
+    # The local files sidecar for every target this run bundles, and the ONLYOFFICE page it serves
+    # (stage-local-files.sh): tauri-build refuses to bundle an `externalBin` that is not there.
+    if [ "$WINDOWS_ONLY" -eq 1 ]; then
+        INTENTIC_VERSION="$VERSION" bash "$ROOT/_tools/scripts/desktop/stage-local-files.sh" x86_64-pc-windows-msvc
+    else
+        INTENTIC_VERSION="$VERSION" bash "$ROOT/_tools/scripts/desktop/stage-local-files.sh" "$(rustc -vV | sed -n 's/^host: //p')" x86_64-pc-windows-msvc
+    fi
     # The launcher UI, once. tauri.conf.json's beforeBuildCommand would build it per `tauri build` invocation, and
     # this script invokes tauri twice against ONE frontendDist — so the Windows pass re-ran vue-tsc + vite over
     # bytes the Linux pass had already produced (34s + 14s, release job 15686372011). Built here instead, and

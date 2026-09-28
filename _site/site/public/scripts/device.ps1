@@ -61,9 +61,11 @@ function Get-IntenticAgentVersion {
 
 # WHETHER THE INSTALLED AGENT UNDERSTANDS THE HANDOVER, asked by running its help rather than by reading its
 # version: `<route> setup --help` prints a usage screen and exits 0 on an agent that has the route, exits
-# non-zero on one that does not, and connects nothing either way.
+# non-zero on one that does not, and connects nothing either way. Every one of -Flags has to be on that screen
+# too: an agent older than one of them refuses the whole handover over it ("No flag registered"). The
+# embedding script passes the flags its handover uses that are newer than the route, and none otherwise.
 #
-# Assigned to $null rather than redirected, and the assignment is doing two jobs: it keeps the usage screen
+# Assigned to a variable rather than redirected, and the assignment is doing two jobs: it keeps the usage screen
 # off the user's screen, and it keeps the function's return value a plain boolean instead of the help text
 # plus a boolean. Silencing the older agent's complaint instead would need a stderr redirection, which no
 # .ps1 here may hold while $ErrorActionPreference = 'Stop' is in force - on Windows PowerShell 5.1 that pair
@@ -71,10 +73,15 @@ function Get-IntenticAgentVersion {
 # detect (src-tauri/src/scripts.rs holds that line for every bundled script). So the one line such an agent
 # writes stays visible, which is no loss: it is the truth, and the line after it says what is being done.
 function Test-IntenticAgentSpeaks {
-    param([string]$Path, [string]$Route)
+    param([string]$Path, [string]$Route, [string[]]$Flags = @())
     try {
-        $null = & $Path $Route setup --help
-        return $LASTEXITCODE -eq 0
+        $help = & $Path $Route setup --help
+        if ($LASTEXITCODE -ne 0) { return $false }
+        $said = "$help"
+        foreach ($flag in $Flags) {
+            if (-not $said.Contains($flag)) { return $false }
+        }
+        return $true
     } catch {
         return $false
     }

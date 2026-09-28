@@ -4,6 +4,7 @@ import { unstubbed } from "@intentic/testing";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { computed, type EffectScope, effectScope, ref } from "vue";
 import { sandboxSummary } from "../../../testing/sandboxSummary";
+import { setupProjectOf } from "../setupArrival";
 import { ladderOptionsOf } from "./machineLadder";
 import { type CommandLaneHost, useCommandLane } from "./useCommandLane";
 import { type HostedLaneHost, useHostedLane } from "./useHostedLane";
@@ -20,6 +21,8 @@ interface World {
     readonly address?: AddressOffer | Error;
     readonly inApp?: boolean;
     readonly query?: Record<string, string>;
+    // `?project=`, which the page reads ahead of every lane and hands to each.
+    readonly project?: string;
 }
 
 const scopes: EffectScope[] = [];
@@ -45,12 +48,14 @@ const stage = (world: World = {}) => {
     const runHere = jest.fn(() => undefined);
     const warmCredential = jest.fn(async () => undefined);
     const route = { query: world.query ?? {} };
+    const project = setupProjectOf(world.project);
     const scope = effectScope();
     scopes.push(scope);
     const flow = scope.run(() => {
         const row = useSetupRow({
             sandbox: unstubbed<SetupRowHost[`sandbox`]>(`sandbox`, { sandboxes: ref([]), create, select, remove: jest.fn(async () => undefined) }),
             enter: jest.fn(async () => undefined),
+            name: project?.name,
         });
         const hosted = useHostedLane({
             platform: unstubbed<HostedLaneHost[`platform`]>(`platform`, { hostedOffer: platform.hostedOffer }),
@@ -66,7 +71,7 @@ const stage = (world: World = {}) => {
         });
         const ladder = computed(() =>
             ladderOptionsOf({
-                hostedOffered: hosted.hostedOffered.value,
+                hostedOffered: hosted.hostedOffered.value && project === undefined,
                 hostedFull: hosted.hostedFull.value,
                 hostedSuspended: hosted.hostedSuspended.value,
                 plan: false,
@@ -82,6 +87,7 @@ const stage = (world: World = {}) => {
             hosted,
             command,
             route,
+            project: project !== undefined,
             inApp: ref(world.inApp ?? false),
             ladder,
             warmCredential,
@@ -159,6 +165,35 @@ describe(`the app's arrival`, () => {
         hostedRelease.mockRejectedValueOnce(new Error(`network`));
         await arrival.readArrival();
         expect({ machine: hosted.machine.value, arrival: arrival.arrival.value }).toEqual({ machine: `hosted`, arrival: `choose` });
+    });
+});
+
+// The app opened this page for a folder the reader picked: whatever else the account runs, the sandbox is made for that
+// folder, named after it, and handed to the app on this computer.
+describe(`a project's arrival`, () => {
+    it(`names the sandbox it makes after the folder, and hands it to the app beside another sandbox`, async () => {
+        const live = sandboxSummary({ id: `live`, token: `tok`, lastSeenAt: `2026-09-23T10:00:00Z` });
+        const { create, runHere, arrival } = stage({ rows: [live], inApp: true, project: `My App` });
+        await arrival.readArrival();
+        await advanceTimersByTimeAsync(500);
+        expect(create.mock.calls).toEqual([[`My App`]]);
+        expect({ arrival: arrival.arrival.value, handedOff: runHere.mock.calls.length }).toEqual({ arrival: `local`, handedOff: 1 });
+    });
+
+    it(`starts no machine of ours from a browser, where the folder's link reaches the app instead`, async () => {
+        const { hostedProvision, runHere, hosted, arrival } = stage({ project: `My App` });
+        await arrival.readArrival();
+        await advanceTimersByTimeAsync(500);
+        expect(hostedProvision).not.toHaveBeenCalled();
+        expect({ machine: hosted.machine.value, handedOff: runHere.mock.calls.length }).toEqual({ machine: `mine`, handedOff: 1 });
+    });
+
+    it(`keeps the name of a row it found rather than made`, async () => {
+        const found = sandboxSummary({ id: `s1`, name: `workspace`, token: `tok` });
+        const { create, row, arrival } = stage({ rows: [found], query: { sandbox: `s1` }, inApp: true, project: `My App` });
+        await arrival.readArrival();
+        expect(create).not.toHaveBeenCalled();
+        expect(row.created.value?.name).toBe(`workspace`);
     });
 });
 

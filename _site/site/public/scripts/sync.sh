@@ -20,6 +20,10 @@
 #   PAIR_TOKEN   the one-time pairing token from the card (single-use, expires in ~10 min).
 # Optional env:
 #   SYNC_DIR     local folder to sync (default: ~/intentic/<id>, the same id the sandbox's own URL carries)
+#   SYNC_REMOTE_DIR  the sandbox folder it syncs with: /work (the default), or /work/<name> for a project
+#                folder of your own, which also needs SYNC_PROJECT.
+#   SYNC_PROJECT any non-empty value (the desktop app sends 1): SYNC_DIR is your own project, synced into
+#                SYNC_REMOTE_DIR with no sandbox state backup and no git bridge writing into it.
 #   TAKEOVER     any non-empty value takes over sync from another machine already enrolled on this sandbox.
 #   AGENT_BIN    run THIS agent command instead of the installed one — for local dev / dogfooding an
 #                unreleased build, e.g. AGENT_BIN="node /path/to/intentic/_devices/machine/dist/cli.js".
@@ -28,6 +32,8 @@ set -eu
 URL="${SANDBOX_URL:-}"
 PAIR="${PAIR_TOKEN:-}"
 DIR="${SYNC_DIR:-}"
+REMOTE_DIR="${SYNC_REMOTE_DIR:-}"
+PROJECT="${SYNC_PROJECT:-}"
 if [ -z "$URL" ] || [ -z "$PAIR" ]; then
     echo "error: SANDBOX_URL and PAIR_TOKEN are required (copy the command from the Desktop sync card)." >&2
     exit 1
@@ -55,6 +61,12 @@ esac
 # block below probes for it and the handover at the bottom makes it, so the two can never disagree.
 ROUTE="sync"
 
+# THE HANDOVER'S NEWER WORDS: the flags below that an agent older than them refuses outright, so the bootstrap
+# block replaces an installed agent whose `setup --help` does not list them. Empty for an ordinary folder.
+SPEAKS=""
+[ -n "$REMOTE_DIR" ] && SPEAKS="--remote-dir"
+[ -n "$PROJECT" ] && SPEAKS="$SPEAKS --project"
+
 # ---- bootstrap the agent binary (identical in device.sh and sync.sh: standalone `curl | sh` files, no shared code) ----
 #
 # Only when this machine has no agent that can take the handover: one that can skips straight to `setup`,
@@ -79,16 +91,25 @@ if [ -z "$BIN" ]; then
 
     # Does the agent at $1 understand the handover this script is about to make? `<route> setup --help`
     # prints a usage screen and exits 0 on an agent that has the route, non-zero on one that does not, and
-    # connects nothing either way. $ROUTE is the one input the embedding script gives this block.
+    # connects nothing either way. Every flag in $3 has to be on that screen too: an agent older than one of
+    # them refuses the whole handover over it ("No flag registered"). $ROUTE and $SPEAKS (the flags, empty
+    # when the handover passes none newer than the route) are the inputs the embedding script gives this block.
     agent_speaks() {
-        ("$1" "$2" setup --help >/dev/null 2>&1)
+        help="$( ("$1" "$2" setup --help) 2>/dev/null)" || return 1
+        # shellcheck disable=SC2086 — $3 is a list of flags, split on purpose.
+        for flag in $3; do
+            case "$help" in
+                *"$flag"*) ;;
+                *) return 1 ;;
+            esac
+        done
     }
 
     have="$(agent_version "$dest")"
     usable=no
     case "$have" in
         [0-9]*.[0-9]*.[0-9]*)
-            if agent_speaks "$dest" "$ROUTE"; then
+            if agent_speaks "$dest" "$ROUTE" "${SPEAKS:-}"; then
                 usable=yes # whether it also UPDATES is `setup`'s decision, not this file's
             else
                 echo "The agent installed here ($have) doesn't understand \`$ROUTE setup\` — replacing it."
@@ -146,6 +167,8 @@ fi
 
 set -- "$ROUTE" setup --url "$URL" --pair "$PAIR"
 [ -n "$DIR" ] && set -- "$@" --dir "$DIR"
+[ -n "$REMOTE_DIR" ] && set -- "$@" --remote-dir "$REMOTE_DIR"
+[ -n "$PROJECT" ] && set -- "$@" --project
 [ -n "${TAKEOVER:-}" ] && set -- "$@" --takeover
 # BIN may be a multi-word AGENT_BIN dev command (intentional word-split); a real path runs directly.
 # shellcheck disable=SC2086

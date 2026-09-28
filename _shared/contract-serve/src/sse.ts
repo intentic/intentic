@@ -25,7 +25,7 @@ export const eventStream = <T>(request: Request, start: (sink: StreamSink<T>) =>
                 try {
                     controller.enqueue(encoder.encode(text));
                 } catch {
-                    // Consumer went away between the check and the enqueue; the abort listener cleans up.
+                    // allow(silent-catch): the consumer went away between the check and the enqueue; the abort listener cleans up.
                 }
             };
             const sink: StreamSink<T> = {

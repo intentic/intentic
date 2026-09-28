@@ -27,10 +27,15 @@ const PLAIN_PATTERN = /^[^/*?[\]!\\]+$/;
 // walk still prunes there and costs nothing.
 const REPOSITORY = ".git";
 
+// SECRETS ARE NOT BUILD OUTPUT EITHER, though the session ignores them too: they stay off the wire because they are
+// private (ssh.ts IGNORES: `.env`, `.env.local`, the credential files), not because a build writes them again. A folder
+// holding one is never residue, so the patterns that name them are not taught here, whichever build made the session.
+const isPrivateName = (name: string): boolean => name.startsWith(".env") || name === ".secrets.json" || name === "claude.json";
+
 export const ignoreMatcher = (patterns: readonly string[]): ((path: string) => boolean) => {
     const anywhere = new Set<string>();
     const atRoot = new Set<string>();
-    for (const pattern of patterns) {
+    for (const pattern of patterns.filter((candidate) => !isPrivateName(candidate.replace(/^\//, "")))) {
         if (PLAIN_PATTERN.test(pattern)) {
             anywhere.add(pattern);
         } else if (pattern.startsWith("/") && PLAIN_PATTERN.test(pattern.slice(1))) {

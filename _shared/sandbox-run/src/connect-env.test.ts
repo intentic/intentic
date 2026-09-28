@@ -8,10 +8,11 @@ import { REPLAY_ENV } from "./index.js";
 
 const connectSource = readFileSync(join(repoRoot(import.meta.url), "_sandbox/ic/src/sandbox/connect.rs"), "utf8");
 
-// The env pairs connect.rs frames for `sandbox run-command`: the ("KEY", value) tuples of its nul_frame call.
+// The env pairs connect.rs frames for `sandbox run-command`: the ("KEY", value) tuples of its nul_frame call, including
+// the ones rustfmt breaks over several lines.
 const rustKeys = (): Set<string> => {
     const block = /nul_frame\(&\[([\s\S]*?)\]\)/.exec(connectSource)?.[1] ?? "";
-    return new Set([...block.matchAll(/\("([A-Z_]+)"/g)].map((match) => match[1] ?? ""));
+    return new Set([...block.matchAll(/\(\s*"([A-Z_]+)"/g)].map((match) => match[1] ?? ""));
 };
 
 // Capabilities that fail silently when missing; nothing here makes the sandbox refuse to start.
@@ -48,6 +49,14 @@ describe("ic sandbox connect env", () => {
     it("requires nothing the run contract would not replay", () => {
         const replayed: readonly string[] = REPLAY_ENV;
         expect(REQUIRED.filter((key) => !replayed.includes(key))).toEqual([]);
+    });
+
+    // A project sandbox's folder is what the sandbox is: dropped by a recreate, the daemon would seed a starter beside it.
+    it("passes a project sandbox's folder, broken over lines as rustfmt leaves it", () => {
+        expect([...keys].filter((key) => key === "SANDBOX_PROJECT_DIR" || key === "AGENT_AUTH_DIR").toSorted()).toEqual([
+            "AGENT_AUTH_DIR",
+            "SANDBOX_PROJECT_DIR",
+        ]);
     });
 
     it("passes only keys the run contract replays, so a recreate keeps them", () => {

@@ -509,7 +509,6 @@
     "_shared/sandbox-contract/src/time/zone.ts": 1,
     "_site/astro-integrations/src/git-lastmod.mjs": 1,
     "_site/astro-integrations/src/git-stats.mjs": 1,
-    "_site/demo/src/sse.ts": 1,
     "_site/demo/src/transport.ts": 1,
     "_site/site/scripts/source-first.mjs": 1,
     "_site/site/scripts/submit-indexnow.mjs": 2,

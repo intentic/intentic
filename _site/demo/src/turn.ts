@@ -3,7 +3,7 @@ import { isTurnFact } from "@intentic/sandbox-contract";
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { DESK_FEATURED_ID, OCTOBER_AFTER, OCTOBER_BEFORE } from "./fixture/desk";
 import { CHECKOUT_LIB_AFTER, CHECKOUT_LIB_BEFORE, CHECKOUT_ROUTE } from "./fixture/workspace";
-import type { StreamSink } from "./sse";
+import type { StreamSink } from "@intentic/contract-serve";
 
 // `/agent/attach`: rows on the head, then every patch and fact as it lands, folded by the same function the daemon uses
 // (transcript-fold.ts) over a scripted `AgentEvent` sequence instead of a real agent. `plan` and `question` frames park

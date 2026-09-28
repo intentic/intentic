@@ -41,6 +41,23 @@ test("flags ride only when set, and a folder never does", async () => {
     expect(full.searchParams.get(`mirror`)).toBe(`1`);
 });
 
+/* A project setup names where the app's own folder lands in the sandbox; a folder the page made up never rides beside it. */
+test("the setup link carries a project in place of a sync folder, and a blank one not at all", async () => {
+    const { desktopSetupLink } = await load();
+    const project = new URL(desktopSetupLink({ code: `abc`, sandboxId: `sbx_7`, name: `My App`, project: `My-App`, syncDir: `~/intentic/my-app-7` }));
+    expect([...project.searchParams]).toEqual([
+        [`code`, `abc`],
+        [`sandbox`, `sbx_7`],
+        [`name`, `My App`],
+        [`project`, `My-App`],
+    ]);
+    const blank = new URL(desktopSetupLink({ code: `abc`, project: ``, syncDir: `~/intentic/work-7` }));
+    expect([...blank.searchParams]).toEqual([
+        [`code`, `abc`],
+        [`syncDir`, `~/intentic/work-7`],
+    ]);
+});
+
 /* The app's progress announcement, read back off a detail that crossed a process boundary: the fields the strip draws survive. */
 test("a setup report is read back with its figures and without anything unexpected", async () => {
     const { readDesktopSetupReport } = await load();

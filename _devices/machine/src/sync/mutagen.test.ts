@@ -9,6 +9,8 @@ import {
     parseOrphanForwardNames,
     parseOrphanSyncNames,
     sessionName,
+    strayBackupSessions,
+    syncSessionNames,
 } from "./mutagen.js";
 
 // `sync uninstall` stops and unregisters Mutagen's daemon only when it is this agent's own copy: a user's own install,
@@ -118,6 +120,28 @@ describe("parseOrphanSyncNames", () => {
     it("has nothing to retire on a first pairing", () => {
         expect(parseOrphanSyncNames("", [first])).toEqual([]);
         expect(parseOrphanSyncNames(first, [first])).toEqual([]);
+    });
+});
+
+// A project folder is the owner's own, so a state backup writing into it is surplus whoever created it, and the one
+// thing retired; a workspace pairing's backup is never touched, and nothing is retired that does not exist.
+describe("strayBackupSessions", () => {
+    const project = { sandboxId: "sandbox-first.example.dev", project: true as const };
+    const backup = `${sessionName(project.sandboxId)}-state`;
+
+    it("names a project pairing's live state backup", () => {
+        expect(strayBackupSessions(project, [backup])).toEqual([backup]);
+    });
+
+    it("leaves a workspace pairing's backup alone, and names nothing when none runs", () => {
+        expect(strayBackupSessions({ sandboxId: project.sandboxId }, [backup])).toEqual([]);
+        expect(strayBackupSessions(project, [])).toEqual([]);
+    });
+
+    it("keeps a project pairing's session names to its one session, so the orphan sweep retires the backup too", () => {
+        expect(syncSessionNames(project)).toEqual([sessionName(project.sandboxId)]);
+        expect(parseOrphanSyncNames(`${sessionName(project.sandboxId)} ${backup}`, syncSessionNames(project))).toEqual([backup]);
+        expect(syncSessionNames({ sandboxId: project.sandboxId })).toEqual([sessionName(project.sandboxId), backup]);
     });
 });
 

@@ -1,5 +1,6 @@
 import { plural } from "@intentic/base/format";
-import type { DeviceScopes, DeviceConflict, DeviceConflictChange, DevicePort, DeviceReport } from "@intentic/sandbox-contract";
+import { WORKSPACE_ROOT } from "@intentic/constants";
+import type { DeviceScopes, DeviceConflict, DeviceConflictChange, DevicePairing, DevicePort, DeviceReport } from "@intentic/sandbox-contract";
 import type { PeerLinkState } from "@intentic/sandbox-contract/peer-dial";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { agentBuildSkew, agentStalled } from "@intentic/sandbox-contract";
@@ -122,6 +123,11 @@ const portLine = (port: DevicePort): string => {
     return `  localhost:${port.port}, NOT mirrored from ${port.sandboxId}: ${reason} (${what})`;
 };
 
+// The report carries a pairing's remote dir rather than its kind; the two only ever come together (config.ts
+// pairingProblem), so a folder under /work is a project pairing's, and it has no backup session to look for.
+const reportedKind = (pairing: DevicePairing): { readonly sandboxId: string; readonly project?: true } =>
+    pairing.remoteDir === undefined || pairing.remoteDir === WORKSPACE_ROOT ? { sandboxId: pairing.sandboxId } : { sandboxId: pairing.sandboxId, project: true };
+
 // One pairing's line, pure and exported since every word of it has been wrong at least once. A count is
 // printed only when it IS a count: `conflicts` is absent whenever Mutagen has none (protobuf JSON omits an
 // empty list), never a number to interpolate. A missing session is shouted, not blanked.
@@ -133,8 +139,11 @@ const fileSyncState = (pairing: DeviceReport["pairings"][number]): (string | und
     pairing.paused === true ? "paused" : (pairing.mutagenStatus ?? "NO FILE-SYNC SESSION, this folder is not syncing"),
     pairing.conflicts === undefined || pairing.conflicts === 0 ? undefined : plural(pairing.conflicts, "conflict"),
     // The backup's own word, shouted when missing for the same reason as the line above: the value of this session
-    // is being there on the day the sandbox is not, and silent absence reads identically to healthy.
-    pairing.paused === true ? undefined : `backup ${pairing.backupStatus ?? "NOT RUNNING, this sandbox's own state is not being copied here"}`,
+    // is being there on the day the sandbox is not, and silent absence reads identically to healthy. A project folder
+    // has none to miss.
+    pairing.paused === true || reportedKind(pairing).project === true
+        ? undefined
+        : `backup ${pairing.backupStatus ?? "NOT RUNNING, this sandbox's own state is not being copied here"}`,
 ];
 
 // The stuck paths themselves, printed under the line that counts them: the count is a symptom, the paths are
@@ -185,7 +194,8 @@ export const conflictLines = (pairing: DeviceReport["pairings"][number]): string
 };
 
 export const pairingLine = (pairing: DeviceReport["pairings"][number]): string => {
-    const where = pairing.mode === "sync" ? (pairing.localDir ?? "(no folder)") : "(ports only)";
+    const folder = pairing.localDir ?? "(no folder)";
+    const where = pairing.mode === "sync" ? (reportedKind(pairing).project === true ? `${folder} ↔ ${pairing.remoteDir}` : folder) : "(ports only)";
     const state = [
         // Mirroring being off is stated on both modes and loudly, since it is a switch somebody threw and its only
         // other evidence (an empty port list) is identical to a sandbox serving nothing. Absent means on.
@@ -316,12 +326,12 @@ const printMutagen = (mutagen: string, report: DeviceReport, out: (message: stri
         out("File sync:");
         // Both of a pairing's sessions: the workspace and the state backup that rides beside it. Listing only the
         // first would report a healthy sync while the backup was not running at all.
-        const wanted = syncing.flatMap((pairing) => syncSessionNames(pairing.sandboxId));
+        const wanted = syncing.flatMap((pairing) => syncSessionNames(reportedKind(pairing)));
         const live = new Set(existingSyncSessions(mutagen, wanted));
         if (live.size > 0) {
             runMutagen(mutagen, ["sync", "list", ...wanted.filter((name) => live.has(name))]);
         }
-        for (const pairing of syncing.filter((held) => !syncSessionNames(held.sandboxId).every((name) => live.has(name)))) {
+        for (const pairing of syncing.filter((held) => !syncSessionNames(reportedKind(held)).every((name) => live.has(name)))) {
             out(
                 `  ${pairing.sandboxId}: no file-sync session exists on this machine, ${pairing.localDir ?? "its folder"} is NOT syncing. The agent retries every few minutes; if it stays this way the sandbox is unreachable (check ${runLogPath}).`,
             );

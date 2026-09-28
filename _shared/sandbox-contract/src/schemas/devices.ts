@@ -374,6 +374,9 @@ export const DevicePairingSchema = z.object({
     mode: z.enum(["sync", "mirror"]),
     // Set only for mode "sync", and only for the sandbox being reported to.
     localDir: z.string().optional(),
+    // Which sandbox folder `localDir` holds when it is not /work itself: a project pairing's `/work/<name>`, the
+    // owner's own folder, which carries no state backup and no git bridge. Absent means /work.
+    remoteDir: z.string().optional(),
     // Machine-owned switch (agent's own `sync mirror off`); absent reads as "on", not merely unknown.
     mirroring: z.enum(["on", "off"]).optional(),
     // Mutagen's own status word, kept verbatim rather than reduced to a traffic light.

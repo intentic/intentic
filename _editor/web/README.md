@@ -39,7 +39,9 @@ flowchart LR
   device row's card is its own `card`, never parsed out of its key.
 - **Routes.** `/login` and `/setup` sit outside the shell. Everything else lives under `/` in
   `WorkspaceShell.vue`, guarded by `requireAuth` and `requireSetup`, which renders `ShellDesktop.vue` (rail, docked
-  chat and terminal) or `ShellMobile.vue` (tab bar, full-screen views).
+  chat and terminal) or `ShellMobile.vue` (tab bar, full-screen views). A link naming a sandbox (`/?sandbox=<id>`, the
+  desktop app's) opens the shell on it if the account lists it, and the id leaves the address either way
+  (`router/sandboxArrival.ts`).
 - **Extensions.** `src/extension-host/loader.ts` activates what the daemon lists. First-party extensions are compiled
   in (`builtins.ts`); the rest arrive from the daemon as single-file ESM bundles imported from a Blob URL.
   `hostModules.ts` and `public/ext-shims/` hand every bundle the app's own `vue`, vue-query and

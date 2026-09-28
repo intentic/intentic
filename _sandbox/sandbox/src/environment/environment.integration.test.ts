@@ -66,6 +66,7 @@ const stubServices = (environmentHashApplied = "", capabilities: Capability[] = 
                 definitionSeed: "",
                 devRoot: undefined,
                 prewarm: false,
+                projectDir: "",
             },
             extensionsDir: EXTENSIONS_DIR,
             // Read by the provider-pack fragment source (codexConnected) on every compose, empty: no provider.

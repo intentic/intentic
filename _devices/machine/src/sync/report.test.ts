@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { PortSummary } from "@intentic/sandbox-contract";
 import type { Pairing, SyncState } from "./config.js";
 import { skippedPortsOf } from "./mirror.js";
@@ -22,6 +23,20 @@ describe("buildReport", () => {
         // `mirroring: "on"` is stated even untouched, since an absent port list would otherwise mean both "off" and
         // "nothing listening".
         expect(built.pairings).toEqual([{ sandboxId: "work", mode: "sync", localDir: "/home/me/intentic/work", mirroring: "on" }]);
+    });
+
+    // A project pairing says which sandbox folder its local one holds; every other pairing says nothing, which is /work.
+    it("names the sandbox folder a project pairing syncs, and only for that pairing", () => {
+        const built = report({
+            pairings: [
+                pairing({ sandboxId: "work", localDir: "/home/me/intentic/work" }),
+                pairing({ sandboxId: "app", localDir: "/home/me/code/app", remoteDir: `${WORKSPACE_ROOT}/app`, project: true }),
+            ],
+        });
+        expect(built.pairings).toEqual([
+            { sandboxId: "work", mode: "sync", localDir: "/home/me/intentic/work", mirroring: "on" },
+            { sandboxId: "app", mode: "sync", localDir: "/home/me/code/app", remoteDir: "/work/app", mirroring: "on" },
+        ]);
     });
 
     // Off, this device reports no ports for that sandbox, identical to a sandbox serving nothing; the mirroring state

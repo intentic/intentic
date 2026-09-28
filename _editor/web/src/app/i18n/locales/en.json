@@ -1787,6 +1787,17 @@
             "changesPending": "changes pending"
         }
     },
+    "local": {
+        "localFiles": {
+            "toggleFolder": "Show or hide the folder",
+            "openFolder": "Open another folder",
+            "reveal": "Show in your file manager",
+            "withAgent": "Work on this with an agent",
+            "withAgentHint": "Creates a sandbox that keeps this folder in sync, so agents can work on it",
+            "openSandbox": "Open this folder's sandbox",
+            "openSandboxHint": "Opens the workspace on the sandbox this folder syncs with, starting it if it is stopped"
+        }
+    },
     "needs": {
         "inbox": {
             "title": "Needs you",
@@ -4164,7 +4175,8 @@
             "whatDoes": "What this does"
         },
         "setupSyncOption": {
-            "alsoSyncLocalFolder": "Also sync a local folder"
+            "alsoSyncLocalFolder": "Also sync a local folder",
+            "syncsWithFolderYouPicked": "Syncs live with the folder you picked"
         },
         "words": {
             "useLettersNumbersHyphens": "Use letters, numbers and hyphens only."

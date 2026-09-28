@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { stubEnv } from "@intentic/testing/bun";
 
-import type { SandboxMetrics } from "@intentic/sandbox-contract";
+import { type Hello, projectRemoteDir, type SandboxMetrics } from "@intentic/sandbox-contract";
 import { createApp } from "../app.js";
 
 import { createLogger } from "../logger.js";
@@ -19,6 +19,7 @@ import { rejectAuth } from "../auth/auth-slice.testing.js";
 import { fakeFiles } from "../workspace/workspace-slice.testing.js";
 import { fakeProcesses } from "../processes/processes-slice.testing.js";
 import { services } from "../harness/route-services.testing.js";
+import { memoryAreasStore } from "../harness/route-stores.testing.js";
 import { HOST_PEER } from "../hosts/host-peer.js";
 import { filePeerStore } from "../peers/peer-store.js";
 import { MAX_BACKLOG_FRAMES } from "../seams/frame-backlog.js";
@@ -324,6 +325,50 @@ test("events: the hello names the daemon's build and where its boot is, then str
     boot.finish();
     expect(await nextBoot()).toMatchObject({ ready: true });
     controller.abort();
+});
+
+// The first frame of a fresh /events connection, which is always the hello.
+const helloFrom = async (client: ReturnType<typeof clientFor>): Promise<Hello> => {
+    const controller = new AbortController();
+    const stream = await client.system.events({}, { signal: controller.signal });
+    const { value, done } = await stream[Symbol.asyncIterator]().next();
+    controller.abort();
+    if (done === true || value.kind !== "hello") {
+        throw new Error(`expected a hello frame first, got ${done === true ? "stream end" : value.kind}`);
+    }
+    return value;
+};
+
+// testConfig's workspace root is the container's own, so this reads as `ic` hands it over.
+const projectConfig = { ...testConfig, sandbox: { ...testConfig.sandbox, projectDir: projectRemoteDir("my-app") } };
+
+// The browser opens a project sandbox on the owner's folder from its first frame, before any route answers.
+test("events: a project sandbox's hello names its folder, workspace-relative, and any other sandbox's names none", async () => {
+    expect(await helloFrom(clientFor(createApp(services({ config: projectConfig }))))).toMatchObject({ kind: "hello", projectDir: "my-app" });
+    expect(Object.keys(await helloFrom(clientFor(createApp(services()))))).toEqual(["kind", "workspaceId", "routes", "shapes", "build", "boot"]);
+});
+
+// A fence withholds a folder it does not reach, as it withholds any repository's name; one on the way down to a held
+// folder still reaches it, since the project explains what changes inside the part that is theirs.
+test("events: a fenced member's hello names the project folder only when their fence reaches it", async () => {
+    let areas: readonly string[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                config: projectConfig,
+                auth: { authorize: async () => proven("dee@example.com", "writer", ["google"], areas), authorizeOwner: rejectForbidden },
+                areas: memoryAreasStore([
+                    { id: "support", folders: ["support"] },
+                    { id: "frontend", folders: ["my-app/src"] },
+                ]),
+            }),
+        ),
+        { bearer: "member" },
+    );
+    areas = ["support"];
+    expect(Object.keys(await helloFrom(client))).not.toContain("projectDir");
+    areas = ["frontend"];
+    expect(await helloFrom(client)).toMatchObject({ kind: "hello", projectDir: "my-app" });
 });
 
 // On the contract like the doors it leads to, so the daemon advertises its shape and a browser reading a field this

@@ -47,6 +47,8 @@
                     "__POSTHOG_KEY__",
                     "__intentic",
                     "__INTENTIC_DESKTOP__",
+                    // What the desktop app's init script hands a window on a local folder (src-tauri/src/local.rs).
+                    "__INTENTIC_LOCAL__",
                     "__termFrames",
                     "__name",
                     "_core",

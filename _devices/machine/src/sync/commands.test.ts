@@ -1,7 +1,8 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { DEV_VERSION, type DevicePairing, type DeviceReport, AGENT_STALL_AFTER_MS, DeviceScopesSchema } from "@intentic/sandbox-contract";
 import { stubGlobal } from "@intentic/testing/bun";
 import { agentLine, buildSkewLine, conflictLines, linkLine, pairingLine, statusSummary } from "../status.js";
-import { enrollKey, selectPairings, syncSwitchPlan } from "./commands.js";
+import { enrollKey, placementChange, placementOf, projectAskedWithoutFlag, selectPairings, syncSwitchPlan } from "./commands.js";
 import type { Pairing, SyncState } from "./config.js";
 import { syncSessionNames } from "./mutagen.js";
 
@@ -113,6 +114,68 @@ describe("selectPairings", () => {
     });
 });
 
+// The two flags that place a folder, refused before enrollment spends the pairing token when they disagree.
+// The skew that would sync a sandbox's whole /work into someone's own folder: ic asked for a project in the environment,
+// and an install script older than this agent enrolled it without the flag.
+describe("projectAskedWithoutFlag", () => {
+    it("refuses a project the environment asked for and the flags do not carry", () => {
+        expect(projectAskedWithoutFlag({ project: false }, { SYNC_PROJECT: "1" })).toContain("did not pass --project");
+        expect(projectAskedWithoutFlag({ project: false }, { SYNC_REMOTE_DIR: "/work/my-app" })).toContain("did not pass --project");
+    });
+
+    it("lets through a project the flags carry, and an ordinary setup", () => {
+        expect(projectAskedWithoutFlag({ project: true }, { SYNC_PROJECT: "1", SYNC_REMOTE_DIR: "/work/my-app" })).toBeUndefined();
+        expect(projectAskedWithoutFlag({ project: false }, {})).toBeUndefined();
+        expect(projectAskedWithoutFlag({ project: false }, { SYNC_REMOTE_DIR: "/work" })).toBeUndefined();
+    });
+});
+
+describe("placementOf", () => {
+    it("stores nothing for /work, whether it was spelled out or left to the default", () => {
+        expect(placementOf({ project: false })).toEqual({});
+        expect(placementOf({ remoteDir: "/work", project: false })).toEqual({});
+    });
+
+    it("places a project in its own folder under /work", () => {
+        expect(placementOf({ remoteDir: "/work/my-app", project: true })).toEqual({ remoteDir: "/work/my-app", project: true });
+    });
+
+    it("refuses a project with no folder of its own, which would sync the whole workspace into it", () => {
+        expect(() => placementOf({ project: true })).toThrow("--project needs --remote-dir /work/<name>");
+        expect(() => placementOf({ remoteDir: "/work", project: true })).toThrow("--project needs --remote-dir /work/<name>");
+    });
+
+    it("refuses a project folder without --project, which would bring the state backup and git bridge into it", () => {
+        expect(() => placementOf({ remoteDir: "/work/my-app", project: false })).toThrow("--remote-dir /work/my-app is a project folder, so pass --project");
+    });
+});
+
+// Setting a sandbox up again replaces its pairing, so where its folder syncs is refused as a change rather than taken:
+// a project folder handed /work would get the whole workspace and the sandbox's state written into it.
+describe("placementChange", () => {
+    const workspace: Pairing = { sandboxUrl: "https://x.example.dev/", sandboxId: "x", mode: "sync", localDir: "/home/ada/intentic/x" };
+    const project: Pairing = { ...workspace, localDir: "/home/ada/code/my-app", remoteDir: `${WORKSPACE_ROOT}/my-app`, project: true };
+
+    it("lets a pairing be set up again where it already syncs, and a new sandbox anywhere", () => {
+        expect(placementChange(workspace, {})).toBeUndefined();
+        expect(placementChange(project, { remoteDir: "/work/my-app", project: true })).toBeUndefined();
+        expect(placementChange(undefined, { remoteDir: "/work/my-app", project: true })).toBeUndefined();
+        const portsOnly: Pairing = { sandboxUrl: workspace.sandboxUrl, sandboxId: workspace.sandboxId, mode: "mirror" };
+        expect(placementChange(portsOnly, { remoteDir: "/work/my-app", project: true })).toBeUndefined();
+    });
+
+    it("refuses to turn a project folder into a copy of the whole workspace", () => {
+        expect(placementChange(project, {})).toBe(
+            "x already syncs /home/ada/code/my-app with its /work/my-app as a project; setting it up again for /work would rewrite what that folder holds. Unpair it first (`intentic-machine sync uninstall --sandbox x`), then set it up again.",
+        );
+    });
+
+    it("refuses to move a pairing to another sandbox folder or kind", () => {
+        expect(placementChange(workspace, { remoteDir: "/work/my-app", project: true })).toContain("already syncs /home/ada/intentic/x with its /work;");
+        expect(placementChange(project, { remoteDir: "/work/other", project: true })).toContain("setting it up again for /work/other as a project");
+    });
+});
+
 // `mutagen sync pause a b` resolves every name or none, so a pairing with no session used to take the whole
 // command down with Mutagen's own "did not match any sessions" — which is what the Pause syncing button showed.
 describe("syncSwitchPlan", () => {
@@ -120,7 +183,7 @@ describe("syncSwitchPlan", () => {
     const one = pairing("sandbox-aacfe05c01ce-sbx-intentic-dev");
     const two = pairing("sandbox-bce57bb9fe3b-intentic-dev");
     // Both of a pairing's sessions, named the way the agent names them rather than spelled out here.
-    const both = (held: Pairing): string[] => [...syncSessionNames(held.sandboxId)];
+    const both = (held: Pairing): string[] => [...syncSessionNames(held)];
 
     it("names nothing, and nothing to act on, when the daemon holds no session for any of them", () => {
         expect(syncSwitchPlan([one, two], [])).toEqual({ names: [], acted: [], idle: [one, two] });
@@ -135,8 +198,15 @@ describe("syncSwitchPlan", () => {
 
     // The backup session is created after the workspace one, so the half-created pairing is the common case, not
     // an edge: naming the missing half would fail the pause for the half that is running.
+    // A project pairing never has a backup session, so naming one would fail every pause and every uninstall for it.
+    it("names a project pairing's workspace session alone", () => {
+        const project: Pairing = { ...one, remoteDir: `${WORKSPACE_ROOT}/my-app`, project: true };
+        expect(syncSessionNames(project)).toEqual(["intentic-sandbox-aacfe05c01ce-sbx-intentic-dev"]);
+        expect(syncSwitchPlan([project], both(project))).toEqual({ names: ["intentic-sandbox-aacfe05c01ce-sbx-intentic-dev"], acted: [project], idle: [] });
+    });
+
     it("acts on the half a pairing has when its backup session was never created", () => {
-        const workspaceOnly = syncSessionNames(one.sandboxId)[0]!;
+        const workspaceOnly = syncSessionNames(one)[0]!;
         const plan = syncSwitchPlan([one], [workspaceOnly]);
         expect(plan.names).toEqual([workspaceOnly]);
         expect(plan.acted).toEqual([one]);
@@ -187,6 +257,13 @@ describe("pairingLine", () => {
         expect(line).toContain("watching");
         expect(line).toContain("backup");
         expect(line).not.toContain("backup watching");
+    });
+
+    // A project folder is the owner's own and carries no state backup by design, so its absence is not a gap to shout
+    // about, and the line says which sandbox folder the local one holds.
+    it("names a project pairing's sandbox folder and does not miss a backup it never has", () => {
+        const line = pairingLine(synced({ localDir: "/home/me/code/my-app", remoteDir: `${WORKSPACE_ROOT}/my-app`, backupStatus: undefined }));
+        expect(line).toBe("  sandbox-0738cd6b5027-intentic-dev  /home/me/code/my-app ↔ /work/my-app  [watching]");
     });
 
     it("names the backup's own status when it has one of its own", () => {

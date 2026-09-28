@@ -8,12 +8,13 @@ import {
     type SandboxHandlerOutput,
     type SandboxProcedure,
 } from "@intentic/sandbox-contract";
-import { eventStream, type StreamSink } from "./sse";
-import { json } from "./transport";
+import { json } from "./json.js";
+import { eventStream, type StreamSink } from "./sse.js";
 
-// The demo's stand-in for the daemon's OpenAPI handler: a request resolves to its route by the contract's own matcher,
-// a procedure's input is decoded and parsed as oRPC's handler does it, and every answer is typed by the contract. The
-// routes the daemon serves outside oRPC are answered by hand, keyed by the contract's declaration of each.
+// A stand-in for the daemon's OpenAPI handler, for whatever answers the contract without being the daemon: the demo's
+// in-page fixture and the desktop app's local files sidecar. A request resolves to its route by the contract's own
+// matcher, a procedure's input is decoded and parsed as oRPC's handler does it, and every answer is typed by the
+// contract. The routes the daemon serves outside oRPC are answered by hand, keyed by the contract's declaration of each.
 
 // Thrown by any handler to refuse: answered as the daemon's own `{ error }` body, with its status.
 export class Refusal extends Error {
@@ -41,7 +42,7 @@ export type ProcedureHandler<G extends SandboxGroup, P extends SandboxProcedure<
     input: SandboxHandlerInput<G, P>,
 ) => Answer<SandboxHandlerOutput<G, P>> | Promise<Answer<SandboxHandlerOutput<G, P>>>;
 
-// The fixture's half of the contract: a handler for each procedure it serves, held to that procedure's types.
+// A stand-in's half of the contract: a handler for each procedure it serves, held to that procedure's types.
 export type FixtureRouter = { readonly [G in SandboxGroup]?: { readonly [P in SandboxProcedure<G>]?: ProcedureHandler<G, P> } };
 
 export interface RawContext {
@@ -51,7 +52,7 @@ export interface RawContext {
     readonly param: (name: string) => string;
 }
 
-// A raw route's answer, or undefined for "not mine" (a path in an extension's namespace the fixture has no answer for).
+// A raw route's answer, or undefined for "not mine" (a path in an extension's namespace the stand-in has no answer for).
 export type RawRoutes = { readonly [K in RawRouteKey]?: (context: RawContext) => Response | undefined | Promise<Response | undefined> };
 
 // A schema read the way oRPC's handler validates with one: Standard Schema, whichever library wrote it.
@@ -117,18 +118,27 @@ const answerOf = async (procedures: FixtureRouter, raw: RawRoutes, request: Requ
     return answer instanceof Frames ? eventStream(request, answer.start) : json(answer);
 };
 
+// Who is answering, in the words a request nothing answered is told: `The demo fixture`, `This folder view`. `tag`
+// starts the console line (`[demo]`), and `log` is where that line goes.
+export interface ServeVoice {
+    readonly speaker: string;
+    readonly tag: string;
+    // Where the line for a request nothing answered goes: the host's own log, since only the host knows where that is.
+    readonly log: (line: string) => void;
+}
+
 // The console line for a request nothing answered, carrying the reason when `unserved` lists its route.
-const unansweredLine = (request: Request, url: URL, unserved: Readonly<Record<string, string>>): string => {
+const unansweredLine = (request: Request, url: URL, unserved: Readonly<Record<string, string>>, voice: ServeVoice): string => {
     const reason = unserved[sandboxRouteFor(request.method, url.pathname)?.name ?? ``];
     return reason === undefined
-        ? `[demo] no fixture route for ${request.method} ${url.pathname}`
-        : `[demo] ${request.method} ${url.pathname} is left out of the demo: ${reason}`;
+        ? `${voice.tag} no route for ${request.method} ${url.pathname}`
+        : `${voice.tag} ${request.method} ${url.pathname} is left out: ${reason}`;
 };
 
-// The fixture daemon as a fetch handler. Anything it does not serve answers 404 and logs one line naming the method and
+// The handler table as a fetch handler. Anything it does not serve answers 404 and logs one line naming the method and
 // path, with the reason `unserved` gives when the request is a contract route it lists.
 export const serve =
-    (procedures: FixtureRouter, raw: RawRoutes, unserved: Readonly<Record<string, string>>) =>
+    (procedures: FixtureRouter, raw: RawRoutes, unserved: Readonly<Record<string, string>>, voice: ServeVoice) =>
     async (request: Request, url: URL): Promise<Response> => {
         try {
             const answer = await answerOf(procedures, raw, request, url);
@@ -141,8 +151,8 @@ export const serve =
             }
             throw error;
         }
-        console.info(unansweredLine(request, url, unserved));
-        return json({ error: `The demo fixture doesn't serve ${request.method} ${url.pathname}.` }, 404);
+        voice.log(unansweredLine(request, url, unserved, voice));
+        return json({ error: `${voice.speaker} doesn't serve ${request.method} ${url.pathname}.` }, 404);
     };
 
 // Every procedure a router serves, by the contract's name for it (`git.log`).

@@ -13,6 +13,7 @@ import { sandboxRpc } from "../features/sandbox/client/sandboxRpc";
 import { readFailure } from "../features/sandbox/overview/useDaemonRoutes";
 import { createExtensionApi, deactivateAllExtensions, deactivateExtension, type HostBindings } from "./apiImpl";
 import { builtinModules } from "./builtins";
+import { LOCAL_EXTENSIONS, localFace } from "../app/environments/local";
 
 // Loads and activates installed extensions from GET /extensions (compiled-in first-party, daemon-baked, and
 // git-installed alike): owner's switch, then engines check, then code.
@@ -131,11 +132,12 @@ const loadOne = async (summary: ExtensionSummary, host: HostBindings, startedIn:
 };
 
 // Compiled-in extensions the daemon's list didn't mention (image predates this bundle, or GET /extensions failed).
-// Activated anyway from this build; reported as having no switch or settings to live in the daemon.
+// Activated anyway from this build; reported as having no switch or settings to live in the daemon. A window on a local
+// folder lists none and runs only the ones that show files (environments/local.ts).
 const loadUnlisted = async (listed: ReadonlySet<string>, host: HostBindings, detail: string, startedIn: number): Promise<ExtensionHostStatus[]> =>
     Promise.all(
         [...builtinModules]
-            .filter(([extensionId]) => !listed.has(extensionId))
+            .filter(([extensionId]) => !listed.has(extensionId) && (localFace() === undefined || LOCAL_EXTENSIONS.has(extensionId)))
             .map(async ([extensionId, module]): Promise<ExtensionHostStatus> => {
                 const summary: ExtensionSummary = { id: extensionId, manifest: module.manifest, commit: `builtin`, source: `builtin`, enabled: true };
                 try {

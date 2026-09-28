@@ -22,7 +22,7 @@ when the daemon runs from a checkout), the process environment, then command-lin
 
 | Group | For example |
 | --- | --- |
-| Roots | `WORKSPACE_ROOT`, `HISTORY_ROOT`, `AGENT_AUTH_DIR` |
+| Roots | `WORKSPACE_ROOT`, `HISTORY_ROOT`, `AGENT_AUTH_DIR`, `SANDBOX_PROJECT_DIR` |
 | Owner and sign-in | `CONNECT_TOKEN`, `OWNER_EMAIL`, `GOOGLE_CLIENT_ID`, `WEB_ORIGIN` |
 | Reachability | `SANDBOX_GRANT`, `INGRESS_URL`, `SANDBOX_PUBLIC_URL`, `PLATFORM_URL`, `SANDBOX_PORT` |
 | Posture | `SANDBOX_PROFILE`, `SANDBOX_VM`, `SANDBOX_PREWARM`, `IDLE_STOP_MINUTES` |
@@ -38,6 +38,10 @@ when the daemon runs from a checkout), the process environment, then command-lin
   in the front's `front-wire` crate and read by [src/bootstrap/front-door.ts](../src/bootstrap/front-door.ts).
 - A runner container gets `RUNNER_PARENT_URL` and `RUNNER_PAIR_TOKEN`, both or neither
   ([src/runners/runner-mode.ts](../src/runners/runner-mode.ts)).
+- `ic` sets `SANDBOX_PROJECT_DIR=/work/<name>` on a project sandbox, one made for a folder on the owner's computer and
+  synced into that folder rather than into `/work` itself. The daemon then seeds no starter site, makes the folder a
+  repo of its own (its git dir on `/history`, nothing committed at boot), tells agents about it in the workspace's
+  `AGENTS.md`, and names it in the `/events` hello ([src/system/project-dir.ts](../src/system/project-dir.ts)).
 - The daemon sets `INTENTIC_LOG_DIR`, `INTENTIC_TERMINAL_LOGS_DIR` and `INTENTIC_AGENT_TMUX` for its own children
   ([src/bootstrap/daemon-env.ts](../src/bootstrap/daemon-env.ts)).
 - The nightly update drill sets `INTENTIC_FAULT` (`crash-at-boot`, `crash-after-ready`, `fail-conversion`) to make a
@@ -51,4 +55,7 @@ The daemon exits with code 78 rather than serve an unsafe posture:
   authenticated; only the e2e harnesses bypass this, with `SANDBOX_ALLOW_UNAUTHENTICATED`;
 - `SANDBOX_PROFILE=local` with a non-loopback `SANDBOX_HOST`, a connect token, a public URL or a platform URL
   (`requireLocalContract` in [src/system/boot/profile.ts](../src/system/boot/profile.ts));
+- a `SANDBOX_PROJECT_DIR` that is not one folder directly under the workspace root with a name a project may take: the
+  root itself, `public/` or any other name the daemon keeps for its own would put the owner's files where the daemon
+  serves, seeds or keeps state (`requireProjectDir` in [src/system/project-dir.ts](../src/system/project-dir.ts));
 - started without the two front sockets.

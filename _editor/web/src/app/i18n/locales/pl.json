@@ -3723,7 +3723,8 @@
             "whatDoes": "Co to robi"
         },
         "setupSyncOption": {
-            "alsoSyncLocalFolder": "Synchronizuj też lokalny folder"
+            "alsoSyncLocalFolder": "Synchronizuj też lokalny folder",
+            "syncsWithFolderYouPicked": "Synchronizuje się na bieżąco z wybranym przez Ciebie folderem"
         },
         "words": {
             "useLettersNumbersHyphens": "Używaj tylko liter, cyfr i myślników."

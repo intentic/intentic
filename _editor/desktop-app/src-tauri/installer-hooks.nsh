@@ -54,3 +54,22 @@
   Pop $0
   Sleep 500
 !macroend
+
+; "OPEN WITH INTENTIC" ON A FOLDER, and on the empty space inside one — the folder half of what the file
+; associations in tauri.conf.json do for documents. The app reads the path it is handed as any second launch's
+; (src/local.rs `open_args`) and shows the folder in a window of its own; nothing runs in a sandbox until the
+; user asks for one there. Per user, under HKCU, like the install itself (`installMode: currentUser`), and gone
+; with the uninstall below: a verb left behind would start an app that is no longer there.
+!macro NSIS_HOOK_POSTINSTALL
+  WriteRegStr HKCU "Software\Classes\Directory\shell\Intentic" "" "Open with Intentic"
+  WriteRegStr HKCU "Software\Classes\Directory\shell\Intentic" "Icon" "$INSTDIR\${MAINBINARYNAME}.exe"
+  WriteRegStr HKCU "Software\Classes\Directory\shell\Intentic\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%1"'
+  WriteRegStr HKCU "Software\Classes\Directory\Background\shell\Intentic" "" "Open with Intentic"
+  WriteRegStr HKCU "Software\Classes\Directory\Background\shell\Intentic" "Icon" "$INSTDIR\${MAINBINARYNAME}.exe"
+  WriteRegStr HKCU "Software\Classes\Directory\Background\shell\Intentic\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" "%V"'
+!macroend
+
+!macro NSIS_HOOK_POSTUNINSTALL
+  DeleteRegKey HKCU "Software\Classes\Directory\shell\Intentic"
+  DeleteRegKey HKCU "Software\Classes\Directory\Background\shell\Intentic"
+!macroend

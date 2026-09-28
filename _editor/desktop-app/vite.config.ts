@@ -26,6 +26,8 @@ export default defineConfig({
         host: `localhost`,
         port: 47146,
         strictPort: true,
+        // The local face's dev server (vite.local.config.ts), under the path its windows open in a built app.
+        proxy: { "/files": { target: `http://127.0.0.1:47147`, ws: true } },
     },
     build: {
         outDir: `dist`,

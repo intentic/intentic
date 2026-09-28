@@ -397,6 +397,7 @@ fn open_in_browser(app: &AppHandle, url: &str) {
 /// Google and the webview can present itself honestly.
 pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
     let state = app.state::<AppState>();
+    state.remember_workspace_seen();
     let base = state.app_url();
     let target = match path {
         Some(path) => format!("{}{path}", base.trim_end_matches('/')),
@@ -639,6 +640,107 @@ fn show_floating(
         }
         Err(error) => eprintln!("floating window for {panel} failed to open: {error}"),
     }
+}
+
+/* A WINDOW ON A FOLDER OF THE USER'S OWN DISK (local.rs). */
+
+/// Where a local window may navigate in place: the app's own bundle (whichever scheme this platform serves it
+/// under, or the dev server's), and the loopback editor ONLYOFFICE frames. Anything else leaves for the browser.
+fn stays_in_files_window(url: &Url) -> bool {
+    match url.scheme() {
+        "tauri" | "about" | "blob" | "data" => true,
+        "http" | "https" => matches!(
+            url.host_str(),
+            Some("tauri.localhost" | "localhost" | "127.0.0.1")
+        ),
+        _ => false,
+    }
+}
+
+/// Build the window that shows one grant of the sidecar: the local face of the app's own bundle
+/// (`files/local`), told who it is by `init` (`__INTENTIC_LOCAL__`, local.rs) before any of its script runs.
+/// Frameless like every page window, drawn by the same page bar; unlike them it holds NO capability, so its
+/// only ways into the app are the `window` and `local` links (setup_link.rs) and the sidecar's own port.
+pub fn show_files_window(
+    app: &AppHandle,
+    label: &str,
+    title: &str,
+    init: &str,
+) -> Result<WebviewWindow, String> {
+    let state = app.state::<AppState>();
+    let screen = work_area(app);
+    let (size, min) = opening_bounds(screen.map(|screen| screen.size));
+    let builder = WebviewWindowBuilder::new(app, label, WebviewUrl::App("files/local".into()))
+        .title(title)
+        .decorations(false)
+        .shadow(true)
+        .background_color(face_background(state.ui_mode()))
+        // Drops land in the page: the explorer copies a dragged file into the folder, as the workspace does.
+        .disable_drag_drop_handler()
+        .additional_browser_args(BROWSER_ARGS)
+        .initialization_script(workspace_init_script(
+            &state.install_id(),
+            crate::update::stage(app).ready_version(),
+        ))
+        .initialization_script(init)
+        .inner_size(size.0, size.1)
+        .min_inner_size(min.0, min.1)
+        .on_navigation({
+            let app = app.clone();
+            let label = label.to_string();
+            move |url| {
+                if url.scheme() == "intentic" {
+                    let app = app.clone();
+                    let label = label.clone();
+                    let link = url.to_string();
+                    tauri::async_runtime::spawn(async move {
+                        crate::handle_intentic_link(&app, &link, Source::Files { window: &label });
+                    });
+                    return false;
+                }
+                if stays_in_files_window(url) {
+                    return true;
+                }
+                open_in_browser(&app, url.as_str());
+                false
+            }
+        })
+        .on_new_window({
+            let app = app.clone();
+            move |url, _features| {
+                open_in_browser(&app, url.as_str());
+                NewWindowResponse::Deny
+            }
+        });
+    let window = builder
+        .build()
+        .map_err(|error| format!("the window for {title} did not open: {error}"))?;
+    let handle = app.clone();
+    let own = label.to_string();
+    window.on_window_event(move |event| match event {
+        WindowEvent::Resized(_) => {
+            if let Some(window) = handle.get_webview_window(&own) {
+                announce_frame(&window, false);
+            }
+        }
+        // The folder stops being served the moment nothing shows it (local.rs).
+        WindowEvent::Destroyed => {
+            forget_chrome(&own);
+            crate::local::window_closed(&handle, &own);
+        }
+        _ => {}
+    });
+    arm_frame_fallback(app, label);
+    if let Some(screen) = screen {
+        place_in_work_area(&window, screen, size);
+    }
+    let _ = window.set_focus();
+    Ok(window)
+}
+
+/// Bring a window back in front of the reader, as the tray or a second double-click on the same file asks.
+pub fn raise_window(window: &WebviewWindow) {
+    raise(window);
 }
 
 /// In front of the reader, whatever it was doing: hidden, minimised, or under the window that asked.
@@ -965,10 +1067,21 @@ fn launcher(app: &AppHandle) -> Option<WebviewWindow> {
             // app here instead would take it away from a user one gesture after the setup they just ran, and
             // the screen that setup was for is the one behind this window.
             let handle = app.clone();
-            window.on_window_event(move |event| {
-                if matches!(event, WindowEvent::CloseRequested { .. }) {
-                    show_workspace(&handle);
+            window.on_window_event(move |event| match event {
+                // An install that never showed the workspace has none to go back to: the card simply goes, and the
+                // app stays in the tray (lib.rs keeps it running with no window).
+                WindowEvent::CloseRequested { .. } => {
+                    if handle.state::<AppState>().workspace_seen() {
+                        show_workspace(&handle);
+                    }
                 }
+                // A folder or a document dropped on the card opens in a window of its own (local.rs).
+                WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {
+                    for path in paths {
+                        crate::local::open_later(&handle, path.clone());
+                    }
+                }
+                _ => {}
             });
             // The same cold-start placement the workspace gets, and needed for the same reason: this face can
             // be the FIRST window an install ever shows (a link from the browser, nothing else running), and
@@ -1048,8 +1161,11 @@ fn setup_announcement(report: &SetupReport) -> String {
 pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
     match parse_link(link, source) {
         Some(Link::Setup(args)) => match source {
-            Source::App { .. } => park_setup(app, *args),
+            // A project's setup gets the folder this app parked for it, and only here (project.rs).
+            Source::App { .. } => park_setup(app, crate::project::bind(app, *args)),
             Source::External => confirm_setup(app, *args),
+            // Never parsed from a local window (setup_link.rs); named so a new source is a decision here too.
+            Source::Files { .. } => {}
         },
         Some(Link::Recreate(args)) => {
             *app.state::<crate::state::AppState>()
@@ -1089,10 +1205,16 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         // and no face is swapped: these are presses on one window, answered on that window — and only a window
         // of the app's own sends them (`parse_link`).
         Some(Link::Window(verb)) => {
-            let Source::App { window } = source else {
+            let Some(window) = source.window() else {
                 return;
             };
             work_the_window(app, window, verb);
+        }
+        // A local window asking for a dialog or the file manager, about its own folder (local.rs).
+        Some(Link::Local(verb)) => {
+            if let Source::Files { window } = source {
+                crate::local::act(app, window, verb);
+            }
         }
         None => {}
     }

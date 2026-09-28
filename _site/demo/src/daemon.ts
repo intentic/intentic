@@ -81,7 +81,7 @@ import {
     writeFile,
 } from "./fixture/workspace";
 import { demoMode, deskEdition } from "./mode";
-import { type FixtureRouter, Frames, type RawContext, type RawRoutes, refuse, serve } from "./router";
+import { type FixtureRouter, Frames, type RawContext, type RawRoutes, refuse, serve } from "@intentic/contract-serve";
 import { terminalSession } from "./terminal";
 import { featuredRun, type Run, visitorRun } from "./turn";
 import { type DemoSession, json } from "./transport";
@@ -1274,4 +1274,4 @@ const DEMO_SAVINGS: SavingsReport = {
     },
 };
 
-export const daemon = serve(procedures, raw, UNSERVED);
+export const daemon = serve(procedures, raw, UNSERVED, { speaker: `The demo fixture`, tag: `[demo]`, log: console.info });

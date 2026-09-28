@@ -8,13 +8,15 @@ import { desktopSetupLink } from "../../../app/environments/desktop";
 import type { desktopInstaller } from "../../../app/environments/desktopDownloads";
 import { environment } from "../../../app/environments/environment";
 import { scriptSource } from "../../../app/environments/scriptCommand";
+import type { SetupProject } from "../setupArrival";
 import type { ComposeArgs } from "../setupCompose";
 import { installCommand, platformUrlOf, uninstallCommand, webOriginOf } from "./installCommand";
 import type { SetupRow } from "./useSetupRow";
 
 // Step 2 on the reader's own machine: which shell's command is on screen, and whether it is on screen at all (it folds
 // behind the app's button, the phone's handoff or an offered installer), what rides with it, and the handoff to the
-// desktop app, which runs the same code through the same connect script.
+// desktop app, which runs the same code through the same connect script. A project setup has no command: only the app
+// knows where its folder is, and a pasted command could only sync /work into a folder made up here.
 
 export interface SetupReader {
     // A phone gets a different step 2 (a handoff, not a narrower command).
@@ -38,11 +40,16 @@ export interface RunStepHost {
     readonly cmdOs: Ref<`unix` | `windows`>;
     readonly mode: Readonly<Ref<`intentic` | `own`>>;
     readonly cfToken: Readonly<Ref<string>>;
+    // The folder the app is setting this sandbox up for, fixed for the visit.
+    readonly project: SetupProject | undefined;
     readonly openDesktopLink: (link: string) => void;
 }
 
-export const useRunStep = ({ command, row, reader, cmdOs, mode, cfToken, openDesktopLink }: RunStepHost) => {
+export const useRunStep = ({ command, row, reader, cmdOs, mode, cfToken, project, openDesktopLink }: RunStepHost) => {
     const { mobile, inApp, installer } = reader;
+    // Set up by the app's button: in the app, and for a project wherever this page is, whose link reaches the app by the
+    // OS from a browser too.
+    const throughApp = computed(() => inApp.value || project !== undefined);
     // The compose tab is this page's own: choosing it must not overwrite the unix/windows preference.
     const composeSelected = ref(false);
     const showCommand = ref(false);
@@ -70,21 +77,24 @@ export const useRunStep = ({ command, row, reader, cmdOs, mode, cfToken, openDes
         { label: mobile.value ? `Compose` : `Docker Compose`, value: `compose` as const, title: t(`setup.setup.noScriptRunsRead`) },
     ]);
     const appFirst = computed(() => installer.value !== undefined);
-    // The command folds away wherever it isn't the path: the app's button, the phone's handoff, an offered installer.
-    const commandVisible = computed(() => (inApp.value || mobile.value || appFirst.value ? showCommand.value : true));
+    // The command folds away wherever it isn't the path: the app's button, the phone's handoff, an offered installer. A
+    // project's is never on screen.
+    const commandVisible = computed(() => project === undefined && (inApp.value || mobile.value || appFirst.value ? showCommand.value : true));
     // Compose declares its own environment: only the compose tab on screen, not merely no command, hides sync.
     const composeShown = computed(() => commandVisible.value && runTab.value === `compose`);
     // Installing through the app with the command folded away.
     const installing = computed(() => appFirst.value && !commandVisible.value);
     // A failed run is retried with the app's button wherever no command is on screen to run again.
-    const retriedByButton = computed(() => !commandVisible.value && (inApp.value || installing.value));
-    // Empty until the mint lands.
+    const retriedByButton = computed(() => !commandVisible.value && (throughApp.value || installing.value));
+    // Empty until the mint lands, and for a project always: its folder is the one the reader picked, not one made up here.
     const syncDir = computed(() =>
-        row.created.value && command.setup.value ? syncFolder(row.created.value.name, command.setup.value.hostname) : ``,
+        project === undefined && row.created.value && command.setup.value ? syncFolder(row.created.value.name, command.setup.value.hostname) : ``,
     );
+    // The made-up folder rides the command and the app's link only while the switch is on.
+    const syncRides = computed(() => project === undefined && syncEnabled.value);
     // Sync exists only where the command does: not before the mint, not on compose, not for hosted; it survives the
-    // app's fold.
-    const syncOffered = computed(() => command.commandReady.value && !composeShown.value && (commandVisible.value || inApp.value));
+    // app's fold. A project's is the folder itself, stated rather than offered, in the same place.
+    const syncOffered = computed(() => command.commandReady.value && !composeShown.value && (commandVisible.value || throughApp.value));
     // Only the path form, run from a checkout, has a repo to build the dev image from.
     const buildsFromCheckout = computed(() => platformUrl !== undefined && scriptSource.value === `checkout`);
     // The reader's own Cloudflare token rides the command on the own-zone path only.
@@ -102,7 +112,7 @@ export const useRunStep = ({ command, row, reader, cmdOs, mode, cfToken, openDes
             platformUrl,
             fromCheckout: buildsFromCheckout.value,
             webOrigin,
-            syncDir: syncEnabled.value ? syncDir.value : undefined,
+            syncDir: syncRides.value ? syncDir.value : undefined,
             // Root only installs Docker, and only in production: in local dev it breaks the pnpm-built image.
             sudo: environment.production && !hasDocker.value,
         });
@@ -132,7 +142,7 @@ export const useRunStep = ({ command, row, reader, cmdOs, mode, cfToken, openDes
         if (code === undefined || target === null) {
             return;
         }
-        track(`desktop_setup_started`, { mode: mode.value, inApp: inApp.value, sync: syncEnabled.value });
+        track(`desktop_setup_started`, { mode: mode.value, inApp: inApp.value, sync: syncRides.value, project: project !== undefined });
         command.launched.value = true;
         const token = ownToken();
         openDesktopLink(
@@ -141,7 +151,8 @@ export const useRunStep = ({ command, row, reader, cmdOs, mode, cfToken, openDes
                 sandboxId: target.id,
                 name: target.name,
                 ...(token === undefined ? {} : { cfToken: token }),
-                ...(syncEnabled.value ? { syncDir: syncDir.value } : {}),
+                syncDir: syncRides.value ? syncDir.value : undefined,
+                project: project?.dirName,
                 ...(platformUrl === undefined ? {} : { platformUrl }),
             }),
         );
@@ -153,6 +164,7 @@ export const useRunStep = ({ command, row, reader, cmdOs, mode, cfToken, openDes
         showCommand,
         hasDocker,
         syncEnabled,
+        throughApp,
         appFirst,
         commandVisible,
         composeShown,

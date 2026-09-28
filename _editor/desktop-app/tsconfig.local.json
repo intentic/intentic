@@ -1,0 +1,15 @@
+/* The local face's own entry (local/): its bootstrap and the platform stand-in. The editor it enters is type-checked by
+   _editor/web itself, so its entry is declared (local/editor-entry.d.ts) rather than followed here. */
+{
+    "compilerOptions": {
+        "rootDir": "../..",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo-local",
+        "types": ["vite/client"],
+        "paths": {
+            "@intentic/web/local": ["../../_editor/web/src/app/environments/local.ts"],
+            "@intentic/api-contract": ["../../_shared/api-contract/src/index.ts"]
+        }
+    },
+    "extends": "@intentic/tsconfig/tsconfig.vue.json",
+    "include": ["./local/**/*.ts"]
+}

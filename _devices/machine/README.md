@@ -35,6 +35,12 @@ flowchart LR
 - **sync** (`src/sync/`): `sync setup` enrolls an SSH key and runs Mutagen against the sandbox's sshd, reached
   through a loopback port tunnelled over a WebSocket. It keeps a folder two-way synced, forwards every workspace
   port to the same localhost port, and fast-forwards local git clones from the sandbox.
+- A **project pairing** (`sync setup --remote-dir /work/<name> --project`, what the desktop app asks for when it
+  makes a sandbox for a folder the owner picked) syncs that folder with `/work/<name>` rather than `/work`, and nothing
+  of the sandbox's is written into it: no state backup session, no git bridge, and an ignore list that keeps a
+  project's own `.intentic/` and `refs/` ([`sync/config.ts`](src/sync/config.ts) holds a remote dir to those two
+  shapes, and refuses `sync.json` whole otherwise). `setup` refuses a folder that is, holds or sits inside another
+  sandbox's, and a set-up-again that would change where a paired sandbox's folder syncs.
 - Only the resident agent creates Mutagen sessions: `setup` records the pairing and waits for the session to
   appear, since two creators racing left one name holding two identical sessions. The agent keeps one session per
   name, terminating any extras, and recreates a session whose rules drifted once there are no conflicts left.

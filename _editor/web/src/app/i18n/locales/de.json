@@ -3701,7 +3701,8 @@
             "whatDoes": "Was das tut"
         },
         "setupSyncOption": {
-            "alsoSyncLocalFolder": "Auch einen lokalen Ordner synchronisieren"
+            "alsoSyncLocalFolder": "Auch einen lokalen Ordner synchronisieren",
+            "syncsWithFolderYouPicked": "Synchronisiert live mit dem Ordner, den Sie gewählt haben"
         },
         "words": {
             "useLettersNumbersHyphens": "Nur Buchstaben, Ziffern und Bindestriche."

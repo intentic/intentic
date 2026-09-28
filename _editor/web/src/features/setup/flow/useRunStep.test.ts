@@ -6,6 +6,7 @@ import { desktopSetupLink } from "../../../app/environments/desktop";
 import type { desktopInstaller } from "../../../app/environments/desktopDownloads";
 import { bashCommand } from "../../../app/environments/scriptCommand";
 import { sandboxSummary } from "../../../testing/sandboxSummary";
+import { type SetupProject, setupProjectOf } from "../setupArrival";
 import { useRunStep } from "./useRunStep";
 
 // Pins step 2 on the reader's own machine: the compose tab never overwrites the shell preference, the command folds
@@ -16,7 +17,7 @@ const minted: SetupCode = { code: `vphf-3wk`, hostname: `sandbox-fa0b431303b8.sb
 const windows = { platform: `windows`, label: `Windows`, href: `https://intentic.dev/download/windows` } as const;
 const scopes: EffectScope[] = [];
 
-const stage = (over: { mobile?: boolean; inApp?: boolean; installer?: ReturnType<typeof desktopInstaller> } = {}) => {
+const stage = (over: { mobile?: boolean; inApp?: boolean; installer?: ReturnType<typeof desktopInstaller>; project?: SetupProject } = {}) => {
     const command = { setup: ref<SetupCode | null>(null), commandReady: ref(false), launched: ref(false) };
     const row = { created: ref<SandboxSummary | null>(sandboxSummary({ id: `s1`, name: `workspace` })) };
     const reader = { mobile: ref(over.mobile ?? false), inApp: ref(over.inApp ?? false), installer: ref(over.installer) };
@@ -26,7 +27,7 @@ const stage = (over: { mobile?: boolean; inApp?: boolean; installer?: ReturnType
     const openDesktopLink = jest.fn((_link: string) => undefined);
     const scope = effectScope();
     scopes.push(scope);
-    const step = scope.run(() => useRunStep({ command, row, reader, cmdOs, mode, cfToken, openDesktopLink }))!;
+    const step = scope.run(() => useRunStep({ command, row, reader, cmdOs, mode, cfToken, project: over.project, openDesktopLink }))!;
     const ready = (): void => {
         command.setup.value = minted;
         command.commandReady.value = true;
@@ -144,5 +145,43 @@ describe(`the handoff to the app`, () => {
         step.runHere();
         expect(openDesktopLink).not.toHaveBeenCalled();
         expect(command.launched.value).toBe(false);
+    });
+});
+
+// The app opened this page for a folder the reader picked, and kept the folder's path to itself: the page hands over
+// only where the folder lands in the sandbox, and never makes up a folder to sync /work into.
+describe(`a project setup`, () => {
+    const project = setupProjectOf(`My App`)!;
+
+    it(`hands the app the folder's place in the sandbox, and no sync folder of its own`, () => {
+        const { openDesktopLink, step, ready } = stage({ inApp: true, project });
+        ready();
+        step.runHere();
+        expect(step.syncDir.value).toBe(``);
+        expect(openDesktopLink.mock.calls).toEqual([
+            [desktopSetupLink({ code: minted.code, sandboxId: `s1`, name: `workspace`, project: project.dirName, platformUrl: `http://localhost` })],
+        ]);
+    });
+
+    it(`builds no command that would sync /work, even with sync switched on`, () => {
+        const { step, ready } = stage({ project });
+        ready();
+        const dev = ` PLATFORM_URL='http://localhost' INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth' SANDBOX_IMAGE='intentic-sandbox:dev'`;
+        const origin = step.webOrigin === undefined ? `` : ` WEB_ORIGIN='${step.webOrigin}'`;
+        expect(step.syncEnabled.value).toBe(true);
+        expect(step.selectedCommand.value).toBe(bashCommand(`sh`, `env${dev}${origin} `, minted.code));
+    });
+
+    // From a browser too: the setup link reaches the app by the OS, and the sync slot states the folder instead.
+    it(`is set up by the app's button, with no command on screen even when asked for`, () => {
+        const { step, ready } = stage({ project });
+        ready();
+        step.showCommand.value = true;
+        expect({
+            throughApp: step.throughApp.value,
+            commandVisible: step.commandVisible.value,
+            retriedByButton: step.retriedByButton.value,
+            syncOffered: step.syncOffered.value,
+        }).toEqual({ throughApp: true, commandVisible: false, retriedByButton: true, syncOffered: true });
     });
 });

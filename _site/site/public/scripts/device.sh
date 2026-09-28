@@ -75,16 +75,25 @@ if [ -z "$BIN" ]; then
 
     # Does the agent at $1 understand the handover this script is about to make? `<route> setup --help`
     # prints a usage screen and exits 0 on an agent that has the route, non-zero on one that does not, and
-    # connects nothing either way. $ROUTE is the one input the embedding script gives this block.
+    # connects nothing either way. Every flag in $3 has to be on that screen too: an agent older than one of
+    # them refuses the whole handover over it ("No flag registered"). $ROUTE and $SPEAKS (the flags, empty
+    # when the handover passes none newer than the route) are the inputs the embedding script gives this block.
     agent_speaks() {
-        ("$1" "$2" setup --help >/dev/null 2>&1)
+        help="$( ("$1" "$2" setup --help) 2>/dev/null)" || return 1
+        # shellcheck disable=SC2086 — $3 is a list of flags, split on purpose.
+        for flag in $3; do
+            case "$help" in
+                *"$flag"*) ;;
+                *) return 1 ;;
+            esac
+        done
     }
 
     have="$(agent_version "$dest")"
     usable=no
     case "$have" in
         [0-9]*.[0-9]*.[0-9]*)
-            if agent_speaks "$dest" "$ROUTE"; then
+            if agent_speaks "$dest" "$ROUTE" "${SPEAKS:-}"; then
                 usable=yes # whether it also UPDATES is `setup`'s decision, not this file's
             else
                 echo "The agent installed here ($have) doesn't understand \`$ROUTE setup\` — replacing it."

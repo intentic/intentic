@@ -247,6 +247,12 @@ pub fn setup_script(args: &SetupArgs, ctx: &SetupContext) -> ScriptRun {
     if let Some(dir) = args.sync_dir.clone().filter(|dir| !dir.is_empty()) {
         env.push(("SYNC_DIR".into(), dir));
     }
+    // A folder of this computer as the sandbox's project (project.rs): synced with `/work/<name>`, not with
+    // `/work` itself, and marked a project so nothing of the sandbox's own is written into it.
+    if let Some(project) = args.project.clone().filter(|_| args.sync_dir.is_some()) {
+        env.push(("SYNC_REMOTE_DIR".into(), format!("/work/{project}")));
+        env.push(("SYNC_PROJECT".into(), "1".into()));
+    }
     if let Some(image) = ctx.sandbox_image.clone() {
         env.push(("SANDBOX_IMAGE".into(), image));
     }
@@ -311,6 +317,7 @@ pub async fn setup_run(app: AppHandle, args: SetupArgs, install: bool) -> Comman
     app.state::<AppState>().clear_parked_setup();
 
     let name = args.name.clone();
+    let project = args.clone();
     let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let run = setup_script(&args, &SetupContext::of(&handle, install));
@@ -326,11 +333,12 @@ pub async fn setup_run(app: AppHandle, args: SetupArgs, install: bool) -> Comman
     // The script names the container after the slug it derived, so the row it just created is the one slug we
     // did not have a moment ago. Remembering the display name here is why the manager can show "work" instead
     // of a twelve-hex id — docker knows only the container name.
-    if let Some(name) = name.filter(|name| !name.is_empty()) {
-        if let Some(slug) = newest_slug() {
-            app.state::<AppState>().remember_name(&slug, Some(&name));
-        }
+    let slug = newest_slug();
+    if let (Some(name), Some(slug)) = (name.filter(|name| !name.is_empty()), slug.as_ref()) {
+        app.state::<AppState>().remember_name(slug, Some(&name));
     }
+    // A folder that asked for this sandbox has it now: opening the folder again reaches this one (project.rs).
+    crate::project::remember(&app, &project, slug);
     Ok(())
 }
 
@@ -958,6 +966,7 @@ mod tests {
             cf_token: None,
             sync_dir: None,
             platform_url: None,
+            project: None,
         }
     }
 

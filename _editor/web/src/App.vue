@@ -10,10 +10,14 @@ import NotificationHost from "./shell/notifications/NotificationHost.vue";
 import SignInWall from "./features/sandbox/gates/SignInWall.vue";
 import WindowControls from "./shell/window/WindowControls.vue";
 import WorkspaceRuntime from "./shell/WorkspaceRuntime.vue";
+import LocalRuntime from "./local/LocalRuntime.vue";
+import { localFace } from "./app/environments/local";
 
 const { user } = useAuth();
 const { activeSandboxId } = useSandbox();
 const router = useRouter();
+// A window on a folder of the user's own disk keeps only the file stream alive (local/LocalRuntime.vue).
+const local = localFace() !== undefined;
 
 /* Every standing fact and open question the app can float, declared once from the root (composables/notificationSources.ts). */
 startNotificationSources();
@@ -29,7 +33,8 @@ watch(user, (current, previous) => {
 
 <template>
     <RouterView />
-    <WorkspaceRuntime v-if="user && activeSandboxId" />
+    <WorkspaceRuntime v-if="user && activeSandboxId && !local" />
+    <LocalRuntime v-if="user && activeSandboxId && local" />
     <SignInWall />
     <HostModelPicker />
 <!-- THE ONE LANE. -->

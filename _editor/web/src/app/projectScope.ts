@@ -1,6 +1,7 @@
 import { sandboxRef } from "@intentic/extension-api";
+import { isProjectDirName } from "@intentic/sandbox-contract";
 import { activeSandboxId } from "../features/sandbox/overview/activeSandbox";
-import { removeStoredValue, storedValue, storeValue } from "../lib/browserStorage";
+import { storedValue, storeValue } from "../lib/browserStorage";
 
 // Which project the whole shell is looking at: one repository under the workspace root, or everything. A sandbox-wide
 // selection, not a view's: the workspace roots at it, the agents board files conversations under it, and every
@@ -17,12 +18,23 @@ const read = (sandboxId: string | undefined): string | undefined => {
 
 export const projectScope = sandboxRef<string | undefined>(() => read(activeSandboxId.value));
 
+// Everything is stored too, as the empty value `read` gives back as no project: a choice made rather than none made,
+// which is what keeps `adoptProjectScope` from narrowing a workspace its owner (or a link they followed) widened.
 export const setProjectScope = (project: string | undefined): void => {
     projectScope.value = project;
-    if (project === undefined) {
-        removeStoredValue(storageKey(activeSandboxId.value));
-    } else {
-        storeValue(storageKey(activeSandboxId.value), project);
+    storeValue(storageKey(activeSandboxId.value), project ?? ``);
+};
+
+// A project sandbox's own folder, as its daemon's hello names it (`projectDir`), is the scope its workspace opens on the
+// first time this browser hears it. Once anything is stored for the sandbox, that is the owner's choice and stands:
+// every reconnect says hello again. By the id of the sandbox that spoke, which a switch may have taken out of view.
+export const adoptProjectScope = (sandboxId: string, projectDir: string): void => {
+    if (!isProjectDirName(projectDir) || storedValue(storageKey(sandboxId)) !== undefined) {
+        return;
+    }
+    storeValue(storageKey(sandboxId), projectDir);
+    if (sandboxId === activeSandboxId.value) {
+        projectScope.value = projectDir;
     }
 };
 

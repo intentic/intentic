@@ -1,0 +1,18 @@
+/* Type-checks only: the sidecar is bundled by `bun build` (package.json), which reads its workspace dependencies from
+   source, so this resolves them the way a bundler does rather than through their emitted declarations. */
+{
+    "compilerOptions": {
+        "types": ["bun", "node"],
+        "noEmit": true,
+        "composite": false,
+        "declaration": false,
+        "declarationMap": false,
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "resolveJsonModule": true,
+        "tsBuildInfoFile": "./.cache/tsbuildinfo"
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts", "./src/testing.ts"],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

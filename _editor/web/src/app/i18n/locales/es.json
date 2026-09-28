@@ -3720,7 +3720,8 @@
             "whatDoes": "Qué hace esto"
         },
         "setupSyncOption": {
-            "alsoSyncLocalFolder": "Sincronizar también una carpeta local"
+            "alsoSyncLocalFolder": "Sincronizar también una carpeta local",
+            "syncsWithFolderYouPicked": "Se sincroniza en directo con la carpeta que elegiste"
         },
         "words": {
             "useLettersNumbersHyphens": "Usa solo letras, números y guiones."

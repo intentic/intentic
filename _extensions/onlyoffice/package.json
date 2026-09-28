@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-onlyoffice",
     "version": "1.0.0",
-    "description": "ONLYOFFICE Docs in the workspace: documents, spreadsheets and presentations opened in a full editor — first-party intentic extension via contributes.viewers and a backend that runs the document server",
+    "description": "ONLYOFFICE Docs in the workspace: documents, spreadsheets and presentations opened in a full editor \u2014 first-party intentic extension via contributes.viewers and a backend that runs the document server",
     "license": "MIT",
     "private": true,
     "type": "module",
@@ -11,6 +11,10 @@
         ".": {
             "types": "./src/index.ts",
             "default": "./src/index.ts"
+        },
+        "./local-office": {
+            "types": "./src/server/local-office.ts",
+            "default": "./src/server/local-office.ts"
         }
     },
     "scripts": {

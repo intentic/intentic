@@ -3,6 +3,7 @@ import { resetSandboxScope } from "@intentic/extension-api";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { createApp, effectScope, nextTick, ref } from "vue";
+import { projectScope, setProjectScope } from "../../../app/projectScope";
 import { activeSandboxId } from "../overview/activeSandbox";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
@@ -155,4 +156,20 @@ it(`starts presence, the fleet and the archive over on a switch`, async () => {
             .map((card) => card.id),
         archived: archived.value.map((card) => card.id),
     }).toEqual({ present: [], fleet: [], archived: [] });
+});
+
+// A project sandbox's hello names its folder on every connect: the workspace opens on it the first time, a reconnect
+// leaves whatever the owner chose since, and a replaced workspace, whose remembered scope is swept, opens on it again.
+it(`opens a project sandbox on its own folder once, and a replaced one on it again`, () => {
+    const projectHello = (workspaceId: string): void =>
+        applySystemEvent({ kind: `hello`, workspaceId, build: `build-1`, projectDir: `my-app` }, SANDBOX);
+
+    projectHello(`workspace-1`);
+    const opened = projectScope.value;
+    setProjectScope(undefined);
+    projectHello(`workspace-1`);
+    const reconnected = projectScope.value;
+    projectHello(`workspace-2`);
+
+    expect({ opened, reconnected, replaced: projectScope.value }).toEqual({ opened: `my-app`, reconnected: undefined, replaced: `my-app` });
 });

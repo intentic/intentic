@@ -77,6 +77,12 @@ flowchart LR
   written beside the file, then moved over it. A final save that changed nothing since the last forced one writes
   nothing, so it cannot overwrite a change made to the file in between.
 
+- **On the user's own computer**, the desktop app's local windows edit documents with the same browser engine, with
+  no daemon: `@intentic/ext-onlyoffice/local-office` (`src/server/local-office.ts`) answers the viewer's four routes
+  for one folder per window inside the app's `intentic-files` sidecar ([local-files](../../_devices/local-files)).
+  Its listener keeps to loopback (`host` in `listener.ts`), where a sandbox's listens on every interface for the
+  document server's container, and the bundle is downloaded once into the app's cache.
+
 ## Key files
 
 - [src/OnlyOfficeViewer.vue](src/OnlyOfficeViewer.vue) — the card, the wait, the conflict and failure notices, and the slot the editor goes in.

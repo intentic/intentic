@@ -10,13 +10,42 @@ pub enum Source<'a> {
     App {
         window: &'a str,
     },
+    /// A window on a folder of the user's own disk (local.rs), by label. Local content, like the app's own
+    /// faces, but it draws documents nobody vouched for (a Word file, an SVG, an EPUB), so it is believed about
+    /// its own window and the folder it shows and about nothing else: never a setup, a sync, a recreate, a
+    /// sign-in. See [`LocalVerb`].
+    Files {
+        window: &'a str,
+    },
     External,
 }
 
-impl Source<'_> {
+impl<'a> Source<'a> {
     pub fn is_app(self) -> bool {
         matches!(self, Source::App { .. })
     }
+
+    /// The window a title-bar press came from, for the two kinds of window that draw their own bar.
+    pub fn window(self) -> Option<&'a str> {
+        match self {
+            Source::App { window } | Source::Files { window } => Some(window),
+            Source::External => None,
+        }
+    }
+}
+
+/// `intentic://local?do=…[&path=…]` — what a window on a local folder asks of the app, which it cannot do from
+/// the page: pick another folder or file in the system dialog, or show an entry in the file manager. `path`
+/// names an entry INSIDE the window's own folder, root-relative, and is resolved against that folder only
+/// (local.rs); a page cannot point the app anywhere else by it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LocalVerb {
+    OpenFolder,
+    OpenFile,
+    Reveal(Option<String>),
+    /// "Work on this with an agent": the sandbox the window's folder has, or the question that makes one
+    /// (project.rs). About the window's own folder, the only folder it could name.
+    Sandbox,
 }
 
 /// `intentic://setup?code=…` — run the sandbox this setup code was minted for on this device.
@@ -36,6 +65,11 @@ pub struct SetupArgs {
     /// The API origin the setup code is redeemed against. Local dev only, and [`Source::App`] only — see
     /// [`Source`] for what a stranger's copy of this value would buy them.
     pub platform_url: Option<String>,
+    /// A folder of this computer becoming this sandbox's project (project.rs): its name inside `/work`, from the
+    /// setup page. [`Source::App`] only, and never with a folder: the folder is the one this app parked when the
+    /// user asked (`project::bind`), so a `syncDir` riding beside it is dropped.
+    #[serde(default)]
+    pub project: Option<String>,
 }
 
 /// `intentic://recreate?slug=…[&hash=…][&rollback=1]` — swap the sandbox onto a different image. This is what
@@ -138,6 +172,8 @@ pub enum Link {
     /// See [`WindowVerb`]: the workspace SPA's own title bar, which is a link channel rather than IPC for the
     /// same reason everything else here is.
     Window(WindowVerb),
+    /// See [`LocalVerb`]; a local window's only other channel.
+    Local(LocalVerb),
 }
 
 pub fn parse_link(url: &str, source: Source) -> Option<Link> {
@@ -158,16 +194,35 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             .find(|(key, _)| key == name)
             .map(|(_, value)| value.clone())
     };
-    match parsed.host_str()? {
+    let host = parsed.host_str()?;
+    // A local window is heard on its own bar and its own folder, and on nothing else (see [`Source::Files`]).
+    if matches!(source, Source::Files { .. }) && !matches!(host, "window" | "local") {
+        return None;
+    }
+    match host {
+        "local" if matches!(source, Source::Files { .. }) => {
+            Some(Link::Local(match get("do")?.as_str() {
+                "open-folder" => LocalVerb::OpenFolder,
+                "open-file" => LocalVerb::OpenFile,
+                "reveal" => LocalVerb::Reveal(get("path")),
+                "sandbox" => LocalVerb::Sandbox,
+                _ => return None,
+            }))
+        }
+        "local" => None,
         "setup" => {
             let from_app = source.is_app();
+            let project = get("project")
+                .filter(|_| from_app)
+                .filter(|name| crate::project::is_project_dir_name(name));
             Some(Link::Setup(Box::new(SetupArgs {
                 code: get("code")?,
                 sandbox_id: get("sandbox"),
                 name: get("name"),
                 cf_token: get("cfToken").filter(|_| from_app),
-                sync_dir: get("syncDir"),
+                sync_dir: get("syncDir").filter(|_| project.is_none()),
                 platform_url: get("platform").filter(|_| from_app),
+                project,
             })))
         }
         "signin" => Some(Link::SignIn {
@@ -205,7 +260,7 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
         })),
         // The page's own title bar. App-window only, and one verb per press — an unknown verb is a page newer
         // than this app, which is the ordinary skew between the two and is answered by doing nothing.
-        "window" if source.is_app() => Some(Link::Window(match get("do")?.as_str() {
+        "window" if source.window().is_some() => Some(Link::Window(match get("do")?.as_str() {
             "ready" => WindowVerb::Ready,
             "minimize" => WindowVerb::Minimize,
             "maximize" => WindowVerb::Maximize,
@@ -520,5 +575,80 @@ mod tests {
         };
         assert_eq!(args.platform_url.as_deref(), Some("https://evil.example"));
         assert_eq!(args.cf_token.as_deref(), Some("cf"));
+    }
+
+    /* A LOCAL WINDOW draws documents nobody vouched for, so it is heard on its own bar and its own folder alone. */
+
+    const FILES: Source<'static> = Source::Files { window: "files-1" };
+
+    /// A project's folder is the one the app parked, so a link may name the project but never where it lives.
+    #[test]
+    fn a_project_setup_carries_its_name_from_the_app_and_no_folder() {
+        let args = setup_of("intentic://setup?code=abc&project=my-app&syncDir=%2Fetc").unwrap();
+        assert_eq!(args.project.as_deref(), Some("my-app"));
+        assert_eq!(args.sync_dir, None);
+        let Some(Link::Setup(outside)) =
+            parse_link("intentic://setup?code=abc&project=my-app", Source::External)
+        else {
+            panic!("an external setup link still parses");
+        };
+        assert_eq!(outside.project, None);
+        assert_eq!(
+            setup_of("intentic://setup?code=abc&project=..%2Fetc")
+                .unwrap()
+                .project,
+            None
+        );
+    }
+
+    #[test]
+    fn a_local_window_asks_for_a_dialog_or_the_file_manager_about_its_own_folder() {
+        assert_eq!(
+            parse_link("intentic://local?do=open-folder", FILES),
+            Some(Link::Local(LocalVerb::OpenFolder))
+        );
+        assert_eq!(
+            parse_link("intentic://local?do=open-file", FILES),
+            Some(Link::Local(LocalVerb::OpenFile))
+        );
+        assert_eq!(
+            parse_link("intentic://local?do=reveal&path=docs%2Fa.md", FILES),
+            Some(Link::Local(LocalVerb::Reveal(Some("docs/a.md".into()))))
+        );
+        assert_eq!(
+            parse_link("intentic://local?do=reveal", FILES),
+            Some(Link::Local(LocalVerb::Reveal(None)))
+        );
+        assert_eq!(parse_link("intentic://local?do=delete", FILES), None);
+        assert_eq!(
+            parse_link("intentic://window?do=close", FILES),
+            Some(Link::Window(WindowVerb::Close))
+        );
+    }
+
+    /// Everything a local window could be made to send that acts beyond its own window: none of it is heard.
+    #[test]
+    fn a_local_window_is_never_heard_on_a_setup_a_sync_a_recreate_or_a_sign_in() {
+        for link in [
+            "intentic://setup?code=abc123",
+            "intentic://sync?url=https%3A%2F%2Fx&pair=p",
+            "intentic://recreate?slug=sandbox-abc",
+            "intentic://update",
+            "intentic://launcher",
+            "intentic://signin",
+            "intentic://auth?handoff=h&state=s",
+        ] {
+            assert_eq!(parse_link(link, FILES), None, "{link}");
+        }
+    }
+
+    /// And the local verbs belong to local windows alone: the workspace and the outside have no folder to ask about.
+    #[test]
+    fn the_local_verbs_are_refused_from_the_workspace_and_from_outside() {
+        assert_eq!(parse_link("intentic://local?do=open-folder", APP), None);
+        assert_eq!(
+            parse_link("intentic://local?do=open-folder", Source::External),
+            None
+        );
     }
 }

@@ -86,6 +86,7 @@ export const testConfig: Config = {
         definitionSeed: "",
         devRoot: undefined,
         prewarm: false,
+        projectDir: "",
     },
     // No edge to dial; loopback-only is a supported posture here, not a gap.
     ingress: { url: "" },

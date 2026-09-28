@@ -37,6 +37,9 @@ export interface SetupArrivalHost {
     readonly command: Pick<CommandLaneApi, `addressRead` | `addressed` | `commandReady` | `recordOffer`>;
     // Where `?sandbox=`, `?machine=` and `?elsewhere=1` are read.
     readonly route: Pick<RouteLocationNormalizedLoaded, `query`>;
+    // Whether `?project=` named a folder (`setupProjectOf`). The page reads it, once, ahead of this: the ladder this is
+    // handed and the run step whose handoff this fires both depend on it.
+    readonly project: boolean;
     readonly inApp: Readonly<Ref<boolean>>;
     // The rungs on offer, which a `?machine=` must name to count.
     readonly ladder: Readonly<Ref<readonly MachineOption[]>>;
@@ -46,7 +49,19 @@ export interface SetupArrivalHost {
     readonly runHere: () => void;
 }
 
-export const useSetupArrival = ({ sandbox, platform, row, hosted, command, route, inApp, ladder, warmCredential, runHere }: SetupArrivalHost) => {
+export const useSetupArrival = ({
+    sandbox,
+    platform,
+    row,
+    hosted,
+    command,
+    route,
+    project,
+    inApp,
+    ladder,
+    warmCredential,
+    runHere,
+}: SetupArrivalHost) => {
     // `choose` until the offers and the row land, so nothing folds on an unanswered read.
     const arrival = ref<Arrival>(`choose`);
     // Rungs the arrival did not take are folded, not absent; `?elsewhere=1`, or its link, reveals them.
@@ -146,6 +161,7 @@ export const useSetupArrival = ({ sandbox, platform, row, hosted, command, route
             commandOffered: command.addressed.value,
             requestedMachine: asked,
             elsewhere: elsewhere.value,
+            project,
         });
         // Nothing takeable means nothing to start: the page states which lane fact holds and switches nothing.
         if (laneTakeable.value && !(await takeArrival(asked))) {

@@ -1,7 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { homeDir, writeSecretFile } from "@intentic/local-agent";
-import type { PortSkipReason, PortSummary } from "@intentic/sandbox-contract";
+import { type PortSkipReason, type PortSummary, projectDirNameOf } from "@intentic/sandbox-contract";
+import { z } from "zod";
 import { baseDir } from "../config.js";
 
 // Everything the sync half persists: its pairing list (in its own file, separate from the device half's), the
@@ -63,7 +65,9 @@ export type SyncMode = "sync" | "mirror";
 // clearing the build output it left inside directories the sandbox deleted (residue.ts); it is off by default because
 // what that removes is content the session already ignores, which a build puts back. ignoredPorts is mirrorOff's
 // per-port form: numbers this device is never to take, which is a standing choice and not a reading, so nothing the
-// watcher learns ever rewrites it.
+// watcher learns ever rewrites it. remoteDir is which sandbox folder localDir holds, /work itself when absent (every
+// pairing made before it existed); `project` marks the owner's own folder synced into `/work/<name>`, which carries
+// no state backup and no git bridge (`isProjectPairing`), and the two only ever come together (`pairingProblem`).
 export interface Pairing {
     readonly sandboxUrl: string;
     readonly sandboxId: string;
@@ -77,7 +81,56 @@ export interface Pairing {
     readonly fileSyncAutoPaused?: boolean | undefined;
     readonly fileSyncSwapPaused?: boolean | undefined;
     readonly autoHealOff?: boolean | undefined;
+    readonly remoteDir?: string | undefined;
+    readonly project?: true | undefined;
 }
+
+// The sandbox folder a pairing syncs.
+export const pairingRemoteDir = (pairing: Pick<Pairing, "remoteDir">): string => pairing.remoteDir ?? WORKSPACE_ROOT;
+
+// A PROJECT PAIRING syncs a folder that is the owner's own project, not a copy of the workspace: nothing of the
+// sandbox's (its state, its git history) may ever be written into it. Every reader that would write something there
+// asks this first.
+export const isProjectPairing = (pairing: Pick<Pairing, "project">): boolean => pairing.project === true;
+
+// What is wrong with a pairing's remote side, or undefined. `remoteDir` is where Mutagen writes in the sandbox and,
+// through the two-way session, what lands in this device's folder, so it is held to exactly two shapes: /work, or
+// one project folder directly under it. A project pairing must be the second (its ignore list no longer shields the
+// sandbox's state dir, which only /work holds), and the second is only ever a project's.
+export const pairingProblem = (pairing: Pick<Pairing, "remoteDir" | "project">): string | undefined => {
+    const inProject = pairing.remoteDir !== undefined && projectDirNameOf(pairing.remoteDir) !== undefined;
+    if (pairing.remoteDir !== undefined && pairing.remoteDir !== WORKSPACE_ROOT && !inProject) {
+        return `remoteDir ${JSON.stringify(pairing.remoteDir)} is neither ${WORKSPACE_ROOT} nor ${WORKSPACE_ROOT}/<name> (a name starting with a letter or digit, of letters, digits, ".", "_" and "-", and not one the sandbox keeps for itself)`;
+    }
+    if (isProjectPairing(pairing) && !inProject) {
+        return `is a project pairing but syncs ${pairingRemoteDir(pairing)}, not a project folder under ${WORKSPACE_ROOT}`;
+    }
+    if (!isProjectPairing(pairing) && inProject) {
+        return `syncs ${pairingRemoteDir(pairing)}, which only a project pairing may`;
+    }
+    return undefined;
+};
+
+// The two fields that decide where a pairing's files go, parsed where the file is read; the rest of a pairing is taken
+// as this agent wrote it, as it always has been.
+const PlacementSchema = z.object({
+    sandboxId: z.string(),
+    remoteDir: z.string().optional(),
+    project: z.literal(true).optional(),
+});
+
+// Every pairing, or the first that is wrong, as the one error it is. A file with a pairing like that is refused whole,
+// read or written, rather than served in part: a pairing that syncs somewhere this agent cannot vouch for must not
+// sync at all, and dropping it would be persisted by the next write as if the owner had unpaired it.
+const assertPairings = (pairings: readonly unknown[]): void => {
+    for (const raw of pairings) {
+        const placement = PlacementSchema.safeParse(raw);
+        const problem = placement.success ? pairingProblem(placement.data) : `is malformed (${placement.error.issues.map((issue) => issue.message).join("; ")})`;
+        if (problem !== undefined) {
+            throw new SyntaxError(`${configPath}: the pairing for ${placement.success ? placement.data.sandboxId : "a sandbox"} ${problem}`);
+        }
+    }
+};
 
 // Every pairing this machine holds, a LIST: one machine legitimately runs a fleet of sandboxes. This file used
 // to hold exactly one pairing, so a second `setup` overwrote the ssh fragment, tore down every forward, and
@@ -103,14 +156,18 @@ export const readState = async (): Promise<SyncState> => {
     if (!Array.isArray(parsed?.pairings)) {
         throw new SyntaxError(`${configPath} has no "pairings" list`);
     }
+    assertPairings(parsed.pairings);
     return { pairings: parsed.pairings };
 };
 
 // Read-modify-write the pairing list: every mutation re-reads first, so a caller mutates what is on disk now.
 // This is NOT cross-process exclusion (`setup` stops the watcher before writing, which is what keeps them
 // apart); it bounds a lost update to one tick's port baseline rather than a sibling's whole pairing.
-export const updateState = async (mutate: (state: SyncState) => SyncState): Promise<void> =>
-    await writeSecretFile(configPath, baseDir, JSON.stringify(mutate(await readState()), undefined, 2));
+export const updateState = async (mutate: (state: SyncState) => SyncState): Promise<void> => {
+    const next = mutate(await readState());
+    assertPairings(next.pairings);
+    await writeSecretFile(configPath, baseDir, JSON.stringify(next, undefined, 2));
+};
 
 // Add a pairing, or replace the one already held for that sandbox (re-running setup rotates its token). Every
 // other pairing survives untouched.

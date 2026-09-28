@@ -231,6 +231,12 @@ test("replayableEnv allowlists, drops empties, and orders canonically: image ide
     ]);
 });
 
+// A project sandbox's folder is part of what the sandbox is, so every later recreate, update and rollback carries it.
+test("replayableEnv carries a project sandbox's folder across a recreate", () => {
+    expect(replayableEnv([["SANDBOX_PROJECT_DIR", "/work/my-app"]])).toEqual([["SANDBOX_PROJECT_DIR", "/work/my-app"]]);
+    expect(replayableEnv([["SANDBOX_PROJECT_DIR", ""]])).toEqual([]);
+});
+
 test("runtime directives: allowlisted tokens pass, anything else stops the recreate by name", () => {
     const overlay = ["FROM base", "# intentic:runtime --device=/dev/net/tun --cap-add=NET_ADMIN", "RUN true"].join("\n");
     expect(runtimeDirectivesOf(overlay)).toEqual(["--device=/dev/net/tun", "--cap-add=NET_ADMIN"]);

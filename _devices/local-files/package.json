@@ -1,0 +1,40 @@
+{
+    "name": "@intentic/local-files",
+    "version": "0.0.0",
+    "description": "intentic-files, the desktop app's sidecar that serves folders on the user's own disk to the editor's file views and edits their Office documents in the browser",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_devices/local-files"
+    },
+    "bin": {
+        "intentic-files": "./dist/cli.js"
+    },
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "bun build src/cli.ts --target=bun --conditions=@intentic/src --outfile dist/cli.js",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "test": "suites",
+        "test:watch": "suites --watch"
+    },
+    "dependencies": {
+        "@intentic/base": "workspace:*",
+        "@intentic/contract-serve": "workspace:*",
+        "@intentic/ext-onlyoffice": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "@intentic/workspace-ignore": "workspace:*",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:"
+    }
+}

@@ -1,8 +1,30 @@
 import type { SandboxSummary } from "@intentic/api-contract";
+import { projectDirNameFor } from "@intentic/sandbox-contract";
+import type { LocationQueryValue } from "vue-router";
 
 // Decides, in one place, what arriving on /setup does by itself: the desktop app hands the setup code to itself;
 // a browser starts a hosted machine. The picker survives only when a surface's own answer is unavailable or
 // refused. `Arrival` is the action taken on arrival, not what the page renders.
+
+// A PROJECT SETUP: the desktop app opens this page as `/setup?project=<folder name>` for a folder the reader picked on
+// their computer, and keeps the folder's path to itself. The page only ever needs its name.
+export interface SetupProject {
+    // The folder's own name, which a sandbox made for it is called.
+    readonly name: string;
+    // Where the folder lands in the sandbox (`/work/<dirName>`), derived once, here, and only validated after.
+    readonly dirName: string;
+}
+
+// One key of a query as vue-router hands it back: an array for a repeated key, null for a bare `?key`.
+type QueryValue = LocationQueryValue | LocationQueryValue[] | undefined;
+
+const isSingle = (value: QueryValue): value is string => typeof value === `string`;
+
+// `?project=` read back as a project, or nothing: a blank value names no folder, and a repeated one no single folder.
+export const setupProjectOf = (value: QueryValue): SetupProject | undefined => {
+    const name = isSingle(value) ? value.trim() : ``;
+    return name === `` ? undefined : { name, dirName: projectDirNameFor(name) };
+};
 
 export type Arrival =
     // Starts a machine on the platform's provider now and shows it booting; a browser's answer.
@@ -35,6 +57,8 @@ export interface ArrivalInput {
     readonly requestedMachine: "hosted" | "mine" | undefined;
     // `?elsewhere=1`: this computer can't run it; the one app arrival that must not install anything.
     readonly elsewhere: boolean;
+    // A project setup (`setupProjectOf`): the folder is on this computer and only the app can sync it.
+    readonly project: boolean;
 }
 
 // Whether there's a machine to give: platform hosts, isn't full, and this account's allowance isn't spent. Shared
@@ -53,6 +77,11 @@ const installsHere = (input: ArrivalInput): boolean => input.commandOffered && i
 export const arrivalFor = (input: ArrivalInput): Arrival => {
     if (settled(input)) {
         return `choose`;
+    }
+    // The folder already answered where it runs, however many sandboxes the account has: the app that picked it installs
+    // here, from a browser too (its setup link reaches the app by the OS), wherever a code can be minted for it.
+    if (input.project) {
+        return input.commandOffered ? `local` : `choose`;
     }
     // A row that already has a machine has nothing to start, whoever asked for it.
     const startable = !input.hostedIdle && hostedTakeable(input);

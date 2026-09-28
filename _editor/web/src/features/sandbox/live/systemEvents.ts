@@ -1,5 +1,6 @@
 import { resetSandboxScope } from "@intentic/extension-api";
 import { fileBoundQueryKeys, staleQueryKeys, staleRuntimeQueryKeys, type SystemEvent } from "@intentic/sandbox-contract";
+import { adoptProjectScope } from "../../../app/projectScope";
 import { contributedFileBindings } from "../../../extension-host/fileBindings";
 import { emitFilesChanged } from "../../../extension-host/fileEvents";
 import { emitRefsChanged, emitReposChanged } from "../../../extension-host/repoEvents";
@@ -60,6 +61,11 @@ const applyHello = (event: Extract<SystemEvent, { kind: `hello` }>, sandboxId: s
         if (activeSandboxId.value === sandboxId) {
             resetSandboxScope();
         }
+    }
+    // A project sandbox opens on its own folder, unless a scope is already stored for it; after the sweep above, so a
+    // replaced workspace starts on it again.
+    if (event.projectDir !== undefined) {
+        adoptProjectScope(sandboxId, event.projectDir);
     }
     // A new connection may restart the daemon's revision counter; reset here so a lower revision isn't dropped as stale.
     desyncAgents();

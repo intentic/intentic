@@ -45,6 +45,7 @@ const stubServices = (capabilities: Capability[] = [], environmentHash = ""): Se
                 definitionSeed: "",
                 devRoot: undefined,
                 prewarm: false,
+                projectDir: "",
             },
             extensionsDir: EXTENSIONS_DIR,
             openaiApiKey: "",

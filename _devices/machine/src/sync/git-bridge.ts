@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { HISTORY_ROOT } from "@intentic/constants";
 import type { Log } from "@intentic/local-agent";
-import type { Pairing } from "./config.js";
+import { isProjectPairing, type Pairing } from "./config.js";
 import { runProcess } from "./exec.js";
 import { sshAlias } from "./ssh.js";
 
@@ -151,14 +151,16 @@ export const bridgeRepo = async (exec: BridgeExec, alias: string, localDir: stri
 };
 
 // One bridge pass over a pairing's sandbox repos (sync-mode only). `known` lets the caller skip re-listing over
-// ssh when the repo set is unchanged; returns the list used, or undefined if there was nothing to bridge.
+// ssh when the repo set is unchanged; returns the list used, or undefined if there was nothing to bridge. Never for a
+// project pairing: its folder is one of the owner's own repos, whose `.git` is theirs, and the sandbox's history of it
+// is a separate repository the bridge would init, re-point and reset theirs onto.
 export const runGitBridge = async (
     exec: BridgeExec,
     pairing: Pairing,
     log: Log,
     known: readonly string[] | undefined,
 ): Promise<readonly string[] | undefined> => {
-    if (pairing.mode !== "sync" || pairing.localDir === undefined) {
+    if (pairing.mode !== "sync" || pairing.localDir === undefined || isProjectPairing(pairing)) {
         return undefined;
     }
     const alias = sshAlias(pairing.sandboxId);

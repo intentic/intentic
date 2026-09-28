@@ -220,6 +220,9 @@ export const REPLAY_ENV = [
     // The arriving profile's own sandbox definition. Replayed rather than consumed, because a recreate is how a
     // workspace that never filled gets a second chance at it; the daemon applies it only to one that arrived empty.
     "SANDBOX_DEFINITION_SEED",
+    // The folder of the owner's computer this sandbox was made for, synced into `/work/<name>` (connect.rs). What the
+    // sandbox IS rather than a setting: a recreate that dropped it would seed a starter site beside the owner's project.
+    "SANDBOX_PROJECT_DIR",
 ] as const;
 
 // `printenv -0` / `env -0` output → name/value pairs. NUL framing is the only safe channel for these values:

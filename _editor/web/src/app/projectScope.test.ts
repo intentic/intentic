@@ -1,5 +1,6 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
+import { RESERVED_PROJECT_DIR_NAMES } from "@intentic/sandbox-contract";
 import { freshImport } from "@intentic/testing/bun";
 import { activeSandboxId } from "../features/sandbox/overview/activeSandbox";
 
@@ -45,15 +46,22 @@ describe(`inside a project`, () => {
     });
 });
 
+// What the store holds for the scope, whichever sandbox is active.
+const stored = (): (string | null)[] =>
+    Object.keys(localStorage)
+        .filter((key) => key.startsWith(`intentic.project.`))
+        .map((key) => localStorage.getItem(key));
+
 describe(`the selection`, () => {
-    it(`is remembered for the sandbox and cleared when set to nothing`, async () => {
+    // Everything is kept as a choice too, not as nothing chosen: a project sandbox's hello must not narrow it again.
+    it(`is remembered for the sandbox, a return to everything included`, async () => {
         const { projectScope, setProjectScope } = await load();
         setProjectScope(`shop`);
         expect(projectScope.value).toBe(`shop`);
-        expect(Object.keys(localStorage).some((key) => key.startsWith(`intentic.project.`))).toBe(true);
+        expect(stored()).toEqual([`shop`]);
         setProjectScope(undefined);
         expect(projectScope.value).toBeUndefined();
-        expect(Object.keys(localStorage).some((key) => key.startsWith(`intentic.project.`))).toBe(false);
+        expect(stored()).toEqual([``]);
     });
 
     // A project id is a folder in one sandbox's workspace: a switch opens on whatever the incoming sandbox had open.
@@ -70,5 +78,49 @@ describe(`the selection`, () => {
         activeSandboxId.value = `sb-a`;
         resetSandboxScope();
         expect(projectScope.value).toBe(`shop`);
+    });
+});
+
+// The daemon's hello names a project sandbox's folder on every connect. The first time this browser hears it, the
+// workspace opens on that folder; from then on the scope is the owner's.
+describe(`a project sandbox's own folder`, () => {
+    it(`becomes the scope while nothing is stored for the sandbox`, async () => {
+        activeSandboxId.value = `sb-a`;
+        const { projectScope, adoptProjectScope } = await load();
+        adoptProjectScope(`sb-a`, `my-app`);
+        expect(projectScope.value).toBe(`my-app`);
+        expect(stored()).toEqual([`my-app`]);
+    });
+
+    it(`never overrules a scope already chosen, a return to everything included`, async () => {
+        activeSandboxId.value = `sb-a`;
+        const { projectScope, setProjectScope, adoptProjectScope } = await load();
+        setProjectScope(`my-app/packages/web`);
+        adoptProjectScope(`sb-a`, `my-app`);
+        const narrowed = projectScope.value;
+        setProjectScope(undefined);
+        adoptProjectScope(`sb-a`, `my-app`);
+        expect({ narrowed, widened: projectScope.value }).toEqual({ narrowed: `my-app/packages/web`, widened: undefined });
+    });
+
+    // The hello names the sandbox it came from, which a switch may have taken out of view.
+    it(`is kept for the sandbox that named it, without moving the one in view`, async () => {
+        activeSandboxId.value = `sb-b`;
+        const { projectScope, adoptProjectScope } = await load();
+        adoptProjectScope(`sb-a`, `my-app`);
+        const inView = projectScope.value;
+        activeSandboxId.value = `sb-a`;
+        resetSandboxScope();
+        expect({ inView, afterSwitch: projectScope.value }).toEqual({ inView: undefined, afterSwitch: `my-app` });
+    });
+
+    it(`is refused when it names no folder a project could be, and taken once it does`, async () => {
+        activeSandboxId.value = `sb-a`;
+        const { projectScope, adoptProjectScope } = await load();
+        adoptProjectScope(`sb-a`, `../elsewhere`);
+        adoptProjectScope(`sb-a`, RESERVED_PROJECT_DIR_NAMES[0]!);
+        const refused = projectScope.value;
+        adoptProjectScope(`sb-a`, `my-app`);
+        expect({ refused, taken: projectScope.value }).toEqual({ refused: undefined, taken: `my-app` });
     });
 });

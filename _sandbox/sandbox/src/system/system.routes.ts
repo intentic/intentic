@@ -1,7 +1,9 @@
 import {
+    type Fence,
     type SystemEvent,
     type TerminalsList,
     type UsageAccount,
+    fenceReaches,
     SANDBOX_ROUTE_NAMES,
     SANDBOX_ROUTE_SHAPES,
     systemContract,
@@ -35,6 +37,7 @@ import {
 } from "../terminal/terminal-session.js";
 import { settleTerminalHelpFor, terminalHelpFor } from "../terminal/terminal-help.js";
 import { isNoTmuxServer } from "../terminal/tmux-server.js";
+import { projectDirOf } from "./project-dir.js";
 import { latestVersion } from "./boot/version-check.js";
 import { breakingNotes, MAX_UPDATE_NOTES, updateNotes, withdrawnRelease } from "./boot/release-notes.js";
 import { stagedUpdate, updateOutcome } from "./boot/staged-update.js";
@@ -48,6 +51,13 @@ import { workspaceIdentity } from "./workspace-identity.js";
 import { framedEvent, framedMetrics, framedSubagents } from "../auth/fleet-scope.js";
 import { frameBacklog } from "../seams/frame-backlog.js";
 import { callerFence } from "../areas/area-scope.js";
+
+// A project sandbox's folder, for the hello: withheld from a caller whose fence does not reach it, as a fenced stream
+// withholds any repository's name (auth/fleet-scope.ts).
+const shownProjectDir = (config: Services["config"], fence: Fence): { readonly projectDir?: string } => {
+    const projectDir = projectDirOf(config);
+    return projectDir !== undefined && fenceReaches(fence, projectDir) ? { projectDir } : {};
+};
 
 // Long-lived /events stream: heartbeats every ~2s interleaved with workspaceChanged batches and presence snapshots.
 // `member` joins the roster for this connection's lifetime; undefined observes without joining.
@@ -69,8 +79,13 @@ async function* systemEvents(
         signal.removeEventListener("abort", abortFromCaller);
         return;
     }
+    // A narrowed caller's stream is cut frame by frame (auth/fleet-scope.ts): a guest's own conversations and no
+    // paths, a fenced member's own folders. Resolved once here rather than per frame, which a file read cannot be;
+    // editing an area revokes the connection, so this can never outlive the grant it was read from.
+    const fence = callerFence(await services.areas.list(), identity);
     // First frame: workspace identity (a wipe/recreate gets a new one), the route/shape surface this build implements,
-    // the build id for cache invalidation, and boot progress; sent before subscribing so it appears before any wait.
+    // the build id for cache invalidation, boot progress, and the project folder the browser opens on; sent before
+    // subscribing so it appears before any wait.
     yield {
         kind: "hello",
         workspaceId: await workspaceIdentity(services),
@@ -78,6 +93,7 @@ async function* systemEvents(
         shapes: { ...SANDBOX_ROUTE_SHAPES },
         build: buildId(),
         boot: services.boot.progress(),
+        ...shownProjectDir(services.config, fence),
     };
     // Every subscription this connection holds, released together and last-first: at the end of the stream, or at the
     // cut, since a consumer that stopped reading leaves this generator suspended at `yield` and its `finally` may never
@@ -95,10 +111,6 @@ async function* systemEvents(
         queueMicrotask(release);
         controller.abort();
     });
-    // A narrowed caller's stream is cut frame by frame (auth/fleet-scope.ts): a guest's own conversations and no
-    // paths, a fenced member's own folders. Resolved once here rather than per frame, which a file read cannot be;
-    // editing an area revokes the connection, so this can never outlive the grant it was read from.
-    const fence = callerFence(await services.areas.list(), identity);
     const enqueue = (event: SystemEvent): void => {
         const framed = framedEvent(identity, fence, event, services.agents.get);
         if (framed !== undefined) {

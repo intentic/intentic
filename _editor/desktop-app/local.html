@@ -1,0 +1,54 @@
+<!doctype html>
+<!-- A window on a folder of the user's own disk: the editor itself (_editor/web), entered through local/main.ts. -->
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>intentic</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- The app's own pre-paint rule (_editor/web/index.html), minus what only a browser tab meets (an arriving profile, a
+             popped-out panel): the reader's stored look and language, else the OS's. Kept in step with that file, or the
+             window paints one look and useTheme corrects it a moment later. -->
+        <script>
+            try {
+                var accentVars = localStorage.getItem("ui-accent-vars");
+                if (accentVars) document.documentElement.setAttribute("style", accentVars);
+                var uiTextSize = localStorage.getItem("ui-text-size");
+                if (uiTextSize === "default" || uiTextSize === "large") document.documentElement.setAttribute("data-text-size", uiTextSize);
+                var UI_LOCALES = ["en", "de", "es", "fr", "pl"];
+                var uiLocale = localStorage.getItem("ui-locale");
+                if (UI_LOCALES.indexOf(uiLocale) === -1) {
+                    uiLocale = "en";
+                    var offered = navigator.languages || [navigator.language];
+                    for (var n = 0; n < offered.length; n++) {
+                        var primary = String(offered[n]).toLowerCase().split("-")[0];
+                        if (UI_LOCALES.indexOf(primary) !== -1) {
+                            uiLocale = primary;
+                            break;
+                        }
+                    }
+                }
+                document.documentElement.setAttribute("lang", uiLocale);
+                var uiScheme = localStorage.getItem("ui-color-scheme");
+                var dark = uiScheme === "dark" || (uiScheme !== "light" && !!window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+                if (dark) document.documentElement.setAttribute("data-mode", "dark");
+                var uiSkin = localStorage.getItem("ui-skin");
+                if (uiSkin === "sanctum" || (uiSkin !== "none" && dark)) document.documentElement.setAttribute("data-skin", "sanctum");
+            } catch (e) {}
+        </script>
+<!-- The runtime config the editor reads while its modules evaluate (src/app/environments/environment.ts). Its platform
+             is a stand-in answered inside the page (local/platform.ts); a local window talks to no server of ours. -->
+        <script>
+            window.env = {
+                production: true,
+                api: { url: "https://platform.local.invalid" },
+                auth: { googleClientId: "" },
+                analytics: { posthogKey: "", posthogHost: "" },
+                afterSignOut: "/",
+            };
+        </script>
+        <script type="module" src="/local/main.ts"></script>
+    </head>
+    <body>
+        <div id="app"></div>
+    </body>
+</html>

@@ -13,6 +13,8 @@ export interface SetupArgs {
     cfToken?: string;
     syncDir?: string;
     platformUrl?: string;
+    // A folder of this computer becoming the sandbox's project: its name inside /work (src-tauri/src/project.rs).
+    project?: string;
 }
 
 export interface RecreateArgs {
@@ -217,6 +219,18 @@ export const runStop = (id: string): Promise<void> => invoke(`run_stop`, { id })
 export const revealLog = (path: string): Promise<void> => invoke(`reveal_log`, { path });
 /** The only way out of this face: a `target="_blank"` on a local page opens nothing (commands.rs `open_url`). */
 export const openUrl = (url: string): Promise<void> => invoke(`open_url`, { url });
+
+// A folder or a document of this computer, in a window of its own (src-tauri/src/local.rs): no sandbox, no sign-in.
+// `recent` is newest first, as the app remembers them (state.rs `Recent`).
+export interface LocalRecent {
+    path: string;
+    folder: boolean;
+    openedAt: number;
+}
+// The system dialog, then a window for what was chosen; nothing chosen opens nothing.
+export const localOpen = (folder: boolean): Promise<void> => invoke(`local_open`, { folder });
+export const localOpenPath = (path: string): Promise<void> => invoke(`local_open_path`, { path });
+export const localRecents = (): Promise<LocalRecent[]> => invoke(`local_recents`);
 // `remember` makes this answer the × from now on and retires the dialog; otherwise it applies once.
 export const closeWorkspace = (action: CloseAction, remember: boolean): Promise<void> => invoke(`close_workspace`, { action, remember });
 

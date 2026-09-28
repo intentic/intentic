@@ -19,6 +19,9 @@ flowchart LR
 - `ic sandbox connect <code>` redeems the setup code from the platform and brings a sandbox up. `update`, `prepare`,
   `rollback`, `rebuild` and `reshape` swap or restart the container while keeping `/work` and `/history`; `remove`
   moves the data to a trash that `restore` brings back and `purge` empties early.
+- A sandbox for one folder of the owner's (`SYNC_REMOTE_DIR=/work/<name>` with `SYNC_PROJECT=1`, beside `SYNC_DIR`)
+  is checked before anything starts (`project_dir.rs`, the contract's name rule), hands the sync installer both, and
+  tells the container `SANDBOX_PROJECT_DIR`, which the run contract replays across every later swap.
 - **ic is the one host authority for what runs and what should run.** Every door onto a sandbox's container (the
   machine agent, the desktop app, the web's pasted fallback lines) calls ic's verbs rather than docker: `start`,
   `stop` and `restart` power the tunnel sidecar with its sandbox, and `ic sandbox list --json` answers each

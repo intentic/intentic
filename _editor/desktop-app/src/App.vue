@@ -27,6 +27,7 @@ import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from "vue";
 import { initAnalytics, track, trackBeforeExit } from "./analytics";
 import DockerCard from "./components/DockerCard.vue";
+import LocalHome from "./components/LocalHome.vue";
 import Requirements from "./components/Requirements.vue";
 import { desktopAgentPanel } from "./deviceAgent";
 import SetupProgress from "./components/SetupProgress.vue";
@@ -1270,6 +1271,9 @@ onUnmounted(() => {
                 </Notice>
                 <!-- Only beside the offer it refused: a failed install turns the offer into the download notice above, which says why. -->
                 <Notice v-if="updateError && update.kind === `ready`" tone="warning" class="items-center">{{ updateError }}</Notice>
+
+                <!-- A folder or a document of this computer, which needs none of what follows: no Docker, no sandbox, no account. -->
+                <LocalHome />
 
                 <!-- THE ENGINE, while this window is starting it and after a start that did not work out. It leads
                      the screen because a sandbox list drawn above a dead Docker is a list of things that are not there. -->

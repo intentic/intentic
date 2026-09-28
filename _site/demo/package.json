@@ -12,6 +12,7 @@
     },
     "dependencies": {
         "@intentic/api-contract": "workspace:*",
+        "@intentic/contract-serve": "workspace:*",
         "@intentic/web": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "fflate": "catalog:"

@@ -15,6 +15,10 @@
 #
 # Required env: SANDBOX_URL, PAIR_TOKEN (the one-time token from the card).
 # Optional: SYNC_DIR - local folder to sync (default: ~/intentic/<id>, the same id the sandbox's own URL carries)
+#           SYNC_REMOTE_DIR - the sandbox folder it syncs with: /work (the default), or /work/<name> for a project
+#           folder of your own, which also needs SYNC_PROJECT.
+#           SYNC_PROJECT - any non-empty value (the desktop app sends 1): SYNC_DIR is your own project, synced into
+#           SYNC_REMOTE_DIR with no sandbox state backup and no git bridge writing into it.
 #           TAKEOVER - any non-empty value takes over sync from another machine already enrolled on this sandbox.
 #           AGENT_BIN - local dev / dogfooding an unreleased build: run this command instead of the installed
 #           agent, whitespace-separated (e.g. "node C:\intentic\_devices\machine\dist\cli.js").
@@ -60,9 +64,11 @@ function Get-IntenticAgentVersion {
 
 # WHETHER THE INSTALLED AGENT UNDERSTANDS THE HANDOVER, asked by running its help rather than by reading its
 # version: `<route> setup --help` prints a usage screen and exits 0 on an agent that has the route, exits
-# non-zero on one that does not, and connects nothing either way.
+# non-zero on one that does not, and connects nothing either way. Every one of -Flags has to be on that screen
+# too: an agent older than one of them refuses the whole handover over it ("No flag registered"). The
+# embedding script passes the flags its handover uses that are newer than the route, and none otherwise.
 #
-# Assigned to $null rather than redirected, and the assignment is doing two jobs: it keeps the usage screen
+# Assigned to a variable rather than redirected, and the assignment is doing two jobs: it keeps the usage screen
 # off the user's screen, and it keeps the function's return value a plain boolean instead of the help text
 # plus a boolean. Silencing the older agent's complaint instead would need a stderr redirection, which no
 # .ps1 here may hold while $ErrorActionPreference = 'Stop' is in force - on Windows PowerShell 5.1 that pair
@@ -70,10 +76,15 @@ function Get-IntenticAgentVersion {
 # detect (src-tauri/src/scripts.rs holds that line for every bundled script). So the one line such an agent
 # writes stays visible, which is no loss: it is the truth, and the line after it says what is being done.
 function Test-IntenticAgentSpeaks {
-    param([string]$Path, [string]$Route)
+    param([string]$Path, [string]$Route, [string[]]$Flags = @())
     try {
-        $null = & $Path $Route setup --help
-        return $LASTEXITCODE -eq 0
+        $help = & $Path $Route setup --help
+        if ($LASTEXITCODE -ne 0) { return $false }
+        $said = "$help"
+        foreach ($flag in $Flags) {
+            if (-not $said.Contains($flag)) { return $false }
+        }
+        return $true
     } catch {
         return $false
     }
@@ -220,10 +231,18 @@ function Install-IntenticAgent {
 $url = $env:SANDBOX_URL
 $pair = $env:PAIR_TOKEN
 $dir = $env:SYNC_DIR
+$remoteDir = $env:SYNC_REMOTE_DIR
+$project = $env:SYNC_PROJECT
 if ([string]::IsNullOrEmpty($url) -or [string]::IsNullOrEmpty($pair)) {
     Write-Error 'SANDBOX_URL and PAIR_TOKEN are required (copy the command from the Desktop sync card).'
     exit 1
 }
+
+# THE HANDOVER'S NEWER WORDS: the flags below that an agent older than them refuses outright, so an installed
+# agent whose `setup --help` does not list them is replaced like one without the route. Empty for an ordinary folder.
+$speaks = @()
+if (-not [string]::IsNullOrEmpty($remoteDir)) { $speaks += '--remote-dir' }
+if (-not [string]::IsNullOrEmpty($project)) { $speaks += '--project' }
 
 # The only Windows agent a release publishes is x64, which Windows on ARM runs under emulation.
 $arch = 'amd64'
@@ -231,7 +250,7 @@ $bin = $env:AGENT_BIN
 if (-not $bin) {
     $dest = Join-Path $HOME '.intentic\machine\bin\intentic-machine.exe'
     $have = Get-IntenticAgentVersion -Path $dest
-    if ($have -and -not (Test-IntenticAgentSpeaks -Path $dest -Route $route)) {
+    if ($have -and -not (Test-IntenticAgentSpeaks -Path $dest -Route $route -Flags $speaks)) {
         Write-Host "The agent installed here ($have) doesn't understand ``$route setup`` - replacing it."
         $have = ''
     }
@@ -241,6 +260,8 @@ if (-not $bin) {
 
 $syncArgs = @($route, 'setup', '--url', $url, '--pair', $pair)
 if (-not [string]::IsNullOrEmpty($dir)) { $syncArgs += @('--dir', $dir) }
+if (-not [string]::IsNullOrEmpty($remoteDir)) { $syncArgs += @('--remote-dir', $remoteDir) }
+if (-not [string]::IsNullOrEmpty($project)) { $syncArgs += @('--project') }
 if (-not [string]::IsNullOrEmpty($env:TAKEOVER)) { $syncArgs += @('--takeover') }
 if (-not [string]::IsNullOrEmpty($env:AGENT_BIN)) {
     # A whitespace-separated command: first token is the executable, the rest are leading args before setup.

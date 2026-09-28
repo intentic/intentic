@@ -11,12 +11,14 @@ import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.handler.js";
 import { localModelPanelKey } from "../capabilities/handlers/localmodel.handler.js";
 import { linkSshHosts } from "../capabilities/ssh-hosts.js";
 import type { Services } from "../composition.js";
+import { ensureProjectRepo } from "../git/remote/project-repo.js";
 import { ensureRepoGitDirs } from "../git/remote/repo-git-dirs.js";
 import { commitRootBaseline, ensureLocalRootRepo, ensureRootRepo } from "../git/remote/root-repo.js";
 import { applyEventsPath, applyRunLive } from "../intentic/apply-events.js";
 import { checkEventsDir } from "../intentic/check-run.js";
 import { INFRA_APPLY_KEY } from "../intentic/infra-apply.js";
 import { arrivedPrewarmed } from "../system/boot/prewarm.js";
+import { projectDirOf, seedsStarterSite } from "../system/project-dir.js";
 import { restoreAuthorizedKeys } from "../hosts/desktop-sync.js";
 import { applyDefinitionItems } from "../portability/apply-definition.js";
 import { sweepArrivals } from "../portability/bundle-arrival.js";
@@ -29,6 +31,7 @@ import { seedStarterSite } from "../scaffold/starter-site.js";
 import { linkClaudeState } from "../sessions/session-store.js";
 import { reconcileBakedSkills } from "../settings/skills.js";
 import type { BootPhase } from "./boot-phase.js";
+import { convergeProjectNote } from "./project-note.js";
 
 // What a step reads: the boot phase, the runner env a definition seed is filtered by, and whether rootRepo created the
 // workspace repo this boot, which the starter seed and the baseline commit wait on.
@@ -158,6 +161,25 @@ const seedStarter = async ({ logger, services }: BootRun): Promise<void> => {
     logger.info({ why: outcome.skipped }, "starter site not seeded, the workspace opens as it arrived");
 };
 
+// Said only when it changed something: every later boot finds the repo standing.
+const ensureProjectFolderRepo = async ({ config, logger, services }: BootRun): Promise<void> => {
+    const name = projectDirOf(config);
+    if (name === undefined) {
+        return;
+    }
+    const outcome = await ensureProjectRepo(services.workspace, config.historyRoot, name);
+    if (outcome === "created" || outcome === "pointer restored") {
+        logger.info({ repo: name, outcome }, "project folder: its repo is in place, with its git dir on /history");
+    }
+};
+
+const noteProjectFolder = async ({ config, logger }: BootRun): Promise<void> => {
+    const name = projectDirOf(config);
+    if (name !== undefined && (await convergeProjectNote(config.workspaceRoot, name))) {
+        logger.info({ repo: name }, "project folder: the workspace's AGENTS.md tells agents it is the owner's");
+    }
+};
+
 // The converging work every held data route waits on, in the order it runs. A request arriving mid-boot queues on the
 // gate rather than reading half-built state, and the browser is told which step is running. `role.container` owns the
 // shared ~/.ssh and ~/.claude; `role.roots` owns the workspace and history roots.
@@ -201,10 +223,19 @@ const BOOT_STEPS: readonly BootChainStep[] = [
         },
         failure: "root workspace repo not ensured, the Changes review will degrade",
     },
+    // After rootRepo, whose excludes it re-syncs once the folder is a repo, so the baseline leaves the project out; before
+    // repoGitDirs, which converges its git dir as it does every repo's.
+    {
+        key: "projectRepo",
+        label: "Making your project folder a repo",
+        when: ({ role, traits, config }) => role.roots && traits.relocateGitDirs && projectDirOf(config) !== undefined,
+        run: ensureProjectFolderRepo,
+        failure: "project folder not made a repo, its files read as the workspace's own in the Changes review",
+    },
     {
         key: "starterSite",
         label: "Putting your starter site in place",
-        when: ({ role, freshRoot, traits }) => role.roots && freshRoot && traits.ownsWorkspaceConfig,
+        when: ({ role, freshRoot, traits, config }) => role.roots && freshRoot && traits.ownsWorkspaceConfig && seedsStarterSite(config),
         run: seedStarter,
         failure: "starter site not seeded, the workspace opens empty",
     },
@@ -253,6 +284,14 @@ const BOOT_STEPS: readonly BootChainStep[] = [
         failure: "agents registry not initialized, the fleet starts empty",
     },
     { key: "skills", label: "Converging agent skills", when: ({ role, traits }) => role.roots && traits.ownsWorkspaceConfig, run: convergeSkills },
+    // Before the baseline, so a fresh root's first commit already holds the note.
+    {
+        key: "projectNote",
+        label: "Telling agents about your project folder",
+        when: ({ role, traits, config }) => role.roots && traits.ownsWorkspaceConfig && projectDirOf(config) !== undefined,
+        run: noteProjectFolder,
+        failure: "project note not written, agents are not told which folder is the owner's",
+    },
     // After every daemon-owned file exists, so Changes starts clean.
     {
         key: "baseline",

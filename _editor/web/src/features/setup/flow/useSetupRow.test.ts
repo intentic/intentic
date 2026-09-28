@@ -8,15 +8,15 @@ import { type SetupRowHost, useSetupRow } from "./useSetupRow";
 // throw, a check-in baseline that follows the row, a connection that selects before entering, and a draft discarded
 // only while this visit minted it and nothing committed it.
 
-const stage = (existing: readonly SandboxSummary[] = []) => {
+const stage = (existing: readonly SandboxSummary[] = [], name?: string) => {
     const sandbox = {
         sandboxes: ref<SandboxSummary[]>([...existing]),
-        create: jest.fn(async (name: string) => sandboxSummary({ id: `new`, name })),
+        create: jest.fn(async (named: string) => sandboxSummary({ id: `new`, name: named })),
         select: jest.fn((_id: string) => undefined),
         remove: jest.fn(async (_id: string) => undefined),
     } satisfies SetupRowHost[`sandbox`];
     const enter = jest.fn(async () => undefined);
-    const row = effectScope().run(() => useSetupRow({ sandbox, enter }))!;
+    const row = effectScope().run(() => useSetupRow({ sandbox, enter, name }))!;
     return { sandbox, enter, row };
 };
 
@@ -27,6 +27,12 @@ describe(`the row this visit sets up`, () => {
         expect(sandbox.create.mock.calls).toEqual([[`workspace-2`]]);
         expect(row.created.value?.id).toBe(`new`);
         expect([row.createdHere.value, row.creating.value]).toEqual([true, false]);
+    });
+
+    it(`names one made for a project after its folder, numbered past a name already taken`, async () => {
+        const { sandbox, row } = stage([sandboxSummary({ id: `s1`, name: `My App` })], `My App`);
+        await row.autoCreate();
+        expect(sandbox.create.mock.calls).toEqual([[`My App-2`]]);
     });
 
     it(`creates only once while a create is in flight`, async () => {

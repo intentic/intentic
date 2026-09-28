@@ -2,6 +2,7 @@ import type { WorkspaceDerived } from "@intentic/sandbox-contract";
 import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import type { OpenFile } from "../viewers/openFile";
 import { rememberDerived } from "./derivedCache";
+import { localFace } from "../../../app/environments/local";
 
 // A file's derived text: the markdown shadow the sandbox keeps of a document, picture, recording or archive, and the
 // same rendering an agent reads instead of the bytes.
@@ -22,7 +23,8 @@ const NOTEBOOK = /\.ipynb$/i;
 
 /** Whether a derived reading of this file is worth offering at all. */
 export const mayHaveDerivedText = (path: string, kind: OpenFile["kind"]): boolean => {
-    if (kind === `empty` || kind === `locked`) {
+    // A folder on the user's own disk has no reader behind it (app/environments/local.ts): no shadow to offer.
+    if (kind === `empty` || kind === `locked` || localFace() !== undefined) {
         return false;
     }
     return kind === `code` || kind === `markdown` || kind === `big-text` ? NOTEBOOK.test(path) : true;

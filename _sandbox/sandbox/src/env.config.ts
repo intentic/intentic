@@ -130,6 +130,13 @@ const configSchema = z.object({
                 .string()
                 .default("")
                 .transform((value) => value === "true" || value === "1"),
+            // A project sandbox's folder, `/work/<name>`: the owner's own, synced live from their computer, set by `ic`
+            // when it creates one; empty on every other sandbox. A value naming anything else refuses the boot
+            // (system/project-dir.ts).
+            projectDir: z
+                .string()
+                .default("")
+                .transform((value) => value.trim()),
         })
         .prefault({}),
     // Outbound edge address this sandbox dials with `sandbox.grant`; empty ⇒ no tunnel, loopback only.

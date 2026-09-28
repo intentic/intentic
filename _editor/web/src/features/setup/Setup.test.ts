@@ -586,6 +586,28 @@ it(`keeps a machine the app finds mid-errand, and asks instead`, async () => {
     expect(el.textContent).toContain(`Starting the machine`);
 });
 
+// The app opened the page for a folder the reader picked (`?project=`): a sandbox named after it goes straight to the
+// app on this computer, even beside the account's other sandbox, and nothing is offered that could not sync the folder:
+// no machine of ours, no command.
+it(`hands a folder the app picked straight to the app, offering no machine and no command in its place`, async () => {
+    desktopApp.value = `1.275.0`;
+    query.value = { project: `My App` };
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
+    setupCode.mockResolvedValue(MINTED);
+    const live = sandboxRow({ id: `s1`, name: `workspace`, lastSeenAt: `2026-09-28T10:00:00.000Z` });
+    sandboxes.value = [live];
+    list.mockResolvedValue([live]);
+    const el = await mount();
+    jest.useFakeTimers();
+    await advanceTimersByTimeAsync(500);
+    await waitFor(() => expect(el.textContent).toContain(`Handed to the app`));
+    expect(create.mock.calls).toEqual([[`My App`]]);
+    expect(hostedProvision).not.toHaveBeenCalled();
+    expect(el.querySelectorAll(`[role="radio"]`)).toHaveLength(0);
+    expect(buttonLabelled(`Set it up now`)?.tagName).toBe(`BUTTON`);
+    expect(el.textContent).not.toContain(`Other ways to set up`);
+});
+
 // A refused check-in means alive but turned away, not slow to boot; waiting alone can't fix it, so the card must say so
 // and offer a way out.
 it(`names a refused check-in on the wait card, with a way out`, async () => {

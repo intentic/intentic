@@ -3,13 +3,27 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { REFERENCE_DIR, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 
-import { convergePlan, mutagenCreateArgs, sessionMatchesSpec, sessionName, surplusSessions, type SyncSessionSpec } from "./mutagen.js";
+import type { Pairing } from "./config.js";
+import {
+    convergePlan,
+    mutagenCreateArgs,
+    sameEnds,
+    sessionMatchesSpec,
+    sessionName,
+    sessionSpec,
+    sessionSpecs,
+    surplusSessions,
+    type SyncSessionSpec,
+} from "./mutagen.js";
+import { ignoreMatcher } from "./residue.js";
 import {
     BACKUP_IGNORES,
     IGNORES,
+    ignoresFor,
     INCLUDE_MARKER,
     mutagenSshPath,
     pairingSshConfig,
+    PROJECT_IGNORES,
     resolvedEndpoint,
     sanitizeId,
     sshAlias,
@@ -431,5 +445,83 @@ describe("sessionMatchesSpec", () => {
     it("rejects a session whose endpoints moved", () => {
         expect(sessionMatchesSpec({ ...live({ paths: [...IGNORES] }), alpha: { path: "/home/u/elsewhere" } }, spec)).toBe(false);
         expect(sessionMatchesSpec({ ...live({ paths: [...IGNORES] }), beta: { host: "intentic-sync-x", path: "/old" } }, spec)).toBe(false);
+    });
+});
+
+// What every workspace session leaves on its own side, pairing kind aside: what the daemon's own walk leaves out
+// (@intentic/workspace-ignore), and the env files that are private by convention.
+describe("every pairing's ignores", () => {
+    it("leave out Python environments and bytecode, Gradle's caches and scratch space, as the daemon does", () => {
+        for (const list of [IGNORES, PROJECT_IGNORES]) {
+            expect(list).toEqual(expect.arrayContaining([".venv", "venv", "__pycache__", ".gradle", ".tmp"]));
+        }
+    });
+
+    // Mutagen's own syntax: a bare name matches at any depth, `*` within one segment. The committed variants
+    // (`.env.example`, `.env.production`) are project content and still travel.
+    it("leave out the machine-local env files and keep the committed ones", () => {
+        expect(IGNORES).toEqual(expect.arrayContaining([".env", ".env.local", ".env.*.local"]));
+        expect(IGNORES.filter((pattern) => pattern.startsWith(".env"))).toEqual([".env", ".env.local", ".env.*.local"]);
+        expect(PROJECT_IGNORES.filter((pattern) => pattern.startsWith(".env"))).toEqual([".env", ".env.local", ".env.*.local"]);
+    });
+});
+
+// A PROJECT PAIRING syncs the owner's own folder into its own folder under /work: none of the workspace root's
+// shields apply, no state backup rides beside it, and a moved remote folder is a new pair of ends.
+describe("a project pairing's sessions", () => {
+    const workspace: Pairing & { readonly localDir: string } = { sandboxUrl: "https://x.example.dev/", sandboxId: "x", mode: "sync", localDir: "/home/u/proj" };
+    const project: Pairing & { readonly localDir: string } = { ...workspace, localDir: "/home/u/code/my-app", remoteDir: `${WORKSPACE_ROOT}/my-app`, project: true };
+    const projectSpec = sessionSpec(project, "portable");
+
+    it("syncs the project folder rather than /work, two-way, under the pairing's own name", () => {
+        expect(projectSpec).toEqual({
+            name: "intentic-x",
+            localDir: "/home/u/code/my-app",
+            alias: "intentic-sync-x",
+            remoteDir: "/work/my-app",
+            mode: "two-way-safe",
+            ignores: PROJECT_IGNORES,
+            from: "local",
+            symlinks: "portable",
+        });
+        expect(mutagenCreateArgs(projectSpec, false).slice(-2)).toEqual(["/home/u/code/my-app", "intentic-sync-x:/work/my-app"]);
+    });
+
+    it("leaves a pairing made without a remote dir on /work, with the workspace's ignores", () => {
+        expect(sessionSpec(workspace, "portable")).toEqual(spec);
+    });
+
+    it("carries no state backup, while a workspace pairing carries one", () => {
+        expect(sessionSpecs(project, "portable").map((one) => one.name)).toEqual(["intentic-x"]);
+        expect(sessionSpecs(workspace, "portable").map((one) => one.name)).toEqual(["intentic-x", "intentic-x-state"]);
+    });
+
+    // A repository's own `.intentic/` and `refs/` are ordinary content of the project: only the workspace root's are the
+    // sandbox's, and a project folder is not the workspace root.
+    it("drops only the workspace root's own two entries", () => {
+        expect(IGNORES.filter((pattern) => !PROJECT_IGNORES.includes(pattern))).toEqual([`/${STATE_DIR}`, `/${REFERENCE_DIR}`]);
+        expect(ignoresFor({ project: true })).toBe(PROJECT_IGNORES);
+        expect(ignoresFor({})).toBe(IGNORES);
+        expect(ignoreMatcher(PROJECT_IGNORES)(STATE_DIR)).toBe(false);
+        expect(ignoreMatcher(PROJECT_IGNORES)(REFERENCE_DIR)).toBe(false);
+        expect(ignoreMatcher(PROJECT_IGNORES)("node_modules")).toBe(true);
+    });
+
+    // Drift is what brings a session to a new remote folder, and it is a new pair of ends: the residue sweep before the
+    // replacement reads absence as deletion only against the folder it has been syncing with.
+    it("reads a session still syncing /work as drifted, with ends of its own", () => {
+        const onWorkspace = { alpha: { path: "/home/u/code/my-app" }, beta: { host: "intentic-sync-x", path: WORKSPACE_ROOT }, ignore: { paths: [...PROJECT_IGNORES] } };
+        expect(sessionMatchesSpec(onWorkspace, projectSpec)).toBe(false);
+        expect(sameEnds(onWorkspace, projectSpec)).toBe(false);
+        expect(convergePlan([onWorkspace], projectSpec)).toBe("replace");
+        const moved = { ...onWorkspace, beta: { host: "intentic-sync-x", path: "/work/my-app" } };
+        expect(sessionMatchesSpec(moved, projectSpec)).toBe(true);
+        expect(sameEnds(moved, projectSpec)).toBe(true);
+    });
+
+    it("is replaced when the pairing changes kind, since the ignore list changes with it", () => {
+        const asWorkspace = { alpha: { path: "/home/u/code/my-app" }, beta: { host: "intentic-sync-x", path: "/work/my-app" }, ignore: { paths: [...IGNORES] } };
+        expect(sessionMatchesSpec(asWorkspace, projectSpec)).toBe(false);
+        expect(sameEnds(asWorkspace, projectSpec)).toBe(true);
     });
 });

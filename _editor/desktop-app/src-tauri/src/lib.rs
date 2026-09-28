@@ -1,6 +1,8 @@
 mod agent_status;
 mod auth;
 mod commands;
+mod local;
+mod project;
 mod scripts;
 mod setup_link;
 mod state;
@@ -32,6 +34,9 @@ enum Opening {
     Workspace,
     ParkedSetup,
     SleepingEngine,
+    /// An install that has never shown the workspace: the app's own card, which leads with opening a folder or a
+    /// document of this computer (local.rs) — the one thing a first launch can do with no account at all.
+    Home,
 }
 
 /// The launch decision, as a function of three facts — pure, because a launch is the one moment with no window
@@ -47,12 +52,20 @@ enum Opening {
 /// more often than the first one: Docker Desktop does not start itself (scripts.rs has the whole of why), so a
 /// machine that hosts a sandbox has no engine, and the workspace this window would otherwise open loads onto
 /// nothing at all.
-const fn opening(parked: bool, hosts_sandboxes: bool, engine_listening: bool) -> Opening {
+const fn opening(
+    parked: bool,
+    hosts_sandboxes: bool,
+    engine_listening: bool,
+    workspace_seen: bool,
+) -> Opening {
     if parked {
         return Opening::ParkedSetup;
     }
     if hosts_sandboxes && !engine_listening {
         return Opening::SleepingEngine;
+    }
+    if !workspace_seen && !hosts_sandboxes {
+        return Opening::Home;
     }
     Opening::Workspace
 }
@@ -79,8 +92,16 @@ pub fn run() {
             // A second launch carrying a link IS the OS delivering that link, and the deep-link plugin below
             // forwards the same argv to `on_open_url` — so handling it here as well runs every external link
             // twice. This decides one thing: whether the second launch was a bare one.
-            .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
                 if argv.iter().any(|arg| arg.starts_with("intentic://")) {
+                    return;
+                }
+                // A double-click on a document, or "Open with Intentic" on a folder, while the app is up.
+                if local::open_args(
+                    app,
+                    argv.into_iter().skip(1),
+                    Some(std::path::Path::new(&cwd)),
+                ) {
                     return;
                 }
                 windows::show_workspace(app);
@@ -129,11 +150,15 @@ pub fn run() {
             commands::settings_set,
             commands::update_state,
             commands::update_install,
+            local::local_open,
+            local::local_open_path,
+            local::local_recents,
         ])
         .setup(|app| {
             app.manage(state::AppState::load(app.handle())?);
             app.manage(auth::PendingAuth::default());
             app.manage(update::UpdateState::default());
+            app.manage(local::LocalFiles::default());
             create_tray(app.handle())?;
             // After the tray exists: the refresh loop retitles the agent row this row-handle now points at.
             agent_status::start(app.handle());
@@ -174,8 +199,16 @@ pub fn run() {
                 update::start(app.handle());
             }
 
+            // A COLD start on a document or a folder (a double-click, "Open with Intentic"): its window is what
+            // this launch is for, so no face opens beside it.
+            let opened_local = local::open_args(
+                app.handle(),
+                std::env::args().skip(1),
+                std::env::current_dir().ok().as_deref(),
+            );
+
             /* BEFORE the link, nothing opens. */
-            if app.webview_windows().is_empty() {
+            if app.webview_windows().is_empty() && !opened_local {
                 let state = app.state::<state::AppState>();
                 // The engine is asked for by its socket, never by `docker info`, which would hold the first
                 // window of the launch for tens of seconds on exactly the machines this is about (scripts.rs).
@@ -183,6 +216,7 @@ pub fn run() {
                     state.parked_setup().is_some(),
                     state.hosts_sandboxes(),
                     scripts::engine_listening(),
+                    state.workspace_seen(),
                 );
                 if opening == Opening::SleepingEngine {
                     *state.pending_docker.lock().unwrap() = true;
@@ -199,10 +233,17 @@ pub fn run() {
         .expect("intentic desktop failed to start");
 
     /* Quitting is the one moment with nothing to interrupt: the window is going anyway, no script run is being watched. */
-    app.run(|app, event| {
-        if matches!(event, RunEvent::Exit) {
+    app.run(|app, event| match event {
+        // The last window closing is not the app ending: it lives in the tray (a local window closed, Home closed
+        // before any workspace was seen). Only Quit, which exits with a code, ends it.
+        RunEvent::ExitRequested {
+            api, code: None, ..
+        } => api.prevent_exit(),
+        RunEvent::Exit => {
+            local::shutdown(app);
             update::install_on_exit(app);
         }
+        _ => {}
     });
 }
 
@@ -222,9 +263,15 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     /* The machine agent has no window because it runs headlessly at logon. */
     let agent = MenuItemBuilder::with_id("agent", "Machine agent: checking…").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+    // A folder or a document of this computer, in a window of its own (local.rs): no sandbox, no sign-in.
+    let open_folder = MenuItemBuilder::with_id("open-folder", "Open a folder…").build(app)?;
+    let open_file = MenuItemBuilder::with_id("open-file", "Open a file…").build(app)?;
     let menu = MenuBuilder::new(app)
         .item(&open)
         .item(&manager)
+        .separator()
+        .item(&open_folder)
+        .item(&open_file)
         .separator()
         .item(&agent)
         .item(&update)
@@ -239,6 +286,8 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             "open" => windows::show_workspace(app),
             "manager" => windows::show_launcher(app),
             "agent" => windows::show_launcher(app),
+            "open-folder" => local::pick(app, true),
+            "open-file" => local::pick(app, false),
             "update" => update::act(app),
             "quit" => app.exit(0),
             _ => {}
@@ -262,22 +311,32 @@ mod tests {
 
     #[test]
     fn a_machine_whose_sandbox_has_no_engine_opens_on_that_and_not_on_a_dead_workspace() {
-        assert_eq!(opening(false, true, false), Opening::SleepingEngine);
+        assert_eq!(opening(false, true, false, true), Opening::SleepingEngine);
         // Engine up: there is nothing to say, and the workspace is what the app is for.
-        assert_eq!(opening(false, true, true), Opening::Workspace);
+        assert_eq!(opening(false, true, true, true), Opening::Workspace);
     }
 
     #[test]
     fn a_parked_setup_outranks_a_sleeping_engine_because_its_own_run_starts_it() {
-        assert_eq!(opening(true, true, false), Opening::ParkedSetup);
-        assert_eq!(opening(true, false, true), Opening::ParkedSetup);
+        assert_eq!(opening(true, true, false, true), Opening::ParkedSetup);
+        assert_eq!(opening(true, false, true, false), Opening::ParkedSetup);
     }
 
     /// Somebody using this app as a window onto a sandbox we host has a perfectly good reason for their Docker
     /// to be off, and starting it for them would be this app helping itself to their machine.
     #[test]
     fn a_machine_no_sandbox_has_run_on_opens_the_workspace_whatever_docker_is_doing() {
-        assert_eq!(opening(false, false, false), Opening::Workspace);
-        assert_eq!(opening(false, false, true), Opening::Workspace);
+        assert_eq!(opening(false, false, false, true), Opening::Workspace);
+        assert_eq!(opening(false, false, true, true), Opening::Workspace);
+    }
+
+    /// A first launch has no workspace to show anyone without an account; the card it opens instead leads with
+    /// the folder or the document they can open right now.
+    #[test]
+    fn an_install_that_never_showed_the_workspace_opens_home() {
+        assert_eq!(opening(false, false, true, false), Opening::Home);
+        assert_eq!(opening(false, false, false, false), Opening::Home);
+        // A machine that hosts a sandbox was set up from the workspace, whatever this file says.
+        assert_eq!(opening(false, true, true, false), Opening::Workspace);
     }
 }

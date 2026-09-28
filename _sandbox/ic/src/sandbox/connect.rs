@@ -5,7 +5,7 @@ use crate::docker;
 use crate::health;
 use crate::logfile::Log;
 use crate::platform;
-use crate::sandbox::{container_status, doctor, list_slugs, remove, CONTAINER_PREFIX};
+use crate::sandbox::{container_status, doctor, list_slugs, project_dir, remove, CONTAINER_PREFIX};
 use crate::tty;
 use crate::ui;
 use crate::util;
@@ -58,6 +58,13 @@ fn connect(
     let sandbox_dns = env_or("SANDBOX_DNS", "1.1.1.1 1.0.0.1");
     let agent_auth_volume = env("INTENTIC_AGENT_AUTH_VOLUME");
     let sync_dir = env("SYNC_DIR");
+    // A project sandbox's folder (the desktop app's one sandbox per folder), refused before anything starts when it is
+    // not a shape the sync agent accepts: a wrong one would sync the owner's folder somewhere they were not told.
+    let placement = project_dir::placement(
+        env("SYNC_REMOTE_DIR").as_deref(),
+        env("SYNC_PROJECT").is_some(),
+        sync_dir.is_some(),
+    )?;
     let self_host = env("SELF_HOST").is_some();
 
     let mut connect_token = env("CONNECT_TOKEN").unwrap_or_default();
@@ -375,6 +382,12 @@ fn connect(
         ("SANDBOX_GRANT", &sandbox_grant),
         ("INGRESS_URL", &ingress_url),
         ("SYNC_PAIR_TOKEN", &sync_pair_token),
+        // Which folder under /work is the owner's own, so the daemon seeds no starter beside it and tells its agents
+        // where to work. Replayed, so a recreate, an update or a rollback keeps the sandbox what it was made as.
+        (
+            "SANDBOX_PROJECT_DIR",
+            placement.project_dir.as_deref().unwrap_or(""),
+        ),
         // The connected-device seed: the pairing the machine agent below redeems, plus what to call this
         // machine and which OS card it gets. The daemon cannot learn either for itself — it is in a container
         // with its own hostname, on a Linux however this machine is spelled.
@@ -470,8 +483,19 @@ fn connect(
         sync_pair_token.is_empty(),
         sandbox_public_url.is_empty(),
     ) {
-        if !run_desktop_sync(&container, &sandbox_public_url, &sync_pair_token, &dir) {
-            ui::warn("desktop sync didn't finish. Your sandbox is fine; enable sync any time from the workspace's Desktop sync card.");
+        if !run_desktop_sync(
+            &container,
+            &sandbox_public_url,
+            &sync_pair_token,
+            &dir,
+            &placement,
+        ) {
+            // A project folder is synced by the app that picked it: the Desktop sync card would sync /work instead.
+            ui::warn(if placement.project_dir.is_some() {
+                "folder sync didn't finish. Your sandbox is fine; set it up again from the desktop app to sync your folder."
+            } else {
+                "desktop sync didn't finish. Your sandbox is fine; enable sync any time from the workspace's Desktop sync card."
+            });
         }
     }
 
@@ -609,7 +633,13 @@ pub(crate) fn ensure_image(image: &str, log: &Log) -> Result<()> {
 /// bootstrap — as the INVOKING user when running under sudo: the agent is per-user state (~/.intentic, the
 /// user's Mutagen daemon). The sync agent connects over the public URL and retries transient tunnel errors
 /// itself, so this local gate need not wait for the tunnel.
-fn run_desktop_sync(container: &str, public_url: &str, pair_token: &str, sync_dir: &str) -> bool {
+fn run_desktop_sync(
+    container: &str,
+    public_url: &str,
+    pair_token: &str,
+    sync_dir: &str,
+    placement: &project_dir::Placement,
+) -> bool {
     step(
         "desktop-sync",
         "waiting for your sandbox to come online to set up desktop sync…",
@@ -625,10 +655,14 @@ fn run_desktop_sync(container: &str, public_url: &str, pair_token: &str, sync_di
             windows_url: "https://intentic.dev/sync.ps1",
         },
         &[
-            ("SANDBOX_URL", public_url),
-            ("PAIR_TOKEN", pair_token),
-            ("SYNC_DIR", sync_dir),
-        ],
+            vec![
+                ("SANDBOX_URL", public_url),
+                ("PAIR_TOKEN", pair_token),
+                ("SYNC_DIR", sync_dir),
+            ],
+            placement.installer_vars(),
+        ]
+        .concat(),
     )
 }
 

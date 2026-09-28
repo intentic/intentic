@@ -21,4 +21,5 @@ flowchart LR
 | [browser](browser) | Drives a separate Chromium profile over CDP for the machine. |
 | [desktop-automation](desktop-automation) | Screen capture, pointer, keyboard and windows on Windows and Linux. |
 | [local-agent](local-agent) | State directory, login autostart and pidfiles for on-device CLIs. |
+| [local-files](local-files) | `intentic-files`: serves the folders the desktop app opens to the editor's file views. |
 | [win-launcher](win-launcher) | Starts an agent on Windows without a console window. |

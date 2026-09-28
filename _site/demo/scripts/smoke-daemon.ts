@@ -92,7 +92,7 @@ const stubBrowser = (): void => {
 // Every module the run reads, bundled once so the daemon and the fixtures below share one instance of each.
 const ENTRIES = {
     daemon: `src/daemon.ts`,
-    router: `src/router.ts`,
+    router: `@intentic/contract-serve`,
     fleet: `src/fixture/fleet.ts`,
     automations: `src/fixture/automations.ts`,
     ci: `src/fixture/ci.ts`,
@@ -459,7 +459,7 @@ const main = async (): Promise<number> => {
     const out = await mkdtemp(join(tmpdir(), `demo-smoke-`));
     await bundle(out);
     const { daemon, procedures } = await loaded<Daemon>(out, `daemon`);
-    const { servedProcedures } = await loaded<typeof import("../src/router.ts")>(out, `router`);
+    const { servedProcedures } = await loaded<typeof import("@intentic/contract-serve")>(out, `router`);
     const contract = await loaded<Contract>(out, `contract`);
     const samples = samplesOf(await fixturesOf(out), Date.now());
     const sent = Object.entries(samples).flatMap(([group, inputs]) => Object.entries(inputs).map(([name, input]) => ({ name: `${group}.${name}`, input })));

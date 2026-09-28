@@ -34,6 +34,15 @@ describe("ignoreMatcher", () => {
         expect(ignored(`intentic/.intentic/checks.json`)).toBe(false);
     });
 
+    // The session ignores env files and credentials because they are private, and nothing rebuilds them: a folder whose
+    // only content is one must never read as residue, or the heal would delete a secret along with its folder.
+    it("never counts a secret as ignored content, whatever the session's list says", () => {
+        for (const secret of [`.env`, `.env.local`, `.env.development.local`, `web/.secrets.json`, `claude.json`]) {
+            expect(ignored(secret)).toBe(false);
+        }
+        expect(ignoreMatcher([`/.env`, `.env.local`])(`.env.local`)).toBe(false);
+    });
+
     it("matches nothing for a pattern spelling it was never taught", () => {
         // The failure that matters is the one that widens deletion; an unreadable pattern must only narrow it.
         const exotic = ignoreMatcher([`**/build`, `!keep`, `src/*.log`]);
@@ -119,6 +128,12 @@ describe("isDerivedHusk", () => {
     it("is true for an empty directory: there is nothing in it to lose", async () => {
         const root = await tree({ empty: null });
         expect(await isDerivedHusk(root, `empty`, ignored)).toBe(true);
+    });
+
+    // A secret is not build output: the heal removing this folder would delete a key nothing can rebuild.
+    it("is false for a directory whose only content besides build output is an env file", async () => {
+        const root = await tree({ "web/node_modules/x.js": `1`, "web/.env.local": `API_KEY=secret` });
+        expect(await isDerivedHusk(root, `web`, ignored)).toBe(false);
     });
 
     // The second defence, so a report that classified a repository as residue still removes nothing: `.git` is under

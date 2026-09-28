@@ -90,6 +90,33 @@ impl Mode {
     }
 }
 
+/// A folder or document the user opened in a local window (local.rs), newest first: what Home and the tray
+/// offer to open again. The path is the one the user chose, as the app resolved it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Recent {
+    pub path: String,
+    pub folder: bool,
+    /// Unix seconds.
+    pub opened_at: u64,
+}
+
+/// How many recents are kept: what fits a menu without scrolling.
+const RECENTS: usize = 12;
+
+/// A folder of this computer that has a sandbox of its own (project.rs): opening it again reaches that sandbox.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Project {
+    pub path: String,
+    /// Its name inside the sandbox's `/work`.
+    pub dir: String,
+    /// The platform's row for the sandbox, which the workspace opens at.
+    pub sandbox_id: Option<String>,
+    /// The sandbox's slug on this machine.
+    pub slug: Option<String>,
+}
+
 pub struct AppState {
     config_dir: PathBuf,
     pub settings: Mutex<Settings>,
@@ -114,6 +141,12 @@ pub struct AppState {
     /// Whether a sandbox has ever run on THIS machine. Kept on disk because the question is asked at the one
     /// moment nothing can be measured: a launch whose Docker is not running cannot be asked what it hosts.
     hosts_sandboxes: Mutex<bool>,
+    /// Whether this install has ever shown the workspace. Until it has, a launch opens the app's own card, where a
+    /// folder or a document of this computer can be opened with no account (lib.rs `opening`).
+    workspace_seen: Mutex<bool>,
+    /// The folder a local window asked a sandbox for, waiting for the setup page's code (project.rs). In-process
+    /// only: a question a quit left unanswered is asked again.
+    pub pending_project: Mutex<Option<PathBuf>>,
 }
 
 impl AppState {
@@ -124,6 +157,7 @@ impl AppState {
         let names = read_json(&config_dir.join("sandboxes.json")).unwrap_or_default();
         let ui_mode = read_json(&config_dir.join("ui-mode.json"));
         let hosts_sandboxes = read_json(&config_dir.join("hosts-sandboxes.json")).unwrap_or(false);
+        let workspace_seen = read_json(&config_dir.join("workspace-seen.json")).unwrap_or(false);
         Ok(AppState {
             config_dir,
             settings: Mutex::new(settings),
@@ -135,6 +169,8 @@ impl AppState {
             install_id: Mutex::new(None),
             ui_mode: Mutex::new(ui_mode),
             hosts_sandboxes: Mutex::new(hosts_sandboxes),
+            workspace_seen: Mutex::new(workspace_seen),
+            pending_project: Mutex::new(None),
         })
     }
 
@@ -154,6 +190,21 @@ impl AppState {
         }
         *held = true;
         write_json(&self.config_dir.join("hosts-sandboxes.json"), &true);
+    }
+
+    pub fn workspace_seen(&self) -> bool {
+        *self.workspace_seen.lock().unwrap()
+    }
+
+    /// Written the first time the workspace is on screen, and never unwritten: from then on a launch opens it, as
+    /// it always did for anyone who uses this app as a window onto a sandbox.
+    pub fn remember_workspace_seen(&self) {
+        let mut held = self.workspace_seen.lock().unwrap();
+        if *held {
+            return;
+        }
+        *held = true;
+        write_json(&self.config_dir.join("workspace-seen.json"), &true);
     }
 
     pub fn ui_mode(&self) -> Option<Mode> {
@@ -236,6 +287,46 @@ impl AppState {
 
     fn parked_setup_path(&self) -> PathBuf {
         self.config_dir.join("resume-setup.json")
+    }
+
+    /* THE FOLDERS THAT HAVE A SANDBOX OF THEIR OWN. */
+
+    pub fn projects(&self) -> Vec<Project> {
+        read_json(&self.config_dir.join("projects.json")).unwrap_or_default()
+    }
+
+    /// One entry per folder: a folder set up again (its sandbox removed, a new one made) replaces its entry.
+    pub fn remember_project(&self, project: Project) {
+        let mut projects = self.projects();
+        projects.retain(|held| held.path != project.path);
+        projects.push(project);
+        write_json(&self.config_dir.join("projects.json"), &projects);
+    }
+
+    /* WHAT WAS OPENED LOCALLY, newest first. */
+
+    pub fn recents(&self) -> Vec<Recent> {
+        read_json(&self.config_dir.join("recent-local.json")).unwrap_or_default()
+    }
+
+    /// Moves `path` to the front, or puts it there; the oldest past [`RECENTS`] fall off.
+    pub fn remember_recent(&self, path: &Path, folder: bool) {
+        let path = path.display().to_string();
+        let mut recents = self.recents();
+        recents.retain(|recent| recent.path != path);
+        recents.insert(
+            0,
+            Recent {
+                path,
+                folder,
+                opened_at: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|since| since.as_secs())
+                    .unwrap_or(0),
+            },
+        );
+        recents.truncate(RECENTS);
+        write_json(&self.config_dir.join("recent-local.json"), &recents);
     }
 
     /* The launcher and the workspace are separate webviews with separate storage. */
@@ -336,6 +427,10 @@ mod tests {
             hosts_sandboxes: Mutex::new(
                 read_json(&config_dir.join("hosts-sandboxes.json")).unwrap_or(false),
             ),
+            workspace_seen: Mutex::new(
+                read_json(&config_dir.join("workspace-seen.json")).unwrap_or(false),
+            ),
+            pending_project: Mutex::new(None),
         }
     }
 
@@ -373,6 +468,7 @@ mod tests {
             cf_token: None,
             sync_dir: None,
             platform_url: None,
+            project: None,
         };
         state_in(&dir).park_setup(&args, SessionEnd::SignOut);
         let parked = state_in(&dir).parked_setup().expect("parked");
@@ -459,5 +555,41 @@ mod tests {
              pasted command uses, and this app has to hand the same thing to the flow it spawns — the \
              platform's API origin, never the app's, which answers a claim POST with 405.",
         );
+    }
+
+    /// Newest first, one entry per path however often it is opened, and no longer than a menu can show.
+    #[test]
+    fn recents_move_to_the_front_and_the_oldest_fall_off() {
+        let dir = std::env::temp_dir().join(format!("intentic-recents-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let state = state_in(&dir);
+        for index in 0..14 {
+            state.remember_recent(Path::new(&format!("/folder-{index}")), true);
+        }
+        state.remember_recent(Path::new("/folder-3"), true);
+        let recents = state.recents();
+        assert_eq!(recents.len(), RECENTS);
+        assert_eq!(recents[0].path, "/folder-3");
+        assert_eq!(recents[1].path, "/folder-13");
+        assert_eq!(
+            recents
+                .iter()
+                .filter(|recent| recent.path == "/folder-3")
+                .count(),
+            1
+        );
+        assert!(!recents.iter().any(|recent| recent.path == "/folder-0"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Asked at a launch, before any window: written once, and read back by the next process.
+    #[test]
+    fn the_workspace_having_been_seen_survives_a_launch() {
+        let dir = std::env::temp_dir().join(format!("intentic-seen-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(!state_in(&dir).workspace_seen());
+        state_in(&dir).remember_workspace_seen();
+        assert!(state_in(&dir).workspace_seen());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

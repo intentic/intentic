@@ -28,6 +28,7 @@ import { claimContainer } from "./system/boot/container-owner.js";
 import { type BootFault, bootFault, CRASH_AFTER_READY_MS } from "./system/boot/fault.js";
 import { finishPrewarm } from "./system/boot/prewarm.js";
 import { listenHost, profileTraits, requireLocalContract } from "./system/boot/profile.js";
+import { requireProjectDir } from "./system/project-dir.js";
 import { checks as containerChecks, owner as containerOwner } from "./system/invariant.js";
 import { readCgroup } from "./system/resources/cgroup.js";
 import { startBootProfile } from "./system/resources/loop/boot-profile.js";
@@ -60,6 +61,7 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     attempt.historyRoot = config.historyRoot;
     requireAuthWhenReachable(config);
     requireLocalContract(config);
+    requireProjectDir(config);
     // Profile differences below read a named trait, never the profile value directly (system/boot/profile.ts).
     const traits = profileTraits(config);
     const host = listenHost(config);

@@ -14,9 +14,11 @@ import { useGoogleIdentity } from "../features/auth/useGoogleIdentity";
 import { useSandbox } from "../features/sandbox/client/useSandbox";
 import { useRole } from "../features/sandbox/secrets/useRole";
 import { retryOnEntry } from "./platformRetry";
+import { arriveOnSandbox } from "./sandboxArrival";
 import { setupRedirect } from "./setupGate";
 import { signInAt } from "./signIn";
 import { t } from "@intentic/ui/i18n";
+import { localFace } from "../app/environments/local";
 
 declare module "vue-router" {
     interface RouteMeta {
@@ -71,6 +73,10 @@ const requireSetup = async (): Promise<boolean | RouteLocationRaw> => {
     const { list } = useSandbox();
     return setupRedirect(await list()) ?? true;
 };
+
+// A link naming a sandbox (`/?sandbox=<id>`) opens the shell on it; sandboxArrival.ts owns the rule. After the gate, so
+// the list it reads is the one the gate just fetched.
+const openNamedSandbox = (to: RouteLocationNormalized): Promise<true | RouteLocationRaw> => arriveOnSandbox(to, useSandbox());
 
 // Menu and Terminal are full-screen tabs only on the mobile shell; the desktop shell docks the terminal and puts the
 // menu's contents on the rail, so a desktop hit lands on the workspace instead.
@@ -140,6 +146,15 @@ const routes: RouteRecordRaw[] = [
         component: asyncView(() => import(`../features/setup/Setup.vue`)),
     },
     {
+        // A desktop window on a folder of the user's own disk (app/environments/local.ts): the explorer and the editor
+        // panes, nothing that needs a sandbox. Guarded like the shell; the window's bootstrap seeds what both read.
+        path: `/local`,
+        name: `local`,
+        meta: { title: () => localFace()?.name ?? t(`shared.files`) },
+        beforeEnter: [requireAuth, requireSetup],
+        component: () => import(`../local/LocalFiles.vue`),
+    },
+    {
         // A floating panel's own window (chat, terminal or preview), no shell around it, nothing to navigate. Guarded
         // like the shell; the path enumerates the three panels, an unknown one falls through.
         path: `/floating/:panel(chat|terminal|preview)`,
@@ -151,7 +166,7 @@ const routes: RouteRecordRaw[] = [
         // Persistent workspace shell (rail + shared chat + area outlet). Guarded: signed in and sandbox connected;
         // otherwise requireSetup redirects to /setup, so all shell navigation is blocked until setup completes.
         path: `/`,
-        beforeEnter: [requireAuth, requireSetup],
+        beforeEnter: [requireAuth, requireSetup, openNamedSandbox],
         component: () => import(`../shell/WorkspaceShell.vue`),
         children: [
             // Where setup lets go of the user: mobile lands on the agent fleet, desktop on the home tile, where its
@@ -317,6 +332,10 @@ export const router = createRouter({
 // drop the tap on the way in. Global, not the home redirect's, for that reason; the target carries no such query,
 // so it cannot loop.
 router.beforeEach((to) => conversationRedirect(to.query, useDevice().mobile.value) ?? true);
+
+// A window on a local folder has one screen. Anything that would lead elsewhere (a link into the workspace, the shell's
+// home) leads back to it: every other screen reads a sandbox this window has none of.
+router.beforeEach((to) => (localFace() !== undefined && to.name !== `local` ? { name: `local` } : true));
 
 // Router half of stale-chunk recovery (asyncView owns the in-shell half). Covers route-level loads (login, handoffs,
 // invite, the shell); a dead chunk here reloads onto the route asked for.

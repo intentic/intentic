@@ -17,10 +17,10 @@ import {
 } from "@intentic/local-agent";
 import { binDir } from "../config.js";
 import { archToken, download, exe, osToken, renameIfPresent } from "../release.js";
-import { mutagenDaemonLogPath, type Pairing } from "./config.js";
+import { isProjectPairing, mutagenDaemonLogPath, type Pairing, pairingRemoteDir } from "./config.js";
 import { runProcess } from "./exec.js";
 import { clearConflictResidue, type ResidueOutcome, sweepDerivedResidue } from "./residue.js";
-import { BACKUP_IGNORES, IGNORES, mutagenSshPath, sanitizeId, sshAlias, sshTransportAnswers } from "./ssh.js";
+import { BACKUP_IGNORES, ignoresFor, mutagenSshPath, sanitizeId, sshAlias, sshTransportAnswers } from "./ssh.js";
 import { deviceSymlinks, type SymlinkMode } from "./symlinks.js";
 
 // The pinned Mutagen version this agent downloads when the machine has no install of its own.
@@ -36,9 +36,12 @@ export const sessionName = (sandboxId: string): string => `${SESSION_PREFIX}${sa
 // rather than its own prefix, so prefix-based sweeps (oursIn, parseOrphanSyncNames) still find it.
 export const backupSessionName = (sandboxId: string): string => `${sessionName(sandboxId)}-state`;
 
-// Both of a pairing's sync sessions, workspace then backup; pause, resume, terminate and the orphan sweep all act
-// on both names together.
-export const syncSessionNames = (sandboxId: string): readonly string[] => [sessionName(sandboxId), backupSessionName(sandboxId)];
+// A pairing's sync sessions, workspace then backup; pause, resume, terminate and the orphan sweep all act on these names
+// together. A project pairing has the workspace session alone: its folder is the owner's project, and the backup would
+// write the sandbox's state into it. Naming a session that does not exist is not harmless either, since `sync terminate
+// a b` fails whole on one unresolved name.
+export const syncSessionNames = (pairing: Pick<Pairing, "sandboxId" | "project">): readonly string[] =>
+    isProjectPairing(pairing) ? [sessionName(pairing.sandboxId)] : [sessionName(pairing.sandboxId), backupSessionName(pairing.sandboxId)];
 
 // One forward session per port, deterministically named so reconcile can target it without querying Mutagen's
 // session list. The name carries the sandbox id, so a session outlives the config that could name it.
@@ -140,21 +143,22 @@ export interface SyncSessionSpec {
     readonly symlinks: SymlinkMode;
 }
 
-// The workspace session for a pairing: name and alias namespace on the sandbox id; remote side is always /work.
-const sessionSpec = (pairing: Pairing & { readonly localDir: string }, symlinks: SymlinkMode): SyncSessionSpec => ({
+// The workspace session for a pairing: name and alias namespace on the sandbox id; the remote side is /work, or the
+// project folder a project pairing syncs (config.ts), and each kind gets its own ignore list (ssh.ts).
+export const sessionSpec = (pairing: Pairing & { readonly localDir: string }, symlinks: SymlinkMode): SyncSessionSpec => ({
     name: sessionName(pairing.sandboxId),
     localDir: pairing.localDir,
     alias: sshAlias(pairing.sandboxId),
-    remoteDir: WORKSPACE_ROOT,
+    remoteDir: pairingRemoteDir(pairing),
     mode: "two-way-safe",
-    ignores: IGNORES,
+    ignores: ignoresFor(pairing),
     from: "local",
     symlinks,
 });
 
 // Mirrors the sandbox's state dir into `<localDir>/.intentic`, one-way, sandbox first — the daemon is the only
 // writer. Halts rather than emptying beta when alpha's root disappears, so a mid-rebuild sandbox isn't read as a
-// deleted backup.
+// deleted backup. Never for a project pairing (syncSessionNames says why).
 const backupSpec = (pairing: Pairing & { readonly localDir: string }, symlinks: SymlinkMode): SyncSessionSpec => ({
     name: backupSessionName(pairing.sandboxId),
     localDir: join(pairing.localDir, STATE_DIR),
@@ -396,7 +400,7 @@ export const pauseRunningSync = (mutagen: string, pairing: Pairing): boolean => 
     if (pairing.mode !== "sync") {
         return false;
     }
-    const names = existingSyncSessions(mutagen, syncSessionNames(pairing.sandboxId));
+    const names = existingSyncSessions(mutagen, syncSessionNames(pairing));
     // `every` over an empty list is true, so "no sessions" and "all paused" share the branch on purpose.
     if (names.every((name) => readSessionState(mutagen, name).paused === true)) {
         return false;
@@ -409,7 +413,7 @@ export const pauseUnreachableSync = pauseRunningSync;
 
 // Lifts the pause a swap of the sandbox put on its file sync. Every session the pairing has: that pause paused them all.
 export const resumeSwapPausedSync = (mutagen: string, pairing: Pairing): boolean => {
-    const names = existingSyncSessions(mutagen, syncSessionNames(pairing.sandboxId));
+    const names = existingSyncSessions(mutagen, syncSessionNames(pairing));
     if (names.length === 0) {
         return false;
     }
@@ -420,7 +424,7 @@ export const resumeAutoPausedSync = (mutagen: string, pairing: Pairing): boolean
     if (pairing.mode !== "sync" || pairing.fileSyncAutoPaused !== true) {
         return false;
     }
-    const names = existingSyncSessions(mutagen, syncSessionNames(pairing.sandboxId));
+    const names = existingSyncSessions(mutagen, syncSessionNames(pairing));
     if (names.length === 0) {
         return false;
     }
@@ -428,11 +432,11 @@ export const resumeAutoPausedSync = (mutagen: string, pairing: Pairing): boolean
     return result.status === 0;
 };
 
-// Whether the running session is what this build would create. Mutagen freezes config at `sync create` with no
-// edit verb, so a stale ignore list means a session that will never behave like this version says.
-export const sessionMatchesSpec = (session: LiveSession, spec: SyncSessionSpec): boolean => {
-    // Which endpoint should hold what for this spec's direction; a backup with reversed ends must never read as
-    // "close enough" — it would upload instead of download.
+// Whether a live session joins the same two folders the spec does, in the same direction. Which endpoint should hold
+// what follows the spec's direction; a backup with reversed ends must never read as "close enough" — it would upload
+// instead of download. A remote dir that moved (a pairing set up again for another folder in the sandbox) is a
+// different pair of ends as much as a local one is.
+export const sameEnds = (session: Pick<LiveSession, "alpha" | "beta">, spec: SyncSessionSpec): boolean => {
     const [alpha, beta] =
         spec.from === "local"
             ? [
@@ -443,11 +447,14 @@ export const sessionMatchesSpec = (session: LiveSession, spec: SyncSessionSpec):
                   { host: spec.alias, path: spec.remoteDir },
                   { host: undefined, path: spec.localDir },
               ];
+    return session.alpha.path === alpha.path && session.alpha.host === alpha.host && session.beta.path === beta.path && session.beta.host === beta.host;
+};
+
+// Whether the running session is what this build would create. Mutagen freezes config at `sync create` with no
+// edit verb, so a stale ignore list means a session that will never behave like this version says.
+export const sessionMatchesSpec = (session: LiveSession, spec: SyncSessionSpec): boolean => {
     return (
-        session.alpha.path === alpha.path &&
-        session.alpha.host === alpha.host &&
-        session.beta.path === beta.path &&
-        session.beta.host === beta.host &&
+        sameEnds(session, spec) &&
         session.ignore.vcs !== true &&
         (session.ignore.paths ?? []).join("\n") === spec.ignores.join("\n") &&
         // A session made before the mode was pinned carries none, and that is portable. It must still match a portable
@@ -474,10 +481,30 @@ export const ensureSyncSession = async (mutagen: string, pairing: Pairing, log: 
     // Both sessions, converged in order, sequential since they share one ssh transport and daemon; workspace first
     // since that's what the user is waiting on. An unreachable sandbox leaves both alone, never half-converged.
     let converged = true;
-    for (const spec of [sessionSpec(held, symlinks.mode), backupSpec(held, symlinks.mode)]) {
+    for (const spec of sessionSpecs(held, symlinks.mode)) {
         converged = (await convergeSession(mutagen, spec, log)) && converged;
     }
+    retireStrayBackup(mutagen, pairing, log);
     return converged;
+};
+
+// What one pairing's sessions should be, in the order they are converged.
+export const sessionSpecs = (pairing: Pairing & { readonly localDir: string }, symlinks: SymlinkMode): readonly SyncSessionSpec[] =>
+    isProjectPairing(pairing) ? [sessionSpec(pairing, symlinks)] : [sessionSpec(pairing, symlinks), backupSpec(pairing, symlinks)];
+
+// A state backup a project pairing should never have had, found and terminated: an older agent's, or one left from when
+// this sandbox was paired as a workspace. Surplus rather than a choice, since it writes the sandbox's state dir into the
+// owner's own project folder for as long as it runs.
+export const strayBackupSessions = (pairing: Pick<Pairing, "sandboxId" | "project">, live: readonly string[]): string[] =>
+    isProjectPairing(pairing) ? live.filter((name) => name === backupSessionName(pairing.sandboxId)) : [];
+
+const retireStrayBackup = (mutagen: string, pairing: Pairing, log: Log): void => {
+    const stray = strayBackupSessions(pairing, existingSyncSessions(mutagen, [backupSessionName(pairing.sandboxId)]));
+    if (stray.length === 0) {
+        return;
+    }
+    spawnSync(mutagen, ["sync", "terminate", ...stray], { stdio: "ignore", windowsHide: true });
+    log(`${pairing.sandboxId}: its folder is a project of yours, which carries no copy of the sandbox's state; terminated the state backup that was writing one into it.`);
 };
 
 // Every session under one name except the oldest, by identifier. Mutagen lists sessions by creation time. Terminating
@@ -517,7 +544,7 @@ export const convergePlan = (sessions: readonly LiveSession[], spec: SyncSession
 // between them. Every path that differs at that moment then reads as created on BOTH sides at once — the one shape
 // two-way-safe can never settle — so a session is replaced only from a settled state, and residue is swept first so it
 // is not propagated back to the sandbox as empty directories by a sync with nothing to compare against.
-const readyForReplacement = async (mutagen: string, spec: SyncSessionSpec, log: Log): Promise<boolean> => {
+const readyForReplacement = async (mutagen: string, spec: SyncSessionSpec, live: readonly LiveSession[], log: Log): Promise<boolean> => {
     // The backup session is one-way from the sandbox and its root is the sandbox's own state dir: nothing of this
     // device's making is in there to settle or to sweep, so it is replaced as it always was.
     if (spec.mode !== "two-way-safe") {
@@ -534,6 +561,12 @@ const readyForReplacement = async (mutagen: string, spec: SyncSessionSpec, log: 
             `${spec.name}: ${plural(cleared.standing, "conflict")} still standing, so this session keeps the rules it was created with rather than being recreated on top of them — a fresh session has no record of what the two ends last agreed on, which would turn every one of those into a collision neither side can win. Settle them and this converges by itself.`,
         );
         return false;
+    }
+    // The sweep below reads "absent in the sandbox" as "deleted there", true only of the folder this device has been
+    // syncing with. A session moving to another folder would read everything the new one lacks as deleted, and remove
+    // this device's build output for it; an empty directory pushed back there costs nothing by comparison.
+    if (!live.every((session) => sameEnds(session, spec))) {
+        return true;
     }
     // Residue nobody has flagged yet matters here for a reason of its own: with no history to compare against, a fresh
     // session reads a directory this device holds and the sandbox does not as something to CREATE there, and pushes
@@ -576,7 +609,7 @@ const convergeSession = async (mutagen: string, spec: SyncSessionSpec, log: Log)
             );
             return false;
         }
-        if (!(await readyForReplacement(mutagen, spec, log))) {
+        if (!(await readyForReplacement(mutagen, spec, sessions, log))) {
             return false;
         }
         log(
@@ -623,7 +656,7 @@ export const retireOrphanSessions = (mutagen: string, pairings: readonly Pairing
     const ids = pairings.map((pairing) => pairing.sandboxId);
     const sessions = parseOrphanSyncNames(
         listSessionNames(mutagen, "sync"),
-        pairings.flatMap((pairing) => syncSessionNames(pairing.sandboxId)),
+        pairings.flatMap((pairing) => syncSessionNames(pairing)),
     );
     if (sessions.length > 0) {
         spawnSync(mutagen, ["sync", "terminate", ...sessions], { stdio: "ignore", windowsHide: true });

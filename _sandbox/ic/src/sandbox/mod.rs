@@ -12,6 +12,7 @@ pub mod owner;
 pub mod power;
 pub mod preflight;
 pub mod probation;
+pub mod project_dir;
 pub mod recreate;
 pub mod remove;
 pub mod restore;

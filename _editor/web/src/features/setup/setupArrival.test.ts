@@ -1,6 +1,7 @@
 import type { SandboxSummary } from "@intentic/api-contract";
+import { projectDirNameFor } from "@intentic/sandbox-contract";
 import { sandboxSummary } from "../../testing/sandboxSummary";
-import { arrivalFor, type ArrivalInput, hostedIdle, rowToOpen, touched } from "./setupArrival";
+import { arrivalFor, type ArrivalInput, hostedIdle, rowToOpen, setupProjectOf, touched } from "./setupArrival";
 
 // A blank first arrival on a platform offering everything; each test overrides the one field it is about.
 const arrival = (over: Partial<ArrivalInput> = {}): ArrivalInput => ({
@@ -15,6 +16,7 @@ const arrival = (over: Partial<ArrivalInput> = {}): ArrivalInput => ({
     commandOffered: true,
     requestedMachine: undefined,
     elsewhere: false,
+    project: false,
     ...over,
 });
 
@@ -113,6 +115,38 @@ describe(`an explicit ask`, () => {
 
 it(`shows the options rather than installing when the app says this computer cannot`, () => {
     expect(arrivalFor(arrival({ inApp: true, elsewhere: true }))).toBe(`choose`);
+});
+
+// The app opened this page for a folder on this computer, so the folder already answered where it runs: only the app
+// can sync it, and no machine of ours can hold it.
+describe(`a project setup`, () => {
+    it(`installs on this computer however many sandboxes the account has, and from a browser starts no machine`, () => {
+        expect(arrivalFor(arrival({ project: true, inApp: true, onlySandbox: false }))).toBe(`local`);
+        expect(arrivalFor(arrival({ project: true }))).toBe(`local`);
+        expect(arrivalFor(arrival({ project: true, requestedMachine: `hosted` }))).toBe(`local`);
+    });
+
+    it(`still needs a code to hand the app, and leaves an errand in progress alone`, () => {
+        expect(arrivalFor(arrival({ project: true, inApp: true, commandOffered: false }))).toBe(`choose`);
+        expect(arrivalFor(arrival({ project: true, inApp: true, touched: true }))).toBe(`choose`);
+        expect(arrivalFor(arrival({ project: true, inApp: true, elsewhere: true }))).toBe(`choose`);
+    });
+});
+
+describe(`the folder a link names`, () => {
+    it(`is the folder's own name, and where the sandbox puts it`, () => {
+        expect(setupProjectOf(` My App `)).toEqual({ name: `My App`, dirName: projectDirNameFor(`My App`) });
+    });
+
+    it(`is no folder at all when blank, repeated or bare`, () => {
+        expect([setupProjectOf(``), setupProjectOf(`   `), setupProjectOf([`a`, `b`]), setupProjectOf(null), setupProjectOf(undefined)]).toEqual([
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+        ]);
+    });
 });
 
 describe(`the row an arrival settles on`, () => {

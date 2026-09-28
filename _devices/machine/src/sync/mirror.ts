@@ -508,7 +508,7 @@ const prepareSession = async (mutagen: string, pairing: Pairing, pending: Set<st
 // pairings in this state: twelve such dials at every agent start, before mirroring or reporting began. Only while its
 // sessions exist, since a pairing that has none is not syncing anything and nothing else would create them.
 const dormant = (mutagen: string, pairing: Pairing): boolean =>
-    pairing.fileSyncAutoPaused === true && existingSyncSessions(mutagen, syncSessionNames(pairing.sandboxId)).length > 0;
+    pairing.fileSyncAutoPaused === true && existingSyncSessions(mutagen, syncSessionNames(pairing)).length > 0;
 
 // Every pairing this watcher has not prepared yet. At startup that is all of them, which is where an upgraded agent's
 // inherited sessions pick up the new rules, since Mutagen bakes them in at creation. After that it is each pairing a

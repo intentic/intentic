@@ -16,9 +16,12 @@ export interface SetupRowHost {
     readonly sandbox: Pick<SandboxStore, `sandboxes` | `create` | `select` | `remove`>;
     // Opens the workspace once the row is selected.
     readonly enter: () => Promise<void>;
+    // What a row minted here is named after: the folder a project setup is for. A row found rather than made keeps its
+    // own name.
+    readonly name?: string | undefined;
 }
 
-export const useSetupRow = ({ sandbox, enter }: SetupRowHost) => {
+export const useSetupRow = ({ sandbox, enter, name }: SetupRowHost) => {
     // Null while the arrival's create is in flight, or after it failed.
     const created = ref<SandboxSummary | null>(null);
     // Arrived on an existing sandbox (named in the URL, or the one unfinished) rather than one created now.
@@ -56,7 +59,8 @@ export const useSetupRow = ({ sandbox, enter }: SetupRowHost) => {
         creating.value = true;
         error.value = null;
         try {
-            created.value = await sandbox.create(autoSandboxName(sandbox.sandboxes.value.map((entry) => entry.name)));
+            const taken = sandbox.sandboxes.value.map((entry) => entry.name);
+            created.value = await sandbox.create(autoSandboxName(taken, name));
             // Minted here, agreed to by nobody: from this instant it is a draft the discard rule owns.
             createdHere.value = true;
         } catch (err) {

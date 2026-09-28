@@ -53,6 +53,9 @@ export const HelloSchema = z.object({
     shapes: z.record(z.string(), z.string()).optional(),
     build: z.string().optional(),
     boot: BootProgressSchema.optional(),
+    // A project sandbox's folder, workspace-relative (`my-app` for /work/my-app): the owner's own folder, synced live
+    // with their computer, which the browser scopes the workspace to on arrival. Absent on every other sandbox.
+    projectDir: z.string().optional(),
 });
 export type Hello = z.infer<typeof HelloSchema>;
 

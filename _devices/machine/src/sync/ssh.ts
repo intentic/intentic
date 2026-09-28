@@ -9,12 +9,14 @@ import { REFERENCE_DIR, STATE_DIR } from "@intentic/constants";
 import { homeDir, type Log, writeSecretFile } from "@intentic/local-agent";
 import { STATE_GROUPS, stateGroupPaths, UNBACKED_STATE_PATHS } from "@intentic/sandbox-contract";
 import { baseDir } from "../config.js";
-import { knownHostsPath, sshConfigName, sshConfigPath, sshDir, sshKeyPath, userSshConfigPath } from "./config.js";
+import { isProjectPairing, knownHostsPath, type Pairing, sshConfigName, sshConfigPath, sshDir, sshKeyPath, userSshConfigPath } from "./config.js";
 import { runProcess } from "./exec.js";
 import { syncSshPort } from "./tunnel.js";
 
 // Mutagen's two-way ignore set: also excludes secrets and the daemon's `.intentic` state, never the search-ignore
 // set's job. `.git` matches every level, since git state travels by git's own protocol (git-bridge.ts), not file sync.
+// Every name here is frozen into a session at its creation, so changing the list replaces every session this agent
+// holds, each from a settled state (mutagen.ts readyForReplacement).
 export const IGNORES = [
     "node_modules",
     "dist",
@@ -25,7 +27,20 @@ export const IGNORES = [
     // Astro's build cache; `.astro/dev.json` holds machine-local paths, so both sides regenerating it is a
     // create-vs-create conflict that never settles.
     ".astro",
+    // What the daemon's own walk already leaves out (@intentic/workspace-ignore IGNORED_DIRS): Python environments and
+    // bytecode, Gradle's caches and scratch space. An environment holds interpreter paths and compiled wheels for the
+    // machine that built it, so carried across it is broken on the other side, and each side rebuilding its own is the
+    // same create-vs-create standoff as `.astro`.
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".gradle",
+    ".tmp",
     ".env",
+    // The machine-local env files every framework's loader reads over `.env` (Vite, Next, CRA): secrets by convention,
+    // and per machine by name. `.env.example` and the other committed variants still sync.
+    ".env.local",
+    ".env.*.local",
     ".secrets.json",
     "claude.json",
     // No `capabilities.json` entry: its credentials live in the vault now, and the daemon's own copy sits under
@@ -50,6 +65,15 @@ export const IGNORES = [
     // conflicts that two-way-safe will never settle — and while they stand, that pairing propagates nothing at all.
     ".image-out",
 ];
+
+// The two entries above that describe the WORKSPACE root rather than any folder: a project pairing syncs one folder
+// under it, whose own `.intentic/` (a repository's committed config) and `refs/` are ordinary content of that project.
+const WORKSPACE_ROOT_ONLY: ReadonlySet<string> = new Set([`/${STATE_DIR}`, `/${REFERENCE_DIR}`]);
+
+export const PROJECT_IGNORES: readonly string[] = IGNORES.filter((pattern) => !WORKSPACE_ROOT_ONLY.has(pattern));
+
+// The ignore list a pairing's workspace session is created with.
+export const ignoresFor = (pairing: Pick<Pairing, "project">): readonly string[] => (isProjectPairing(pairing) ? PROJECT_IGNORES : IGNORES);
 
 // The state dir's own one-way, sandbox-first backup, since the workspace session excludes it wholesale from
 // two-way sync. Patterns are anchored, not depth-matched; a group collapses to a folder only when wholly excluded.

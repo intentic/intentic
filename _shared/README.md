@@ -21,6 +21,7 @@ flowchart LR
 | [api-contract](api-contract) | oRPC contract between the editor and the platform api. |
 | [capability-catalog](capability-catalog) | Capability tiles, their add forms and what connecting one does. |
 | [connector-runtime](connector-runtime) | Gateway shell the chat connector extensions run on. |
+| [contract-serve](contract-serve) | Answers sandbox-contract requests from typed handlers, for stand-ins for the daemon. |
 | [entry-css](entry-css) | The site's look for sign-in, setup and desktop handoff screens. |
 | [extension-api](extension-api) | Versioned host API an extension's code programs against. |
 | [extension-manifest](extension-manifest) | Schema of `intentic-extension.json`, what an extension declares. |

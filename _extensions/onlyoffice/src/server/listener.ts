@@ -34,6 +34,9 @@ export interface ListenerDeps {
     // The browser engine's routes; false for a request that is not one of them.
     readonly browser: BrowserRoutes;
     readonly log: (line: string) => void;
+    // Where to listen. All interfaces by default, since the document server reaches this from inside its container; a
+    // listener on a user's own computer, which no container calls, keeps to loopback.
+    readonly host?: string;
 }
 
 export interface Listener {
@@ -312,12 +315,13 @@ export const createListener = (deps: ListenerDeps): Listener => {
         relayUpgrade(http.request({ host: "127.0.0.1", port, method: req.method, path: req.url, headers: req.headers }), socket, head);
     });
 
-    // 0.0.0.0: the document server reaches this from inside its container, through the engine's host gateway.
+    // 0.0.0.0 unless told otherwise: the document server reaches this from inside its container, through the engine's
+    // host gateway.
     const bind = (port: number): Promise<number> =>
         new Promise((resolve, reject) => {
             const failed = (error: Error): void => reject(error);
             server.once("error", failed);
-            server.listen(port, "0.0.0.0", () => {
+            server.listen(port, deps.host ?? "0.0.0.0", () => {
                 server.off("error", failed);
                 const address = server.address();
                 resolve(typeof address === "object" && address !== null ? address.port : 0);

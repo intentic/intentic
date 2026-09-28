@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { t } from "../../i18n/index.js";
 import { formatUntil } from "../../lib/timeWindow.js";
 
@@ -43,6 +44,9 @@ export interface DeviceFolderRow {
     paused?: boolean | undefined;
     // The second session's word, the one-way mirror carrying the sandbox's own state down; see `backupState`.
     backupStatus?: string | undefined;
+    // Which sandbox folder `localDir` holds when it is not /work itself: a project pairing's `/work/<name>`, the
+    // owner's own folder, which never carries a backup; see `backupState`.
+    remoteDir?: string | undefined;
 }
 
 export interface DeviceSandboxShape {
@@ -242,9 +246,10 @@ export const folderState = (folder: DeviceFolderRow): string | undefined => {
 export const syncSessionLive = (folder: DeviceFolderRow | undefined): boolean => folder?.mode === `sync` && folder.mutagenStatus !== undefined;
 
 // Whether this sandbox's state is kept anywhere else; the one row where an absence must be louder than
-// any word Mutagen could return. Undefined for a mirror or a paused pairing: neither is a backup that failed.
+// any word Mutagen could return. Undefined for a mirror or a paused pairing: neither is a backup that failed. Nor
+// for a project folder (anything but /work): the owner's own project, into which nothing of the sandbox is written.
 export const backupState = (folder: DeviceFolderRow): string | undefined => {
-    if (folder.mode === `mirror` || folder.paused === true) {
+    if (folder.mode === `mirror` || folder.paused === true || (folder.remoteDir !== undefined && folder.remoteDir !== WORKSPACE_ROOT)) {
         return undefined;
     }
     return folder.backupStatus ?? `not backed up`;

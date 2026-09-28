@@ -216,6 +216,11 @@ export interface DesktopSetupArgs {
     name?: string;
     cfToken?: string;
     syncDir?: string;
+    /**
+     * A project setup's folder name in the sandbox (`/work/<project>`), for the folder the app picked and keeps: it
+     * stands in for `syncDir`, which names a folder the page made up, and never rides beside it.
+     */
+    project?: string;
     platformUrl?: string;
 }
 
@@ -234,7 +239,9 @@ export const desktopSetupLink = (args: DesktopSetupArgs): string => {
     carry(`sandbox`, args.sandboxId);
     carry(`name`, args.name);
     carry(`cfToken`, desktopVersion() === undefined ? undefined : args.cfToken);
-    carry(`syncDir`, args.syncDir);
+    // Never both: the app would sync the folder it picked into the project AND a made-up one into /work.
+    carry(`syncDir`, args.project === undefined || args.project === `` ? args.syncDir : undefined);
+    carry(`project`, args.project);
     if (args.platformUrl !== undefined) {
         params.set(`platform`, args.platformUrl);
     }

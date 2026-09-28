@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -181,5 +182,64 @@ describe("updateState", () => {
         const { pairings } = await readState();
         expect(pairings.find((held) => held.sandboxId === local.sandboxId)?.mirroredPorts).toEqual([{ port: 8787, host: "127.0.0.1" }]);
         expect(pairings.find((held) => held.sandboxId === web.sandboxId)).toEqual(web);
+    });
+});
+
+// Where a pairing's files go is held to two shapes on the way in AND on the way out: /work (absent, as every pairing
+// made before project folders), or one project folder under it, which only a project pairing may name.
+describe("a pairing's remote dir", () => {
+    const project = {
+        ...pairing("sandbox-5a1b2c3d4e5f-intentic-dev", "/home/dev/code/my-app"),
+        remoteDir: `${WORKSPACE_ROOT}/my-app`,
+        project: true as const,
+    };
+
+    it("round-trips a project pairing and leaves a pairing without one on /work", async () => {
+        await upsertPairing(local);
+        await upsertPairing(project);
+
+        expect((await readState()).pairings).toEqual([local, project]);
+    });
+
+    it("accepts /work spelled out, the shape a pairing without the field already means", async () => {
+        await writeFile(syncStatePath, JSON.stringify({ pairings: [{ ...local, remoteDir: WORKSPACE_ROOT }] }));
+
+        expect((await readState()).pairings).toEqual([{ ...local, remoteDir: "/work" }]);
+    });
+
+    it.each([
+        ["a folder outside /work", { remoteDir: "/etc", project: true }, `remoteDir "/etc" is neither /work nor /work/<name>`],
+        [
+            "a folder deeper than one level",
+            { remoteDir: `${WORKSPACE_ROOT}/my-app/src`, project: true },
+            `remoteDir "${WORKSPACE_ROOT}/my-app/src" is neither`,
+        ],
+        [
+            "a name the sandbox keeps for itself",
+            { remoteDir: `${WORKSPACE_ROOT}/public`, project: true },
+            `remoteDir "${WORKSPACE_ROOT}/public" is neither`,
+        ],
+        ["the state dir", { remoteDir: `${WORKSPACE_ROOT}/.intentic`, project: true }, `remoteDir "${WORKSPACE_ROOT}/.intentic" is neither`],
+        ["a project flag on /work itself", { project: true }, "is a project pairing but syncs /work, not a project folder under /work"],
+        [
+            "a project folder without the project flag",
+            { remoteDir: `${WORKSPACE_ROOT}/my-app` },
+            `syncs ${WORKSPACE_ROOT}/my-app, which only a project pairing may`,
+        ],
+        ["a project flag that is not true", { remoteDir: `${WORKSPACE_ROOT}/my-app`, project: false }, "is malformed"],
+    ])("refuses a state file holding %s, whole, when it is read", async (_what, placement, said) => {
+        await writeFile(syncStatePath, JSON.stringify({ pairings: [local, { ...web, ...placement }] }));
+
+        await expect(readState()).rejects.toThrow(said);
+        await expect(readState()).rejects.toThrow(SyntaxError);
+    });
+
+    it("refuses to write one, leaving the file as it was", async () => {
+        await upsertPairing(local);
+
+        await expect(upsertPairing({ ...web, remoteDir: "/work/refs", project: true })).rejects.toThrow(
+            `the pairing for ${web.sandboxId} remoteDir "/work/refs" is neither /work nor /work/<name>`,
+        );
+        expect((await readState()).pairings).toEqual([local]);
     });
 });

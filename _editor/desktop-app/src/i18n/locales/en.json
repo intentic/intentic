@@ -76,6 +76,12 @@
         "tryOpeningItYourself": "Try opening it yourself, then check again.",
         "waitedOf": "Waiting {elapsed} · gives up after {limit}"
     },
+    "localHome": {
+        "title": "On this computer",
+        "lead": "Open a folder or a file in its own window. No sandbox or account needed.",
+        "openFolder": "Open a folder",
+        "openFile": "Open a file"
+    },
     "requirements": {
         "beforeSandboxRunHere": "Before your sandbox can run here:",
         "checkAgain": "Check again",

@@ -10,9 +10,15 @@ const chain = read("./boot-chain.ts");
 const main = read("../main.ts");
 const workspaceApps = read("./workspace-apps.ts");
 
-const declared = (): string[] => {
-    const table = chain.slice(chain.indexOf("const BOOT_STEPS"), chain.indexOf("export const declareBootSteps"));
-    return [...table.matchAll(/key: "([a-zA-Z]+)"/g)].map((match) => match[1] as string);
+const table = chain.slice(chain.indexOf("const BOOT_STEPS"), chain.indexOf("export const declareBootSteps"));
+
+const declared = (): string[] => [...table.matchAll(/key: "([a-zA-Z]+)"/g)].map((match) => match[1] as string);
+
+// One step's declaration, from its key up to the next step's.
+const stepOf = (key: string): string => {
+    const start = table.indexOf(`key: "${key}"`);
+    const next = table.indexOf(`key: "`, start + 1);
+    return start === -1 ? "" : table.slice(start, next === -1 ? undefined : next);
 };
 
 describe(`daemon boot order`, () => {
@@ -41,5 +47,25 @@ describe(`daemon boot order`, () => {
         expect(sweep, "starterSite starts a panel session").toBeLessThan(order.indexOf("starterSite"));
         // Same rule for the apps, which are no longer a step: the whole chain is awaited before they run.
         expect(main.indexOf("await runBootSteps(")).toBeLessThan(main.indexOf("await startWorkspaceApps("));
+    });
+
+    // A project sandbox's folder is a repo before anything reads the repo set: rootRepo synced root's excludes before it
+    // was one, repoGitDirs converges every repo's git dir, and the baseline must leave the project's files out. Its note
+    // lands before the baseline, so a fresh root's first commit holds it.
+    it(`makes the project folder a repo after the root repo and before the git dirs converge, and notes it before the baseline`, () => {
+        const order = declared();
+        const at = (key: string): number => {
+            const index = order.indexOf(key);
+            expect(index, `${key} must still be a declared step`).toBeGreaterThan(-1);
+            return index;
+        };
+        expect(at("projectRepo")).toBeGreaterThan(at("rootRepo"));
+        expect(at("projectRepo")).toBeLessThan(at("repoGitDirs"));
+        expect(at("projectNote")).toBeLessThan(at("baseline"));
+    });
+
+    // The predicate is unit-tested (system/project-dir.test.ts); what is pinned here is that the step reads it.
+    it(`seeds no starter site beside a project folder`, () => {
+        expect(stepOf("starterSite")).toContain("&& seedsStarterSite(config)");
     });
 });

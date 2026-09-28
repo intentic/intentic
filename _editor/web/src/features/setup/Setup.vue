@@ -40,6 +40,7 @@ import SetupNudge from "./SetupNudge.vue";
 import SetupRunDetails from "./SetupRunDetails.vue";
 import SetupRungArt from "./SetupRungArt.vue";
 import SetupSyncOption from "./SetupSyncOption.vue";
+import { setupProjectOf } from "./setupArrival";
 import { probeDaemon } from "./setupAttach";
 import { lockedReasonOf } from "./flow/commandHandoff";
 import { DEV_SANDBOX_IMAGE } from "./flow/installCommand";
@@ -82,8 +83,12 @@ const subdomain = ref(``);
 const derivedPrefix = ref(``);
 const subdomainValid = computed(() => /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i.test(subdomain.value.trim()));
 const desktop = computed(() => desktopVersion() !== undefined);
-// The installer replaces the raw pipe where a build ships for this machine; undefined leaves the pipe.
-const installer = computed(() => (desktop.value || mobile.value ? undefined : desktopInstaller()));
+// The folder the desktop app is setting this sandbox up for (`?project=`), read once for the visit: the row's name, the
+// ladder, the run step and the arrival all depend on it, and the arrival is handed the other three.
+const project = setupProjectOf(route.query[`project`]);
+// The installer replaces the raw pipe where a build ships for this machine; undefined leaves the pipe. A project's page
+// was opened by the app, so there is nothing to install.
+const installer = computed(() => (desktop.value || mobile.value || project !== undefined ? undefined : desktopInstaller()));
 const reader = { mobile, inApp: desktop, installer };
 
 // Lands on `/`, which differs by form factor (a phone has no docked chat, so it opens straight into one).
@@ -92,7 +97,7 @@ const enterWorkspace = async (): Promise<void> => {
     revealConversation(composingConversation());
 };
 
-const row = useSetupRow({ sandbox, enter: enterWorkspace });
+const row = useSetupRow({ sandbox, enter: enterWorkspace, name: project?.name });
 const { created, resuming, finished, creating, error, claimedAt, report, announced, autoCreate } = row;
 const hosted = useHostedLane({ platform: apiClient.sandbox, sandbox, row });
 const {
@@ -118,13 +123,14 @@ const {
 } = hosted;
 const command = useCommandLane({ platform: apiClient.sandbox, row, hosted, lane });
 const { intenticAvailable, addressed, addressless, setup, setupError, commandReady, copied, launched, remint } = command;
-const step = useRunStep({ command, row, reader, cmdOs, mode, cfToken, openDesktopLink });
+const step = useRunStep({ command, row, reader, cmdOs, mode, cfToken, project, openDesktopLink });
 const {
     runTab,
     runTabOptions,
     showCommand,
     hasDocker,
     syncEnabled,
+    throughApp,
     appFirst,
     commandVisible,
     installing,
@@ -156,7 +162,8 @@ const provisionOffered = computed(() => addressed.value || hostedOffered.value);
 const collectedUnopened = computed(() => hostedOffer.value?.plan !== true);
 const ladderOptions = computed(() =>
     ladderOptionsOf({
-        hostedOffered: hostedOffered.value,
+        // A machine of ours cannot hold a folder on this computer: a project has no rung but its own.
+        hostedOffered: hostedOffered.value && project === undefined,
         hostedFull: hostedFull.value,
         hostedSuspended: hostedSuspended.value,
         plan: hostedOffer.value?.plan === true,
@@ -191,6 +198,7 @@ const {
     hosted,
     command,
     route,
+    project: project !== undefined,
     inApp: desktop,
     ladder: ladderOptions,
     warmCredential: warmSandboxCredential,
@@ -276,8 +284,8 @@ const startFresh = (): void => {
     derivedPrefix.value = ``;
     domain.value = ``;
     attach.resetAttach();
-    // Dropping ?sandbox= keeps a reload from resuming the abandoned row.
-    void router.replace({ path: `/setup` });
+    // Dropping ?sandbox= keeps a reload from resuming the abandoned row; the new one is still for the same folder.
+    void router.replace({ path: `/setup`, query: project === undefined ? {} : { project: project.name } });
     void autoCreate();
 };
 
@@ -897,8 +905,8 @@ onUnmounted(() => row.discardDraft(committed.value));
                             </div>
                         </template>
                         <template v-else>
-                            <!-- In-app setup hands the command to the app. -->
-                            <template v-if="desktop">
+                            <!-- In-app setup hands the command to the app; so does a project's, from wherever this page is. -->
+                            <template v-if="throughApp">
                                 <p class="text-xs text-muted">
                                     {{ t(`setup.setup.installsDockerNeedStarts`) }}
                                 </p>
@@ -922,9 +930,10 @@ onUnmounted(() => row.discardDraft(committed.value));
                             <!-- Phone's real next step, placed above the command it redirects from; a correction below goes unread. -->
                             <SetupHandoff v-if="mobile && created" :sandbox-id="created.id" :email="user?.email ?? ``" @sent="onEmailed" />
 
-                            <!-- One row naming both alternatives by outcome, not stacked disclosures: one changes where, the other how. -->
+                            <!-- One row naming both alternatives by outcome, not stacked disclosures: one changes where, the other how.
+                                 A project has neither: no machine of ours holds its folder, and no command syncs it. -->
                             <nav
-                                v-if="desktop || mobile || appFirst || otherMachinesFolded"
+                                v-if="project === undefined && (desktop || mobile || appFirst || otherMachinesFolded)"
                                 :aria-label="t(`setup.setup.otherWaysToSet`)"
                                 class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted"
                             >
@@ -1018,7 +1027,7 @@ onUnmounted(() => row.discardDraft(committed.value));
                             </div>
 
                             <!-- Sync for widths with no reference column; survives folding in the app, but not on the compose tab. -->
-                            <SetupSyncOption v-if="syncOffered" v-model="syncEnabled" :folder="syncDir" class="xl:hidden" />
+                            <SetupSyncOption v-if="syncOffered" v-model="syncEnabled" :folder="syncDir" :project="project?.name" class="xl:hidden" />
                         </template>
 
                         <!-- Keep the spinner visible while polling and use color to show ownership. -->
@@ -1059,7 +1068,7 @@ onUnmounted(() => row.discardDraft(committed.value));
                                         {{ t(`setup.setup.pasteIntoTerminalPress`) }}
                                     </template>
                                     <!-- This names the actor responsible for the next setup step. -->
-                                    <template v-else-if="desktop && !commandVisible">
+                                    <template v-else-if="throughApp && !commandVisible">
                                         <span class="font-medium text-content">{{ t(`setup.setup.waitingToStart`) }}</span>
                                         {{ t(`setup.setup.nothingRunsUntilPress`) }}
                                     </template>
@@ -1134,7 +1143,7 @@ onUnmounted(() => row.discardDraft(committed.value));
                     <div class="entry-card flex flex-col gap-3 p-4">
                         <SetupRunDetails :cleanup="cleanupCommand" :downloads="!appFirst" />
                         <!-- Sync belongs with what the command does, not the path to it; gated on the command, like its twin under it. -->
-                        <SetupSyncOption v-if="syncOffered" v-model="syncEnabled" :folder="syncDir" class="pt-1" />
+                        <SetupSyncOption v-if="syncOffered" v-model="syncEnabled" :folder="syncDir" :project="project?.name" class="pt-1" />
                     </div>
                     <!-- Correction as this column's second card, once the wait reads as a misunderstanding, beside the command. -->
                     <SetupNudge

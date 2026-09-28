@@ -24,7 +24,8 @@
         "longDescription": "Run your intentic sandbox on this computer without a terminal, this app installs Docker if you need it, starts the sandbox and its tunnel, keeps it updated, and opens your workspace.",
         "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
         "resources": {
-            "staged-scripts/*": "scripts/"
+            "staged-scripts/*": "scripts/",
+            "../../../_extensions/onlyoffice/dist/editor/*": "onlyoffice-page/"
         },
         "linux": {
             "deb": {
@@ -41,7 +42,58 @@
                 "installMode": "currentUser",
                 "installerHooks": "./installer-hooks.nsh"
             }
-        }
+        },
+        "externalBin": ["binaries/intentic-files"],
+        "fileAssociations": [
+            {
+                "ext": ["docx", "doc", "odt", "rtf"],
+                "name": "Word document",
+                "description": "Word document, opened in Intentic",
+                "role": "Editor",
+                "rank": "Alternate",
+                "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            },
+            {
+                "ext": ["xlsx", "xls", "ods", "csv"],
+                "name": "Spreadsheet",
+                "description": "Spreadsheet, opened in Intentic",
+                "role": "Editor",
+                "rank": "Alternate",
+                "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            },
+            {
+                "ext": ["pptx", "ppt", "odp"],
+                "name": "Presentation",
+                "description": "Presentation, opened in Intentic",
+                "role": "Editor",
+                "rank": "Alternate",
+                "mimeType": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            },
+            {
+                "ext": ["epub"],
+                "name": "EPUB book",
+                "description": "EPUB book, opened in Intentic",
+                "role": "Viewer",
+                "rank": "Alternate",
+                "mimeType": "application/epub+zip"
+            },
+            {
+                "ext": ["md", "markdown"],
+                "name": "Markdown",
+                "description": "Markdown, opened in Intentic",
+                "role": "Editor",
+                "rank": "Alternate",
+                "mimeType": "text/markdown"
+            },
+            {
+                "ext": ["txt", "log", "json", "yaml", "yml", "toml"],
+                "name": "Text",
+                "description": "Text, opened in Intentic",
+                "role": "Editor",
+                "rank": "Alternate",
+                "mimeType": "text/plain"
+            }
+        ]
     },
     "plugins": {
         "updater": {

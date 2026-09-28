@@ -6,7 +6,7 @@ import { runPidPath } from "../config.js";
 import { installedBuild } from "../installed.js";
 import { machineId } from "../machine-id.js";
 import { wslEnvironment } from "../wsl.js";
-import { mirrorHeartbeatPath, type Pairing, readState, type SyncState } from "./config.js";
+import { isProjectPairing, mirrorHeartbeatPath, type Pairing, readState, type SyncState } from "./config.js";
 import { backupSessionName, ensureMutagen, readSessionState, sessionName } from "./mutagen.js";
 
 // Everything this agent knows about the device, in one shape fed to `status`, `status --json`, the mirror
@@ -34,27 +34,32 @@ const pairingReport = (mutagen: string | undefined, pairing: Pairing): DevicePai
     // Stated on every pairing rather than inferred from an empty port list: "nothing is listening" and "this device
     // was told not to" look identical otherwise, and only one has anything for a reader to do.
     const mirroring = pairing.mirrorOff === true ? "off" : "on";
+    // Which sandbox folder the local one holds, stated only where it is not /work itself, so every older reader's
+    // picture of every other pairing holds.
+    const remote = pairing.remoteDir === undefined ? {} : { remoteDir: pairing.remoteDir };
     // A mirror-only enrollment has no file sync to ask about; the absent status is a fact about the mode, not a
     // failed read.
     if (pairing.mode !== "sync" || mutagen === undefined) {
-        return { sandboxId: pairing.sandboxId, mode: pairing.mode, localDir: pairing.localDir, mirroring };
+        return { sandboxId: pairing.sandboxId, mode: pairing.mode, localDir: pairing.localDir, ...remote, mirroring };
     }
     // A sync pairing with no session is carried as the absence of a status, not a word for it, so every reader
     // renders it the same way instead of inventing a default. readSessionState resolves Mutagen's omitted zero.
     const session = readSessionState(mutagen, sessionName(pairing.sandboxId));
-    // The state backup reads the same way: no status means no session, so the sandbox is the only copy of its state.
-    const backup = readSessionState(mutagen, backupSessionName(pairing.sandboxId));
+    // The state backup reads the same way: no status means no session, so the sandbox is the only copy of its state. A
+    // project pairing has none by design, which the remote dir beside it says; its absence here is not a failure.
+    const backup = isProjectPairing(pairing) ? undefined : readSessionState(mutagen, backupSessionName(pairing.sandboxId));
     return {
         sandboxId: pairing.sandboxId,
         mode: pairing.mode,
         localDir: pairing.localDir,
+        ...remote,
         mirroring,
         mutagenStatus: session.status,
         conflicts: session.conflicts,
         // The stuck paths, not just a count: a number names nothing to look at.
         conflictedPaths: session.conflictedPaths,
         paused: session.paused,
-        backupStatus: backup.status,
+        backupStatus: backup?.status,
     };
 };
 

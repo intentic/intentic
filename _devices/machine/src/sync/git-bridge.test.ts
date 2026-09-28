@@ -1,3 +1,4 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { join } from "node:path";
 import type { Pairing } from "./config.js";
 import { type BridgeExec, bridgeRepo, listSandboxRepos, runGitBridge } from "./git-bridge.js";
@@ -305,6 +306,17 @@ describe("runGitBridge", () => {
     it("returns undefined when the sandbox is unreachable, so the next pass lists again", async () => {
         const { exec } = scripted({ ssh: undefined });
         expect(await runGitBridge(exec, config, () => undefined, undefined)).toBeUndefined();
+    });
+
+    // The owner's own repository: its `.git` is theirs, and the sandbox's history of the folder is a separate repo the
+    // bridge would init, re-point and reset theirs onto. Not even listed, so a sandbox repo named like a subfolder of the
+    // project can never be bridged into it.
+    it("does nothing for a project pairing, not even list the sandbox's repos", async () => {
+        const { calls, exec } = scripted({ ssh: "intentic\nmy-app\n" });
+        const project: Pairing = { ...config, remoteDir: `${WORKSPACE_ROOT}/my-app`, project: true };
+        expect(await runGitBridge(exec, project, () => undefined, undefined)).toBeUndefined();
+        expect(await runGitBridge(exec, project, () => undefined, ["my-app"])).toBeUndefined();
+        expect(calls).toEqual([]);
     });
 
     it("does nothing for a mirror-only enrollment, which has no local tree to bridge into", async () => {
