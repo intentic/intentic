@@ -11,7 +11,8 @@ flowchart LR
 ```
 
 - `sanctum.css` scopes every rule to `[data-skin="sanctum"]` and is imported by `src/styles.css`, so the skin
-  `none` needs no stylesheet: it writes no attribute and the app shows its plain look.
+  `none` needs no stylesheet: it writes no attribute and the app shows its plain look. The agents board wears its
+  own plate art under `[data-skin="sanctum"]`; regenerate the AVIF rungs with `pnpm --filter @intentic/web plate:agents`.
 - The setting is stored under `ui-skin` and holds `system`, `none` or `sanctum`. `system` is the default and
   follows the colour scheme: dark wears `sanctum`, light wears `none`, and an OS that flips at dusk carries the
   look with it.
