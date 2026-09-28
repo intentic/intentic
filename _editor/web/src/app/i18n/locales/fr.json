@@ -2897,6 +2897,9 @@
             "uncountedHint": "Espace que le disque déclare utilisé mais qu'aucune catégorie ne contient : le système lui-même, d'autres programmes partageant le disque, et la comptabilité propre au système de fichiers.",
             "unreadable": "{count} fichier ou dossier n'a pas pu être lu et n'est pas compté. | {count} fichiers ou dossiers n'ont pas pu être lus et ne sont pas comptés.",
             "waiting": "Rien à libérer pour l'instant",
+            "freeable": "{bytes} peuvent être libérés",
+            "more": "{count} catégorie plus petite | {count} catégories plus petites",
+            "fewer": "Afficher moins",
             "waitingHint": "Tout ici a changé au cours du dernier jour ou est en cours d'utilisation : un nettoyage laisserait donc tout en place."
         },
         "sandboxSwitcher": {

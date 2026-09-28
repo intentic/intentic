@@ -2913,6 +2913,9 @@
             "uncountedHint": "Espacio que el disco da por usado y que no pertenece a ninguna categoría: el propio sistema, otros programas que comparten el disco y la contabilidad interna del sistema de archivos.",
             "unreadable": "{count} archivo o carpeta no se pudo leer y no se cuenta. | {count} archivos o carpetas no se pudieron leer y no se cuentan.",
             "waiting": "Nada que liberar aún",
+            "freeable": "Se pueden liberar {bytes}",
+            "more": "{count} categoría más pequeña | {count} categorías más pequeñas",
+            "fewer": "Mostrar menos",
             "waitingHint": "Todo lo de aquí cambió en el último día o está en uso, así que una limpieza lo dejaría todo en su sitio."
         },
         "sandboxSwitcher": {

@@ -1,6 +1,6 @@
 import { STORAGE_CLEANABILITY, StorageCategoryIdSchema, type StorageCategoryUsage, type StorageScan } from "@intentic/sandbox-contract";
 import { storageCategoryText } from "./storageCategories";
-import { cleanOffer, shareOfDisk, uncountedBytes } from "./storageView";
+import { cleanOffer, freeableBytes, shareOfCounted, splitCategories, uncountedBytes } from "./storageView";
 
 // What the Disk card decides from a scan: what the scan could not account for, how long each row's bar is, and what
 // each category's button offers. Pinned at the edges, where a card would otherwise say something false.
@@ -36,15 +36,41 @@ describe(`uncountedBytes`, () => {
     });
 });
 
-describe(`shareOfDisk`, () => {
-    it(`measures every row against the whole volume`, () => {
-        expect(shareOfDisk(250, scanOf([], { usedBytes: 500, totalBytes: 1000 }))).toBe(25);
+describe(`shareOfCounted`, () => {
+    const counted = [usage({ id: `trash`, bytes: 100 }), usage({ id: `logs`, bytes: 300 })];
+
+    it(`measures every row against what the scan counted, not the whole volume`, () => {
+        expect(shareOfCounted(100, scanOf(counted, { usedBytes: 500, totalBytes: 100_000 }))).toBe(25);
     });
 
-    it(`falls back to what the scan counted, and never draws past the end`, () => {
-        expect(shareOfDisk(100, scanOf([usage({ id: `trash`, bytes: 100 }), usage({ id: `logs`, bytes: 300 })]))).toBe(25);
-        expect(shareOfDisk(2000, scanOf([], { usedBytes: 500, totalBytes: 1000 }))).toBe(100);
-        expect(shareOfDisk(10, scanOf([]))).toBe(0);
+    it(`never draws past the end, and draws nothing from an empty scan`, () => {
+        expect(shareOfCounted(2000, scanOf(counted))).toBe(100);
+        expect(shareOfCounted(10, scanOf([]))).toBe(0);
+    });
+});
+
+describe(`freeableBytes`, () => {
+    it(`adds what each cleanable category would give back, and nothing for one that cannot say`, () => {
+        const scan = scanOf([
+            usage({ id: `workspace`, bytes: 900 }),
+            usage({ id: `logs`, bytes: 300, cleanableBytes: 200 }),
+            usage({ id: `modelWeights`, bytes: 100, cleanableBytes: 100 }),
+            usage({ id: `packageStores`, bytes: 500 }),
+        ]);
+        expect(freeableBytes(scan)).toBe(300);
+    });
+});
+
+describe(`splitCategories`, () => {
+    const letters = [`a`, `b`, `c`, `d`, `e`, `f`, `g`, `h`, `i`];
+
+    it(`lists the largest and folds the tail`, () => {
+        expect(splitCategories(letters, 6)).toEqual({ lead: letters.slice(0, 6), rest: letters.slice(6) });
+    });
+
+    it(`never folds a tail of one row`, () => {
+        expect(splitCategories(letters.slice(0, 7), 6)).toEqual({ lead: letters.slice(0, 7), rest: [] });
+        expect(splitCategories([], 6)).toEqual({ lead: [], rest: [] });
     });
 });
 

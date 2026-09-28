@@ -2913,6 +2913,9 @@
             "uncountedHint": "Miejsce, które dysk zgłasza jako zajęte, a które nie należy do żadnej kategorii: sam system, inne programy dzielące ten dysk i własne dane systemu plików.",
             "unreadable": "Nie udało się odczytać {count} pliku lub folderu, więc nie został policzony. | Nie udało się odczytać {count} plików lub folderów, więc nie zostały policzone. | Nie udało się odczytać {count} plików lub folderów, więc nie zostały policzone.",
             "waiting": "Na razie nic do zwolnienia",
+            "freeable": "Można zwolnić {bytes}",
+            "more": "{count} mniejsza kategoria | {count} mniejsze kategorie | {count} mniejszych kategorii",
+            "fewer": "Pokaż mniej",
             "waitingHint": "Wszystko tutaj zmieniło się w ciągu ostatniej doby albo jest w użyciu, więc czyszczenie zostawiłoby wszystko na miejscu."
         },
         "sandboxSwitcher": {

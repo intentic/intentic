@@ -2899,6 +2899,9 @@
             "uncountedHint": "Platz, den der Datenträger als belegt meldet, der aber zu keiner Kategorie gehört: das System selbst, andere Programme auf demselben Datenträger und die Verwaltungsdaten des Dateisystems.",
             "unreadable": "{count} Datei oder Ordner ließ sich nicht lesen und ist nicht mitgezählt. | {count} Dateien oder Ordner ließen sich nicht lesen und sind nicht mitgezählt.",
             "waiting": "Noch nichts freizugeben",
+            "freeable": "{bytes} lassen sich freigeben",
+            "more": "{count} kleinere Kategorie | {count} kleinere Kategorien",
+            "fewer": "Weniger anzeigen",
             "waitingHint": "Alles hier wurde am letzten Tag geändert oder ist in Gebrauch, eine Bereinigung ließe also alles an seinem Platz."
         },
         "sandboxSwitcher": {
