@@ -434,8 +434,7 @@
             "unprovenDetail": "L’agent a modifié du code sans lancer ensuite de tests, typecheck, lint ni build.",
             "unviewedHead": "Interface modifiée sans regarder",
             "unviewed": "A modifié {count} fichier d’interface sans regarder le résultat | A modifié {count} fichiers d’interface sans regarder le résultat",
-            "ran": "Lancé",
-            "note": "Lu à partir de ce que l’agent a lui-même lancé à son dernier tour. La CI vérifie tout après le push."
+            "ran": "Lancé"
         },
         "words": {
             "new": "Nouveau",

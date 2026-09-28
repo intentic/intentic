@@ -438,8 +438,7 @@
             "unprovenDetail": "Agent zmienił kod i nie uruchomił potem testów, typecheck, lint ani builda.",
             "unviewedHead": "Interfejs zmieniony bez podglądu",
             "unviewed": "Zmienił {count} plik interfejsu bez obejrzenia wyniku | Zmienił {count} pliki interfejsu bez obejrzenia wyniku | Zmienił {count} plików interfejsu bez obejrzenia wyniku",
-            "ran": "Uruchomił",
-            "note": "Odczytane z tego, co agent sam uruchomił w ostatniej turze. CI sprawdza wszystko po wypchnięciu."
+            "ran": "Uruchomił"
         },
         "words": {
             "new": "Nowy",

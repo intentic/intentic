@@ -433,8 +433,7 @@
             "unprovenDetail": "Der Agent hat Code geändert und danach weder Tests, Typecheck, Lint noch Build ausgeführt.",
             "unviewedHead": "Oberfläche ungesehen geändert",
             "unviewed": "{count} Oberflächendatei geändert, ohne das Ergebnis anzusehen | {count} Oberflächendateien geändert, ohne das Ergebnis anzusehen",
-            "ran": "Ausgeführt",
-            "note": "Gelesen aus dem, was der Agent in seinem letzten Zug selbst ausgeführt hat. CI prüft alles nach dem Push."
+            "ran": "Ausgeführt"
         },
         "words": {
             "new": "Neu",

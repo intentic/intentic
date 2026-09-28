@@ -455,8 +455,7 @@
             "unprovenDetail": "The agent changed code and ran no test, typecheck, lint or build after it.",
             "unviewedHead": "Interface changed unseen",
             "unviewed": "Changed {count} interface file without looking at the result | Changed {count} interface files without looking at the result",
-            "ran": "Ran",
-            "note": "Read from what the agent itself ran in its last turn. CI checks everything once you push."
+            "ran": "Ran"
         },
         "words": {
             "new": "New",

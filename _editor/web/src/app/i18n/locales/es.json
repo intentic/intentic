@@ -438,8 +438,7 @@
             "unprovenDetail": "El agente cambió código y no ejecutó tests, typecheck, lint ni build después.",
             "unviewedHead": "Interfaz cambiada sin mirar",
             "unviewed": "Cambió {count} archivo de interfaz sin mirar el resultado | Cambió {count} archivos de interfaz sin mirar el resultado",
-            "ran": "Ejecutó",
-            "note": "Leído de lo que el propio agente ejecutó en su último turno. CI lo comprueba todo al hacer push."
+            "ran": "Ejecutó"
         },
         "words": {
             "new": "Nuevo",

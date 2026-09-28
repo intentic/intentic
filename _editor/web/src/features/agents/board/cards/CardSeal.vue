@@ -111,7 +111,6 @@ const onCardEnter = (): void => hover.cancel();
                 <p v-if="proof.verification !== undefined && unviewed" class="flex items-start gap-1.5 text-2xs leading-relaxed text-muted">
                     <Icon name="eye-slash" class="mt-0.5 shrink-0 text-warning" />{{ unviewed }}
                 </p>
-                <p class="border-t border-line pt-2 text-2xs leading-relaxed text-subtle">{{ t(`agents.cardSeal.note`) }}</p>
             </div>
         </AnchoredOverlay>
     </span>
