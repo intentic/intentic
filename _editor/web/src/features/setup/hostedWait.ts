@@ -43,9 +43,11 @@ export interface WaitFailure {
 export type WakeRefusal = "hours" | "suspended";
 
 const REFUSED: Record<WakeRefusal, WaitFailure> = {
+    // The hours may be the account's free ones or the machine's own month on a paid slot; the refusal does not say
+    // which, so the sentence names neither.
     hours: {
-        problem: `This sandbox's free hours for the month are used up, so we've left its machine stopped.`,
-        remedy: `They reset at the start of next month, and the membership lifts the ceiling for good. Running it on a computer of your own has no ceiling at all, and either way nothing on the machine is lost.`,
+        problem: `This sandbox's hosted hours for the month are used up, so we've left its machine stopped.`,
+        remedy: `They come back on the 1st. A slot on the hosted plan gives it a bigger machine with hours of its own, and on a computer of your own nothing is metered at all. Either way nothing on the machine is lost.`,
         action: `none`,
     },
     suspended: {

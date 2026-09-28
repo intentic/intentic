@@ -1,4 +1,10 @@
-import { apiContract, type HostedMigration as HostedMigrationState, type HostedPlanHosted, type HostedPlanState } from "@intentic/api-contract";
+import {
+    apiContract,
+    type HostedHoursMeter,
+    type HostedMigration as HostedMigrationState,
+    type HostedPlanHosted,
+    type HostedPlanState,
+} from "@intentic/api-contract";
 import { FREE_TIER, type HostedTier, hostedTier, isHostedTierId } from "@intentic/constants";
 import { implement, ORPCError } from "@orpc/server";
 import type { Config } from "../../config.js";
@@ -9,7 +15,7 @@ import { applySubscription, entryTier, hostedPlanEnabled, hostedPrices, hostedSl
 import { HostedMigrationRefused, type MigrationRefusal, migrateHosted } from "./migrate/hosted-migrate.js";
 import { StripeError, type StripeGateway, stripeGateway } from "./hosted-plan-stripe.js";
 import { hostedTierIn, shapeOfRow } from "./hosted-shape.js";
-import { hostedArrivalBudget, hostedBudgetOf, hostedOomsSince, usageMonth, usageResetsAt } from "./hosted-usage.js";
+import { accountHoursOf, type HostedBudget, hostedOomsSince, usageResetsAt } from "./hosted-usage.js";
 import { DAY_MS } from "../../durations.js";
 
 const os = implement(apiContract).$context<OrpcContext>();
@@ -17,14 +23,23 @@ const os = implement(apiContract).$context<OrpcContext>();
 // Where Stripe sends the browser back: the Billing page, which owns the post-checkout wait and every state's words.
 const billingUrl = (context: OrpcContext, query = ``): string => `${context.config.webOrigin}/settings/billing${query}`;
 
-// The lane as it applies to one account: slots, machines, this month's meter, shared by the Billing page, avatar row
-// and Overview card so they can't disagree. usedMinutes is live, shown to subscribers too; the ceiling (ramped for a
-// new account, absent for a subscriber) is the budget's own answer, so the page and the wake cannot disagree.
+// The wire form of one kind of hours: what was spent, the ceiling or null where nothing is counted, and when it resets.
+const meterOf = (budget: HostedBudget, now: Date): HostedHoursMeter => ({
+    kind: budget.kind,
+    usedMinutes: budget.usedMinutes,
+    allowanceMinutes: budget.metered ? budget.allowanceMinutes : null,
+    resetsAt: usageResetsAt(now).toISOString(),
+    ...(budget.rampUntil === undefined ? {} : { rampUntil: budget.rampUntil.toISOString() }),
+});
+
+// The lane as it applies to one account: slots, machines and the hours each spends, shared by the Billing page, the
+// sandbox's own pages and the chat strip so they can't disagree. Every figure is accountHoursOf's, the same read the
+// wake and the tick judge by, so the page and the refusal cannot disagree either.
 const hostedFor = async (context: OrpcContext, userId: string): Promise<HostedPlanHosted> => {
     const { prisma, config } = context;
     const now = new Date();
     const free = hostedTierIn(config, FREE_TIER.id);
-    const [slots, machines, budget] = await Promise.all([
+    const [slots, machines, hours] = await Promise.all([
         hostedSlotsOf(prisma, config, userId),
         prisma.hostedMachine.findMany({
             where: { sandbox: { ownerId: userId } },
@@ -40,43 +55,26 @@ const hostedFor = async (context: OrpcContext, userId: string): Promise<HostedPl
             },
             orderBy: { createdAt: `asc` },
         }),
-        hostedArrivalBudget(prisma, config, userId, now),
+        accountHoursOf(prisma, config, userId, now),
     ]);
-    // Each machine's own month and its own week of out-of-memory kills; both are the machine's, not the account's.
+    // Each machine's own week of out-of-memory kills: the machine's, not the account's.
     const weekAgo = new Date(now.getTime() - 7 * DAY_MS);
-    const meters = await Promise.all(
-        machines.map(async (machine) =>
-            Promise.all([
-                hostedBudgetOf(prisma, config, { sandboxId: machine.sandbox.id, tier: machine.tier, ownerId: userId }, now),
-                hostedOomsSince(prisma, machine.sandbox.id, weekAgo),
-            ]),
-        ),
-    );
+    const ooms = await Promise.all(machines.map((machine) => hostedOomsSince(prisma, machine.sandbox.id, weekAgo)));
     return {
         slots: [...slots.values()].reduce((sum, count) => sum + count, 0),
         slotsByTier: Object.fromEntries(slots),
-        machines: machines.map((machine, index) => {
-            const [meter, oomsThisWeek] = meters[index] as (typeof meters)[number];
-            return {
-                sandboxId: machine.sandbox.id,
-                name: machine.sandbox.name,
-                region: machine.region,
-                wokeAt: machine.wokeAt?.toISOString() ?? null,
-                tier: machine.tier,
-                // The machine's own numbers, never the rung's: the two part company the moment a migration starts.
-                shape: shapeOfRow(machine),
-                usedMinutes: meter.usedMinutes,
-                allowanceMinutes: meter.metered ? meter.allowanceMinutes : null,
-                oomsThisWeek,
-            };
-        }),
-        usage: {
-            month: usageMonth(now),
-            usedMinutes: budget.usedMinutes,
-            allowanceMinutes: budget.metered ? budget.allowanceMinutes : null,
-            resetsAt: usageResetsAt(now).toISOString(),
-            ...(budget.rampUntil === undefined ? {} : { rampUntil: budget.rampUntil.toISOString() }),
-        },
+        machines: machines.map((machine, index) => ({
+            sandboxId: machine.sandbox.id,
+            name: machine.sandbox.name,
+            region: machine.region,
+            wokeAt: machine.wokeAt?.toISOString() ?? null,
+            tier: machine.tier,
+            // The machine's own numbers, never the rung's: the two part company the moment a migration starts.
+            shape: shapeOfRow(machine),
+            hours: meterOf(hours.machines.get(machine.sandbox.id) ?? hours.free, now),
+            oomsThisWeek: ooms[index] ?? 0,
+        })),
+        freeHours: meterOf(hours.free, now),
         freeTier: { id: free.id, shape: shapeOfRow(free), monthlyHours: free.monthlyHours },
     };
 };

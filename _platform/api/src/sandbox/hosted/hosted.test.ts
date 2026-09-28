@@ -89,10 +89,10 @@ const PAID = ENTRY;
 const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof jest.fn>>>) => {
     const prisma = {
         hostedPlan: { findUnique: jest.fn().mockResolvedValue(null) },
+        // Nothing spent this month unless a test says so: the meter's one read groups the month by machine and hours.
         hostedUsage: {
-            findUnique: jest.fn().mockResolvedValue(null),
             upsert: jest.fn().mockResolvedValue({}),
-            aggregate: jest.fn().mockResolvedValue({ _sum: { minutes: null } }),
+            groupBy: jest.fn().mockResolvedValue([]),
         },
         // In good standing, and the provision ledger accepts every row.
         user: { findUnique: jest.fn().mockResolvedValue({ hostedSuspendedAt: null, hostedSuspendedReason: null }) },
@@ -1205,7 +1205,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
                     hosted: { id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null, tier: `free` },
                 }),
             },
-            hostedUsage: { findUnique: jest.fn().mockResolvedValue({ minutes: 40 * 60 }) },
+            hostedUsage: { groupBy: jest.fn().mockResolvedValue([{ sandboxId: `s1`, tier: FREE_TIER.id, _sum: { minutes: 40 * 60 } }]) },
         });
         await expect(call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma: spent }) })).rejects.toMatchObject({
             code: `PAYMENT_REQUIRED`,
@@ -1213,11 +1213,12 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         expect(fetchSpy).toHaveLength(0);
     });
 
-    /* THE CEILING IS THE MACHINE'S RUNG'S. The same spent month that refuses a free machine's wake is nowhere near
-     * a Standard one's, and the rung on the row is the only thing that decides which. */
-    it(`wakes a machine on a paid rung past the hours a free one would have spent`, async () => {
+    /* A PAID SLOT'S HOURS ARE ITS MACHINE'S. The account's free hours, spent, refuse a free machine's wake; a machine
+     * standing on a held Standard slot spends its own month instead, and wakes. The same machine with the slot gone
+     * (a plan that stopped paying) spends the free hours again, and is refused with them. */
+    it(`wakes a machine on a held paid slot past the free hours, and refuses it once the slot is gone`, async () => {
         stubFetch([{ match: (method, url) => method === `POST` && url.endsWith(`/start`), respond: () => json({ ok: true }) }]);
-        const spent = (tier: string) =>
+        const spent = (tier: string, plan: { status: string; items: { tier: string; quantity: number }[] }) =>
             fakePrisma({
                 sandbox: {
                     findFirst: jest.fn().mockResolvedValue({
@@ -1226,15 +1227,23 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
                         hosted: { id: `h1`, sandboxId: `s1`, tier, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null },
                     }),
                 },
-                hostedUsage: { findUnique: jest.fn().mockResolvedValue({ minutes: FREE_TIER.monthlyHours * 60 }) },
-                hostedPlan: { findUnique: jest.fn().mockResolvedValue({ status: `active`, items: [] }) },
-                // The row the wake opens its stretch on, still there when the start lands.
-                hostedMachine: { findUnique: jest.fn().mockResolvedValue({ wokeAt: null }) },
+                // The forty free hours, spent on this machine before it moved up a rung.
+                hostedUsage: { groupBy: jest.fn().mockResolvedValue([{ sandboxId: `s1`, tier: FREE_TIER.id, _sum: { minutes: FREE_TIER.monthlyHours * 60 } }]) },
+                hostedPlan: { findUnique: jest.fn().mockResolvedValue(plan) },
+                // The account's one machine as the meter reads it, and the row the wake opens its stretch on.
+                hostedMachine: {
+                    findMany: jest.fn().mockResolvedValue([{ sandboxId: `s1`, tier, wokeAt: null }]),
+                    findUnique: jest.fn().mockResolvedValue({ wokeAt: null }),
+                },
             });
-        await expect(call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma: spent(FREE_TIER.id) }) })).rejects.toThrow(
-            /free hours are used up/u,
+        const slot = { status: `active`, items: [{ tier: PAID.id, quantity: 1 }] };
+        await expect(call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma: spent(FREE_TIER.id, slot) }) })).rejects.toThrow(
+            /free hosted hours of this sandbox's owner are used up/u,
         );
-        expect(await call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma: spent(PAID.id) }) })).toEqual({ ok: true });
+        expect(await call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma: spent(PAID.id, slot) }) })).toEqual({ ok: true });
+        await expect(
+            call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma: spent(PAID.id, { ...slot, status: `past_due` }) }) }),
+        ).rejects.toMatchObject({ code: `PAYMENT_REQUIRED` });
     });
 
     // Baseline sandbox row: ordinary creation, tunnel already claimed.

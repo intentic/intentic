@@ -17,7 +17,7 @@ interface FakeState {
 
 test(`the offer, then a paid checkout the page turns into an active plan while the webhook is still on its way`, async ({ page }) => {
     await page.goto(`/settings/billing`);
-    await expect(page.getByRole(`heading`, { name: `Keep your hosted sandbox always on.` })).toBeVisible();
+    await expect(page.getByRole(`heading`, { name: `Give a hosted sandbox a bigger machine and hours of its own.` })).toBeVisible();
 
     await page.getByRole(`button`, { name: `Subscribe for $20/month` }).first().click();
     // Off to Stripe: the api minted the session, the stand-in hosts the page.
@@ -28,7 +28,7 @@ test(`the offer, then a paid checkout the page turns into an active plan while t
     // Redirects home before the webhook lands; the page polls rather than requiring a reload.
     await expect(page).toHaveURL(/\/settings\/billing\?plan=welcome$/);
     await expect(page.getByText(`Payment received, activating your plan`)).toBeVisible();
-    await expect(page.getByText(/Your hosted sandbox(es)? (is|are) always on/)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(`You're on the hosted plan`)).toBeVisible({ timeout: 20_000 });
     await expect(page.getByRole(`button`, { name: `Manage on Stripe` })).toBeVisible();
     await expect(page.getByText(/^renews /)).toBeVisible();
     await expect(page.getByRole(`button`, { name: `Subscribe for $20/month` })).toHaveCount(0);
@@ -65,7 +65,7 @@ test(`a failed charge asks for a card, and an ended plan is offered again as a r
     await expect(page.getByText(`Your plan needs a working card`)).toBeVisible();
     await expect(page.getByRole(`button`, { name: `Update payment on Stripe` })).toBeVisible();
     await expect(page.getByText(`Stripe reports this plan as "past_due".`)).toBeVisible();
-    await expect(page.getByRole(`heading`, { name: `Keep your hosted sandbox always on.` })).toHaveCount(0);
+    await expect(page.getByRole(`heading`, { name: `Give a hosted sandbox a bigger machine and hours of its own.` })).toHaveCount(0);
 
     // Fully given up on: customer.subscription.deleted; the offer returns, phrased as a resubscription.
     await request.post(`${control}/update/${live?.id}`, { data: { patch: { status: `canceled` } } });

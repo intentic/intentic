@@ -4,7 +4,7 @@ import type { PrismaClient } from "@intentic/prisma";
 import { configSchema, type Config } from "../../config.js";
 import { call } from "@orpc/server";
 import type { OrpcContext } from "../../context.js";
-import { cancelHostedPlan, checkHostedPlanPrices, hostedSlotsOf, onHostedPlan } from "./hosted-plan.js";
+import { cancelHostedPlan, checkHostedPlanPrices, compedEmail, hostedSlotsOf, onHostedPlan, paidSlotsOf, slotHolders } from "./hosted-plan.js";
 import { StripeError, type StripeGateway, type StripePrice } from "./hosted-plan-stripe.js";
 import { hostedPlanRoutes } from "./hosted-plan.orpc.js";
 import { hostedPlanHttpRoutes } from "./hosted-plan.routes.js";
@@ -509,5 +509,42 @@ describe(`hosted slots`, () => {
         [`never sells a slot at the free rung, whatever an item says`, [row(`active`, { items: [item(FREE_TIER.id, 9)] })], { free: 1 }],
     ])(`%s`, async (_name, plans, expected) => {
         expect(Object.fromEntries(await hostedSlotsOf(fakePrisma({ plans }).prisma, config, `user-1`))).toEqual(expected);
+    });
+
+    it(`holds paid slots only while the plan is paid for, and never one at the free rung`, () => {
+        const items = [
+            { tier: ENTRY.id, quantity: 2 },
+            { tier: FREE_TIER.id, quantity: 9 },
+            { tier: `max`, quantity: 0 },
+        ];
+        expect(Object.fromEntries(paidSlotsOf({ status: `active`, items }))).toEqual({ [ENTRY.id]: 2 });
+        expect(Object.fromEntries(paidSlotsOf({ status: `trialing`, items }))).toEqual({ [ENTRY.id]: 2 });
+        expect(paidSlotsOf({ status: `past_due`, items }).size).toBe(0);
+        expect(paidSlotsOf(null).size).toBe(0);
+    });
+
+    /* WHICH MACHINES A SLOT'S HOURS BELONG TO (hosted-usage.ts): at each rung, the oldest machines up to the slots held
+     * there. A free machine never stands on a paid slot, and a machine past the count spends the free hours. */
+    it(`gives each rung's slots to its oldest machines, and none to a free one`, () => {
+        const machines = [
+            { sandboxId: `free-1`, tier: FREE_TIER.id },
+            { sandboxId: `standard-old`, tier: ENTRY.id },
+            { sandboxId: `max-1`, tier: `max` },
+            { sandboxId: `standard-new`, tier: ENTRY.id },
+        ];
+        const slots = new Map([
+            [ENTRY.id, 1],
+            [`max`, 1],
+            [FREE_TIER.id, 5],
+        ]);
+        expect([...slotHolders(machines, slots)]).toEqual([`standard-old`, `max-1`]);
+        expect([...slotHolders(machines, new Map())]).toEqual([]);
+    });
+
+    it(`reads the comp list case-folded, and reads nothing into an empty one`, () => {
+        const comped = { ...config, hostedPlan: { ...config.hostedPlan, compEmails: ` Friend@Example.com , other@example.com` } };
+        expect(compedEmail(comped, `FRIEND@example.com`)).toBe(true);
+        expect(compedEmail(comped, `stranger@example.com`)).toBe(false);
+        expect(compedEmail({ ...config, hostedPlan: { ...config.hostedPlan, compEmails: `` } }, `friend@example.com`)).toBe(false);
     });
 });

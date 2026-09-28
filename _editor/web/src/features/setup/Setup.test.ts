@@ -662,12 +662,12 @@ it(`stops starting a machine that will not stay up, and then says so`, async () 
 it(`says what a refused start actually was, and offers the way out that works`, async () => {
     hostedWaiting();
     hostedStatus.mockResolvedValue({ machine: `stopped` });
-    wake.mockRejectedValue(Object.assign(new Error(`free hours are used up this month`), { code: `PAYMENT_REQUIRED`, status: 402 }));
+    wake.mockRejectedValue(Object.assign(new Error(`free hosted hours are used up for this month`), { code: `PAYMENT_REQUIRED`, status: 402 }));
     jest.useFakeTimers();
     const el = await mount();
     await advanceTimersByTimeAsync(3_000);
     // No clock is waited out for this: somebody decided it, so it is true the moment it is known.
-    await waitFor(() => expect(el.textContent).toContain(`free hours`));
+    await waitFor(() => expect(el.textContent).toContain(`hosted hours for the month are used up`));
     expect(el.textContent).not.toContain(`isn't running`);
     expect(buttonLabelled(`Start it over`)).toBeUndefined();
     // The offered way out is the one that works right now, and taking it hands the stopped machine back.
@@ -701,7 +701,9 @@ it(`states the hour ceiling and what follows it on the hosted card, with the sma
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1, hours: { allowance: 40, remaining: 40 } });
     const el = await mount();
     const hosted = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)][0];
-    expect(hosted?.textContent).toContain(`40h a month, always on with the plan`);
+    expect(hosted?.textContent).toContain(`Free · 40h a month`);
+    // Nothing on the card promises a machine that never sleeps: none does, on any rung.
+    expect(hosted?.textContent).not.toContain(`always on`);
     hosted!.click();
     await nextTick();
     // Card stays three lines; the disk's fate is read where the reader commits, not on the card itself.
@@ -710,14 +712,19 @@ it(`states the hour ceiling and what follows it on the hosted card, with the sma
     expect(el.textContent).toContain(`it's removed`);
 });
 
-// Bare "Free · ready in seconds" is reserved for a platform with no ceiling at all.
-it(`says always on, not free, on the hosted card of an owner on the plan`, async () => {
+// An owner the plan's comp puts on the house has no hours counted against a limit, so the card says so rather than
+// "free", which would read as the free plan's ceiling; bare "Free · ready in seconds" is for a platform with no ceiling.
+it(`says no hour limit, not free, on the hosted card of an owner whose hours are not counted`, async () => {
     query.value = { elsewhere: `1` };
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1, plan: true });
     const el = await mount();
     const hosted = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)][0];
-    expect(hosted?.textContent).toContain(`On your plan · always on`);
+    expect(hosted?.textContent).toContain(`No hour limit · ready in seconds`);
     expect(hosted?.textContent).not.toContain(`Free`);
+    // Their machines are never collected either, so the small print does not threaten it.
+    hosted!.click();
+    await nextTick();
+    expect(el.textContent).not.toContain(`it's removed`);
 });
 
 it(`says nothing about hours to someone they do not apply to`, async () => {

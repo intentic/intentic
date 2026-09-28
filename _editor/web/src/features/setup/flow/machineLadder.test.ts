@@ -32,8 +32,11 @@ describe(`the picker's rungs`, () => {
     it.each<[string, Partial<LadderInput>, string]>([
         [`a full fleet, over every other fact`, { hostedFull: true, hostedSuspended: true, plan: true }, `No machines free right now`],
         [`a switched-off account`, { hostedSuspended: true, plan: true }, `Switched off for this account`],
-        [`the plan, which has no hours`, { plan: true, hours: { allowance: 40, remaining: 40 } }, `On your plan · always on`],
-        [`a monthly ceiling and what follows it`, { hours: { allowance: 40, remaining: 12 } }, `Free to try · 40h a month, always on with the plan`],
+        // A subscriber's new machine still arrives on the free rung, so the card states the free hours to them too.
+        [`a subscriber, whose new machine spends the free hours`, { plan: true, hours: { allowance: 40, remaining: 40 } }, `Free · 40h a month`],
+        [`a comp, whose hours count against no limit`, { plan: true }, `No hour limit · ready in seconds`],
+        [`a month nothing has been spent of`, { hours: { allowance: 40, remaining: 40 } }, `Free · 40h a month`],
+        [`a month partly spent, released machines included`, { hours: { allowance: 40, remaining: 12 } }, `Free · 12 of 40h left this month`],
         [
             `a new account's ramp`,
             { hours: { allowance: 8, remaining: 8, rampUntil: `2026-10-01T00:00:00.000Z` } },

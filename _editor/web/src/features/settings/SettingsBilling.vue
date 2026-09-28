@@ -6,21 +6,27 @@ import { errorMessage } from "@intentic/ui/async";
 import { timeAgo } from "@intentic/ui/format";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { RouterLink, useRoute } from "vue-router";
+import HostedHoursMeter from "./hosted-plan/HostedHoursMeter.vue";
 import HostedPlanOffer from "./hosted-plan/HostedPlanOffer.vue";
-import { formatDay, formatMinutes, hoursLeftLine, RECOVERABLE } from "./hosted-plan/hostedHours";
+import { formatDay, formatMinutes, hoursMeter, machineHours, RECOVERABLE } from "./hosted-plan/hostedHours";
 import { hasReturned, subscribeLabel, useHostedPlan } from "./hosted-plan/useHostedPlan";
 import { apiClient } from "../../lib/useApi";
 import { desktopVersion } from "../../app/environments/desktop";
 import type { HostedPlanState } from "@intentic/api-contract";
 import { useT } from "@intentic/ui/i18n";
 
-// The one page about money: what plan this account is on and the one action to take, this month's hours, the hosted
-// sandboxes the plan covers, what a slot is, and the door to Stripe. Managed on Stripe, but consequences are said here
+// The one page about money: what plan this account is on and the one action to take, the hosted sandboxes and the hours
+// each one spends, the machines a slot buys, and the door to Stripe. Managed on Stripe, but consequences are said here
 // (what cancelling does, why "ends" not "renews", a plan with no machine).
+//
+// HOURS ARE SAID PER HOSTED SANDBOX, NEVER AS THE ACCOUNT'S "THIS MONTH". A limit shown on its own at account level reads
+// as a limit on everything, sandboxes on the reader's own computers included, which are never metered at all; so the
+// hours sit on the machines that spend them, the free hours are named only where a machine spends them or a new one
+// would start on what is left of them, and the list says in so many words that nothing else is counted.
 
 const t = useT();
 
-const { state: plan, error, refetch, meter, setSlots, slotsWorking, changeTier, moving, tiers } = useHostedPlan();
+const { state: plan, error, refetch, setSlots, slotsWorking, changeTier, moving, tiers } = useHostedPlan();
 
 const working = ref(false);
 const actionError = ref<string | undefined>(undefined);
@@ -168,15 +174,28 @@ const dropAway = (): void => {
 const hosted = computed(() => plan.value?.hosted);
 const machines = computed(() => hosted.value?.machines ?? []);
 const slots = computed(() => hosted.value?.slots ?? 0);
-const price = computed(() => plan.value?.priceUsd ?? 0);
-// The machine a sandbox lands on with nothing bought, as this deployment sizes it.
-const freeShape = computed(() => {
-    const free = hosted.value?.freeTier;
-    return free === undefined ? undefined : hostedShapeLine(free.shape);
-});
+// The slots a subscription bought, the free one aside: what "on the plan" counts.
+const paidSlots = computed(() =>
+    Object.entries(hosted.value?.slotsByTier ?? {}).reduce((sum, [tier, count]) => (tier === hosted.value?.freeTier.id ? sum : sum + count), 0),
+);
 
-const resetsOn = computed(() => (hosted.value === undefined ? undefined : formatDay(hosted.value.usage.resetsAt)));
-const awakeThisMonth = computed(() => (hosted.value === undefined ? undefined : formatMinutes(hosted.value.usage.usedMinutes)));
+// When every kind of hours comes back; one date, since the months are all calendar months (UTC).
+const resetsOn = computed(() => (hosted.value === undefined ? undefined : formatDay(hosted.value.freeHours.resetsAt)));
+
+// Each machine's hours as its row draws them: the account's free ones, or its own month on its slot.
+const hoursOf = (machine: (typeof machines.value)[number]) => machineHours(plan.value, machine);
+
+// What an empty list says about the free hours, and only once some are gone: a released machine's minutes stay in them,
+// so a new machine starts on what is left rather than a fresh forty. Nothing at all while the month is untouched.
+const freeHoursNote = computed(() => {
+    const meter = hoursMeter(hosted.value?.freeHours);
+    if (meter === undefined || meter.usedMinutes === 0) {
+        return undefined;
+    }
+    return meter.remainingMinutes === 0
+        ? t(`settings.settingsBilling.freeHoursSpentEmpty`, { resetsOn: formatDay(meter.resetsAt) })
+        : t(`settings.settingsBilling.freeHoursLeftEmpty`, { left: formatMinutes(meter.remainingMinutes), allowance: formatMinutes(meter.allowanceMinutes) });
+});
 
 // A machine's standing this minute, off the row's own stamp: no provider call, honest about what it knows.
 const machineState = (wokeAt: string | null): string => (wokeAt === null ? `asleep` : `awake since ${timeAgo(new Date(wokeAt).getTime())}`);
@@ -266,7 +285,7 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
             <RowGroup v-if="plan.onPlan && comped" :label="t(`settings.settingsBilling.hostedPlan`)">
                 <RowNote variant="block">
                     <p class="text-sm font-medium text-content">{{ t(`settings.settingsBilling.complimentary`) }}</p>
-                    <p class="mt-1 text-xs text-muted">{{ t(`settings.settingsBilling.hostedSandboxAlwaysOn`) }}</p>
+                    <p class="mt-1 text-xs text-muted">{{ t(`settings.settingsBilling.compedOnTheHouse`) }}</p>
                 </RowNote>
             </RowGroup>
 
@@ -280,19 +299,15 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                         <template v-if="cancelling">
                             <p class="text-sm font-medium text-content">{{ t(`settings.settingsBilling.planEnds`, { periodEnd }) }}</p>
                             <p class="text-xs text-muted">
-                                {{ t(`settings.settingsBilling.afterThatFreeLane`, { count: machines.length }, machines.length) }}
+                                {{ t(`settings.settingsBilling.afterThatFreeHours`, { count: machines.length }, machines.length) }}
                             </p>
                         </template>
                         <template v-else>
                             <p class="text-sm font-medium text-content">
-                                {{
-                                    onTrial
-                                        ? t(`settings.settingsBilling.youreOnTrial`)
-                                        : t(`settings.settingsBilling.alwaysOn`, { count: machines.length }, machines.length)
-                                }}
+                                {{ onTrial ? t(`settings.settingsBilling.youreOnTrial`) : t(`settings.settingsBilling.onHostedPlan`) }}
                             </p>
                             <p class="text-xs text-muted">
-                                {{ t(`settings.settingsBilling.perMonthPerSandbox`, { price, count: slots }, slots) }}
+                                {{ t(`settings.settingsBilling.slotsOnPlan`, { count: paidSlots }, paidSlots) }}
                             </p>
                         </template>
                         <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -314,7 +329,7 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                 <RowNote variant="block">
                     <div class="flex flex-col gap-3">
                         <p class="text-sm font-medium text-warning">{{ t(`settings.settingsBilling.planNeedsWorkingCard`) }}</p>
-                        <p class="text-xs text-muted">{{ t(`settings.settingsBilling.paymentFailedUntilGoes`) }}</p>
+                        <p class="text-xs text-muted">{{ t(`settings.settingsBilling.paymentFailedFreeHours`) }}</p>
                         <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
                             <Button
                                 :label="t(`settings.settingsBilling.updatePaymentOnStripe`)"
@@ -379,39 +394,8 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                 <HostedPlanOffer :subscribe-label="buyLabel" :working="working" @checkout="open(`checkout`)" />
             </template>
 
-            <!-- This month: the free plan's meter, live, or a subscriber's awake hours with nothing beside them. -->
-            <RowGroup v-if="hosted" :label="t(`settings.settingsBilling.month`)">
-                <template v-if="resetsOn" #actions>
-                    <span class="text-2xs text-subtle">{{ t(`settings.settingsBilling.resets`, { resetsOn }) }}</span>
-                </template>
-                <RowNote variant="block">
-                    <div v-if="meter" class="flex flex-col gap-2">
-                        <div class="flex items-baseline justify-between gap-3">
-                            <p class="text-sm font-medium" :class="meter.remainingMinutes === 0 ? `text-warning` : `text-content`">
-                                {{ hoursLeftLine(meter) }}
-                            </p>
-                            <span class="text-2xs text-subtle">{{
-                                t(`settings.settingsBilling.awake`, { usedMinutes: formatMinutes(meter.usedMinutes) })
-                            }}</span>
-                        </div>
-                        <!-- What's left, as a bar: the same number the words state, so colour never carries it alone. -->
-                        <div class="h-1.5 w-full overflow-hidden rounded-full bg-content/10" role="presentation">
-                            <div
-                                class="h-full rounded-full transition-[width]"
-                                :class="meter.fraction <= 0.125 ? `bg-warning` : `bg-primary-fill`"
-                                :style="{ width: `${Math.round(meter.fraction * 100)}%` }"
-                            />
-                        </div>
-                        <p class="text-2xs text-subtle">{{ t(`settings.settingsBilling.sleepingMachineSpendsNo`) }}</p>
-                    </div>
-                    <div v-else class="flex items-baseline justify-between gap-3">
-                        <p class="text-sm font-medium text-content">{{ t(`settings.settingsBilling.awake2`, { awakeThisMonth }) }}</p>
-                        <span class="text-2xs text-subtle">{{ t(`settings.settingsBilling.noCeiling`) }}</span>
-                    </div>
-                </RowNote>
-            </RowGroup>
-
-            <!-- The hosted sandboxes the plan covers, and how many it could. -->
+            <!-- The hosted sandboxes, how many there is room for, and the hours each one spends: the only place on this page
+                 hours are stated, beside the machines that spend them. -->
             <RowGroup
                 v-if="hosted"
                 :label="t(`settings.settingsBilling.hostedSandboxes`)"
@@ -445,6 +429,7 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                         {{ t(`settings.settingsBilling.noneYet`) }}
                         <RouterLink :to="HOSTED_SETUP" class="text-link hover:underline">{{ t(`settings.settingsBilling.startOne`) }}</RouterLink
                         >{{ t(`settings.settingsBilling.freeInSeconds`) }}
+                        <template v-if="freeHoursNote">{{ freeHoursNote }}</template>
                     </p>
                 </RowNote>
                 <RowNote v-else variant="block">
@@ -459,15 +444,10 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                                 <!-- This machine's own shape and month, from its row: once rungs differ, the account has neither. -->
                                 <span class="text-2xs text-subtle">
                                     {{ hostedShapeLine(machine.shape) }} · {{ machine.region }} · {{ machineState(machine.wokeAt) }}
-                                    <template v-if="machine.allowanceMinutes !== null">
-                                        {{
-                                            t(`settings.settingsBilling.hoursOfMonth`, {
-                                                used: formatMinutes(machine.usedMinutes),
-                                                allowance: formatMinutes(machine.allowanceMinutes),
-                                            })
-                                        }}
-                                    </template>
                                 </span>
+                                <!-- Whose hours this machine spends and what is left of them: its own month on a slot, or
+                                     the account's free hours, shared when another machine spends them too. -->
+                                <HostedHoursMeter :hours="hoursOf(machine)" class="max-w-sm py-0.5" />
                                 <!-- The one upgrade prompt on this page, and it is a fact the provider reported rather
                                      than a pitch: this machine was killed for memory, this many times, at this size. -->
                                 <span v-if="machine.oomsThisWeek > 0" class="text-2xs text-warning">
@@ -496,6 +476,11 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                             </div>
                         </li>
                     </ul>
+                </RowNote>
+                <!-- Said once, as the list's last line, because it is the question a limit shown anywhere raises first:
+                     what is counted, and that a sandbox on the reader's own computer never is. -->
+                <RowNote v-if="resetsOn" variant="block">
+                    <p class="text-2xs text-subtle">{{ t(`settings.settingsBilling.hoursFootnote`, { resetsOn }) }}</p>
                 </RowNote>
                 <p v-if="moveError" class="mt-2 text-2xs text-danger">{{ moveError }}</p>
             </RowGroup>
@@ -541,18 +526,21 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                 </RowNote>
             </RowGroup>
 
-            <!-- What a slot is: what the money is a machine of. -->
-            <RowGroup v-if="hosted && freeShape" :label="t(`settings.settingsBilling.whatSlot`)">
+            <!-- How hosting works: what the free machine and a slot each come with, what an hour is, and what is never
+                 counted at all. -->
+            <RowGroup v-if="hosted" :label="t(`settings.settingsBilling.howHostingWorks`)">
                 <RowNote variant="block">
                     <dl class="grid grid-cols-1 gap-x-6 gap-y-2 text-xs @lg:grid-cols-[auto_1fr]">
-                        <dt class="text-subtle">{{ t(`settings.settingsBilling.machine`) }}</dt>
-                        <dd class="text-muted">{{ t(`settings.settingsBilling.sameOnFreeLane`, { shape: freeShape }) }}</dd>
                         <dt class="text-subtle">{{ t(`settings.settingsBilling.freePlan`) }}</dt>
-                        <dd class="text-muted">{{ t(`settings.settingsBilling.oneHostedSandboxAwake`) }}</dd>
+                        <dd class="text-muted">{{ t(`settings.settingsBilling.freePlanTerms`, { hours: hosted.freeTier.monthlyHours }) }}</dd>
                         <dt class="text-subtle">{{ t(`settings.settingsBilling.onPlan`) }}</dt>
-                        <dd class="text-muted">{{ t(`settings.settingsBilling.alwaysOnNeverRemoved`, { price }) }}</dd>
+                        <dd class="text-muted">{{ t(`settings.settingsBilling.slotTerms`) }}</dd>
+                        <dt class="text-subtle">{{ t(`settings.settingsBilling.awakeHours`) }}</dt>
+                        <dd class="text-muted">{{ t(`settings.settingsBilling.awakeHoursTerms`) }}</dd>
+                        <dt class="text-subtle">{{ t(`settings.settingsBilling.ownComputer`) }}</dt>
+                        <dd class="text-muted">{{ t(`settings.settingsBilling.ownComputerTerms`) }}</dd>
                         <dt class="text-subtle">{{ t(`settings.settingsBilling.teams`) }}</dt>
-                        <dd class="text-muted">{{ t(`settings.settingsBilling.sharedSandboxRunsOn`) }}</dd>
+                        <dd class="text-muted">{{ t(`settings.settingsBilling.sharedSandboxSpendsOwners`) }}</dd>
                     </dl>
                 </RowNote>
             </RowGroup>

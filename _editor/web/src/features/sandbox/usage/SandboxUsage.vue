@@ -11,6 +11,7 @@ import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSavings } from "./useSavings";
 import { useUsage } from "./useUsage";
 import PlanLimitsPanel from "./PlanLimitsPanel.vue";
+import SandboxHoursCard from "./SandboxHoursCard.vue";
 import { compositionOf } from "./savingsChart";
 import SavingsCard from "./SavingsCard.vue";
 import SavingsStackBar from "./SavingsStackBar.vue";
@@ -42,7 +43,8 @@ import {
 } from "./usageChart";
 import { useT } from "@intentic/ui/i18n";
 
-// The Usage tab answers three separate questions, kept visually distinct:
+// The Usage tab answers four separate questions, kept visually distinct:
+//   - whether this sandbox's awake time costs hours, and how many are left (SandboxHoursCard: hosted machines only)
 //   - what has this sandbox cost (the never-pruned spend ledger, scoped by the filter row)
 //   - how much of your plan is left (account-wide, provider-reported, unaffected by the filters, no dollar figure)
 //   - what the token-reduction settings were worth over this window (its own section, needs a period to mean anything)
@@ -188,6 +190,9 @@ const hasSpend = computed(() => current.value.length > 0);
                 <p class="mt-0.5 text-xs leading-relaxed text-muted">{{ t(`sandbox.sandboxUsage.apiPricingBasis`) }}</p>
             </div>
         </div>
+
+        <!-- The machine's hours sit above the filters: they are this month's, and nothing the range picks scopes them. -->
+        <SandboxHoursCard />
 
         <!-- One filter row scoping everything below; date first, the control every reader reaches for. -->
         <div class="flex flex-wrap items-center gap-x-4 gap-y-2">

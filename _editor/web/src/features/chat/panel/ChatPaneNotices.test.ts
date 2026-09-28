@@ -2,10 +2,12 @@
 // Retry); `degraded` isn't (the pool answered after failing over). Both used to share one sentence and button,
 // wrongly telling a working answer's reader their message had failed.
 import "@intentic/testing/dom";
+import type { HostedPlanState } from "@intentic/api-contract";
 import { type AgentProvider, type OauthAccount, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { type App, createApp, defineComponent, h, nextTick, ref, shallowRef } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
+import { hostedLane, hostedMachine, hostedPlanState, spentHours } from "../../../testing/hostedPlan";
 import { RouterLinkStub } from "../../../testing/routerLinkStub";
 import type { ServingAccount } from "../accounts/servingAccount";
 
@@ -36,15 +38,15 @@ jest.mock(`./useChat-view`, () => ({
     }),
 }));
 // The active sandbox, for the hosted-hours strip: a hosted row its reader owns, or nothing.
-const active = ref<{ hosted: { region: string; warm: boolean } | null; role: string } | undefined>(undefined);
+const active = ref<{ id: string; hosted: { region: string; warm: boolean } | null; role: string } | undefined>(undefined);
 jest.mock(`../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ reachable, active }) }));
-// The free plan's meter as the strip reads it: settable, so the threshold is hostedHours.ts's rule.
-const hostedMeter = ref<{ usedMinutes: number; allowanceMinutes: number; remainingMinutes: number; fraction: number; resetsAt: string } | undefined>(
-    undefined,
-);
-const lowOnHours = ref(false);
+// The plan state as the strip reads it: settable, so what counts as low is hostedHours.ts's own rule.
+const hostedPlan = ref<HostedPlanState | undefined>(undefined);
 const planOffered = ref(true);
-jest.mock(`../../settings/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ meter: hostedMeter, lowOnHours, offered: planOffered }) }));
+jest.mock(`../../settings/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ state: hostedPlan, offered: planOffered }) }));
+// An account whose one free machine, s1, has spent `usedMinutes` of the forty free hours.
+const spending = (usedMinutes: number): HostedPlanState =>
+    hostedPlanState(hostedLane([hostedMachine(`s1`, spentHours(usedMinutes))], spentHours(usedMinutes)));
 jest.mock(`../../agents/fleet/useAgents`, () => ({
     useAgents: () => ({
         agentById: () => undefined,
@@ -85,8 +87,7 @@ beforeEach(() => {
     reachable.value = true;
     streaming.value = false;
     active.value = undefined;
-    hostedMeter.value = undefined;
-    lowOnHours.value = false;
+    hostedPlan.value = undefined;
     trialStatus.value = { available: true, allowance: 10, used: 6, remaining: 4, health: `healthy` };
     accounts.value = [];
     servingAccount.value = undefined;
@@ -197,29 +198,29 @@ it(`hangs every action off one box, and gives the sentence a floor to wrap again
     expect(sentence?.className).not.toContain(`min-w-0`);
 });
 
-// The free plan's last hours, above the composer, to the one person spending them: only on a hosted sandbox, only
-// its owner (a guest can't buy more), only while the meter says low, with a door to Billing.
-it(`warns a hosted sandbox's owner about the last free hours, and nobody else`, async () => {
+// The last of the hours THIS sandbox spends, above the composer, to the one person spending them: only on a hosted
+// sandbox, only its owner (a guest can't buy more), only while its machine's hours are low, with a door to Billing.
+it(`warns a hosted sandbox's owner about its machine's last hours, and nobody else`, async () => {
     provider.value = `claude` as AgentProvider;
-    hostedMeter.value = { usedMinutes: 2_160, allowanceMinutes: 2_400, remainingMinutes: 240, fraction: 0.1, resetsAt: `2026-10-01T00:00:00.000Z` };
-    lowOnHours.value = true;
-    active.value = { hosted: { region: `arn`, warm: true }, role: `owner` };
+    hostedPlan.value = spending(2_160);
+    active.value = { id: `s1`, hosted: { region: `arn`, warm: true }, role: `owner` };
     const root = mount();
     await nextTick();
-    expect(root.textContent).toContain(`4 h of 40 h left this month`);
+    expect(root.textContent).toContain(`Free hours · 4 h of 40 h left this month`);
     expect(root.textContent).toContain(`Billing`);
 
     // A guest on the same sandbox is told nothing: the hours are the owner's to buy back.
-    active.value = { hosted: { region: `arn`, warm: true }, role: `maintainer` };
+    active.value = { id: `s1`, hosted: { region: `arn`, warm: true }, role: `maintainer` };
     await nextTick();
     expect(root.textContent).not.toContain(`left this month`);
 
-    // Nor is anyone on a non-hosted sandbox, or while most of the month remains.
-    active.value = { hosted: null, role: `owner` };
+    // Nor is anyone on a sandbox on their own computer, whatever the account's hosted hours say, or while most of the
+    // month remains.
+    active.value = { id: `local`, hosted: null, role: `owner` };
     await nextTick();
     expect(root.textContent).not.toContain(`left this month`);
-    active.value = { hosted: { region: `arn`, warm: true }, role: `owner` };
-    lowOnHours.value = false;
+    active.value = { id: `s1`, hosted: { region: `arn`, warm: true }, role: `owner` };
+    hostedPlan.value = spending(600);
     await nextTick();
     expect(root.textContent).not.toContain(`left this month`);
 });

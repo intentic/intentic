@@ -162,7 +162,7 @@ const baseMoved = async (
 
 // Brakes read in one pass: per-owner limit first, then platform-wide ceilings, then the owner's hours. Running builds
 // count at the full timeout against the day's minutes.
-const assertWithinLimits = async (prisma: PrismaClient, config: Config, machine: { sandboxId: string; tier: string; ownerId: string }, now: Date): Promise<void> => {
+const assertWithinLimits = async (prisma: PrismaClient, config: Config, machine: { sandboxId: string; ownerId: string }, now: Date): Promise<void> => {
     const { ownerId } = machine;
     const { buildsPerDay, buildConcurrency, buildMinutesPerDay, buildTimeoutMinutes } = config.hosted;
     const dayStart = utcDayStart(now);
@@ -185,11 +185,12 @@ const assertWithinLimits = async (prisma: PrismaClient, config: Config, machine:
     if ((await hostedCapacity(prisma, config)).headroom === 0) {
         throw new HostedBuildRefused(`capacity`, `we have no room on our provider for a build machine right now; your sandbox is unaffected, try again a little later`);
     }
+    // A build's minutes are charged like awake time, to the hours this sandbox spends: its slot's, or the free ones.
     const budget = await hostedBudgetOf(prisma, config, machine);
     if (budget.metered && budget.remainingMinutes < buildTimeoutMinutes) {
         throw new HostedBuildRefused(
             `budget`,
-            `a build can take up to ${buildTimeoutMinutes} minutes of this sandbox's free hours and fewer are left this month; upgrade or self-host`,
+            `a build can take up to ${buildTimeoutMinutes} minutes of this sandbox's ${budget.kind === `free` ? `free hosted hours` : `hours`} and fewer are left this month; they come back on the 1st (UTC)`,
         );
     }
 };
@@ -430,7 +431,7 @@ export const requestHostedBuild = async (
         await applyHostedBuild(prisma, config, logger, reusable, reusable.digest);
         return buildStateOf(reusable);
     }
-    await assertWithinLimits(prisma, config, { sandboxId: hosted.sandboxId, tier: hosted.tier, ownerId: hosted.sandbox.owner.id }, now);
+    await assertWithinLimits(prisma, config, { sandboxId: hosted.sandboxId, ownerId: hosted.sandbox.owner.id }, now);
     const id = randomUUID();
     const won = await prisma.hostedMachine.updateMany({ where: { id: hosted.id, buildingId: null }, data: { buildingId: id } });
     if (won.count === 0) {

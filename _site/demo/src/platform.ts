@@ -56,17 +56,17 @@ const DEMO_HOSTED_PLAN: HostedPlanState = {
                 name: DEMO_SANDBOX.name,
                 region: `arn`,
                 wokeAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
-                // A paying account in the demo, so the machine is the rung this one is standing on, with that
-                // rung's own month rather than the free plan's.
+                // A paying account in the demo, so the machine stands on a slot at its rung and spends that slot's own
+                // month rather than the account's free hours.
                 tier: DEMO_MACHINE_TIER.id,
                 shape: DEMO_MACHINE_TIER,
-                usedMinutes: 12_720,
-                allowanceMinutes: DEMO_MACHINE_TIER.monthlyHours * 60,
+                hours: { kind: `slot`, usedMinutes: 12_720, allowanceMinutes: DEMO_MACHINE_TIER.monthlyHours * 60, resetsAt: `2026-10-01T00:00:00.000Z` },
                 // A machine that has not been killed for memory; the page shows nothing at 0, which is the point.
                 oomsThisWeek: 0,
             },
         ],
-        usage: { month: new Date().toISOString().slice(0, 7), usedMinutes: 12_720, allowanceMinutes: null, resetsAt: `2026-10-01T00:00:00.000Z` },
+        // The account's free hours, untouched: its one machine spends its slot's month instead.
+        freeHours: { kind: `free`, usedMinutes: 0, allowanceMinutes: FREE_TIER.monthlyHours * 60, resetsAt: `2026-10-01T00:00:00.000Z` },
         freeTier: { id: FREE_TIER.id, shape: FREE_TIER, monthlyHours: FREE_TIER.monthlyHours },
     },
 };

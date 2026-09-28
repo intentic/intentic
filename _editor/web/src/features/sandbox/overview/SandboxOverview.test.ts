@@ -1,10 +1,11 @@
 // Pins that the logo tile is live at rest (not behind rename mode) and rename stays compact and independent.
 // jsdom: mounts the component tree and reads rendered DOM.
 import "@intentic/testing/dom";
-import type { SandboxSummary } from "@intentic/api-contract";
+import type { HostedPlanState, SandboxSummary } from "@intentic/api-contract";
 import { waitFor } from "@intentic/testing/bun";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import { hostedLane, hostedMachine, hostedPlanState, spentHours } from "../../../testing/hostedPlan";
 
 // Stubs the sandbox's other surfaces (version, workspace tree, availability) so only the identity block mounts.
 const active = ref<SandboxSummary | undefined>(undefined);
@@ -22,10 +23,10 @@ jest.mock(`./useSandboxAvailability`, () => ({ useSandboxAvailability: () => ava
 // suite mounts the identity block alone rather than the devices query behind it.
 const placement = ref<{ kind: string; icon: string; label: string; detail: string } | undefined>(undefined);
 jest.mock(`./useSandboxPlacement`, () => ({ useSandboxPlacement: () => placement }));
-// Hosted plan standing is a plain ref here, not a query; the sentence itself lives in hostedHours.ts.
-const machineStanding = ref<string | undefined>(undefined);
+// The hosted plan's state is a plain ref here, not a query; the sentence read off it is hostedHours.ts's own.
+const hostedPlan = ref<HostedPlanState | undefined>(undefined);
 const planOffered = ref(false);
-jest.mock(`../../settings/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ machineStanding, offered: planOffered }) }));
+jest.mock(`../../settings/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ state: hostedPlan, offered: planOffered }) }));
 jest.mock(`./version/SandboxUpdateCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 jest.mock(`./version/SandboxBehindCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 jest.mock(`./manifest/SandboxManifestCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
@@ -222,16 +223,18 @@ it(`reports an unreadable file without writing anything`, async () => {
     expect(update).not.toHaveBeenCalled();
 });
 
-it(`states the machine's standing on the hosted card, with Billing where a plan is sold`, async () => {
-    machineStanding.value = `12 h of 40 h left this month`;
+/* THIS SANDBOX'S HOURS, not the account's: the card reads the machine it stands on out of the plan state, so a sandbox
+ * whose machine spends the free hours says so, and one the reader holds no machine for says nothing. */
+it(`states this sandbox's own hours on the hosted card, with Billing where a plan is sold`, async () => {
+    hostedPlan.value = hostedPlanState(hostedLane([hostedMachine(`s1`, spentHours(1_680))], spentHours(1_680)));
     planOffered.value = true;
     const root = mount(sandboxRow({ role: `owner`, hosted: { region: `arn`, warm: true } }));
     await nextTick();
-    expect(root.textContent).toContain(`12 h of 40 h left this month`);
+    expect(root.textContent).toContain(`Free hours · 12 h of 40 h left this month`);
     expect(root.textContent).toContain(`Billing`);
 
     planOffered.value = false;
     await nextTick();
-    expect(root.textContent).toContain(`12 h of 40 h left this month`);
+    expect(root.textContent).toContain(`Free hours · 12 h of 40 h left this month`);
     expect(root.textContent).not.toContain(`Billing`);
 });

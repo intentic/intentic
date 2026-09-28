@@ -9,7 +9,7 @@ import { modelLabelFor, trialStatus } from "../accounts/providerCatalog";
 import { loadTrialStatus } from "../models/useChat-catalog";
 import { usePaneView } from "./useChat-view";
 import { useSandbox } from "../../sandbox/client/useSandbox";
-import { hoursLeftLine } from "../../settings/hosted-plan/hostedHours";
+import { lowHoursNotice } from "../../settings/hosted-plan/hostedHours";
 import { useHostedPlan } from "../../settings/hosted-plan/useHostedPlan";
 import ChatAccountPanel from "../accounts/ChatAccountPanel.vue";
 import NeedsStrip from "../../needs/NeedsStrip.vue";
@@ -25,16 +25,13 @@ const t = useT();
 const { conversation, provider, accounts, streaming } = usePaneView();
 const { reachable, active } = useSandbox();
 
-// The last free hours, above the composer, to the person spending them: only on a hosted sandbox, only its owner
-// (a guest can't buy more), only in the last stretch (hostedHours.ts's threshold) rather than from the first
-// minute.
-const { meter: hostedMeter, lowOnHours, offered: planOffered } = useHostedPlan();
-const hoursNotice = computed(() => {
-    if (!lowOnHours.value || hostedMeter.value === undefined || (active.value?.hosted ?? null) === null || active.value?.role !== `owner`) {
-        return undefined;
-    }
-    return `${hoursLeftLine(hostedMeter.value)}. A sleeping machine spends none; ${planOffered.value ? `the hosted plan lifts the ceiling` : `it resets on the first`}.`;
-});
+// The last of the hours THIS sandbox spends, above the composer, to the person spending them: only on a hosted
+// sandbox, only its owner (a guest can't buy more), only in the last stretch (hostedHours.ts's threshold) rather than
+// from the first minute. The account's free hours or the machine's own month on its slot, whichever it spends.
+const { state: hostedPlan, offered: planOffered } = useHostedPlan();
+const hoursNotice = computed(() =>
+    (active.value?.hosted ?? null) === null || active.value?.role !== `owner` ? undefined : lowHoursNotice(hostedPlan.value, active.value?.id),
+);
 const { agentById, archived, loadArchived, restore, busyIds } = useAgents();
 
 // An archived agent can still be read in an open tab (opened from the archive view, or swept there while open);

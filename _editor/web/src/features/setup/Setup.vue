@@ -152,6 +152,8 @@ const otherWorkspace = computed(() => sandbox.sandboxes.value.some((entry) => en
 const neverStarted = computed(() => created.value !== null && created.value.lastSeenAt === null);
 // Whether a provision lane exists (a machine or an address); without either, attach is the whole flow, not a detour.
 const provisionOffered = computed(() => addressed.value || hostedOffered.value);
+// Whether a machine left unopened is collected: every account's but one on the plan or its comp, whatever its hours say.
+const collectedUnopened = computed(() => hostedOffer.value?.plan !== true);
 const ladderOptions = computed(() =>
     ladderOptionsOf({
         hostedOffered: hostedOffered.value,
@@ -864,7 +866,7 @@ onUnmounted(() => row.discardDraft(committed.value));
                                     </template>
                                     <template v-else>
                                         {{ t(`setup.setup.sleepsWhileYoureAway`)
-                                        }}<template v-if="hostedHours"> {{ t(`setup.setup.unopenedFewWeeksRemoved`) }}</template>
+                                        }}<template v-if="collectedUnopened"> {{ t(`setup.setup.unopenedFewWeeksRemoved`) }}</template>
                                     </template>
                                 </p>
                             </template>

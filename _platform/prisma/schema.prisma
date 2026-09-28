@@ -470,23 +470,28 @@ model HostedPoolMachine {
     @@map("hosted_pool_machine")
 }
 
-// Awake MINUTES one hosted machine has burned this calendar month — the meter behind its rung's hour ceiling
-// (@intentic/constants hosted-tiers). Shaped exactly like TrialUsage above, one period coarser: a `YYYY-MM`
-// string rather than a timestamp range, so the unique key does the resetting and an upsert on
-// (sandboxId, month) is the whole increment with no read-modify-write to race.
+// Awake MINUTES a hosted machine spent this calendar month, and WHICH HOURS PAID FOR THEM: the ledger behind every
+// hour ceiling (api hosted-usage.ts). Shaped like TrialUsage above, one period coarser: a `YYYY-MM` string rather
+// than a timestamp range, so the unique key does the resetting and an upsert on (sandboxId, month, tier) is the
+// whole increment with no read-modify-write to race.
 //
-// KEYED BY MACHINE, COUNTED BY ACCOUNT TOO, because the two questions are different ones.
+// TWO KINDS OF HOURS, and `tier` says which one a minute was charged to, decided when it is charged:
 //
-// The CEILING is the machine's, since an account may hold two machines on two rungs and a pooled month would let
-// the expensive one spend the cheap one's hours; that is what `sandboxId` keys.
+//   `free` — the ACCOUNT's free hours: one allowance a month (the free rung's, hosted-tiers), spent by every machine
+//   of the account that does not stand on a paid slot. It has to survive the sandbox that spent it: a person who
+//   burns a free machine's hours, releases it and asks for another would otherwise start a fresh month every time,
+//   which is the whole free plan for the price of clicking twice. So `sandboxId` goes null when the sandbox does,
+//   rather than taking the row with it, and `ownerId` keeps counting.
 //
-// The ACCOUNT's month is what the provision gate reads, and it has to survive the sandbox that spent it. A person
-// who burns a free machine's hours, releases it and asks for another would otherwise start a fresh month every
-// time, which is the whole free plan for the price of clicking twice. So `sandboxId` goes null when the sandbox
-// does, rather than taking the row with it, and `ownerId` keeps counting.
+//   a paid rung's id — ONE MACHINE's own month, on the paid slot it stands on. A slot's hours are that machine's
+//   alone, since an account may hold two machines on two rungs and a pooled month would let the expensive one spend
+//   the cheap one's hours.
 //
-// Billed to the OWNER's machine, never to whoever woke it — a shared sandbox's guests spend the owner's month,
-// which is the only reading under which sharing a sandbox cannot be used to launder machine time.
+// Recorded rather than derived, because what paid for a minute is a fact of its moment: a machine moved between
+// rungs, or a plan that lapsed, changes which hours the NEXT minute spends, never the ones already spent.
+//
+// Billed to the OWNER, never to whoever woke the machine — a shared sandbox's guests spend the owner's hours, which
+// is the only reading under which sharing a sandbox cannot be used to launder machine time.
 //
 // Rows are disposable — nothing reads a past month — and retention.ts sweeps them on the ledger window.
 model HostedUsage {
@@ -497,12 +502,15 @@ model HostedUsage {
     sandboxId String?
     sandbox   Sandbox? @relation(fields: [sandboxId], references: [id], onDelete: SetNull)
     month     String
+    // The hours these minutes were charged to: `free` for the account's free hours, a paid rung's id for the
+    // machine's own month on a slot at that rung.
+    tier      String   @default("free")
     minutes   Int      @default(0)
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 
     // Many rows may hold a null sandbox for one month, which is exactly what a released machine leaves behind.
-    @@unique([sandboxId, month])
+    @@unique([sandboxId, month, tier])
     @@index([ownerId, month])
     // The sweep deletes by month, and neither index above leads with it.
     @@index([month])

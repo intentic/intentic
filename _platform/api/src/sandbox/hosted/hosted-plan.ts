@@ -57,15 +57,20 @@ const compEmails = (config: Config): readonly string[] =>
         .map((email) => email.trim().toLowerCase())
         .filter((email) => email !== ``);
 
+/** Whether an address is on the operator's comp list, for a caller that already holds the account's email. */
+export const compedEmail = (config: Config, email: string): boolean => {
+    const comped = compEmails(config);
+    return comped.length > 0 && comped.includes(email.toLowerCase());
+};
+
 // Whether this account's email is on the operator's comp list; read only when no paid row answered, so the paying path
 // never pays for a lookup.
 export const isComped = async (prisma: PrismaClient, config: Config, userId: string): Promise<boolean> => {
-    const comped = compEmails(config);
-    if (comped.length === 0) {
+    if (compEmails(config).length === 0) {
         return false;
     }
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
-    return user !== null && comped.includes(user.email.toLowerCase());
+    return user !== null && compedEmail(config, user.email);
 };
 
 // On the plan: a live subscription, or an email on the comp list. Comp check runs only when no row answered; a comped
@@ -77,6 +82,40 @@ export const onHostedPlan = async (prisma: PrismaClient, config: Config, userId:
     return isComped(prisma, config, userId);
 };
 
+/** The paid slots a plan row holds, by rung: none for no plan or a lapsed one, since a slot is only held while it is paid for. */
+export const paidSlotsOf = (plan: { status: string; items: readonly { tier: string; quantity: number }[] } | null): ReadonlyMap<string, number> => {
+    const slots = new Map<string, number>();
+    if (plan === null || !isOnPlan(plan)) {
+        return slots;
+    }
+    for (const item of plan.items) {
+        if (item.tier !== FREE_TIER.id && item.quantity > 0) {
+            slots.set(item.tier, item.quantity);
+        }
+    }
+    return slots;
+};
+
+/**
+ * WHICH MACHINES STAND ON A PAID SLOT THE ACCOUNT HOLDS: at each paid rung, the oldest machines there, as many as the
+ * slots held at it. Normally that is every paid machine, since a slot is bought before a machine moves onto it and
+ * cannot be sold back from under one; the rest are a lapsed plan's (whose slots count none) and a resubscription that
+ * bought back fewer. A machine outside this set spends the account's free hours whatever its size (hosted-usage.ts).
+ * `machines` comes oldest first, which is the only order the answer depends on.
+ */
+export const slotHolders = (machines: readonly { sandboxId: string; tier: string }[], slots: ReadonlyMap<string, number>): ReadonlySet<string> => {
+    const holders = new Set<string>();
+    const taken = new Map<string, number>();
+    for (const machine of machines) {
+        const used = taken.get(machine.tier) ?? 0;
+        if (machine.tier !== FREE_TIER.id && used < (slots.get(machine.tier) ?? 0)) {
+            holders.add(machine.sandboxId);
+            taken.set(machine.tier, used + 1);
+        }
+    }
+    return holders;
+};
+
 /** An owner's slots by rung, none where absent: free's is `hosted.perUser` and never bought, and a lapsed plan's paid ones count none. */
 export const hostedSlotsOf = async (
     prisma: Pick<PrismaClient, "hostedPlan">,
@@ -85,13 +124,8 @@ export const hostedSlotsOf = async (
 ): Promise<ReadonlyMap<HostedTierId, number>> => {
     const slots = new Map<HostedTierId, number>([[FREE_TIER.id, config.hosted.perUser]]);
     const plan = await prisma.hostedPlan.findUnique({ where: { userId }, select: { status: true, items: true } });
-    if (plan === null || !isOnPlan(plan)) {
-        return slots;
-    }
-    for (const item of plan.items) {
-        if (item.tier !== FREE_TIER.id && item.quantity > 0) {
-            slots.set(hostedTier(item.tier).id, item.quantity);
-        }
+    for (const [tier, quantity] of paidSlotsOf(plan)) {
+        slots.set(hostedTier(tier).id, quantity);
     }
     return slots;
 };

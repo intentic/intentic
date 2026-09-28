@@ -11,15 +11,16 @@ jest.mock(`./hosted-app-lock.js`, () => ({ withHostedAppLock: fakeHostedAppLock 
 
 const STANDARD = hostedTier(`standard`);
 
-// Reads the open stretch live and stops a machine once ITS OWN month exceeds ITS OWN rung's ceiling plus the grace.
-// Judged per machine, not per account: an account holding a spent free machine and a Standard one nowhere near its
-// hours loses only the first. A machine under its ceiling and one that already stopped are left alone.
+// Reads the open stretch live and stops a machine once the hours it spends are gone past the grace: the account's
+// free hours for a machine off a paid slot, its own month for one on a slot. Judged per machine against those hours, so
+// an account holding a spent free machine and a Standard one nowhere near its own hours loses only the first. A machine
+// under its ceiling, one that already stopped, and a comped account's are left alone.
 
 const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() } as never;
 
 const NOW = new Date(`2026-08-13T12:00:00.000Z`);
 
-const config = (over: Record<string, unknown> = {}): Config =>
+const config = (over: Record<string, unknown> = {}, compEmails = ``): Config =>
     ({
         // The lane needs both the credential and the edge (hostedEnabled), like the idle sweep's fixture.
         ingress: { url: `https://ingress.sbx.test`, signingKey: `k`, zone: `sbx.test` },
@@ -32,7 +33,7 @@ const config = (over: Record<string, unknown> = {}): Config =>
             newAccountHours: 0,
             ...over,
         },
-        hostedPlan: { compEmails: `` },
+        hostedPlan: { compEmails },
     }) as unknown as Config;
 
 // One machine with an open stretch, as the tick selects it.
@@ -56,7 +57,7 @@ const prismaWith = (rows: ReturnType<typeof machine>[], over: Record<string, Rec
             ),
             findUnique: jest.fn(async ({ where }: { where: { sandboxId: string } }) => rows.find((row) => row.sandboxId === where.sandboxId) ?? null),
         },
-        hostedUsage: { findUnique: jest.fn().mockResolvedValue(null) },
+        hostedUsage: { groupBy: jest.fn().mockResolvedValue([]) },
         hostedPlan: { findUnique: jest.fn().mockResolvedValue(null) },
         // In good standing unless a test says otherwise; the tick reads the owner's row before the meter.
         user: { findUnique: jest.fn().mockResolvedValue({ hostedSuspendedAt: null }) },
@@ -85,6 +86,14 @@ const stubFly = (state: string) => {
 
 const stops = (fly: ReturnType<typeof stubFly>) => fly.called(`POST`, `/stop`);
 
+// This month's settled minutes as the meter's one read groups them: `minutes` charged to `tier` by machine s1.
+const settled = (minutes: number, tier: string = FREE_TIER.id) => ({
+    hostedUsage: { groupBy: jest.fn().mockResolvedValue([{ sandboxId: `s1`, tier, _sum: { minutes } }]) },
+});
+
+// A live subscription holding one Standard slot, which the Standard machine below stands on.
+const standardSlot = { hostedPlan: { findUnique: jest.fn().mockResolvedValue({ status: `active`, items: [{ tier: STANDARD.id, quantity: 1 }] }) } };
+
 afterEach(() => {
     unstubAllGlobals();
 });
@@ -93,12 +102,12 @@ describe(`the hour meter's stop`, () => {
     it(`stops a running machine whose owner is an hour past the ceiling`, async () => {
         const fly = stubFly(`started`);
         // 2,400 settled + 10 live = 2,410; ceiling 2,400 + grace 60 = 2,460 - not yet.
-        const under = prismaWith([machine()], { hostedUsage: { findUnique: jest.fn().mockResolvedValue({ minutes: 2_400 }) } });
+        const under = prismaWith([machine()], settled(2_400));
         expect(await stopOverBudgetHosted(under, config(), logger, NOW)).toEqual({ stopped: 0 });
         expect(stops(fly)).toHaveLength(0);
 
         // 2,450 settled + 10 live = 2,460, exactly the grace: stopped.
-        const over = prismaWith([machine()], { hostedUsage: { findUnique: jest.fn().mockResolvedValue({ minutes: 2_450 }) } });
+        const over = prismaWith([machine()], settled(2_450));
         expect(await stopOverBudgetHosted(over, config(), logger, NOW)).toEqual({ stopped: 1 });
         expect(stops(fly)).toHaveLength(1);
         expect(stops(fly)[0]?.url).toContain(`/apps/intentic-sbx-a/machines/m1/stop`);
@@ -121,35 +130,55 @@ describe(`the hour meter's stop`, () => {
     });
 
     /* A PAID MACHINE IS NOT UNMETERED, it has a bigger month. Awake for 100 of this month's hours is past the free
-     * rung's 40 and well inside Standard's, and the rung on the row is the only thing that decides which. */
-    it(`judges a paid machine against its own rung's hours, not the free plan's`, async () => {
+     * rung's 40 and well inside Standard's, and the slot the machine stands on is what decides which. */
+    it(`judges a machine on a paid slot against its own rung's hours, not the free plan's`, async () => {
         const awake = { wokeAt: new Date(NOW.getTime() - 100 * 60 * 60_000) };
         stubFly(`started`);
         expect(await stopOverBudgetHosted(prismaWith([machine(awake)]), config(), logger, NOW)).toEqual({ stopped: 1 });
 
         const fly = stubFly(`started`);
-        expect(await stopOverBudgetHosted(prismaWith([machine({ ...awake, tier: STANDARD.id })]), config(), logger, NOW)).toEqual({ stopped: 0 });
+        expect(await stopOverBudgetHosted(prismaWith([machine({ ...awake, tier: STANDARD.id })], standardSlot), config(), logger, NOW)).toEqual({
+            stopped: 0,
+        });
         expect(stops(fly)).toHaveLength(0);
+    });
+
+    // Paid hours come with a held slot: a Standard machine whose plan stopped paying spends the free hours, and stops.
+    it(`judges a paid-size machine with no slot held against the free hours`, async () => {
+        const fly = stubFly(`started`);
+        const lapsed = { hostedPlan: { findUnique: jest.fn().mockResolvedValue({ status: `canceled`, items: [{ tier: STANDARD.id, quantity: 1 }] }) } };
+        const prisma = prismaWith([machine({ tier: STANDARD.id, wokeAt: new Date(NOW.getTime() - 100 * 60 * 60_000) })], lapsed);
+        expect(await stopOverBudgetHosted(prisma, config(), logger, NOW)).toEqual({ stopped: 1 });
+        expect(stops(fly)).toHaveLength(1);
     });
 
     // The operator's ceiling knob is the free rung's; switching it off does not make a bought rung free of its own.
     it(`keeps a paid machine metered where the free ceiling is switched off`, async () => {
         stubFly(`started`);
-        const past = prismaWith([machine({ tier: STANDARD.id, wokeAt: new Date(NOW.getTime() - 300 * 60 * 60_000) })]);
+        const past = prismaWith([machine({ tier: STANDARD.id, wokeAt: new Date(NOW.getTime() - 300 * 60 * 60_000) })], standardSlot);
         expect(await stopOverBudgetHosted(past, config({ monthlyHours: 0 }), logger, NOW)).toEqual({ stopped: 1 });
+    });
+
+    // On the house means on the house: a comped account's machine is never stopped for its hours, however many.
+    it(`never stops a comped account's machine for its hours`, async () => {
+        const fly = stubFly(`started`);
+        const friend = { user: { findUnique: jest.fn().mockResolvedValue({ hostedSuspendedAt: null, email: `friend@example.com`, createdAt: NOW }) } };
+        const prisma = prismaWith([machine()], { ...settled(9_000), ...friend });
+        expect(await stopOverBudgetHosted(prisma, config({}, `friend@example.com`), logger, NOW)).toEqual({ stopped: 0 });
+        expect(stops(fly)).toHaveLength(0);
     });
 
     // An open wokeAt also describes a machine that stopped on its own before its stretch settled.
     it(`does not stop a machine that already stopped`, async () => {
         const fly = stubFly(`stopped`);
-        const prisma = prismaWith([machine()], { hostedUsage: { findUnique: jest.fn().mockResolvedValue({ minutes: 9_000 }) } });
+        const prisma = prismaWith([machine()], settled(9_000));
         expect(await stopOverBudgetHosted(prisma, config(), logger, NOW)).toEqual({ stopped: 0 });
         expect(stops(fly)).toHaveLength(0);
     });
 
     it(`is off for a free machine where the platform sets no ceiling, and off entirely with no lane`, async () => {
         const fly = stubFly(`started`);
-        const prisma = prismaWith([machine()], { hostedUsage: { findUnique: jest.fn().mockResolvedValue({ minutes: 9_000 }) } });
+        const prisma = prismaWith([machine()], settled(9_000));
         expect(await stopOverBudgetHosted(prisma, config({ monthlyHours: 0 }), logger, NOW)).toEqual({ stopped: 0 });
         expect(await stopOverBudgetHosted(prisma, config({ flyApiToken: `` }), logger, NOW)).toEqual({ stopped: 0 });
         expect(stops(fly)).toHaveLength(0);
@@ -172,7 +201,7 @@ describe(`the hour meter's stop`, () => {
      * and a stop in there would read as the new version going down; the tick leaves that machine to the next one. */
     it(`leaves a machine mid-change to the next tick, and stops it once the change is done`, async () => {
         const fly = stubFly(`started`);
-        const prisma = prismaWith([machine()], { hostedUsage: { findUnique: jest.fn().mockResolvedValue({ minutes: 9_000 }) } });
+        const prisma = prismaWith([machine()], settled(9_000));
         const change = Promise.withResolvers<void>();
         const held = fakeHostedAppLock(config(), `intentic-sbx-a`, true, () => change.promise);
         expect(await stopOverBudgetHosted(prisma, config(), logger, NOW)).toEqual({ stopped: 0 });
@@ -183,11 +212,12 @@ describe(`the hour meter's stop`, () => {
         expect(stops(fly)).toHaveLength(1);
     });
 
-    it(`stops every spent machine in one pass, and only the spent ones`, async () => {
+    /* TWO FREE MACHINES OF ONE ACCOUNT SPEND ONE MONTH: once u1's free hours are gone, both of its machines stop,
+     * whichever of them spent the hours, and u2's machine beside them is untouched. Each account is read once a pass. */
+    it(`stops every machine spending spent hours in one pass, and only those`, async () => {
         const fly = stubFly(`started`);
-        const spent = new Set([`s1`, `s2`]);
-        const usage = jest.fn(async ({ where }: { where: { sandboxId_month: { sandboxId: string } } }) =>
-            spent.has(where.sandboxId_month.sandboxId) ? { minutes: 9_000 } : { minutes: 0 },
+        const usage = jest.fn(async ({ where }: { where: { ownerId: string } }) =>
+            where.ownerId === `u1` ? [{ sandboxId: `s1`, tier: FREE_TIER.id, _sum: { minutes: 9_000 } }] : [],
         );
         const prisma = prismaWith(
             [
@@ -195,12 +225,13 @@ describe(`the hour meter's stop`, () => {
                 machine({ id: `h2`, sandboxId: `s2`, appName: `intentic-sbx-b`, machineId: `m2` }),
                 machine({ id: `h3`, sandboxId: `s3`, appName: `intentic-sbx-c`, machineId: `m3`, sandbox: { ownerId: `u2` } }),
             ],
-            { hostedUsage: { findUnique: usage } },
+            { hostedUsage: { groupBy: usage } },
         );
         expect(await stopOverBudgetHosted(prisma, config(), logger, NOW)).toEqual({ stopped: 2 });
         expect(stops(fly).map((call) => call.url)).toEqual([
             expect.stringContaining(`intentic-sbx-a/machines/m1/stop`),
             expect.stringContaining(`intentic-sbx-b/machines/m2/stop`),
         ]);
+        expect(usage.mock.calls.map(([query]) => query.where.ownerId)).toEqual([`u1`, `u2`]);
     });
 });

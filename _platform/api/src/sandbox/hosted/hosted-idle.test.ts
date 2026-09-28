@@ -82,11 +82,12 @@ describe(`collecting the machines nobody came back to`, () => {
         const upsert = jest.fn().mockResolvedValue({});
         const wokeAt = daysAgo(30);
         const prisma = prismaWith([machine({ wokeAt, idleWarnedAt: daysAgo(8) })], {
-            hostedUsage: { upsert, aggregate: jest.fn().mockResolvedValue({ _sum: { minutes: null } }) },
+            hostedUsage: { upsert },
         });
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 1, dropped: 0 });
+        // To the account's free hours: they outlive the row, which is what stops a collection wiping the month.
         expect(upsert).toHaveBeenCalledWith(
-            expect.objectContaining({ where: { sandboxId_month: { sandboxId: `s1`, month: wokeAt.toISOString().slice(0, 7) } } }),
+            expect.objectContaining({ where: { sandboxId_month_tier: { sandboxId: `s1`, month: wokeAt.toISOString().slice(0, 7), tier: `free` } } }),
         );
         const deleteCall = (prisma.hostedMachine.delete as ReturnType<typeof jest.fn>).mock.invocationCallOrder[0]!;
         expect(upsert.mock.invocationCallOrder[0]).toBeLessThan(deleteCall);

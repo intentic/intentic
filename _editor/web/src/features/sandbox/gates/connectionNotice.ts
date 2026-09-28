@@ -110,23 +110,24 @@ const goneNotice = (name: string): ConnectionNotice => ({
     waiting: false,
 });
 
-// Not a wait at all: the platform declined to start the machine, and the meter has read zero for a while.
-// Addressed to whoever is reading: the owner is offered the plan; a guest is told whose hours they are.
+// Not a wait at all: the platform declined to start the machine, and the hours it spends read zero (the account's free
+// hours, or its own month on a paid slot; the refusal does not say which, so neither sentence claims one). Addressed to
+// whoever is reading: the owner is offered the plan; a guest is told whose hours they are.
 const hoursSpentNotice = (input: ConnectionNoticeInput, name: string): ConnectionNotice | undefined => {
     if (!input.hostedMachine || input.hoursSpent !== true) {
         return undefined;
     }
     if (input.owner === false) {
         return {
-            title: t(`sandbox.connectionNotice.usedFreeHoursMonth`, { name }),
-            body: t(`sandbox.connectionNotice.ownersFreeHostedHours`),
+            title: t(`sandbox.connectionNotice.usedHoursMonth`, { name }),
+            body: t(`sandbox.connectionNotice.hoursSpentGuest`),
             action: undefined,
             waiting: false,
         };
     }
     return {
-        title: t(`sandbox.connectionNotice.usedFreeHoursMonth`, { name }),
-        body: t(`sandbox.connectionNotice.freeHostedSandboxesGet`),
+        title: t(`sandbox.connectionNotice.usedHoursMonth`, { name }),
+        body: t(`sandbox.connectionNotice.hoursSpentOwner`),
         action: { kind: `billing`, label: t(`sandbox.connectionNotice.seePlan`) },
         waiting: false,
     };

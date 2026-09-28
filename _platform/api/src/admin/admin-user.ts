@@ -41,7 +41,8 @@ export const adminUserDetail = async (
             orderBy: { day: `desc` },
             select: { day: true, messages: true, lastModel: true },
         }),
-        prisma.hostedUsage.aggregate({ where: { month, sandbox: { ownerId: user.id } }, _sum: { minutes: true } }),
+        // By owner: a released machine's minutes stay on the account with no sandbox to reach them through.
+        prisma.hostedUsage.aggregate({ where: { month, ownerId: user.id }, _sum: { minutes: true } }),
         prisma.wallet.findMany({
             where: { userId: user.id },
             select: { id: true, network: true, address: true, perPaymentMaxUsd: true, dailyCapUsd: true },

@@ -207,7 +207,7 @@ describe(`a silence this browser asked for`, () => {
 
     it(`never talks over a refusal the platform has already made`, () => {
         const shown = notice(classifyFailure({ message: `failed to fetch` }), { restart, hostedMachine: true, hoursSpent: true, owner: true });
-        expect(shown.title).toContain(`free hours`);
+        expect(shown.title).toBe(`"laptop" has used its hours for this month`);
         expect(shown.waiting).toBe(false);
     });
 });
@@ -239,14 +239,16 @@ describe(`a sandbox that is actually gone`, () => {
     });
 });
 
-// The platform refused the wake (PAYMENT_REQUIRED), not a wait, said at once instead of after the minute. The
-// owner is offered the plan; a guest is told whose hours they are.
-describe(`a hosted machine whose owner's free hours are spent`, () => {
+// The platform refused the wake (PAYMENT_REQUIRED), not a wait, said at once instead of after the minute. The hours may
+// be the account's free ones or the machine's own month on a slot, so neither is named. The owner is offered the plan;
+// a guest is told whose hours they are.
+describe(`a hosted machine whose hours are spent`, () => {
     const asleep = classifyFailure({ message: `failed to fetch` });
 
     it(`says so at once, before any wait, and offers the plan to the owner`, () => {
         const shown = notice(asleep, { hostedMachine: true, hoursSpent: true, owner: true, outageMs: 0 });
-        expect(shown.title).toBe(`"laptop" has used its free hours for this month`);
+        expect(shown.title).toBe(`"laptop" has used its hours for this month`);
+        expect(shown.body).toContain(`where nothing is metered`);
         expect(shown.action).toEqual({ kind: `billing`, label: `See the plan` });
     });
 

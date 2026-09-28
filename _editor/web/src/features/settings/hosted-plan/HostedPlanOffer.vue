@@ -1,12 +1,14 @@
 <script setup lang="ts">
+import { FREE_TIER, PAID_TIERS } from "@intentic/constants";
 import { Button, Card, Icon } from "@intentic/ui";
 import { useHostedPlan } from "./useHostedPlan";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 
-// The only thing this product charges for: a free hosted sandbox sleeps on an hour ceiling and gets removed after weeks
-// unopened; the plan keeps it always on and never collected, changing nothing else.
-// Price comes from the plan state, not hardcoded, so a platform that charges differently is described correctly.
+// The only thing this product charges for, said as it is: the free machine shares the account's free hours and is
+// removed after weeks unopened; a slot gives one sandbox a bigger machine with a month of hours to itself, never
+// collected, and changes nothing else. No rung is "always on": every machine sleeps once nobody is using it.
+// Price comes from the plan state, and every hour figure from the ladder, never typed here.
 
 const t = useT();
 
@@ -18,14 +20,25 @@ const props = defineProps<{
 
 const emit = defineEmits<{ checkout: [] }>();
 
-const { priceUsd } = useHostedPlan();
+const { priceUsd, hosted } = useHostedPlan();
 
-// What the money buys, stated as facts: the three things the plan changes about the free machine.
+// The hours on either side of the purchase: the free machine's share of the account's (as this deployment sets it),
+// and the range a paid slot gives one sandbox to itself.
+const hours = computed(() => {
+    const paid = PAID_TIERS.map((tier) => tier.monthlyHours);
+    return {
+        freeHours: hosted.value?.freeTier.monthlyHours ?? FREE_TIER.monthlyHours,
+        minHours: Math.min(...paid),
+        maxHours: Math.max(...paid),
+    };
+});
+
+// What the money buys, stated as facts: the three things a slot changes about the free machine.
 const buys = computed(() => [
     {
-        icon: `bolt` as const,
-        title: t(`settings.hostedPlanOffer.alwaysOn`),
-        body: t(`settings.hostedPlanOffer.noAwakeHourCeiling`),
+        icon: `clock` as const,
+        title: t(`settings.hostedPlanOffer.moreHours`),
+        body: t(`settings.hostedPlanOffer.moreHoursBody`, hours.value),
     },
     {
         icon: `shield` as const,
@@ -43,8 +56,8 @@ const buys = computed(() => [
 const assurances = computed(() => [
     {
         icon: `eye-slash` as const,
-        title: t(`settings.hostedPlanOffer.nothingMetered`),
-        body: t(`settings.hostedPlanOffer.noTokensCountedNo`),
+        title: t(`settings.hostedPlanOffer.flatPrice`),
+        body: t(`settings.hostedPlanOffer.flatPriceBody`),
     },
     {
         icon: `undo` as const,
@@ -68,9 +81,9 @@ const assurances = computed(() => [
                     <Icon name="star" class="text-base text-link" />
                     <span class="text-2xs font-semibold uppercase tracking-wider text-link">{{ t(`settings.hostedPlanOffer.hosted`) }}</span>
                 </div>
-                <h2 class="mt-3 text-2xl font-semibold leading-tight text-content">{{ t(`settings.hostedPlanOffer.keepHostedSandboxAlways`) }}</h2>
+                <h2 class="mt-3 text-2xl font-semibold leading-tight text-content">{{ t(`settings.hostedPlanOffer.biggerMachineOwnHours`) }}</h2>
                 <p class="mt-2 text-sm text-muted">
-                    {{ t(`settings.hostedPlanOffer.freeMachineSleepsAfter`) }}
+                    {{ t(`settings.hostedPlanOffer.freeSharesSlotOwns`, hours) }}
                 </p>
             </div>
 

@@ -395,6 +395,23 @@ export const HostedShapeSchema = z.object({
     volumeGb: z.number().int().positive(),
 });
 
+/* ONE KIND OF HOSTED HOURS, and this month of it. There are two kinds (api hosted-usage.ts), and every awake minute of
+ * a hosted machine is charged to exactly one: the ACCOUNT's free hours, spent by every machine that does not stand on
+ * a paid slot (released ones included), and ONE MACHINE's own month at the rung of the paid slot it stands on. A
+ * sandbox on the owner's own computer spends neither: nothing of the platform's runs, so nothing is counted. */
+export const HostedHoursMeterSchema = z.object({
+    kind: z.enum(["free", "slot"]),
+    // Awake minutes spent from these hours this month, live: a machine that is up right now counts since it woke.
+    usedMinutes: z.number().int().nonnegative(),
+    // The ceiling in minutes; null when nothing is counted against one (a comped account, a platform with no ceiling).
+    allowanceMinutes: z.number().int().nonnegative().nullable(),
+    // When the month rolls over (the first of next month, UTC).
+    resetsAt: z.iso.datetime(),
+    // Present while the free hours are a new account's ramp rather than the month's figure: when the full one applies.
+    rampUntil: z.iso.datetime().optional(),
+});
+export type HostedHoursMeter = z.infer<typeof HostedHoursMeterSchema>;
+
 export const HostedPlanMachineSchema = z.object({
     sandboxId: z.string(),
     name: z.string(),
@@ -404,30 +421,14 @@ export const HostedPlanMachineSchema = z.object({
     // Which rung sold this machine, and what it actually is.
     tier: z.string(),
     shape: HostedShapeSchema,
-    // This machine's own month: the ceiling belongs to its rung, so an account with two machines has two meters.
-    usedMinutes: z.number().int().nonnegative(),
-    allowanceMinutes: z.number().int().nonnegative().nullable(),
+    // The hours this machine spends: its own month while it stands on a paid slot, otherwise the account's free hours,
+    // in which case these are the same figures as `freeHours` below.
+    hours: HostedHoursMeterSchema,
     // Times the kernel killed this machine for memory in the last week. A fact, and the only honest reason to put a
     // bigger machine in front of somebody; 0 says nothing and shows nothing.
     oomsThisWeek: z.number().int().nonnegative(),
 });
 export type HostedPlanMachine = z.infer<typeof HostedPlanMachineSchema>;
-
-// The ACCOUNT's month, which is a different question from any one machine's: it counts minutes whose sandbox has
-// since been released, and its ceiling is the free rung's, because that is what a NEW machine would be allowed.
-export const HostedPlanUsageSchema = z.object({
-    // The calendar month the meter is keyed by, `YYYY-MM` UTC.
-    month: z.string(),
-    // Awake minutes so far, live: a machine that is up right now counts the minutes since it woke.
-    usedMinutes: z.number().int().nonnegative(),
-    // The free plan's ceiling in minutes; null when unmetered, so `usedMinutes` has nothing to compare against.
-    allowanceMinutes: z.number().int().nonnegative().nullable(),
-    // When the month rolls over (the first of next month, UTC).
-    resetsAt: z.iso.datetime(),
-    // Present while the ceiling is a new account's ramp rather than the month's: when the full one applies.
-    rampUntil: z.iso.datetime().optional(),
-});
-export type HostedPlanUsage = z.infer<typeof HostedPlanUsageSchema>;
 
 export const HostedPlanHostedSchema = z.object({
     // Hosted sandboxes this account may have in total, and how many at each rung; a machine occupies one slot at
@@ -435,7 +436,9 @@ export const HostedPlanHostedSchema = z.object({
     slots: z.number().int().nonnegative(),
     slotsByTier: z.record(z.string(), z.number().int().nonnegative()),
     machines: z.array(HostedPlanMachineSchema),
-    usage: HostedPlanUsageSchema,
+    // The account's free hours (`kind` is always `free`): what every machine off a paid slot spends, and what a new
+    // hosted sandbox starts on. Present with no machine at all, since a released machine's minutes stay in it.
+    freeHours: HostedHoursMeterSchema,
     // The rung a machine lands on with nothing bought, and the shape this deployment gives it: an operator running
     // their own fleet may size the free rung differently from the published ladder.
     freeTier: z.object({ id: z.string(), shape: HostedShapeSchema, monthlyHours: z.number().int().nonnegative() }),
@@ -625,7 +628,8 @@ export const SandboxHostedSchema = z.object({
 export type SandboxHosted = z.infer<typeof SandboxHostedSchema>;
 
 // The hosted lane's offer, read before creation; `remaining` is this caller's own allowance left.
-// `hours` is the free plan's budget, absent for anyone it doesn't apply to (unmetered, a member, no ceiling).
+// `hours` is the account's free hours, which is what a new machine spends: it arrives on the free rung, a subscriber's
+// included. Absent where nothing is counted against them (a comped account, a platform with no ceiling).
 export const HostedHoursSchema = z.object({
     // Monthly ceiling and what's left, in whole hours; `remaining` floors, so "1 hour left" isn't a few minutes.
     allowance: z.number().int().nonnegative(),
@@ -641,7 +645,7 @@ export const HostedOfferSchema = z.object({
     // The platform's fleet is full, no machine to give anyone; unrelated to this account's own `remaining`.
     full: z.boolean().optional(),
     hours: HostedHoursSchema.optional(),
-    // True when the caller is on the hosted plan (or comped); the card reads "always on" instead of showing hours.
+    // True when the caller is on the hosted plan (or comped): their machines are never removed for going unopened.
     plan: z.boolean().optional(),
     // True when the hosted lane is switched off for this account (hosted-standing.ts); `remaining` is 0 with it.
     suspended: z.boolean().optional(),

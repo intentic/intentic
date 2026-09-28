@@ -45,7 +45,7 @@ import {
 import { hostedPlanEnabled, hostedSlotUse, onHostedPlan } from "./hosted/hosted-plan.js";
 import { assertHostedSource, HostedSourceCapped, recordHostedProvision } from "./hosted/abuse/hosted-source.js";
 import { assertHostedStanding, HostedSuspended, hostedSuspensionOf } from "./hosted/abuse/hosted-standing.js";
-import { dropHostedMachine, hostedArrivalBudget, hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
+import { dropHostedMachine, hostedArrivalBudget, type HostedBudget, hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
 import { mintSandbox } from "./mint-sandbox.js";
 import { listTrash, restoreSandbox, trashSandbox, TrashedSandboxGone } from "./sandbox-trash.js";
@@ -73,6 +73,19 @@ const REFUSAL_CODES = {
 // PAYMENT_REQUIRED is this platform's own code, not oRPC's; the status must be set explicitly or oRPC's unknown-code
 // fallback reports 500 for an ordinary, expected refusal.
 const paymentRequired = (message: string): ORPCError<`PAYMENT_REQUIRED`, undefined> => new ORPCError(`PAYMENT_REQUIRED`, { status: 402, message });
+
+// The refusal for spent hours, in whichever kind the machine spends (hosted-usage.ts): whose, how many, and when they
+// come back. Addressed to the owner where only the owner can be reading (a new machine, a restart), and to nobody in
+// particular on a wake, since a guest waking a shared sandbox spends its owner's hours rather than their own.
+const hoursSpent = (budget: HostedBudget, reader: `owner` | `anyone`): string => {
+    const hours = budget.allowanceMinutes / 60;
+    if (budget.kind === `slot`) {
+        return `this sandbox's ${hours} hours a month on its ${hostedTier(budget.tier).name} slot are used up; they come back on the 1st (UTC)`;
+    }
+    return reader === `owner`
+        ? `your ${hours} free hosted hours for this month are used up; they come back on the 1st (UTC), or run it on your own computer, where nothing is metered`
+        : `the ${hours} free hosted hours of this sandbox's owner are used up for this month; they come back on the 1st (UTC)`;
+};
 
 // The hosted lane is switched off for the machine's OWNER (hosted-standing.ts): FORBIDDEN, in the suspension's own
 // words, for every act that would start a machine. Checked before anything is settled, counted or built.
@@ -186,9 +199,9 @@ const stopForChange = async (
     // Settling now is exact, since the stop just ended the stretch; the change ends in a start, so the budget applies
     // too.
     await settleHostedStretch(context.prisma, context.config, context.logger, { ...hosted, ownerId: sandbox.ownerId });
-    const budget = await hostedBudgetOf(context.prisma, context.config, { sandboxId: sandbox.id, tier: hosted.tier, ownerId: sandbox.ownerId });
+    const budget = await hostedBudgetOf(context.prisma, context.config, { sandboxId: sandbox.id, ownerId: sandbox.ownerId });
     if (budget.metered && budget.remainingMinutes === 0) {
-        throw paymentRequired(`your ${budget.allowanceMinutes / 60} free hours are used up this month; upgrade or self-host`);
+        throw paymentRequired(hoursSpent(budget, `owner`));
     }
     return {
         sandboxId: sandbox.id,
@@ -237,11 +250,10 @@ const assertHostedAllowance = async (
     if (left <= 0) {
         throw new ORPCError(`BAD_REQUEST`, { message: slotsMessage(used) });
     }
+    // The account's free hours, released machines' minutes included: letting one go never buys a fresh month.
     const budget = await hostedArrivalBudget(context.prisma, context.config, userId);
     if (budget.metered && budget.remainingMinutes === 0) {
-        throw paymentRequired(
-            `your ${budget.allowanceMinutes / 60} free hours are used up for this month, the hosted plan lifts the limit, or run it on a machine of your own and it never applies`,
-        );
+        throw paymentRequired(hoursSpent(budget, `owner`));
     }
 };
 
@@ -675,14 +687,10 @@ export const sandboxRoutes = {
         const { hosted } = sandbox;
         await requireHostedStanding(context, sandbox.ownerId);
         await settleHostedStretch(context.prisma, context.config, context.logger, { ...sandbox.hosted, ownerId: sandbox.ownerId });
-        const budget = await hostedBudgetOf(context.prisma, context.config, {
-            sandboxId: sandbox.id,
-            tier: sandbox.hosted.tier,
-            ownerId: sandbox.ownerId,
-        });
+        const budget = await hostedBudgetOf(context.prisma, context.config, { sandboxId: sandbox.id, ownerId: sandbox.ownerId });
         if (budget.metered && budget.remainingMinutes === 0) {
-            // Addressed as "this sandbox's" hours, not "your": the reader may not be the account that spent them.
-            throw paymentRequired(`this sandbox's ${budget.allowanceMinutes / 60} free hours are used up this month; upgrade or self-host`);
+            // Addressed as the owner's hours, not "your": the reader may not be the account that spent them.
+            throw paymentRequired(hoursSpent(budget, `anyone`));
         }
         try {
             // What a re-applied config is composed from, as a restart composes it; the owner's address and not the

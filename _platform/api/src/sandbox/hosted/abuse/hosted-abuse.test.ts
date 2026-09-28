@@ -160,7 +160,7 @@ describe(`the abuse watch`, () => {
         ]);
         // The stretch is charged and closed at the stop, not left for the meter to find.
         expect(prisma.hostedUsage.upsert).toHaveBeenCalledWith(
-            expect.objectContaining({ create: { sandboxId: `s1`, ownerId: `u1`, month: `2026-09`, minutes: 120 } }),
+            expect.objectContaining({ create: { sandboxId: `s1`, ownerId: `u1`, month: `2026-09`, tier: `free`, minutes: 120 } }),
         );
         expect(prisma.hostedMachine.update).toHaveBeenCalledWith({ where: { id: `h1` }, data: { wokeAt: null } });
         expect(prisma.user.update).not.toHaveBeenCalled();

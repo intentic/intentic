@@ -6,6 +6,7 @@ import { computed, ref } from "vue";
 import { fileToSquareDataUrl } from "../../../lib/imageDataUrl";
 import { useSandboxVersion } from "./version/useSandboxVersion";
 import { useSandbox } from "../client/useSandbox";
+import { sandboxHoursLine } from "../../settings/hosted-plan/hostedHours";
 import { useHostedPlan } from "../../settings/hosted-plan/useHostedPlan";
 import { useSandboxOutline } from "./useSandboxOutline";
 import { sandboxAvailabilityVisual } from "./availability";
@@ -41,8 +42,16 @@ const agentUrl = computed(() => sandbox.daemonUrl.value ?? undefined);
 const hosted = computed(() => (sandbox.active.value?.hosted ?? null) !== null);
 // Which machine this sandbox stands on, said in words beside its name.
 const placement = useSandboxPlacement();
-// Same standing sentence Billing and the avatar row use, kept in sync by sharing the source.
-const { machineStanding, offered: planOffered } = useHostedPlan();
+// The hours THIS sandbox's machine spends, in the sentence Billing and the chat strip use for it: its own month on a
+// paid slot, or the account's free hours.
+const { state: hostedPlan, offered: planOffered } = useHostedPlan();
+const machineStanding = computed(() => sandboxHoursLine(hostedPlan.value, sandbox.active.value?.id));
+// Whether that machine is the free one: only it is a "small starter machine", and a paid rung is not to be called one.
+const starterMachine = computed(() => {
+    const lane = hostedPlan.value?.hosted;
+    const machine = lane?.machines.find((row) => row.sandboxId === sandbox.active.value?.id);
+    return machine === undefined || machine.tier === lane?.freeTier.id;
+});
 
 // THIS SANDBOX'S SHARE OF ITS MACHINE, beside the image and the URL it already reports. The Devices tab can change
 // it too, but only for a reader who knows which machine to open first; this is the same form reached from the facts
@@ -362,7 +371,7 @@ const removeLogo = async (): Promise<void> => {
                 >
             </p>
             <p class="text-xs leading-relaxed text-muted">
-                {{ t(`sandbox.sandboxOverview.sandboxSmallStarterMachine`) }}
+                {{ starterMachine ? t(`sandbox.sandboxOverview.sandboxSmallStarterMachine`) : t(`sandbox.sandboxOverview.sandboxHostedMachine`) }}
                 <span class="text-content">{{ t(`sandbox.sandboxOverview.ownDevice`) }}</span
                 >{{ t(`sandbox.sandboxOverview.noHourLimitNothing`) }}
             </p>

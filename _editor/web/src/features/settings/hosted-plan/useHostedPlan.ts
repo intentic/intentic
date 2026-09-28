@@ -4,11 +4,12 @@ import { useQuery } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 import { HOSTED_PLAN } from "../../../lib/queryKeys";
 import { apiClient } from "../../../lib/useApi";
-import { hoursMeter, lowOnHours, machineStandingLine, planBadge } from "./hostedHours";
+import { planBadge } from "./hostedHours";
 
-// The hosted plan's state, read once for the whole app: Billing, the account badge, Overview, the chat strip, and
-// whether the platform sells a plan at all. Not sandbox-scoped; a planless platform answers `enabled: false` rather
-// than erroring.
+// The hosted plan's state, read once for the whole app: Billing, the account badge, a hosted sandbox's hours on its own
+// pages and in the chat strip, and whether the platform sells a plan at all. Account-scoped, not sandbox-scoped: a
+// sandbox's hours are found in it by id (hostedHours.ts). A planless platform answers `enabled: false` rather than
+// erroring.
 export function useHostedPlan() {
     const query = useQuery({
         queryKey: HOSTED_PLAN.every,
@@ -19,7 +20,6 @@ export function useHostedPlan() {
     });
 
     const state = computed<HostedPlanState | undefined>(() => query.data.value);
-    const meter = computed(() => hoursMeter(state.value?.hosted?.usage));
 
     // Writes to Stripe then refetches; one in-flight call at a time so racing presses can't overwrite each other.
     const slotsWorking = ref(false);
@@ -56,11 +56,7 @@ export function useHostedPlan() {
         onPlan: computed(() => state.value?.onPlan === true),
         priceUsd: computed(() => state.value?.priceUsd ?? 0),
         hosted: computed(() => state.value?.hosted),
-        // Free plan usage meter; undefined where it doesn't apply.
-        meter,
-        lowOnHours: computed(() => lowOnHours(meter.value)),
         planBadge: computed(() => planBadge(state.value)),
-        machineStanding: computed(() => machineStandingLine(state.value)),
         setSlots,
         slotsWorking,
         changeTier,

@@ -257,7 +257,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         const signedIn = await state(alice);
         expect(signedIn.body).toMatchObject({ enabled: true, onPlan: false, priceUsd: ENTRY.priceUsd });
         expect(signedIn.body.status).toBeUndefined();
-        expect(signedIn.body.hosted).toMatchObject({ slots: 1, machines: [], usage: { allowanceMinutes: MONTHLY_HOURS * 60, usedMinutes: 0 } });
+        expect(signedIn.body.hosted).toMatchObject({ slots: 1, machines: [], freeHours: { kind: `free`, allowanceMinutes: MONTHLY_HOURS * 60, usedMinutes: 0 } });
     });
 
     it(`meters the free plan: a spent month refuses the wake and the offer says how many hours are left`, async () => {
@@ -323,14 +323,17 @@ describe.skipIf(!tier.runs)(tier.title, () => {
          * the sandbox is still the free machine it was until it is moved onto that slot (changeTier below). */
         expect((await offer()).body).toMatchObject({ enabled: true, plan: true });
         expect(Object.fromEntries(await hostedSlotsOf(prisma, config, alice.id))).toEqual({ [FREE_TIER.id]: 1, [ENTRY.id]: 1 });
-        expect(await hostedBudgetOf(prisma, config, { sandboxId, tier: FREE_TIER.id, ownerId: alice.id })).toMatchObject({
+        expect(await hostedBudgetOf(prisma, config, { sandboxId, ownerId: alice.id })).toMatchObject({
+            kind: `free`,
             metered: true,
             allowanceMinutes: MONTHLY_HOURS * 60,
+            remainingMinutes: 0,
         });
 
-        // The wake refused a minute ago is still refused: the machine's own month is still spent.
+        // The wake refused a minute ago is still refused: a free machine spends the account's free hours, still spent.
         expect((await wake()).status).toBe(402);
-        // Moved onto the slot, it is a Standard machine with Standard's hours, and the wake goes through.
+        /* Moved onto the slot, it is a Standard machine with a month of its own at Standard's hours, and the wake goes
+         * through: the forty hours it spent before the move were the account's free ones, and stay there. */
         const [moved] = await Promise.all([
             rpc<{ state: string }>(app, `/hosted-plan/tier`, { as: alice, method: `POST`, body: { sandboxId, tier: ENTRY.id } }),
             announceOnBoot(),
@@ -413,21 +416,23 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(await onHostedPlan(prisma, config, alice.id)).toBe(true);
     });
 
-    it(`pauses the plan on a failed charge: the slot it bought stops counting and the free plan is metered again`, async () => {
+    it(`pauses the plan on a failed charge: the slot it bought stops counting and its machine spends the free hours`, async () => {
         expect((await stripe.update(subscriptionId, { status: `past_due`, cancel_at_period_end: false })).status).toBe(200);
         const { body } = await state(alice);
         expect(body).toMatchObject({ onPlan: false, status: `past_due` });
         expect(body.cancelAtPeriodEnd).toBeUndefined();
-        expect(body.hosted?.usage.allowanceMinutes).toBe(MONTHLY_HOURS * 60);
-        // An unpaid charge takes the slot away; the machine standing on that rung stays where it is until it is moved.
+        expect(body.hosted?.freeHours).toMatchObject({ kind: `free`, allowanceMinutes: MONTHLY_HOURS * 60 });
+        /* An unpaid charge takes the slot away. The machine standing on that rung stays the size it is until it is moved,
+         * but paid hours come with a held slot and nothing else, so it spends the account's free hours meanwhile, which
+         * is what the Billing page tells somebody whose card failed. */
         expect((await hostedSlotsOf(prisma, config, alice.id)).get(ENTRY.id)).toBeUndefined();
-        expect(await hostedBudgetOf(prisma, config, { sandboxId, tier: ENTRY.id, ownerId: alice.id })).toMatchObject({ metered: true });
+        expect(await hostedBudgetOf(prisma, config, { sandboxId, ownerId: alice.id })).toMatchObject({ kind: `free`, metered: true, remainingMinutes: 0 });
+        expect(body.hosted?.machines).toEqual([expect.objectContaining({ sandboxId, tier: ENTRY.id, hours: expect.objectContaining({ kind: `free` }) })]);
         // The free slot is empty and offered again: this account's one machine stands on the Standard rung it moved to
         // earlier, and the card offers a free machine.
         expect((await offer()).body).toEqual({ enabled: true, remaining: 1, hours: { allowance: MONTHLY_HOURS, remaining: 0 } });
-        // The wake is judged against the machine's OWN rung, not the account's lane:
-        // the spent forty hours are the free plan's, and a Standard machine is nowhere near Standard's ceiling.
-        expect((await wake()).status).toBe(200);
+        // Those free hours were spent before the move, so the wake is refused until the card goes through.
+        expect((await wake()).status).toBe(402);
     });
 
     it(`refuses a webhook without Stripe's signature, with another secret, or from outside the replay window`, async () => {
@@ -467,7 +472,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect((await stripe.update(subscriptionId, { status: `canceled` })).status).toBe(200);
         const ended = await state(alice);
         expect(ended.body).toMatchObject({ onPlan: false, status: `canceled` });
-        expect(await hostedBudgetOf(prisma, config, { sandboxId, tier: FREE_TIER.id, ownerId: alice.id })).toMatchObject({ metered: true });
+        expect(await hostedBudgetOf(prisma, config, { sandboxId, ownerId: alice.id })).toMatchObject({ kind: `free`, metered: true });
 
         // The resubscriber is the customer they were: addressed by id, with no email beside it.
         const checkout = await rpc<{ url: string }>(app, `/hosted-plan/checkout`, { as: alice, method: `POST` });
@@ -512,7 +517,8 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         const { body } = await rpc<HostedPlanState>(compedApp, `/hosted-plan`, { as: bob });
         expect(body).toMatchObject({ enabled: true, onPlan: true, comped: true });
         expect(body.status).toBeUndefined();
-        expect(body.hosted?.usage.allowanceMinutes).toBe(MONTHLY_HOURS * 60);
+        // On the house means on the house: the free hours are still counted, against no ceiling.
+        expect(body.hosted?.freeHours).toMatchObject({ kind: `free`, allowanceMinutes: null, usedMinutes: 0 });
         expect(await prisma.hostedPlan.findUnique({ where: { userId: bob.id } })).toBeNull();
 
         // Off the list, the same account is on the free plan: nothing was ever written down.

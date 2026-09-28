@@ -1,26 +1,34 @@
-import type { HostedPlanState } from "@intentic/api-contract";
-import { FREE_TIER } from "@intentic/constants";
-import { formatDayShort, formatMinutes, hoursLeftLine, hoursMeter, lowOnHours, machineStandingLine, planBadge } from "./hostedHours";
+import type { HostedHoursMeter, HostedPlanMachine, HostedPlanState } from "@intentic/api-contract";
+import { hostedTier } from "@intentic/constants";
+import { HOURS_RESET_AT, hostedLane, hostedMachine, spentHours } from "../../../testing/hostedPlan";
+import {
+    formatDayShort,
+    formatMinutes,
+    hoursLeftLine,
+    hoursMeter,
+    lowHoursNotice,
+    lowOnHours,
+    machineHours,
+    planBadge,
+    sandboxHoursLine,
+} from "./hostedHours";
 
 // Pins the hosted-plan sentences as words: the failure this suite guards against is two surfaces phrasing the same fact
 // differently.
 
-const usage = (usedMinutes: number, allowanceMinutes: number | null = 2_400) => ({
-    month: `2026-09`,
-    usedMinutes,
-    allowanceMinutes,
-    resetsAt: `2026-10-01T00:00:00.000Z`,
-});
+const STANDARD = hostedTier(`standard`);
+const RESETS_AT = HOURS_RESET_AT;
 
-const hosted = (usedMinutes: number, allowanceMinutes: number | null = 2_400) => ({
-    slots: 1,
-    slotsByTier: { [FREE_TIER.id]: 1 },
-    machines: [],
-    usage: usage(usedMinutes, allowanceMinutes),
-    // The rung an arrival lands on, read from the ladder rather than typed: these sentences quote no part of it, but
-    // a shape invented here would be a shape nothing hands out.
-    freeTier: { id: FREE_TIER.id, shape: FREE_TIER, monthlyHours: FREE_TIER.monthlyHours },
-});
+// One kind of hours as the wire carries it, at a forty-hour month unless a case says otherwise.
+const usage = (usedMinutes: number, allowanceMinutes: number | null = 2_400, kind: HostedHoursMeter[`kind`] = `free`): HostedHoursMeter =>
+    spentHours(usedMinutes, allowanceMinutes, kind);
+
+// A hosted machine as Billing lists it, spending the hours given.
+const machine = (sandboxId: string, hours: HostedHoursMeter, tier?: string): HostedPlanMachine => hostedMachine(sandboxId, hours, tier);
+
+// The account's lane, with its free hours spent this far and the machines given.
+const hosted = (usedMinutes: number, allowanceMinutes: number | null = 2_400, machines: HostedPlanMachine[] = []) =>
+    hostedLane(machines, usage(usedMinutes, allowanceMinutes));
 
 const state = (over: Partial<HostedPlanState> = {}): HostedPlanState => ({ enabled: true, onPlan: false, priceUsd: 20, ...over });
 
@@ -142,12 +150,57 @@ describe(`the account menu's plan chip`, () => {
     });
 });
 
-describe(`the machine's standing`, () => {
-    it(`credits the plan, the comp, or states the hours`, () => {
-        expect(machineStandingLine(state({ onPlan: true, hosted: hosted(0, null) }))).toBe(`Always on · covered by your Hosted plan`);
-        expect(machineStandingLine(state({ onPlan: true, comped: true, hosted: hosted(0, null) }))).toBe(`Always on · complimentary`);
-        expect(machineStandingLine(state({ hosted: hosted(1_680) }))).toBe(`12 h of 40 h left this month`);
-        expect(machineStandingLine(state({ hosted: hosted(0, null) }))).toBe(`Always on`);
-        expect(machineStandingLine(state())).toBeUndefined();
+/* WHOSE HOURS A MACHINE SPENDS, said on every surface that shows them: a slot's own month under its rung's name, the
+ * account's free hours (shared once a second machine spends them), or a comp's hours counted against nothing. */
+describe(`a machine's hours`, () => {
+    it(`names a slot's month by its rung, and the free hours as the account's`, () => {
+        const onSlot = machine(`s1`, usage(180, STANDARD.monthlyHours * 60, `slot`), STANDARD.id);
+        expect(machineHours(state({ hosted: hosted(0, 2_400, [onSlot]) }), onSlot)).toEqual({
+            label: `Standard hours`,
+            line: `217 h of 220 h left this month`,
+            meter: expect.objectContaining({ kind: `slot`, remainingMinutes: STANDARD.monthlyHours * 60 - 180 }),
+        });
+        const free = machine(`s1`, usage(1_680));
+        expect(machineHours(state({ hosted: hosted(1_680, 2_400, [free]) }), free)).toMatchObject({ label: `Free hours`, line: `12 h of 40 h left this month` });
+    });
+
+    it(`says the free hours are shared once a second machine spends them`, () => {
+        const one = machine(`s1`, usage(600));
+        const two = machine(`s2`, usage(600));
+        expect(machineHours(state({ hosted: hosted(600, 2_400, [one, two]) }), one).label).toBe(`Free hours, shared`);
+    });
+
+    it(`credits the comp for hours counted against nothing, and says how many were spent`, () => {
+        const comped = machine(`s1`, usage(95, null));
+        expect(machineHours(state({ onPlan: true, comped: true, hosted: hosted(95, null, [comped]) }), comped)).toEqual({
+            label: `On the house`,
+            line: `1.6 h awake this month`,
+            meter: undefined,
+        });
+        expect(machineHours(state({ hosted: hosted(95, null, [comped]) }), comped).label).toBe(`No hour limit`);
+    });
+
+    it(`gives a slot's spent month its own words, not the free plan's`, () => {
+        expect(hoursLeftLine(hoursMeter(usage(9_000, 9_000, `slot`))!)).toBe(`This month's hours used up`);
+    });
+});
+
+describe(`the sandbox's own line and the chat strip`, () => {
+    it(`states the hours of the sandbox asked about, and nothing for one the reader holds no machine for`, () => {
+        const withMachine = state({ hosted: hosted(1_680, 2_400, [machine(`s1`, usage(1_680))]) });
+        expect(sandboxHoursLine(withMachine, `s1`)).toBe(`Free hours · 12 h of 40 h left this month`);
+        expect(sandboxHoursLine(withMachine, `local`)).toBeUndefined();
+        expect(sandboxHoursLine(state(), `s1`)).toBeUndefined();
+    });
+
+    it(`warns only in a machine's last stretch, with the day they come back`, () => {
+        const low = state({ hosted: hosted(2_160, 2_400, [machine(`s1`, usage(2_160))]) });
+        expect(lowHoursNotice(low, `s1`)).toBe(
+            `Free hours · 4 h of 40 h left this month. A sleeping machine spends none, and they come back on ${formatDayShort(RESETS_AT)}.`,
+        );
+        expect(lowHoursNotice(state({ hosted: hosted(600, 2_400, [machine(`s1`, usage(600))]) }), `s1`)).toBeUndefined();
+        // A slot with most of its own month left is not low because the free hours beside it are.
+        const onSlot = state({ hosted: hosted(2_300, 2_400, [machine(`s1`, usage(600, STANDARD.monthlyHours * 60, `slot`), STANDARD.id)]) });
+        expect(lowHoursNotice(onSlot, `s1`)).toBeUndefined();
     });
 });

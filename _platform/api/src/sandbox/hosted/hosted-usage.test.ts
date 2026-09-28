@@ -3,12 +3,11 @@ import type { PrismaClient } from "@intentic/prisma";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { Config } from "../../config.js";
 import {
+    accountHoursOf,
     closeHostedStretch,
     dropHostedMachine,
     hostedArrivalBudget,
     hostedBudgetOf,
-    hostedOwnerMinutes,
-    hostedUsedMinutes,
     openHostedStretch,
     settleHostedStretch,
     usageMonth,
@@ -18,27 +17,29 @@ import {
 const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() } as never;
 
 const STANDARD = hostedTier(`standard`);
+const FREE_MINUTES = FREE_TIER.monthlyHours * 60;
+const STANDARD_MINUTES = STANDARD.monthlyHours * 60;
 
 const config = (
     monthlyHours = FREE_TIER.monthlyHours,
     ramp: { newAccountDays: number; newAccountHours: number } = { newAccountDays: 0, newAccountHours: 0 },
-): Config => ({ hosted: { flyApiToken: `fly`, monthlyHours, ...ramp }, hostedPlan: { compEmails: `` } }) as unknown as Config;
+    compEmails = ``,
+): Config => ({ hosted: { flyApiToken: `fly`, monthlyHours, ...ramp }, hostedPlan: { compEmails } }) as unknown as Config;
 
-// One machine as every budget read names it: which sandbox, which rung, whose account.
-const onFree = { sandboxId: `s1`, tier: FREE_TIER.id, ownerId: `u1` };
-const onStandard = { sandboxId: `s1`, tier: STANDARD.id, ownerId: `u1` };
 // The machine row a stretch write names: which row, whose month.
 const owned = { id: `h1`, sandboxId: `s1`, ownerId: `u1` };
 
 const prismaWith = (over: Record<string, Record<string, ReturnType<typeof jest.fn>>>) => {
     const prisma = {
         hostedUsage: {
-            findUnique: jest.fn().mockResolvedValue(null),
             upsert: jest.fn().mockResolvedValue({}),
-            aggregate: jest.fn().mockResolvedValue({ _sum: { minutes: null } }),
+            groupBy: jest.fn().mockResolvedValue([]),
         },
-        // No open stretch unless a test says so: the live half of the meter reads the machine's own wake stamp.
+        // No machine and no open stretch unless a test says so.
         hostedMachine: { update: jest.fn().mockResolvedValue({}), findUnique: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
+        // No plan, and an account with no age and no address to judge: the free hours at the month's figure.
+        hostedPlan: { findUnique: jest.fn().mockResolvedValue(null) },
+        user: { findUnique: jest.fn().mockResolvedValue(null) },
         hostedOom: { create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0) },
         // A stretch write locks the row and acts in one transaction; the stub runs it in place.
         $transaction: jest.fn((work: (tx: unknown) => Promise<unknown>) => work(prisma)),
@@ -86,7 +87,35 @@ afterEach(() => {
     unstubAllGlobals();
 });
 
+// One account's month as the meter reads it: its machines (oldest first), its plan, its settled rows and the account.
+const month = (
+    read: {
+        machines?: { sandboxId: string; tier: string; wokeAt?: Date | null }[];
+        plan?: { status: string; items: { tier: string; quantity: number }[] } | null;
+        rows?: { sandboxId: string | null; tier: string; minutes: number }[];
+        owner?: { createdAt: Date; email: string } | null;
+    } = {},
+) =>
+    prismaWith({
+        hostedMachine: {
+            update: jest.fn(),
+            findUnique: jest.fn().mockResolvedValue(null),
+            findMany: jest.fn().mockResolvedValue((read.machines ?? []).map((machine) => ({ wokeAt: null, ...machine }))),
+        },
+        hostedPlan: { findUnique: jest.fn().mockResolvedValue(read.plan ?? null) },
+        hostedUsage: {
+            upsert: jest.fn(),
+            groupBy: jest.fn().mockResolvedValue((read.rows ?? []).map(({ minutes, ...key }) => ({ ...key, _sum: { minutes } }))),
+        },
+        user: { findUnique: jest.fn().mockResolvedValue(read.owner ?? null) },
+    });
+
+// A live subscription holding `quantity` Standard slots, and the same plan with its charge failing.
+const standardSlots = (quantity: number, status = `active`) => ({ status, items: [{ tier: STANDARD.id, quantity }] });
+
 describe(`the hosted hour meter`, () => {
+    const now = new Date(`2026-08-13T12:00:00.000Z`);
+
     it(`keys a month the way the rows are keyed`, () => {
         expect(usageMonth(new Date(`2026-08-13T23:59:00.000Z`))).toBe(`2026-08`);
     });
@@ -96,150 +125,251 @@ describe(`the hosted hour meter`, () => {
         expect(usageResetsAt(new Date(`2026-12-31T23:59:00.000Z`)).toISOString()).toBe(`2027-01-01T00:00:00.000Z`);
     });
 
-    // The live figure = the settled row plus minutes since the open stretch began, attributed to the month the
-    // stretch started in, same as settling would.
-    describe(`the live figure`, () => {
-        const now = new Date(`2026-08-13T12:00:00.000Z`);
-
-        it(`adds the minutes since the open stretch began to the settled row`, async () => {
-            const prisma = prismaWith({
-                hostedUsage: { findUnique: jest.fn().mockResolvedValue({ minutes: 100 }) },
-                hostedMachine: { update: jest.fn(), findUnique: jest.fn().mockResolvedValue({ wokeAt: new Date(`2026-08-13T10:00:00.000Z`) }) },
+    /* THE FREE HOURS ARE THE ACCOUNT'S: one allowance a month, spent by every machine that does not stand on a paid
+     * slot, released ones included. Two free machines are one month, not two, and letting one go is not a fresh one. */
+    describe(`the account's free hours`, () => {
+        it(`counts every free minute of the month against one allowance, a released machine's included`, async () => {
+            const prisma = month({
+                machines: [{ sandboxId: `s1`, tier: FREE_TIER.id }],
+                rows: [
+                    { sandboxId: `s1`, tier: FREE_TIER.id, minutes: 600 },
+                    { sandboxId: null, tier: FREE_TIER.id, minutes: 1_200 },
+                ],
             });
-            expect(await hostedUsedMinutes(prisma, `s1`, now)).toBe(100 + 120);
-        });
-
-        it(`leaves a stretch that began last month to last month's row`, async () => {
-            const prisma = prismaWith({
-                hostedMachine: { update: jest.fn(), findUnique: jest.fn().mockResolvedValue({ wokeAt: new Date(`2026-07-31T23:00:00.000Z`) }) },
-            });
-            expect(await hostedUsedMinutes(prisma, `s1`, now)).toBe(0);
-        });
-
-        it(`is what the budget reads, so an awake machine can run a month out`, async () => {
-            const prisma = prismaWith({
-                hostedUsage: { findUnique: jest.fn().mockResolvedValue({ minutes: 2_300 }) },
-                hostedMachine: { update: jest.fn(), findUnique: jest.fn().mockResolvedValue({ wokeAt: new Date(`2026-08-13T10:00:00.000Z`) }) },
-            });
-            expect(await hostedBudgetOf(prisma, config(), onFree, now)).toMatchObject({ usedMinutes: 2_420, remainingMinutes: 0 });
-        });
-    });
-
-    /* THE CEILING BELONGS TO THE MACHINE'S RUNG. Two machines on one account are two meters, and a paid machine is
-     * not unmetered: it has a bigger month, which is the whole reason the ladder's arithmetic works out. */
-    describe(`whose month it is, and whether any is left`, () => {
-        it(`meters a free machine against this deployment's configured ceiling`, async () => {
-            const prisma = prismaWith({ hostedUsage: { findUnique: jest.fn().mockResolvedValue({ minutes: 90 }) } });
-            expect(await hostedBudgetOf(prisma, config(), onFree)).toEqual({
+            const hours = await accountHoursOf(prisma, config(), `u1`, now);
+            expect(hours.free).toEqual({
+                kind: `free`,
+                tier: FREE_TIER.id,
                 metered: true,
-                allowanceMinutes: FREE_TIER.monthlyHours * 60,
-                usedMinutes: 90,
-                remainingMinutes: FREE_TIER.monthlyHours * 60 - 90,
+                allowanceMinutes: FREE_MINUTES,
+                remainingMinutes: FREE_MINUTES - 1_800,
+                usedMinutes: 1_800,
             });
-        });
-
-        it(`meters a paid machine against its own rung's hours, not the free plan's and not nothing`, async () => {
-            const prisma = prismaWith({ hostedUsage: { findUnique: jest.fn().mockResolvedValue({ minutes: 90 }) } });
-            const budget = await hostedBudgetOf(prisma, config(), onStandard);
-            expect(budget.allowanceMinutes).toBe(STANDARD.monthlyHours * 60);
-            expect(budget.allowanceMinutes).toBeGreaterThan(FREE_TIER.monthlyHours * 60);
-            expect(budget.metered).toBe(true);
-        });
-
-        // The operator's knob is the free rung's alone; a paid rung's month is the ladder's and not a deployment's.
-        it(`leaves a paid rung metered even where the operator has switched the free ceiling off`, async () => {
-            expect(await hostedBudgetOf(prismaWith({}), config(0), onFree)).toMatchObject({ metered: false });
-            expect(await hostedBudgetOf(prismaWith({}), config(0), onStandard)).toMatchObject({
-                metered: true,
-                allowanceMinutes: STANDARD.monthlyHours * 60,
-            });
-        });
-
-        it(`meters a machine that has never woken at a full allowance rather than at nothing`, async () => {
-            expect((await hostedBudgetOf(prismaWith({}), config(), onFree)).remainingMinutes).toBe(FREE_TIER.monthlyHours * 60);
-        });
-
-        it(`never reports a negative remainder, however far past the ceiling a stretch ran`, async () => {
-            const over = prismaWith({ hostedUsage: { findUnique: jest.fn().mockResolvedValue({ minutes: 99_000 }) } });
-            expect(await hostedBudgetOf(over, config(), onFree)).toMatchObject({ usedMinutes: 99_000, remainingMinutes: 0 });
-        });
-    });
-
-    /* THE ACCOUNT'S MONTH IS A DIFFERENT QUESTION, and it is the one the provision gate asks. It counts minutes
-     * whose sandbox has since been released, which is what stops release-and-ask-again being a fresh free month. */
-    describe(`the account's month`, () => {
-        it(`sums every row of the month, including rows whose sandbox is gone`, async () => {
-            const prisma = prismaWith({
-                hostedUsage: { aggregate: jest.fn().mockResolvedValue({ _sum: { minutes: 1_800 } }) },
-                hostedMachine: { update: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
-            });
-            expect(await hostedOwnerMinutes(prisma, `u1`)).toBe(1_800);
+            // The free machine spends exactly those hours, not a month of its own.
+            expect(hours.machines.get(`s1`)).toBe(hours.free);
         });
 
         it(`refuses a new machine to an account whose released one already spent the month`, async () => {
-            const prisma = prismaWith({
-                hostedUsage: { aggregate: jest.fn().mockResolvedValue({ _sum: { minutes: FREE_TIER.monthlyHours * 60 } }) },
-                hostedMachine: { update: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
-            });
-            expect(await hostedArrivalBudget(prisma, config(), `u1`)).toMatchObject({ metered: true, remainingMinutes: 0 });
+            const prisma = month({ rows: [{ sandboxId: null, tier: FREE_TIER.id, minutes: FREE_MINUTES }] });
+            expect(await hostedArrivalBudget(prisma, config(), `u1`, now)).toMatchObject({ kind: `free`, metered: true, remainingMinutes: 0 });
         });
 
-        it(`adds the live minutes of whatever is awake right now`, async () => {
-            const now = new Date(`2026-08-13T12:00:00.000Z`);
-            const prisma = prismaWith({
-                hostedUsage: { aggregate: jest.fn().mockResolvedValue({ _sum: { minutes: 10 } }) },
-                hostedMachine: {
-                    update: jest.fn(),
-                    findMany: jest.fn().mockResolvedValue([
-                        { wokeAt: new Date(`2026-08-13T11:00:00.000Z`) },
-                        { wokeAt: new Date(`2026-08-13T11:30:00.000Z`) },
-                    ]),
-                },
+        // The hole this closes: a machine released at 39 hours used to hand the next one a fresh forty.
+        it(`gives a second free machine what is left of the same hours, not a fresh month`, async () => {
+            const prisma = month({
+                machines: [
+                    { sandboxId: `s1`, tier: FREE_TIER.id },
+                    { sandboxId: `s2`, tier: FREE_TIER.id, wokeAt: new Date(now.getTime() - 120 * 60_000) },
+                ],
+                rows: [{ sandboxId: null, tier: FREE_TIER.id, minutes: FREE_MINUTES - 60 }],
             });
-            expect(await hostedOwnerMinutes(prisma, `u1`, now)).toBe(10 + 60 + 30);
+            expect(await hostedBudgetOf(prisma, config(), { sandboxId: `s2`, ownerId: `u1` }, now)).toMatchObject({
+                kind: `free`,
+                usedMinutes: FREE_MINUTES + 60,
+                remainingMinutes: 0,
+            });
+        });
+
+        // An open stretch counts live, towards the month it began in, same as settling will charge it.
+        it(`adds the minutes since an open stretch began, and none for one that began last month`, async () => {
+            const awake = month({
+                machines: [{ sandboxId: `s1`, tier: FREE_TIER.id, wokeAt: new Date(`2026-08-13T10:00:00.000Z`) }],
+                rows: [{ sandboxId: `s1`, tier: FREE_TIER.id, minutes: 100 }],
+            });
+            expect((await accountHoursOf(awake, config(), `u1`, now)).free.usedMinutes).toBe(100 + 120);
+            const fromLastMonth = month({ machines: [{ sandboxId: `s1`, tier: FREE_TIER.id, wokeAt: new Date(`2026-07-31T23:00:00.000Z`) }] });
+            expect((await accountHoursOf(fromLastMonth, config(), `u1`, now)).free.usedMinutes).toBe(0);
+        });
+
+        it(`meters an account that has spent nothing at the full allowance rather than at nothing`, async () => {
+            expect((await hostedArrivalBudget(month(), config(), `u1`, now)).remainingMinutes).toBe(FREE_MINUTES);
+        });
+
+        it(`never reports a negative remainder, however far past the ceiling a stretch ran`, async () => {
+            const over = month({ machines: [{ sandboxId: `s1`, tier: FREE_TIER.id }], rows: [{ sandboxId: `s1`, tier: FREE_TIER.id, minutes: 99_000 }] });
+            expect(await hostedBudgetOf(over, config(), { sandboxId: `s1`, ownerId: `u1` }, now)).toMatchObject({ usedMinutes: 99_000, remainingMinutes: 0 });
+        });
+
+        // The operator's knob switches the ceiling off, not the counting: the month is still there to be read.
+        it(`counts against no ceiling where the platform sets none`, async () => {
+            const prisma = month({ rows: [{ sandboxId: null, tier: FREE_TIER.id, minutes: 90 }] });
+            expect((await accountHoursOf(prisma, config(0), `u1`, now)).free).toEqual({
+                kind: `free`,
+                tier: FREE_TIER.id,
+                metered: false,
+                allowanceMinutes: 0,
+                remainingMinutes: 0,
+                usedMinutes: 90,
+            });
         });
     });
 
-    // A fresh account's month is the ramp's figure until the account is old enough; the moment that changes rides
-    // along so every surface can say so.
-    describe(`the newcomer ramp`, () => {
-        const now = new Date(`2026-08-13T12:00:00.000Z`);
-        const ramp = { newAccountDays: 7, newAccountHours: 10 };
-        const born = (daysAgo: number) => ({
-            findUnique: jest.fn().mockResolvedValue({ createdAt: new Date(now.getTime() - daysAgo * 24 * 60 * 60_000) }),
+    /* A PAID SLOT'S HOURS ARE ITS MACHINE'S, and only while the slot is held: a machine that moved up keeps the free
+     * minutes it spent before the move in the free hours, and a machine whose slot lapsed spends the free hours again. */
+    describe(`a machine's own month on a paid slot`, () => {
+        it(`meters a machine on a held slot against its rung's hours, apart from the free ones it spent before`, async () => {
+            const prisma = month({
+                machines: [{ sandboxId: `s1`, tier: STANDARD.id }],
+                plan: standardSlots(1),
+                rows: [
+                    { sandboxId: `s1`, tier: FREE_TIER.id, minutes: FREE_MINUTES },
+                    { sandboxId: `s1`, tier: STANDARD.id, minutes: 90 },
+                ],
+            });
+            const hours = await accountHoursOf(prisma, config(), `u1`, now);
+            expect(hours.machines.get(`s1`)).toEqual({
+                kind: `slot`,
+                tier: STANDARD.id,
+                metered: true,
+                allowanceMinutes: STANDARD_MINUTES,
+                remainingMinutes: STANDARD_MINUTES - 90,
+                usedMinutes: 90,
+            });
+            expect(hours.free).toMatchObject({ usedMinutes: FREE_MINUTES, remainingMinutes: 0 });
         });
 
+        // The operator's knob is the free rung's alone; a paid rung's month is the ladder's and not a deployment's.
+        it(`leaves a paid slot metered where the operator has switched the free ceiling off`, async () => {
+            const prisma = month({ machines: [{ sandboxId: `s1`, tier: STANDARD.id }], plan: standardSlots(1) });
+            const hours = await accountHoursOf(prisma, config(0), `u1`, now);
+            expect(hours.free.metered).toBe(false);
+            expect(hours.machines.get(`s1`)).toMatchObject({ kind: `slot`, metered: true, allowanceMinutes: STANDARD_MINUTES });
+        });
+
+        it(`spends the free hours on a machine whose plan stopped paying, whatever size it still is`, async () => {
+            const prisma = month({ machines: [{ sandboxId: `s1`, tier: STANDARD.id }], plan: standardSlots(1, `past_due`) });
+            const hours = await accountHoursOf(prisma, config(), `u1`, now);
+            expect(hours.machines.get(`s1`)).toBe(hours.free);
+        });
+
+        // A resubscription that bought back fewer slots than machines stand at the rung: the oldest keep theirs.
+        it(`gives the held slots to the oldest machines at the rung, and the free hours to the rest`, async () => {
+            const prisma = month({
+                machines: [
+                    { sandboxId: `older`, tier: STANDARD.id },
+                    { sandboxId: `newer`, tier: STANDARD.id },
+                ],
+                plan: standardSlots(1),
+            });
+            const hours = await accountHoursOf(prisma, config(), `u1`, now);
+            expect(hours.machines.get(`older`)).toMatchObject({ kind: `slot`, tier: STANDARD.id });
+            expect(hours.machines.get(`newer`)).toBe(hours.free);
+        });
+
+        // An open stretch on a slot counts towards the slot, never towards the free hours beside it.
+        it(`counts a paid machine's open stretch towards its own month only`, async () => {
+            const prisma = month({
+                machines: [{ sandboxId: `s1`, tier: STANDARD.id, wokeAt: new Date(`2026-08-13T11:00:00.000Z`) }],
+                plan: standardSlots(1),
+            });
+            const hours = await accountHoursOf(prisma, config(), `u1`, now);
+            expect(hours.machines.get(`s1`)?.usedMinutes).toBe(60);
+            expect(hours.free.usedMinutes).toBe(0);
+        });
+    });
+
+    /* ON THE HOUSE MEANS ON THE HOUSE: a comped account's minutes are counted as anybody's are, against no ceiling. A
+     * paying account is a subscriber first, as the plan state reads it, so a comp never waives a slot's own month. */
+    describe(`a comp`, () => {
+        const comped = config(FREE_TIER.monthlyHours, undefined, ` Friend@Example.com `);
+        const friend = { createdAt: new Date(`2026-01-01T00:00:00.000Z`), email: `friend@example.com` };
+
+        it(`counts a comped account's hours against no ceiling`, async () => {
+            const prisma = month({ owner: friend, machines: [{ sandboxId: `s1`, tier: FREE_TIER.id }], rows: [{ sandboxId: `s1`, tier: FREE_TIER.id, minutes: 9_000 }] });
+            expect(await hostedBudgetOf(prisma, comped, { sandboxId: `s1`, ownerId: `u1` }, now)).toEqual({
+                kind: `free`,
+                tier: FREE_TIER.id,
+                metered: false,
+                allowanceMinutes: 0,
+                remainingMinutes: 0,
+                usedMinutes: 9_000,
+            });
+        });
+
+        it(`leaves a comped subscriber's slot on its own month`, async () => {
+            const prisma = month({ owner: friend, machines: [{ sandboxId: `s1`, tier: STANDARD.id }], plan: standardSlots(1) });
+            const hours = await accountHoursOf(prisma, comped, `u1`, now);
+            expect(hours.machines.get(`s1`)).toMatchObject({ kind: `slot`, metered: true, allowanceMinutes: STANDARD_MINUTES });
+            expect(hours.free.metered).toBe(true);
+        });
+    });
+
+    // A fresh account's free hours are the ramp's figure until the account is old enough; the moment that changes
+    // rides along so every surface can say so.
+    describe(`the newcomer ramp`, () => {
+        const ramp = { newAccountDays: 7, newAccountHours: 10 };
+        const born = (daysAgo: number) => ({ createdAt: new Date(now.getTime() - daysAgo * 24 * 60 * 60_000), email: `new@example.com` });
+
         it(`holds a week-old account to the ramp and says when the full month applies`, async () => {
-            const budget = await hostedBudgetOf(prismaWith({ user: born(2) }), config(40, ramp), onFree, now);
-            expect(budget).toEqual({
+            expect(await hostedArrivalBudget(month({ owner: born(2) }), config(40, ramp), `u1`, now)).toEqual({
+                kind: `free`,
+                tier: FREE_TIER.id,
                 metered: true,
                 allowanceMinutes: 600,
-                usedMinutes: 0,
                 remainingMinutes: 600,
+                usedMinutes: 0,
                 rampUntil: new Date(`2026-08-18T12:00:00.000Z`),
             });
         });
 
         it(`gives an account past the ramp the month's figure, with no ramp end to report`, async () => {
-            const budget = await hostedBudgetOf(prismaWith({ user: born(8) }), config(40, ramp), onFree, now);
-            expect(budget).toMatchObject({ allowanceMinutes: 2400 });
+            const budget = await hostedArrivalBudget(month({ owner: born(8) }), config(40, ramp), `u1`, now);
+            expect(budget).toMatchObject({ allowanceMinutes: 2_400 });
             expect(budget.rampUntil).toBeUndefined();
         });
 
         it(`never raises the month: a ramp above the month's figure is the month's figure`, async () => {
-            expect(await hostedBudgetOf(prismaWith({ user: born(1) }), config(5, ramp), onFree, now)).toMatchObject({ allowanceMinutes: 300 });
+            expect(await hostedArrivalBudget(month({ owner: born(1) }), config(5, ramp), `u1`, now)).toMatchObject({ allowanceMinutes: 300 });
         });
 
-        // A paid rung bought on day one keeps its hours: the ramp is a brake on the free plan, not on a purchase.
-        it(`cannot pull a paid rung below what was bought`, async () => {
-            const budget = await hostedBudgetOf(prismaWith({ user: born(1) }), config(40, ramp), onStandard, now);
-            expect(budget.allowanceMinutes).toBe(600);
+        // A slot bought on day one keeps its hours: the ramp is a brake on the free plan, not on a purchase.
+        it(`cannot pull a paid slot below what was bought`, async () => {
+            const prisma = month({ owner: born(1), machines: [{ sandboxId: `s1`, tier: STANDARD.id }], plan: standardSlots(1) });
+            const hours = await accountHoursOf(prisma, config(40, ramp), `u1`, now);
+            expect(hours.machines.get(`s1`)).toMatchObject({ allowanceMinutes: STANDARD_MINUTES });
+            expect(hours.machines.get(`s1`)?.rampUntil).toBeUndefined();
+            expect(hours.free).toMatchObject({ allowanceMinutes: 600 });
+        });
+    });
+
+    /* WHAT A MINUTE WAS CHARGED TO is written when it is charged, by the same rule the meter reads with: the machine's
+     * own rung while it stands on a held slot, the account's free hours otherwise. */
+    describe(`which hours a charge lands on`, () => {
+        const settleOn = async (tier: string, plan: { status: string; items: { tier: string; quantity: number }[] } | null) => {
+            stubMachine(`stopped`, `2026-08-13T10:30:00.000Z`);
+            const wokeAt = new Date(`2026-08-13T10:00:00.000Z`);
+            const prisma = prismaWith({
+                hostedMachine: {
+                    update: jest.fn().mockResolvedValue({}),
+                    findUnique: jest.fn().mockResolvedValue({ wokeAt, tier }),
+                    findMany: jest.fn().mockResolvedValue([{ sandboxId: `s1`, tier }]),
+                },
+                hostedPlan: { findUnique: jest.fn().mockResolvedValue(plan) },
+            });
+            await settleHostedStretch(prisma, config(), logger, { id: `h1`, sandboxId: `s1`, ownerId: `u1`, appName: `a`, machineId: `m1`, wokeAt });
+            return prisma;
+        };
+
+        it(`charges a machine on a held slot to its rung`, async () => {
+            expect((await settleOn(STANDARD.id, standardSlots(1))).hostedUsage.upsert).toHaveBeenCalledWith({
+                where: { sandboxId_month_tier: { sandboxId: `s1`, month: `2026-08`, tier: STANDARD.id } },
+                create: { sandboxId: `s1`, ownerId: `u1`, month: `2026-08`, tier: STANDARD.id, minutes: 30 },
+                update: { minutes: { increment: 30 } },
+            });
         });
 
-        it(`reads no account row at all with the ramp off`, async () => {
-            const user = born(1);
-            expect(await hostedBudgetOf(prismaWith({ user }), config(40), onFree, now)).toMatchObject({ allowanceMinutes: 2400 });
-            expect(user.findUnique).not.toHaveBeenCalled();
+        it(`charges the same machine to the free hours once its plan stops paying`, async () => {
+            expect((await settleOn(STANDARD.id, standardSlots(1, `canceled`))).hostedUsage.upsert).toHaveBeenCalledWith(
+                expect.objectContaining({ create: { sandboxId: `s1`, ownerId: `u1`, month: `2026-08`, tier: FREE_TIER.id, minutes: 30 } }),
+            );
+        });
+
+        it(`charges a free machine to the free hours without asking about a plan`, async () => {
+            const prisma = await settleOn(FREE_TIER.id, standardSlots(1));
+            expect(prisma.hostedUsage.upsert).toHaveBeenCalledWith(
+                expect.objectContaining({ create: { sandboxId: `s1`, ownerId: `u1`, month: `2026-08`, tier: FREE_TIER.id, minutes: 30 } }),
+            );
+            expect(prisma.hostedPlan.findUnique).not.toHaveBeenCalled();
         });
     });
 
@@ -261,12 +391,11 @@ describe(`the hosted hour meter`, () => {
             const prisma = holding(wokeAt);
             await settleHostedStretch(prisma, config(), logger, machine(wokeAt));
             // The row names both: the sandbox whose ceiling it counts against, and the account it outlives.
-            expect(prisma.hostedUsage.upsert).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    create: { sandboxId: `s1`, ownerId: `u1`, month: `2026-08`, minutes: 30 },
-                    update: { minutes: { increment: 30 } },
-                }),
-            );
+            expect(prisma.hostedUsage.upsert).toHaveBeenCalledWith({
+                where: { sandboxId_month_tier: { sandboxId: `s1`, month: `2026-08`, tier: FREE_TIER.id } },
+                create: { sandboxId: `s1`, ownerId: `u1`, month: `2026-08`, tier: FREE_TIER.id, minutes: 30 },
+                update: { minutes: { increment: 30 } },
+            });
             expect(prisma.hostedMachine.update).toHaveBeenCalledWith({ where: { id: `h1` }, data: { wokeAt: null } });
         });
 
@@ -345,7 +474,7 @@ describe(`the hosted hour meter`, () => {
             });
             // Thirty minutes from the wake to Fly's stop stamp, billed as usual: the kill is a note beside it.
             expect(prisma.hostedUsage.upsert).toHaveBeenCalledWith(
-                expect.objectContaining({ create: { sandboxId: `s1`, ownerId: `u1`, month: `2026-08`, minutes: 30 } }),
+                expect.objectContaining({ create: { sandboxId: `s1`, ownerId: `u1`, month: `2026-08`, tier: FREE_TIER.id, minutes: 30 } }),
             );
         });
 

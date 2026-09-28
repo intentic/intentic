@@ -148,7 +148,10 @@ const request = (over: Partial<Parameters<typeof requestHostedBuild>[3]> = {}) =
 const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof jest.fn>>> = {}) =>
     ({
         hostedPlan: { findUnique: jest.fn().mockResolvedValue(null), ...overrides[`hostedPlan`] },
-        hostedUsage: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}), ...overrides[`hostedUsage`] },
+        // The meter's read of the owner's month: nothing spent unless a case says so.
+        hostedUsage: { groupBy: jest.fn().mockResolvedValue([]), upsert: jest.fn().mockResolvedValue({}), ...overrides[`hostedUsage`] },
+        // The owner as the meter reads them: an account with no comp and no newcomer ramp to apply.
+        user: { findUnique: jest.fn().mockResolvedValue(null), ...overrides[`user`] },
         hostedMachine: {
             findUnique: jest.fn().mockResolvedValue(machineRow()),
             updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -315,7 +318,11 @@ describe(`requesting a build: every refusal spends nothing`, () => {
     });
 
     it(`refuses a metered owner whose remaining hours are under the timeout`, async () => {
-        const prisma = fakePrisma({ hostedUsage: { findUnique: jest.fn().mockResolvedValue({ minutes: 40 * 60 - 10 }), upsert: jest.fn() } });
+        // Ten minutes of the free hours left, the sandbox's machine among the owner's, and a build that could take thirty.
+        const prisma = fakePrisma({
+            hostedUsage: { groupBy: jest.fn().mockResolvedValue([{ sandboxId: `s1`, tier: `free`, _sum: { minutes: 40 * 60 - 10 } }]), upsert: jest.fn() },
+            hostedMachine: { findMany: jest.fn().mockResolvedValue([machineRow()]) },
+        });
         expect(await outcome(prisma, config())).toEqual(refused(`budget`));
     });
 });
@@ -508,11 +515,11 @@ describe(`the builder's report`, () => {
         };
         expect(verdict.where).toEqual({ id: `b1`, state: `building` });
         expect(verdict.data).toMatchObject({ state: `built`, exitCode: 0, digest: DIGEST, log: `#1 DONE\n`, minutes: 3 });
-        // Build minutes are charged to the sandbox's month the same way a session stretch is, and to the account
-        // beside it, so releasing the machine does not erase them.
+        // Build minutes are charged the same way a session stretch is, to the hours the sandbox spends (a free machine:
+        // the account's free hours) and to the account beside it, so releasing the machine does not erase them.
         expect(prisma.hostedUsage.upsert).toHaveBeenCalledWith(
             expect.objectContaining({
-                create: expect.objectContaining({ sandboxId: `s1`, ownerId: `u1`, minutes: 3 }),
+                create: expect.objectContaining({ sandboxId: `s1`, ownerId: `u1`, tier: `free`, minutes: 3 }),
                 update: { minutes: { increment: 3 } },
             }),
         );

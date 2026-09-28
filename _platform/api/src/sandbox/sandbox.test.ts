@@ -406,10 +406,8 @@ describe(`a metered owner whose month is spent`, () => {
             },
             user: { findUnique: jest.fn().mockResolvedValue({ hostedSuspendedAt: null, hostedSuspendedReason: null }) },
             hostedPlan: { findUnique: jest.fn().mockResolvedValue(null) },
-            hostedUsage: {
-                findUnique: jest.fn().mockResolvedValue({ minutes: 40 * 60 }),
-                aggregate: jest.fn().mockResolvedValue({ _sum: { minutes: 40 * 60 } }),
-            },
+            // The account's free hours, all forty spent this month on its one free machine.
+            hostedUsage: { groupBy: jest.fn().mockResolvedValue([{ sandboxId: `s1`, tier: `free`, _sum: { minutes: 40 * 60 } }]) },
             hostedMachine: {
                 findUnique: jest.fn().mockResolvedValue(null),
                 findMany: jest.fn().mockResolvedValue([]),
@@ -463,7 +461,7 @@ describe(`an owner whose hosted lane is suspended`, () => {
     } as unknown as OrpcContext[`config`];
 
     const suspended = () => {
-        const usage = jest.fn().mockResolvedValue({ minutes: 0 });
+        const usage = jest.fn().mockResolvedValue([]);
         const prisma = fakePrisma({
             sandbox: {
                 findFirst: jest.fn().mockResolvedValue({
@@ -473,7 +471,7 @@ describe(`an owner whose hosted lane is suspended`, () => {
             },
             user: { findUnique: jest.fn().mockResolvedValue({ hostedSuspendedAt: new Date(), hostedSuspendedReason: `mining` }) },
             hostedPlan: { findUnique: jest.fn().mockResolvedValue(null) },
-            hostedUsage: { findUnique: usage, aggregate: jest.fn().mockResolvedValue({ _sum: { minutes: null } }) },
+            hostedUsage: { groupBy: usage },
             hostedMachine: {
                 findUnique: jest.fn().mockResolvedValue(null),
                 findMany: jest.fn().mockResolvedValue([]),
@@ -577,12 +575,13 @@ describe(`sandbox.delete on a hosted sandbox`, () => {
                 update: jest.fn().mockResolvedValue({}),
                 delete: jest.fn().mockResolvedValue({}),
             },
-            hostedUsage: { upsert, aggregate: jest.fn().mockResolvedValue({ _sum: { minutes: null } }) },
+            hostedUsage: { upsert },
         });
         await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma, config: hostedConfig }) });
+        // A free machine's minutes are the account's free hours, and stay on the account once the sandbox is gone.
         expect(upsert).toHaveBeenCalledWith({
-            where: { sandboxId_month: { sandboxId: `s1`, month } },
-            create: { sandboxId: `s1`, ownerId: `u1`, month, minutes: 90 },
+            where: { sandboxId_month_tier: { sandboxId: `s1`, month, tier: `free` } },
+            create: { sandboxId: `s1`, ownerId: `u1`, month, tier: `free`, minutes: 90 },
             update: { minutes: { increment: 90 } },
         });
         // Charged BEFORE the cascade: after it there is no row left to hold the minutes.
@@ -610,13 +609,13 @@ describe(`sandbox.delete on a hosted sandbox`, () => {
                 }),
             },
             hostedMachine: { findUnique: jest.fn().mockResolvedValue({ ...hostedMachineRow, wokeAt: held }), delete: jest.fn().mockResolvedValue({}) },
-            hostedUsage: { upsert, aggregate: jest.fn().mockResolvedValue({ _sum: { minutes: null } }) },
+            hostedUsage: { upsert },
         });
         await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma, config: hostedConfig }) });
         expect(upsert).toHaveBeenCalledTimes(1);
         expect(upsert).toHaveBeenCalledWith({
-            where: { sandboxId_month: { sandboxId: `s1`, month } },
-            create: { sandboxId: `s1`, ownerId: `u1`, month, minutes: 10 },
+            where: { sandboxId_month_tier: { sandboxId: `s1`, month, tier: `free` } },
+            create: { sandboxId: `s1`, ownerId: `u1`, month, tier: `free`, minutes: 10 },
             update: { minutes: { increment: 10 } },
         });
         expect(events).toEqual([`delete sandbox`, `POST stop`]);

@@ -5,13 +5,14 @@ import { JOB_HOSTED_METER, JOB_HOSTED_MIGRATE, runExclusive } from "../../jobs-l
 import { getMachine, isFlyGone, LIVE_STATES, stopMachine } from "./fly/fly.js";
 import { withHostedAppLock } from "./hosted-app-lock.js";
 import { hostedEnabled } from "./hosted.js";
-import { hostedBudgetOf, settleHostedStretches } from "./hosted-usage.js";
+import { type AccountHours, accountHoursOf, settleHostedStretches } from "./hosted-usage.js";
 import { sweepHostedMigrations } from "./migrate/hosted-migrate.js";
 
-// Hourly: settles the stretch of every machine that stopped since last look, then stops a metered owner's machines once
-// their month is spent past `hosted.overBudgetGraceMinutes`, and a suspended owner's whatever the month says. Backstops
-// the daemon's in-box idle-stop (tmux activity keeps a free machine awake, and an awake machine is never settled or
-// charged) and a suspension whose stop Fly refused. A subscriber in good standing is never touched.
+// Hourly: settles the stretch of every machine that stopped since last look, then stops a machine once the hours it
+// spends are gone past `hosted.overBudgetGraceMinutes`, and a suspended owner's whatever the hours say. Backstops the
+// daemon's in-box idle-stop (tmux activity keeps a machine awake, and an awake machine is never settled or charged) and
+// a suspension whose stop Fly refused. A machine whose hours count against no ceiling (a comped account's) is never
+// stopped for them.
 
 const TICK_MS = 60 * 60 * 1000;
 
@@ -78,25 +79,28 @@ export const stopOwnerMachines = async (
 };
 
 // Why one owner's awake machines must stop now, or undefined to leave them: a suspension first (it holds whatever the
-// month says, and costs no meter read), then the month spent past its grace.
+// hours say, and costs no meter read), then the hours this machine spends, gone past their grace.
 const stopReason = async (
     prisma: PrismaClient,
     config: Config,
-    machine: { sandboxId: string; tier: string; ownerId: string },
-    now: Date,
+    machine: { sandboxId: string; ownerId: string },
+    hoursOf: (ownerId: string) => Promise<AccountHours>,
 ): Promise<string | undefined> => {
     const owner = await prisma.user.findUnique({ where: { id: machine.ownerId }, select: { hostedSuspendedAt: true } });
     if (owner?.hostedSuspendedAt) {
         return `its owner's hosted lane is suspended`;
     }
-    const budget = await hostedBudgetOf(prisma, config, machine, now);
-    return budget.metered && budget.usedMinutes >= budget.allowanceMinutes + config.hosted.overBudgetGraceMinutes
-        ? `this machine's hours for the month are spent`
-        : undefined;
+    const hours = await hoursOf(machine.ownerId);
+    const budget = hours.machines.get(machine.sandboxId) ?? hours.free;
+    if (!budget.metered || budget.usedMinutes < budget.allowanceMinutes + config.hosted.overBudgetGraceMinutes) {
+        return undefined;
+    }
+    return budget.kind === `free` ? `its account's free hours for the month are spent` : `this machine's hours on its slot are spent for the month`;
 };
 
-// One pass over every open-stretch machine, judged one at a time: the ceiling belongs to the machine's rung, so an
-// account holding a spent free machine and a paid one that is nowhere near its hours must lose only the first.
+// One pass over every open-stretch machine, judged one at a time against the hours it spends: an account holding a
+// free machine that spent the free hours and a paid one nowhere near its own must lose only the first. Each account's
+// hours are read once per pass, since two free machines of one account spend the same hours.
 export const stopOverBudgetHosted = async (
     prisma: PrismaClient,
     config: Config,
@@ -108,12 +112,22 @@ export const stopOverBudgetHosted = async (
     }
     const open = await prisma.hostedMachine.findMany({
         where: { wokeAt: { not: null } },
-        select: { id: true, sandboxId: true, tier: true, appName: true, machineId: true, sandbox: { select: { ownerId: true } } },
+        select: { id: true, sandboxId: true, appName: true, machineId: true, sandbox: { select: { ownerId: true } } },
     });
+    const read = new Map<string, Promise<AccountHours>>();
+    const hoursOf = (ownerId: string): Promise<AccountHours> => {
+        const known = read.get(ownerId);
+        if (known !== undefined) {
+            return known;
+        }
+        const fresh = accountHoursOf(prisma, config, ownerId, now);
+        read.set(ownerId, fresh);
+        return fresh;
+    };
     let stopped = 0;
     for (const machine of open) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- sequential sweep, gentle on the API
-        const why = await stopReason(prisma, config, { sandboxId: machine.sandboxId, tier: machine.tier, ownerId: machine.sandbox.ownerId }, now);
+        const why = await stopReason(prisma, config, { sandboxId: machine.sandboxId, ownerId: machine.sandbox.ownerId }, hoursOf);
         if (why !== undefined) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- sequential sweep, gentle on the API
             stopped += await stopOwnerMachines(config, logger, [machine], why, stopUnlessChanging);

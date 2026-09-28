@@ -36,7 +36,9 @@ export const meRoutes = {
                 where: { userId: user.id },
                 select: { status: true, currentPeriodEnd: true, createdAt: true },
             }),
-            context.prisma.hostedUsage.findMany({ where: { sandbox: { ownerId: user.id } }, select: { month: true, minutes: true } }),
+            // By owner rather than through the sandbox: a released machine's minutes stay on the account, keyed by no
+            // sandbox, and they are the caller's all the same.
+            context.prisma.hostedUsage.findMany({ where: { ownerId: user.id }, select: { month: true, tier: true, minutes: true } }),
             // The address each hosted machine was asked for from, and the abuse watch's verdicts: both about the
             // subject, both kept only as long as they are counted (retention.ts).
             context.prisma.hostedProvision.findMany({ where: { userId: user.id }, select: { ip: true, domain: true, appName: true, createdAt: true } }),

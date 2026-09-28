@@ -131,7 +131,7 @@ describe(`hostedWaitView`, () => {
     // prove wrong, and the button under it only earns a second refusal.
     it(`gives a refused start its own words, and no button that would only be refused again`, () => {
         const spent = hostedWaitView(wait({ machine: `stopped`, wakeRefusal: `hours` }));
-        expect(spent.failure?.problem).toContain(`free hours`);
+        expect(spent.failure?.problem).toBe(`This sandbox's hosted hours for the month are used up, so we've left its machine stopped.`);
         expect(spent.failure?.problem).not.toContain(`isn't running`);
         expect(spent.failure?.action).toBe(`none`);
         const off = hostedWaitView(wait({ machine: `stopped`, wakeRefusal: `suspended` }));
@@ -141,7 +141,7 @@ describe(`hostedWaitView`, () => {
 
     it(`keeps the refusal on screen while it tries again, and still lets a refused check-in outrank it`, () => {
         const refused = wait({ machine: `stopped`, wakeRefusal: `hours` });
-        expect(hostedWaitView({ ...refused, waking: true }).failure?.problem).toContain(`free hours`);
+        expect(hostedWaitView({ ...refused, waking: true }).failure?.problem).toContain(`hosted hours for the month are used up`);
         const announced = hostedWaitView({ ...refused, refusal: { announced: `old.example.dev`, expected: `sandbox-abc.sbx.test` } });
         expect(announced.failure?.problem).toContain(`old.example.dev`);
     });

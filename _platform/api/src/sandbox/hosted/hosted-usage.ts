@@ -1,157 +1,191 @@
-import { FREE_TIER } from "@intentic/constants";
+import { FREE_TIER, isHostedTierId } from "@intentic/constants";
 import type { Prisma, PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { DAY_MS } from "../../durations.js";
+import { compedEmail, isOnPlan, paidSlotsOf, slotHolders } from "./hosted-plan.js";
 import { hostedTierIn } from "./hosted-shape.js";
 import { getMachineDetail, isFlyGone, LIVE_STATES } from "./fly/fly.js";
 
-// The hour meter: what a machine costs its month, and whether any of it is left to wake it with. A stretch opens at
-// wake (the platform's own stamp) and closes later by asking Fly, since a machine stops itself from inside. Counts
-// live while open; enforced at wake, past a grace hour on the tick.
-//
-// PER MACHINE, because the ceiling is its rung's (@intentic/constants hosted-tiers). An account holding two machines
-// on two rungs has two ceilings, and an account figure is the sum of them, which is only ever a display.
-//
-// Every stretch write locks the machine row and charges in its transaction; the writers race in specs/HostedStretch.tla.
+/* THE HOUR METER. A hosted machine's awake minutes are paid for out of one of two kinds of hours, and every minute is
+ * charged to exactly one of them:
+ *
+ *   THE ACCOUNT'S FREE HOURS: the free rung's monthly figure (@intentic/constants hosted-tiers, the operator's own in
+ *   `config.hosted`), ramped for a new account, and spent by every machine of the account that does not stand on a
+ *   paid slot. Released machines' minutes stay in it, so letting a machine go and asking for another never starts a
+ *   fresh month.
+ *
+ *   A MACHINE'S OWN MONTH: its rung's figure, while it stands on a paid slot the account holds (hosted-plan.ts
+ *   `slotHolders`). A slot's hours are that machine's alone, so two machines on two rungs are two ceilings and the
+ *   expensive one never spends the cheap one's hours.
+ *
+ * A comped account's minutes are charged the same way and counted against nothing. Which hours a minute went to is
+ * written on its row when it is charged (`tier`), so moving a machine or losing a plan changes what the NEXT minute
+ * spends and never re-prices one already spent.
+ *
+ * A stretch opens at wake (the platform's own stamp) and closes later by asking Fly, since a machine stops itself from
+ * inside. It counts live while open, towards the hours the machine spends now; enforced at wake, and past a grace
+ * hour on the tick (hosted-meter.ts). Every stretch write locks the machine row and charges in its transaction; the
+ * writers race in specs/HostedStretch.tla. */
 
 // The calendar month a moment belongs to, UTC, as the `YYYY-MM` rows are keyed by.
 export const usageMonth = (at: Date): string => at.toISOString().slice(0, 7);
 
-// When the meter's month rolls over: the first of the next month, UTC; what the Billing page calls resets.
+// When the meter's month rolls over: the first of the next month, UTC; what every surface calls resets.
 export const usageResetsAt = (at: Date): Date => new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() + 1, 1));
 
+/** Which hours: the account's free ones, or one machine's own month on the paid slot it stands on. */
+export type HoursKind = `free` | `slot`;
+
 export interface HostedBudget {
-    // False when unmetered entirely: a platform with the ceiling off, or a rung that has none.
+    readonly kind: HoursKind;
+    // The rung whose figure the ceiling is, which is also what a minute spent from these hours is recorded as: the
+    // free rung's id for the account's free hours, the slot's rung for a machine's own month.
+    readonly tier: string;
+    // False when nothing is counted against a ceiling: a comped account, or free hours on a platform that sets none.
     readonly metered: boolean;
-    // Ceiling and what's left of it, in minutes; both 0 when unmetered, so read `metered` first.
+    // The ceiling and what is left of it, in minutes; both 0 when unmetered, so read `metered` first.
     readonly allowanceMinutes: number;
-    readonly usedMinutes: number;
     readonly remainingMinutes: number;
-    // Set while the newcomer ramp holds the ceiling down: when the account is old enough for the full one.
+    // Spent this month, live, and counted whether or not a ceiling applies: a comped account still has a month.
+    readonly usedMinutes: number;
+    // Set while the newcomer ramp holds the free hours down: when the account is old enough for the full figure.
     readonly rampUntil?: Date;
 }
 
-const unmetered: HostedBudget = { metered: false, allowanceMinutes: 0, usedMinutes: 0, remainingMinutes: 0 };
+/** Every kind of hours one account has this month, read at once so that no two surfaces can disagree about any of it. */
+export interface AccountHours {
+    // The account's free hours: what every machine off a paid slot spends, and what a new machine arrives on.
+    readonly free: HostedBudget;
+    // What each of the account's machines spends, by sandbox id: the free budget itself for a machine that spends the
+    // account's free hours, its own month for one on a paid slot.
+    readonly machines: ReadonlyMap<string, HostedBudget>;
+}
 
-/* THE NEWCOMER RAMP: an account younger than `hosted.newAccountDays` has `hosted.newAccountHours` as its
- * month's ceiling instead of the full one. A farm of fresh accounts is the cheapest way to multiply the free
- * lane, and ageing an account is the one cost it cannot skip; a person evaluating the product spends a few
- * hours in their first week, not forty. Never raises the ceiling: a ramp above the month's figure is the
- * month's figure, which is also what keeps it off a paid rung that was bought on day one. */
-const rampedAllowance = async (
-    prisma: Pick<PrismaClient, "user">,
-    config: Config,
-    userId: string,
-    full: number,
-    now: Date,
-): Promise<{ allowanceMinutes: number; rampUntil?: Date }> => {
+interface Ceiling {
+    readonly allowanceMinutes: number;
+    readonly rampUntil?: Date;
+}
+
+// One budget from what was spent and the ceiling it is held to, or none: unmetered.
+const budgetOf = (kind: HoursKind, tier: string, usedMinutes: number, ceiling: Ceiling | undefined): HostedBudget =>
+    ceiling === undefined
+        ? { kind, tier, metered: false, allowanceMinutes: 0, remainingMinutes: 0, usedMinutes }
+        : {
+              kind,
+              tier,
+              metered: true,
+              allowanceMinutes: ceiling.allowanceMinutes,
+              remainingMinutes: Math.max(0, ceiling.allowanceMinutes - usedMinutes),
+              usedMinutes,
+              ...(ceiling.rampUntil === undefined ? {} : { rampUntil: ceiling.rampUntil }),
+          };
+
+/* THE NEWCOMER RAMP: an account younger than `hosted.newAccountDays` has `hosted.newAccountHours` as its free hours
+ * instead of the month's figure. A farm of fresh accounts is the cheapest way to multiply the free lane, and ageing
+ * an account is the one cost it cannot skip; a person evaluating the product spends a few hours in their first week,
+ * not forty. Never raises the figure, and never touches a paid slot's hours: it is a brake on the free plan, not on a
+ * purchase made on day one. */
+const rampedFreeHours = (config: Config, createdAt: Date | undefined, full: number, now: Date): Ceiling => {
     const { newAccountDays, newAccountHours } = config.hosted;
-    if (newAccountDays === 0 || newAccountHours === 0) {
+    if (createdAt === undefined || newAccountDays === 0 || newAccountHours === 0) {
         return { allowanceMinutes: full };
     }
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { createdAt: true } });
-    const rampUntil = user === null ? undefined : new Date(user.createdAt.getTime() + newAccountDays * DAY_MS);
-    if (rampUntil === undefined || rampUntil <= now) {
-        return { allowanceMinutes: full };
-    }
-    return { allowanceMinutes: Math.min(full, newAccountHours * 60), rampUntil };
+    const rampUntil = new Date(createdAt.getTime() + newAccountDays * DAY_MS);
+    return rampUntil <= now ? { allowanceMinutes: full } : { allowanceMinutes: Math.min(full, newAccountHours * 60), rampUntil };
 };
 
-// Minutes this machine has spent this month, live: the settled row plus its open stretch, no provider call. An open
-// stretch is attributed to the month it started in, like settling will.
-export const hostedUsedMinutes = async (prisma: PrismaClient, sandboxId: string, now: Date = new Date()): Promise<number> => {
+// Minutes since an open stretch began, towards the month it began in, which is where settling charges all of it.
+const liveMinutes = (wokeAt: Date | null, month: string, now: Date): number =>
+    wokeAt === null || usageMonth(wokeAt) !== month ? 0 : Math.max(0, Math.floor((now.getTime() - wokeAt.getTime()) / 60_000));
+
+// Oldest first, ties by id: the order slotHolders decides in, so the meter and the charge read the same machines.
+const OLDEST_FIRST: Prisma.HostedMachineOrderByWithRelationInput[] = [{ createdAt: `asc` }, { id: `asc` }];
+
+/**
+ * Every kind of hours this ACCOUNT has this month, live: settled rows plus open stretches, no provider call. `ownerId`
+ * is always the sandbox's OWNER, never the caller, so a shared sandbox's guests spend the owner's hours. The one read
+ * the Billing page, the wake, the provision gate, a build and the tick all make, so none of them can disagree.
+ */
+export const accountHoursOf = async (prisma: PrismaClient, config: Config, ownerId: string, now: Date = new Date()): Promise<AccountHours> => {
     const month = usageMonth(now);
-    const [row, machine] = await Promise.all([
-        prisma.hostedUsage.findUnique({ where: { sandboxId_month: { sandboxId, month } }, select: { minutes: true } }),
-        prisma.hostedMachine.findUnique({ where: { sandboxId }, select: { wokeAt: true } }),
+    const [owner, plan, machines, rows] = await Promise.all([
+        prisma.user.findUnique({ where: { id: ownerId }, select: { createdAt: true, email: true } }),
+        prisma.hostedPlan.findUnique({ where: { userId: ownerId }, select: { status: true, items: { select: { tier: true, quantity: true } } } }),
+        prisma.hostedMachine.findMany({ where: { sandbox: { ownerId } }, select: { sandboxId: true, tier: true, wokeAt: true }, orderBy: OLDEST_FIRST }),
+        prisma.hostedUsage.groupBy({ by: [`sandboxId`, `tier`], where: { ownerId, month }, _sum: { minutes: true } }),
     ]);
-    const wokeAt = machine?.wokeAt ?? null;
-    const live = wokeAt === null || usageMonth(wokeAt) !== month ? 0 : Math.max(0, Math.floor((now.getTime() - wokeAt.getTime()) / 60_000));
-    return (row?.minutes ?? 0) + live;
-};
+    // A paying account is a subscriber first, as the plan state reads it; the comp list answers only for the rest.
+    const comped = !isOnPlan(plan) && owner !== null && compedEmail(config, owner.email);
+    const holders = slotHolders(machines, paidSlotsOf(plan));
+    const settled = (counts: (row: { sandboxId: string | null; tier: string }) => boolean): number =>
+        rows.reduce((sum, row) => (counts(row) ? sum + (row._sum.minutes ?? 0) : sum), 0);
 
-/**
- * Every awake minute this ACCOUNT has spent this month, live, including minutes whose sandbox is gone. This is the
- * figure the provision gate reads, and the orphaned rows are the point: a person who burns a free machine's hours,
- * releases it and asks for another must not start a fresh month by doing so.
- */
-export const hostedOwnerMinutes = async (prisma: PrismaClient, userId: string, now: Date = new Date()): Promise<number> => {
-    const month = usageMonth(now);
-    const [settled, machines] = await Promise.all([
-        prisma.hostedUsage.aggregate({ where: { ownerId: userId, month }, _sum: { minutes: true } }),
-        prisma.hostedMachine.findMany({ where: { sandbox: { ownerId: userId }, wokeAt: { not: null } }, select: { wokeAt: true } }),
-    ]);
-    const live = machines.reduce((sum, machine) => {
-        const wokeAt = machine.wokeAt;
-        return wokeAt === null || usageMonth(wokeAt) !== month ? sum : sum + Math.max(0, Math.floor((now.getTime() - wokeAt.getTime()) / 60_000));
-    }, 0);
-    return (settled._sum.minutes ?? 0) + live;
-};
+    const freeLive = machines.reduce((sum, machine) => (holders.has(machine.sandboxId) ? sum : sum + liveMinutes(machine.wokeAt, month, now)), 0);
+    const freeFull = hostedTierIn(config, FREE_TIER.id).monthlyHours * 60;
+    const free = budgetOf(
+        `free`,
+        FREE_TIER.id,
+        settled((row) => row.tier === FREE_TIER.id) + freeLive,
+        comped || freeFull === 0 ? undefined : rampedFreeHours(config, owner?.createdAt, freeFull, now),
+    );
 
-/**
- * What a new machine for this account would be allowed, read before there is a machine to read. The ceiling is the
- * free rung's, since that is the rung an arrival lands on, and the spend is the ACCOUNT's for the reason above.
- */
-export const hostedArrivalBudget = async (prisma: PrismaClient, config: Config, userId: string, now: Date = new Date()): Promise<HostedBudget> => {
-    const full = hostedTierIn(config, FREE_TIER.id).monthlyHours * 60;
-    if (full === 0) {
-        return unmetered;
+    const perMachine = new Map<string, HostedBudget>();
+    for (const machine of machines) {
+        if (!holders.has(machine.sandboxId)) {
+            perMachine.set(machine.sandboxId, free);
+            continue;
+        }
+        // Every minute this machine spent on a paid slot this month, whichever paid rung it stood on at the time.
+        const used = settled((row) => row.sandboxId === machine.sandboxId && row.tier !== FREE_TIER.id) + liveMinutes(machine.wokeAt, month, now);
+        perMachine.set(machine.sandboxId, budgetOf(`slot`, machine.tier, used, { allowanceMinutes: hostedTierIn(config, machine.tier).monthlyHours * 60 }));
     }
-    const [{ allowanceMinutes, rampUntil }, usedMinutes] = await Promise.all([
-        rampedAllowance(prisma, config, userId, full, now),
-        hostedOwnerMinutes(prisma, userId, now),
-    ]);
-    return {
-        metered: true,
-        allowanceMinutes,
-        usedMinutes,
-        remainingMinutes: Math.max(0, allowanceMinutes - usedMinutes),
-        ...(rampUntil === undefined ? {} : { rampUntil }),
-    };
+    return { free, machines: perMachine };
 };
 
-/**
- * What this machine has left this month. `userId` is always the sandbox's OWNER, never the caller, so a shared
- * sandbox's guests spend the owner's month; the rung is the machine's own, so two machines on one account are two
- * separate ceilings.
- */
+/** The hours this machine spends right now, and how many are left of them. `ownerId` is always the sandbox's OWNER. */
 export const hostedBudgetOf = async (
     prisma: PrismaClient,
     config: Config,
-    machine: { sandboxId: string; tier: string; ownerId: string },
+    machine: { sandboxId: string; ownerId: string },
     now: Date = new Date(),
 ): Promise<HostedBudget> => {
-    const full = hostedTierIn(config, machine.tier).monthlyHours * 60;
-    if (full === 0) {
-        return unmetered;
-    }
-    const [{ allowanceMinutes, rampUntil }, usedMinutes] = await Promise.all([
-        rampedAllowance(prisma, config, machine.ownerId, full, now),
-        hostedUsedMinutes(prisma, machine.sandboxId, now),
-    ]);
-    return {
-        metered: true,
-        allowanceMinutes,
-        usedMinutes,
-        remainingMinutes: Math.max(0, allowanceMinutes - usedMinutes),
-        ...(rampUntil === undefined ? {} : { rampUntil }),
-    };
+    const hours = await accountHoursOf(prisma, config, machine.ownerId, now);
+    // A machine the read did not find (its row deleted mid-request) stands on no slot, so it would spend the free hours.
+    return hours.machines.get(machine.sandboxId) ?? hours.free;
 };
 
-/** The budget for a sandbox named by id alone, for callers that hold no machine row yet. Unmetered where none exists. */
-export const hostedBudgetForSandbox = async (prisma: PrismaClient, config: Config, sandboxId: string, now: Date = new Date()): Promise<HostedBudget> => {
-    const machine = await prisma.hostedMachine.findUnique({ where: { sandboxId }, select: { tier: true, sandbox: { select: { ownerId: true } } } });
-    if (machine === null) {
-        return unmetered;
+/** What a new machine would spend: it arrives on the free rung, so the account's free hours, released machines' included. */
+export const hostedArrivalBudget = async (prisma: PrismaClient, config: Config, ownerId: string, now: Date = new Date()): Promise<HostedBudget> =>
+    (await accountHoursOf(prisma, config, ownerId, now)).free;
+
+// The hours a minute this machine spends right now is charged to: its own rung while it stands on a paid slot the
+// account holds, the account's free hours otherwise. Read inside the charge's own transaction, by the same rule the
+// meter reads with (slotHolders), so a minute is recorded as the hours it was counted against.
+const chargedTierOf = async (tx: Prisma.TransactionClient, machine: { sandboxId: string; ownerId: string }): Promise<string> => {
+    const own = await tx.hostedMachine.findUnique({ where: { sandboxId: machine.sandboxId }, select: { tier: true } });
+    // No row, the free rung, or a rung the ladder does not know: nothing that could stand on a paid slot.
+    if (own === null || own.tier === FREE_TIER.id || !isHostedTierId(own.tier)) {
+        return FREE_TIER.id;
     }
-    return hostedBudgetOf(prisma, config, { sandboxId, tier: machine.tier, ownerId: machine.sandbox.ownerId }, now);
+    const slots = paidSlotsOf(
+        await tx.hostedPlan.findUnique({ where: { userId: machine.ownerId }, select: { status: true, items: { select: { tier: true, quantity: true } } } }),
+    );
+    if (!slots.has(own.tier)) {
+        return FREE_TIER.id;
+    }
+    const peers = await tx.hostedMachine.findMany({
+        where: { tier: own.tier, sandbox: { ownerId: machine.ownerId } },
+        select: { sandboxId: true, tier: true },
+        orderBy: OLDEST_FIRST,
+    });
+    return slotHolders(peers, slots).has(machine.sandboxId) ? own.tier : FREE_TIER.id;
 };
 
-// Adds minutes to a machine's month; an atomic upsert, so two stretches (or a build) landing on one row both count.
-// Also used by an overlay build's minutes (hosted-build.ts), charged once when it ends.
+// Adds minutes to what they were charged to this month; an atomic upsert, so two stretches (or a build) landing on one
+// row both count. Also used by an overlay build's minutes (hosted-build.ts), charged once when it ends.
 export const chargeMinutes = async (
-    prisma: Prisma.TransactionClient,
+    tx: Prisma.TransactionClient,
     machine: { sandboxId: string; ownerId: string },
     month: string,
     minutes: number,
@@ -159,9 +193,10 @@ export const chargeMinutes = async (
     if (minutes <= 0) {
         return;
     }
-    await prisma.hostedUsage.upsert({
-        where: { sandboxId_month: { sandboxId: machine.sandboxId, month } },
-        create: { sandboxId: machine.sandboxId, ownerId: machine.ownerId, month, minutes },
+    const tier = await chargedTierOf(tx, machine);
+    await tx.hostedUsage.upsert({
+        where: { sandboxId_month_tier: { sandboxId: machine.sandboxId, month, tier } },
+        create: { sandboxId: machine.sandboxId, ownerId: machine.ownerId, month, tier, minutes },
         update: { minutes: { increment: minutes } },
     });
 };
@@ -182,7 +217,7 @@ const chargeStretch = async (tx: Prisma.TransactionClient, machine: { sandboxId:
 };
 
 // Closes an open stretch if it has actually ended; safe to call on anything. A still-running machine is left open
-// (hostedUsedMinutes reads it live); the whole stretch is attributed to the month it started in, never split.
+// (accountHoursOf reads it live); the whole stretch is attributed to the month it started in, never split.
 export const settleHostedStretch = async (
     prisma: PrismaClient,
     config: Config,

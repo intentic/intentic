@@ -1,4 +1,5 @@
-import type { HostedPlanState, HostedPlanUsage } from "@intentic/api-contract";
+import type { HostedHoursMeter, HostedPlanMachine, HostedPlanState } from "@intentic/api-contract";
+import { HOSTED_TIERS } from "@intentic/constants";
 import type { StatusVariant } from "@intentic/ui";
 // Through `@intentic/ui/format`, not the barrel: this module is plain TypeScript, tested without a DOM, and the
 // barrel drags in the component graph — a chart component reaching for `window.matchMedia` at import time takes the
@@ -6,8 +7,12 @@ import type { StatusVariant } from "@intentic/ui";
 import { formatDateLong, formatDayMonth } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 
-// Sentences derived from hosted-plan state so Billing, the account badge, Overview and the chat strip cannot disagree.
-// Pure functions, tested rather than screenshotted.
+// Sentences derived from hosted-plan state so Billing, the account badge, a sandbox's own pages and the chat strip
+// cannot disagree. Pure functions, tested rather than screenshotted.
+//
+// Two kinds of hours, and a hosted machine spends exactly one of them (api hosted-usage.ts): the ACCOUNT's free hours,
+// shared by every machine that does not stand on a paid slot, or ONE MACHINE's own month on the slot it stands on. A
+// sandbox on its owner's own computer spends neither, so nothing here is ever said about one.
 
 // Minutes as a person reads them: under an hour in minutes, whole hours plain, otherwise one decimal.
 export const formatMinutes = (minutes: number): string => {
@@ -32,30 +37,32 @@ export const formatDay = (instant: string): string => formatDateLong(instant);
 // Shorter, for the one-line surfaces (the avatar row) where a year is noise. Same contract: an instant, not a day.
 export const formatDayShort = (instant: string): string => formatDayMonth(new Date(instant).getTime());
 
-// Free plan usage meter; undefined for an owner it doesn't apply to (on the plan, or no ceiling). `fraction` is what's
-// left, 0..1, for a bar; the minute fields are for the sentence.
+/** One kind of hours as a bar and a sentence draw it; `fraction` is what is left, 0..1. */
 export interface HoursMeter {
+    readonly kind: HostedHoursMeter[`kind`];
     readonly usedMinutes: number;
     readonly allowanceMinutes: number;
     readonly remainingMinutes: number;
     readonly fraction: number;
     readonly resetsAt: string;
-    // Set while a new account's ceiling is the ramp's, not the month's: when the full one applies (ISO).
+    // Set while a new account's free hours are the ramp's, not the month's: when the full figure applies (ISO).
     readonly rampUntil?: string;
 }
 
-export const hoursMeter = (usage: HostedPlanUsage | undefined): HoursMeter | undefined => {
-    if (usage === undefined || usage.allowanceMinutes === null) {
+/** The meter for hours held to a ceiling; undefined for hours counted against none (a comp, a platform without one). */
+export const hoursMeter = (hours: HostedHoursMeter | undefined): HoursMeter | undefined => {
+    if (hours === undefined || hours.allowanceMinutes === null) {
         return undefined;
     }
-    const remainingMinutes = Math.max(0, usage.allowanceMinutes - usage.usedMinutes);
+    const remainingMinutes = Math.max(0, hours.allowanceMinutes - hours.usedMinutes);
     return {
-        usedMinutes: usage.usedMinutes,
-        allowanceMinutes: usage.allowanceMinutes,
+        kind: hours.kind,
+        usedMinutes: hours.usedMinutes,
+        allowanceMinutes: hours.allowanceMinutes,
         remainingMinutes,
-        fraction: usage.allowanceMinutes === 0 ? 0 : remainingMinutes / usage.allowanceMinutes,
-        resetsAt: usage.resetsAt,
-        ...(usage.rampUntil === undefined ? {} : { rampUntil: usage.rampUntil }),
+        fraction: hours.allowanceMinutes === 0 ? 0 : remainingMinutes / hours.allowanceMinutes,
+        resetsAt: hours.resetsAt,
+        ...(hours.rampUntil === undefined ? {} : { rampUntil: hours.rampUntil }),
     };
 };
 
@@ -68,10 +75,67 @@ export const lowOnHours = (meter: HoursMeter | undefined): boolean =>
 // "12 h of 40 h left this month", the meter's one line, shared by every surface that states it. A new account's
 // ramp names the day the full month applies instead of "this month", since its ceiling changes before the month does.
 export const hoursLeftLine = (meter: HoursMeter): string => {
-    const when = meter.rampUntil === undefined ? `this month` : `until ${formatDayShort(meter.rampUntil)}`;
-    return meter.remainingMinutes === 0
-        ? `Free hours used up ${when}`
-        : `${formatMinutes(meter.remainingMinutes)} of ${formatMinutes(meter.allowanceMinutes)} left ${when}`;
+    const until = meter.rampUntil === undefined ? undefined : formatDayShort(meter.rampUntil);
+    if (meter.remainingMinutes === 0) {
+        if (meter.kind === `slot`) {
+            return t(`settings.hostedHours.slotUsedUpThisMonth`);
+        }
+        return until === undefined ? t(`settings.hostedHours.freeUsedUpThisMonth`) : t(`settings.hostedHours.freeUsedUpUntil`, { day: until });
+    }
+    const figures = { left: formatMinutes(meter.remainingMinutes), allowance: formatMinutes(meter.allowanceMinutes) };
+    return until === undefined ? t(`settings.hostedHours.leftThisMonth`, figures) : t(`settings.hostedHours.leftUntil`, { ...figures, day: until });
+};
+
+/** A rung as a reader meets it; an id the ladder does not know is shown as itself rather than hidden. */
+export const rungName = (tier: string): string => HOSTED_TIERS.find((rung) => rung.id === tier)?.name ?? tier;
+
+/** One machine's hours as its surfaces draw them: whose they are, one line about them, and a meter where one applies. */
+export interface MachineHours {
+    readonly label: string;
+    readonly line: string;
+    readonly meter: HoursMeter | undefined;
+}
+
+/**
+ * WHOSE HOURS A MACHINE SPENDS, AND WHAT IS LEFT OF THEM. A machine on a paid slot has its own month, labelled with
+ * its rung; any other spends the account's free hours, labelled as shared when a second machine spends them too. Hours
+ * held to no ceiling say how much was spent instead, credited to the comp where that is why.
+ */
+export const machineHours = (state: HostedPlanState | undefined, machine: HostedPlanMachine): MachineHours => {
+    const meter = hoursMeter(machine.hours);
+    if (meter === undefined) {
+        return {
+            label: state?.comped === true ? t(`settings.hostedHours.onTheHouse`) : t(`settings.hostedHours.noHourLimit`),
+            line: t(`settings.hostedHours.awakeThisMonth`, { used: formatMinutes(machine.hours.usedMinutes) }),
+            meter,
+        };
+    }
+    if (machine.hours.kind === `slot`) {
+        return { label: t(`settings.hostedHours.slotHours`, { name: rungName(machine.tier) }), line: hoursLeftLine(meter), meter };
+    }
+    const sharing = (state?.hosted?.machines ?? []).filter((other) => other.hours.kind === `free`).length > 1;
+    return { label: sharing ? t(`settings.hostedHours.freeHoursShared`) : t(`settings.hostedHours.freeHours`), line: hoursLeftLine(meter), meter };
+};
+
+/** The hours of the sandbox the reader is looking at, as one line; undefined where the reader holds no such machine. */
+export const sandboxHoursLine = (state: HostedPlanState | undefined, sandboxId: string | undefined): string | undefined => {
+    const machine = state?.hosted?.machines.find((row) => row.sandboxId === sandboxId);
+    if (machine === undefined) {
+        return undefined;
+    }
+    const { label, line } = machineHours(state, machine);
+    return t(`settings.hostedHours.labelledLine`, { label, line });
+};
+
+/** The chat strip's sentence once a machine's hours run low; undefined while they don't. */
+export const lowHoursNotice = (state: HostedPlanState | undefined, sandboxId: string | undefined): string | undefined => {
+    const machine = state?.hosted?.machines.find((row) => row.sandboxId === sandboxId);
+    const meter = hoursMeter(machine?.hours);
+    if (machine === undefined || !lowOnHours(meter) || meter === undefined) {
+        return undefined;
+    }
+    const { label, line } = machineHours(state, machine);
+    return t(`settings.hostedHours.lowHoursNotice`, { line: t(`settings.hostedHours.labelledLine`, { label, line }), day: formatDayShort(meter.resetsAt) });
 };
 
 // Which lane this account is on, one word beside the name; absent when the platform sells no plan. A failing card is
@@ -130,15 +194,3 @@ export const planBadge = (state: HostedPlanState | undefined): PlanBadge | undef
 
 // Statuses where Stripe is retrying a live subscription, not a sale: `past_due`, `unpaid`, `incomplete`.
 export const RECOVERABLE = new Set([`past_due`, `unpaid`, `incomplete`]);
-
-// The Overview card's one line about the machine's standing under the owner's plan.
-export const machineStandingLine = (state: HostedPlanState | undefined): string | undefined => {
-    if (state === undefined || state.hosted === undefined) {
-        return undefined;
-    }
-    if (state.onPlan) {
-        return state.comped ? `Always on · complimentary` : `Always on · covered by your Hosted plan`;
-    }
-    const meter = hoursMeter(state.hosted.usage);
-    return meter === undefined ? `Always on` : hoursLeftLine(meter);
-};
