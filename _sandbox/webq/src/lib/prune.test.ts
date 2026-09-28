@@ -52,4 +52,27 @@ describe("pruneTree", () => {
         pruneTree(body, { threshold: 0 });
         expect(textOf(body)).not.toContain("enable js");
     });
+
+    it("keeps every token of a syntax-highlighted code block", () => {
+        const token = (cls: string, text: string): string => `<span class="token ${cls}">${text}</span>`;
+        const line = [
+            token("keyword", "import"),
+            " ",
+            token("punctuation", "{"),
+            " ",
+            token("plain", "useState"),
+            " ",
+            token("punctuation", "}"),
+            " ",
+            token("keyword", "from"),
+            " ",
+            token("string", "'react'"),
+            token("punctuation", ";"),
+        ].join("");
+        const body = bodyFor(
+            `${CHROME}<main><article><h1>Hooks</h1><p>Import the hook before you call it at the top level of your component, like this example shows in full.</p><div class="code-block"><pre><code>${line}</code></pre></div></article></main>`,
+        );
+        pruneTree(body);
+        expect(renderMarkdown(body, {})).toContain("import { useState } from 'react';");
+    });
 });

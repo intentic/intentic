@@ -86,6 +86,11 @@ const weigh = (el: Element, memo: Map<Element, Mass>): Mass => {
             }
         }
     }
+    // A code block is all content however many highlighter spans carry it: its inner markup would read as chrome and
+    // sink every wrapper around it, so only the <pre>'s own tags count against it.
+    if (el.tagName === "pre") {
+        markupLen = textLen;
+    }
     // <tag attrs></tag> overhead: 2 brackets + name, twice, plus each attribute's name="value".
     markupLen += 2 * (el.tagName.length + 2) + el.attrs.reduce((sum, a) => sum + a.name.length + a.value.length + 4, 0);
     const mass = { textLen, markupLen, linkTextLen };
@@ -96,6 +101,10 @@ const weigh = (el: Element, memo: Map<Element, Mass>): Mass => {
 const pruneNode = (el: Element, threshold: number, minWords: number | undefined, masses: Map<Element, Mass>): void => {
     if (compositeScore(el, minWords, masses) < threshold) {
         remove(el);
+        return;
+    }
+    // Inside a code block every token span scores as chrome; dropping one silently rewrites the code.
+    if (el.tagName === "pre") {
         return;
     }
     for (const child of childElements(el)) {

@@ -224,11 +224,48 @@ const renderPre = (el: Element): string => {
     const codeChild = el.childNodes.filter(isElement).find((child) => child.tagName === "code");
     const classes = `${attr(el, "class") ?? ""} ${codeChild === undefined ? "" : (attr(codeChild, "class") ?? "")}`;
     const lang = /(?:language|lang)-([\w+-]+)/.exec(classes)?.[1] ?? "";
-    const code = rawTextOf(el).replace(/^\n/, "").trimEnd();
+    const code = preTextOf(el).replace(/^\n/, "").trimEnd();
     // The fence must be longer than any backtick run inside the code it fences.
     const longestRun = Math.max(2, ...[...code.matchAll(/`+/g)].map((m) => m[0].length));
     const fence = "`".repeat(Math.max(3, longestRun + 1));
     return `${fence}${lang}\n${code}\n${fence}`;
+};
+
+// Elements that are a line of their own inside a <pre>: editors like CodeMirror render one <div> per line and no
+// newline text between them, so the line breaks exist only as structure.
+const PRE_LINE = new Set(["div", "p", "li", "tr", "section", "article", "table", "tbody", "ul", "ol", "h1", "h2", "h3", "h4", "h5", "h6"]);
+
+/** A code block's text, with a line break at each <br> and around each block-level child. */
+const preTextOf = (node: Node): string => {
+    if (isText(node)) {
+        return node.value;
+    }
+    if (!isElement(node) || NON_CONTENT.has(node.tagName)) {
+        return "";
+    }
+    if (node.tagName === "br") {
+        return "\n";
+    }
+    let text = "";
+    let afterLine = false;
+    for (const child of node.childNodes) {
+        if (isElement(child) && PRE_LINE.has(child.tagName)) {
+            if (text !== "" && !text.endsWith("\n")) {
+                text += "\n";
+            }
+            // An empty line is a line element holding only a <br>: the element is the line, the <br> adds nothing.
+            text += `${preTextOf(child).replace(/\n$/, "")}\n`;
+            afterLine = true;
+            continue;
+        }
+        // Pretty-printed markup puts a newline between line elements that already ended their line.
+        if (afterLine && isText(child) && /^\r?\n$/.test(child.value)) {
+            continue;
+        }
+        text += preTextOf(child);
+        afterLine = false;
+    }
+    return text;
 };
 
 const renderTable = (el: Element, options: MarkdownOptions): string => {

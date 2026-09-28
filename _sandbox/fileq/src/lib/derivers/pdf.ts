@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { extractText, getDocumentProxy, getMeta } from "unpdf";
 import { onPath } from "../tools.js";
 import type { DerivedDoc, Deriver } from "./deriver.js";
+import { stripRunningFurniture } from "./pdf-furniture.js";
 
 // PDF text layer, per page, via unpdf's serverless pdf.js build (no worker, canvas or DOM shims needed for text
 // extraction).
@@ -48,6 +49,19 @@ const pagesToMarkdown = (pages: readonly string[]): string =>
         ? (pages[0] ?? "")
         : pages.map((page, index) => `## Page ${index + 1}\n\n${page === "" ? "(no text on this page)" : page}`).join("\n\n");
 
+// Every stripped line is named in a note, since a reader comparing against the page image should know what went.
+const furnitureNotes = (removed: number, example: string | undefined): string[] =>
+    removed === 0
+        ? []
+        : [
+              `removed ${removed} running header, footer and page-number line${removed === 1 ? "" : "s"}${example === undefined ? "" : ` (such as "${example}")`}`,
+          ];
+
+const withoutFurniture = (pages: readonly string[]): { markdown: string; notes: string[] } => {
+    const { pages: kept, removed, example } = stripRunningFurniture(pages);
+    return { markdown: pagesToMarkdown(kept), notes: furnitureNotes(removed, example) };
+};
+
 export const pdfDeriver: Deriver = {
     // The stamp names OCR capability, since a sidecar written before tesseract was available must read as stale now
     // that it's here.
@@ -55,7 +69,7 @@ export const pdfDeriver: Deriver = {
     get name(): string {
         return ocrAvailable() ? "pdf+ocr" : "pdf";
     },
-    version: 1,
+    version: 2,
     derive: async (absPath): Promise<DerivedDoc> => {
         const pdf = await getDocumentProxy(new Uint8Array(await readFile(absPath)));
         const { totalPages, text } = await extractText(pdf, { mergePages: false });
@@ -80,8 +94,9 @@ export const pdfDeriver: Deriver = {
             if (totalPages > MAX_OCR_PAGES) {
                 notes.push(`OCR stops at ${MAX_OCR_PAGES} pages: run tesseract over the rest yourself if they matter`);
             }
-            return { markdown: pagesToMarkdown(recognised), title, notes };
+            const { markdown, notes: stripped } = withoutFurniture(recognised);
+            return { markdown, title, notes: [...notes, ...stripped] };
         }
-        return { markdown: pagesToMarkdown(pages), title, notes: [] };
+        return { title, ...withoutFurniture(pages) };
     },
 };

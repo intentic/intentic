@@ -31,6 +31,15 @@ describe("renderMarkdown", () => {
         expect(md("<pre><code>a ``` b</code></pre>")).toBe("````\na ``` b\n````\n");
     });
 
+    it("breaks lines at each line element of an editor-rendered code block, keeping blank lines", () => {
+        const lines = "<div class='cm-line'>const a = 1;</div><div class='cm-line'><br></div><div class='cm-line'>f(a);</div>";
+        expect(md(`<pre><code>${lines}</code></pre>`)).toBe("```\nconst a = 1;\n\nf(a);\n```\n");
+        // Pretty-printed markup: the newline between line elements is not a second line break.
+        expect(md("<pre><code><div>a</div>\n<div>b</div></code></pre>")).toBe("```\na\nb\n```\n");
+        // Highlighter spans with real newlines stay as they are.
+        expect(md("<pre><code><span class='line'>a</span>\n<span class='line'>b</span></code></pre>")).toBe("```\na\nb\n```\n");
+    });
+
     it("renders GFM tables, escaping pipes and taking th as header", () => {
         expect(md("<table><thead><tr><th>A</th><th>B|C</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table>")).toBe(
             "| A | B\\|C |\n| --- | --- |\n| 1 | 2 |\n",
