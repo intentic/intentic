@@ -170,7 +170,11 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
 <!-- Kept outside the template: a comment inside it makes this multi-root, and dev patches a multi-root subtree
      unoptimized — every slotted child, closed dialogs included, redraws on every board render. -->
 <template>
-    <div ref="boardEl" class="relative flex h-full min-h-0 flex-col">
+    <div ref="boardEl" class="agents-board relative flex h-full min-h-0 flex-col">
+        <!-- Sanctum only: mist at dawn behind the lanes (sanctum.css); the flat canvas wash stays everywhere else. -->
+        <div class="agents-board-backdrop" aria-hidden="true">
+            <div class="agents-board-art"></div>
+        </div>
         <!-- The filter remains usable at narrow /agents widths. -->
         <div class="view-header view-header-wrap flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
             <div class="flex min-w-0 flex-1 basis-0 items-center gap-2">
@@ -600,6 +604,11 @@ const starters = computed(() => boardStarters(workspaceRepos.value.length, works
     </div>
 </template>
 <style scoped>
+/* Inert outside sanctum; the skin owns the art (sanctum.css). */
+.agents-board-backdrop {
+    display: none;
+}
+
 /* Scale-fade for arrivals and removals; leaving card is absolutely positioned so siblings close ranks. */
 .lane-enter-active,
 .lane-leave-active {

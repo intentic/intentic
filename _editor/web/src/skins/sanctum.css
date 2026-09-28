@@ -147,6 +147,48 @@
         background-attachment: fixed;
     }
 
+    /* THE AGENTS BOARD — mist at dawn behind the fleet lanes, instead of the flat canvas wash. */
+    [data-skin="sanctum"] .agents-board-backdrop {
+        display: block;
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        overflow: hidden;
+        pointer-events: none;
+        background: var(--role-canvas);
+    }
+
+    [data-skin="sanctum"] .agents-board-art {
+        position: absolute;
+        inset: 0;
+        background-image: url("/assets/plate/agents-900.avif");
+        background-position: 38% 42%;
+        background-size: cover;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+    }
+
+    @media (min-width: 60rem) {
+        [data-skin="sanctum"] .agents-board-art {
+            background-image: url("/assets/plate/agents-1600.avif");
+        }
+    }
+
+    /* A light well under the header and a vignette at the edges; the photograph is already night. */
+    [data-skin="sanctum"] .agents-board-art::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+            linear-gradient(180deg, rgba(0, 0, 0, 0.62) 0%, rgba(0, 0, 0, 0.28) 12%, transparent 34%),
+            radial-gradient(128% 108% at 50% 40%, transparent 44%, rgba(0, 0, 0, 0.48) 100%);
+    }
+
+    [data-skin="sanctum"] .agents-board > :not(.agents-board-backdrop) {
+        position: relative;
+        z-index: 1;
+    }
+
     /* Plates provide the shared surface for cards and grouped lists. */
     [data-skin="sanctum"] .ui-card,
     [data-skin="sanctum"] section > .bg-card.divide-y {
