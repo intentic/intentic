@@ -13,7 +13,6 @@ import type { TurnStarter } from "../seams/turn-starter.js";
 import { conversationUnits, type ConversationUnits } from "../store/conversation-units.js";
 import type { ConversationsDb } from "../store/conversations-db.js";
 import { openConversationsDbAtBoot } from "../store/conversations-db-recovery.js";
-import { previousRunDied } from "../system/boot/boot-marker.js";
 import type { PerfTracker } from "../system/resources/perf.js";
 import type { WorkspaceScopeDeps } from "../workspace/layout/workspace-scope.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
@@ -71,6 +70,9 @@ export interface ConversationsDeps {
     // A turn is the one thing here that reaches most of the daemon (agent/run/stream-agent.ts), and it runs long after
     // composing, so its doors read the finished services per turn.
     readonly whole: () => Services;
+    // Whether the previous run died without its exit hook (system/boot/boot-marker.ts), passed in by composition so the
+    // fleet does not import the system subsystem.
+    readonly previousRunDied: () => boolean;
 }
 
 // What else composing reads of the conversations that no route does: the landing caches' sizes, for the resource series.
@@ -81,7 +83,7 @@ export interface ConversationsParts {
 
 // Builds the conversations slice: one database for the registry and everything keyed by a conversation, so a fact
 // spanning its tables is one write.
-export const createConversationsSlice = ({ historyRoot, workspace, logger, perf, whole }: ConversationsDeps): ConversationsParts => {
+export const createConversationsSlice = ({ historyRoot, workspace, logger, perf, whole, previousRunDied }: ConversationsDeps): ConversationsParts => {
     // Opened so a missing or damaged file never keeps the daemon from coming up: set aside, salvaged or made again,
     // logged and reported (store/conversations-db-recovery.ts). Checked up front only after a run that died unannounced.
     const { db: conversationsDb, recovery } = openConversationsDbAtBoot({ historyRoot, check: previousRunDied(), logger });

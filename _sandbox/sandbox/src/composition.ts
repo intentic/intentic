@@ -116,6 +116,7 @@ import { type CiSlice, createCiSlice } from "./ci/ci-slice.js";
 import { createDepsSlice, type DepsSlice, type QueueMembers } from "./workspace/deps/deps-slice.js";
 import { createResourcesSlice, type ResourcesSlice } from "./system/resources/resources-slice.js";
 import { createProvidersSlice, type ProvidersSlice } from "./agent/providers/providers-slice.js";
+import { previousRunDied } from "./system/boot/boot-marker.js";
 import { createConversationsSlice, type ConversationsSlice } from "./conversations/conversations-slice.js";
 import { createWorkspaceSlice, type DerivedMembers, type WorkspaceSlice } from "./workspace/workspace-slice.js";
 import { createSessionsSlice, type SessionsSlice } from "./sessions/sessions-slice.js";
@@ -461,7 +462,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const authSlice = createAuthSlice(config, workspace.root, logger);
     // Hoisted: worktree ops and the Changes scan must file into the same tracker the summary line reads.
     const perf = createPerfTracker(logger, createPerfLogger(config));
-    const conversationsParts = createConversationsSlice({ historyRoot: config.historyRoot, workspace, logger, perf, whole });
+    const conversationsParts = createConversationsSlice({ historyRoot: config.historyRoot, workspace, logger, perf, whole, previousRunDied });
     const { agents, conversations, cards } = conversationsParts.slice;
     const invariants = createInvariantRegistry(logger);
     const processesSlice = createProcessesSlice({ config, logger });
