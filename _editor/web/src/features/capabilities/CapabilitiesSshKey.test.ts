@@ -53,7 +53,7 @@ jest.mock(`../sandbox/devices/useLiveLinks`, () => ({
     useLiveLinks: () => ({ links: ref([]), error: ref(undefined), open: jest.fn(), close: jest.fn() }),
 }));
 jest.mock(`./connect/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-jest.mock(`./connect/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`./connect/hosts/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
 const { default: Capabilities } = await import("./Capabilities.vue");
 

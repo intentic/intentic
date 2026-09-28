@@ -7,16 +7,16 @@ import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import PrimeVue from "primevue/config";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
-import * as useDevicesOriginal from "../../sandbox/devices/useDevices";
+import * as useDevicesOriginal from "../../../sandbox/devices/useDevices";
 
 const reachable = ref(true);
 const swapServingSandbox = jest.fn(async (_hostId: string, _slug: string, _op: string): Promise<string | undefined> => undefined);
 // Imported statically and spread: a module loaded inside a mock factory deadlocks bun's link of the graph naming it.
-jest.mock(`../../sandbox/devices/useDevices`, () => ({ ...useDevicesOriginal, swapServingSandbox, useHostRunning: () => ref(`host-1`) }));
-jest.mock(`../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(`sb1`), reachable }) }));
-jest.mock(`../../sandbox/devices/ConnectDeviceHint.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`../../../sandbox/devices/useDevices`, () => ({ ...useDevicesOriginal, swapServingSandbox, useHostRunning: () => ref(`host-1`) }));
+jest.mock(`../../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(`sb1`), reachable }) }));
+jest.mock(`../../../sandbox/devices/ConnectDeviceHint.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
-const { forgetRestarts, restartExpected } = await import("../../sandbox/live/sandboxRestart");
+const { forgetRestarts, restartExpected } = await import("../../../sandbox/live/sandboxRestart");
 const { default: HostRecreate } = await import("./HostRecreate.vue");
 
 let app: App | undefined;

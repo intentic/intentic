@@ -10,7 +10,7 @@ import {
     rebuildRunning,
     rebuildSeconds,
     useDevRebuild,
-} from "../environment/useDevRebuild";
+} from "../environment/rebuild/useDevRebuild";
 import { useSandboxVersion } from "../overview/version/useSandboxVersion";
 import { SANDBOX_DEFAULT_SECTION } from "../sandboxNav";
 import { useHostedBuild } from "../secrets/useHostedBuild";

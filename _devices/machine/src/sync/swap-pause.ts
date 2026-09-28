@@ -1,5 +1,5 @@
 import { sandboxIdFromUrl } from "@intentic/sandbox-contract";
-import type { SwapRecord } from "../device/swap-records.js";
+import type { SwapRecord } from "../device/sandbox-rounds/swap-records.js";
 import type { Pairing } from "./config.js";
 
 // FILE SYNC HOLDS STILL WHILE ITS SANDBOX IS SWAPPED ON THIS MACHINE. Two-way sync against a container that is parked,

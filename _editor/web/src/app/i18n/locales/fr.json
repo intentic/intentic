@@ -2126,7 +2126,9 @@
             "runOnYourself": "Ou lancez ceci sur {machine} vous-même"
         },
         "deviceOps": {
+            "couldntRevokeAccess": "Impossible de révoquer l'accès de cet appareil.",
             "deviceDidntReportSandboxs": "Cet appareil n'a pas indiqué la part qui revient à ce sandbox.",
+            "didntWorkOnDevice": "Cela n'a pas fonctionné sur cet appareil.",
             "noLongerAccessTo": "{label} n'a plus accès à ce sandbox.",
             "refreshTryAgainKeeps": "Rechargez et réessayez. Si cela se répète, son agent est trop ancien pour indiquer une part — « Mettre à jour l'agent », ci-dessus, règle cela d'ici."
         },

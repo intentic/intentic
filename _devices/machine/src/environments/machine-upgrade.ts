@@ -54,9 +54,11 @@ const withUpgradeLock = async (log: Log, run: () => Promise<UpgradeOutcome>): Pr
 // a newer release (or `--force`) moves it past. Undefined when nothing stands in the way.
 export const skippedRefusal = (config: MachineConfig, target: string, force: boolean): string | undefined => {
     const skipped = config.skippedAgent;
-    return force || skipped?.version !== target
-        ? undefined
-        : `the agent ${target} kept stopping on this machine and was rolled back on ${new Date(skipped.at).toISOString().slice(0, 10)}, so it is skipped until a newer release is published (\`intentic-machine upgrade --force\` installs it anyway).`;
+    if (force || skipped?.version !== target) {
+        return undefined;
+    }
+    const utcDay = new Date(skipped.at).toISOString().slice(0, 10);
+    return `the agent ${target} kept stopping on this machine and was rolled back on ${utcDay} (UTC), so it is skipped until a newer release is published (\`intentic-machine upgrade --force\` installs it anyway).`;
 };
 
 // This environment alone, to `target`: what one leg of a machine-wide upgrade and setup's self-update both run. First

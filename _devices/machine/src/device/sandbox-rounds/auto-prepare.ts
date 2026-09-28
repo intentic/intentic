@@ -1,8 +1,8 @@
 import type { Log } from "@intentic/local-agent";
 import type { DeviceSandbox } from "@intentic/sandbox-contract";
-import { readMachineConfig } from "../environments/machine.js";
+import { readMachineConfig } from "../../environments/machine.js";
 import { type IcRun, lastLine, newRoundState, type RoundState, type Rounds, runRound, startRounds, ticksToSkip } from "./ic-rounds.js";
-import { fleet, icInFlight, runIc } from "./tools/sandboxes.js";
+import { fleet, icInFlight, runIc } from "../tools/sandboxes.js";
 
 // Keeps the next sandbox update downloaded by running `ic sandbox prepare <slug> --auto` on a timer, letting `ic`
 // decide everything (disk checks, pinned/dev images, no-ops). Lives on the machine, not the sandbox, since the

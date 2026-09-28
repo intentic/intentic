@@ -4,10 +4,10 @@ import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
    read it may be the round the switch is off, so it prepares nothing rather than guessing the switch is on. */
 
 const reached: string[] = [];
-jest.mock("../environments/machine.js", () => ({
+jest.mock("../../environments/machine.js", () => ({
     readMachineConfig: () => Promise.reject(new SyntaxError("machine.json: Unexpected token")),
 }));
-jest.mock("./tools/sandboxes.js", () => ({
+jest.mock("../tools/sandboxes.js", () => ({
     fleet: () => {
         reached.push("fleet");
         return Promise.resolve([]);

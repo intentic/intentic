@@ -74,7 +74,7 @@ const chatOf = (conversationId: string) => ({ path: `/`, query: { conversation: 
                         {{ item.label }}
                         <span v-if="item.note" class="text-2xs text-subtle">· {{ item.note }}</span>
                     </span>
-                    <button type="button" class="shrink-0 text-2xs text-link hover:underline disabled:opacity-60" :disabled="busy" @click="takeBack(item.grant)">
+                    <button type="button" class="shrink-0 text-2xs text-link hover:underline disabled:cursor-default disabled:text-[var(--ui-button-off-content)] disabled:hover:no-underline" :disabled="busy" @click="takeBack(item.grant)">
                         {{ t(`needs.grants.takeBack`) }}
                     </button>
                 </li>

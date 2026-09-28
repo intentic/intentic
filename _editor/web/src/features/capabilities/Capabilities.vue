@@ -41,7 +41,7 @@ import CapabilityRail from "./connect/CapabilityRail.vue";
 import CapabilityRenameDialog from "./connect/CapabilityRenameDialog.vue";
 import ForticlientImport from "./connect/ForticlientImport.vue";
 import GitRefField from "./connect/GitRefField.vue";
-import HostConnectDialog from "./connect/HostConnectDialog.vue";
+import HostConnectDialog from "./connect/hosts/HostConnectDialog.vue";
 import PluginRegistryBrowse from "./connect/PluginRegistryBrowse.vue";
 import SyncOnlyDeviceRow from "./connect/SyncOnlyDeviceRow.vue";
 import WebExtConnectDialog from "./connect/WebExtConnectDialog.vue";

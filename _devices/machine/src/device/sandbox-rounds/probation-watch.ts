@@ -2,7 +2,7 @@ import type { Log } from "@intentic/local-agent";
 import { z } from "zod";
 import { type IcRun, lastLine, newRoundState, type RoundState, type Rounds, runRound, startRounds, ticksToSkip } from "./ic-rounds.js";
 import { readSwapRecords, type SwapRecord } from "./swap-records.js";
-import { icInFlight, runIc } from "./tools/sandboxes.js";
+import { icInFlight, runIc } from "../tools/sandboxes.js";
 
 // THE PROBATION WATCH: `ic sandbox watch` finishes or undoes a swap that was interrupted (the agent restarted, the
 // machine rebooted between parking the old container and starting the new one) and judges a new version on probation,

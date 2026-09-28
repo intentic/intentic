@@ -1,7 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import type { Log } from "@intentic/local-agent";
-import { icInFlight } from "./tools/sandboxes.js";
+import { icInFlight } from "../tools/sandboxes.js";
 
 // THE SHAPE OF EVERY BACKGROUND `ic` ROUND this agent runs over its sandboxes (auto-prepare.ts, auto-backup.ts,
 // probation-watch.ts): one slug at a time, never one a person's flow is touching, and a slug that keeps failing sits out

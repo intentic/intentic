@@ -10,13 +10,17 @@ const logger = { warn: jest.fn() } as never;
 // once the test releases it, so the test, not a timer race a loaded runner can lose, decides which one finishes first.
 const history = (held: readonly string[] = []) => {
     const gates = new Map(held.map((id) => [id, Promise.withResolvers<void>()]));
+    const finished: string[] = [];
     let next = 0;
     return {
         release: (id: string) => gates.get(id)?.resolve(),
+        // The captures in the order they resolved.
+        finished,
         history: {
             snapshot: async () => {
                 const id = `snap-${++next}`;
                 await gates.get(id)?.promise;
+                finished.push(id);
                 return id;
             },
             list: async () => [],
@@ -47,6 +51,7 @@ test("a slow capture keeps its place, so states stay paired with the messages th
     captures.release("snap-1");
     await first;
 
+    expect(captures.finished).toEqual(["snap-2", "snap-1"]);
     expect(taken(deps, "c1")).toEqual([
         { kind: "tree", snapshot: "snap-1" },
         { kind: "tree", snapshot: "snap-2" },

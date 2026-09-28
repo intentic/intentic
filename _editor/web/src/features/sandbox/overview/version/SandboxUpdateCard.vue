@@ -2,8 +2,8 @@
 import { Button, Code, commandLang, CopyButton, Notice, type NoticeModel, RowGroup, RowNote, StatusBadge, ui, useOsPreference } from "@intentic/ui";
 import { useAsyncAction, useNow } from "@intentic/ui/async";
 import { computed, ref } from "vue";
-import DevRebuild from "../../environment/DevRebuild.vue";
-import HostRecreate from "../../../capabilities/connect/HostRecreate.vue";
+import DevRebuild from "../../environment/rebuild/DevRebuild.vue";
+import HostRecreate from "../../../capabilities/connect/hosts/HostRecreate.vue";
 import { turnInFlight } from "../../../agents/fleet/agentStatus";
 import { useAgents } from "../../../agents/fleet/useAgents";
 import { useSandbox } from "../../client/useSandbox";

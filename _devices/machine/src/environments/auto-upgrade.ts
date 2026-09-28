@@ -1,7 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
 import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract";
-import { readSwapRecords, type SwapRecord, swapsUnderway } from "../device/swap-records.js";
+import { readSwapRecords, type SwapRecord, swapsUnderway } from "../device/sandbox-rounds/swap-records.js";
 import { icSwapsInFlight } from "../device/tools/sandboxes.js";
 import { installedBuild } from "../installed.js";
 import { publishedVersion } from "../release.js";

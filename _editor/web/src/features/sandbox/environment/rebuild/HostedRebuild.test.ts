@@ -9,7 +9,7 @@ import { type App, createApp, h, nextTick, ref } from "vue";
 const build = ref<HostedBuildState | undefined>(undefined);
 const applied = ref<string | undefined>(undefined);
 const rebuild = jest.fn().mockResolvedValue({ state: `building`, hash: `h1`, startedAt: `2026-09-04T10:00:00.000Z` });
-jest.mock(`../secrets/useHostedBuild`, () => ({ useHostedBuild: () => ({ build, applied, rebuild, isLoading: ref(false) }) }));
+jest.mock(`../../secrets/useHostedBuild`, () => ({ useHostedBuild: () => ({ build, applied, rebuild, isLoading: ref(false) }) }));
 
 const { default: HostedRebuild } = await import("./HostedRebuild.vue");
 

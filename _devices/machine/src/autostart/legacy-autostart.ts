@@ -2,8 +2,8 @@ import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { autostart, type AutostartSpec, type Log } from "@intentic/local-agent";
-import { baseDir } from "./config.js";
-import { machineLauncher } from "./supervision.js";
+import { baseDir } from "../config.js";
+import { machineLauncher } from "../supervision.js";
 
 // THE LOGIN ENTRIES OF THE TWO AGENTS THIS ONE REPLACED. Until 2026-08-29 a device ran `intentic-host` (the device half)
 // and `intentic-sync`'s mirror watcher (the sync half) as agents of their own, each registered to start at login. The

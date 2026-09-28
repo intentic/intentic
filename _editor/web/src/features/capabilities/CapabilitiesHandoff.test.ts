@@ -103,7 +103,7 @@ jest.mock(`../sandbox/devices/useLiveLinks`, () => ({
     useLiveLinks: () => ({ links: ref([]), error: ref(undefined), open: jest.fn(), close: jest.fn() }),
 }));
 // The two dialogs mint real credentials against a daemon; the stubs render only what's open and on what.
-jest.mock(`./connect/HostConnectDialog.vue`, () => ({
+jest.mock(`./connect/hosts/HostConnectDialog.vue`, () => ({
     default: defineComponent({
         props: { visible: Boolean, id: String, platform: String, permissions: String },
         render() {

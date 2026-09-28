@@ -113,7 +113,7 @@
     "_editor/web/src/features/sandbox/devices/loopback/loopbackPermission.ts": 1,
     "_editor/web/src/features/sandbox/devices/sync/useDesktopSync.ts": 1,
     "_editor/web/src/features/sandbox/devices/usePeerConnect.ts": 2,
-    "_editor/web/src/features/sandbox/environment/useDevRebuild.ts": 1,
+    "_editor/web/src/features/sandbox/environment/rebuild/useDevRebuild.ts": 1,
     "_editor/web/src/features/sandbox/environment/useEngines.ts": 1,
     "_editor/web/src/features/sandbox/live/fleetAcross.ts": 1,
     "_editor/web/src/features/sandbox/live/sandboxRestart.ts": 1,

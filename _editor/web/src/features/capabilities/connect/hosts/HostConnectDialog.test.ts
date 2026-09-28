@@ -10,23 +10,23 @@ import { IconStub } from "@intentic/ui/testing";
 
 // The composable reads only the sandbox's address and a minted pairing token; everything else in the command is
 // built here.
-jest.mock(`../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ daemonUrl: ref(`https://sandbox-abc.intentic.dev`) }) }));
+jest.mock(`../../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ daemonUrl: ref(`https://sandbox-abc.intentic.dev`) }) }));
 // The roster a test connects a machine into; the pair route answers a token regardless.
 const roster = ref<unknown[]>([]);
-jest.mock(`../../sandbox/client/sandboxClient`, () => ({
+jest.mock(`../../../sandbox/client/sandboxClient`, () => ({
     sandboxRequest: jest.fn(async () => ({ ok: true, json: async () => ({ token: `pair-token`, hosts: roster.value }) })),
 }));
 // Taking the hostname is a rename, which is the capabilities composable's; this spies on the call rather than on the wire.
 const renamed = jest.fn(async (_: { id: string; to: string }) => ({}));
-jest.mock(`./useCapabilities`, () => ({ useCapabilities: () => ({ rename: { mutateAsync: renamed } }) }));
+jest.mock(`../useCapabilities`, () => ({ useCapabilities: () => ({ rename: { mutateAsync: renamed } }) }));
 // The fleet the dialog reads Windows PCs' distros off; empty unless a test connects one.
 const fleet = ref<Device[]>([]);
-jest.mock(`../../sandbox/devices/useDevices`, () => ({
+jest.mock(`../../../sandbox/devices/useDevices`, () => ({
     useDevices: () => ({ devices: computed(() => fleet.value), readAt: ref(0), error: ref(undefined), isLoading: ref(false), refetch: () => {} }),
 }));
 
 const { default: HostConnectDialog } = await import("./HostConnectDialog.vue");
-const { scriptSource } = await import("../../../app/environments/scriptCommand");
+const { scriptSource } = await import("../../../../app/environments/scriptCommand");
 
 // Dialog content isn't under the mount point (PrimeVue teleports to body). `visible` starts false and flips, since
 // minting hangs off that transition, as on the tile.

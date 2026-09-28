@@ -1,7 +1,7 @@
 //
 // Needs jsdom: the follow's import chain reaches the app's router and theme, both of which touch the document.
 import "@intentic/testing/dom";
-import type { DevRebuildRun } from "../environment/useDevRebuild";
+import type { DevRebuildRun } from "../environment/rebuild/useDevRebuild";
 
 jest.mock(`../../../router`, () => ({ router: { push: jest.fn(), currentRoute: { value: { name: `chat`, params: {} } } } }));
 

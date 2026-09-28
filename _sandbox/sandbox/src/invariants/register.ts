@@ -8,6 +8,7 @@ import { checks as engineChecks, owner as engineOwner } from "../engines/invaria
 import { checks as exitChecks, type ExitInvariantDeps, owner as exitOwner } from "../exit/invariant.js";
 import { checks as issueChecks, type IssuesInboxDeps, owner as issueOwner } from "../issues/invariant.js";
 import { checks as hostChecks, owner as hostOwner } from "../hosts/invariant.js";
+import { checks as needsChecks, owner as needsOwner } from "../needs/invariant.js";
 import { checks as netdiskChecks, type NetdiskInvariantDeps, owner as netdiskOwner } from "../netdisk/invariant.js";
 import { checks as offloadChecks, owner as offloadOwner } from "../offload/invariant.js";
 import { checks as peerChecks, owner as peerOwner, type PeerRegistryDeps } from "../peers/invariant.js";
@@ -51,6 +52,7 @@ export const registerDaemonInvariants = (registry: InvariantRegistry, deps: Daem
     registry.register(hostOwner, hostChecks());
     registry.register(webextOwner, webextChecks());
     registry.register(runnerOwner, runnerChecks());
+    registry.register(needsOwner, needsChecks());
     registry.register(offloadOwner, offloadChecks());
     registry.register(engineOwner, engineChecks());
     registry.register(derivedOwner, derivedChecks());

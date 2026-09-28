@@ -1,12 +1,12 @@
 import { type DeviceCommandResult, readDevRebuildLog } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, onScopeDispose, reactive, ref } from "vue";
 import { type DevRebuildLayers, type DevRebuildStage, rebuildFraction, readRebuildProgress, stageStart } from "./devRebuildStages";
-import { runDeviceCommand } from "../devices/useDevices";
-import { SandboxHttpError } from "../client/sandboxHttpError";
-import { useSandbox } from "../client/useSandbox";
-import { expectRestart, type RestartQuiet } from "../live/sandboxRestart";
-import { removeStoredValue, storedValue, storeValue } from "../../../lib/browserStorage";
-import { beginHubWork, hubWorkKey } from "../../../shell/hub/hubWork";
+import { runDeviceCommand } from "../../devices/useDevices";
+import { SandboxHttpError } from "../../client/sandboxHttpError";
+import { useSandbox } from "../../client/useSandbox";
+import { expectRestart, type RestartQuiet } from "../../live/sandboxRestart";
+import { removeStoredValue, storedValue, storeValue } from "../../../../lib/browserStorage";
+import { beginHubWork, hubWorkKey } from "../../../../shell/hub/hubWork";
 import { t } from "@intentic/ui/i18n";
 
 // FOLLOWING A REBUILD THAT NOTHING ON THIS PAGE OWNS. `dev-rebuild` starts a detached build on the machine holding the

@@ -2137,7 +2137,9 @@
             "runOnYourself": "O ejecuta esto en {machine} tú mismo"
         },
         "deviceOps": {
+            "couldntRevokeAccess": "No se pudo revocar el acceso de ese dispositivo.",
             "deviceDidntReportSandboxs": "Ese dispositivo no informó del reparto que este sandbox tiene de él.",
+            "didntWorkOnDevice": "Eso no funcionó en este dispositivo.",
             "noLongerAccessTo": "{label} ya no tiene acceso a este sandbox.",
             "refreshTryAgainKeeps": "Recarga e inténtalo de nuevo. Si sigue pasando, su agente es demasiado antiguo para informar de un reparto: «Actualizar el agente», arriba, lo arregla desde aquí."
         },

@@ -77,9 +77,9 @@ flowchart LR
   is never killed when the link or request that asked for it goes away. Every restart of the agent (the auto-upgrade
   tick, `upgrade`, `run`, the browser's Update and Restart) waits while any channel record in this environment's ic
   home (`INTENTIC_HOME`, else `~/.intentic`) says `swap_phase=cutover` with `swap_at` in the last 30 minutes, or while
-  this process runs a flow that moves a container ([`device/swap-records.ts`](src/device/swap-records.ts)); the tick
+  this process runs a flow that moves a container ([`device/sandbox-rounds/swap-records.ts`](src/device/sandbox-rounds/swap-records.ts)); the tick
   looks again in five minutes, a command waits and says so.
-- **The probation watch** ([`device/probation-watch.ts`](src/device/probation-watch.ts)) runs
+- **The probation watch** ([`device/sandbox-rounds/probation-watch.ts`](src/device/sandbox-rounds/probation-watch.ts)) runs
   `ic sandbox watch <slug> --json` every minute for each sandbox whose record names a `swap_phase`, and
   `ic sandbox watch --json` over every sandbox half a minute after start (a reboot mid-swap) and every ten minutes.
   ic finishes or undoes an interrupted cutover and rolls a failing new version back; the agent logs what it did.

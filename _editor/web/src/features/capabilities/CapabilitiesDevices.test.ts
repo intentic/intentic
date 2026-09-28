@@ -73,7 +73,7 @@ jest.mock(`../sandbox/devices/useLiveLinks`, () => ({
     useLiveLinks: () => ({ links: ref([]), error: ref(undefined), open: jest.fn(), close: jest.fn() }),
 }));
 jest.mock(`./connect/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-jest.mock(`./connect/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+jest.mock(`./connect/hosts/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
 // The daemon's device registry, the list both screens now read. Only `useDevices` and the revoke are replaced;
 // everything else in that module keeps working for whatever else the page mounts.

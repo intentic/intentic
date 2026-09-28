@@ -13,10 +13,10 @@ import {
     stopProcess,
 } from "@intentic/local-agent";
 import { recordStopped } from "./agent-trial.js";
-import { MACHINE_AUTOSTART } from "./autostart.js";
+import { MACHINE_AUTOSTART } from "./autostart/autostart.js";
 import { runLogPath, runPidPath } from "./config.js";
 import { linkStatePath } from "./device/config.js";
-import { CUTOVER_HOLDS_MS, readSwapRecords, swapsUnderway } from "./device/swap-records.js";
+import { CUTOVER_HOLDS_MS, readSwapRecords, swapsUnderway } from "./device/sandbox-rounds/swap-records.js";
 import { attachToWindows, WINDOWS_SUPERVISOR } from "./environments/machine.js";
 import { mirrorHeartbeatPath } from "./sync/config.js";
 

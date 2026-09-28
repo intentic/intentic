@@ -40,7 +40,7 @@ const active = ref<ActiveRow>({ id: `sb1`, role: `owner` });
 jest.mock(`../../client/useSandbox`, () => ({ useSandbox: () => ({ active }) }));
 jest.mock(`../../../../lib/useApi`, () => ({ apiClient: { sandbox: { hostedRestart: async () => undefined } } }));
 // Marked, not mounted: which executor the card chose is the whole subject, and each reaches a device on its own.
-jest.mock(`../../../capabilities/connect/HostRecreate.vue`, () => ({
+jest.mock(`../../../capabilities/connect/hosts/HostRecreate.vue`, () => ({
     default: defineComponent({
         props: { action: { type: String, default: `` }, label: { type: String, default: undefined } },
         render(): ReturnType<typeof h> {
@@ -48,7 +48,7 @@ jest.mock(`../../../capabilities/connect/HostRecreate.vue`, () => ({
         },
     }),
 }));
-jest.mock(`../../environment/DevRebuild.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `checkout` }) }) }));
+jest.mock(`../../environment/rebuild/DevRebuild.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `checkout` }) }) }));
 // The platform's question, marked by whom it would ask about; the dialog's own behaviour is its own suite's.
 jest.mock(`./HostedRollbackDialog.vue`, () => ({
     default: defineComponent({

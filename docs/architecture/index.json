@@ -2364,7 +2364,7 @@
           "what": "the one loop, its pidfile, its link stamp, and reconcileResidency."
         },
         {
-          "path": "_devices/machine/src/device/auto-prepare.ts",
+          "path": "_devices/machine/src/device/sandbox-rounds/auto-prepare.ts",
           "what": "the background update-download tick; the judgement about what to download stays in ic sandbox prepare --auto, on purpose."
         },
         {

@@ -24,7 +24,7 @@ describe("skippedRefusal", () => {
 
     it("refuses exactly the release this environment rolled back from, and says how to take it anyway", () => {
         expect(skippedRefusal(config, "1.305.0", false)).toBe(
-            "the agent 1.305.0 kept stopping on this machine and was rolled back on 2026-09-20, so it is skipped until a newer release is published (`intentic-machine upgrade --force` installs it anyway).",
+            "the agent 1.305.0 kept stopping on this machine and was rolled back on 2026-09-20 (UTC), so it is skipped until a newer release is published (`intentic-machine upgrade --force` installs it anyway).",
         );
     });
 

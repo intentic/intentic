@@ -18,7 +18,7 @@ import {
     updateState,
 } from "./config.js";
 import { createDaemonBases, type DaemonBases, type Dialed, dialedPairings } from "../daemon-base.js";
-import { readSwapRecords } from "../device/swap-records.js";
+import { readSwapRecords } from "../device/sandbox-rounds/swap-records.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import {
     ensureMutagen,

@@ -199,7 +199,12 @@ export const createNeeds = (deps: NeedsDeps): Needs => {
 
     // What a met need's answer tells the agent, freshly: the kind's own sentence when it can say it, else the stored one.
     const metOf = async (need: Need): Promise<Met> =>
-        (await deps.kinds[need.subject.kind].check(need).catch(() => undefined)) ?? { result: need.outcome ?? "It is done.", use: [] };
+        (await deps.kinds[need.subject.kind]
+            .check(need)
+            .catch((error: unknown) => {
+                deps.logger.warn({ err: error, need: need.id }, "needs: the kind could not say what the met need tells");
+                return undefined;
+            })) ?? { result: need.outcome ?? "It is done.", use: [] };
 
     const checking = { running: false };
     const checkOpen = async (): Promise<void> => {

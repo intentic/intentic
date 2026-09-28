@@ -8,14 +8,14 @@ import PrimeVue from "primevue/config";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
-import { forgetHubWork, hubWorkKey, hubWorkRunning } from "../../../shell/hub/hubWork";
+import { forgetHubWork, hubWorkKey, hubWorkRunning } from "../../../../shell/hub/hubWork";
 
 const hostId = ref<string | undefined>(`host-1`);
 // What the card asks the door rule about: its own checkout, since one PC answers for this container through several
 // doors and only the checkout's path picks between them.
 const askedAbout: (string | undefined)[] = [];
 const runDeviceCommand = jest.fn();
-jest.mock(`../devices/useDevices`, () => ({
+jest.mock(`../../devices/useDevices`, () => ({
     useHostHolding: (_slug: () => string | undefined, path: () => string | undefined) => {
         askedAbout.push(path());
         return hostId;
@@ -23,13 +23,13 @@ jest.mock(`../devices/useDevices`, () => ({
     useDevices: () => ({ devices: ref([]) }),
     runDeviceCommand,
 }));
-jest.mock(`../client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(`sbx-1`) }) }));
+jest.mock(`../../client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(`sbx-1`) }) }));
 // What the restart will interrupt, and whether it hands it back: both are read at the moment of asking, so both are
 // driven from here. `turnInFlight` stays real — what counts as mid-turn is not this card's opinion.
 const fleet = ref<{ status: string }[]>([]);
-jest.mock(`../../agents/fleet/useAgents`, () => ({ useAgents: () => ({ fleet }) }));
+jest.mock(`../../../agents/fleet/useAgents`, () => ({ useAgents: () => ({ fleet }) }));
 const settings = ref<{ autoResumeOnRestart: boolean } | undefined>(undefined);
-jest.mock(`../overview/useSandboxSettings`, () => ({ useSandboxSettings: () => ({ settings }) }));
+jest.mock(`../../overview/useSandboxSettings`, () => ({ useSandboxSettings: () => ({ settings }) }));
 
 const { default: DevRebuild } = await import("./DevRebuild.vue");
 // The same module instance the card uses, so a test can put a run in flight without driving the confirm dialog first.

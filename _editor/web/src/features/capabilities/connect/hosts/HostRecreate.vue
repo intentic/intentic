@@ -14,14 +14,14 @@ import {
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { manageDeviceSandbox, swapServingSandbox, useHostRunning } from "../../sandbox/devices/useDevices";
-import { useSandbox } from "../../sandbox/client/useSandbox";
-import { expectRestart, type RestartQuiet } from "../../sandbox/live/sandboxRestart";
-import { useHubWork } from "../../../shell/hub/hubWork";
-import ConnectDeviceHint from "../../sandbox/devices/ConnectDeviceHint.vue";
-import { desktopRecreateLink, desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
-import { DESKTOP_DOWNLOADS } from "../../../app/environments/desktopDownloads";
-import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
+import { manageDeviceSandbox, swapServingSandbox, useHostRunning } from "../../../sandbox/devices/useDevices";
+import { useSandbox } from "../../../sandbox/client/useSandbox";
+import { expectRestart, type RestartQuiet } from "../../../sandbox/live/sandboxRestart";
+import { useHubWork } from "../../../../shell/hub/hubWork";
+import ConnectDeviceHint from "../../../sandbox/devices/ConnectDeviceHint.vue";
+import { desktopRecreateLink, desktopVersion, openDesktopLink } from "../../../../app/environments/desktop";
+import { DESKTOP_DOWNLOADS } from "../../../../app/environments/desktopDownloads";
+import { bashCommand, psCommand } from "../../../../app/environments/scriptCommand";
 import { useT } from "@intentic/ui/i18n";
 
 // Recreating needs the host machine (the daemon has no host Docker socket for its own container), so this renders

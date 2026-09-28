@@ -62,8 +62,8 @@ export const BUNDLE_PIN: BundlePin = {
         },
         {
             file: `sdkjs/common/wasm/x2t/x2t_helper.js`,
-            find: `                    try { t.postMessage(payload, '*'); } catch (e) {}\n`,
-            replace: `                    try { t.postMessage(payload, window.location.origin); } catch (e) {}\n`,
+            find: `                    try { t.postMessage(payload, '*'); } catch (e) {}\n`, // allow(silent-catch): upstream x2t source text the patch matches, not our code
+            replace: `                    try { t.postMessage(payload, window.location.origin); } catch (e) {}\n`, // allow(silent-catch): upstream x2t source text, only the target origin changes
             why: `address the exported document to the editor page's own origin rather than to any`,
         },
     ],

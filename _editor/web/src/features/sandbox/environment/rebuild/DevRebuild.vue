@@ -2,12 +2,12 @@
 import { devRebuildLogPath } from "@intentic/sandbox-contract";
 import { AnchoredOverlay, Button, Code, commandLang, ConfirmDialog, type IconName, Notice, useHoverIntent } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
-import ConnectDeviceHint from "../devices/ConnectDeviceHint.vue";
+import ConnectDeviceHint from "../../devices/ConnectDeviceHint.vue";
 import DevRebuildProgress from "./DevRebuildProgress.vue";
-import { turnInFlight } from "../../agents/fleet/agentStatus";
-import { useAgents } from "../../agents/fleet/useAgents";
-import { useSandboxSettings } from "../overview/useSandboxSettings";
-import { useHostHolding } from "../devices/useDevices";
+import { turnInFlight } from "../../../agents/fleet/agentStatus";
+import { useAgents } from "../../../agents/fleet/useAgents";
+import { useSandboxSettings } from "../../overview/useSandboxSettings";
+import { useHostHolding } from "../../devices/useDevices";
 import { rebuildRunning, useDevRebuild } from "./useDevRebuild";
 import { useT } from "@intentic/ui/i18n";
 

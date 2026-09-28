@@ -1,7 +1,7 @@
 import "@intentic/testing/dom";
 import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK } from "@intentic/sandbox-contract";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { SandboxHttpError } from "../client/sandboxHttpError";
+import { SandboxHttpError } from "../../client/sandboxHttpError";
 
 // A rebuild runs on another machine, detached, and ends by replacing the container this page is talking to. What is
 // pinned here is that the run survives all of that: the component being thrown away, the daemon going quiet mid-build,
@@ -9,7 +9,7 @@ import { SandboxHttpError } from "../client/sandboxHttpError";
 // answer FROM the daemon, carrying the status the composable branches on.
 
 const runDeviceCommand = jest.fn();
-jest.mock(`../devices/useDevices`, () => ({ runDeviceCommand }));
+jest.mock(`../../devices/useDevices`, () => ({ runDeviceCommand }));
 
 const { rebuildRunning, useDevRebuild } = await import("./useDevRebuild");
 

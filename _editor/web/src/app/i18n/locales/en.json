@@ -2439,7 +2439,9 @@
             "runOnYourself": "Or run this on {machine} yourself"
         },
         "deviceOps": {
+            "couldntRevokeAccess": "Couldn't revoke that device's access.",
             "deviceDidntReportSandboxs": "That device didn't report this sandbox's share of it.",
+            "didntWorkOnDevice": "That didn't work on this device.",
             "noLongerAccessTo": "{label} no longer has access to this sandbox.",
             "refreshTryAgainKeeps": "Refresh and try again. If it keeps happening, its agent is too old to report a share — Update agent, above, fixes that from here."
         },

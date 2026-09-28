@@ -453,7 +453,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             // A log tail's result line would only restate the pane above it, so it's left to be the answer.
             outcome.value = verb === `logs` ? undefined : { key, message };
         } catch (error) {
-            failure.value = { key, notice: noticeFrom(error, `That didn't work on this device.`), command: sandboxFallback(verb, slug, intent, { takesSet, to }) };
+            failure.value = { key, notice: noticeFrom(error, t(`sandbox.deviceOps.didntWorkOnDevice`)), command: sandboxFallback(verb, slug, intent, { takesSet, to }) };
             if (verb === `logs`) {
                 openLog.value = undefined;
             }
@@ -977,7 +977,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             await revokeSyncDevice(enrollment.machine);
             outcome.value = { key, message: t(`sandbox.deviceOps.noLongerAccessTo`, { label }) };
         } catch (error) {
-            failure.value = { key, notice: noticeFrom(error, `Couldn't revoke that device's access.`) };
+            failure.value = { key, notice: noticeFrom(error, t(`sandbox.deviceOps.couldntRevokeAccess`)) };
         } finally {
             confirmingRevoke.value = undefined;
             revoking.value = false;

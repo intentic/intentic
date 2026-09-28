@@ -6,7 +6,7 @@ import { agentLogPath } from "../../config.js";
 import { installedBuild } from "../../installed.js";
 import { machineLauncher } from "../../supervision.js";
 import { assertScope } from "../policy.js";
-import { CUTOVER_HOLDS_MS } from "../swap-records.js";
+import { CUTOVER_HOLDS_MS } from "../sandbox-rounds/swap-records.js";
 import { icSwapsInFlight } from "./sandboxes.js";
 
 // Updates or restarts this device's own agent, asked for from the browser. Both operations stop the process

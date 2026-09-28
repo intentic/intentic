@@ -2126,7 +2126,9 @@
             "runOnYourself": "Oder führen Sie das auf {machine} selbst aus"
         },
         "deviceOps": {
+            "couldntRevokeAccess": "Der Zugriff dieses Geräts ließ sich nicht widerrufen.",
             "deviceDidntReportSandboxs": "Dieses Gerät hat den Anteil dieser Sandbox daran nicht gemeldet.",
+            "didntWorkOnDevice": "Das hat auf diesem Gerät nicht funktioniert.",
             "noLongerAccessTo": "{label} hat keinen Zugriff mehr auf diese Sandbox.",
             "refreshTryAgainKeeps": "Laden Sie neu und versuchen Sie es erneut. Wenn es weiter passiert, ist sein Agent zu alt, um einen Anteil zu melden — „Agent aktualisieren“ oben behebt das von hier aus."
         },

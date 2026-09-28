@@ -60,6 +60,7 @@ export const readDaemonHealth = (stdout: string): DaemonHealthAnswer | undefined
     try {
         parsed = HealthAnswerSchema.parse(JSON.parse(text));
     } catch {
+        // allow(silent-catch): not JSON or not a /health shape, which is what undefined answers
         return undefined;
     }
     const journal = parsed.state?.journal;

@@ -2136,7 +2136,9 @@
             "runOnYourself": "Albo uruchom to na {machine} samodzielnie"
         },
         "deviceOps": {
+            "couldntRevokeAccess": "Nie udało się cofnąć dostępu temu urządzeniu.",
             "deviceDidntReportSandboxs": "Tamto urządzenie nie zgłosiło przydziału dla tego sandboxa.",
+            "didntWorkOnDevice": "To nie zadziałało na tym urządzeniu.",
             "noLongerAccessTo": "{label} nie ma już dostępu do tego sandboxa.",
             "refreshTryAgainKeeps": "Odśwież i spróbuj ponownie. Jeśli to się powtarza, jego agent jest za stary, żeby zgłosić przydział — „Zaktualizuj agenta” powyżej naprawia to stąd."
         },

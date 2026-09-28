@@ -56,7 +56,7 @@ import { type ConflictAsk, conflictAsk } from "./sync/conflictAsk";
 import SandboxSyncToggles from "./sync/SandboxSyncToggles.vue";
 import { type DeviceScopes, manageBlock } from "./deviceFacts";
 import { startAgent } from "../../agents/fleet/agentActions";
-import HostConnectDialog from "../../capabilities/connect/HostConnectDialog.vue";
+import HostConnectDialog from "../../capabilities/connect/hosts/HostConnectDialog.vue";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
 import { isDefaultName } from "../../capabilities/model/tiles";
 import { machineGrants } from "../../capabilities/model/connections";

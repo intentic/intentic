@@ -2,7 +2,7 @@
 import { Button, Code, Notice } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { computed } from "vue";
-import { useHostedBuild } from "../secrets/useHostedBuild";
+import { useHostedBuild } from "../../secrets/useHostedBuild";
 import { useT } from "@intentic/ui/i18n";
 
 // Rebuilds a hosted sandbox's environment, the counterpart of HostRecreate for the lane with no host device: the

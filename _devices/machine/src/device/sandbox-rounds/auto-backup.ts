@@ -3,9 +3,9 @@ import { plural } from "@intentic/base/format";
 import type { Log } from "@intentic/local-agent";
 import type { DeviceSandbox } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { readMachineConfig } from "../environments/machine.js";
+import { readMachineConfig } from "../../environments/machine.js";
 import { type IcRun, lastLine, newRoundState, type RoundState, type Rounds, runRound, startRounds } from "./ic-rounds.js";
-import { fleet, icInFlight, runIc } from "./tools/sandboxes.js";
+import { fleet, icInFlight, runIc } from "../tools/sandboxes.js";
 
 // A copy of every sandbox on this machine once a day: `ic sandbox backup <slug> --auto` writes an encrypted,
 // incremental backup beside the sandbox's data, and decides everything itself (skipped when one ran in the last day or

@@ -70,7 +70,7 @@ jest.mock(`../../workspace/viewers/DiffView.vue`, () => ({ default: defineCompon
 jest.mock(`../../workspace/viewers/DiffToolbar.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 // Marks each executor with data-executor, so a test can tell which one rendered without mounting it. The host one
 // carries out whether it was asked for its cost line (`bare` drops it) and for the tier below the step (`text`).
-jest.mock(`../../capabilities/connect/HostRecreate.vue`, () => ({
+jest.mock(`../../capabilities/connect/hosts/HostRecreate.vue`, () => ({
     default: defineComponent({
         props: { bare: { type: Boolean, default: false }, text: { type: Boolean, default: false } },
         render(): ReturnType<typeof h> {
@@ -78,10 +78,10 @@ jest.mock(`../../capabilities/connect/HostRecreate.vue`, () => ({
         },
     }),
 }));
-jest.mock(`./HostedRebuild.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `hosted` }) }) }));
+jest.mock(`./rebuild/HostedRebuild.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `hosted` }) }) }));
 // Carries `recipePending` out with it: whether the checkout's rebuild knows a recipe is waiting is what makes its
 // confirmation say it applies that recipe too. And `secondary`: whether it is the step the card is asking for.
-jest.mock(`./DevRebuild.vue`, () => ({
+jest.mock(`./rebuild/DevRebuild.vue`, () => ({
     default: defineComponent({
         props: { recipePending: { type: Boolean, default: false }, secondary: { type: Boolean, default: false } },
         render(): ReturnType<typeof h> {

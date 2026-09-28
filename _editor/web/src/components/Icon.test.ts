@@ -21,7 +21,7 @@ it.each([`exclamation-circle`, `exclamation-triangle`, `exclamation`] as const)(
     expect(glyphBody(ICONS[name])).toBe(glyphBody(ICONS[`exclamation-circle`]));
     const badge = host.querySelector(`.ui-badge`)!;
     expect(badge.classList.contains(`text-warning`)).toBe(true);
-    expect([...badge.classList].filter((name) => name.startsWith(`bg-`))).toEqual([`bg-[color:var(--ui-tile-ground)]`]);
+    expect([...badge.classList].filter((cls) => cls.startsWith(`bg-`))).toEqual([`bg-[color:var(--ui-tile-ground)]`]);
     expect(badge.querySelector(`svg`)!.classList.contains(`text-[1.8em]`)).toBe(true);
 });
 // Props are cast through `as never` since the accessibility tests below pass raw fallthrough attrs (`aria-label`,

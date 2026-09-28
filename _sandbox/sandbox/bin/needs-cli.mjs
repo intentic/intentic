@@ -82,7 +82,7 @@ export const refusalOf = (text) => {
             return parsed.error.message;
         }
     } catch {
-        // Not JSON: the raw text is all there is.
+        // allow(silent-catch): not JSON, the raw text is all there is.
     }
     return text || "the daemon did not say why";
 };

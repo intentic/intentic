@@ -2,13 +2,13 @@
 import { type HostSummary, userDistrosOf } from "@intentic/sandbox-contract";
 import { Button, Code, Modal, type NoticeModel, Notice, SegmentedControl, noticeFrom } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { useDevices } from "../../sandbox/devices/useDevices";
-import { HOST_DOOR, usePeerConnect } from "../../sandbox/devices/usePeerConnect";
-import { useSandbox } from "../../sandbox/client/useSandbox";
-import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
-import { cleanName } from "../model/form";
-import ScriptSourceSwitch from "./ScriptSourceSwitch.vue";
-import { useCapabilities } from "./useCapabilities";
+import { useDevices } from "../../../sandbox/devices/useDevices";
+import { HOST_DOOR, usePeerConnect } from "../../../sandbox/devices/usePeerConnect";
+import { useSandbox } from "../../../sandbox/client/useSandbox";
+import { bashCommand, psCommand } from "../../../../app/environments/scriptCommand";
+import { cleanName } from "../../model/form";
+import ScriptSourceSwitch from "../ScriptSourceSwitch.vue";
+import { useCapabilities } from "../useCapabilities";
 import { useT } from "@intentic/ui/i18n";
 
 // Connect-this-device dialog for a host-kind capability: a tab can't install anything on another machine, so this
