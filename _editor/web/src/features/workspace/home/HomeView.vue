@@ -262,9 +262,11 @@ const dropDirOf = (entry: WorkspaceTreeEntry): string => (entry.type === `dir` &
 const dropTargetOf = (entry: WorkspaceTreeEntry): string | undefined => (noDrops(dropDirOf(entry)) ? undefined : dropDirOf(entry));
 // A tile lights as a target for a move or for OS files; a file tile never does, its folder is the home.
 const targeted = (entry: WorkspaceTreeEntry): boolean => entry.type === `dir` && dropLit(entry.path);
-// The release that ended a drag lands as a click on the tile it started on; it was a drop, not a pick.
+// The release that ended a drag lands as a click on the tile it started on; it was a drop, not a pick. So does one
+// arriving while a name field is open (a press anywhere else blurs it shut first): a text selection dragged out of the
+// field, which must not take the focus and end the edit.
 const onTileSelect = (entry: WorkspaceTreeEntry, event: MouseEvent): void => {
-    if (!consumeSuppressedClick()) {
+    if (!consumeSuppressedClick() && !editing.value) {
         select(entry.path, event);
     }
 };
@@ -426,8 +428,9 @@ const onTile = (event: Event): boolean => event.target instanceof Element && eve
 // A click on the home itself, not a tile, drops the selection, like clicking a desktop's wallpaper; it also parks
 // focus here, so cut, copy and paste work right after clicking in.
 const onBackgroundClick = (event: MouseEvent): void => {
-    // Under a cover the selection is which folder is being read, so a click on the page must not drop it.
-    if (covering.value) {
+    // Under a cover the selection is which folder is being read, so a click on the page must not drop it; one arriving
+    // with a name field open is a text selection dragged out of it.
+    if (covering.value || editing.value) {
         return;
     }
     if (!onTile(event)) {

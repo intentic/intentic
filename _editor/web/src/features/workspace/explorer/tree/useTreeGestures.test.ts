@@ -130,6 +130,18 @@ describe(`a click on a row`, () => {
         gestures.onRowClick(click(), rowOf(README));
         expect([done, state().selected]).toEqual([[], []]);
     });
+
+    // A press anywhere else blurs the field shut before its click; one arriving with the field open began inside it.
+    it(`is not a click at all when it is a text selection dragged out of an open name field`, () => {
+        const { gestures, selecting, host, done, state } = gesturesOver();
+        selecting.selectSingle(`README.md`);
+        host.editing.value = true;
+
+        gestures.onRowClick(click(), rowOf(README));
+        gestures.onRowClick(click(), rowOf(MAIN));
+        gestures.onBackgroundClick();
+        expect([done, state().selected]).toEqual([[], [`README.md`]]);
+    });
 });
 
 describe(`the other presses`, () => {

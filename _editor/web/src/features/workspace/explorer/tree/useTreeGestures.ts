@@ -64,10 +64,14 @@ export const useTreeGestures = (host: TreeGesturesHost) => {
         host.openFile(entry.path, mode);
     };
 
+    // A click arriving while a field is open began in it: a press anywhere else would have blurred it shut first. It is
+    // a text selection dragged out of the field, released over the row or the background, and ends nothing.
+    const fromOpenField = (): boolean => host.editing.value;
+
     // Shift ranges and Ctrl/Cmd toggles, neither activating; a plain click selects, picks and activates.
     const onRowClick = (event: MouseEvent, row: Row): void => {
         // The release that ended a drag lands here too; it was a drop, not a click.
-        if (consumeSuppressedClick()) {
+        if (consumeSuppressedClick() || fromOpenField()) {
             return;
         }
         const path = row.entry.path;
@@ -100,6 +104,9 @@ export const useTreeGestures = (host: TreeGesturesHost) => {
     };
     // A click on empty space drops the selection, like clicking a desktop's wallpaper; the lead stays for the keyboard.
     const onBackgroundClick = (): void => {
+        if (fromOpenField()) {
+            return;
+        }
         clear();
         host.cleared();
     };
