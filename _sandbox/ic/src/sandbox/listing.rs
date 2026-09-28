@@ -406,7 +406,7 @@ mod tests {
         );
     }
 
-    /* The key is DOCKER's (`HostConfig`), not this repo's vocabulary. A sweep once renamed it in a reader and in its fixtures together, and every cap read absent while the suite stayed green; a reader aimed at any other key sees an unbounded, unprivileged container. */
+    /* The key is DOCKER's (`HostConfig`), not this repo's vocabulary. A sweep once renamed it in a reader and in its fixtures together, and every cap read absent while the suite kept passing; a reader aimed at any other key sees an unbounded, unprivileged container. */
     #[test]
     fn the_share_is_read_under_dockers_own_key_so_a_renamed_one_cannot_pass() {
         let as_docker_emits_it = json!({

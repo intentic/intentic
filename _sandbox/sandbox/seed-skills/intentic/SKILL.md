@@ -24,8 +24,8 @@ What the daemon does around you:
   nothing checks it when you stop, nothing sends you back, and no check holds a land, a commit or a push. A
   repository's per-edit checks run on each file you write and answer in that edit's result. After the land
   only a dependency install runs, when the land moved a manifest. CI checks what the owner commits and
-  pushes, and when main's CI goes red one fix agent (the `ci-fix-<repo>-<run>` conversation) is sent every
-  failure until it is green. So run the checks you judge worth running while you work, scoped to what you
+  pushes, and when main's CI fails one fix agent (the `ci-fix-<repo>-<run>` conversation) is sent every
+  failure until it passes. So run the checks you judge worth running while you work, scoped to what you
   changed: the test files that cover it and its package's typecheck, never the whole repository
   (`pnpm test`, `pnpm typecheck`, `pnpm verify`, an unfiltered `turbo run`), since several conversations
   share the machine. A failure in code you did not touch may be main's own, and it is not yours to chase
@@ -152,7 +152,7 @@ over a window you choose. They cannot write, and nothing in this playbook restar
 - A turn changed code and ran no check after its last edit, or its last check failed →
   `mcp__diagnostics__turns` with `only: "unproven"`. That is the turn's own record, since nothing checks a turn
   when it ends or after it lands. Whether main passes is CI's answer for what the owner pushed: the
-  **Pipelines** view, where a red main shows the fix agent on it above the runs.
+  **Pipelines** view, where a failing main shows the fix agent on it above the runs.
 - Something errored in the daemon (an automation, a sync, a land, a refused provider) →
   `mcp__diagnostics__errors` (`sinceMinutes`; `contains` a conversation id, route or code; `level`).
 - The editor white-screened, stalled or felt slow → `mcp__diagnostics__errors` with `source: "browser"`.
@@ -192,8 +192,8 @@ rebuild, a daemon restart from the host). Say plainly that nothing was changed.
   panel with every figure, memory by kind of process, and memory and CPU by session; each card shows its own
   conversation's.
 - **Pipelines** (`/ext/pipelines`, a rail tile shown once a GitHub or GitLab account is connected, counting the
-  branches whose last commit is red): the workspace repositories' CI runs, each run's jobs drawn as a graph,
-  with rerun, cancel and Fix. A red main-line branch shows above the runs with the one fix agent on it and what
+  branches whose last commit fails): the workspace repositories' CI runs, each run's jobs drawn as a graph,
+  with rerun, cancel and Fix. A failing main-line branch shows above the runs with the one fix agent on it and what
   was last decided about it: the agent has it, it waits for you, or it is only reported because the Agent tab's
   Repair switch is off. Nothing checks a push on its way out: what a push broke is CI's to say, and on main the
   fix agent takes it.

@@ -29,7 +29,7 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
                        * either lands or doesn't", which is the whole of what the tile reports. */
                       [{ key: `pipelines`, title: t(`extension.pipelines`), icon: `bolt` }]
                     : [],
-            // Counts branches whose last commit is red; viewing the board does not clear it.
+            // Counts branches whose last commit failed; viewing the board does not clear it.
             badge: () => ciBadge(),
             // Board's initial read, sharing the entry usePipelines reads and the badge fills; scheduled at low priority.
             warm: () => [ciRunsQuery()],

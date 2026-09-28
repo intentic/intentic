@@ -7,7 +7,7 @@
 # to schema.prisma and written INTO an existing migration file — one every deployed database had already
 # applied. Prisma keys _prisma_migrations by migration NAME, so an edited file never re-runs: `migrate deploy`
 # said "No pending migrations to apply" over a table that was missing a column, and the API only found out by
-# throwing on the INSERT. Nothing was red anywhere. Every database CI builds is created fresh from the edited
+# throwing on the INSERT. Nothing failed anywhere. Every database CI builds is created fresh from the edited
 # file, so the fresh ones were correct and the deployed one was not — a divergence no test on a fresh database
 # can express, because both halves of it are consistent with themselves.
 #
@@ -21,7 +21,7 @@
 #      never supplies — so a migration carrying it is not "risky on production", it is a migration that can
 #      only ever apply where there is nothing to lose. Which is precisely the database check 3 builds, and
 #      every database a developer resets. THIS IS NOT HYPOTHETICAL EITHER: 20260831120000_ingress_reachability
-#      added `tunnelId` that way, green here, and stopped dead on the live database with "column tunnelId of
+#      added `tunnelId` that way, passed here, and stopped dead on the live database with "column tunnelId of
 #      relation sandbox contains null values". Prisma records a failure as a WALL, not a skip — `migrate
 #      deploy` answers P3009 for every later migration too — so the api's boot chain never reached its second
 #      step and the platform served nothing until it was fixed forward by hand

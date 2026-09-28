@@ -39,7 +39,7 @@ const appSources = sourceFiles(appRoot)
     .filter((file) => !AUTHORITIES.has(file))
     .map((file) => ({ path: relative(appRoot, file).replaceAll(`\\`, `/`), text: readFileSync(file, `utf8`) }));
 
-// Nothing to guard is a broken guard, not a passing one: a moved directory would otherwise read as green.
+// Nothing to guard is a broken guard, not a passing one: a moved directory would otherwise read as a pass.
 const MIN_SCANNED = 200;
 
 // The array literal after a `queryKey:`, read by balancing brackets rather than regex, since a key can span lines or

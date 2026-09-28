@@ -21,7 +21,7 @@ import { parkedCards } from "../../conversations/actor/parked-cards.js";
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);
 
-// What every opening message is told of the checks that run after its work lands, with the main tree green.
+// What every opening message is told of the checks that run after its work lands, with the main tree passing.
 const OPENING_CHECKS_NOTE = LANDING_CHECKS_NOTE;
 
 // Pins the four turn-plan gates around the workspace map (the generator itself has its own suite): off must mean off,

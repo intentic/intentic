@@ -80,7 +80,7 @@ param(
     # Repair an existing registration's session without reconfiguring it. No -Url/-Token needed.
     [switch]$Repair,
     # Proceed even though this runner is in the middle of a job. Off by default because the alternative is
-    # somebody's red CI run: replacing the listener takes down the job it is executing, and what that looks like
+    # somebody's failed CI run: replacing the listener takes down the job it is executing, and what that looks like
     # on the Actions page is a step failing for a reason the log cannot explain — every assertion passing, then
     # the process gone. Written after doing exactly that to a run that was passing.
     [switch]$Force
@@ -183,7 +183,7 @@ if (-not (Test-Path (Join-Path $RunnerRoot 'run.cmd'))) {
 # ASKED BEFORE ANYTHING IS TOUCHED, because every destructive step below — removing the service, re-registering
 # the task, replacing the listener — takes down a job in flight, and the way that surfaces is the problem: the
 # job's current step dies, so the Actions page shows a step failing after every assertion in it passed, with a
-# process that simply stopped and no line in the log naming a cause. It cost a red run on a passing commit to
+# process that simply stopped and no line in the log naming a cause. It cost a failed run on a passing commit to
 # learn that, and the person reading that log has no way to connect it to a command somebody ran on the box.
 #
 # `Runner.Worker.exe` is the per-job process the listener spawns, so its presence IS "a job is executing" —

@@ -52,7 +52,7 @@ const bare = (over: Partial<TelegramMessage> = {}): TelegramMessage => ({
 });
 
 const message = (over: Partial<TelegramMessage> = {}): TelegramMessage =>
-    bare({ from: { id: 42, first_name: "Ada", last_name: "Lovelace" }, text: "deploy is red again", ...over });
+    bare({ from: { id: 42, first_name: "Ada", last_name: "Lovelace" }, text: "deploy is failing again", ...over });
 
 test("a media-only message says what it is instead of arriving empty", () => {
     expect(contentOf(bare({ voice: { file_id: "v1", duration: 12 } }))).toBe("[voice note, 12s]");
@@ -95,7 +95,7 @@ test("an unaddressed group message dispatches without holding a turn stream", as
     listener.onUpdate(fakeConnection(calls), { update_id: 1, message: message() });
     await waitFor(() => expect(fake.dispatched).toHaveLength(1));
     expect(fake.streamed).toHaveLength(0);
-    expect(fake.dispatched[0]).toMatchObject({ provider: "telegram", type: "message", channelId: "-100123", content: "deploy is red again" });
+    expect(fake.dispatched[0]).toMatchObject({ provider: "telegram", type: "message", channelId: "-100123", content: "deploy is failing again" });
     expect(fake.dispatched[0]?.["mentioned"]).toBeUndefined();
     // No reply painted, so no typing indicator either.
     expect(calls).toEqual([]);

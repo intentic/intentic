@@ -2,7 +2,7 @@ import type { PipelineRun } from "@intentic/sandbox-contract";
 import { arrivesOpen, failureStreaks, openFailures, inFlightOnHead, streakTooltip, supersededBy } from "./ciStreaks";
 import { type JobFailureRun, recurringFailures } from "./failureHistory";
 
-// Pins failureStreaks and friends: is this branch red right now. `sha` defaults to one per run; the same sha on several
+// Pins failureStreaks and friends: is this branch failing right now. `sha` defaults to one per run; the same sha on several
 // runs models one push firing several workflows.
 
 const run = (runId: number, status: PipelineRun["status"], createdAt: number, branch = "main", sha = `sha${runId}`): PipelineRun => ({
@@ -17,17 +17,17 @@ const run = (runId: number, status: PipelineRun["status"], createdAt: number, br
     createdAt,
 });
 
-test("a streak starts when the branch went red, not at its newest failure", () => {
+test("a streak starts when the branch started failing, not at its newest failure", () => {
     const streaks = failureStreaks([run(1, "failed", 50), run(2, "failed", 40), run(3, "failed", 30), run(4, "success", 20)]);
     expect(streaks).toHaveLength(1);
     expect(streaks[0]).toMatchObject({ repo: "intentic", branch: "main", sha: "sha1", since: 30, commits: 3, runs: 3 });
 });
 
-test("green at the head ends the streak", () => {
+test("a pass at the head ends the streak", () => {
     expect(failureStreaks([run(1, "success", 50), run(2, "failed", 40)])).toHaveLength(0);
 });
 
-test("a commit with one failed run among green siblings is a red commit", () => {
+test("a commit with one failed run among passing siblings is a failed commit", () => {
     const push = [run(1, "success", 51, "main", "head"), run(2, "failed", 50, "main", "head"), run(3, "success", 49, "main", "head")];
     expect(failureStreaks(push)).toHaveLength(1);
     // Order-independent: whichever sibling the vendor timestamps last.
@@ -40,7 +40,7 @@ test("a commit with one failed run among green siblings is a red commit", () => 
 test("a later commit that passes clean is what ends it", () => {
     const runs = [run(1, "success", 60, "main", "fixed"), run(2, "failed", 50, "main", "broke"), run(3, "success", 51, "main", "broke")];
     expect(failureStreaks(runs)).toHaveLength(0);
-    // A mixed newer commit isn't a recovery; the branch stays red, now at the new commit.
+    // A mixed newer commit isn't a recovery; the branch keeps failing, now at the new commit.
     const mixed = failureStreaks([run(4, "failed", 60, "main", "next"), run(5, "success", 61, "main", "next"), ...runs.slice(1)]);
     expect(mixed[0]).toMatchObject({ sha: "next", commits: 2, since: 50 });
 });
@@ -104,11 +104,11 @@ test("two workflows failing on the head commit are two open failures", () => {
 
 test("a branch that recovered has no open failure", () => {
     expect(openFailures([run(1, "success", 50), run(2, "failed", 40)]).size).toBe(0);
-    // Per branch: main red, feat green.
+    // Per branch: main failing, feat passing.
     expect(openFailures([run(1, "failed", 50, "main"), run(2, "success", 40, "feat"), run(3, "failed", 30, "feat")]).size).toBe(1);
 });
 
-test("a failure is superseded by the run that recovered the branch, not by the newest green", () => {
+test("a failure is superseded by the run that recovered the branch, not by the newest pass", () => {
     const failure = run(1, "failed", 10);
     const recovery = run(2, "success", 20);
     const later = run(3, "success", 30);
@@ -117,7 +117,7 @@ test("a failure is superseded by the run that recovered the branch, not by the n
     expect(superseded.get(recovery)).toBeUndefined();
 });
 
-test("a green run on the failure's OWN commit does not supersede it", () => {
+test("a passing run on the failure's OWN commit does not supersede it", () => {
     const failure = run(1, "failed", 50, "main", "head");
     const sibling = run(2, "success", 51, "main", "head");
     expect(supersededBy([sibling, failure]).size).toBe(0);
@@ -126,12 +126,12 @@ test("a green run on the failure's OWN commit does not supersede it", () => {
     expect(supersededBy([recovery, sibling, failure]).get(failure)).toBe(recovery);
 });
 
-test("a failure with nothing green after it is not superseded", () => {
+test("a failure with nothing passing after it is not superseded", () => {
     const head = run(1, "failed", 50);
     const behind = run(2, "failed", 40);
     const superseded = supersededBy([head, behind]);
     expect(superseded.size).toBe(0);
-    // A green on another branch cannot close it.
+    // A pass on another branch cannot close it.
     expect(supersededBy([head, run(3, "success", 60, "feat")]).size).toBe(0);
 });
 
@@ -225,7 +225,7 @@ test("a job failing run after run is one problem, not many failures", () => {
     expect(recurring.find((item) => item.job === "unit")).toBeUndefined();
 });
 
-test("a green run in between splits one streak into two short ones", () => {
+test("a passing run in between splits one streak into two short ones", () => {
     expect(recurringFailures([entry(50, ["eslint"]), entry(40, []), entry(30, ["eslint"])])).toHaveLength(0);
 });
 

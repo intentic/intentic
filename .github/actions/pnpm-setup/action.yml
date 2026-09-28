@@ -37,9 +37,9 @@ runs:
         # operation will ever remove the directory around them. It is then a ghost — zero tracked files, still
         # in every `ls`, still guessed at — which is exactly what the layout check's first rule fails on.
         #
-        # AND NO COMMIT COULD FIX IT. The check ran green on a fresh clone and red on the fleet, naming
+        # AND NO COMMIT COULD FIX IT. The check passed on a fresh clone and failed on the fleet, naming
         # directories that do not exist in git; `pnpm prepass` runs it in preflight, in verify-core and in
-        # verify-platform, so one stale runner reddened three jobs at once and a re-run reproduced it exactly
+        # verify-platform, so one stale runner made three jobs fail at once and a re-run reproduced it exactly
         # (run 34046947138). The prune belongs HERE, beside the Playwright and pnpm-state cleanups
         # above, for the same reason they are here: it is the persistent workspace being repaired, so it has to
         # happen in the step every job on that workspace shares rather than in whichever job noticed last.
@@ -88,7 +88,7 @@ runs:
         # kit and its call sites in one commit, every runner kept typechecking web against a copy of the
         # preview extension that still said `cmp`, typecheck failed before `build` could run, and the build was
         # the only thing that would have re-synced anything. Two pipelines died on source that was correct in
-        # git, and no re-run could have gone green.
+        # git, and no re-run could have passed.
         #
         # Removing the file costs the install its shortcut — ~5s of real work against 0.3s of assertion — and
         # is what makes a fresh checkout produce a node_modules that matches it. The persistent workspace

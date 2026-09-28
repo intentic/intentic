@@ -27,7 +27,7 @@ export function useFailureHistory(runs: Ref<readonly PipelineRun[]>) {
 
     const history = computed((): JobFailureRun[] => {
         const jobsByRun = new Map<number, CiJobsResponse | undefined>(failedRuns.value.map((run, index) => [run.runId, queries.value[index]?.data]));
-        // A green run failed nothing, known without asking, and it is what ends a streak.
+        // A passing run failed nothing, known without asking, and it is what ends a streak.
         const entryOf = (run: PipelineRun): JobFailureRun => ({
             repo: run.repo,
             branch: run.branch,

@@ -13,7 +13,7 @@
 #
 # There is no soak. This repo used to publish every release to a `beta` lane and let a nightly job promote it
 # to stable after ~48h; the delay was paid on every release, including fixes, and caught nothing, because a
-# canary lane only helps if somebody watches it. The pipeline is the gate now — green means shipped — and a
+# canary lane only helps if somebody watches it. The pipeline is the gate now — passing means shipped — and a
 # bad release is pulled with rollback-stable.sh rather than waited out.
 #
 # Skips without a token so a local release dry-run stays runnable; fatal in CI, where a quiet skip would leave

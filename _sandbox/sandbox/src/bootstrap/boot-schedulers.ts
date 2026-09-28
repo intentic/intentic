@@ -73,7 +73,7 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
 
     if (role.container) {
         services.ciHooks.start();
-        // Main's CI has one fix agent (ci/main-fixer.ts): each of its settled turns may hand main's red to the owner, and
+        // Main's CI has one fix agent (ci/main-fixer.ts): each of its settled turns may hand main's failure to the owner, and
         // what main did while the daemon was down reaches it now.
         shutdown.push(
             services.events.subscribe("run.settled", (settled) => {
@@ -82,7 +82,7 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
                 );
             }),
         );
-        void resumeMainFixer(services).catch((error: unknown) => logger.warn({ err: error }, "ci repair: main's reds could not be resumed"));
+        void resumeMainFixer(services).catch((error: unknown) => logger.warn({ err: error }, "ci repair: main's failures could not be resumed"));
     }
 
     // Covers repos whose CI hook could not be registered; its first pass is a silent seed.

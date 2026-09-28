@@ -56,7 +56,7 @@ const CI_SOURCE: TriggerSource = {
     },
     starterPrompt:
         "CI pipeline results just arrived, each line of the event payload is one JSON event: `type` is `pipeline_failed`, `pipeline_broken` " +
-        "(it was green before), `pipeline_succeeded` or `pipeline_fixed`; `channelId` is the workspace repo dir and `branch` is the ref, with " +
+        "(it passed before), `pipeline_succeeded` or `pipeline_fixed`; `channelId` is the workspace repo dir and `branch` is the ref, with " +
         "`extra` carrying sha, url and failedJobs. For a failure: fetch the failing jobs' logs with your GitHub/GitLab capability (the url points " +
         "at the run), reproduce the failure locally in that repo, fix the cause, and push the fix. For a pass or a fix, no action is usually " +
         "needed: summarize briefly.",
@@ -297,13 +297,13 @@ export const CORE_AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
         title: "Fix failing CI",
         icon: "bolt",
         requires: ["github", "gitlab"],
-        // `pipeline_broken`, not `pipeline_failed`: wakes on the run that broke the branch, not every red push.
+        // `pipeline_broken`, not `pipeline_failed`: wakes on the run that broke the branch, not every failing push.
         trigger: { kind: "listener", provider: CI_PROVIDER, eventType: "pipeline_broken" },
         prompt:
-            "A CI pipeline that was green just went red: each payload line is one JSON event with the workspace repo, branch, sha, run url and the " +
+            "A CI pipeline that was passing just failed: each payload line is one JSON event with the workspace repo, branch, sha, run url and the " +
             "failed job names. Fetch the failing jobs' logs with your GitHub/GitLab capability, reproduce the failure locally in that repo, fix the " +
             "cause, verify the failing checks pass, and push the fix to the branch that failed.",
-        note: "the moment a branch goes red",
+        note: "the moment a branch starts failing",
     },
     ...CHORE_TEMPLATES,
 ];

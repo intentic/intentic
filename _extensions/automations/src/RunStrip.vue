@@ -17,7 +17,7 @@ const MARK: Record<AutomationRun[`outcome`], string> = {
 };
 
 // The tooltip has to say what the marks cannot: which colour meant what, and how many of each. Ordered
-// worst-first, because the reason anyone hovers this is a red mark.
+// worst-first, because the reason anyone hovers this is a failed run.
 const summary = computed<string>(() => {
     const count = (outcome: AutomationRun[`outcome`]): number => shown.value.filter((run) => run.outcome === outcome).length;
     const parts = [

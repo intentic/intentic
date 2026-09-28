@@ -89,7 +89,7 @@ test("on the main tree reads only what the turn edited", async () => {
     expect(text).toContain("src.ts");
     expect(text).not.toContain("other.ts");
     expect(text).not.toContain("new.ts");
-    expect(text).toContain("Verification: passed, `pnpm test` ran green after the last edit.");
+    expect(text).toContain("Verification: passed, `pnpm test` ran after the last edit and passed.");
 });
 
 // After a restart the held turn's ledger is gone; the card's record of the last turn that touched code is the same
@@ -103,7 +103,7 @@ test("falls back to the fold's checklist and the proof the card recorded", async
     });
     const text = note?.text ?? "";
     expect(text).toContain("- [ ] Write the tests");
-    expect(text).toContain("Verification: FAILING, `pnpm test` was red when the turn stopped. Fix that before anything else.");
+    expect(text).toContain("Verification: FAILING, `pnpm test` was failing when the turn stopped. Fix that before anything else.");
 });
 
 test("reads the live ledger over the card's record while the held turn's is still in hand", async () => {
@@ -115,7 +115,7 @@ test("reads the live ledger over the card's record while the held turn's is stil
         checklist: [{ content: "Write the tests", status: "pending" }],
     });
     const text = note?.text ?? "";
-    expect(text).toContain("Verification: passed, `pnpm test src/a.test.ts` ran green after the last edit.");
+    expect(text).toContain("Verification: passed, `pnpm test src/a.test.ts` ran after the last edit and passed.");
     expect(text).not.toContain("FAILING");
 });
 

@@ -4,7 +4,7 @@ Which versions of intentic's pieces must match each other, and what every releas
 
 ```mermaid
 flowchart LR
-    main["main<br/>green pipeline"] --> rel(["release<br/>one version stamp"])
+    main["main<br/>passing pipeline"] --> rel(["release<br/>one version stamp"])
     rel --> pointers["moving pointers<br/>:stable · latest Release · stable tag"]
     pointers --> users["connect scripts · download links<br/>update cards"]
     rel --> kept["versioned tags<br/>stay published"]
@@ -16,7 +16,7 @@ flowchart LR
 - `set-versions.sh` stamps the release version on every first-party package before anything builds; git keeps `0.0.0`. Every artifact of a release, from npm packages and binaries to installers and images, comes from one commit with one stamp, and `release-prepare.sh` refuses one stamped otherwise.
 - Node and pnpm are pinned in `package.json` (`engines`, `packageManager`), and the `ci-base` image bakes the same pins.
 
-## A green pipeline is the ship
+## A passing pipeline is the ship
 
 There is one release lane. A release that passes the whole pipeline becomes what everyone gets in the same run: `release-images.sh` moves the sandbox's `stable` and `core-stable` tags and dind-host's `stable`, then `ship-stable.sh` moves the git `stable` tag and marks the GitHub Release as latest. Connect scripts, the deploy engine's image references, download links and every sandbox's update check follow those pointers as unpinned tags, never digests, so nothing else changes when a release ships.
 

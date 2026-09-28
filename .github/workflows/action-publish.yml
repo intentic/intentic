@@ -24,7 +24,7 @@
 # intentic/gate-action): the script probes the write before it pushes anything and skips loudly — a warning
 # annotation on this run — rather than failing the release train over an optional artifact. A token that only
 # reads is the same to it as no token: the action repo is public, so a useless credential clones just fine and
-# is refused at the first push, which is how v1.209.1 took this job red. The first Marketplace listing is a
+# is refused at the first push, which is how v1.209.1 made this job fail. The first Marketplace listing is a
 # one-time manual step in the UI; releases after that surface on it by themselves.
 name: action publish
 

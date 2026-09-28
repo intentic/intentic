@@ -154,8 +154,8 @@ test("a success after a failure dispatches pipeline_succeeded AND pipeline_fixed
     expect(prompts[0]).toContain("pipeline_fixed");
 });
 
-// The mirror of the test above, and the reason `pipeline_broken` exists: a branch that was already red keeps
-// firing `pipeline_failed` on every push, and only the run that turned it red is news.
+// The mirror of the test above, and the reason `pipeline_broken` exists: a branch that was already failing keeps
+// firing `pipeline_failed` on every push, and only the run that broke it is news.
 test("a failure after a recorded success dispatches pipeline_failed AND pipeline_broken; a second failure does not", async () => {
     const { app, services, prompts } = await harness("wh-broken");
     await services.ciStore.recordConclusion("web", "main", "success", 1);

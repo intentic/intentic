@@ -19,7 +19,7 @@ import {
 // The asking commands against the contract itself: each request a CLI sends must be the route the contract declares
 // (method, path) with a body its input schema takes, and each answer shaped by the output schema must print and exit as
 // promised. On 2026-09-21 a field rename on the daemon's side left `capabilities list` printing "No capability cards are
-// available." and `capabilities request` refusing every ask, for days, with every suite green: this is what reads for it.
+// available." and `capabilities request` refusing every ask, for days, with every suite passing: this is what reads for it.
 
 const BIN = join(packageRoot(import.meta.url), "bin");
 

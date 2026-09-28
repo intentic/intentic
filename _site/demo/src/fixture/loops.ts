@@ -4,8 +4,8 @@ import type { LoopDesign } from "@intentic/sandbox-contract";
 // exit code, or a reviewer agreeing. Both carry a spend ceiling since a loop keeps spending after it's armed.
 export const demoLoops = (): LoopDesign[] => [
     {
-        id: `until-green`,
-        name: `Until the suite is green`,
+        id: `until-passing`,
+        name: `Until the suite passes`,
         description: `Fix, run, fix again, the classic. Ends on the test command, not on the agent's opinion of it.`,
         context: `fresh`,
         output: { kind: `none` },

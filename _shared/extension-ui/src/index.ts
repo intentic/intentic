@@ -12,7 +12,7 @@ export {
     type AgentRunPicker,
     type ModelPicking,
     useAgentRunPick,
-    // How a fix stance (the contract's `fixStance`) is drawn, so a chip beside a red row wears the same icon and tint
+    // How a fix stance (the contract's `fixStance`) is drawn, so a chip beside a failed row wears the same icon and tint
     // as the same state on the shell's own surfaces.
     type FixStanceLook,
     fixStanceLook,

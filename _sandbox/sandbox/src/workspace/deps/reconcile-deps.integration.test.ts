@@ -159,7 +159,7 @@ test("a manifest burst installs only once the writes around it have gone quiet",
         // 30ms in: past the 20ms the manifest armed on its own, so nothing but the extension holds the install back.
         // The deadline is exact on the fake clock, but a pass that DID wake still needs a millisecond or two of real
         // filesystem work to reach `startInstall`; the wall-clock wait is what gives it that, at a hundred times what
-        // the work costs on a temp tree. Too short and this reads green for want of time rather than for the window.
+        // the work costs on a temp tree. Too short and this passes for want of time rather than for the window.
         await advanceTimersByTimeAsync(15);
         await realSleep(200);
         expect(started).toEqual([]);

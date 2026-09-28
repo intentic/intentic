@@ -40,7 +40,7 @@ const FIX_CI: AutomationTemplate = {
     title: `Fix failing CI`,
     requires: [`github`],
     trigger: { kind: `listener`, provider: `ci`, eventType: `pipeline_broken` },
-    prompt: `A pipeline that was green just went red — fix it.`,
+    prompt: `A pipeline that was passing just failed — fix it.`,
 };
 const REVIEW: AutomationTemplate = {
     id: `review-agent-work`,
@@ -431,7 +431,7 @@ describe(`sender rules`, () => {
         const { form, sendersOffered, build } = formState();
         form.kind = `listener`;
         form.provider = `ci`;
-        form.id = `red-builds`;
+        form.id = `failed-builds`;
         form.prompt = `Fix it.`;
         form.models = [...LADDER];
         form.senders = true;

@@ -1,5 +1,5 @@
 {
-    // Green on main; `pnpm lint` gates it, and _tools/oxlint/lint-edit.mjs holds every written file to it.
+    // Passing on main; `pnpm lint` gates it, and _tools/oxlint/lint-edit.mjs holds every written file to it.
     //
     // Rules are ENUMERATED rather than pulled in by category. Oxlint's categories are buckets of available
     // rules, not curated presets (there is no `recommended` preset yet — oxc-project/oxc#20758), and the wide

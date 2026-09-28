@@ -1,4 +1,4 @@
-// Pins how a failed run becomes units, since a unit that reads differently in two checkouts charges a turn with main's red.
+// Pins how a failed run becomes units, since a unit that reads differently in two checkouts charges a turn with main's failure.
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

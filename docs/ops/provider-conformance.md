@@ -11,10 +11,10 @@ flowchart LR
 ```
 
 - The suites are [`codex-wire.e2e.test.ts`](../../_sandbox/sandbox/src/e2e/codex-wire.e2e.test.ts), run against two model families whose wire formats differ, and [`opencode-wire.e2e.test.ts`](../../_sandbox/sandbox/src/e2e/opencode-wire.e2e.test.ts). Each spawns the real binary the way a live turn does and checks both the events the daemon receives and the requests the CLI sends.
-- Nothing leaves the machine: no credential, no vendor, no quota. A vendor outage cannot turn it red, which is why `verify-providers` in `ci.yml` is a required success for the release.
+- Nothing leaves the machine: no credential, no vendor, no quota. A vendor outage cannot make it fail, which is why `verify-providers` in `ci.yml` is a required success for the release.
 - It never skips quietly. With `INTENTIC_E2E_PROVIDERS=1` set and a CLI missing, the suite fails and names the pack to install.
 - The versions come from the pack Dockerfiles in [`image-packs/`](../../_sandbox/sandbox/image-packs), which [`install-provider-clis.sh`](../../_tools/scripts/ci/install-provider-clis.sh) reads. `packs.integration.test.ts` keeps those pins in step with the daemon's own dependencies.
-- The nightly `provider-canary` job runs the same suites against each CLI's newest release. Red there means "do not bump yet"; it gates nothing.
+- The nightly `provider-canary` job runs the same suites against each CLI's newest release. A failure there means "do not bump yet"; it gates nothing.
 
 ## Running it
 

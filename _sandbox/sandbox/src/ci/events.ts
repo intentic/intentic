@@ -9,7 +9,7 @@ import type { FetchFn } from "./providers.js";
 // (ci/poller.ts); the previous-conclusion memory is written only here. Canceled and skipped runs produce nothing.
 
 // pipeline_broken/pipeline_fixed fire only when the previous conclusion is known; an unknown one is never guessed as
-// the opposite color, so a cold start reports no edges.
+// the opposite verdict, so a cold start reports no edges.
 const typesFor = (status: "failed" | "success", previous: "failed" | "success" | undefined): string[] =>
     status === "failed"
         ? ["pipeline_failed", ...(previous === "success" ? ["pipeline_broken"] : [])]
@@ -19,10 +19,10 @@ const sha7 = (sha: string): string => sha.slice(0, 7);
 
 const headline = (type: string, run: PipelineRun): string => {
     if (type === "pipeline_fixed") {
-        return "CI fixed (back to green)";
+        return "CI fixed (passing again)";
     }
     if (type === "pipeline_broken") {
-        return "CI just broke (was green)";
+        return "CI just broke (was passing)";
     }
     return run.status === "failed" ? "CI failed" : "CI passed";
 };
@@ -90,6 +90,8 @@ export const dispatchCiRun = async (
         await dispatchListenerMessage(services, ciMessageOf(run, type, author));
     }
     // Off the webhook's clock: main's fix agent reads the failed jobs and their logs (main-fixer.ts).
-    void runFinished(services, run, fetchFn).catch((error: unknown) => services.logger.warn({ err: error, runId: run.runId }, "ci repair: the finished run could not be read"));
+    void runFinished(services, run, fetchFn).catch((error: unknown) =>
+        services.logger.warn({ err: error, runId: run.runId }, "ci repair: the finished run could not be read"),
+    );
     return types;
 };

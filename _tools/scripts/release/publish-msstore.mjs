@@ -347,7 +347,7 @@ const verifyInstaller = async ({ packageUrl, sumsUrl, installerName, root }) => 
             );
         }
         // Authenticode, read off the PE itself. The Store signs MSIX packages and only MSIX packages: an unsigned
-        // installer is a certification refusal that arrives days after this run went green.
+        // installer is a certification refusal that arrives days after this run passed.
         try {
             execFileSync("bash", [join(root, "_tools/scripts/build/sign-windows.sh"), "--check", path], { stdio: "pipe" });
         } catch {

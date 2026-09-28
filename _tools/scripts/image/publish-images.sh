@@ -11,7 +11,7 @@
 #   docker login ghcr.io && TAGS=0.1.0 pnpm publish:images
 # TAGS is a space-separated tag list; every listed tag is pushed. On release the moving `stable` tag — the one
 # every connect script and _deploy/state-resolver/src/lib/images.ts reference — is pushed onto the new version
-# as part of that same publish, so a green pipeline IS the ship (COMPATIBILITY.md). Unpinned: no digest to
+# as part of that same publish, so a passing pipeline IS the ship (COMPATIBILITY.md). Unpinned: no digest to
 # maintain. The GHCR packages must be made public once so tenant hosts can pull them unauthenticated.
 set -euo pipefail
 . "$(dirname "$0")/../lib/repo-root.sh"

@@ -435,7 +435,7 @@ describe("agents registry", () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
         const origin = { automationId: "support", provider: "discord", channelId: "c-general", author: "alice" };
-        await beginTurn(conversations, turn({ origin, title: "alice: the build is red" }), 1_000);
+        await beginTurn(conversations, turn({ origin, title: "alice: the build fails" }), 1_000);
         expect(registry.get("c1")?.origin).toEqual(origin);
         await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         await beginTurn(conversations, turn({ prompt: "try the other fix" }), 3_000);
@@ -1635,19 +1635,19 @@ describe("agents registry", () => {
     // What a turn showed of its own work, read off its tool calls by the settle (turn-settlement.ts) and filed on the
     // card: the record the board badges instead of sending the turn back to prove anything.
     describe("the proof a turn showed", () => {
-        const RED = { at: 1_500, verification: "failing", check: "pnpm test" } as const;
-        const GREEN = { at: 3_500, verification: "verified", check: "pnpm test" } as const;
+        const FAILING = { at: 1_500, verification: "failing", check: "pnpm test" } as const;
+        const VERIFIED = { at: 3_500, verification: "verified", check: "pnpm test" } as const;
 
         it("files what the settling turn noted, and reports it on the card", async () => {
             const store = memoryStore();
             const { agents: registry, conversations } = createFleet(store, standings(), presences());
             await registry.init();
             await beginTurn(conversations, turn(), 1_000);
-            conversations.send("c1", { kind: "proof-noted", proof: RED });
+            conversations.send("c1", { kind: "proof-noted", proof: FAILING });
             await conversations.send("c1", { kind: "settle" }, 2_000).settled;
-            expect(registry.entry("c1")?.proof).toEqual(RED);
-            expect(registry.get("c1")?.proof).toEqual(RED);
-            expect(store.saved().find((entry) => entry.id === "c1")?.proof).toEqual(RED);
+            expect(registry.entry("c1")?.proof).toEqual(FAILING);
+            expect(registry.get("c1")?.proof).toEqual(FAILING);
+            expect(store.saved().find((entry) => entry.id === "c1")?.proof).toEqual(FAILING);
         });
 
         // The work on the branch has not moved, so what was last shown of it still stands.
@@ -1655,25 +1655,25 @@ describe("agents registry", () => {
             const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
             await registry.init();
             await beginTurn(conversations, turn(), 1_000);
-            conversations.send("c1", { kind: "proof-noted", proof: RED });
+            conversations.send("c1", { kind: "proof-noted", proof: FAILING });
             await conversations.send("c1", { kind: "settle" }, 2_000).settled;
 
             await beginTurn(conversations, turn({ prompt: "what did you change?" }), 3_000);
             await conversations.send("c1", { kind: "settle" }, 4_000).settled;
-            expect(registry.get("c1")?.proof).toEqual(RED);
+            expect(registry.get("c1")?.proof).toEqual(FAILING);
         });
 
         it("takes the next proof a turn shows over the last one", async () => {
             const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
             await registry.init();
             await beginTurn(conversations, turn(), 1_000);
-            conversations.send("c1", { kind: "proof-noted", proof: RED });
+            conversations.send("c1", { kind: "proof-noted", proof: FAILING });
             await conversations.send("c1", { kind: "settle" }, 2_000).settled;
 
             await beginTurn(conversations, turn({ prompt: "fix the test" }), 3_000);
-            conversations.send("c1", { kind: "proof-noted", proof: GREEN });
+            conversations.send("c1", { kind: "proof-noted", proof: VERIFIED });
             await conversations.send("c1", { kind: "settle" }, 4_000).settled;
-            expect(registry.get("c1")?.proof).toEqual(GREEN);
+            expect(registry.get("c1")?.proof).toEqual(VERIFIED);
         });
 
         // Unlike the turn's own books, the record is the card's: a restart reads it back off the entry.
@@ -1682,12 +1682,12 @@ describe("agents registry", () => {
             const first = createFleet(store, standings(), presences());
             await first.agents.init();
             await beginTurn(first.conversations, turn(), 1_000);
-            first.conversations.send("c1", { kind: "proof-noted", proof: RED });
+            first.conversations.send("c1", { kind: "proof-noted", proof: FAILING });
             await first.conversations.send("c1", { kind: "settle" }, 2_000).settled;
 
             const restarted = createFleet(store, standings(), presences());
             await restarted.agents.init();
-            expect(restarted.agents.get("c1")?.proof).toEqual(RED);
+            expect(restarted.agents.get("c1")?.proof).toEqual(FAILING);
         });
 
         it("is absent on a card no turn has proved anything on", async () => {
@@ -1822,8 +1822,8 @@ describe("agents registry", () => {
         });
 
         // Nothing checks a turn's work when it ends any more (checks run after it lands), so no failing check is ever
-        // left open on the card: a red one the turn ran is its proof, below.
-        it("never marks a turn unfinished for the check it ran red", async () => {
+        // left open on the card: a failing one the turn ran is its proof, below.
+        it("never marks a turn unfinished for a check it ran that failed", async () => {
             const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
             await registry.init();
             await beginTurn(conversations, turn(), 1_000);

@@ -14,7 +14,7 @@
 #      to run `curl ... | sh`.
 #
 # Non-fatal by design, unlike publish-github.sh. The real attestation is already published by the time this
-# runs; a failure here costs a convenience copy, not the guarantee, and taking a released version red for it
+# runs; a failure here costs a convenience copy, not the guarantee, and failing a released version for it
 # would mean re-running a publish that has already shipped.
 #   bash _tools/scripts/release/attach-provenance.sh 1.192.0 /tmp/attestation.jsonl
 set -euo pipefail

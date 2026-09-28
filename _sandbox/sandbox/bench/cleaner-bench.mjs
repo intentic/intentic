@@ -62,7 +62,7 @@ const FIXTURES = [
         raw: `${["Progress: resolved 1, reused 0, downloaded 0, added 0", "Progress: resolved 812, reused 800, downloaded 12, added 0", "Packages: +240", "++++++++++++++++++++++++++++++++++++++++", "Downloading typescript@5.9.2: 2.1 MB/2.1 MB, done", "Virtual store is at node_modules/.pnpm", "Lockfile is up to date, resolution step is skipped", "dependencies:", "+ zod 4.4.3", "Done in 4.2s"].join("\n")}\n`,
     },
     {
-        name: "vitest (green)",
+        name: "vitest (passing)",
         command: "cd /work/intentic/_sandbox/sandbox && ./node_modules/.bin/vitest run",
         exitCode: "0",
         raw: `${[...Array.from({ length: 40 }, (_, i) => `✓ src/mod-${i}.test.ts (${i % 5}) ${i}ms`), "", "Test Files  40 passed (40)", "Tests  180 passed (180)", "Duration  3.7s"].join("\n")}\n`,

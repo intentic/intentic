@@ -161,8 +161,8 @@ const repoSlug = (repo: string): string =>
 export const ciFixConversationId = (repo: string, runId: number): string => `${CI_FIX_PREFIX}${repoSlug(repo)}-${runId}`;
 
 // FNV-1a, not a cryptographic hash: nothing here is secret, the only requirement is the same failure yields the same
-// seven characters in every browser and in node. The one spelling: what main's red owes is named by it too (a failed
-// job's id, ci/main-fixer.ts).
+// seven characters in every browser and in node. The one spelling: what a failing main owes is named by it too (a
+// failed job's id, ci/main-fixer.ts).
 const FNV_OFFSET = 0x811c_9dc5;
 const FNV_PRIME = 0x0100_0193;
 export const fnvDigest = (text: string): string => {
@@ -173,12 +173,12 @@ export const fnvDigest = (text: string): string => {
     return (hash >>> 0).toString(36).padStart(7, "0");
 };
 
-// A red main-line check that no conversation still holding the work could take: keyed by the project and the moment its
-// red streak began, so every attempt at one streak shares a base and a later streak in the same project starts over.
+// A failing main-line check that no conversation still holding the work could take: keyed by the project and the moment
+// it began failing, so every attempt at one streak shares a base and a later streak in the same project starts over.
 // Seconds in base36 keep it short; the workspace root is spelled `workspace`, since its project folder is empty.
 export const LAND_FIX_PREFIX = "land-fix-";
-export const landFixConversationId = (project: string, redSince: number): string =>
-    `${LAND_FIX_PREFIX}${repoSlug(project === "" ? "workspace" : project)}-${Math.floor(redSince / 1000).toString(36)}`;
+export const landFixConversationId = (project: string, failingSince: number): string =>
+    `${LAND_FIX_PREFIX}${repoSlug(project === "" ? "workspace" : project)}-${Math.floor(failingSince / 1000).toString(36)}`;
 
 // ONE FAILURE, MANY ATTEMPTS, ONE LIVE ANSWER. The derived id above names the FAILURE; an attempt at it is a
 // conversation of its own, so starting over (another model, a clean worktree) never rewrites a record some other window

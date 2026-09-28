@@ -42,7 +42,7 @@ const { turns, turnShots, repeatedChecklists, isStreaming, showTurnStatus, strip
         conversationId: computed(() => conversation.value.conversationId),
     });
 const doomed = computed(() => conversation.value.transcript.doomed.value);
-// The red line only where it adds to the transcript: the daemon's notice already says a turn's failure.
+// The error line only where it adds to the transcript: the daemon's notice already says a turn's failure.
 const error = computed(() => unsaidError(conversation.value.error.value, messages.value));
 // The low-memory row whose message is held at the foot: that message's own line says it (ChatHeldMessages), so the row
 // is not drawn a second time above it.
@@ -130,7 +130,7 @@ provide(CHAT_SURFACE, viewingIn(useChatSurface(), viewer));
         <slot v-else name="empty" />
         <!-- The live turn before it's written anything (showTurnStatus); outside the turn sections since it belongs to no message yet. -->
         <ChatTurnStatus v-if="showTurnStatus" />
-        <!-- What the queue holds, where the message the reader just sent would have been: after everything that ran, above the red line a press on it may leave. -->
+        <!-- What the queue holds, where the message the reader just sent would have been: after everything that ran, above the error line a press on it may leave. -->
         <ChatHeldMessages />
         <p v-if="error !== undefined" class="text-xs text-danger">{{ error }}</p>
         <!-- Mounted only while open, so a chat nobody is looking through pictures in computes none of its filmstrip. -->

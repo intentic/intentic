@@ -39,7 +39,7 @@ const fakeTurn = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]):
 
 const baseLoop = (conversationId: string): Loop => ({
     conversationId,
-    goal: "the suite is green",
+    goal: "the suite passes",
     prompt: "fix the top failure",
     context: "fresh",
     output: { kind: "claim" },
@@ -77,7 +77,7 @@ test("a turn is told the goal and where its memory is, and nothing about being o
     expect(prompts).toHaveLength(2);
     for (const prompt of prompts) {
         expect(prompt).toContain("fix the top failure");
-        expect(prompt).toContain("the suite is green");
+        expect(prompt).toContain("the suite passes");
         // Without progress.md a fresh session repeats the last one's dead end.
         expect(prompt).toContain("progress.md");
         expect(prompt).not.toContain("Iteration");

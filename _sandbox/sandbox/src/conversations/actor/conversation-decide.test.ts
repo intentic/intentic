@@ -43,7 +43,7 @@ const BROADCAST: ConversationEffect[] = [{ kind: "broadcast" }];
 // What a running turn's own progress raises: a broadcast that may ride the next send.
 const PROGRESS: ConversationEffect[] = [{ kind: "progress" }];
 const JOB: AgentJob = { id: "j-1", label: "pnpm build", session: "agent-c1", startedAt: 1_000 };
-const WATCH: AgentWatch = { id: "watch-k3f9", note: "CI green", intervalSeconds: 60, deadlineAt: 9_000 };
+const WATCH: AgentWatch = { id: "watch-k3f9", note: "CI passes", intervalSeconds: 60, deadlineAt: 9_000 };
 // A person's message waiting for the next turn, and the queue holding it.
 const QUEUED = { id: "m-1", voice: "person", queuedAt: 900, turn: { conversationId: "c1", prompt: "and the docs", messageId: "m-1" } } as const;
 const WAITING = joined(NO_QUEUE, QUEUED);
@@ -630,9 +630,9 @@ const rows: readonly Row[] = [
     },
     {
         name: "a loop's standing replaces the last one on the card, and publishes it",
-        from: { ...running(), loop: { state: "running", iteration: 1, maxIterations: 5, goal: "green suite" } },
-        event: { kind: "loop-shown", loop: { state: "exhausted", iteration: 5, maxIterations: 5, goal: "green suite" } },
-        to: { ...running(), loop: { state: "exhausted", iteration: 5, maxIterations: 5, goal: "green suite" } },
+        from: { ...running(), loop: { state: "running", iteration: 1, maxIterations: 5, goal: "passing suite" } },
+        event: { kind: "loop-shown", loop: { state: "exhausted", iteration: 5, maxIterations: 5, goal: "passing suite" } },
+        to: { ...running(), loop: { state: "exhausted", iteration: 5, maxIterations: 5, goal: "passing suite" } },
         effects: BROADCAST,
     },
     {

@@ -354,9 +354,9 @@ export const dayMarksOf = (turns: readonly ChatTurn[]): Map<number, string> => {
 };
 
 /**
- * The window's red failure line, unless the transcript's last row already says it: the daemon writes every turn
+ * The window's error line, unless the transcript's last row already says it: the daemon writes every turn
  * failure into the transcript as a notice that opens with the same sentence, so drawing both prints it twice. The
- * notice is the one kept (it is the record, and survives a reload); a red line that adds words of its own still shows.
+ * notice is the one kept (it is the record, and survives a reload); an error line that adds words of its own still shows.
  */
 export const unsaidError = (error: string | null, messages: readonly TranscriptRow[]): string | undefined => {
     if (error === null || error.trim() === ``) {

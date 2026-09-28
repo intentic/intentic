@@ -69,7 +69,7 @@ export interface ActionFailure {
     readonly run?: PushRun;
 }
 
-// Thrown when a push settles red, so the batch below files its run alongside the failure message.
+// Thrown when a push settles as refused, so the batch below files its run alongside the failure message.
 class PushRefused extends Error {
     constructor(readonly run: PushRun) {
         super(refusalSummary(run));

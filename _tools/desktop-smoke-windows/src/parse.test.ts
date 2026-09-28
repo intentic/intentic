@@ -133,7 +133,7 @@ test("the seeded store is compared as the daemon reads it, not as bytes", () => 
     expect(sameStore(store, `{"tokens":[`)).toBe(false);
 });
 
-test("a title matches on its distinctive half, so reworded copy does not go red", () => {
+test("a title matches on its distinctive half, so reworded copy does not fail it", () => {
     const open = [`Intentic, Setting up your sandbox`, `Program Manager`];
     expect(titled(open, `Setting up`)).toBe(true);
     expect(titled(open, `Intentic`)).toBe(true);
@@ -212,7 +212,7 @@ test("a repetition interval is reported in the units a person reads", () => {
     expect(humanDuration(``)).toBe(``);
 });
 
-/* Whether this desktop can be driven, the check whose absence cost two red releases: the doctor looked for the foreground window in the WINDOW LIST. */
+/* Whether this desktop can be driven, the check whose absence cost two failed releases: the doctor looked for the foreground window in the WINDOW LIST. */
 
 const idle = { locked: false, foreground: undefined } as const;
 const lockScreen = { locked: false, foreground: { id: "66048", title: "Windows Default Lock Screen", app: "LockApp" } } as const;

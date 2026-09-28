@@ -2,19 +2,29 @@
     "extension": {
         "pipelines": "Pipeline'y"
     },
-    "mainRed": {
-        "failing": "Pada",
-        "fixAgent": "Agent naprawczy",
+    "mainFailure": {
+        "continueFix": "Kontynuuj naprawę",
+        "failingJobs": "Padające zadania",
+        "fixAgent": "Agent naprawczy działa",
         "fixAgentHint": "Każda porażka na {branch} trafia do tego jednego agenta, dopóki przebieg nie przejdzie.",
-        "newestRun": "najnowszy czerwony przebieg #{runId}",
-        "open": "Otwórz",
-        "openFixer": "Otwórz rozmowę agenta naprawczego",
-        "reported": "Naprawy są wyłączone, więc nikogo nie wysłano.",
+        "fixWithAgent": "Napraw agentem",
+        "handBackGone": "Agenta nie ma",
+        "handBackInterrupted": "Tura przerwana",
+        "handBackNoChange": "Brak poprawki",
+        "handBackRefused": "Agent nieosiągalny",
+        "handBackStopped": "Agent zatrzymany",
+        "handBackTurnFailed": "Tura nieudana",
+        "handBackTurns": "Brak tur",
+        "handedBack": "Oddane",
+        "handedBackHint": "Agent naprawczy oddał to Tobie. Kontynuuj, żeby oddać mu tury, albo otwórz go, żeby zobaczyć, co próbował.",
+        "moreJobs": "+{count} więcej",
+        "needsYou": "Czeka na Ciebie",
+        "openFixer": "Otwórz agenta",
+        "repairsOff": "Auto-naprawa wyłączona",
+        "repairsOffHint": "Naprawy są wyłączone, więc nie wysłano żadnego agenta.",
         "since": "od {when}",
-        "spent": "Agent naprawczy wykorzystał swoje tury albo skończył, niczego nie zmieniając.",
-        "title": "{branch} jest czerwona",
-        "unassigned": "Nie ma jeszcze na tym agenta naprawczego.",
-        "waitsForYou": "Czeka na Ciebie"
+        "title": "{branch} nie przechodzi",
+        "unassigned": "Jeszcze bez agenta naprawczego"
     },
     "pipelineDagGraph": {
         "expand": "Rozwiń",
@@ -39,11 +49,11 @@
         "jobGraph": "{headline}: graf zadań",
         "loadingJobs": "Wczytywanie zadań",
         "noJobDetailsAvailable": "Brak szczegółów zadań dla tego przebiegu.",
+        "passedAgainIn": "{branch} znowu przeszła w tym przebiegu: otwórz go, żeby sprawdzić, czy zadanie, które tu padło, w ogóle się wykonało",
         "reRun": "Uruchom ponownie",
         "setAttemptAsideStart": "Odłóż tę próbę i zacznij nową — najpierw otwiera wybór",
         "startOver": "Zacznij od nowa",
-        "supersededBy": "zastąpiony przez",
-        "wentGreenAgainIn": "{branch} znowu zrobiła się zielona w tym przebiegu: otwórz go, żeby sprawdzić, czy zadanie, które tu padło, w ogóle się wykonało"
+        "supersededBy": "zastąpiony przez"
     },
     "pipelinesSkeleton": {
         "loadingPipelines": "Wczytywanie pipeline'ów"

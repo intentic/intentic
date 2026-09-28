@@ -2,19 +2,29 @@
     "extension": {
         "pipelines": "Pipelines"
     },
-    "mainRed": {
-        "failing": "Failing",
-        "fixAgent": "Fix agent",
+    "mainFailure": {
+        "continueFix": "Continue fix",
+        "failingJobs": "Failing jobs",
+        "fixAgent": "Fix agent on it",
         "fixAgentHint": "Every failure on {branch} goes to this one agent until a run passes.",
-        "newestRun": "newest red run #{runId}",
-        "open": "Open",
-        "openFixer": "Open the fix agent's conversation",
-        "reported": "Repairs are switched off, so nobody was sent.",
+        "fixWithAgent": "Fix with agent",
+        "handBackGone": "Agent gone",
+        "handBackInterrupted": "Turn cut off",
+        "handBackNoChange": "No fix found",
+        "handBackRefused": "Agent unreachable",
+        "handBackStopped": "Agent stopped",
+        "handBackTurnFailed": "Turn failed",
+        "handBackTurns": "Out of turns",
+        "handedBack": "Handed back",
+        "handedBackHint": "The fix agent handed this back. Continue to give it its turns back, or open it to see what it tried.",
+        "moreJobs": "+{count} more",
+        "needsYou": "Needs you",
+        "openFixer": "Open agent",
+        "repairsOff": "Auto-fix off",
+        "repairsOffHint": "Repairs are switched off, so no agent was sent.",
         "since": "since {when}",
-        "spent": "The fix agent has had its turns, or it finished without changing anything.",
-        "title": "{branch} is red",
-        "unassigned": "No fix agent on it yet.",
-        "waitsForYou": "Waits for you"
+        "title": "{branch} is failing",
+        "unassigned": "No fix agent yet"
     },
     "pipelineDagGraph": {
         "expand": "Expand",
@@ -39,11 +49,11 @@
         "jobGraph": "{headline}: job graph",
         "loadingJobs": "Loading jobs",
         "noJobDetailsAvailable": "No job details available for this run.",
+        "passedAgainIn": "{branch} passed again in this run: open it to check the job that failed here even ran",
         "reRun": "Re-run",
         "setAttemptAsideStart": "Set this attempt aside and start a fresh one — opens the picker first",
         "startOver": "Start over",
-        "supersededBy": "superseded by",
-        "wentGreenAgainIn": "{branch} went green again in this run: open it to check the job that failed here even ran"
+        "supersededBy": "superseded by"
     },
     "pipelinesSkeleton": {
         "loadingPipelines": "Loading pipelines"

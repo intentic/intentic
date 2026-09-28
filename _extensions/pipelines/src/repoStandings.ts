@@ -2,17 +2,17 @@ import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
 import { failureStreaks } from "./ciStreaks";
 
 // Row order ranks how loudly a repository is asking, not discovery order:
-// 0 failing: a branch's last run is red.
+// 0 failing: a branch's last run failed.
 // 1 in flight: running or queued (queued is its own row number, not its own rank).
 // 2 warned: `hookWarning` is set; often why a repo looks silent.
-// 3 settled: has runs, nothing red or moving.
+// 3 settled: has runs, nothing failing or moving.
 // 4 silent: no runs at all.
 // Ties break by newest run, then name.
 
 export interface RepoStanding {
     readonly repo: CiRepo;
     readonly runs: readonly PipelineRun[];
-    // Branches whose last commit is red, not failed runs; multiple failures in one breakage still count as one.
+    // Branches whose last commit failed, not failed runs; multiple failures in one breakage still count as one.
     readonly failing: number;
     readonly running: number;
     // Accepted by the forge, not yet picked up by a runner; kept separate from `running`.

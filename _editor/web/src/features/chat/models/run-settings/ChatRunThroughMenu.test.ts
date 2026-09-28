@@ -41,8 +41,8 @@ const rowLabelled = (element: HTMLElement, label: string): HTMLButtonElement | u
     [...element.querySelectorAll(`button`)].find((button) => (button.textContent ?? ``).includes(label));
 
 const aLoop = (over: Partial<LoopDesign> = {}): LoopDesign => ({
-    id: `green`,
-    name: `Until green`,
+    id: `passing`,
+    name: `Until it passes`,
     context: `fresh`,
     output: { kind: `none` },
     checks: [{ kind: `command`, command: `pnpm test` }],
@@ -95,12 +95,12 @@ it(`hides the heading of a kind this workspace has none of`, () => {
 // moment of choosing, not behind a hover.
 it(`says what ends a loop and how far it may go, on the row`, () => {
     loops.value = [aLoop()];
-    const row = rowLabelled(mount(), `Until green`)!;
+    const row = rowLabelled(mount(), `Until it passes`)!;
 
     expect(text(row)).toContain(`pnpm test`);
     expect(text(row)).toContain(`8`);
     row.click();
-    expect(picked.loop).toEqual([`green`]);
+    expect(picked.loop).toEqual([`passing`]);
 });
 
 // Why anyone keeps a workflow at all: its shape and the models it pins, neither of which survives in a name.

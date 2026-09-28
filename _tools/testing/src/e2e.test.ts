@@ -21,7 +21,7 @@ test("a switch left off says so, and is not read as non-empty", () => {
 
 test("asked for, and short of a credential: stands down rather than failing", () => {
     // The bug this seam was written for. The nightly sets one switch for every tier at once, so a tier it was
-    // given no credentials for must skip: the previous spelling threw out of `beforeAll` and reddened CI.
+    // given no credentials for must skip: the previous spelling threw out of `beforeAll` and failed CI.
     stubEnv("INTENTIC_E2E", "1");
     const tier = e2eTier("intentic CLI end-to-end", { enabledBy: "INTENTIC_E2E", secrets: ["CLOUDFLARE_API_TOKEN"] });
     expect(tier.runs).toBe(false);

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # UN-SHIP A RELEASE — move stable back onto an earlier version, in one command.
 #
-# This is the counterweight to shipping on green. Releases used to sit on a `beta` lane for ~48h before a
+# This is the counterweight to shipping on a pass. Releases used to sit on a `beta` lane for ~48h before a
 # nightly job promoted them, so a bad one could be caught in the gap and simply never pointed at; the gap cost
 # every release two days and caught nothing, so it is gone (ship-stable.sh). What replaces it is this: the
 # ability to put stable back where it was, deliberately, in the seconds after a bad release is noticed.

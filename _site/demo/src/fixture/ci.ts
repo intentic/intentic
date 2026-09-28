@@ -1,9 +1,9 @@
-import type { CiMainRed, CiRepo, CiRunsResponse, PipelineJob, PipelineRun } from "@intentic/sandbox-contract";
+import type { CiMainFailure, CiRepo, CiRunsResponse, PipelineJob, PipelineRun } from "@intentic/sandbox-contract";
 import { API_MAIN_FIXER_ID, WEB_MAIN_FIXER_ID } from "./fleet";
 
 // acme-shop's two repos on two hosts (web/GitHub, api/GitLab) as one board. Runs are a healthy afternoon: one running,
-// five green, one mixed failure (`test:integration` red, deploy skipped). The whole recording adds main going red on
-// both (MAIN_RED below). GitLab jobs carry a `stage`; GitHub's don't, so the view layers them by `needs`.
+// five passing, one mixed failure (`test:integration` failed, deploy skipped). The whole recording adds main failing on
+// both (MAIN FAILING below). GitLab jobs carry a `stage`; GitHub's don't, so the view layers them by `needs`.
 
 const minutes = (count: number): number => count * 60_000;
 
@@ -57,7 +57,7 @@ const ciRuns = (now: number): PipelineRun[] => [
         createdAt: now - minutes(96),
         durationSeconds: 254,
     },
-    // The only red run on the board.
+    // The only failed run on the board.
     {
         repo: `api`,
         host: `gitlab`,
@@ -121,12 +121,12 @@ const ciRuns = (now: number): PipelineRun[] => [
     },
 ];
 
-// MAIN RED, in the whole recording only, since its two fix agents are on no other roster. The release notes' push turned
-// `web`'s main red at its unit job, and the sandbox put one fix agent on it there and then (ci/main-fixer.ts); the next
-// push to main failed too, and went to the same agent, which is working on both. On `api`, main has been red on
+// MAIN FAILING, in the whole recording only, since its two fix agents are on no other roster. The release notes' push
+// failed `web`'s main at its unit job, and the sandbox put one fix agent on it there and then (ci/main-fixer.ts); the
+// next push to main failed too, and went to the same agent, which is working on both. On `api`, main has been failing
 // test:integration for most of an hour: its fix agent read the logs, found the failure outside the code and finished
-// without changing anything, so the red waits for you.
-const mainRedRuns = (now: number): PipelineRun[] => [
+// without changing anything, so it waits for you.
+const mainFailureRuns = (now: number): PipelineRun[] => [
     {
         repo: `web`,
         host: `github`,
@@ -177,7 +177,7 @@ const mainRedRuns = (now: number): PipelineRun[] => [
     },
 ];
 
-const mainReds = (now: number): CiMainRed[] => [
+const mainFailures = (now: number): CiMainFailure[] => [
     {
         repo: `web`,
         branch: `main`,
@@ -189,7 +189,7 @@ const mainReds = (now: number): CiMainRed[] => [
             kind: `fix-up`,
             conversationId: WEB_MAIN_FIXER_ID,
             at: now - minutes(32),
-            detail: `Main went red on unit: a fix agent was started at the first failed job, and every later failure on main goes to it.`,
+            detail: `Its first failed job, unit, put a fix agent on it; every later failure goes to the same one.`,
         },
     },
     {
@@ -201,15 +201,16 @@ const mainReds = (now: number): CiMainRed[] => [
         fixer: API_MAIN_FIXER_ID,
         decision: {
             kind: `spent`,
+            reason: `no-change`,
             conversationId: API_MAIN_FIXER_ID,
             at: now - minutes(19),
-            detail: `The fix agent finished without changing anything: test:integration fails because the CI database refuses connections, which is not in the code.`,
+            detail: `Its fix agent finished without changing anything.`,
         },
     },
 ];
 
 // Every run the fixture has, whichever recording lists it: a row asks for its jobs by id, and only lists what it drew.
-const allRuns = (now: number): PipelineRun[] => [...ciRuns(now), ...mainRedRuns(now)];
+const allRuns = (now: number): PipelineRun[] => [...ciRuns(now), ...mainFailureRuns(now)];
 
 // Both forges give every job its own page, so the fixture mints one per job rather than only for the interesting ones:
 // the graph draws each job name as a link out, and a fixture without them would under-draw the view.
@@ -328,10 +329,10 @@ export const ciJobs = (repo: string, runId: number, now: number): PipelineJob[] 
     return run.host === `gitlab` ? gitlabJobs(run.createdAt, failed) : githubJobs(run.createdAt, failed, run.runId);
 };
 
-// The feature branch's failure is the newest run on its branch, so the rail badge stays lit truthfully. `reds` as a
-// current daemon always sends it, empty or not; only the whole recording's main is red.
-export const ciRunsResponse = (now: number, mainRed = false): CiRunsResponse => ({
+// The feature branch's failure is the newest run on its branch, so the rail badge stays lit truthfully. `failures` as a
+// current daemon always sends it, empty or not; only the whole recording's main is failing.
+export const ciRunsResponse = (now: number, mainFailing = false): CiRunsResponse => ({
     repos: CI_REPOS,
-    runs: mainRed ? [...ciRuns(now), ...mainRedRuns(now)].toSorted((left, right) => right.createdAt - left.createdAt) : ciRuns(now),
-    reds: mainRed ? mainReds(now) : [],
+    runs: mainFailing ? [...ciRuns(now), ...mainFailureRuns(now)].toSorted((left, right) => right.createdAt - left.createdAt) : ciRuns(now),
+    failures: mainFailing ? mainFailures(now) : [],
 });

@@ -24,7 +24,7 @@ const OPENERS: readonly RegExp[] = [
     /^(?:quick\s+(?:one|question|q)|one\s+more\s+thing)\b[\s,.:;!—–-]*/i,
 ];
 
-// Terminal punctuation followed by a break; keeps `v1.2` and `foo.ts` intact while still ending `Why is it red?`.
+// Terminal punctuation followed by a break; keeps `v1.2` and `foo.ts` intact while still ending `Why does it fail?`.
 const SENTENCE_END = /[.!?](?=\s|$)/;
 
 // Matches a first sentence reporting past work (`We just landed…`); that is scene-setting, not the ask.

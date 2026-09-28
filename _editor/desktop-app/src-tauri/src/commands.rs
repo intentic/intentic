@@ -118,7 +118,7 @@ impl From<scripts::EngineOutcome> for DockerStart {
 /// (`engine_limit_seconds` in [`DesktopInfo`]), which is the whole of what there is to say while it waits.
 ///
 /// Minutes long by design and deliberately NOT a `CommandResult`: every way this ends is an answer the screen
-/// has a sentence for, and an `Err` would collapse five of them into a red string.
+/// has a sentence for, and an `Err` would collapse five of them into one error string.
 #[tauri::command]
 pub async fn docker_start() -> DockerStart {
     tauri::async_runtime::spawn_blocking(|| {

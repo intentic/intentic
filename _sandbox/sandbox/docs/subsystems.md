@@ -107,7 +107,7 @@ into the pipeline's order by subscribing earlier. They are, in subscription orde
 | reaper | `composition.ts` | frees what a stopped owner held |
 | taint | `composition.ts` | drops the turn's outside-content taint |
 | drain | `composition.ts` (`wireReactions`) | lets out what waited in the conversation's queue |
-| held red | `bootstrap/deps-coordination.ts` | routes a main-line red that waited on this conversation |
+| main's fix agent | `bootstrap/boot-schedulers.ts` | hands a failing main to the owner when its fix agent's turn ends without a fix |
 | invariants | `bootstrap/boot-sweeps.ts` | runs the `turn-settled` self-checks |
 | child report | `bootstrap/boot-schedulers.ts` | tells a spawned child's parent it settled |
 | keep-warm | `bootstrap/boot-schedulers.ts` | arms a prompt-cache hold after a person's turn, from the event alone |

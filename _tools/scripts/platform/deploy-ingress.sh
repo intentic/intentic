@@ -6,7 +6,7 @@
 # which rolls the KOMODO STACK. The api and the web are in that stack. The ingress is not: it runs on Fly
 # (_platform/ingress/fly.toml), and nothing in this repository ever deployed it. `intentic-ingress` appeared
 # in exactly one file, the fly.toml describing it. So `ingress:latest` moved on every push to main and the
-# machines serving production kept the build they were started with; the pipeline went green each time,
+# machines serving production kept the build they were started with; the pipeline passed each time,
 # because pushing an image is what it checked.
 #
 # What that cost: hosted sandboxes had moved off tunnels onto `fly-replay` (at the time the daemon on a hosted

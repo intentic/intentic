@@ -249,7 +249,7 @@ test.each([
 // what runs after the work lands: told to every runtime alike, isolated or not, whenever the facts carry the note (when a
 // turn owes it is turn-facts.test.ts's), and never past a card that dropped it
 
-// The note as gatherTurnFacts reads it for a turn that owes it, with the main tree green.
+// The note as gatherTurnFacts reads it for a turn that owes it, with the main tree passing.
 const LANDING_NOTE = LANDING_CHECKS_NOTE;
 const QUIET: Persona = { id: "quiet", capabilities: [], briefing: { omit: ["checks"] } };
 const IN_WORKTREE: TurnContext = { ...context, localCwd: `${ROOT}-worktree`, effectiveCwd: `${ROOT}-worktree` };

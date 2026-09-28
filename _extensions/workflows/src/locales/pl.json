@@ -39,7 +39,7 @@
         "dollars": "dolarów",
         "editLoop": "Edytuj pętlę",
         "everyPublicFunctionDoc": "Każda publiczna funkcja ma komentarz dokumentacyjny wyjaśniający, po co istnieje.",
-        "fixesFailuresOneAt": "naprawia niepowodzenia po kolei, aż suita będzie zielona",
+        "fixesFailuresOneAt": "naprawia niepowodzenia po kolei, aż suita zacznie przechodzić",
         "freshContext": "Świeży kontekst",
         "howEnds": "Jak się kończy",
         "idleRoundOneChanged": "Pusta runda to taka, która niczego nie zmieniła w drzewie: to, a nie błąd, jest zwykłym sposobem, w jaki pętla schodzi na manowce.",

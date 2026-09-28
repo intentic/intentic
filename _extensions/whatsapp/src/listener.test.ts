@@ -47,7 +47,7 @@ const fakeCtx = (): { ctx: GatewayCtx; dispatched: Record<string, unknown>[]; st
     };
 };
 
-const groupMessage = (over: Partial<WaRawMessage> = {}, content: WaMessageContent = { conversation: "deploy is red again" }): WaRawMessage => ({
+const groupMessage = (over: Partial<WaRawMessage> = {}, content: WaMessageContent = { conversation: "deploy is failing again" }): WaRawMessage => ({
     key: { id: "MSG1", remoteJid: GROUP, fromMe: false, participant: "4915222222222@s.whatsapp.net" },
     pushName: "Ada",
     messageTimestamp: 1_755_102_030,
@@ -120,7 +120,7 @@ test("an unaddressed group message dispatches without a turn stream, a typing in
         type: "message",
         channelId: GROUP,
         author: { id: "4915222222222", name: "Ada" },
-        content: "deploy is red again",
+        content: "deploy is failing again",
     });
     expect(fake.dispatched[0]?.["mentioned"]).toBeUndefined();
 });

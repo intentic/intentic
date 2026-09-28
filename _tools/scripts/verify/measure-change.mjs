@@ -20,7 +20,7 @@ export const lintFindings = (output) =>
 
 /**
  * The linter over `files` (every lintable file when omitted), one way for every caller: `{ ran, findings }`. `ran` is
- * false when the linter could not run at all (no pnpm, or a red exit with no finding in it), which is not a pass.
+ * false when the linter could not run at all (no pnpm, or a failing exit with no finding in it), which is not a pass.
  */
 export const runLint = (root, files) => {
     if (files !== undefined && files.length === 0) {

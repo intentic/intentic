@@ -6,7 +6,7 @@
 #
 # Nothing about that failure is about this repository, so a re-run would have fixed it — which is the whole
 # argument for retrying here instead: a transient network timeout should cost seconds, not a human noticing a
-# red release an hour later and pressing the button.
+# failed release an hour later and pressing the button.
 #
 # A CREDENTIAL REJECTION MUST STILL FAIL FAST, so the retry is not blind. `docker login` answers a bad token
 # with `unauthorized`/`denied` and a good one that cannot be reached with a timeout or a 5xx, and only the

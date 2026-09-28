@@ -15,7 +15,7 @@ flowchart LR
 - Microsoft signs MSIX packages, not EXE installers, and an unsigned installer fails certification days later. The script downloads the installer, checks it against `SHA256SUMS` and refuses it without an Authenticode signature ([windows-code-signing.md](windows-code-signing.md)).
 - The script writes two parts of the listing: the package, and "What's new" built from the release's `## Breaking changes` and `## What's new` sections. Everything else is typed into the dashboard from [`STORE-LISTING.md`](../../_editor/desktop-app/STORE-LISTING.md).
 - The Store takes one submission at a time. A release cut while another is in certification defers with a warning, and the next release carries it. Re-running at the same tag finishes a run that staged the package but did not submit. A tag older than the draft is refused.
-- With any of the five settings missing, the run skips with a warning and the release stays green.
+- With any of the five settings missing, the run skips with a warning and the release still passes.
 
 ## One-time setup
 

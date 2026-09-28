@@ -25,7 +25,7 @@ flowchart LR
   conversation's worktree (or the main tree, or a remote runner), and `conversations/land/land.ts` lands the result as
   uncommitted changes. Nothing checks the turn when it ends or its work after it lands: the dependency reconciler
   (`workspace/deps/reconcile-deps.ts`) installs when a land moved a manifest, and CI checks what the owner pushes.
-  When main's CI goes red, `ci/main-fixer.ts` gives the red streak one fix agent and sends it every later failure.
+  When main's CI fails, `ci/main-fixer.ts` gives the failing streak one fix agent and sends it every later failure.
 - Archive is sticky: only a person's message un-archives a conversation. A turn the daemon starts itself (a retry,
   a nudge, an automation's thread) is refused on an archived one (`conversations/actor/conversation-decide.ts`), and a
   thread whose conversation was archived opens a fresh one instead.

@@ -1398,12 +1398,12 @@
             "fixingWhatLandBroke": "Arreglando lo que rompió su integración",
             "resolvingLandConflict": "Resolviendo el conflicto de integración",
             "sentByAppLanding": "Enviado por la aplicación; integrar este trabajo fue rechazado",
-            "sentBySandboxLand": "Enviado por el sandbox; integrar su trabajo dejó en rojo la comprobación del árbol principal",
+            "sentBySandboxLand": "Enviado por el sandbox; integrar su trabajo hizo fallar la comprobación del árbol principal",
             "sentBySandboxTurn": "Enviado por el sandbox; ese turno terminó sin verificar",
-            "fixingRedMainLine": "Arreglando una línea principal en rojo",
-            "startedBySandboxRedMain": "Iniciado por el sandbox: la comprobación de main se puso en rojo tras integrarse trabajo, y ninguna conversación que tuviera ese trabajo pudo encargarse",
-            "mainRedOnItsWork": "Avisado de que main se puso en rojo con su trabajo",
-            "sentBySandboxHeld": "Enviado por el sandbox: la comprobación de main se puso en rojo en lo que esta conversación aún está trabajando",
+            "fixingFailingMainLine": "Arreglando una línea principal que falla",
+            "startedBySandboxFailingMain": "Iniciado por el sandbox: la comprobación de main falló tras integrarse trabajo, y ninguna conversación que tuviera ese trabajo pudo encargarse",
+            "mainFailedOnItsWork": "Avisado de que main falló con su trabajo",
+            "sentBySandboxHeld": "Enviado por el sandbox: la comprobación de main falló en lo que esta conversación aún está trabajando",
             "fixingPushFindings": "Arreglando lo que encontraron las comprobaciones del push",
             "sentBySandboxPush": "Enviado por el sandbox, a partir de lo que encontraron las comprobaciones del push",
             "fixingFailedCi": "Arreglando una ejecución de CI fallida",
@@ -1698,7 +1698,7 @@
         },
         "agentChecks": {
             "repairMainCi": "Reparar main cuando falle su CI",
-            "repairMainCiNote": "El primer job que falla en main arranca un agente de corrección, y cada fallo posterior va a él hasta que main vuelva a estar en verde. Cuando se le acaben los turnos, o no cambie nada, te lo deja a ti. Una ejecución que falló por las propias máquinas de CI se relanza una vez en su lugar.",
+            "repairMainCiNote": "El primer job que falla en main arranca un agente de corrección, y cada fallo posterior va a él hasta que main vuelva a pasar. Cuando se le acaben los turnos, o no cambie nada, te lo deja a ti. Una ejecución que falló por las propias máquinas de CI se relanza una vez en su lugar.",
             "mainCi": "CI de main"
         },
         "agentClock": {

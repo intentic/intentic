@@ -52,7 +52,7 @@ const selected = CHECKS.filter(
         (paths === undefined || check.scoped === true),
 );
 // Nothing to say rather than nothing wrong: a per-edit run on a file no scoped check reads must be silent, and it must
-// not print a green line claiming the tree was measured.
+// not print a passing line claiming the tree was measured.
 if (paths !== undefined && (paths.length === 0 || selected.length === 0)) {
     process.exit(0);
 }
@@ -102,7 +102,7 @@ if (json) {
     if (failed.length > 0) {
         // Named, because the finding is in the file just edited but not necessarily on the line just written: a
         // standing violation in a file a turn touches surfaces here too, and that is worth knowing rather than
-        // worth hiding. Fixing either costs a line now and a red pipeline tomorrow.
+        // worth hiding. Fixing either costs a line now and a failed pipeline tomorrow.
         process.stderr.write(`\nIn the file just edited. Fix it here, or it is found on main by \`nightly.yml\`'s tidy job, where no turn can be sent back for it.\n`);
         process.exitCode = 1;
     }

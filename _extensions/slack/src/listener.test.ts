@@ -52,7 +52,7 @@ const messageEvent = (over: Partial<SlackMessage> = {}): SlackMessage => ({
     channel: "C1",
     channel_type: "channel",
     user: "U1",
-    text: "deploy is red again",
+    text: "deploy is failing again",
     ts: "1755102030.001900",
     ...over,
 });
@@ -84,7 +84,7 @@ test("a plain channel message dispatches without a mention and without holding a
         type: "message",
         channelId: "C1",
         author: { id: "U1", name: "Ada" },
-        content: "deploy is red again",
+        content: "deploy is failing again",
         extra: { threadTs: "1755102030.001900", teamId: "T1" },
     });
     expect(dispatched[0]).not.toHaveProperty("mentioned");

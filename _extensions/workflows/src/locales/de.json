@@ -36,7 +36,7 @@
         "dollars": "Dollar",
         "editLoop": "Schleife bearbeiten",
         "everyPublicFunctionDoc": "Jede öffentliche Funktion hat einen Doc-Kommentar, der erklärt, warum es sie gibt.",
-        "fixesFailuresOneAt": "repariert Fehlschläge einen nach dem anderen, bis die Suite grün ist",
+        "fixesFailuresOneAt": "repariert Fehlschläge einen nach dem anderen, bis die Suite besteht",
         "freshContext": "Frischer Kontext",
         "howEnds": "Wie sie endet",
         "idleRoundOneChanged": "Eine Leerrunde ist eine, die nichts im Baum geändert hat: das, nicht ein Fehler, ist, wie eine Schleife meist schiefgeht.",

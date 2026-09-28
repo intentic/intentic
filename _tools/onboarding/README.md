@@ -14,7 +14,7 @@ flowchart LR
 ```
 
 - One journey runs per Playwright project (`compose`, `ic`); a provisioner in `src/provisioners/` owns only the step of getting a connected sandbox. "Connected" means the platform's sandbox row records a sighting from this run (`announce.ts`).
-- Runs in the nightly workflow. It stands down with a reason, and stays green, when not asked for (`INTENTIC_E2E_ONBOARDING`), when there is no Docker, or when no `ic` binary can be found or built. An `IC_BIN` that names no executable fails the lane instead.
+- Runs in the nightly workflow. It stands down with a reason, and still passes, when not asked for (`INTENTIC_E2E_ONBOARDING`), when there is no Docker, or when no `ic` binary can be found or built. An `IC_BIN` that names no executable fails the lane instead.
 - Sign-in is seeded: `seed.ts` writes a session row, a cookie and an unsigned Google token. `SIGN_IN_IS_SEEDED` marks the part a real Google sign-in would still have to cover.
 - The world lives on `127.0.0.1` ports because the SPA's CSP allows plain http only there, so the Docker daemon must run where the test process runs. Inside a container, give it a dockerd of its own; `requireLoopback` says so when it cannot reach a published port.
 - The api and SPA speak HTTPS with a certificate minted per run that nothing verifies: global setup turns Node's certificate check off and Playwright ignores HTTPS errors. A probe added without the same bypass gets a certificate refusal, which is easy to misread as "the platform is down".

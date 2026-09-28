@@ -20,7 +20,7 @@
 #
 # NOT BAKED INTO ci-base, unlike every other tool the jobs use, and the reason is the bootstrap edge ci.yml's
 # header describes: a pull request that adds a tool to ci-base cannot use it, because the image is built there
-# but only pushed from main. A linter that goes red on the very pull request adding it is a linter nobody
+# but only pushed from main. A linter that fails the very pull request adding it is a linter nobody
 # lands. Two pinned binaries into the shared cache cost ~1s warm and a few seconds cold, once per runner.
 #
 # THE PINS ARE BYTES, NOT TAGS. Each tool is fetched at an exact version and checked against a sha256 before it

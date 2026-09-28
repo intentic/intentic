@@ -29,8 +29,8 @@ export const inFlightNote = (all: readonly PipelineRun[]): string | undefined =>
 };
 
 // THE TILE'S TWO READINGS, kept apart. Broken branches are the count and the rail's only `danger` tone, cleared when CI
-// is (a later passing commit), never by opening the view. In flight is the running mark, independent of it: a red branch
-// with its fix already re-running is the ordinary case, and the tile says both at once rather than picking the louder one.
+// is (a later passing commit), never by opening the view. In flight is the running mark, independent of it: a failing
+// branch with its fix already re-running is the ordinary case, and the tile says both at once rather than picking the louder one.
 export const attentionBadge = (all: readonly PipelineRun[]): ViewBadge | undefined => {
     const streaks = failureStreaks(all);
     const running = inFlightNote(all);

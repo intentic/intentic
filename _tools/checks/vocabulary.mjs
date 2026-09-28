@@ -24,6 +24,10 @@ const EXEMPT = [
         why: "every shape a stored document has had, generated from release history: the old names are what it records",
     },
     { test: (path) => path === "docs/architecture/index.json", why: "generated from the package READMEs, not written by hand" },
+    {
+        test: (path) => path === "_shared/sandbox-contract/src/events/land-breakage.ts",
+        why: "the exact openings of two retired prompts that stored records hold; the chat recognises them byte for byte, so their words cannot change",
+    },
 ];
 const exemptFor = (path) => EXEMPT.find((rule) => rule.test(path))?.why;
 

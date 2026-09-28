@@ -190,7 +190,7 @@
         // Named apart from `e2e` for the reason the two tasks below are: it asks for a provisioning of its own,
         // the provider CLIs at their pinned versions (_tools/scripts/ci/install-provider-clis.sh). What it does
         // NOT ask for is a credential or a network: each turn drives the real CLI against a local scripted
-        // model (@intentic/fake-model), so it is deterministic, costs nothing, and cannot be reddened by a
+        // model (@intentic/fake-model), so it is deterministic, costs nothing, and cannot fail because of a
         // vendor's outage. That is precisely what makes it safe to block a release on, where the tiers that
         // spend real tokens are not.
         "e2e:providers": {

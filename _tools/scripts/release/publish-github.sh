@@ -17,7 +17,7 @@
 # keeping the correction of, because a PAT is the one thing that would have made `on: push: tags` work and the
 # note read as if it had been supplied. Locally, without a token, this SKIPS so a release dry-run stays
 # runnable — but IN CI a missing token is fatal. It has to be: a quiet skip on a real release leaves a tagged
-# version whose installers nobody can download and still reports green, which is the shape of how
+# version whose installers nobody can download and still reports a pass, which is the shape of how
 # v1.177.0-v1.179.0 were tagged with no packages behind them.
 #   bash _tools/scripts/release/publish-github.sh 1.177.0
 set -euo pipefail

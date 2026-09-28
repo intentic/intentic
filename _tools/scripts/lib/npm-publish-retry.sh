@@ -39,7 +39,7 @@
 # ONLY THE FAR SIDE'S OWN STATE EARNS A SECOND ATTEMPT. A package whose trusted publisher was never registered,
 # a tarball the registry rejects, the 422 a self-hosted runner earns for its builder id (publish-npm.sh asserts
 # that one before the first pack) — every one of those must fail on the FIRST attempt, because three silent
-# backoffs before the same error is how a red release becomes a slow red release that reads like a flake. So
+# backoffs before the same error is how a failed release becomes a slow failed release that reads like a flake. So
 # the decision is made on the command's own output, never on its exit status, which is 1 for all of them alike.
 #
 # BOTH DIRECTIONS ARE ASSERTED, against the text 1.243.0 actually printed, by the `publish-retry` check

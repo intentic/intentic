@@ -40,7 +40,7 @@ const read = () => {
 
 const report = read();
 // Neither of these is a finding about the tree, so neither is reported as one: this check did not look. Saying so in
-// its own voice is what keeps a broken tool from reading as an untidy repository — the shape that reddened
+// its own voice is what keeps a broken tool from reading as an untidy repository — the shape that failed
 // `nightly.yml`'s tidy job on a tree with nothing wrong in it.
 if (report === "no-pnpm") {
     cannotMeasure("pnpm is not on PATH, so the lockfile's peers went unread: the job running this check has to install pnpm before it");

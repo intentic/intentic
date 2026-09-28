@@ -196,7 +196,7 @@ const publish = await fetch(`${api}:publish`, {
 });
 const published = await json(publish);
 if (!publish.ok) {
-    // If the server committed before the response was lost, the status check is authoritative and the run stays green.
+    // If the server committed before the response was lost, the status check is authoritative and the run still passes.
     if (finishIfSettled(await fetchStatus())) {
         process.exit(0);
     }

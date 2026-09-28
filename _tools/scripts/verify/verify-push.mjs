@@ -2,7 +2,7 @@
 // THE PUSH CHECK: what a range of commits broke that a checkout can tell in seconds. CI's `quick` job runs it on every
 // push (`--base <sha>`, the commit that push is measured against), and `pnpm verify:push` runs it by hand, the branch
 // against where it left its upstream. Nothing runs it on the way out: no check holds back a land, a commit or a push in
-// this repository, and when main goes red the sandbox's one CI fix agent takes the failed job's log
+// this repository, and when main's CI fails the sandbox's one CI fix agent takes the failed job's log
 // (_sandbox/sandbox/src/ci/main-fixer.ts).
 //
 // Every step runs even after one fails, so whoever reads it gets all of it at once (lib/steps.mjs), cheapest first:
@@ -120,7 +120,7 @@ const lockfileRewriteOnly = () => {
 // question, of the whole range.
 //
 // Judged against the base rather than failed wholesale, for the reason the tidy job's own comment gives: a gate that
-// fails a push for state nobody in it produced teaches everyone that red means nothing. What fails is the lines the range
+// fails a push for state nobody in it produced teaches everyone that a failure means nothing. What fails is the lines the range
 // ADDED (turn-findings.mjs); what was already standing is named and charged to no one. The judging is measure-change.mjs's
 // (judgeTidy), `Allow:` trailers in the range included.
 {

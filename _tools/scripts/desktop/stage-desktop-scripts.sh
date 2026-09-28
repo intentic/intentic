@@ -10,7 +10,7 @@
 # carry — and every one of them shipped, inside an installer, as a script the app spawns by basename and
 # nobody can review at its source path. That is not hypothetical: release 1.206.0's windows-build died at
 # verify-desktop-bundle.sh with `stale connect-host.ps1 is bundled but is not committed`, on a checkout that
-# had built three green jobs an hour earlier. The tree also MOVES mid-build — job 92707727494 packed a .deb
+# had built three passing jobs an hour earlier. The tree also MOVES mid-build — job 92707727494 packed a .deb
 # and a .rpm two seconds apart from two different versions of cleanup.sh.
 #
 # So the glob now points here, and this directory is rebuilt from `git archive HEAD` on the way in. What ships

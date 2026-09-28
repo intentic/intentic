@@ -56,9 +56,9 @@ export function usePipelines() {
     return {
         repos: computed(() => query.data.value?.repos ?? []),
         runs: computed(() => query.data.value?.runs ?? []),
-        // Main-line branches red right now, each with the one fix agent the daemon put on it; absent from a daemon that
-        // keeps none, which reads the same as none being red.
-        reds: computed(() => query.data.value?.reds ?? []),
+        // Main-line branches failing right now, each with the one fix agent the daemon put on it; absent from a daemon
+        // that keeps none, which reads the same as none failing.
+        failures: computed(() => query.data.value?.failures ?? []),
         error: computed(() => query.error.value?.message),
         // isPending, not isLoading: true until the first response, including while `enabled` still gates the fetch.
         isPending: query.isPending,

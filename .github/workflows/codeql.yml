@@ -40,7 +40,7 @@ jobs:
       # is discarded.
       security-events: write
     strategy:
-      # One language failing must not cancel the others' results — a red Rust leg still leaves a complete
+      # One language failing must not cancel the others' results — a failed Rust leg still leaves a complete
       # TypeScript analysis worth having.
       fail-fast: false
       matrix:

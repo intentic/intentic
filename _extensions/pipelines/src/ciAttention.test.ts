@@ -1,7 +1,7 @@
 import type { PipelineRun } from "@intentic/sandbox-contract";
 import { attentionBadge, inFlightNote } from "./ciAttention";
 
-// The rail's other sentence: not "is this branch red" (ciStreaks) but "is CI doing anything right now". It must count
+// The rail's other sentence: not "is this branch failing" (ciStreaks) but "is CI doing anything right now". It must count
 // the way the board's own tally counts, or the tile and the header it opens would disagree about the same runs.
 
 const run = (runId: number, status: PipelineRun["status"]): PipelineRun => ({

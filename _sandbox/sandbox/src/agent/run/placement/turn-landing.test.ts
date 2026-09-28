@@ -29,7 +29,7 @@ const allow: Rule = {
     enabled: true,
 };
 // Written when a check could still hold work; a turn that reaches its land always ended clean now, so this matches none.
-const allowRed: Rule = { ...allow, id: "allow-red", label: "Land red work", when: { outcome: ["checks-failed"] } };
+const allowFailing: Rule = { ...allow, id: "allow-failing", label: "Land failing work", when: { outcome: ["checks-failed"] } };
 
 // No check takes part: nothing checks the work when it lands, and CI checks what the owner pushes.
 describe("a land decision", () => {
@@ -51,8 +51,8 @@ describe("a land decision", () => {
             },
         ],
         [
-            "under a rule naming the retired red outcome is decided by the rest of the table",
-            [allowRed, hold],
+            "under a rule naming the retired checks-failed outcome is decided by the rest of the table",
+            [allowFailing, hold],
             undefined,
             {
                 mode: "measure",
@@ -62,7 +62,7 @@ describe("a land decision", () => {
                 ],
             },
         ],
-        ["with the override on lands past a rule naming the retired red outcome", [allowRed], true, { mode: "check", writes: [] }],
+        ["with the override on lands past a rule naming the retired checks-failed outcome", [allowFailing], true, { mode: "check", writes: [] }],
     ];
     test.each(decisions)("%s", (_case, rules, override, decision) => {
         expect(landingDecision(rules, { repos: ["root"], outcome: "clean" }, override)).toStrictEqual(decision);

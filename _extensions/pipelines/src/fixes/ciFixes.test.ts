@@ -41,7 +41,7 @@ test("the same run number in another repo is another conversation", () => {
     expect(fixes.has(api)).toBe(false);
 });
 
-/* THE READING THAT KEEPS A BOARD FROM STARTING A SECOND AGENT ON ONE BREAKAGE: the newest red row has no fix. */
+/* THE READING THAT KEEPS A BOARD FROM STARTING A SECOND AGENT ON ONE BREAKAGE: the newest failed row has no fix. */
 test("a branch's ongoing fix is carried to the branch's other runs", () => {
     const older = run({ runId: 41, createdAt: 100 });
     const newer = run({ runId: 43, createdAt: 300 });

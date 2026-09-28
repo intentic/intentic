@@ -73,7 +73,7 @@ jobs:
   #                                 API version move a field under it.
   #
   # A tier this job has no credentials for stands down and names the variable it wanted, in the suite title
-  # the runner prints beside its skip marker. So green here means the UNLOCKED tiers passed and the log says which those
+  # the runner prints beside its skip marker. So a pass here means the UNLOCKED tiers passed and the log says which those
   # were — and widening the run is a matter of adding the secret, never of editing this file. What a missing
   # credential must not do is fail the job.
   #
@@ -132,11 +132,11 @@ jobs:
       #
       # This job used to pass `SANDBOX_E2E_IMAGE=ghcr.io/intentic/sandbox:latest` on the strength of the word
       # "freshly". That tag moves in ONE place — ci.yml's `images` job, gated on `verify-core` passing on a push
-      # to main — so a red main FREEZES it, and this suite then asserts today's contract against whatever daemon
+      # to main — so a failing main FREEZES it, and this suite then asserts today's contract against whatever daemon
       # last passed. On the night this was written that daemon was 19 hours old: the two automation specs failed
       # on a `webhookToken` the published image had never heard of, because door tokens landed at 11:04 and the
-      # last green main was 00:12 (run 34053040446; `grep -r webhookToken /opt/sandbox` in that image finds
-      # nothing). The suite was right, the image was old, and no commit could have turned the job green.
+      # last passing main was 00:12 (run 34053040446; `grep -r webhookToken /opt/sandbox` in that image finds
+      # nothing). The suite was right, the image was old, and no commit could have made the job pass.
       #
       # Building it here is the harness's own default when the variable is empty (e2e-harness.ts), the path every
       # developer already runs, and the same trees the images job publishes — the artifact, one build earlier. It
@@ -179,7 +179,7 @@ jobs:
   # THROUGH provisioning into a daemon the wizard's own instructions started, and until this ran, nothing did:
   # the tier was written, documented as a release gate, and called by no workflow at all. What lived in that
   # gap is worth naming — reachability moved to intentic's own edge, ic stopped passing the two values a daemon
-  # dials with, every layer's own tests stayed green, and four days of installs came up healthy, registered,
+  # dials with, every layer's own tests kept passing, and four days of installs came up healthy, registered,
   # and reachable by nobody.
   #
   # Nightly rather than per-push: it builds the api and web images, pulls a sandbox image and boots a real box.
@@ -228,7 +228,7 @@ jobs:
       # The freshly published image the box comes up on, the same one the desktop tiers run.
       SANDBOX_E2E_IMAGE: ghcr.io/intentic/sandbox:latest
       # Not $HOME — ci.yml's platform deploy job carries the full account of why a browser left in a job
-      # container's home directory reddens unrelated suites on the same runner hours later.
+      # container's home directory makes unrelated suites fail on the same runner hours later.
       PLAYWRIGHT_BROWSERS_PATH: /ci-cache/ms-playwright
       # WHERE THIS JOB'S DAEMON LISTENS, AND DELIBERATELY NOT SPELLED `DOCKER_HOST`. The name is the fix: the
       # runner drives this container with the HOST's docker client (`docker exec <container> …`, once per step,
@@ -279,7 +279,7 @@ jobs:
           # world's own postgres, api and web, which come up perfectly. The first one that does ask dies on
           #   cannot enter cgroupv2 "/sys/fs/cgroup/docker" with domain controllers -- it is in threaded mode
           # That is runs 34575319384 and 34645853155, and it reads as an `ic sandbox connect` bug: nine specs
-          # green, the whole [compose] lane green, and the [ic] lane red on the single container in this journey
+          # passing, the whole [compose] lane passing, and the [ic] lane failing on the single container in this journey
           # that carries `--memory`. Nothing in the message points at this step.
           #
           # The fix is the official dind entrypoint's (moby's hack/dind): move the tasks into a child cgroup so
@@ -379,7 +379,7 @@ jobs:
       # Bound the store the volume above keeps: every run tags a fresh api and web image over yesterday's, and
       # the ones it displaces are dangling layers nothing else evicts. Same rule and the same reason as the
       # turbo cache prune in the pnpm-setup composite — a directory that outlives the job needs a job to bound
-      # it. `always()`, because a failed run leaves exactly as much behind as a green one — and `|| true`
+      # it. `always()`, because a failed run leaves exactly as much behind as a passing one — and `|| true`
       # because the one failure that reaches here with no daemon to talk to is the daemon step itself, which
       # has already said so.
       #
@@ -437,7 +437,7 @@ jobs:
   # rather than a runtime hook the released app would also have (verify-desktop-update.sh says why).
   #
   # This is the tier that would have caught the whole of it: for every release up to v1.213.0 the app checked
-  # once, said "it installs the next time you quit", and installed nothing on any path — green the entire time,
+  # once, said "it installs the next time you quit", and installed nothing on any path — passing the entire time,
   # because nothing anywhere asserted the outcome.
   desktop-update:
     if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'desktop-update' }}
@@ -572,7 +572,7 @@ jobs:
   # (@intentic/constants' INSTALL_SCRIPTS), and every static check of that table passes while they are out of
   # step: the rename in b266789b5 shipped in the app, the site did not deploy for eight days, and
   # https://intentic.dev/device.ps1 — the exact string the "Connect this device" dialog told people to run —
-  # answered with the 404 page relabelled `text/plain`. Green repository, broken product. The script says what
+  # answered with the 404 page relabelled `text/plain`. Passing repository, broken product. The script says what
   # it asserts and why it stops short of a byte-comparison.
   #
   # A schedule is the right trigger for the same reason images-public is scheduled rather than gated: this
@@ -642,10 +642,10 @@ jobs:
   # This is the job that changes when we find out. Every provider break this repository has shipped was
   # discovered by a user after a pin bump landed: the config key that became a table, the tool that started
   # fabricating consent. Running the same assertions against `@latest` moves that discovery to the night a
-  # vendor publishes, which is before anyone has decided to bump. Red here does not mean the product is broken
+  # vendor publishes, which is before anyone has decided to bump. A failure here does not mean the product is broken
   # — it means DO NOT BUMP YET, and it names which assertion stops holding.
   #
-  # It is deliberately NOT a gate on anything. Nothing in this repository ships `@latest`, so a red canary must
+  # It is deliberately NOT a gate on anything. Nothing in this repository ships `@latest`, so a failing canary must
   # never be able to stop a release that is pinned to a version still passing in CI.
   provider-canary:
     if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'provider-canary' }}
@@ -658,7 +658,7 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     timeout-minutes: 30
-    # Reports; it does not gate — see above. The nightly's own summary is where a red canary is read.
+    # Reports; it does not gate — see above. The nightly's own summary is where a failing canary is read.
     continue-on-error: true
     env:
       # Not the shared /ci-cache prefix the pinned gate uses: installing @latest there would leave the next
@@ -672,15 +672,15 @@ jobs:
           clean: false
       - uses: ./.github/actions/pnpm-setup
       - run: bash _tools/scripts/ci/install-provider-clis.sh --latest
-      # The versions that were actually tested, printed into the log: a red canary is only actionable if the
-      # run says which release it was red against.
+      # The versions that were actually tested, printed into the log: a failing canary is only actionable if the
+      # run says which release it failed against.
       - run: pnpm e2e:providers
 
   # THE UPDATE PROMISES, DRILLED ON A REAL SANDBOX — verify-update-survival.sh connects a sandbox on the
   # published stable image, plants sentinels in /work and /history, then updates, rolls back, forces a FAILED
   # update (a build whose daemon cannot boot) and an update that fails its PROBATION (a build that crashes once up,
   # which `ic sandbox watch` must undo by itself), asserting after each that the daemon is healthy, the files
-  # survived, and that the parked container came back exactly as it was found. A red run here means the product's
+  # survived, and that the parked container came back exactly as it was found. A failed run here means the product's
   # central promise — "your files are never touched; the worst outcome of an update is the sandbox you already
   # had" — broke, before any user felt it. Nightly because it pulls two full sandbox images into a clean dind
   # host; ci-desktop for the same reason ic-check uses it: ic builds with the baked cargo.
@@ -717,7 +717,7 @@ jobs:
   # Bubblewrap that began requiring a manifest key wrote `splashScreenFadeOutDuration: ,` into build.gradle,
   # and a Capacitor that moved to Swift-package wiring stopped writing the App.xcworkspace both mobile
   # workflows opened. Under the path filter alone nothing looks until someone touches a shell, so the shells
-  # sat broken for a day across three red runs on pushes that changed neither (the CI failure
+  # sat broken for a day across three failed runs on pushes that changed neither (the CI failure
   # audit's class F, in history before 2fed33289). Here it costs nobody's push.
   #
   # A CALL, not a copy: mobile.yml owns the two jobs and gained `workflow_call` for this. It runs on
@@ -737,16 +737,16 @@ jobs:
   # after it could not see from its worktree.
   #
   # So the refusal lives HERE, where it costs nobody anything: one commit, read on a GitHub-hosted runner, with
-  # no `needs` in either direction. Nothing in this file waits on it, no push waits on it, and a red here is a
+  # no `needs` in either direction. Nothing in this file waits on it, no push waits on it, and a failure here is a
   # message about the tree on main rather than a refusal of whoever pushed last. `--gate=tidy` runs exactly the
   # checks the other runs downgrade to warnings, so the pair cannot drift: one manifest, two exit codes.
   #
-  # THAT USED TO BE THE ONLY PLACE A TIDY RULE REFUSED, and it made this job red on 7 of its first 10 scheduled
+  # THAT USED TO BE THE ONLY PLACE A TIDY RULE REFUSED, and it made this job fail on 7 of its first 10 scheduled
   # runs. Every anchor it printed traced to one feature commit a day or two old — a `/work` spelled in a test
   # (a533ac08d), a `bg-[#4c4c58]` in a new component (58458710b), a bare `<button>` (821d0951b) — one line, in
   # one file, written by one turn that was never told. What that turn saw of it was a single line naming the
   # check ids and saying they were "not what holds a turn", and the push said the same. A gate that only refuses
-  # where nobody can act teaches everyone reading it that red means nothing, which is this repository's own
+  # where nobody can act teaches everyone reading it that a failure means nothing, which is this repository's own
   # finding about a different gate.
   #
   # TWO moments upstream now answer for the part that HAS an author, so what reaches this job is the part that does
@@ -757,11 +757,11 @@ jobs:
   #
   # The second was the missing one, and its absence is most of this job's history. A worktree measured against its
   # own HEAD is a tree that never becomes main, so a rule that COUNTS composes wrongly across conversations: two turns
-  # that each add one file to a directory of thirty are both green on their own and over the limit once they land
+  # that each add one file to a directory of thirty both pass on their own and are over the limit once they land
   # together, and neither could have seen it. That is 13 of this job's 14 failures. The pushed range is the first
   # tree that becomes main, which is why the failure sits there.
   #
-  # A red here should now mean a standing cost nobody caused — a directory the tree grew into, a link a rename
+  # A failure here should now mean a standing cost nobody caused — a directory the tree grew into, a link a rename
   # broke, a package that went private — which is what this job was always for and could not be while it was also
   # the only net under every new line.
   #
@@ -788,7 +788,7 @@ jobs:
       # THE BINARY, NOT AN INSTALL. A hosted image ships node, npm and yarn and no pnpm, and one check in this
       # gate (`peer-deps`) asks pnpm to read the lockfile — `pnpm peers check --lockfile-only`, no resolution and
       # no node_modules. Without this step that check cannot run at all and reports the shape it expected as
-      # missing, which is what reddened this job with nothing wrong in the tree. `packageManager` in package.json
+      # missing, which is what made this job fail with nothing wrong in the tree. `packageManager` in package.json
       # pins the version, so this is the same pnpm every other job runs.
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       # Checkout only: no repository install, seconds of work. Same runner as ci-audit for the same reason —
@@ -800,7 +800,7 @@ jobs:
   # this job's summary: the extraction the CI failure audit was written from (runs → jobs → failed step →
   # first error line), run every night instead of reconstructed in a two-week retrospective. Reads the Actions
   # API with the token's read scope and nothing else, so a GitHub-hosted runner is the right place for it and
-  # the self-hosted fleet is never in its path. A red week is a table here, never a failure of this job.
+  # the self-hosted fleet is never in its path. A week of failures is a table here, never a failure of this job.
   ci-audit:
     if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'ci-audit' }}
     runs-on: ubuntu-latest

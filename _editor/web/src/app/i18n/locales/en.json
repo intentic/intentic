@@ -1471,12 +1471,12 @@
             "fixingWhatLandBroke": "Fixing what its land broke",
             "resolvingLandConflict": "Resolving the land conflict",
             "sentByAppLanding": "Sent by the app, landing this work refused",
-            "sentBySandboxLand": "Sent by the sandbox, its land turned the main tree's check red",
+            "sentBySandboxLand": "Sent by the sandbox, its land made the main tree's check fail",
             "sentBySandboxTurn": "Sent by the sandbox, that turn ended unverified",
-            "fixingRedMainLine": "Fixing a red main line",
-            "startedBySandboxRedMain": "Started by the sandbox: main's check went red after work landed, and no conversation holding that work could take it",
-            "mainRedOnItsWork": "Told main went red on its work",
-            "sentBySandboxHeld": "Sent by the sandbox: main's check went red on what this conversation is still working on",
+            "fixingFailingMainLine": "Fixing a failing main line",
+            "startedBySandboxFailingMain": "Started by the sandbox: main's check failed after work landed, and no conversation holding that work could take it",
+            "mainFailedOnItsWork": "Told main failed on its work",
+            "sentBySandboxHeld": "Sent by the sandbox: main's check failed on what this conversation is still working on",
             "fixingPushFindings": "Fixing what the push checks found",
             "sentBySandboxPush": "Sent by the sandbox, from what the push checks found",
             "fixingFailedCi": "Fixing a failed CI run",
@@ -1980,7 +1980,7 @@
         },
         "agentChecks": {
             "repairMainCi": "Repair main when its CI fails",
-            "repairMainCiNote": "The first job that fails on main starts one fix agent, and every later failure goes to it until main is green. When its turns run out, or it changes nothing, it hands over to you. A run that failed on the CI machines themselves is re-run once instead.",
+            "repairMainCiNote": "The first job that fails on main starts one fix agent, and every later failure goes to it until main passes again. When its turns run out, or it changes nothing, it hands over to you. A run that failed on the CI machines themselves is re-run once instead.",
             "mainCi": "Main's CI"
         },
         "agentClock": {

@@ -7,14 +7,14 @@
 #
 # It runs no engine and no test, and that is the design. It rewrites the pins, resolves the lockfile, checks that what
 # it wrote clears the two checkout gates its own output can fail, and opens ONE pull request; ci.yml runs on that pull
-# request exactly as it does on anyone else's, and auto-merge lands it when the suite is green. The invariant is
+# request exactly as it does on anyone else's, and auto-merge lands it when the suite passes. The invariant is
 # untouched — CI is still what blesses a version — while the remembering is gone.
 #
 # NEEDS `ENGINE_BUMP_TOKEN`, a fine-grained PAT or App installation token with `contents: write` and
 # `pull requests: write`. Without it the pull request is authored by github-actions[bot] and its runs never start, so
 # there is nothing to bless against; this job fails rather than leaving that looking fine.
 #
-# ONE LONG-LIVED BRANCH, force-pushed. A bump that CI refuses stays open and red, and tomorrow's run rewrites it to
+# ONE LONG-LIVED BRANCH, force-pushed. A bump that CI refuses stays open and failing, and tomorrow's run rewrites it to
 # whatever upstream published since, so a broken release upstream fixes itself rather than accumulating a PR a day. To
 # stop one engine without stopping the rest, put a `hold` on it in engines.json.
 name: Engines

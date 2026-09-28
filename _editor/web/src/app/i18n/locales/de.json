@@ -1389,12 +1389,12 @@
             "fixingWhatLandBroke": "Behebt, was das Landen seiner Arbeit kaputt gemacht hat",
             "resolvingLandConflict": "Löst den Landekonflikt",
             "sentByAppLanding": "Von der App gesendet, das Landen dieser Arbeit wurde verweigert",
-            "sentBySandboxLand": "Von der Sandbox gesendet, das Landen seiner Arbeit hat die Prüfung des Hauptbaums rot gemacht",
+            "sentBySandboxLand": "Von der Sandbox gesendet, das Landen seiner Arbeit hat die Prüfung des Hauptbaums fehlschlagen lassen",
             "sentBySandboxTurn": "Von der Sandbox gesendet, jener Zug endete ungeprüft",
-            "fixingRedMainLine": "Behebt eine rote Hauptlinie",
-            "startedBySandboxRedMain": "Von der Sandbox gestartet: Die Prüfung von main wurde nach dem Landen von Arbeit rot, und keine Unterhaltung, die diese Arbeit hielt, konnte es übernehmen",
-            "mainRedOnItsWork": "Erfährt, dass main an seiner Arbeit rot wurde",
-            "sentBySandboxHeld": "Von der Sandbox gesendet: Die Prüfung von main wurde rot an dem, woran diese Unterhaltung noch arbeitet",
+            "fixingFailingMainLine": "Behebt eine fehlschlagende Hauptlinie",
+            "startedBySandboxFailingMain": "Von der Sandbox gestartet: Die Prüfung von main ist nach dem Landen von Arbeit fehlgeschlagen, und keine Unterhaltung, die diese Arbeit hielt, konnte es übernehmen",
+            "mainFailedOnItsWork": "Erfährt, dass main an seiner Arbeit fehlgeschlagen ist",
+            "sentBySandboxHeld": "Von der Sandbox gesendet: Die Prüfung von main ist an dem fehlgeschlagen, woran diese Unterhaltung noch arbeitet",
             "fixingPushFindings": "Behebt, was die Push-Prüfungen gefunden haben",
             "sentBySandboxPush": "Von der Sandbox gesendet, aus den Funden der Push-Prüfungen",
             "fixingFailedCi": "Behebt einen fehlgeschlagenen CI-Lauf",
@@ -1689,7 +1689,7 @@
         },
         "agentChecks": {
             "repairMainCi": "Main reparieren, wenn das CI fehlschlägt",
-            "repairMainCiNote": "Der erste Job, der auf main fehlschlägt, startet einen Reparatur-Agenten, und jeder weitere Fehlschlag geht an ihn, bis main wieder grün ist. Sind seine Züge aufgebraucht oder ändert er nichts, übergibt er an Sie. Ein Lauf, der an den CI-Maschinen selbst scheiterte, wird stattdessen einmal neu gestartet.",
+            "repairMainCiNote": "Der erste Job, der auf main fehlschlägt, startet einen Reparatur-Agenten, und jeder weitere Fehlschlag geht an ihn, bis main wieder erfolgreich durchläuft. Sind seine Züge aufgebraucht oder ändert er nichts, übergibt er an Sie. Ein Lauf, der an den CI-Maschinen selbst scheiterte, wird stattdessen einmal neu gestartet.",
             "mainCi": "Main-CI"
         },
         "agentClock": {

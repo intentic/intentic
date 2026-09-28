@@ -148,7 +148,7 @@
         "workLands": "Work lands",
         "workspace": "Workspace",
         "retired": "retired",
-        "retiredNeverFires": "Nothing sends this any more: the check that ran after every land is gone, so this automation never fires. Pick one of the moments above, or wake on a red CI pipeline instead."
+        "retiredNeverFires": "Nothing sends this any more: the check that ran after every land is gone, so this automation never fires. Pick one of the moments above, or wake on a failed CI pipeline instead."
     },
     "automationRow": {
         "alreadyFired": "Already fired; edit it to a new moment to arm it again",

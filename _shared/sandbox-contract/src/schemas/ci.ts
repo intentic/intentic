@@ -111,8 +111,8 @@ export type CiRepo = z.infer<typeof CiRepoSchema>;
 // Fallback poll interval when a repo's webhook couldn't register; lives here since both the poller and the automation
 // editor need it to tell the owner what a `hookWarning` actually costs (minutes' delay, not the feature).
 export const CI_POLL_INTERVAL_MS = 2 * 60_000;
-// What was decided about main's red, in the order it was decided (ci/main-fixer.ts).
-export const RedDecisionKindSchema = z.enum([
+// What was decided about a main-line branch while its CI fails, in the order it was decided (ci/main-fixer.ts).
+export const MainFailureDecisionKindSchema = z.enum([
     // Its one fix agent was put on it: by the sandbox at the first job that failed, or by a person's Fix press, which
     // gives the agent its turns back.
     "fix-up",
@@ -121,41 +121,62 @@ export const RedDecisionKindSchema = z.enum([
     // The fix agent had its turns, or stopped without a fix: it waits for a person.
     "spent",
 ]);
-export type RedDecisionKind = z.infer<typeof RedDecisionKindSchema>;
+export type MainFailureDecisionKind = z.infer<typeof MainFailureDecisionKindSchema>;
 
-export const RedDecisionSchema = z.object({
-    kind: RedDecisionKindSchema.describe("What was decided."),
+// Why the fix agent handed the failure back (a `spent` decision), as a closed set the editor words for itself, so what a
+// reader sees stays a few words in every language rather than whatever the turn's error happened to say.
+export const MainFailureHandBackSchema = z.enum([
+    // It had every turn the sandbox gives one failure, and main still fails.
+    "turns",
+    // Its turn ended without changing anything, so the failure is likely not in the code.
+    "no-change",
+    // A person stopped it.
+    "stopped",
+    // Its turn was cut off.
+    "interrupted",
+    // Its turn failed.
+    "turn-failed",
+    // Its conversation is gone or archived.
+    "gone",
+    // It could not be told about the newest failure.
+    "refused",
+]);
+export type MainFailureHandBack = z.infer<typeof MainFailureHandBackSchema>;
+
+export const MainFailureDecisionSchema = z.object({
+    kind: MainFailureDecisionKindSchema.describe("What was decided."),
+    reason: MainFailureHandBackSchema.optional().describe("Why the fix agent handed it back, on a `spent` decision."),
     conversationId: z.string().optional().describe("The conversation working on it, when one is."),
     at: z.number().describe("When that was decided, in milliseconds."),
-    detail: z.string().optional().describe("One sentence on why, in the sandbox's words."),
+    detail: z.string().optional().describe("One short sentence on why, in the sandbox's words."),
 });
-export type RedDecision = z.infer<typeof RedDecisionSchema>;
+export type MainFailureDecision = z.infer<typeof MainFailureDecisionSchema>;
 
-// Main's CI while it is red, as the daemon's one fix agent on it sees it (ci/main-fixer.ts): from the first job that
-// failed until a later run of every workflow that failed on it passes, whatever else failed along the way.
-export const CiMainRedSchema = z.object({
+// A main-line branch while its CI fails, as the daemon's one fix agent on it sees it (ci/main-fixer.ts): from the first
+// job that failed until a later run of every workflow that failed on it passes, whatever else failed along the way.
+export const CiMainFailureSchema = z.object({
     repo: z.string().describe("Which workspace repository."),
     branch: z.string().describe("Which main-line branch."),
     since: z.number().describe("When its first job failed, in milliseconds."),
     runId: z.number().describe("The newest run that failed on it."),
-    jobs: z.array(z.string()).describe("The jobs failing on it now, by name: the newest red run's failures, and any that failed since."),
+    jobs: z.array(z.string()).describe("The jobs failing on it now, by name: the newest failed run's failures, and any that failed since."),
     fixer: z
         .string()
         .optional()
-        .describe("The one conversation working on it, which every failure goes to until the branch is green. Absent while nobody is on it."),
-    decision: RedDecisionSchema.optional().describe(
+        .describe("The one conversation working on it, which every failure goes to until the branch passes. Absent while nobody is on it."),
+    decision: MainFailureDecisionSchema.optional().describe(
         "The latest thing decided about it: `fix-up` while the fix agent has it, `spent` once it waits for you (its turns are used up, or it stopped without a fix), `reported` when repairs are off.",
     ),
 });
-export type CiMainRed = z.infer<typeof CiMainRedSchema>;
+export type CiMainFailure = z.infer<typeof CiMainFailureSchema>;
 export const CiRunsResponseSchema = z.object({
     repos: z.array(CiRepoSchema).describe("Which workspace repositories are wired to a forge, and how each one's notifications are set up."),
     // Newest first, across all mapped repos.
     runs: z.array(PipelineRunSchema).describe("Runs across all of them, newest first."),
-    reds: z
-        .array(CiMainRedSchema)
+    failures: z
+        .array(CiMainFailureSchema)
         .optional()
-        .describe("Every main-line branch red right now, with the fix agent on it. Absent from a daemon that keeps none."),
+        .describe("Every main-line branch failing right now, with the fix agent on it. Absent from a daemon that keeps none."),
 });
 export type CiRunsResponse = z.infer<typeof CiRunsResponseSchema>;
 // Re-resolves repo → project + token on every call, so a stale card can't act on a mapping the workspace no longer has.

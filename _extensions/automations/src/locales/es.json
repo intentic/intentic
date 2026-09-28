@@ -100,7 +100,7 @@
         "requireMyApprovalBefore": "Exigir mi aprobación antes de ejecutarse",
         "requireMyApprovalBefore2": "Exigir mi aprobación antes de que se ejecute",
         "retired": "retirado",
-        "retiredNeverFires": "Ya nada envía esto: la comprobación que se ejecutaba tras cada integración ya no existe, así que esta automatización nunca se dispara. Elige uno de los momentos de arriba, o haz que la despierte una pipeline de CI en rojo.",
+        "retiredNeverFires": "Ya nada envía esto: la comprobación que se ejecutaba tras cada integración ya no existe, así que esta automatización nunca se dispara. Elige uno de los momentos de arriba, o haz que la despierte una pipeline de CI que falle.",
         "runsOn": "Se ejecuta en",
         "sStarterSendsDifferent": "Este es el iniciador de {label}, pero {label2} envía una carga distinta.",
         "sStarterYoursTo": "Iniciador de {label}, tuyo para reescribirlo.",

@@ -7,7 +7,7 @@ import { fakeGoogleIdToken, GOOGLE_TOKEN_STORAGE_KEY, seedSession, verifySession
 import { startWorld } from "./world.js";
 import { STORAGE_STATE, writeWorldFile } from "./world-file.js";
 
-// Stands down instead of failing red when the reason isn't fixable by a person (feature flag off, no Docker), since
+// Stands down instead of failing when the reason isn't fixable by a person (feature flag off, no Docker), since
 // this tier blocks releases. Returns a function to double as the global teardown, since the containers are held in this
 // closure and can't survive a move to a separate module.
 

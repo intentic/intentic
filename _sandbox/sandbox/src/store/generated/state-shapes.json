@@ -779,7 +779,7 @@
       "since": "v1.316.0"
     },
     {
-      "type": "{ announced?: Record<string, number[]>; conclusions: Record<string, { at: number; status: \"success\" | \"failed\" }>; greens?: Record<string, Record<string, number>>; reds?: Record<string, { changed?: boolean; count: number; decisions?: ({ at: number; conversationId?: string; detail?: string; kind: \"fix-up\" | \"reported\" | \"spent\" })[]; findings?: { id: string; source: string; text: string }[]; firstRunId: number; heard?: string[]; runId: number; since: number; turns?: number; workflows?: Record<string, number> }>; secret: string }",
+      "type": "{ announced?: Record<string, number[]>; conclusions: Record<string, { at: number; status: \"success\" | \"failed\" }>; failures?: Record<string, { changed?: boolean; count: number; decisions?: ({ at: number; conversationId?: string; detail?: string; kind: \"fix-up\" | \"reported\" | \"spent\"; reason?: \"turns\" | \"no-change\" | \"stopped\" | \"interrupted\" | \"turn-failed\" | \"gone\" | \"refused\" })[]; findings?: { id: string; source: string; text: string }[]; firstRunId: number; heard?: string[]; runId: number; since: number; turns?: number; workflows?: Record<string, number> }>; passes?: Record<string, Record<string, number>>; secret: string }",
       "since": "unreleased"
     }
   ],

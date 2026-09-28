@@ -87,7 +87,7 @@ test("an attempt already archived is skipped over rather than resurrected", asyn
     expect(outcome).toMatchObject({ conversationId: fixAttemptId(BASE, 3), attempt: 3 });
 });
 
-test("a landed attempt is history: the same run red again gets a fresh attempt", async () => {
+test("a landed attempt is history: the same run failing again gets a fresh attempt", async () => {
     const { deps } = fakes([agent(BASE, { status: "landed" })]);
     expect(await startFixAttempt(deps, ASK)).toMatchObject({ kind: "started", conversationId: fixAttemptId(BASE, 2), continued: false });
 });

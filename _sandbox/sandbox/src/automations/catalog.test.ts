@@ -28,7 +28,7 @@ describe(`code chores come from the book`, () => {
         }
     });
 
-    // review-agent-work is an event-triggered reflex with no accumulated evidence (main's red CI is its one fix agent's
+    // review-agent-work is an event-triggered reflex with no accumulated evidence (main's failing CI is its one fix agent's
     // to answer, ci/main-fixer.ts, so no chore wakes on one);
     // dreaming-session and field-notes both measure the fleet's own session history, not a repo.
     test(`the only hand-written chores are the ones the book cannot measure`, () => {

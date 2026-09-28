@@ -24,7 +24,7 @@ const root = repoRoot(import.meta.url);
 const { say, step, skip, fail, finish } = createSteps("verify", root);
 const verdicts = checkVerdicts(root);
 
-// Only a `code` failure fails the gates: a tidy rule red for an unrelated directory says nothing about whether the tree
+// Only a `code` failure fails the gates: a tidy rule failing for an unrelated directory says nothing about whether the tree
 // works (what a tidy failure means: _tools/checks/manifest.mjs), and the push check judges tidiness against its own
 // range (verify-push.mjs).
 if (verdicts === undefined) {

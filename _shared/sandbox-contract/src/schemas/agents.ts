@@ -89,7 +89,7 @@ export const UnfinishedWorkSchema = z.object({
         })
         .optional()
         .describe("The agent's own checklist where that turn left it. Absent for a conversation that kept no list."),
-    // Name of the `turn.ending` check still red when the turn ended. Retired with that check: nothing writes it now, and
+    // Name of the `turn.ending` check still failing when the turn ended. Retired with that check: nothing writes it now, and
     // it stays so entries written before still read.
     check: z
         .string()

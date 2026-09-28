@@ -50,7 +50,7 @@ const sending = sandboxRef(() => false);
 const since = sandboxRef(() => 0);
 const question = sandboxShallowRef<PushQuestion | undefined>(() => undefined);
 
-/* THE RED VERDICT THAT OUTLIVES ITS CARD. */
+/* A FAILED PUSH'S VERDICT, WHICH OUTLIVES ITS CARD. */
 export interface StandingVerdict {
     readonly push: PendingPush;
     readonly question: PushQuestion;
@@ -66,7 +66,7 @@ const standing = sandboxShallowRef<StandingVerdict | undefined>(() => undefined)
 // Whether the card on screen is a verdict being reprinted rather than one that just landed; the card says so, since
 // "Push failed" reads as news and this is not news.
 const fromMemory = sandboxRef(() => false);
-// Push runs that settled red behind the question: the terminal each ran in.
+// Push runs that settled as refused behind the question: the terminal each ran in.
 const refusedRuns = sandboxShallowRef<readonly PushRun[]>(() => []);
 const pushed = sandboxShallowRef<PendingPush | undefined>(() => undefined);
 // Expires the "Pushed" note; a switch takes the note down with its timer.

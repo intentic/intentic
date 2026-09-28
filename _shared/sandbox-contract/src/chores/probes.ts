@@ -453,7 +453,7 @@ export const PROBES: readonly ProbeSpec[] = [
     {
         id: `mutation`,
         title: `Test strength`,
-        measures: `how much of the code could break with every test still green`,
+        measures: `how much of the code could break with every test still passing`,
         // `--incremental` reruns only changed mutants; the 30-day TTL targets that costly first full run.
         tier: 2,
         ttlMs: 30 * DAY_MS,

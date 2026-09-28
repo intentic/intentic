@@ -303,8 +303,8 @@ const SEPTEMBER_TEMPLATE: AgentTranscript = {
     ],
 };
 
-// The one fix agent the sandbox put on `web`'s red main line (fixture/ci.ts), in the words the daemon composes for a CI
-// failure (ci/ci-fix.ts), then the next red run on main sent to the same conversation. Both rows carry the errand they
+// The one fix agent the sandbox put on `web`'s failing main line (fixture/ci.ts), in the words the daemon composes for a CI
+// failure (ci/ci-fix.ts), then the next failed run on main sent to the same conversation. Both rows carry the errand they
 // are, so the chat shows them as the sandbox's brief rather than as something a person typed.
 const WEB_MAIN_FIX: AgentTranscript = {
     sessionId: `ses_01j9cifixweb`,
@@ -335,7 +335,7 @@ const WEB_MAIN_FIX: AgentTranscript = {
         {
             role: `user`,
             errand: `ci-fix-nudge`,
-            text: `Main failed again on web (https://github.com/acme/shop-web/actions/runs/4822): typecheck, unit. It is the same red, and this conversation has it until a run of main passes.`,
+            text: `Main failed again on web (https://github.com/acme/shop-web/actions/runs/4822): typecheck, unit. It is the same failure, and this conversation has it until a run of main passes.`,
         },
     ],
 };

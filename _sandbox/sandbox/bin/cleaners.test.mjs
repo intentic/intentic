@@ -284,13 +284,13 @@ test("filterOutput: no footer when nothing was dropped", () => {
     expect(filterOutput("hello\nworld\n", { command: "echo hi", exitCode: "0", durationS: "0" }).out).toBe("hello\nworld\n");
 });
 
-test("cleaner: drops per-test pass lines on green, keeps the summary", () => {
+test("cleaner: drops per-test pass lines on a passing run, keeps the summary", () => {
     const lines = ["✓ src/a.test.ts (3)", "✓ src/b.test.ts (2)", "Test Files  2 passed (2)", "Tests  5 passed (5)"];
     const out = cleanLines(lines, { command: "vitest run", exitCode: "0", enabled: new Set(CLEANERS) }).lines;
     expect(out).toEqual(["Test Files  2 passed (2)", "Tests  5 passed (5)"]);
 });
 
-test("cleaner: drops bun's per-test pass lines on green, keeps its summary", () => {
+test("cleaner: drops bun's per-test pass lines on a passing run, keeps its summary", () => {
     const lines = ["(pass) parses a row [0.12ms]", "(pass) refuses a blank one", " 2 pass", " 0 fail", "Ran 2 tests across 1 file. [12.00ms]"];
     const out = cleanLines(lines, { command: "bun test src/rows.test.ts", exitCode: "0", enabled: new Set(CLEANERS) }).lines;
     expect(out).toEqual([" 2 pass", " 0 fail", "Ran 2 tests across 1 file. [12.00ms]"]);

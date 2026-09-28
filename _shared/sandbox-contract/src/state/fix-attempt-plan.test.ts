@@ -24,7 +24,7 @@ test("an archived attempt is skipped over, not resurrected", () => {
     expect(planFixAttempt(BASE, [], [BASE])).toEqual({ kind: `new`, conversationId: fixAttemptId(BASE, 2), attempt: 2 });
 });
 
-test("a landed attempt is closed: the same gates red again get a fresh attempt", () => {
+test("a landed attempt is closed: the same gates failing again get a fresh attempt", () => {
     const plan = planFixAttempt(BASE, [agent(BASE, { status: `landed` })], []);
     expect(plan).toEqual({ kind: `new`, conversationId: fixAttemptId(BASE, 2), attempt: 2 });
 });

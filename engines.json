@@ -11,7 +11,7 @@
         "`minimum` is advisory and records a floor the provider itself enforces, so a card can explain a refusal.",
         "NOBODY EDITS `blessed` BY HAND. .github/workflows/engines.yml runs _tools/scripts/engines/bump-engines.mjs",
         "daily: it takes upstream's newest stable version once it has aged past the soak window below, rewrites",
-        "every pin, and opens one auto-merging pull request. CI's green is what turns that into a blessing, so the",
+        "every pin, and opens one auto-merging pull request. CI passing is what turns that into a blessing, so the",
         "invariant holds while the number stops being something a person has to remember. `policy` is what steers",
         "it, and `hold` is how to stop it for one engine without stopping it for the rest."
     ],

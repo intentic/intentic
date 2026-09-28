@@ -1192,7 +1192,7 @@ test("a turn that proved its edits is recorded as verified, naming the check tha
     await runAgentTurn(client, { prompt: "fix the parser", conversationId: "conv-verified" });
 
     await waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
-    // The command matters: 'verified' alone would read as the whole repo being green, not one file.
+    // The command matters: 'verified' alone would read as the whole repo passing, not one file.
     expect(ledger[0]).toMatchObject({ outcome: "ok", verification: "verified", check: "pnpm test src/parser.test.ts", filesEdited: 1 });
 });
 

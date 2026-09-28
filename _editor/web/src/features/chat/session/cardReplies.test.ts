@@ -126,7 +126,7 @@ describe(`reply`, () => {
         });
     }
 
-    it(`says a refusal on the red line in the card's own words, and leaves the card answerable`, async () => {
+    it(`says a refusal on the error line in the card's own words, and leaves the card answerable`, async () => {
         const chat = parkedOn({ kind: `payment_offer`, requestId: `r1`, offer: PAYMENT });
         replyRoute.mockImplementationOnce(async () => {
             throw new SandboxHttpError(404, `Not found.`);

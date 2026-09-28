@@ -36,10 +36,11 @@ test("conclusions prune oldest-touched past the cap so the file cannot grow fore
     expect(Object.keys(state.conclusions)).toHaveLength(200);
 });
 
-// Until the push checks went (2026-09-28), main's red was kept in the one shape it shared with a push's: a finding with
-// what a push check printed about it, decisions naming the findings they were about, and two kinds only a push red made.
-test("a red kept in the shape it shared with a push's red reads back as main's red", async () => {
-    const path = join(mkdtempSync(join(tmpdir(), "ci-red-")), "ci.json");
+// Until the push checks went (2026-09-28), main's failure was kept in the one shape it shared with a failed push's: a
+// finding with what a push check printed about it, decisions naming the findings they were about, and two kinds only a
+// failed push made. It was kept under `reds` then, and the newest passes under `greens`.
+test("a failure kept in the shape it shared with a failed push's reads back as main's failure", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "ci-failure-")), "ci.json");
     const finding = { id: "f", source: "CI", text: "verify-core" };
     await writeFile(
         path,
@@ -49,7 +50,16 @@ test("a red kept in the shape it shared with a push's red reads back as main's r
             reds: {
                 "web\nmain": {
                     since: 1,
-                    findings: [{ ...finding, path: "src/a.ts", command: "pnpm test", recheckable: true, gate: "code", commit: { sha: "c1", subject: "Fix" } }],
+                    findings: [
+                        {
+                            ...finding,
+                            path: "src/a.ts",
+                            command: "pnpm test",
+                            recheckable: true,
+                            gate: "code",
+                            commit: { sha: "c1", subject: "Fix" },
+                        },
+                    ],
                     decisions: [
                         { kind: "fix-up", conversationId: "ci-fix-web-40", at: 2 },
                         { kind: "resolved", at: 3, findings: ["f"], detail: "A later measurement no longer printed them." },
@@ -60,9 +70,12 @@ test("a red kept in the shape it shared with a push's red reads back as main's r
                     count: 2,
                 },
             },
+            greens: { "web\nmain": { CodeQL: 39 } },
         }),
     );
-    expect(await fileCiStore(path).reds()).toEqual({
+    const store = fileCiStore(path);
+    expect(await store.passes("web", "main")).toEqual({ CodeQL: 39 });
+    expect(await store.failures()).toEqual({
         "web\nmain": {
             since: 1,
             findings: [finding],
@@ -80,4 +93,32 @@ test("a red kept in the shape it shared with a push's red reads back as main's r
             changed: false,
         },
     });
+});
+
+// Written under today's names, and read back by them: nothing of main's failure is kept under the names it had.
+test("a failure and a pass are kept as failures and passes", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "ci-names-")), "ci.json");
+    const store = fileCiStore(path);
+    await store.failure("web", "main", () => ({
+        since: 1,
+        findings: [],
+        decisions: [{ kind: "spent", reason: "turn-failed", at: 2, detail: "Its fix agent's turn failed." }],
+        firstRunId: 40,
+        runId: 40,
+        count: 1,
+        workflows: { CI: 40 },
+        heard: ["40/7"],
+        turns: 1,
+        changed: false,
+    }));
+    await store.recordPass("web", "main", "CodeQL", 41);
+    await store.recordPass("web", "main", "CodeQL", 39);
+
+    // SAFETY: the store has just written this file, and it writes one JSON object.
+    const state = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+    expect(Object.keys(state)).toEqual(["secret", "conclusions", "failures", "passes"]);
+    expect(state["passes"]).toEqual({ "web\nmain": { CodeQL: 41 } });
+    expect((await store.failures())["web\nmain"]?.decisions).toEqual([
+        { kind: "spent", reason: "turn-failed", at: 2, detail: "Its fix agent's turn failed." },
+    ]);
 });

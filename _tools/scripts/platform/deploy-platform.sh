@@ -25,10 +25,10 @@ echo
 # unreported: an image that will not start, a migration that fails, and now the schema check the api image runs
 # before it serves anything (see _platform/api/Dockerfile), which is DESIGNED to stop the container. A guard
 # whose failure nobody is told about is the same silence it was written to end, so the job that rolled the
-# deploy is the one that has to go red.
+# deploy is the one that has to fail.
 #
 # /health is the api's own readiness — it answers only after the boot chain completed, and it touches the
-# database, so it cannot come back green over a container that failed the schema check. The first seconds are
+# database, so it cannot come back healthy over a container that failed the schema check. The first seconds are
 # given away deliberately: the OLD container is still answering until compose replaces it, so polling
 # immediately would accept the outgoing one as proof the incoming one is fine.
 HEALTH_URL="${PLATFORM_HEALTH_URL:-https://api.intentic.dev/health}"
@@ -64,7 +64,7 @@ echo "api is serving"
 # as a fault in the web image's own files.
 #
 # Same contract as deploy-ingress.sh: read the build back off the PUBLIC address, out of the image rather than
-# recomputed here, so a deploy that did not land is a red job.
+# recomputed here, so a deploy that did not land is a failed job.
 WEB_URL="${PLATFORM_WEB_URL:-https://app.intentic.dev}"
 WEB_IMAGE="${PLATFORM_WEB_IMAGE:-ghcr.io/intentic/web:latest}"
 

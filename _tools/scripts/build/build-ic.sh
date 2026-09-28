@@ -43,7 +43,7 @@ MANIFEST="_sandbox/ic/Cargo.toml"
 OUT="_sandbox/ic/dist-bin"
 # Where cargo actually WRITES the binaries. The release job points CARGO_TARGET_DIR at the shared /ci-cache
 # store, and cargo obeys that over the crate-local target/ — so the hardcoded spelling finds nothing there and
-# nothing else: `cp: cannot stat '_sandbox/ic/target/…/ic'`, green everywhere a developer runs it. build-desktop.sh
+# nothing else: `cp: cannot stat '_sandbox/ic/target/…/ic'`, passing everywhere a developer runs it. build-desktop.sh
 # carries the identical line after learning it the same way.
 TARGET_DIR="${CARGO_TARGET_DIR:-_sandbox/ic/target}"
 mkdir -p "$OUT"

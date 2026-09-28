@@ -130,7 +130,7 @@ const triggers = [
         </thead>
         <tbody>
             <tr><td><strong>Goal</strong></td><td>What "done" means, in your words: the sentence the step is measured against. Leave it out and the step is measured against whatever was asked of the run this time, which is usually what you meant.</td></tr>
-            <tr><td><strong>Instruction</strong></td><td>What the step is told to <em>do</em>, which is a different sentence: "the suite is green" is a goal, "run the tests, take the top failure, fix it" is an instruction. Leave it out and the request is handed over verbatim.</td></tr>
+            <tr><td><strong>Instruction</strong></td><td>What the step is told to <em>do</em>, which is a different sentence: "the suite passes" is a goal, "run the tests, take the top failure, fix it" is an instruction. Leave it out and the request is handed over verbatim.</td></tr>
             <tr><td><strong>Handoff</strong></td><td>Whether this step starts fresh or continues from the one before it.</td></tr>
             <tr><td><strong>Output</strong></td><td>Nothing, a structured claim (<code>done</code> plus a reason), or JSON matching fields you declare.</td></tr>
             <tr><td><strong>Checks</strong></td><td>What else has to be true: a shell command that must exit 0, or a judge given a rubric. ANDed with the output above.</td></tr>
@@ -150,8 +150,8 @@ const triggers = [
     </p>
     <p>
         On GitHub it's one step. Paste the gate's URL into a repository secret and add the <strong>Intentic Agent Gate</strong> action, from
-        the GitHub Marketplace, to your workflow. The build then waits for the verdict: <strong>green</strong> when it passes,{" "}
-        <strong>red</strong> when it fails, and <strong>left alone</strong> when the gate couldn't reach a decision because a check that
+        the GitHub Marketplace, to your workflow. The build then waits for the verdict: it <strong>passes</strong> when the gate passes,{" "}
+        <strong>fails</strong> when the gate fails, and is <strong>left alone</strong> when the gate couldn't reach a decision because a check that
         breaks is not the same as a product that broke. The reason shows up right on the run.
     </p>
     <DocsCodeBlock code={gate} lang="yaml" title="A release gate in GitHub Actions" />
@@ -161,7 +161,7 @@ const triggers = [
 
     <h2>Loops</h2>
     <p>
-        A loop is started <em>against a conversation</em>: "keep going until this is true". It has no editor and no id, because it is not a thing you maintain: it converges or gives up, and then it is history. The conversation need not exist yet, which lets "run this until it's green" be the first thing you say to a new agent.
+        A loop is started <em>against a conversation</em>: "keep going until this is true". It has no editor and no id, because it is not a thing you maintain: it converges or gives up, and then it is history. The conversation need not exist yet, which lets "run this until it passes" be the first thing you say to a new agent.
     </p>
     <p>
         It uses the same fields as a workflow step: a goal, an output and checks. It also asks whether each iteration

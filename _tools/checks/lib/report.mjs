@@ -4,7 +4,7 @@
 // The check never got to judge anything — its own tool moved under it, or the environment is missing something it needs.
 // Exit 2 rather than 1, because "the tree is bad" and "I did not look" are different facts and a caller that cannot tell
 // them apart has to choose between blocking everyone on a broken tool and quietly not testing the thing any more. Both
-// have happened here: `pnpm peers check`'s output shape moved and reddened the nightly with nothing wrong in the tree.
+// have happened here: `pnpm peers check`'s output shape moved and failed the nightly with nothing wrong in the tree.
 export const cannotMeasure = (why) => {
     console.error(why);
     process.exit(2);

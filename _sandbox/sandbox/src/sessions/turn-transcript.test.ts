@@ -35,8 +35,8 @@ describe("openingRows", () => {
 
     // A turn the sandbox opened by itself says so on its row, and what for, so no reader shows it as the owner's words.
     it("carries who spoke the opening and the errand it is", () => {
-        expect(openingRows({ prompt: "main is red", messageId: "m-9", speaker: { kind: "sandbox", source: "land-breakage" }, errand: "land-fix" }, "/work", SENT_AT)).toEqual([
-            { role: "user", text: "main is red", sentAt: SENT_AT, messageId: "m-9", speaker: { kind: "sandbox", source: "land-breakage" }, errand: "land-fix" },
+        expect(openingRows({ prompt: "main fails", messageId: "m-9", speaker: { kind: "sandbox", source: "land-breakage" }, errand: "land-fix" }, "/work", SENT_AT)).toEqual([
+            { role: "user", text: "main fails", sentAt: SENT_AT, messageId: "m-9", speaker: { kind: "sandbox", source: "land-breakage" }, errand: "land-fix" },
         ]);
     });
 

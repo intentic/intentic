@@ -221,7 +221,7 @@ if ($disabled -and -not $Check) {
 # used to die in 30 seconds in Initialize containers on "failed to connect to the docker API" -- twice on 26
 # September. ACTIONS_RUNNER_HOOK_JOB_STARTED runs before the job's containers are created, so a hook that waits
 # for the daemon turns those into jobs that start a few minutes late. It fails the job itself only after
-# $DockerWaitSeconds seconds, with a line naming the machine, which is a real outage and should be red.
+# $DockerWaitSeconds seconds, with a line naming the machine, which is a real outage and should fail.
 #
 # THE MARKER is what lets the watchdog tell this wait from a working job: a Runner.Worker is running either way,
 # and the integration restart may only happen while no job is working. Named after the hook's pid, so the
@@ -788,7 +788,7 @@ if (-not `$cliAnswered -or -not `$sockAnswered) {
     Say "docker in `${Distro}: the CLI runs but no daemon answers through /var/run/docker.sock as the fleet's own user. EVERY container job this fleet takes will fail in Initialize containers until it does. If the engine answers on Windows this is Docker Desktop's WSL integration (the lines above say what this pass tried); if it does not, it is the engine (section 1)."
 } else {
     # THE FLEET IS STARTED ANYWAY, below, and its jobs will fail. That is deliberate and it is the same choice
-    # section 1 makes: a red pipeline names the machine and this file's oldest lesson is that a queue against a
+    # section 1 makes: a failed pipeline names the machine and this file's oldest lesson is that a queue against a
     # label nothing answers went unnoticed for three and a half days. Stopping the listeners would trade a
     # failure that reports itself for a silence that does not.
     Say "docker in `$Distro is NOT USABLE BY THE FLEET (no docker CLI on its PATH) and nothing under /mnt/wsl could be linked in its place, so Docker Desktop's WSL integration is not applied to this machine at all. EVERY container job this fleet takes will fail in Set up job on 'docker: command not found'. Switch the integration on for `$Distro under Docker Desktop, Settings, Resources, WSL integration: a -Restart re-applies an integration that is enabled and merely absent, and cannot turn on one that is off."

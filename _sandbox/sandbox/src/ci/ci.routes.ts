@@ -9,7 +9,7 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { AttemptRefused } from "../conversations/fix/fix-attempts.js";
 import { ciFailureEvidence, runOf, startCiFix } from "./ci-fix.js";
-import { fixPressed, mainReds, streakFixerFor } from "./main-fixer.js";
+import { fixPressed, mainFailures, streakFixerFor } from "./main-fixer.js";
 import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects, type CiProject } from "./projects.js";
 
@@ -54,10 +54,10 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
                     ...(operator && warning?.recipe !== undefined ? { hookRecipe: warning.recipe } : {}),
                 };
             });
-            const reds = await mainReds(services);
+            const failures = await mainFailures(services);
             const cached = services.ciRuns.sweep();
             if (cached !== undefined) {
-                return { repos, runs: cached, reds };
+                return { repos, runs: cached, failures };
             }
             // One list call per project; a failing vendor drops just its own repos, not the whole view.
             const listed = await Promise.all(
@@ -70,7 +70,7 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
                         }),
                 ),
             );
-            return { repos, runs: services.ciRuns.replace(listed.flat()), reds };
+            return { repos, runs: services.ciRuns.replace(listed.flat()), failures };
         }),
         rerun: i.rerun.handler(async ({ input }) => {
             const project = await resolve(input.repo);
@@ -98,7 +98,7 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
                     message: `Every failed job died on the fleet${where}, not in any step of this repository: bring the runner back and re-run the pipeline; force the fix to put an agent on it anyway.`,
                 });
             }
-            // A run of a red main-line branch is its streak's: the press continues the one fix agent on it.
+            // A run of a failing main-line branch is its streak's: the press continues the one fix agent on it.
             const run = await runOf(services, project, input.runId, fetchFn);
             const streak = run === undefined ? undefined : await streakFixerFor(services, run);
             const outcome = await startCiFix(

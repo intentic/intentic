@@ -3,7 +3,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { defineStep } from "../state-steps.js";
 
 // What the push checks kept, retired on 2026-09-28 when CI became the only check and the pre-push hook went: each push
-// the hook measured, what it let through, and every project's push red with the decisions about it. Nothing reads it
+// the hook measured, what it let through, and every project's failed push with the decisions about it. Nothing reads it
 // any more, so the step deletes it. Spelled here rather than through state-paths.ts, which lists only what the daemon
 // still keeps. It sits under the state dir.
 const RECORD = ["records", "push-checks.json"] as const;

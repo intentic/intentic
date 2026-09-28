@@ -9,7 +9,7 @@ import { cartPage, checkoutPage, pricingPage } from "./storefront";
 const BUY_A_PLAN = `# Buy a plan
 
 A visitor picks the Growth plan on the pricing page and pays with a card. This is the path the whole storefront
-exists for, so it is the one story that must never be red.
+exists for, so it is the one story that must never fail.
 
 ## Acceptance criteria
 

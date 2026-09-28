@@ -25,7 +25,7 @@ export interface Row {
 export type Tolerance = (metric: string) => number;
 
 // A row whose count no longer matches the baseline, in either direction. It is reported, never failed: a baseline that
-// fails on every move is a golden master, re-recorded by whoever the red lands on until the numbers mean nothing.
+// fails on every move is a golden master, re-recorded by whoever the failure lands on until the numbers mean nothing.
 const MOVED: ReadonlySet<Verdict> = new Set(["regressed", "improved", "new", "gone"]);
 
 export const moved = (rows: readonly Row[]): readonly Row[] => rows.filter((row) => MOVED.has(row.verdict));
@@ -246,7 +246,7 @@ export const rerecordOf = (track: "instr" | "browser"): string =>
 
 /**
  * Why `--update` may not run here, or undefined where it may: only in the record workflow, on the runner class the
- * counts are judged on, so a baseline is never re-recorded on a laptop, in a sandbox, or by whoever a red run lands on.
+ * counts are judged on, so a baseline is never re-recorded on a laptop, in a sandbox, or by whoever a failed run lands on.
  */
 export const recordingRefusal = (env: Readonly<Record<string, string | undefined>>, rerecord: string): string | undefined =>
     env["GITHUB_WORKFLOW_REF"]?.includes(RECORD_WORKFLOW) === true

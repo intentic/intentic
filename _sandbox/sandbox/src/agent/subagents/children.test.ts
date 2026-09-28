@@ -577,7 +577,7 @@ describe("the escalation ladder", () => {
 });
 
 // A child's conversation is not only its parent's: the owner can write in its chat, send it a land conflict, or the land
-// check can send a red back to it. A follow-up that meets one of those turns must still arrive, and say where it is.
+// check can send a failure back to it. A follow-up that meets one of those turns must still arrive, and say where it is.
 describe("a follow-up that meets a turn somebody else started", () => {
     // Polls the roster until the child reads `status`, so an assertion never races the detached start.
     const rowReading = async (id: string, status: string): Promise<SubagentSession | undefined> => {
@@ -614,7 +614,7 @@ describe("a follow-up that meets a turn somebody else started", () => {
 
         expect(sent).toEqual({
             ok: true,
-            note: "Sent, to run next: it is busy with a turn it did not get from you (a person, a land conflict or a red check sent back to it), and your message runs as its own follow-up once that ends. Supervise it with wait.",
+            note: "Sent, to run next: it is busy with a turn it did not get from you (a person, a land conflict or a failing check sent back to it), and your message runs as its own follow-up once that ends. Supervise it with wait.",
         });
         expect(await rowReading(result.id, "pending")).toMatchObject({
             status: "pending",

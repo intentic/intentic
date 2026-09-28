@@ -6,13 +6,13 @@
 # WHY THIS EXISTS. Everything upstream of the image jobs runs in the DEVELOPMENT install: the root node_modules,
 # every devDependency present, every workspace package linked. The image runs a tree that
 # prepare-image-trees.sh pruned with `pnpm deploy --prod`. Those two graphs are not the same graph, and the
-# difference is invisible to `build`, `typecheck` and every test suite — all four of which stay green while
+# difference is invisible to `build`, `typecheck` and every test suite — all four of which keep passing while
 # the daemon the image actually starts dies on its first import.
 #
 # That is not a hypothetical failure mode. On 2026-08-18 a host-side module imported the extension API's root
 # barrel for one constant; the barrel re-exports a browser module that imports `vue` as a value, `vue` is a dev
 # dependency and an unmet peer, so it is absent from the pruned tree — and the daemon crashed on boot. The
-# pipeline was green, `sandbox:latest` was published, and the first thing that noticed was an update on a real
+# pipeline passed, `sandbox:latest` was published, and the first thing that noticed was an update on a real
 # machine timing out at "the sandbox did not become healthy within 30s".
 #
 # Nothing per-push booted the artifact. The nightly tiers do (`sandbox.e2e.test.ts`,

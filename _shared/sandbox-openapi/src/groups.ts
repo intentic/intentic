@@ -333,7 +333,7 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
         name: "ci",
         shelf: "ship",
         label: "Pipelines",
-        summary: "Continuous integration runs, and asking an agent to fix a red one",
+        summary: "Continuous integration runs, and asking an agent to fix a failed one",
         description:
             "Read the runs and the jobs inside them, re-run or cancel one, and mark the board read. The interesting one hands a failing run to an agent rather than to you.",
     },

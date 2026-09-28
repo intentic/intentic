@@ -436,7 +436,7 @@ describe(`what a badge says`, () => {
         expect(badgeOf({ running: `2 running` })?.running).toBe(`2 running`);
     });
 
-    it(`carries the count and the run together, since a red branch is usually red WHILE its fix runs`, () => {
+    it(`carries the count and the run together, since a failing branch is usually failing WHILE its fix runs`, () => {
         expect(badgeOf({ count: 2, tone: `danger`, tooltip: `main is broken`, running: `1 running` })).toMatchObject({
             count: 2,
             running: `1 running`,

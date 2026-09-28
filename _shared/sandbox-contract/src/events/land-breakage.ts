@@ -1,4 +1,4 @@
-// The follow-ups the daemon USED to send when the check it ran after every land went red: back to the conversation
+// The follow-ups the daemon USED to send when the check it ran after every land failed: back to the conversation
 // that landed the work, or to a fresh conversation started on it. Nothing sends either any more: nothing checks work
 // after it lands, CI checks what the owner pushes (schemas/ci.ts). They stay on the wire because records already hold
 // them, and the chat has to go on recognising them: a prompt nobody typed must not reach a reader as their own words.

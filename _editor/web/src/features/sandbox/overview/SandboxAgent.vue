@@ -122,10 +122,10 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <AgentSafetyLog />
         </template>
 
-        <!-- What happens around a turn: nothing checks it inside the turn or after it lands, so first whether main's red CI gets a fix agent, then what each repository runs on its own code, then delivery, and last the recovery path for a turn that broke instead. -->
+        <!-- What happens around a turn: nothing checks it inside the turn or after it lands, so first whether main's failing CI gets a fix agent, then what each repository runs on its own code, then delivery, and last the recovery path for a turn that broke instead. -->
         <template v-else>
             <AgentChecks />
-            <!-- Directly under the repair switch, since the two answer one question: what checks the work, and who is owed a red. -->
+            <!-- Directly under the repair switch, since the two answer one question: what checks the work, and who is owed a failure. -->
             <AgentRepoChecks />
             <AgentFinishedWork />
             <AgentChangelog />

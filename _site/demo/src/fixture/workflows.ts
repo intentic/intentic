@@ -35,7 +35,7 @@ const demoWorkflow = (): Workflow => ({
         {
             id: `build`,
             title: `Make the change`,
-            goal: `the plan is implemented and the suite is green`,
+            goal: `the plan is implemented and the suite passes`,
             prompt: `Implement the plan you just wrote, then run the suite and fix what it says.`,
             needs: [`plan`],
             handoff: `continue`,
@@ -123,8 +123,8 @@ export const demoRuns = (now: number): WorkflowRun[] => [
                 iterations: 5,
                 costUsd: 1.96,
                 loopState: `done`,
-                document: { done: true, reason: `Suite is green after the third fix.`, evidence: `pnpm test, 1,412 passed` },
-                report: `Implemented the plan; the suite went green once the webhook idempotency key was added.`,
+                document: { done: true, reason: `Suite passes after the third fix.`, evidence: `pnpm test, 1,412 passed` },
+                report: `Implemented the plan; the suite passed once the webhook idempotency key was added.`,
             },
             {
                 stepId: `review-perf`,

@@ -1150,7 +1150,7 @@ const followUp = async (services: Services, parent: ChildParent, kid: ChildRecor
         return {
             ok: true,
             note: occupied
-                ? "Sent, to run next: it is busy with a turn it did not get from you (a person, a land conflict or a red check sent back to it), and your message runs as its own follow-up once that ends. Supervise it with wait."
+                ? "Sent, to run next: it is busy with a turn it did not get from you (a person, a land conflict or a failing check sent back to it), and your message runs as its own follow-up once that ends. Supervise it with wait."
                 : "Sent: the child runs a follow-up turn, once there is memory for it. Supervise it with wait.",
         };
     } finally {

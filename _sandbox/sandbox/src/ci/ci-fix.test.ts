@@ -1,6 +1,6 @@
 import { infraLog } from "./ci-fix.js";
 
-// A red read as the fleet's is re-run instead of fixed, so a test's own output must never read as the runner dying.
+// A failure read as the fleet's is re-run instead of fixed, so a test's own output must never read as the runner dying.
 
 test("the runner's own death reads as the fleet, and a failing test's words never do", () => {
     expect(infraLog("ERROR: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?")).toBe(true);

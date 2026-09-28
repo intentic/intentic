@@ -12,8 +12,8 @@
 #
 # INERT UNTIL THE LISTING EXISTS. The five MSSTORE_* values are an Entra ID application associated with the
 # Partner Center account, plus the seller and product ids from the dashboard. Without them the publish step SKIPS
-# loudly (a warning annotation on the run) rather than failing: an app with no listing must not take a release
-# red. docs/ops/microsoft-store.md is the one-time setup, and _editor/desktop-app/STORE-LISTING.md is what goes
+# loudly (a warning annotation on the run) rather than failing: an app with no listing must not make a release
+# fail. docs/ops/microsoft-store.md is the one-time setup, and _editor/desktop-app/STORE-LISTING.md is what goes
 # in the listing form.
 #
 # IT CAN ALSO DEFER, and that is not a failure either. Certification takes up to three business days and the API

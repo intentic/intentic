@@ -22,8 +22,8 @@ import { branchFixes, branchKey, fixesByRun } from "./fixes/ciFixes";
 import { arrivesOpen, openFailures, supersededBy } from "./ciStreaks";
 import { useCiFixes } from "./fixes/useCiFixes";
 import { useFailureHistory } from "./useFailureHistory";
-import MainRedCallout from "./fixes/MainRedCallout.vue";
-import { mainRedsOf } from "./fixes/mainReds";
+import MainFailureBanner from "./fixes/MainFailureBanner.vue";
+import { mainFailuresOf, offersFix } from "./fixes/mainFailures";
 import PipelineRunRow from "./PipelineRunRow.vue";
 import PipelinesSkeleton from "./PipelinesSkeleton.vue";
 import PipelinesTally from "./PipelinesTally.vue";
@@ -34,16 +34,16 @@ import { t } from "./i18n.js";
 
 // A DevOps-grade CI dashboard: a top-bar picker scopes the board to one repository or all of them, counts ride the
 // title row, runs group by repo, and each row auto-fetches its jobs and renders an inline connected-circles graph. A
-// stage circle pops job details; the chevron expands the full job flow. A main-line branch that is red says so once at
-// the head of its repository's runs, with the one fix agent the daemon put on it.
+// stage circle pops job details; the chevron expands the full job flow. A main-line branch that is failing says so once
+// at the head of its repository's runs, with the one fix agent the daemon put on it.
 
 const api = host();
-const { repos: allRepos, runs: allRuns, reds: allReds, error, isPending, rerun, cancel, fix } = usePipelines();
+const { repos: allRepos, runs: allRuns, failures: allFailures, error, isPending, rerun, cancel, fix } = usePipelines();
 // The open project's rows only (api.workspace.inProject): runs come from the CI routes, not from repos(), so the view
 // narrows them itself and says on its chip how many repositories it put out of sight.
 const repos = computed(() => allRepos.value.filter((repo) => api.workspace.inProject(repo.repo)));
 const runs = computed(() => allRuns.value.filter((run) => api.workspace.inProject(run.repo)));
-const reds = computed(() => allReds.value.filter((red) => api.workspace.inProject(red.repo)));
+const failures = computed(() => allFailures.value.filter((failure) => api.workspace.inProject(failure.repo)));
 const projectHidden = computed(() => allRepos.value.length - repos.value.length);
 
 // Repository scope lives in the URL query, not a mirrored ref, so it's linkable and Back/Forward work. A repo the
@@ -101,25 +101,29 @@ const recurringByBranch = computed(() => {
 });
 const recurringFor = (run: PipelineRun): ReadonlyMap<string, number> => recurringByBranch.value.get(`${run.repo}\n${run.branch}`) ?? new Map();
 
-// Which red rows still carry an open problem, so only one gets a primary 'Fix with agent' per breakage. Read off every
+// Which failed rows still carry an open problem, so only one gets a primary 'Fix with agent' per breakage. Read off every
 // run, not the scoped ones: a branch's history doesn't change with the repository filter.
 const open = computed(() => openFailures(runs.value));
 const superseded = computed(() => supersededBy(runs.value));
 
-// Which red rows already have an agent, and its fate; read off every run for the same cross-run reason as above. Joined
-// by the derived conversation id (ciFixes.ts); only fetched when a run has failed or a branch is red.
-const fixesWanted = computed(() => runs.value.some((run) => run.status === `failed`) || reds.value.length > 0);
+// Which failed rows already have an agent, and its fate; read off every run for the same cross-run reason as above.
+// Joined by the derived conversation id (ciFixes.ts); only fetched when a run has failed or a main line is failing.
+const fixesWanted = computed(() => runs.value.some((run) => run.status === `failed`) || failures.value.length > 0);
 const { agents, invalidate: refreshFixes } = useCiFixes(fixesWanted);
 const fixByRun = computed(() => fixesByRun(runs.value, agents.value));
 
-// Main's reds with their one fix agent each, joined by the fixer's own id rather than a run's (mainReds.ts).
-const mainReds = computed(() => mainRedsOf(reds.value, agents.value, runs.value));
-const mainRedsOfRepo = (repo: string) => mainReds.value.filter((view) => view.red.repo === repo);
-// Branch's fix, for rows with none of their own; stops the newest red row offering a second agent.
+// Failing main lines with their one fix agent each, joined by the fixer's own id rather than a run's (mainFailures.ts).
+const mainFailures = computed(() => mainFailuresOf(failures.value, agents.value, runs.value));
+const mainFailuresOfRepo = (repo: string) => mainFailures.value.filter((view) => view.failure.repo === repo);
+// Branches whose banner offers the Fix press: it is their one primary, so their rows' own stay quiet.
+const bannerBranches = computed(
+    () => new Set(mainFailures.value.filter(offersFix).map((view) => `${view.failure.repo}\n${view.failure.branch}`)),
+);
+// Branch's fix, for rows with none of their own; stops the newest failed row offering a second agent.
 const fixByBranch = computed(() => branchFixes(fixByRun.value));
-// A row with its own agent never also carries the branch pointer to itself, and only a red row carries it at all: it is
-// there to hold back a second Fix, which a passing or running row never offers, and on the green run a branch went red
-// after it would read as an agent working on that run.
+// A row with its own agent never also carries the branch pointer to itself, and only a failed row carries it at all: it
+// is there to hold back a second Fix, which a passing or running row never offers, and on the passing run a branch
+// failed after it would read as an agent working on that run.
 const branchFixFor = (run: PipelineRun): CiFix | undefined =>
     run.status !== `failed` || fixByRun.value.has(run) ? undefined : fixByBranch.value.get(branchKey(run));
 
@@ -303,11 +307,13 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
                                 </a>
                             </template>
 
-                            <!-- First in its group: the one sentence about the branch that saves reading every red row under it. -->
-                            <MainRedCallout
-                                v-for="view in mainRedsOfRepo(standing.repo.repo)"
-                                :key="`${view.red.repo}:${view.red.branch}`"
+                            <!-- First in its group: the one line about the branch that saves reading every failed row under it. -->
+                            <MainFailureBanner
+                                v-for="view in mainFailuresOfRepo(standing.repo.repo)"
+                                :key="`${view.failure.repo}:${view.failure.branch}`"
                                 :view="view"
+                                :busy="busy"
+                                @fix="(run) => fixRun(run, undefined, undefined)"
                             />
 
                             <!-- Everyone sees warnings; only maintainers see the signing recipe. -->
@@ -327,6 +333,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
                                 :auto-open="autoOpen.has(run)"
                                 :fix="fixByRun.get(run)"
                                 :branch-fix="branchFixFor(run)"
+                                :led-by-banner="bannerBranches.has(`${run.repo}\n${run.branch}`)"
                                 @rerun="act($event, rerun)"
                                 @cancel="act($event, cancel)"
                                 @fix="fixRun"

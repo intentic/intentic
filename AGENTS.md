@@ -57,7 +57,7 @@ memory. CI runs all of it on what the owner pushes.
 **After the land**: the dependency reconciler installs when the land moved a manifest or the lockfile
 (`_sandbox/sandbox/src/workspace/deps/reconcile-deps.ts`), and nothing else runs. The owner commits and pushes, and CI
 checks the commit (`.github/workflows/ci.yml`: its `quick` job type-checks the packages a push changed and runs the
-push check within minutes, and the verify groups build and test the rest). When main goes red, one fix agent takes it
+push check within minutes, and the verify groups build and test the rest). When main's CI fails, one fix agent takes it
 (below). The "Checks after landing" note every conversation gets says so too, and that a failure in code you
 did not touch may be main's own: not yours to chase unless your task is about it.
 
@@ -83,15 +83,15 @@ files the range changed. `pnpm verify:push` runs the same check by hand, the bra
 the manifest/lockfile lockstep and `cargo fmt --check` on the crates the range touched. It exits non-zero on a finding
 and never runs typecheck, build or test (`pnpm verify` does, by hand).
 
-When main's CI goes red, one fix agent takes it (`_sandbox/sandbox/src/ci/main-fixer.ts`). The sandbox watches `main`
+When main's CI fails, one fix agent takes it (`_sandbox/sandbox/src/ci/main-fixer.ts`). The sandbox watches `main`
 and `master` of every workspace repository mapped to a connected GitHub or GitLab account, and acts on the first job
-that fails rather than on the finished run: a red streak begins there and ends once a later run of every workflow that
-failed on it passes. The
+that fails rather than on the finished run: a failure streak begins there and ends once a later run of every workflow
+that failed on it passes. The
 agent, `ci-fix-<repo>-<runId>`, starts with that job's log tail, and every later failed job on the branch goes to the
 same conversation, each job once. It gets at most three turns the sandbox starts per streak. Once they are spent, or
-it finished without changing anything, failed or was stopped, the red waits for the owner. A failure in the runners
+it finished without changing anything, failed or was stopped, the failure waits for the owner. A failure in the runners
 rather than the code never reaches it, and a run whose every failure is the fleet's is re-run once. With the Agent
-tab's Repair switch (`autoRepair`) off, main's red is only reported. `docs/architecture/sandbox.md` has the rest.
+tab's Repair switch (`autoRepair`) off, main's failure is only reported. `docs/architecture/sandbox.md` has the rest.
 
 ## Stored data
 
@@ -175,7 +175,7 @@ rules are about what a test stands the code up with, not about how it asserts.
   the literal text the assertions pin) and flags a downgrade (`toEqual` → `toMatchObject`) or a narrowing (the
   asserted text cut past a quarter with no test removed) unless a commit in the range carries a `test!:` subject
   or a `Test-Note:` trailer saying why. CI's push check fails an undeclared one in its range. On 2026-08-31 about 180
-  test files were widened in an afternoon with every suite green, which is what this reads for.
+  test files were widened in an afternoon with every suite passing, which is what this reads for.
 - Mock a workspace package with every name the code under test imports from it – the `test-programs` check reads
   every `jest.mock("@intentic/…", () => ({…}))` factory against the names the test and the modules it stands up
   import from that package, and refuses a missing one.

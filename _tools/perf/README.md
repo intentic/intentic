@@ -25,7 +25,7 @@ flowchart LR
   someone would defend, not a number that happened to be measured.
 - Every other count is a report: the diff against `baselines/` goes to stdout and, in CI, to the job summary, and
   never fails the job. A baseline that failed on every move was re-recorded four times in its first 28 hours by
-  whoever the red run landed on, which is what a golden master turns into.
+  whoever the failed run landed on, which is what a golden master turns into.
 - The baseline records the host it was taken on. A different Node, V8 flags, architecture or CPU (instruction track),
   or browser version (browser track), shows the diff without comparing it. Budgets are judged on any host.
 - A baseline is re-recorded only by `.github/workflows/perf-record.yml`, dispatched by hand, on the runner class the

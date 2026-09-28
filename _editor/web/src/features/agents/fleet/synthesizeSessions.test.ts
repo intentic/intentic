@@ -122,7 +122,7 @@ const mockTranscripts = (byId: Record<string, TranscriptRow[]>): void => {
 describe(`renderTranscript`, () => {
     it(`labels every message with the source letter and keeps the full retained evidence`, () => {
         const rendered = renderTranscript(`A`, `Fix the build`, [
-            { role: `user`, text: `fix the build`, attachments: [`shot.png`], notes: [{ title: `Turn context`, text: `the branch is red` }] },
+            { role: `user`, text: `fix the build`, attachments: [`shot.png`], notes: [{ title: `Turn context`, text: `the branch is failing` }] },
             {
                 role: `assistant`,
                 text: `fixed`,

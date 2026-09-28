@@ -2,7 +2,7 @@
 #
 # ci.yml's perf-instr and perf-browser jobs report every count that moved from _tools/perf/baselines/ in their job
 # summary and fail only on a declared budget (_tools/perf/README.md). A baseline is therefore re-recorded when someone
-# decides its numbers should describe the code again, never because a run went red, and always here: on the runner
+# decides its numbers should describe the code again, never because a run failed, and always here: on the runner
 # class and image the CI jobs judge on, so the recorded host (CPU, Chromium, Node) is the one the report compares
 # against. `--update` refuses to run anywhere else (baseline.ts, recordingRefusal).
 #

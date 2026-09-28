@@ -9,7 +9,7 @@ import type { TurnClient } from "../session/turnClient";
 import { importOrReload } from "../../../router/staleChunk";
 import { markNeedsReauth } from "../accounts/providerAccounts";
 
-// Maps a turn failure's code to what this window does: whether the user is needed (red line) or merely informed, and
+// Maps a turn failure's code to what this window does: whether the user is needed (the error line) or merely informed, and
 // whether the turn returns on its own. The daemon owns the failure's transcript line and keeps a refused message in the
 // conversation's queue, held; recovery state for the auto-resuming codes lives here.
 
@@ -59,11 +59,11 @@ export class TurnFailures {
         switch (code) {
             case `claude-reauth`:
                 // Credential dead, nothing ran: the daemon holds the message in the queue until the account is back.
-                // No red line: the composer already shows a reauth banner with the one-click fix.
+                // No error line: the composer already shows a reauth banner with the one-click fix.
                 this.markReauth(error, message);
                 return;
             case `codex-reauth`:
-                // Same badge as claude-reauth, but also red line: no held message here to replay instead.
+                // Same badge as claude-reauth, but also the error line: no held message here to replay instead.
                 this.markReauth(error, message);
                 this.host.error.value = message;
                 return;
@@ -77,7 +77,7 @@ export class TurnFailures {
             case `sandbox-memory-low`:
                 return;
             case `session-not-found`:
-                // Session vanished mid-turn: drop the dead id so the next send starts fresh. No red line.
+                // Session vanished mid-turn: drop the dead id so the next send starts fresh. No error line.
                 this.host.session.value = undefined;
                 return;
             case `codex-advisory`:
@@ -109,7 +109,7 @@ export class TurnFailures {
         }
     }
 
-    // Failures this window cannot fix itself: the red line; where nothing was processed yet the daemon holds the message.
+    // Failures this window cannot fix itself: the error line; where nothing was processed yet the daemon holds the message.
     private applyUnhandledError(error: TurnError): void {
         const { message, code } = error;
         if (code === `context-overflow`) {
@@ -154,7 +154,7 @@ export class TurnFailures {
         }
     }
 
-    // A spent allowance is a wait, not a crash: muted, not red, and nothing is resent unless this conversation's
+    // A spent allowance is a wait, not a crash: muted, not the error line, and nothing is resent unless this conversation's
     // answer for the ending says so. `held` means continuing resends the same turn, not a new message.
     private applyLimitError(error: TurnError): void {
         const model = this.host.selection.model.value === `` ? undefined : { id: this.host.selection.model.value };
@@ -169,8 +169,8 @@ export class TurnFailures {
         };
     }
 
-    // Provider outage with a resume in flight: muted notice naming when it retries, not the red line, since it
-    // isn't the user's fault. No `outage` (attempts spent) falls back to the red line and returns the message.
+    // Provider outage with a resume in flight: muted notice naming when it retries, not the error line, since it
+    // isn't the user's fault. No `outage` (attempts spent) falls back to the error line and returns the message.
     private applyOutageError(error: TurnError): void {
         const { message, outage } = error;
         if (outage === undefined) {
@@ -203,7 +203,7 @@ export class TurnFailures {
     }
 
     // A turn that outgrew the model's window: the daemon re-runs it once in a fresh session by itself, holding its queue
-    // for that run, and this window watches for it rather than reddening. The re-run overflowing too is red.
+    // for that run, and this window watches for it rather than raising the error line. A re-run that overflows too raises it.
     private applyOverflowError(error: TurnError): void {
         if (error.autoResume !== `scheduled`) {
             this.host.error.value = error.message;

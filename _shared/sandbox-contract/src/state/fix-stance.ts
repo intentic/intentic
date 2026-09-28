@@ -1,7 +1,7 @@
 import { turnedAwayCode } from "../policy/turned-away.js";
 import { type AgentSummary, awaitsWake } from "../schemas/agents.js";
 
-/* WHAT BECAME OF THE AGENT A SURFACE SENT AFTER A FAILURE — a red pipeline row, a refused push. */
+/* WHAT BECAME OF THE AGENT A SURFACE SENT AFTER A FAILURE — a failed pipeline row, a refused push. */
 
 export type FixStanceKind =
     // A turn is in flight. Nothing is owed by the reader.

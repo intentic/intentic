@@ -695,7 +695,7 @@ export const procedures = {
         runs: () => ({ runs: [] }),
     },
     // CI board data is real; the badge reflects the fixture's own state. Rerun, cancel and Fix-with-agent
-    // refuse: a recording can't act on a real pipeline. Main is red, with its fix agents, only in the whole recording,
+    // refuse: a recording can't act on a real pipeline. Main is failing, with its fix agents, only in the whole recording,
     // the one roster that carries them.
     ci: {
         runs: () => ciRunsResponse(Date.now(), demoMode.id === `full`),

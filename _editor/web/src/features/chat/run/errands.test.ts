@@ -27,7 +27,7 @@ describe(`errandOf`, () => {
     });
 });
 
-// The first prompt of a fresh conversation the DAEMON used to start on a red check after a land. Nothing starts one any
+// The first prompt of a fresh conversation the DAEMON used to start on a failed check after a land. Nothing starts one any
 // more, but transcripts hold them: composed here the way the daemon composed it (its opening, then the evidence), so a
 // reworded opening on either side fails rather than filing the brief as the user's words.
 it(`recognises the brief a fresh fix-up was started with, through the contract's own reader`, () => {
@@ -53,12 +53,12 @@ it(`gives every errand an opening no other errand's prompt starts with`, () => {
     }
 });
 
-// Rows name their errand now, so what the sandbox composed without an opening (a push or CI fix, its nudge, a held red's
+// Rows name their errand now, so what the sandbox composed without an opening (a push or CI fix, its nudge, a held failure's
 // note) no longer reads as the owner's words, and a row's own name wins over whatever its text happens to open with.
 it(`reads the errand a row names before its text`, () => {
     expect(errandOf({ ...user(`Fix what the push checks found in web.`), errand: `push-fix` })?.label).toBe(errands().pushFix.label);
     expect(errandOf({ ...user(`Carry on from where you left off.`), errand: `ci-fix-nudge` })?.label).toBe(errands().ciFix.label);
-    expect(errandOf({ ...user(`Main went red on what you are working on.`), errand: `land-held` })?.label).toBe(errands().landHeld.label);
+    expect(errandOf({ ...user(`Main failed on what you are working on.`), errand: `land-held` })?.label).toBe(errands().landHeld.label);
     expect(errandOf({ ...user(`${LAND_FIX_OPENING}\n\nmore`), errand: `land-fix-nudge` })?.label).toBe(errands().landFix.label);
     expect(errandOf(user(`Carry on from where you left off.`))).toBeUndefined();
 });

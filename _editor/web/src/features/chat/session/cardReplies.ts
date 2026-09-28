@@ -27,7 +27,7 @@ const FIELD_OF: Readonly<Record<CardAnswer["kind"], RequestField>> = {
     credential_offer: `credentialOffer`,
 };
 
-// What the red line says when the daemon didn't take an answer, in the words each card has always used.
+// What the error line says when the daemon didn't take an answer, in the words each card has always used.
 export const refusalOf = (answer: CardAnswer): string => {
     switch (answer.kind) {
         case `plan`:
@@ -104,7 +104,7 @@ export class CardReplies {
     }
 
     // Answers the still-pending card `requestId` names; false when there is none to answer, a second press is already
-    // on its way, or the daemon didn't take it (said on the red line, and the card stays answerable).
+    // on its way, or the daemon didn't take it (said on the error line, and the card stays answerable).
     async reply(requestId: string, answer: CardAnswer): Promise<boolean> {
         const field = FIELD_OF[answer.kind];
         const message = this.host.transcript.messages.value.find((row) => row[field]?.status === `pending` && row[field]?.requestId === requestId);

@@ -30,7 +30,7 @@ describe(`a turn that outgrew the model's window`, () => {
 
     // The daemon opens the fresh session on its next pass, holding the conversation's queue for it; attach streams are
     // pull, so the window has to go looking for that run once this one's stream is over.
-    it(`is a wait this window watches when the daemon re-runs it, not a red line`, async () => {
+    it(`is a wait this window watches when the daemon re-runs it, not the error line`, async () => {
         const host = hostOf();
         const failures = new TurnFailures(host);
         host.error.value = `an earlier sentence in the same turn`;
@@ -57,7 +57,7 @@ describe(`a turn that outgrew the model's window`, () => {
     });
 
     // The fresh session overflowing too is the end of it: nothing is coming back, and nothing here would fix it.
-    it(`is the red line when the fresh re-run overflowed as well, with nothing to press and nothing to watch`, async () => {
+    it(`is the error line when the fresh re-run overflowed as well, with nothing to press and nothing to watch`, async () => {
         const host = hostOf();
         const failures = new TurnFailures(host);
         const sentence = `Prompt is too long. A fresh session could not hold this turn either.`;

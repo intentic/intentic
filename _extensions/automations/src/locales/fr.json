@@ -98,7 +98,7 @@
         "requireMyApprovalBefore": "Exiger mon approbation avant de s'exécuter",
         "requireMyApprovalBefore2": "Exiger mon approbation avant qu'elle ne s'exécute",
         "retired": "retiré",
-        "retiredNeverFires": "Plus rien n'envoie ceci : la vérification qui tournait après chaque intégration n'existe plus, donc cette automatisation ne se déclenche jamais. Choisissez l'un des moments ci-dessus, ou faites-la réveiller par une pipeline CI au rouge.",
+        "retiredNeverFires": "Plus rien n'envoie ceci : la vérification qui tournait après chaque intégration n'existe plus, donc cette automatisation ne se déclenche jamais. Choisissez l'un des moments ci-dessus, ou faites-la réveiller par une pipeline CI en échec.",
         "runsOn": "Tourne sur",
         "sStarterSendsDifferent": "C'est le point de départ de {label}, mais {label2} envoie une charge utile différente.",
         "sStarterYoursTo": "Point de départ de {label}, à vous de le réécrire.",

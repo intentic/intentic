@@ -69,7 +69,7 @@ const SUBJECTS = [
             // glance. Retrying one waits out a clock that has already stopped, three times, for a build nobody wants.
             ["a sibling task torn down", "ERROR: failed to build: failed to solve: Canceled: context canceled"],
         ],
-        // A push GHCR drops once and accepts on retry is a green release; a broken build fails on the first attempt.
+        // A push GHCR drops once and accepts on retry is a passing release; a broken build fails on the first attempt.
         // Attempts are counted on disk, since `tee` puts the counted command in a subshell.
         drill: String.raw`
 export REGISTRY_RETRY_ATTEMPTS=3 REGISTRY_RETRY_DELAY=0

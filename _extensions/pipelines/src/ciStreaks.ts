@@ -1,7 +1,7 @@
 import { isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract";
 
-// Whether a branch is red right now, judged on its last commit rather than its last run: near-simultaneous workflows
-// mean a green one can hide a red one. A state, not a one-time edge: it clears only when a later commit passes, never
+// Whether a branch is failing right now, judged on its last commit rather than its last run: near-simultaneous
+// workflows mean a passing one can hide a failed one. A state, not a one-time edge: it clears only when a later commit passes, never
 // on merely being viewed. One streak per branch, however many commits deep, keeps the count from becoming noise.
 
 export interface FailureStreak {
@@ -9,9 +9,9 @@ export interface FailureStreak {
     readonly branch: string;
     // The commit at the head of the branch: the one that is broken now.
     readonly sha: string;
-    // When the branch WENT red: the oldest failure in the unbroken run of red commits at the head.
+    // When the branch STARTED failing: the oldest failure in the unbroken run of failed commits at the head.
     readonly since: number;
-    // For the tooltip: commits in a row that are red, and how many runs failed across them.
+    // For the tooltip: commits in a row that failed, and how many runs failed across them.
     readonly commits: number;
     readonly runs: number;
 }
@@ -32,7 +32,7 @@ interface BranchCommit {
     // Its terminal runs, newest first. Never empty.
     readonly runs: readonly PipelineRun[];
     readonly newest: PipelineRun;
-    // The red ones. Empty ⇒ the commit passed.
+    // The failed ones. Empty ⇒ the commit passed.
     readonly failed: readonly PipelineRun[];
 }
 
@@ -72,14 +72,14 @@ export const failureStreaks = (runs: readonly PipelineRun[]): FailureStreak[] =>
         }
         // Runs back to the last passing commit, or the window's oldest run; never looks newer than it is.
         const clean = commits.findIndex((commit) => commit.failed.length === 0);
-        const red = clean === -1 ? commits : commits.slice(0, clean);
-        const failed = red.flatMap((commit) => [...commit.failed]);
+        const broken = clean === -1 ? commits : commits.slice(0, clean);
+        const failed = broken.flatMap((commit) => [...commit.failed]);
         streaks.push({
             repo: head.newest.repo,
             branch: head.newest.branch,
             sha: head.sha,
             since: Math.min(...failed.map((run) => run.createdAt)),
-            commits: red.length,
+            commits: broken.length,
             runs: failed.length,
         });
     }
@@ -120,7 +120,7 @@ export const inFlightOnHead = (runs: readonly PipelineRun[]): ReadonlySet<Pipeli
 // rules, so a breakage six commits deep still opens one row, not six.
 export const arrivesOpen = (runs: readonly PipelineRun[]): ReadonlySet<PipelineRun> => new Set([...inFlightOnHead(runs), ...openFailures(runs)]);
 
-// Earliest later commit that passed clean, not just the newest green; a green on the failure's own commit doesn't
+// Earliest later commit that passed clean, not just the newest pass; a pass on the failure's own commit doesn't
 // count. Keyed by run object identity (shared from one query cache); absent means nothing has passed since.
 export const supersededBy = (runs: readonly PipelineRun[]): ReadonlyMap<PipelineRun, PipelineRun> => {
     const superseded = new Map<PipelineRun, PipelineRun>();
@@ -147,10 +147,10 @@ export const supersededBy = (runs: readonly PipelineRun[]): ReadonlyMap<Pipeline
 export const streakTooltip = (streaks: readonly FailureStreak[]): string => {
     const [only] = streaks;
     if (streaks.length === 1 && only !== undefined) {
-        const red = `${only.runs} failed run${only.runs === 1 ? `` : `s`}`;
+        const failedRuns = `${only.runs} failed run${only.runs === 1 ? `` : `s`}`;
         return only.commits === 1
-            ? `${only.repo} ${only.branch} is failing: ${red} on ${only.sha.slice(0, 7)}`
-            : `${only.repo} ${only.branch} is failing: ${only.commits} commits in a row, ${red}`;
+            ? `${only.repo} ${only.branch} is failing: ${failedRuns} on ${only.sha.slice(0, 7)}`
+            : `${only.repo} ${only.branch} is failing: ${only.commits} commits in a row, ${failedRuns}`;
     }
     return `${streaks.length} branches are failing`;
 };

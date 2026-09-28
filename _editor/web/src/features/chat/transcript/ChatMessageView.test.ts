@@ -845,7 +845,7 @@ describe(`ChatMessageView errand row`, () => {
         expect(shownText(element)).not.toContain(`src/parser.ts`);
     });
 
-    // The brief a fresh conversation opened on when the check after a land went red with nobody holding the work to take
+    // The brief a fresh conversation opened on when the check after a land failed with nobody holding the work to take
     // it. Nothing starts one any more, but transcripts hold them: the whole first turn is the sandbox's, so it reads as the
     // sandbox's errand, never as the user's own words. Composed the way the daemon composed it: its opening, then the
     // evidence.

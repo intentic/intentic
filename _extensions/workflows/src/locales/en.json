@@ -41,7 +41,7 @@
         "dollars": "dollars",
         "editLoop": "Edit loop",
         "everyPublicFunctionDoc": "Every public function has a doc comment explaining why it exists.",
-        "fixesFailuresOneAt": "fixes failures one at a time until the suite is green",
+        "fixesFailuresOneAt": "fixes failures one at a time until the suite passes",
         "freshContext": "Fresh context",
         "howEnds": "How it ends",
         "idleRoundOneChanged": "An idle round is one that changed nothing in the tree: that, not an error, is how a loop usually goes wrong.",

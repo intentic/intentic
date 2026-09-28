@@ -771,7 +771,7 @@ test("every runtime is told what runs after its work lands, on the main tree or 
     }
 });
 
-// The pre-turn rebase says nothing to the model: telling it only bought a verification sweep reported green. The human
+// The pre-turn rebase says nothing to the model: telling it only bought a verification sweep reported passing. The human
 // still sees it in the transcript's worktree frame.
 test("a rebased branch says nothing to any runtime", async () => {
     const isolated: TurnContext = {

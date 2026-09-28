@@ -26,7 +26,7 @@ export const ActivityEventSchema = z.object({
     type: z
         .string()
         .describe(
-            "Exactly what happened: a message received or sent, a reaction, a turn starting or ending, a rule doing something. A rule that ran and passed says nothing here, because a feed of green ticks is one the eye learns to skip.",
+            "Exactly what happened: a message received or sent, a reaction, a turn starting or ending, a rule doing something. A rule that ran and passed says nothing here, because a feed of passes is one the eye learns to skip.",
         ),
     channelId: z.string().optional().describe("Which channel or thread it happened in."),
     // Inbound author display name.

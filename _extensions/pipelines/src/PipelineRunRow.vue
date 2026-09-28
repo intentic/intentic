@@ -52,9 +52,12 @@ const props = defineProps<{
     // This row's own agent, if any (ciFixes.ts): its conversation id derives from this run. Turns the button into a
     // report instead of an offer to start.
     fix: AgentSummary | undefined;
-    // Another run's agent working the same branch, for a row with none of its own; only set when `fix` isn't, so a red
+    // Another run's agent working the same branch, for a row with none of its own; only set when `fix` isn't, so a failed
     // row can't offer a second agent for work already in flight.
     branchFix: CiFix | undefined;
+    // A failing-main banner above speaks for this row's branch and holds its one primary press, so this row's stays quiet:
+    // one loud button per breakage.
+    ledByBanner?: boolean;
 }>();
 const emit = defineEmits<{
     rerun: [run: PipelineRun];
@@ -158,8 +161,8 @@ const demoted = computed<string | undefined>(() => {
         ? `${props.run.branch} has passed since: this failure is history, but you can still start an agent on it`
         : `Behind a newer failure on ${props.run.branch}, that one is the run to fix`;
 });
-// Loud only on the branch's open failure, while no agent is already on it.
-const loud = computed(() => props.open && props.branchFix === undefined);
+// Loud only on the branch's open failure, while no agent is already on it and no banner above already offers the press.
+const loud = computed(() => props.open && props.branchFix === undefined && props.ledByBanner !== true);
 
 // Precision matches the amount: a sub-cent turn still shows something.
 const spend = computed<string | undefined>(() => {
@@ -284,7 +287,7 @@ const openStartOver = (): void => {
                     target="_blank"
                     rel="noopener"
                     class="touch-target inline-flex shrink-0 items-center gap-1 rounded border border-line px-2.5 py-1 text-2xs font-medium text-subtle hover:text-link"
-                    v-tooltip.top="t(`pipelineRunRow.wentGreenAgainIn`, { branch: run.branch })"
+                    v-tooltip.top="t(`pipelineRunRow.passedAgainIn`, { branch: run.branch })"
                 >
                     <Icon name="check-circle" class="text-2xs text-success" />
                     {{ t(`pipelineRunRow.supersededBy`) }}

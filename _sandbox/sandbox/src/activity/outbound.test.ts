@@ -185,7 +185,7 @@ test("telegram reports a refusal in `description` where slack uses `error`: both
 test("a whatsapp CLI send records message.send with the chat and text, whatever the quoting", () => {
     const { appended, services } = capture();
     const sniffer = createOutboundSniffer(services, TURN);
-    sniffer.observe(tool(`whatsapp send 4915112345678@s.whatsapp.net deploy is out, all green`, "t1"));
+    sniffer.observe(tool(`whatsapp send 4915112345678@s.whatsapp.net deploy is out, all checks pass`, "t1"));
     sniffer.observe(result("Sent to 4915112345678@s.whatsapp.net.", "t1"));
     sniffer.observe(tool(`whatsapp send-file "1203630000000000@g.us" /work/report.pdf`, "t2"));
     sniffer.observe(result("Sent /work/report.pdf to 1203630000000000@g.us.", "t2"));
@@ -195,7 +195,7 @@ test("a whatsapp CLI send records message.send with the chat and text, whatever 
             type: "message.send",
             endpoint: "/send",
             channelId: "4915112345678@s.whatsapp.net",
-            content: "deploy is out, all green",
+            content: "deploy is out, all checks pass",
         },
         {
             provider: "whatsapp",

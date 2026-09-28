@@ -4,9 +4,9 @@ import { computed, type Ref } from "vue";
 import { host } from "../host";
 
 // Fix agents already started, read off the fleet: no store needed since a fix conversation's id is derived from the run
-// it fixes, so matching a row to its agent is a lookup by id, not a record that can drift. Main's red names its one
+// it fixes, so matching a row to its agent is a lookup by id, not a record that can drift. A failing main line names its one
 // fixer outright (`fixer`), an id no later run derives, so the roster is handed on whole and every reader looks up only
-// the ids it owns (fixesByRun, mainRedsOf). Queries only when there is a failed run or a red to ask about.
+// the ids it owns (fixesByRun, mainFailuresOf). Queries only when there is a failed run or a failing main line to ask about.
 
 // Poll pace while a fix is moving; faster than the board's own CI poll since this can change in seconds.
 const LIVE_POLL_MS = 5_000;

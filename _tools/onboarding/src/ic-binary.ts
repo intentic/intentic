@@ -11,7 +11,7 @@ import { repoRoot } from "@intentic/constants/node";
 // - _sandbox/ic/dist-bin/…: what build-ic.sh left, for a developer who already built one.
 // - target/release/ic: a previous cargo build --release in this tree.
 // - cargo: build it now, if the toolchain is here.
-// With none found, stands down with an actionable message rather than failing red, since this tier blocks releases.
+// With none found, stands down with an actionable message rather than failing, since this tier blocks releases.
 
 const run = promisify(execFile);
 const root = repoRoot(import.meta.url);

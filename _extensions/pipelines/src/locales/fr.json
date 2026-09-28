@@ -1,17 +1,27 @@
 {
-    "mainRed": {
-        "failing": "En échec",
-        "fixAgent": "Agent de correction",
+    "mainFailure": {
+        "continueFix": "Continuer la correction",
+        "failingJobs": "Tâches en échec",
+        "fixAgent": "Agent de correction dessus",
         "fixAgentHint": "Chaque échec sur {branch} va à ce seul agent jusqu'à ce qu'une exécution passe.",
-        "newestRun": "dernière exécution rouge #{runId}",
-        "open": "Ouvrir",
-        "openFixer": "Ouvrir la conversation de l'agent de correction",
-        "reported": "Les réparations sont désactivées, donc personne n'a été envoyé.",
+        "fixWithAgent": "Réparer avec un agent",
+        "handBackGone": "Agent disparu",
+        "handBackInterrupted": "Tour interrompu",
+        "handBackNoChange": "Aucune correction",
+        "handBackRefused": "Agent injoignable",
+        "handBackStopped": "Agent arrêté",
+        "handBackTurnFailed": "Tour en échec",
+        "handBackTurns": "Plus de tours",
+        "handedBack": "Rendu",
+        "handedBackHint": "L'agent de correction a rendu la main. Continuez pour lui rendre ses tours, ou ouvrez-le pour voir ce qu'il a tenté.",
+        "moreJobs": "+{count} de plus",
+        "needsYou": "Vous attend",
+        "openFixer": "Ouvrir l'agent",
+        "repairsOff": "Correction auto désactivée",
+        "repairsOffHint": "Les réparations sont désactivées, donc aucun agent n'a été envoyé.",
         "since": "depuis {when}",
-        "spent": "L'agent de correction a eu ses tours, ou il a terminé sans rien changer.",
-        "title": "{branch} est au rouge",
-        "unassigned": "Aucun agent de correction dessus pour l'instant.",
-        "waitsForYou": "Vous attend"
+        "title": "{branch} échoue",
+        "unassigned": "Pas encore d'agent de correction"
     },
     "pipelineDagGraph": {
         "expand": "Déplier",
@@ -36,11 +46,11 @@
         "jobGraph": "{headline} : graphe des tâches",
         "loadingJobs": "Chargement des tâches",
         "noJobDetailsAvailable": "Aucun détail de tâche disponible pour cette exécution.",
+        "passedAgainIn": "{branch} est repassée dans cette exécution : ouvrez-la pour vérifier que la tâche en échec ici a seulement tourné",
         "reRun": "Relancer",
         "setAttemptAsideStart": "Mettre cette tentative de côté et en lancer une nouvelle — ouvre d'abord le sélecteur",
         "startOver": "Tout reprendre",
-        "supersededBy": "remplacée par",
-        "wentGreenAgainIn": "{branch} est repassée au vert dans cette exécution : ouvrez-la pour vérifier que la tâche en échec ici a seulement tourné"
+        "supersededBy": "remplacée par"
     },
     "pipelinesSkeleton": {
         "loadingPipelines": "Chargement des pipelines"

@@ -133,7 +133,7 @@ describe(`the provisioning canary`, () => {
         const prisma = prismaWith(new Date());
         const result = await runHostedCanary(prisma, config(), logger, nap);
         expect(result.ok).toBe(true);
-        // Green requires both: the daemon checked in and the starter answered at its preview address.
+        // A pass requires both: the daemon checked in and the starter answered at its preview address.
         expect(result.starterServingInMs).toEqual(expect.any(Number));
         expect(calls.some((entry) => entry.url.startsWith(`https://preview-site--landing-`) && entry.url.includes(`/__intentic/preview-probe`))).toBe(
             true,

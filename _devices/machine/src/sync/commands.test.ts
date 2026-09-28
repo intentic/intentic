@@ -331,7 +331,7 @@ describe("agentLine", () => {
     });
 
     // Neither a stall nor a clean bill of health: an agent too old to stamp, or one whose first pass hasn't landed.
-    // Saying which is the point, since picking either lets a silent stall read as green.
+    // Saying which is the point, since picking either lets a silent stall read as healthy.
     it("says so when no pass has been reported yet, rather than assuming either way", () => {
         const pid = 4242;
         const withoutTick = agentLine({ running: true, pid }, NOW);

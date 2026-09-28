@@ -5,7 +5,7 @@
 # trigger. It BUILDS nothing — it moves pointers between artifacts a release already published — so it runs in
 # under a minute and needs nothing from the checkout but the script.
 #
-# Shipping is the other direction and happens in the release pipeline (ship-stable.sh, on green). There is no
+# Shipping is the other direction and happens in the release pipeline (ship-stable.sh, once the pipeline passes). There is no
 # soak lane to fall back on any more; this is the safety net that replaced it.
 name: Rollback
 

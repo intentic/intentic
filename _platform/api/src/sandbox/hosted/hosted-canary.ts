@@ -20,7 +20,7 @@ import { HOUR_MS } from "../../durations.js";
 const POLL_MS = 15_000;
 // Generous: a cold build pulls the image (minutes); past this, a real signup would already have given up.
 const DEADLINE_MS = 12 * 60 * 1000;
-// How long after check-in the starter site gets to answer at its preview address; past it, the run is red.
+// How long after check-in the starter site gets to answer at its preview address; past it, the run fails.
 const STARTER_DEADLINE_MS = 3 * 60 * 1000;
 // The daemon's reserved probe path (preview-routes.ts PREVIEW_PROBE_PATH); `serving` is the only answer that counts.
 const PREVIEW_PROBE_PATH = `/__intentic/preview-probe`;

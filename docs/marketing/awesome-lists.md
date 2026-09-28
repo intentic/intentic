@@ -168,7 +168,7 @@ moved.
 | ikaijua/Awesome-AITools | [#782](https://github.com/ikaijua/Awesome-AITools/pull/782) | AI Coding table | **closed 2026-08-28 poll**: auto-closed by the repo's 14-day-inactivity bot; "feel free to reopen if there are updates", so a comment + reopen revives it |
 | punkpeye/awesome-mcp-clients | [#276](https://github.com/punkpeye/awesome-mcp-clients/pull/276) | Clients, alphabetical | open, clean |
 | steven2358/awesome-generative-ai | [#1191](https://github.com/steven2358/awesome-generative-ai/pull/1191) | `DISCOVERIES.md` → Coding Assistants | open, CI awaiting approval |
-| jamesmurdza/awesome-ai-devtools | [#945](https://github.com/jamesmurdza/awesome-ai-devtools/pull/945) | Agent Infrastructure → Multi-Agent Orchestration | open, clean: template check green |
+| jamesmurdza/awesome-ai-devtools | [#945](https://github.com/jamesmurdza/awesome-ai-devtools/pull/945) | Agent Infrastructure → Multi-Agent Orchestration | open, clean: template check passing |
 | AwesomeHomelab/awesome-homelab | [#114](https://github.com/AwesomeHomelab/awesome-homelab/pull/114) | `data/development.yaml` | open, clean |
 | ai-for-developers/awesome-ai-coding-tools | [#603](https://github.com/ai-for-developers/awesome-ai-coding-tools/pull/603) | Coding Agents | open, clean |
 | bradAGI/awesome-cli-coding-agents | [#253](https://github.com/bradAGI/awesome-cli-coding-agents/pull/253) | Session managers, sorted by stars | **live** (2026-08-28 poll): maintainer first closed it as "too new", reversed after a stats correction and added the entry himself; the PR reads closed-unmerged but the README carries intentic |
@@ -189,7 +189,7 @@ A second round of work on 2026-08-10 re-pushed the jamesmurdza branch and opened
 repo's template. That repo runs a bot (`PR Template Check`, on `pull_request_target: [opened, edited]`) that
 **auto-closes and labels `invalid-template`** any PR whose body is missing `## Description`, `## Checklist`, all
 four checklist lines verbatim, or a single `- [x]`. #958 was closed 16 seconds after it opened, and because the
-duplicate shared a head commit with #945, its red check landed on #945 too. Fixed by editing #945's body back
+duplicate shared a head commit with #945, its failed check landed on #945 too. Fixed by editing #945's body back
 to the template: the `edited` trigger reran the bot, it passed, and the newer success supersedes the failure on
 that commit. #945 is `mergeable_state: clean` and unlabelled again.
 
@@ -199,7 +199,7 @@ that commit. #945 is `mergeable_state: clean` and unlabelled again.
    accepts a title and body change and, on these bots, that is what re-triggers the check.
 3. **Paste the target repo's PR template verbatim, every time.** Two lists enforce it with a bot. Before
    submitting, run the repo's own check script against the intended body locally; the failure mode is a closed
-   PR, not a retryable red build.
+   PR, not a retryable failed build.
 4. **When a gate is missed, withdraw rather than argue.** `awesome-selfhosted-data`
    [#2883](https://github.com/awesome-selfhosted/awesome-selfhosted-data/pull/2883) was opened the same day
    against the 4-month release rule and self-withdrawn with an apology the same minute: the right move, and it

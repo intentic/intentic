@@ -100,7 +100,7 @@
         "requireMyApprovalBefore": "Wymagaj mojej zgody przed uruchomieniem",
         "requireMyApprovalBefore2": "Wymagaj mojej zgody, zanim się uruchomi",
         "retired": "wycofany",
-        "retiredNeverFires": "Nic już tego nie wysyła: sprawdzenie, które działało po każdym scaleniu, zniknęło, więc ta automatyzacja nigdy się nie uruchomi. Wybierz jeden z momentów powyżej albo niech budzi ją czerwony pipeline CI.",
+        "retiredNeverFires": "Nic już tego nie wysyła: sprawdzenie, które działało po każdym scaleniu, zniknęło, więc ta automatyzacja nigdy się nie uruchomi. Wybierz jeden z momentów powyżej albo niech budzi ją nieudany pipeline CI.",
         "runsOn": "Działa na",
         "sStarterSendsDifferent": "To jest rozrusznik {label}, ale {label2} wysyła inny ładunek.",
         "sStarterYoursTo": "Rozrusznik {label}, do przepisania po swojemu.",

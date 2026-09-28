@@ -10,7 +10,7 @@ export const gatePath = (workflowId: string, token: string): string =>
     `/workflows/${encodeURIComponent(workflowId)}/gate?token=${encodeURIComponent(token)}`;
 
 // GitHub Actions step using the `intentic/gate-action` Marketplace action, not open-coded curl; the action maps
-// `blocked` to a non-failing build, not a red one.
+// `blocked` to a build that does not fail.
 export const githubStep = (workflowName: string): string => `- name: ${workflowName}
   uses: intentic/gate-action@v1
   with:

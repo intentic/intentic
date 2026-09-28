@@ -92,7 +92,7 @@ const harness = async (warned: boolean, narrow: { branch?: string } = {}) => {
         prompts.push(input.prompt);
         yield { kind: "done" } as never;
     };
-    // The runs list, plus the failed-jobs enrichment the poller makes for a red run.
+    // The runs list, plus the failed-jobs enrichment the poller makes for a failed run.
     let listed = [run(1, "success")];
     const fetchFn: FetchFn = (async (url: string) =>
         String(url).includes("/jobs")

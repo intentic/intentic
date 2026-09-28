@@ -211,7 +211,7 @@ export const productPages: ProductPage[] = [
                 title: "Six jobs you could automate today",
                 body: "Each is a trigger, a prompt and the choices about who runs it.",
                 bullets: [
-                    "A pipeline finishes red: an agent reads the log, fixes the build and leaves the change on its branch",
+                    "A pipeline fails: an agent reads the log, fixes the build and leaves the change on its branch",
                     "A webhook fires on a new issue: an agent reproduces it, labels it and proposes the change",
                     "A nightly schedule: a dependency audit, filed as a chore",
                     "A weekly schedule: release notes drafted from what landed",

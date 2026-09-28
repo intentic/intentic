@@ -1401,10 +1401,10 @@
             "sentByAppLanding": "Wysłane przez aplikację — scalenie tej pracy zostało odrzucone",
             "sentBySandboxLand": "Wysłane przez sandbox — scalenie jego pracy wywróciło sprawdzenie głównego drzewa",
             "sentBySandboxTurn": "Wysłane przez sandbox — tamta tura skończyła się niezweryfikowana",
-            "fixingRedMainLine": "Naprawia czerwoną główną linię",
-            "startedBySandboxRedMain": "Uruchomione przez sandbox: sprawdzenie main zrobiło się czerwone po scaleniu pracy, a żadna rozmowa, która ją miała, nie mogła się tym zająć",
-            "mainRedOnItsWork": "Dowiaduje się, że main zrobił się czerwony na jego pracy",
-            "sentBySandboxHeld": "Wysłane przez sandbox — sprawdzenie main zrobiło się czerwone na tym, nad czym ta rozmowa wciąż pracuje",
+            "fixingFailingMainLine": "Naprawia nieprzechodzącą główną linię",
+            "startedBySandboxFailingMain": "Uruchomione przez sandbox: sprawdzenie main nie przeszło po scaleniu pracy, a żadna rozmowa, która ją miała, nie mogła się tym zająć",
+            "mainFailedOnItsWork": "Dowiaduje się, że sprawdzenie main nie przeszło na jego pracy",
+            "sentBySandboxHeld": "Wysłane przez sandbox — sprawdzenie main nie przeszło na tym, nad czym ta rozmowa wciąż pracuje",
             "fixingPushFindings": "Naprawia to, co znalazły sprawdzenia pushu",
             "sentBySandboxPush": "Wysłane przez sandbox — z tego, co znalazły sprawdzenia pushu",
             "fixingFailedCi": "Naprawia nieudane uruchomienie CI",
@@ -1697,7 +1697,7 @@
         },
         "agentChecks": {
             "repairMainCi": "Naprawiaj main, gdy jego CI zawiedzie",
-            "repairMainCiNote": "Pierwsze zadanie, które nie powiedzie się na main, uruchamia jednego agenta naprawczego, a każdy kolejny błąd trafia do niego, aż main znów będzie zielony. Gdy wyczerpie swoje tury albo niczego nie zmieni, przekazuje sprawę Tobie. Przebieg, który zawiódł przez same maszyny CI, jest zamiast tego raz ponawiany.",
+            "repairMainCiNote": "Pierwsze zadanie, które nie powiedzie się na main, uruchamia jednego agenta naprawczego, a każdy kolejny błąd trafia do niego, aż main znów zacznie przechodzić. Gdy wyczerpie swoje tury albo niczego nie zmieni, przekazuje sprawę Tobie. Przebieg, który zawiódł przez same maszyny CI, jest zamiast tego raz ponawiany.",
             "mainCi": "CI na main"
         },
         "agentClock": {

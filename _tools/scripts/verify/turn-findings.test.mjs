@@ -1,6 +1,6 @@
 // Pins which of a check's findings a change is charged with (verify-push.mjs). The case worth a test is the
 // third answer: a check the base snapshot was in no position to run reports lines that are neither known-new nor
-// known-standing, and treating those as new once meant whichever turn happened to be running while `i18n-keys` was red
+// known-standing, and treating those as new once meant whichever turn happened to be running while `i18n-keys` was failing
 // was sent back to fix ten findings it had not written.
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -58,7 +58,7 @@ test("a check the snapshot could not run charges the turn with nothing, and stil
 });
 
 test("a check the snapshot could not run is not credited with passing either", () => {
-    // `ok: true` from a blind snapshot is a vacuous pass; reading it as "green at HEAD, red now" would blame the turn
+    // `ok: true` from a blind snapshot is a vacuous pass; reading it as "passing at HEAD, failing now" would blame the turn
     // for the whole check the moment its findings arrive in a shape the finding pattern misses.
     const live = [verdict("i18n-literals", ["a finding in no recognised shape"])];
     const [judged] = judgeAgainstBase(live, atBase([verdict("i18n-literals", [], { ok: true })], false));

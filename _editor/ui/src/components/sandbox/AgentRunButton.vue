@@ -8,7 +8,7 @@ import { useT } from "../../i18n/index.js";
 
 const t = useT();
 
-/* THE BUTTON THAT STARTS AN AGENT FOR YOU: Fix with agent on a red pipeline, Ask the agent to fix on a broken container, Run a chore, Run all 21 stories. */
+/* THE BUTTON THAT STARTS AN AGENT FOR YOU: Fix with agent on a failed pipeline, Ask the agent to fix on a broken container, Run a chore, Run all 21 stories. */
 
 const {
     label,

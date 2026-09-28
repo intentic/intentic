@@ -284,7 +284,7 @@ const COMMAND_CLEANERS = [
     strip("apt", invocation(String.raw`apt-get|apt`), [
         /^(?:Get:|Hit:|Ign:|Fetched |Selecting |Preparing to unpack|Unpacking |Setting up |Processing triggers)/,
     ]),
-    // Test runners: on a green run (exit 0) per-test PASS lines are noise, dropped, keeping the summary. Failures skip
+    // Test runners: on a passing run (exit 0) per-test PASS lines are noise, dropped, keeping the summary. Failures skip
     // all command cleaners, so failing tests survive verbatim.
     strip("test", invocation(String.raw`bun\s+test|suites|vitest|jest|pytest|rspec|mocha|phpunit|go\s+test|cargo\s+test`), [
         /^\s*[✓√]\s/, // per-test pass (vitest/jest/mocha)

@@ -98,7 +98,7 @@ test("work that has exited leaves the running list, whether it succeeded or fail
     await waitFor(() => expect(rows.value.map((row) => row.session)).toEqual([`job-capability-demo`]));
 });
 
-/* What a finished job leaves behind IS its pane: a red check's output is in the terminal it ran in and nowhere
+/* What a finished job leaves behind IS its pane: a failed check's output is in the terminal it ran in and nowhere
  * else, so it stays one click away here rather than holding a tab on the strip. A finished agent shell is not
  * here, because its conversation already wrote down everything it did. */
 test("a job that has ended is offered back; a finished agent shell is not", async () => {

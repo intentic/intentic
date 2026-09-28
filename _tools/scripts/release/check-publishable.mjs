@@ -8,7 +8,7 @@
 // publish a NEW name at all, and renaming a package is how a new name arrives without anyone deciding to add one:
 // v1.249.0 renamed `@intentic/desktop` (53 versions, trusted publisher, provenance) to `@intentic/desktop-automation`
 // as collateral of a directory reorganization, and the refusal landed after semantic-release had already tagged and
-// released — a green release, a GitHub Release, and nothing on npm for any of the 28 packages.
+// released — a passing release, a GitHub Release, and nothing on npm for any of the 28 packages.
 //
 // Which is why this is read at PLAN time: the release that cannot publish is the one that must not be cut.
 //

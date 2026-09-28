@@ -71,7 +71,7 @@ const extensionSources = (): { path: string; text: string }[] => {
         .map((file) => ({ path: relative(EXTENSIONS, file).replaceAll(`\\`, `/`), text: readFileSync(file, `utf8`) }));
 };
 
-// Set near the true count so a scan that silently shrinks fails loud, not passes green.
+// Set near the true count so a scan that silently shrinks fails loud rather than passing quietly.
 const MIN_SCANNED = 90;
 
 // Column 0 only: the same call indented is inside a function or setup, created per caller, not once.

@@ -183,7 +183,7 @@ export const sameStore = (written: string, readBack: string): boolean => {
 export const sandboxSlug = (hostname: string): string => hostname.split(`.`)[0] ?? hostname;
 
 // Whether a window title is the one being waited for: substring match on the distinctive half, so a wording change
-// doesn't turn into a red build.
+// doesn't turn into a failed build.
 export const titled = (titles: readonly string[], fragment: string): boolean => titles.some((title) => title.includes(fragment));
 
 // The windows one program owns, by the process name Windows derives from its executable — never by title, which says
@@ -207,7 +207,7 @@ export interface DesktopReadiness {
     readonly drivable: boolean;
     /** The one line the transcript carries, whichever way it goes. */
     readonly summary: string;
-    /** What to do about it, for a person reading a red run at a machine they are not sitting at. */
+    /** What to do about it, for a person reading a failed run at a machine they are not sitting at. */
     readonly remedy: string | undefined;
 }
 

@@ -19,9 +19,9 @@ export const CONFLICT_AGENT_ID = `cnv_auth_middleware`;
 export const HELD_AGENT_ID = `cnv_support_card`;
 // That message, as the queue holds it; its picture is the sweep capture the workspace carries (fixture/browserShots.ts).
 export const HELD_MESSAGE_ID = `msg_01j9supportcard`;
-// The one fix agent the sandbox put on each red main line (fixture/ci.ts), at the first failed job of the run that turned
-// it red. Their ids are the daemon's own shape (ciFixConversationId): the repository, then that run's id, which a later
-// red run on the same branch does not share.
+// The one fix agent the sandbox put on each failing main line (fixture/ci.ts), at the first failed job of the run that
+// made it fail. Their ids are the daemon's own shape (ciFixConversationId): the repository, then that run's id, which a
+// later failed run on the same branch does not share.
 export const WEB_MAIN_FIXER_ID = ciFixConversationId(`web`, 4_818);
 export const API_MAIN_FIXER_ID = ciFixConversationId(`api`, 90_314);
 
@@ -504,7 +504,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         turns: 2,
         toolUses: 11,
         diff: { files: 1, insertions: 22, deletions: 3 },
-        // It reworded the changelog page's headings and never ran or opened it: pushed, it is what turned `web`'s main CI red.
+        // It reworded the changelog page's headings and never ran or opened it: pushed, it is what made `web`'s main CI fail.
         proof: { at: now - minutes(34), verification: `unproven`, unviewed: 1 },
     },
     {
@@ -563,7 +563,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         toolUses: 23,
         diff: { files: 1, insertions: 6, deletions: 4 },
     },
-    // `api`'s: it read the logs, found the failure outside the code, and finished without changing anything, so main's red
+    // `api`'s: it read the logs, found the failure outside the code, and finished without changing anything, so main's failure
     // was handed back and waits for you.
     {
         id: API_MAIN_FIXER_ID,

@@ -2,7 +2,7 @@ import type { Workflow, WorkflowRun, WorkflowStepRun } from "@intentic/sandbox-c
 import { gateVerdictOf } from "./workflow-gate.js";
 
 // One path reaches `fail`; every other way a run ends reaches `blocked`. A regression letting a failed step, a stopped
-// run or a deadline report `fail` would turn the gate's own outages into red builds.
+// run or a deadline report `fail` would turn the gate's own outages into failed builds.
 
 const design: Workflow = {
     id: "release-gate",

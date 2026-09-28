@@ -267,12 +267,12 @@ jobs:
       # THE WORKSPACE OUTLIVES THE COMMIT: checkout here is `clean: false` (above), so a rename leaves its old
       # directories on this persistent runner — a moved package's former directory keeps its node_modules/dist
       # and no git operation will ever remove it. The layout check then fails on ghosts no commit can fix
-      # (5464 tracked files all green, and still red). Prune them first; --prune deletes exactly the
+      # (5464 tracked files all passing, and the check still failing). Prune them first; --prune deletes exactly the
       # directories the check would have named.
       #
       # INLINE HERE AND ONLY HERE: the prune's real home is the pnpm-setup composite, beside the other repairs
       # the persistent workspace needs, which is what covers verify-core and verify-platform — they run this
-      # same check through `pnpm prepass` and were reddened by it (run 34046947138). This job is the one that
+      # same check through `pnpm prepass` and failed on it (run 34046947138). This job is the one that
       # deliberately uses no composite (checkout only, no node_modules, no network), so it carries its own.
       - run: node _tools/checks/layout.mjs --prune
       # EVERY CHECK THE MANIFEST LISTS, side by side (_tools/checks/manifest.mjs says what each is for): the
@@ -280,12 +280,12 @@ jobs:
       # policy (fork boundary, permission ceilings, provenance runners, tag triggers), the byte scan, the
       # daemon's structural gates, the publish set, the UI tiers and the rest. One list, read by this job, by the
       # `quick` job's push check and by the sandbox after each file an agent writes, so a check cannot again be right
-      # and unrun: five of these were red for weeks inside a `pnpm check` chain that no job and no hook ran. Checkout
+      # and unrun: five of these had been failing for weeks inside a `pnpm check` chain that no job and no hook ran. Checkout
       # only, no node_modules, no network, under two seconds.
       #
       # `--tidy=warn` BECAUSE THIS JOB IS A DAG ROOT. Every verify group and e2e-hermetic hangs off it, so a
       # failure here does not report one problem, it HIDES the rest of the pipeline: the day this flag was added,
-      # a run reddened on ghost directories, and the type error and the two broken tests underneath it were not
+      # a run failed on ghost directories, and the type error and the two broken tests underneath it were not
       # discovered until the third round of fixes. The manifest's `gate` field says which failures are worth that
       # (`code`: the tree does not work or cannot be built) and which are not (`tidy`: the tree costs its readers
       # more than it should). Tidy failures print here as warnings and are REFUSED by nightly.yml's `tidy` job,
@@ -396,7 +396,7 @@ jobs:
   # schema.prisma. check-migrations.sh carries the full account; the short version is
   # that a `challenge` column was added by editing a migration every deployed database had already applied,
   # Prisma never re-ran it, and desktop sign-in returned an unhandled 500 in production for a week while every
-  # job in this file stayed green. It could not have been otherwise: every database CI builds is created FRESH
+  # job in this file kept passing. It could not have been otherwise: every database CI builds is created FRESH
   # from that same edited file, so the fresh ones were right, the deployed one was wrong, and each was
   # perfectly consistent with itself. Only the history can say so, which is why this job reads the history.
   #
@@ -563,7 +563,7 @@ jobs:
   # is what a job reports both when it had nothing to do and when its base could not be built. So every job
   # that runs in this image guards on ci-base as well as on this one. Without that second guard a ci-base that
   # built but could not push left the desktop jobs and the release running against the PREVIOUS ci-desktop —
-  # green results, and a release, for a toolchain that is not the commit's. It read as an unrelated failure
+  # passing results, and a release, for a toolchain that is not the commit's. It read as an unrelated failure
   # three jobs away.
   #
   # `!cancelled()` rather than `always()`, here and on every other guard in this file. Both override the
@@ -610,7 +610,7 @@ jobs:
         if: github.ref != 'refs/heads/main'
         run: echo "pull request — image built for validation only, tag not moved"
 
-  # Build + test every product, as ONE JOB PER RELEASE GROUP rather than one job for the monorepo. A red group
+  # Build + test every product, as ONE JOB PER RELEASE GROUP rather than one job for the monorepo. A failed group
   # publishes nothing of its own and blocks nothing of anyone else's — which is what makes the `needs` edges on
   # the publishing jobs below mean anything.
   #
@@ -675,8 +675,8 @@ jobs:
   # versions the packs pin.
   #
   # IT GATES THE RELEASE, and it can, because it is hermetic. Every turn here talks to @intentic/fake-model on
-  # loopback instead of to a vendor, so there is no token to expire, no quota to exhaust and no outage to be
-  # reddened by — the failure modes that make a real-model test unfit to block a release. The tiers that DO
+  # loopback instead of to a vendor, so there is no token to expire, no quota to exhaust and no outage to
+  # fail on — the failure modes that make a real-model test unfit to block a release. The tiers that DO
   # spend real tokens run nightly and alert instead (nightly.yml, provider-smoke).
   #
   # It does not stand down quietly: with the switch on and a CLI missing, the suite FAILS naming the pack, on
@@ -716,8 +716,8 @@ jobs:
   # Every other job in this pipeline runs in a UTC container, which is the same clock the daemon ships on. That makes
   # a whole class of defect structurally invisible: a cron evaluated in the process's own zone, a day bucket that is
   # the reader's only by coincidence, a date test that passes because the author and the runner happen to agree.
-  # An automation set for 20:43 fired at 22:43 for its owner for as long as the feature existed, and the suite was
-  # green throughout — it could not have been anything else.
+  # An automation set for 20:43 fired at 22:43 for its owner for as long as the feature existed, and the suite
+  # passed throughout — it could not have been anything else.
   #
   # Two zones, chosen as the extremes rather than as realistic ones: Kiritimati is UTC+14 and Niue is UTC−11, so
   # between them every "is it the same calendar day" question is answered both ways on the same instant, and a
@@ -865,7 +865,7 @@ jobs:
       # The query worker runs dist/query/query-worker.js on a worker thread, which has no TypeScript loader; everything
       # else here runs from source under bun's @intentic/src condition.
       - run: pnpm turbo run build --filter=@intentic/iq-engine...
-      # One step, every package run whatever the one before it did, so a red run names every failure at once.
+      # One step, every package run whatever the one before it did, so a failed run names every failure at once.
       - name: The suites this lane exists for
         shell: bash
         run: |
@@ -880,7 +880,7 @@ jobs:
 
   # Counts, not timings (_tools/perf/README.md). Each job publishes its diff against the baseline checked into
   # _tools/perf as the job summary, and fails only on a declared budget (src/*/*-budgets.ts): a count that moved is a
-  # report, re-recorded by perf-record.yml when someone decides it should be, never by whoever a red run lands on.
+  # report, re-recorded by perf-record.yml when someone decides it should be, never by whoever a failed run lands on.
   # Instructions executed by the daemon's pure-JS hot paths, under Valgrind with node --predictable.
   perf-instr:
     needs: [changes, preflight]
@@ -1029,7 +1029,7 @@ jobs:
       # `prepare/` — the WSL2 + Docker Desktop setup, the largest single thing ic does on the platform it does
       # the most for — is one `#[cfg(windows)]` block, so the three steps above type-check straight past it. On
       # 2026-08-19 a `String` passed where a `&str` was wanted sat inside that block: fmt, clippy and the tests
-      # were all green, the commit landed on main, and the FIRST thing that ever compiled the line was the
+      # all passed, the commit landed on main, and the FIRST thing that ever compiled the line was the
       # release's own cross-build — which failed, so the release did not happen. A gate that cannot see the code
       # is a gate the release is standing in for, and the release is the worst possible place to find out.
       #
@@ -1260,7 +1260,7 @@ jobs:
   # wake that reaches the provider. The unit tests check those pieces; nothing else checks they are connected.
   #
   # It is allowed to gate because it is hermetic, the argument verify-providers makes for itself: no vendor, so
-  # no way to be red for a reason that is not ours, and its one container is addressed through testcontainers'
+  # no way to fail for a reason that is not ours, and its one container is addressed through testcontainers'
   # host/port mapping rather than a published port — the assumption that keeps `e2e:browser` out of CI.
   #
   # Separate from `e2e-hermetic` because that tier boots Docker-in-Docker and drives a CLI over SSH on
@@ -1406,9 +1406,9 @@ jobs:
         shell: bash
       # THE HALVES MUST BOOT BEFORE ANY MOVING TAG POINTS AT THEM. Everything upstream of this job ran in the
       # development install; the image runs a `pnpm deploy --prod` tree, and a daemon that dies on an import
-      # missing from THAT tree leaves every check above green (smoke-image.sh's header tells the story). This
+      # missing from THAT tree leaves every check above passing (smoke-image.sh's header tells the story). This
       # is the first and only per-push step that starts the artifact. It runs against the SHA tags just pushed
-      # — the published bytes, not a local build — and a red step means images-merge never stitches `latest`,
+      # — the published bytes, not a local build — and a failed step means images-merge never stitches `latest`,
       # so consumers stay on the previous good pair.
       - run: bash _tools/scripts/image/smoke-image.sh "ghcr.io/intentic/sandbox:sha-${GITHUB_SHA::8}-amd64" "ghcr.io/intentic/sandbox:core-sha-${GITHUB_SHA::8}-amd64"
         shell: bash
@@ -1532,7 +1532,7 @@ jobs:
   # the path filter is deliberately COARSE: a push that didn't change an app's actual inputs just re-tags the
   # existing image registry-side.
   #
-  # `e2e-billing` gates here because verify-platform's unit tests can all stay green while the chain between
+  # `e2e-billing` gates here because verify-platform's unit tests can all keep passing while the chain between
   # them is broken, and this job rolls the Komodo stack — the last point at which a plan that takes payments and
   # grants nothing is still ours to stop. It skips on the same `platform == 'true'` this job does, so it never
   # withholds a deploy that should have happened.
@@ -1596,7 +1596,7 @@ jobs:
       # what production was serving. Hosted sandboxes had meanwhile moved onto `fly-replay`, which the running
       # edge was too old to do, so each one answered 502 at its own address and told its owner to start it over.
       # deploy-ingress.sh rolls it and then reads the build back off the public /health, so a push that does not
-      # land is a red job rather than a silent one. It deploys _platform/ingress/fly.toml, where the edge terminates
+      # land is a failed job rather than a silent one. It deploys _platform/ingress/fly.toml, where the edge terminates
       # TLS itself, refuses a config of any other shape, and ends on `edge-mode: tls — intentic-ingress declares quic,
       # h3 and webtransport` once /health says so.
       #
@@ -1611,11 +1611,11 @@ jobs:
       # The step above proves the api boots and answers /health. It says nothing about the front door, and the
       # front door is not ours alone: sign-in also depends on Google still accepting this origin for the OAuth
       # client, which is state living in a console outside this repo and outside this pipeline. When that
-      # stopped being true, every Google button on the site went dead and the whole pipeline stayed green —
+      # stopped being true, every Google button on the site went dead and the whole pipeline kept passing —
       # the browser tier runs on a seeded session with no real Google, and so does every unit test.
       #
       # It is a real browser because it has to be: the same request answers 200 to curl and 400 to Chromium
-      # (smoke-signin.mjs has the evidence), so an HTTP probe would have been green throughout the outage.
+      # (smoke-signin.mjs has the evidence), so an HTTP probe would have passed throughout the outage.
       # That is the whole cost justification for installing a browser in a deploy job.
       - run: npx playwright install --with-deps chromium
         working-directory: _tools/e2e

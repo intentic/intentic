@@ -16,7 +16,7 @@ import {
     fixerSettled,
     fixPressed,
     jobFailed,
-    mainReds,
+    mainFailures,
     resetMainFixer,
     runFinished,
     streakFixerFor,
@@ -26,7 +26,7 @@ import { ciProjects } from "./projects.js";
 import type { FetchFn } from "./providers.js";
 import { createRunsCache } from "./runs-cache.js";
 
-/* Main's CI has one fix agent: started at the first failed job, told every later one, and handing main's red to the
+/* Main's CI has one fix agent: started at the first failed job, told every later one, and handing main's failure to the
    owner when it can do no more. */
 
 // Dropped rather than fed to a live /events feed, whose subscription would start the runtime sampler.
@@ -92,7 +92,10 @@ const harness = async (autoRepair = true) => {
     const said: Said[] = [];
     const steered: { conversationId: string; steer: Steer }[] = [];
     const told: string[] = [];
+    // What the activity feed says, word for word, and what the log was given besides its message.
+    const sentences: string[] = [];
     const logged: string[] = [];
+    const logFields: unknown[] = [];
     const reruns: string[] = [];
     const forge: Forge = { jobs: {}, log: "FAIL src/a.test.ts > adds" };
     const settings = { autoRepair };
@@ -138,10 +141,12 @@ const harness = async (autoRepair = true) => {
         activity: unstubbed<Services["activity"]>("activity", {
             append: async (event) => {
                 told.push(event.type);
+                sentences.push(event.content ?? "");
             },
         }),
         logger: unstubbed<Services["logger"]>("logger", {
             info: (...args: unknown[]) => {
+                logFields.push(args[0]);
                 logged.push(String(args[1]));
             },
             warn: (...args: unknown[]) => {
@@ -175,14 +180,32 @@ const harness = async (autoRepair = true) => {
     if (project === undefined) {
         throw new Error("the web repo should map to its GitHub project");
     }
-    const red = async () => (await services.ciStore.reds())["web\nmain"];
-    return { services, fetchFn, project, agents, running, started, said, steered, told, logged, reruns, forge, settings, settle, red };
+    const failure = async () => (await services.ciStore.failures())["web\nmain"];
+    return {
+        services,
+        fetchFn,
+        project,
+        agents,
+        running,
+        started,
+        said,
+        steered,
+        told,
+        sentences,
+        logged,
+        logFields,
+        reruns,
+        forge,
+        settings,
+        settle,
+        failure,
+    };
 };
 
 beforeEach(resetMainFixer);
 
 test("the first failed job starts one fix agent, named for its run, with that job's log, while the run goes on", async () => {
-    const { services, fetchFn, project, started, told, red } = await harness();
+    const { services, fetchFn, project, started, told, failure } = await harness();
 
     expect(await jobFailed(services, project, job(41, 7), fetchFn)).toBe("code");
 
@@ -192,8 +215,8 @@ test("the first failed job starts one fix agent, named for its run, with that jo
     expect(started[0]!.prompt).toContain("FAIL src/a.test.ts > adds");
     expect(started[0]!.errand).toBe("ci-fix");
     expect(told).toEqual(["ci.repair_started"]);
-    expect(await red()).toMatchObject({ firstRunId: 41, runId: 41, count: 1, turns: 1, workflows: { CI: 41 }, heard: ["41/7"] });
-    expect(await mainReds(services)).toEqual([
+    expect(await failure()).toMatchObject({ firstRunId: 41, runId: 41, count: 1, turns: 1, workflows: { CI: 41 }, heard: ["41/7"] });
+    expect(await mainFailures(services)).toEqual([
         {
             repo: "web",
             branch: "main",
@@ -207,21 +230,21 @@ test("the first failed job starts one fix agent, named for its run, with that jo
 });
 
 test("every later failure goes to the same agent: said into its live turn for free, a turn of its own when idle", async () => {
-    const { services, fetchFn, project, running, started, said, red } = await harness();
+    const { services, fetchFn, project, running, started, said, failure } = await harness();
     await jobFailed(services, project, job(41, 7), fetchFn);
 
     await jobFailed(services, project, job(41, 8, "lint"), fetchFn);
     expect(said.map((words) => [words.turn.conversationId, words.turn.errand, words.voice])).toEqual([[FIXER, "ci-fix-nudge", "sandbox"]]);
     expect(said[0]!.turn.prompt).toContain(`"lint" in run 41`);
-    expect(said[0]!.turn.prompt).toContain("It is in the run this red began in.");
-    expect((await red())?.turns).toBe(1);
+    expect(said[0]!.turn.prompt).toContain("It is in the run this failure began in.");
+    expect((await failure())?.turns).toBe(1);
 
     running.delete(FIXER);
     await jobFailed(services, project, job(42, 9), fetchFn);
     expect(said[1]!.turn.prompt).toContain("It is from a later run, at commit sha42.");
     expect(started).toHaveLength(1);
-    expect(await red()).toMatchObject({ runId: 42, count: 2, turns: 2, workflows: { CI: 42 } });
-    expect((await red())?.findings.map(({ text }) => text)).toEqual(["verify-core", "lint"]);
+    expect(await failure()).toMatchObject({ runId: 42, count: 2, turns: 2, workflows: { CI: 42 } });
+    expect((await failure())?.findings.map(({ text }) => text)).toEqual(["verify-core", "lint"]);
 });
 
 test("a job heard twice, by its own webhook and by its finished run, is handled once", async () => {
@@ -235,15 +258,15 @@ test("a job heard twice, by its own webhook and by its finished run, is handled 
     expect(said).toEqual([]);
 });
 
-test("a job of another branch is nobody's red", async () => {
-    const { services, fetchFn, project, started, red } = await harness();
+test("a job of another branch is no failure of main's", async () => {
+    const { services, fetchFn, project, started, failure } = await harness();
     expect(await jobFailed(services, project, job(41, 7, "verify-core", { branch: "agent/x" }), fetchFn)).toBe("skipped");
     expect(started).toEqual([]);
-    expect(await red()).toBeUndefined();
+    expect(await failure()).toBeUndefined();
 });
 
 test("the fleet's failure is never the agent's: a run only the fleet failed is re-run once, then said", async () => {
-    const { services, fetchFn, project, forge, started, told, reruns, red } = await harness();
+    const { services, fetchFn, project, forge, started, told, reruns, failure } = await harness();
     forge.jobs[41] = [{ id: 8, name: "verify-core", conclusion: "failure", steps: [{ name: "Set up job", conclusion: "failure" }] }];
 
     expect(await jobFailed(services, project, job(41, 8, "verify-core", { step: "Set up job" }), fetchFn)).toBe("fleet");
@@ -251,24 +274,24 @@ test("the fleet's failure is never the agent's: a run only the fleet failed is r
     await runFinished(services, run(41, "failed"), fetchFn);
 
     expect(started).toEqual([]);
-    expect(await red()).toBeUndefined();
+    expect(await failure()).toBeUndefined();
     expect(reruns).toEqual(["https://api.github.com/repos/acme/web/actions/runs/41/rerun"]);
     expect(told).toEqual(["ci.fleet_rerun", "ci.fleet_failed"]);
 });
 
 test("a later pass of every workflow that failed ends the streak, and another workflow's pass does not", async () => {
-    const { services, fetchFn, project, running, steered, told, logged, red } = await harness();
+    const { services, fetchFn, project, running, steered, told, logged, failure } = await harness();
     await jobFailed(services, project, job(41, 7), fetchFn);
     await jobFailed(services, project, job(43, 11, "analyze", { workflow: "CodeQL" }), fetchFn);
 
     await runFinished(services, run(44, "success", { workflow: "Scorecard" }), fetchFn);
-    expect(Object.keys((await red())?.workflows ?? {})).toEqual(["CI", "CodeQL"]);
+    expect(Object.keys((await failure())?.workflows ?? {})).toEqual(["CI", "CodeQL"]);
     await runFinished(services, run(45, "success"), fetchFn);
-    expect(await red()).toMatchObject({ workflows: { CodeQL: 43 } });
-    expect((await red())?.findings.map(({ text }) => text)).toEqual(["analyze"]);
+    expect(await failure()).toMatchObject({ workflows: { CodeQL: 43 } });
+    expect((await failure())?.findings.map(({ text }) => text)).toEqual(["analyze"]);
 
     await runFinished(services, run(46, "success", { workflow: "CodeQL" }), fetchFn);
-    expect(await red()).toBeUndefined();
+    expect(await failure()).toBeUndefined();
     expect(told).toContain("ci.repair_retired");
     expect(logged).toContain("ci repair: streak ended");
     // Still working when main passed: it is told it may stop.
@@ -277,70 +300,122 @@ test("a later pass of every workflow that failed ends the streak, and another wo
 });
 
 test("a failure older than main's newest pass of its workflow is not main's word", async () => {
-    const { services, fetchFn, project, started, red } = await harness();
+    const { services, fetchFn, project, started, failure } = await harness();
     await runFinished(services, run(42, "success"), fetchFn);
     expect(await jobFailed(services, project, job(41, 7), fetchFn)).toBe("skipped");
     expect(started).toEqual([]);
-    expect(await red()).toBeUndefined();
+    expect(await failure()).toBeUndefined();
 });
 
-test(`past its ${TURNS_PER_STREAK} turns the red waits for the owner, and nothing more is sent`, async () => {
-    const { services, fetchFn, project, running, said, told, red } = await harness();
+test(`past its ${TURNS_PER_STREAK} turns the failure waits for the owner, and nothing more is sent`, async () => {
+    const { services, fetchFn, project, running, said, told, sentences, failure } = await harness();
     await jobFailed(services, project, job(41, 7), fetchFn);
     for (let runId = 42; runId <= 42 + TURNS_PER_STREAK; runId += 1) {
         running.delete(FIXER);
         await jobFailed(services, project, job(runId, runId * 10), fetchFn);
     }
     expect(said).toHaveLength(TURNS_PER_STREAK - 1);
-    expect((await red())?.decisions.at(-1)).toMatchObject({ kind: "spent", conversationId: FIXER });
+    expect((await failure())?.decisions.at(-1)).toMatchObject({
+        kind: "spent",
+        reason: "turns",
+        conversationId: FIXER,
+        detail: `Its fix agent had its ${TURNS_PER_STREAK} turns and main still fails.`,
+    });
     expect(told).toEqual(["ci.repair_started", "ci.repair_needs_you"]);
+    expect(sentences).toEqual([
+        "main of web started failing at verify-core: a fix agent is on it, and every later failure goes to it.",
+        `main of web still fails and waits for you: its fix agent had its ${TURNS_PER_STREAK} turns and main still fails.`,
+    ]);
 
     running.delete(FIXER);
     await jobFailed(services, project, job(50, 500), fetchFn);
     expect(said).toHaveLength(TURNS_PER_STREAK - 1);
 });
 
-test("an agent that finished without changing anything hands the red over; one that changed something already does not", async () => {
-    const { services, fetchFn, project, running, said, told, settle, red } = await harness();
+test("an agent that finished without changing anything hands the failure over; one that changed something already does not", async () => {
+    const { services, fetchFn, project, running, said, told, settle, failure } = await harness();
     await jobFailed(services, project, job(41, 7), fetchFn);
     await settle(FIXER, { status: "idle" });
-    expect((await red())?.decisions.at(-1)).toMatchObject({ kind: "spent", conversationId: FIXER });
-    expect((await red())?.decisions.at(-1)?.detail).toContain("finished without changing anything");
+    expect((await failure())?.decisions.at(-1)).toMatchObject({
+        kind: "spent",
+        reason: "no-change",
+        conversationId: FIXER,
+        detail: "Its fix agent finished without changing anything.",
+    });
     expect(told).toEqual(["ci.repair_started", "ci.repair_needs_you"]);
     await jobFailed(services, project, job(42, 9), fetchFn);
     expect(said).toEqual([]);
 
     // A person's press gives it the streak back, with its turns.
     await fixPressed(services, run(42, "failed"), FIXER);
-    expect(await red()).toMatchObject({ turns: 0 });
+    expect(await failure()).toMatchObject({ turns: 0 });
     running.add(FIXER);
     await settle(FIXER, { status: "landed" });
-    expect((await red())?.changed).toBe(true);
+    expect((await failure())?.changed).toBe(true);
     running.delete(FIXER);
     await jobFailed(services, project, job(43, 10), fetchFn);
     expect(said).toHaveLength(1);
     await settle(FIXER, { status: "idle" });
-    expect((await red())?.decisions.at(-1)?.kind).toBe("fix-up");
+    expect((await failure())?.decisions.at(-1)?.kind).toBe("fix-up");
 });
 
-test("an agent whose turn failed hands the red over, and a turn the sandbox runs again by itself is not over yet", async () => {
-    const { services, fetchFn, project, agents, red } = await harness();
+test("an agent whose turn failed hands the failure over, and a turn the sandbox runs again by itself is not over yet", async () => {
+    const { services, fetchFn, project, agents, failure } = await harness();
     await jobFailed(services, project, job(41, 7), fetchFn);
     agents.set(FIXER, summary(FIXER, { status: "error", failure: "the harness crashed" }));
     await fixerSettled(services, { conversationId: FIXER, rerun: {} });
-    expect((await red())?.decisions.at(-1)?.kind).toBe("fix-up");
+    expect((await failure())?.decisions.at(-1)?.kind).toBe("fix-up");
     await fixerSettled(services, { conversationId: FIXER });
-    expect((await red())?.decisions.at(-1)).toMatchObject({ kind: "spent", detail: expect.stringContaining("the harness crashed") });
+    expect((await failure())?.decisions.at(-1)).toMatchObject({ kind: "spent", reason: "turn-failed", detail: "Its fix agent's turn failed." });
 });
 
-test("with repairs switched off, main's red is only reported", async () => {
-    const { services, fetchFn, project, started, red } = await harness(false);
+// The turn's own error is the log's: the owner reads one short sentence, and the reason is a word a screen phrases itself.
+test("a failed turn hands the failure over with its reason, and the agent's own error reaches only the log", async () => {
+    const { services, fetchFn, project, settle, sentences, logFields, failure } = await harness();
+    await jobFailed(services, project, job(41, 7), fetchFn);
+    const error = "Sandbox memory is low: 11.1 GiB resident + 5.0 GiB swapped, against 18.0 GiB";
+
+    await settle(FIXER, { status: "error", failure: error });
+
+    expect((await failure())?.decisions.at(-1)).toEqual({
+        kind: "spent",
+        reason: "turn-failed",
+        conversationId: FIXER,
+        at: expect.any(Number),
+        detail: "Its fix agent's turn failed.",
+    });
+    expect(sentences.at(-1)).toBe("main of web still fails and waits for you: its fix agent's turn failed.");
+    expect(JSON.stringify(await mainFailures(services))).not.toContain("Sandbox memory");
+    expect(sentences.join("\n")).not.toContain("Sandbox memory");
+    expect(logFields).toContainEqual(expect.objectContaining({ reason: "turn-failed", fixer: FIXER, cause: error }));
+});
+
+test("an archived fix agent hands the failure over as gone, in its own words", async () => {
+    const { services, fetchFn, project, agents, failure } = await harness();
+    await jobFailed(services, project, job(41, 7), fetchFn);
+    agents.set(FIXER, summary(FIXER, { status: "idle", archivedAt: 2_000 }));
+
+    await fixerSettled(services, { conversationId: FIXER });
+
+    expect((await failure())?.decisions.at(-1)).toMatchObject({
+        kind: "spent",
+        reason: "gone",
+        conversationId: FIXER,
+        detail: "Its fix agent was archived.",
+    });
+});
+
+test("with repairs switched off, a failing main is only reported", async () => {
+    const { services, fetchFn, project, started, failure } = await harness(false);
     await jobFailed(services, project, job(41, 7), fetchFn);
     await jobFailed(services, project, job(41, 8, "lint"), fetchFn);
     expect(started).toEqual([]);
-    expect((await red())?.decisions.map(({ kind }) => kind)).toEqual(["reported"]);
-    expect((await mainReds(services))[0]).toMatchObject({ jobs: ["verify-core", "lint"], decision: { kind: "reported" } });
-    expect((await mainReds(services))[0]?.fixer).toBeUndefined();
+    expect((await failure())?.decisions.map(({ kind }) => kind)).toEqual(["reported"]);
+    expect((await mainFailures(services))[0]).toMatchObject({
+        jobs: ["verify-core", "lint"],
+        decision: { kind: "reported", detail: "Repairs are off, so nobody was sent." },
+    });
+    expect((await mainFailures(services))[0]?.fixer).toBeUndefined();
 });
 
 // The streak is kept with the CI store, not in memory: a restart keeps it, and the agent on it stays its only one.
@@ -355,7 +430,7 @@ test("a restart keeps the streak: the next failure goes to the agent already on 
     expect(said.map((words) => words.turn.conversationId)).toEqual([FIXER]);
 });
 
-test("a press on a run of a red main-line branch continues the streak's agent; any other run is its own", async () => {
+test("a press on a run of a failing main-line branch continues the streak's agent; any other run is its own", async () => {
     const { services, fetchFn, project } = await harness();
     expect(await streakFixerFor(services, run(41, "failed"))).toBeUndefined();
     await jobFailed(services, project, job(41, 7), fetchFn);

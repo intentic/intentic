@@ -1,8 +1,8 @@
 import type { Marketplace } from "@intentic/api-contract";
 
 // Registry for the Sandbox screen's Discover row: stands in for the two JSON files a real daemon would clone and read.
-// Built to show every state the surface distinguishes (installed, blocked but still listed, unpinnable), not an
-// all-green catalogue.
+// Built to show every state the surface distinguishes (installed, blocked but still listed, unpinnable), not a
+// catalogue where everything is fine.
 
 const sha = (seed: string): string => seed.repeat(40).slice(0, 40);
 const securityReview = (repo: string, commit: string, path?: string) => ({

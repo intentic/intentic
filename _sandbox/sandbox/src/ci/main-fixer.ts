@@ -4,19 +4,20 @@ import {
     type AgentSummary,
     CI_FIX_PREFIX,
     ciFixConversationId,
-    type CiMainRed,
+    type CiMainFailure,
     fixStance,
     fnvDigest,
     isPipelineInFlight,
+    type MainFailureDecision,
+    type MainFailureHandBack,
     type PipelineRun,
-    type RedDecision,
 } from "@intentic/sandbox-contract";
 import { deliverWake } from "../agent/run/turn/wake-delivery.js";
 import type { Services } from "../composition.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
 import { opt } from "../opt.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
-import type { CiFinding, CiRed } from "./ci-store.js";
+import type { CiFailure, CiFinding } from "./ci-store.js";
 import { FIX_LOG_BYTES, infraLog, startCiFix } from "./ci-fix.js";
 import { ciProjects, type CiProject } from "./projects.js";
 import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
@@ -27,13 +28,13 @@ import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
    itself, and nobody decides who broke what. The streak ends when a later run of every workflow that failed on it
    passes.
 
-   It gets a few turns, and hands the red to the owner when they are spent, or when its turn ends without it having
+   It gets a few turns, and hands the failure to the owner when they are spent, or when its turn ends without it having
    changed anything (a failure that is not in the code: the runner's environment, a tool's version, a secret) or ends
    failed, stopped or archived. A failed job the CI fleet died in is never its work: a run whose every failure is the
    fleet's is re-run once. The streak is kept in the CI store (ci-store.ts), so a restart neither forgets it nor starts a
-   second agent on it; the Agent tab's Repair switch (`autoRepair`) off, main's red is only reported. */
+   second agent on it; the Agent tab's Repair switch (`autoRepair`) off, a failing main is only reported. */
 
-// Branches whose red a fix agent is for; any other branch is somebody's work in progress.
+// Branches whose failures a fix agent is for; any other branch is somebody's work in progress.
 const MAIN_BRANCHES: ReadonlySet<string> = new Set(["main", "master"]);
 // Turns the sandbox starts for the fix agent in one streak; words said into its live turn are none.
 export const TURNS_PER_STREAK = 3;
@@ -114,9 +115,9 @@ const orElse = async <T>(services: Pick<Services, "logger">, work: Promise<T>, f
 };
 
 // The one conversation on a streak: the newest a fix-up decision named.
-export const fixerOf = (red: CiRed): string | undefined => red.decisions.findLast((decision) => decision.kind === "fix-up")?.conversationId;
-// Whether the red was handed to the owner since its fix agent was last given it.
-const waitsForOwner = (red: CiRed): boolean => red.decisions.at(-1)?.kind === "spent";
+export const fixerOf = (streak: CiFailure): string | undefined => streak.decisions.findLast((decision) => decision.kind === "fix-up")?.conversationId;
+// Whether the failure was handed to the owner since its fix agent was last given it.
+const waitsForOwner = (streak: CiFailure): boolean => streak.decisions.at(-1)?.kind === "spent";
 
 const tell = (services: Services, type: string, content: string, outcome: "ok" | "error", conversationId?: string): void => {
     void orElse(
@@ -128,41 +129,68 @@ const tell = (services: Services, type: string, content: string, outcome: "ok" |
     );
 };
 
-const decided = async (services: Services, repo: string, branch: string, decision: RedDecision): Promise<void> => {
-    await services.ciStore.red(repo, branch, (current) =>
+const decided = async (services: Services, repo: string, branch: string, decision: MainFailureDecision): Promise<void> => {
+    await services.ciStore.failure(repo, branch, (current) =>
         current === undefined ? current : { ...current, decisions: [...current.decisions, decision] },
     );
     publishRuntimeChange("ci");
 };
 
-// The red handed to the owner: nothing more is sent to its fix agent until a person presses Fix.
-const handOver = async (services: Services, repo: string, branch: string, fixer: string | undefined, why: string): Promise<void> => {
+// Each reason a fix agent hands the failure back for, in the few words the sandbox says it in. The decision carries the
+// reason too, for a screen to word in its own language; what the turn or the delivery said goes to the log only.
+const HAND_BACK = {
+    turns: `its fix agent had its ${TURNS_PER_STREAK} turns and main still fails`,
+    "no-change": "its fix agent finished without changing anything",
+    stopped: "its fix agent was stopped",
+    interrupted: "its fix agent's turn was cut off",
+    "turn-failed": "its fix agent's turn failed",
+    gone: "its fix agent is gone",
+    refused: "its fix agent could not take the newest failure",
+} satisfies Readonly<Record<MainFailureHandBack, string>>;
+
+// Why a failure goes back to the owner: the reason, the words for it where they say more than the reason's own, and the
+// raw cause for the log.
+interface HandBack {
+    readonly reason: MainFailureHandBack;
+    readonly words?: string;
+    readonly cause?: string | undefined;
+}
+
+// An archived fix agent is gone like a deleted one, in its own words.
+const ARCHIVED: HandBack = { reason: "gone", words: "its fix agent was archived" };
+
+// The failure handed to the owner: nothing more is sent to its fix agent until a person presses Fix.
+const handOver = async (services: Services, repo: string, branch: string, fixer: string | undefined, handBack: HandBack): Promise<void> => {
+    const words = handBack.words ?? HAND_BACK[handBack.reason];
     await decided(services, repo, branch, {
         kind: "spent",
+        reason: handBack.reason,
         ...opt("conversationId", fixer),
         at: Date.now(),
-        detail: `${why}: main's red waits for you.`,
+        detail: `${words.charAt(0).toUpperCase()}${words.slice(1)}.`,
     });
-    tell(services, "ci.repair_needs_you", `${branch} of ${repo} is still red and waits for you: ${why}.`, "error", fixer);
+    services.logger.info(
+        { repo, branch, fixer, reason: handBack.reason, ...opt("cause", handBack.cause) },
+        "ci repair: the failure was handed to the owner",
+    );
+    tell(services, "ci.repair_needs_you", `${branch} of ${repo} still fails and waits for you: ${words}.`, "error", fixer);
 };
 
-// Why a fix agent's ended turn hands the red over, or undefined when it does not: a turn that changed nothing after the
-// agent had changed something already found nothing left to do, and its turns are counted anyway.
-const endedWhy = (agent: AgentSummary, red: CiRed): string | undefined => {
+// Why a fix agent's ended turn hands the failure over, or undefined when it does not: a turn that changed nothing after
+// the agent had changed something already found nothing left to do, and its turns are counted anyway.
+const endedHandBack = (agent: AgentSummary, streak: CiFailure): HandBack | undefined => {
     if (fixStance(agent).kind !== "ended") {
         return undefined;
     }
     switch (agent.status) {
         case "idle":
-            return red.changed
-                ? undefined
-                : "its fix agent finished without changing anything, so the failure is likely not in the code (the runner's environment, a tool's version, a secret)";
+            return streak.changed ? undefined : { reason: "no-change" };
         case "stopped":
-            return "its fix agent was stopped";
+            return { reason: "stopped" };
         case "interrupted":
-            return "its fix agent's turn was cut off";
+            return { reason: "interrupted" };
         default:
-            return `its fix agent's turn failed${agent.failure === undefined ? "" : ` (${agent.failure})`}`;
+            return { reason: "turn-failed", cause: agent.failure };
     }
 };
 
@@ -175,17 +203,17 @@ const logBlock = (job: FailedJob, log: string): string => (log === "" ? "" : `\n
 // What the fix agent is told first, ahead of the failure's evidence.
 const openingPreface = (project: CiProject, job: FailedJob): string =>
     [
-        `Main's CI went red: the job ${where(job)} failed on ${job.branch} of "${project.repo}", and the run may still be going.`,
-        `You are the one fix agent for this red. Every later failure on ${job.branch}, in this run or a later one, is sent to this conversation until ${job.branch} passes again, so do not wait on the run or watch it: fix what failed, then end your turn.`,
+        `Main's CI is failing: the job ${where(job)} failed on ${job.branch} of "${project.repo}", and the run may still be going.`,
+        `You are the one fix agent for this failure. Every later failure on ${job.branch}, in this run or a later one, is sent to this conversation until ${job.branch} passes again, so do not wait on the run or watch it: fix what failed, then end your turn.`,
         `Your work lands in the main tree like any conversation's; the owner commits and pushes it, and the next run on ${job.branch} measures it.`,
     ].join(" ");
 
 // What a later failure says to the fix agent already on the streak.
-const followUp = (project: CiProject, red: CiRed, job: FailedJob, log: string): string =>
+const followUp = (project: CiProject, streak: CiFailure, job: FailedJob, log: string): string =>
     [
         `Another job failed on ${job.branch} of "${project.repo}": ${where(job)}.`,
-        job.runId === red.firstRunId
-            ? `It is in the run this red began in.`
+        job.runId === streak.firstRunId
+            ? `It is in the run this failure began in.`
             : `It is from a later run${job.sha === undefined ? "" : `, at commit ${job.sha.slice(0, 7)}`}.`,
         `If what you already changed covers it (the run's commit predates your change), say so and change nothing; otherwise fix it too, then end your turn.`,
     ].join(" ") + logBlock(job, log);
@@ -195,10 +223,10 @@ const followUp = (project: CiProject, red: CiRed, job: FailedJob, log: string): 
 const fleetFailed = (job: FailedJob, log: string): boolean =>
     (job.step !== undefined && isInfraStep(job.step)) || (job.reason !== undefined && GITLAB_FLEET_REASONS.has(job.reason)) || infraLog(log);
 
-// The red after one more failed job: begun at it when there was none.
-const withJob = (current: CiRed | undefined, job: FailedJob, now: number): CiRed => {
+// The streak after one more failed job: begun at it when there was none.
+const withJob = (current: CiFailure | undefined, job: FailedJob, now: number): CiFailure => {
     const workflow = workflowOf(job.workflow);
-    const red: CiRed = current ?? {
+    const streak: CiFailure = current ?? {
         since: now,
         findings: [],
         decisions: [],
@@ -210,20 +238,27 @@ const withJob = (current: CiRed | undefined, job: FailedJob, now: number): CiRed
         turns: 0,
         changed: false,
     };
-    const newest = red.workflows[workflow];
+    const newest = streak.workflows[workflow];
     const finding = findingOf(workflow, job.name);
     return {
-        ...red,
-        runId: Math.max(red.runId, job.runId),
-        count: red.count + (newest === undefined || job.runId > newest ? 1 : 0),
-        workflows: { ...red.workflows, [workflow]: Math.max(newest ?? 0, job.runId) },
-        findings: red.findings.some((owed) => owed.id === finding.id) ? red.findings : [...red.findings, finding],
-        heard: [...red.heard, heardOf(job)].slice(-HEARD_KEPT),
+        ...streak,
+        runId: Math.max(streak.runId, job.runId),
+        count: streak.count + (newest === undefined || job.runId > newest ? 1 : 0),
+        workflows: { ...streak.workflows, [workflow]: Math.max(newest ?? 0, job.runId) },
+        findings: streak.findings.some((owed) => owed.id === finding.id) ? streak.findings : [...streak.findings, finding],
+        heard: [...streak.heard, heardOf(job)].slice(-HEARD_KEPT),
     };
 };
 
 // Puts the streak's fix agent on it: a fresh conversation named for the run the streak began in.
-const startFixer = async (services: Services, project: CiProject, red: CiRed, job: FailedJob, log: string, fetchFn: FetchFn): Promise<void> => {
+const startFixer = async (
+    services: Services,
+    project: CiProject,
+    streak: CiFailure,
+    job: FailedJob,
+    log: string,
+    fetchFn: FetchFn,
+): Promise<void> => {
     const outcome = await orElse(
         services,
         startCiFix(
@@ -231,7 +266,7 @@ const startFixer = async (services: Services, project: CiProject, red: CiRed, jo
             {
                 project,
                 runId: job.runId,
-                base: ciFixConversationId(project.repo, red.firstRunId),
+                base: ciFixConversationId(project.repo, streak.firstRunId),
                 evidence: {
                     failedJobs: [job.name],
                     logs: log === "" ? "" : `--- job: ${job.name} (log tail) ---\n${log}`,
@@ -249,7 +284,7 @@ const startFixer = async (services: Services, project: CiProject, red: CiRed, jo
     if (outcome === undefined) {
         return;
     }
-    await services.ciStore.red(project.repo, job.branch, (current) =>
+    await services.ciStore.failure(project.repo, job.branch, (current) =>
         current === undefined
             ? current
             : {
@@ -271,7 +306,7 @@ const startFixer = async (services: Services, project: CiProject, red: CiRed, jo
         tell(
             services,
             "ci.repair_started",
-            `${job.branch} of ${project.repo} went red on ${job.name}: a fix agent is on it, and every later failure goes to it.`,
+            `${job.branch} of ${project.repo} started failing at ${job.name}: a fix agent is on it, and every later failure goes to it.`,
             "ok",
             outcome.conversationId,
         );
@@ -279,35 +314,29 @@ const startFixer = async (services: Services, project: CiProject, red: CiRed, jo
     }
     // An attempt at this streak's id was already in play (a person's press got there first): it is the fix agent, and
     // hears this failure like any later one.
-    const fixer = (await services.ciStore.reds())[keyOf(project.repo, job.branch)];
-    if (fixer !== undefined) {
-        await sendOn(services, project, fixer, job, log);
+    const current = (await services.ciStore.failures())[keyOf(project.repo, job.branch)];
+    if (current !== undefined) {
+        await sendOn(services, project, current, job, log);
     }
 };
 
-// Says a later failure to the streak's fix agent, or hands the red over when it can take no more.
-const sendOn = async (services: Services, project: CiProject, red: CiRed, job: FailedJob, log: string): Promise<void> => {
-    const fixer = fixerOf(red);
+// Says a later failure to the streak's fix agent, or hands the failure over when it can take no more.
+const sendOn = async (services: Services, project: CiProject, streak: CiFailure, job: FailedJob, log: string): Promise<void> => {
+    const fixer = fixerOf(streak);
     const agent = fixer === undefined ? undefined : services.agents.get(fixer);
     const entry = fixer === undefined ? undefined : services.agents.entry(fixer);
     if (fixer === undefined || agent === undefined || entry === undefined || agent.archivedAt !== undefined) {
-        await handOver(
-            services,
-            project.repo,
-            job.branch,
-            fixer,
-            agent?.archivedAt === undefined ? "its fix agent is gone" : "its fix agent was archived",
-        );
+        await handOver(services, project.repo, job.branch, fixer, agent?.archivedAt === undefined ? { reason: "gone" } : ARCHIVED);
         return;
     }
-    const ended = endedWhy(agent, red);
+    const ended = endedHandBack(agent, streak);
     if (ended !== undefined) {
         await handOver(services, project.repo, job.branch, fixer, ended);
         return;
     }
     // Only a turn the sandbox starts is counted: words said into the live one cost it none.
-    if (!services.conversations.running(fixer) && red.turns >= TURNS_PER_STREAK) {
-        await handOver(services, project.repo, job.branch, fixer, `its fix agent had its ${TURNS_PER_STREAK} turns and main is still red`);
+    if (!services.conversations.running(fixer) && streak.turns >= TURNS_PER_STREAK) {
+        await handOver(services, project.repo, job.branch, fixer, { reason: "turns" });
         return;
     }
     const receipt = await orElse(
@@ -316,7 +345,7 @@ const sendOn = async (services: Services, project: CiProject, red: CiRed, job: F
             { turns: services.turns, sessionIdOf: (conversationId) => services.conversations.sessionIdOf(conversationId) },
             {
                 conversationId: fixer,
-                prompt: followUp(project, red, job, log),
+                prompt: followUp(project, streak, job, log),
                 voice: "sandbox",
                 errand: "ci-fix-nudge",
                 source: "ci",
@@ -331,17 +360,11 @@ const sendOn = async (services: Services, project: CiProject, red: CiRed, job: F
         return;
     }
     if ("why" in receipt || "invalid" in receipt) {
-        await handOver(
-            services,
-            project.repo,
-            job.branch,
-            fixer,
-            `its fix agent could not take the failure (${"why" in receipt ? receipt.why : receipt.invalid})`,
-        );
+        await handOver(services, project.repo, job.branch, fixer, { reason: "refused", cause: "why" in receipt ? receipt.why : receipt.invalid });
         return;
     }
     if (receipt.delivered !== "steered") {
-        await services.ciStore.red(project.repo, job.branch, (current) =>
+        await services.ciStore.failure(project.repo, job.branch, (current) =>
             current === undefined ? current : { ...current, turns: current.turns + 1 },
         );
     }
@@ -360,12 +383,12 @@ export const jobFailed = async (services: Services, project: CiProject, job: Fai
         if (fleetJobs.has(`${project.repo}/${heard}`)) {
             return "fleet";
         }
-        const current = (await services.ciStore.reds())[key];
+        const current = (await services.ciStore.failures())[key];
         if (current?.heard.includes(heard) === true) {
             return "code";
         }
         // A later run of its workflow already passed: older news than main's own.
-        if (((await services.ciStore.greens(project.repo, job.branch))[workflowOf(job.workflow)] ?? 0) > job.runId) {
+        if (((await services.ciStore.passes(project.repo, job.branch))[workflowOf(job.workflow)] ?? 0) > job.runId) {
             return "skipped";
         }
         const log = await orElse(
@@ -379,13 +402,13 @@ export const jobFailed = async (services: Services, project: CiProject, job: Fai
             fleetJobs.add(`${project.repo}/${heard}`);
             return "fleet";
         }
-        const red = await services.ciStore.red(project.repo, job.branch, (previous) => withJob(previous, job, Date.now()));
+        const streak = await services.ciStore.failure(project.repo, job.branch, (previous) => withJob(previous, job, Date.now()));
         publishRuntimeChange("ci");
-        if (red === undefined || waitsForOwner(red)) {
+        if (streak === undefined || waitsForOwner(streak)) {
             return "code";
         }
         if (!(await services.sandboxSettings.get()).autoRepair) {
-            if (red.decisions.at(-1)?.kind !== "reported") {
+            if (streak.decisions.at(-1)?.kind !== "reported") {
                 await decided(services, project.repo, job.branch, {
                     kind: "reported",
                     at: Date.now(),
@@ -394,10 +417,10 @@ export const jobFailed = async (services: Services, project: CiProject, job: Fai
             }
             return "code";
         }
-        if (fixerOf(red) === undefined) {
-            await startFixer(services, project, red, job, log, fetchFn);
+        if (fixerOf(streak) === undefined) {
+            await startFixer(services, project, streak, job, log, fetchFn);
         } else {
-            await sendOn(services, project, red, job, log);
+            await sendOn(services, project, streak, job, log);
         }
         return "code";
     });
@@ -456,20 +479,20 @@ const rerunFleet = async (services: Services, project: CiProject, run: PipelineR
 };
 
 // The streak is over: said, logged with what it cost, and a fix agent still working told it may stop.
-const ended = async (services: Services, repo: string, run: PipelineRun, red: CiRed): Promise<void> => {
-    await services.ciStore.red(repo, run.branch, () => undefined);
+const ended = async (services: Services, repo: string, run: PipelineRun, streak: CiFailure): Promise<void> => {
+    await services.ciStore.failure(repo, run.branch, () => undefined);
     publishRuntimeChange("ci");
-    const fixer = fixerOf(red);
+    const fixer = fixerOf(streak);
     const agent = fixer === undefined ? undefined : services.agents.get(fixer);
-    const lastedMs = Date.now() - red.since;
+    const lastedMs = Date.now() - streak.since;
     services.logger.info(
         {
             repo,
             branch: run.branch,
             lastedMs,
-            runs: red.count,
-            turns: red.turns,
-            handedOver: red.decisions.some((decision) => decision.kind === "spent"),
+            runs: streak.count,
+            turns: streak.turns,
+            handedOver: streak.decisions.some((decision) => decision.kind === "spent"),
             fixer,
             costUsd: agent?.costUsd,
             inputTokens: agent?.inputTokens,
@@ -482,7 +505,7 @@ const ended = async (services: Services, repo: string, run: PipelineRun, red: Ci
     tell(
         services,
         "ci.repair_retired",
-        `${run.branch} of ${repo} passed again at ${run.sha.slice(0, 7)}, ${minutes} min and ${red.count} red run(s) after it went red${fixer === undefined ? "" : `; its fix agent took ${red.turns} turn(s)${cost}`}.`,
+        `${run.branch} of ${repo} passed again at ${run.sha.slice(0, 7)}, ${minutes} min and ${streak.count} failed run(s) after it began failing${fixer === undefined ? "" : `; its fix agent took ${streak.turns} turn(s)${cost}`}.`,
         "ok",
         fixer,
     );
@@ -490,34 +513,34 @@ const ended = async (services: Services, repo: string, run: PipelineRun, red: Ci
         await orElse(
             services,
             services.turns.steer(fixer, {
-                text: `${run.branch} of "${repo}" passed in run ${run.runId}: main's red is over. Finish what you are doing without starting anything new.`,
+                text: `${run.branch} of "${repo}" passed in run ${run.runId}: main no longer fails. Finish what you are doing without starting anything new.`,
                 voice: "sandbox",
             }),
             false,
-            "ci repair: the fix agent could not be told the red is over",
+            "ci repair: the fix agent could not be told main passes again",
             { fixer },
         );
     }
 };
 
-// A passing run takes its workflow off the streak; the last one off ends it. A red kept before workflows were told apart
-// ends at any pass.
+// A passing run takes its workflow off the streak; the last one off ends it. A failure kept before workflows were told
+// apart ends at any pass.
 const passed = async (services: Services, project: CiProject, run: PipelineRun): Promise<void> => {
     const workflow = workflowOf(run.workflow);
-    await services.ciStore.green(project.repo, run.branch, workflow, run.runId);
+    await services.ciStore.recordPass(project.repo, run.branch, workflow, run.runId);
     await serially(keyOf(project.repo, run.branch), async () => {
-        const red = (await services.ciStore.reds())[keyOf(project.repo, run.branch)];
-        if (red === undefined) {
+        const streak = (await services.ciStore.failures())[keyOf(project.repo, run.branch)];
+        if (streak === undefined) {
             return;
         }
-        const failing = Object.keys(red.workflows);
-        const newest = red.workflows[workflow];
+        const failing = Object.keys(streak.workflows);
+        const newest = streak.workflows[workflow];
         if (failing.length > 0 && (newest === undefined || run.runId < newest)) {
             return;
         }
         if (failing.length > 1) {
-            const { [workflow]: _passed, ...others } = red.workflows;
-            await services.ciStore.red(project.repo, run.branch, (current) =>
+            const { [workflow]: _passed, ...others } = streak.workflows;
+            await services.ciStore.failure(project.repo, run.branch, (current) =>
                 current === undefined
                     ? current
                     : { ...current, workflows: others, findings: current.findings.filter((owed) => owed.source !== workflow) },
@@ -525,7 +548,7 @@ const passed = async (services: Services, project: CiProject, run: PipelineRun):
             publishRuntimeChange("ci");
             return;
         }
-        await ended(services, project.repo, run, red);
+        await ended(services, project.repo, run, streak);
     });
 };
 
@@ -535,7 +558,7 @@ const failedRun = async (services: Services, project: CiProject, run: PipelineRu
     const workflow = workflowOf(run.workflow);
     const kept = new Set(failing.map((job) => findingOf(workflow, job).id));
     await serially(keyOf(project.repo, run.branch), async () => {
-        await services.ciStore.red(project.repo, run.branch, (current) =>
+        await services.ciStore.failure(project.repo, run.branch, (current) =>
             current === undefined || (current.workflows[workflow] ?? 0) > run.runId
                 ? current
                 : { ...current, findings: current.findings.filter((owed) => owed.source !== workflow || kept.has(owed.id)) },
@@ -543,7 +566,7 @@ const failedRun = async (services: Services, project: CiProject, run: PipelineRu
     });
 };
 
-/** A finished run, from its webhook or the poller: a pass takes its workflow off main's red, and a failure hands every
+/** A finished run, from its webhook or the poller: a pass takes its workflow off main's failure, and a failure hands every
  *  failed job not yet heard of to the fixer, re-running a run only the fleet failed. */
 export const runFinished = async (services: Services, run: PipelineRun, fetchFn: FetchFn = fetch): Promise<void> => {
     if (!MAIN_BRANCHES.has(run.branch) || (run.status !== "success" && run.status !== "failed")) {
@@ -583,57 +606,57 @@ export const runInFlight = async (services: Services, project: CiProject, run: P
 };
 
 /** A turn of some conversation settled: the fix agent's, it changed something (which is noted) or it ended in a way that
- *  hands the red to the owner. A turn the sandbox runs again by itself is not over yet. */
+ *  hands the failure to the owner. A turn the sandbox runs again by itself is not over yet. */
 export const fixerSettled = async (services: Services, settled: { readonly conversationId: string; readonly rerun?: unknown }): Promise<void> => {
     // Every fix agent is a CI fix conversation (startCiFix); any other turn is none of this.
     if (settled.rerun !== undefined || !settled.conversationId.startsWith(CI_FIX_PREFIX)) {
         return;
     }
-    const found = Object.entries(await services.ciStore.reds()).find(([, red]) => fixerOf(red) === settled.conversationId);
+    const found = Object.entries(await services.ciStore.failures()).find(([, streak]) => fixerOf(streak) === settled.conversationId);
     if (found === undefined) {
         return;
     }
     const [key] = found;
     const [repo = "", branch = ""] = key.split("\n");
     await serially(key, async () => {
-        const red = (await services.ciStore.reds())[key];
+        const streak = (await services.ciStore.failures())[key];
         const agent = services.agents.get(settled.conversationId);
-        if (red === undefined || fixerOf(red) !== settled.conversationId || waitsForOwner(red) || agent === undefined) {
+        if (streak === undefined || fixerOf(streak) !== settled.conversationId || waitsForOwner(streak) || agent === undefined) {
             return;
         }
         if (agent.archivedAt !== undefined) {
-            await handOver(services, repo, branch, settled.conversationId, "its fix agent was archived");
+            await handOver(services, repo, branch, settled.conversationId, ARCHIVED);
             return;
         }
         const stance = fixStance(agent).kind;
         if (stance === "ready" || stance === "landed") {
-            if (!red.changed) {
-                await services.ciStore.red(repo, branch, (current) => (current === undefined ? current : { ...current, changed: true }));
+            if (!streak.changed) {
+                await services.ciStore.failure(repo, branch, (current) => (current === undefined ? current : { ...current, changed: true }));
             }
             return;
         }
-        const why = endedWhy(agent, red);
-        if (why !== undefined) {
-            await handOver(services, repo, branch, settled.conversationId, why);
+        const handBack = endedHandBack(agent, streak);
+        if (handBack !== undefined) {
+            await handOver(services, repo, branch, settled.conversationId, handBack);
         }
     });
 };
 
-/** A person pressed Fix on a run of a red main-line branch: the streak's fix agent is theirs to continue, with its turns
+/** A person pressed Fix on a run of a failing main-line branch: the streak's fix agent is theirs to continue, with its turns
  *  back. The id its attempts share (named for the run the streak began in, whose newest attempt the press continues),
  *  or undefined when the run is no part of a streak. */
 export const streakFixerFor = async (services: Services, run: Pick<PipelineRun, "repo" | "branch">): Promise<string | undefined> => {
     if (!MAIN_BRANCHES.has(run.branch)) {
         return undefined;
     }
-    const red = (await services.ciStore.reds())[keyOf(run.repo, run.branch)];
-    return red === undefined ? undefined : ciFixConversationId(run.repo, red.firstRunId);
+    const streak = (await services.ciStore.failures())[keyOf(run.repo, run.branch)];
+    return streak === undefined ? undefined : ciFixConversationId(run.repo, streak.firstRunId);
 };
 
 /** Records the press that continued a streak's fix agent: it has its turns back, and failures reach it again. */
 export const fixPressed = async (services: Services, run: Pick<PipelineRun, "repo" | "branch">, conversationId: string): Promise<void> => {
     await serially(keyOf(run.repo, run.branch), async () => {
-        await services.ciStore.red(run.repo, run.branch, (current) =>
+        await services.ciStore.failure(run.repo, run.branch, (current) =>
             current === undefined
                 ? current
                 : {
@@ -649,33 +672,33 @@ export const fixPressed = async (services: Services, run: Pick<PipelineRun, "rep
     publishRuntimeChange("ci");
 };
 
-/** Every main-line branch red right now, as GET /ci/runs serves it. */
-export const mainReds = async (services: Services): Promise<CiMainRed[]> =>
-    Object.entries(await services.ciStore.reds()).map(([key, red]) => {
+/** Every main-line branch failing right now, as GET /ci/runs serves it. */
+export const mainFailures = async (services: Services): Promise<CiMainFailure[]> =>
+    Object.entries(await services.ciStore.failures()).map(([key, streak]) => {
         const [repo = "", branch = ""] = key.split("\n");
-        const decision = red.decisions.at(-1);
+        const decision = streak.decisions.at(-1);
         return {
             repo,
             branch,
-            since: red.since,
-            runId: red.runId,
-            jobs: red.findings.map(({ text }) => text),
-            ...opt("fixer", fixerOf(red)),
+            since: streak.since,
+            runId: streak.runId,
+            jobs: streak.findings.map(({ text }) => text),
+            ...opt("fixer", fixerOf(streak)),
             ...opt("decision", decision),
         };
     });
 
-/** At boot, each red the CI store kept: its fix agent's turn may have ended while the daemon was down, and main may have
+/** At boot, each failure the CI store kept: its fix agent's turn may have ended while the daemon was down, and main may have
  *  failed again or passed meanwhile, which a missed webhook never said. */
 export const resumeMainFixer = async (services: Services, fetchFn: FetchFn = fetch): Promise<void> => {
-    const reds = Object.entries(await services.ciStore.reds());
-    if (reds.length === 0) {
+    const streaks = Object.entries(await services.ciStore.failures());
+    if (streaks.length === 0) {
         return;
     }
     const projects = await ciProjects(services);
-    for (const [key, red] of reds) {
+    for (const [key, streak] of streaks) {
         const [repo = "", branch = ""] = key.split("\n");
-        const fixer = fixerOf(red);
+        const fixer = fixerOf(streak);
         if (fixer !== undefined && !services.conversations.running(fixer)) {
             await fixerSettled(services, { conversationId: fixer });
         }
@@ -687,19 +710,19 @@ export const resumeMainFixer = async (services: Services, fetchFn: FetchFn = fet
             services,
             ciClientFor(project.account.provider, fetchFn).listRuns(project, RUNS_LISTED),
             [],
-            "ci repair: runs not listed at boot, main's red waits for the next run",
+            "ci repair: runs not listed at boot, main's failure waits for the next run",
             {
                 repo,
             },
         );
         // Oldest first, as they happened.
-        for (const run of runs.filter((candidate) => candidate.branch === branch && candidate.runId >= red.firstRunId).toReversed()) {
+        for (const run of runs.filter((candidate) => candidate.branch === branch && candidate.runId >= streak.firstRunId).toReversed()) {
             await (isPipelineInFlight(run.status) ? runInFlight(services, project, run, fetchFn) : runFinished(services, run, fetchFn));
         }
     }
 };
 
-/** Test seam: forget what only this process holds, as a restart does; the reds on file stay. */
+/** Test seam: forget what only this process holds, as a restart does; the failures on file stay. */
 export const resetMainFixer = (): void => {
     locks.clear();
     fleetJobs.clear();

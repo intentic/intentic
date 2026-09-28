@@ -90,8 +90,8 @@ const plan = (change: Partial<SettlementPlan> = {}): SettlementPlan => ({
     ...change,
 });
 
-// What a turn that edited code and ran a red suite showed of its own work.
-const RED: TurnProof = { at: 1_000, verification: "failing", check: "pnpm test" };
+// What a turn that edited code and ran a failing suite showed of its own work.
+const FAILING: TurnProof = { at: 1_000, verification: "failing", check: "pnpm test" };
 
 describe("a settlement", () => {
     test("records the resume first, then notes the proof, closes the turn, re-reads, bills, flushes and snapshots", () => {
@@ -101,7 +101,7 @@ describe("a settlement", () => {
             plan({
                 hold: { kind: "held", held: { input, reason: "stopped", ran: true, standing: noCode } },
                 headroomRefresh: { scope: { providers: ["codex"] }, maxAgeMs: 10_000 },
-                proof: { conversationId: "settle-1", proof: RED },
+                proof: { conversationId: "settle-1", proof: FAILING },
                 snapshot: "go",
             }),
             turn,
@@ -110,7 +110,7 @@ describe("a settlement", () => {
         expect(order).toStrictEqual(["held", "proof-noted", "completion", "refresh", "usage", "flush", "snapshot"]);
         expect(deps.conversations.state("settle-1")?.resume.held).toMatchObject({ reason: "stopped", ran: true });
         // Kept on the turn until the settle files it: nothing runs a check or sends the turn back.
-        expect(deps.conversations.state("settle-1")?.turn.proof).toStrictEqual(RED);
+        expect(deps.conversations.state("settle-1")?.turn.proof).toStrictEqual(FAILING);
         expect(writes.headroomRefreshes).toStrictEqual([{ scope: { providers: ["codex"] }, maxAgeMs: 10_000 }]);
         expect(writes.snapshots).toStrictEqual([{ trigger: "turn", label: "go" }]);
     });
@@ -122,11 +122,11 @@ describe("a settlement", () => {
             { conversationId: "settle-2", isolated: true, prompt: "go", profile: { agent: "codex" } },
             1_000,
         );
-        performSettlement(deps, plan({ proof: { conversationId: "settle-2", proof: RED } }), turn);
+        performSettlement(deps, plan({ proof: { conversationId: "settle-2", proof: FAILING } }), turn);
         await deps.conversations.send("settle-2", { kind: "settle" }, 2_000).settled;
 
-        expect(deps.agents.entry("settle-2")?.proof).toStrictEqual(RED);
-        expect(deps.agents.get("settle-2")?.proof).toStrictEqual(RED);
+        expect(deps.agents.entry("settle-2")?.proof).toStrictEqual(FAILING);
+        expect(deps.agents.get("settle-2")?.proof).toStrictEqual(FAILING);
         expect(deps.conversations.state("settle-2")?.turn.proof).toBeUndefined();
     });
 

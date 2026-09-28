@@ -17,7 +17,7 @@ interface MarkProps {
     readonly flush?: boolean;
 }
 
-// No network, ever: the brand tier fetches, and a suite that reached a CDN would be slow when it worked and red on a
+// No network, ever: the brand tier fetches, and a suite that reached a CDN would be slow when it worked and failing on a
 // train. Stubbed to never resolve rather than fail, so "art beats logo" cannot pass merely because the fetch lost a
 // race.
 const mount = async (props: MarkProps): Promise<HTMLElement> => {

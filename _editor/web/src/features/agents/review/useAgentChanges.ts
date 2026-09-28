@@ -228,7 +228,7 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
             resolving.value = result.resolving;
             await invalidateAgentAction(agentId.value, reach.value);
             // A land that carried nothing is an outcome, not a declined mutation: it takes the same floating receipt
-            // askResolve gives a press that found nothing left, rather than this panel's red error line. Said out loud
+            // askResolve gives a press that found nothing left, rather than this panel's error line. Said out loud
             // because the rows below are read off the branch and don't move, so silence here reads as "it worked".
             if (result.landed && !result.changed) {
                 useNotifications().say(nothingLanded());
@@ -255,7 +255,7 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
                 }
             }
             // A press that found nothing left and put the card right is not a declined mutation: it takes the same
-            // floating receipt the board gives it, rather than this panel's red error line.
+            // floating receipt the board gives it, rather than this panel's error line.
             if (ask.kind === `settled`) {
                 useNotifications().say(ask.why);
             }

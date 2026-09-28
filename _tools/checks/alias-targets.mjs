@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Checks that every alias target (fromRoot/here in *.config.ts, tsconfig paths) resolves to a real file; usage: node
-// _tools/checks/alias-targets.mjs. An alias bypasses the package's exports map, so a moved target type-checks green and
+// _tools/checks/alias-targets.mjs. An alias bypasses the package's exports map, so a moved target passes the type-check and
 // fails only at load, in whichever importer runs first.
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";

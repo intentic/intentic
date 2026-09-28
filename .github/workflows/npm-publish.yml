@@ -10,7 +10,7 @@
 # DISPATCHED, NOT TAG-TRIGGERED. semantic-release pushes its tag with the built-in GITHUB_TOKEN, and GitHub
 # refuses to start a workflow from any event that token created — its loop guard. `on: push: tags` was
 # therefore a trigger that could never fire, which is how npm fell ~30 versions behind the tags while every
-# release reported green. workflow_dispatch is the documented exception to that guard, so it is the one
+# release reported a pass. workflow_dispatch is the documented exception to that guard, so it is the one
 # trigger the release job can pull (dispatch-publish.sh). The dispatch names THE TAG as its ref, which this
 # workflow depends on twice over: the checkout gets the released commit and the version stamped from its tag,
 # and the OIDC claim and the provenance attestation name that commit rather than whatever main had drifted to.

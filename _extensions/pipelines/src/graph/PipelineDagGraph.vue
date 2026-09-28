@@ -165,7 +165,7 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                         @mouseleave="hovered = undefined"
                         @click.stop="pin(member.id)"
                     >
-                        <!-- Per row, not per card: one red job among green ones is exactly what a reader looks for. -->
+                        <!-- Per row, not per card: one failed job among passing ones is exactly what a reader looks for. -->
                         <span class="pointer-events-none absolute inset-y-0 left-0 w-0.5" :class="toneOf(member.job).bar"></span>
                         <Icon
                             :name="toneOf(member.job).icon"

@@ -131,6 +131,16 @@ export const RETIRED = [
         became: "quick look (a card a hover raises) or the quick bar's transcript; `peek` names only a tab opened as a look",
         since: "2026-09-25",
     },
+    {
+        // A COLOUR IS NOT A STATE. "Main is red" asks a reader to know what the colour stood for; "main's CI fails" says
+        // it. Only the CI-status spellings are refused: a colour that is a colour (a token, a palette entry, a terminal
+        // code, `color: red`, a red dot, a field's red treatment, Spanish `red`) keeps the word.
+        id: "red-green-status",
+        pattern:
+            /\b(CiMainRed|CiRed|MainRed|RedDecision|mainReds?|ciRed|ciGreen)(?![a-z])|data-main-red|\bmain(?:'s| is| was| stays| stayed)(?: still)? red\b|\b(?:[Ww]ent|[Gg]oes|[Gg]one|[Gg]oing|[Tt]urned) (?:red|green)\b|\b(?:is|was|are|were|stays|stayed) still (?:red|green)\b|\b(?:CI|main|suite|pipeline|build|tree|branch|check|release|deploy|job|run)(?:'s)? (?:is|was|went|goes|turned|turns|stays|stayed|comes back|came back) (?:red|green)\b|\b[Rr]ed (?:runs?|rows?|main|streaks?|builds?|pipelines?|releases?|jobs?|canary|checks?|CI)\b|\b[Gg]reen (?:runs?|pipelines?|builds?|releases?|main|CI)\b|\bCI(?:'s)? (?:red|green)\b|\b[Uu]ntil (?:it's |it is |main is |the suite is )?green\b|\buntil-green\b|\b(?:release|ship|shipping|merge|land) on green\b|\bgreen rate\b/,
+        became: "failing / passing: a run, job, check, gate or branch fails or passes, never red or green",
+        since: "2026-09-28",
+    },
 ];
 
 /** Every retired spelling this text still carries, as `{id, became, line}` findings. */

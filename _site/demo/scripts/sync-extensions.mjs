@@ -91,7 +91,7 @@ for (const [id, pin] of Object.entries(pins)) {
         const marker = join(engine, "source.json");
         // The engine copy is COMMITTED, so a build that did not move the pin has nothing to fetch — and skipping it
         // keeps the only api.github.com call in this script (the notes listing) out of every build. That call is
-        // anonymous at 60 an hour per IP, shared by every job on a runner host, which is how a green pipeline began
+        // anonymous at 60 an hour per IP, shared by every job on a runner host, which is how a passing pipeline began
         // failing on "403 rate limit exceeded". A --local sync writes a working tree rather than the pinned commit,
         // so it leaves no marker and the next sync from GitHub restores the pin.
         const synced = existsSync(marker) ? JSON.parse(readFileSync(marker, "utf8")) : undefined;

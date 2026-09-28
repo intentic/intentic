@@ -98,7 +98,7 @@
         "requireMyApprovalBefore": "Vor dem Ausführen meine Genehmigung verlangen",
         "requireMyApprovalBefore2": "Meine Genehmigung verlangen, bevor sie läuft",
         "retired": "eingestellt",
-        "retiredNeverFires": "Das sendet nichts mehr: Die Prüfung, die nach jeder Landung lief, gibt es nicht mehr, also löst diese Automation nie aus. Wählen Sie einen der Momente oben, oder lassen Sie sie stattdessen von einer roten CI-Pipeline wecken.",
+        "retiredNeverFires": "Das sendet nichts mehr: Die Prüfung, die nach jeder Landung lief, gibt es nicht mehr, also löst diese Automation nie aus. Wählen Sie einen der Momente oben, oder lassen Sie sie stattdessen von einer fehlgeschlagenen CI-Pipeline wecken.",
         "runsOn": "Läuft auf",
         "sStarterSendsDifferent": "Das ist der Starter von {label}, aber {label2} sendet eine andere Nutzlast.",
         "sStarterYoursTo": "Starter von {label}, Ihrer zum Umschreiben.",

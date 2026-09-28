@@ -20,7 +20,7 @@ describe(`sessionCategory`, () => {
 
     test(`a title that reads as nothing wears no category: neutral is information, not a fallback guess`, () => {
         expect(sessionCategory(`New chat`)).toBeUndefined();
-        expect(sessionCategory(`Why is the tree red?`)).toBeUndefined();
+        expect(sessionCategory(`Why is the tree failing?`)).toBeUndefined();
         expect(sessionCategory(undefined)).toBeUndefined();
     });
 });

@@ -21,7 +21,7 @@ import { applyTurnEntry } from "./turnFacts";
 export type ConversationStatus = "idle" | "streaming" | "stopping" | "dismissing" | "awaiting" | "error";
 
 export class Conversation {
-    // The red line: this needs the user. Per-turn chat errors land here; account errors live with the accounts.
+    // The error line: this needs the user. Per-turn chat errors land here; account errors live with the accounts.
     readonly error = ref<string | null>(null);
     // Offer to resume a turn that stopped short (stop, crash, outage, spent allowance); cleared by the next turn.
     readonly pickUp = ref<PickUp | undefined>();

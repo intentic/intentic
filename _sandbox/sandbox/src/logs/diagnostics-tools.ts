@@ -168,7 +168,7 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                 "slow",
                 "Operations the daemon measured as slower than their budget, newest first, each with the machine's one-minute " +
                     "load at the time. Use it when something felt slow: the load field is what separates a real regression from " +
-                    "a busy machine, which is the distinction that has cost this project a red pipeline more than once. Lives in " +
+                    "a busy machine, which is the distinction that has cost this project a failed pipeline more than once. Lives in " +
                     "its own file, so it is not in `errors`.",
                 {
                     sinceMinutes: z.number().int().min(1).max(MAX_MINUTES).optional(),

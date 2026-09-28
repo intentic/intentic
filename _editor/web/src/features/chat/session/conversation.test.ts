@@ -1776,7 +1776,7 @@ describe(`Conversation`, () => {
         expect(conversation.status.value).not.toBe(`error`);
     });
 
-    it(`renders a rate_limit error as a muted notice, not the red error ref`, async () => {
+    it(`renders a rate_limit error as a muted notice, not the error line`, async () => {
         const conversation = new Conversation(`c1`);
         daemon.mockImplementation(
             turnDaemon([{ kind: `error`, code: `rate_limit`, message: `Claude usage limit reached — try again shortly.` }, { kind: `done` }]),
@@ -1846,7 +1846,7 @@ describe(`Conversation`, () => {
             nextAt: resetsAt * 1_000,
             held: { ran: false },
         });
-        // Still a notice rather than the red line: an armed wait is the least alarming state this failure has.
+        // Still a notice rather than the error line: an armed wait is the least alarming state this failure has.
         expect(conversation.error.value).toBeNull();
         // The row states the provider's own sentence and nothing more: what happens next, and the way to change it,
         // are the card's above the composer, said once.
@@ -2186,7 +2186,7 @@ describe(`Conversation`, () => {
         );
         await conversation.turn.send(`hello`, settings);
 
-        // The red line is honest here, and nothing is armed to bring the turn back.
+        // The error line is honest here, and nothing is armed to bring the turn back.
         expect(conversation.error.value).toContain(`500`);
         expect(conversation.failures.outageResume.value).toBeUndefined();
     });
@@ -2740,7 +2740,7 @@ describe(`Conversation`, () => {
         const conversation = new Conversation(`c1`);
         conversation.transcript.restoreMessages([
             { role: `user`, text: `Continue with the tests` },
-            { role: `assistant`, text: `All green.` },
+            { role: `assistant`, text: `All passing.` },
         ]);
         daemon.mockImplementation(turnDaemon([], { head: () => ({ prompt: `Continue` }) }));
 
@@ -2748,7 +2748,7 @@ describe(`Conversation`, () => {
 
         expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `user`, text: `Continue with the tests` },
-            { role: `assistant`, text: `All green.` },
+            { role: `assistant`, text: `All passing.` },
             { role: `user`, text: `Continue` },
         ]);
     });
@@ -2897,7 +2897,7 @@ describe(`Conversation`, () => {
         // The daemon keeps the words in the conversation's queue until the account is back; nothing of them stays here.
         expect(conversation.transcript.messages.value.map((message) => message.role)).toEqual([`notice`]);
         expect(conversation.draft.value).toBe(``);
-        // Muted, not the red error line: the fix is one click away on the banner this raises.
+        // Muted, not the error line: the fix is one click away on the banner this raises.
         expect(conversation.error.value).toBeNull();
     });
 
@@ -3036,7 +3036,7 @@ describe(`Conversation`, () => {
 
         expect(conversation.pickUp.value).toBeUndefined();
         expect(conversation.draft.value).toBe(`the setup view is too scary`);
-        // A Stop is the user's own doing, so it says so and nothing more: no red line over a send they cancelled.
+        // A Stop is the user's own doing, so it says so and nothing more: no error line over a send they cancelled.
         expect(conversation.transcript.messages.value.map((message) => [message.role, message.text])).toEqual([[`notice`, `Stopped.`]]);
         expect(conversation.error.value).toBeNull();
     });

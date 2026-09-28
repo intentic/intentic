@@ -214,7 +214,7 @@ test("a clean turn streams every frame once, stamps the ones that name an accoun
         { conversationId: "frames-clean", event: { kind: "turn-got-somewhere" } },
     ]);
     expect(failureLines(lines)).toStrictEqual([]);
-    // Nothing checks the work at its end or sends it back: the card records the check it ran green after its edit.
+    // Nothing checks the work at its end or sends it back: the card records the check it ran and passed after its edit.
     expect(s.agents.entry("frames-clean")?.proof).toStrictEqual({
         at: expect.any(Number),
         verification: "verified",

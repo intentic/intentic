@@ -65,7 +65,7 @@ const main = async (): Promise<number> => {
 
     if (command === `teardown`) {
         await runTeardown(harness);
-        // Always zero: nothing here is news, and a red teardown would fail a green run for something already working.
+        // Always zero: nothing here is news, and a failed teardown would fail a passing run for something already working.
         harness.report(`the machine is back`);
         return 0;
     }

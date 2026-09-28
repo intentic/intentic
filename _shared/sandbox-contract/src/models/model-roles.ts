@@ -71,7 +71,7 @@ export const MODEL_ROLES = [
     {
         id: "pipeline-fix",
         label: "Pipeline fixes",
-        blurb: "The agent started by Fix on a red pipeline.",
+        blurb: "The agent started by Fix on a failed pipeline.",
         kind: "run",
         trigger: "pressed",
         icon: "wave-pulse",

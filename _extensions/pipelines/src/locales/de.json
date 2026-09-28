@@ -1,17 +1,27 @@
 {
-    "mainRed": {
-        "failing": "Fällt durch",
-        "fixAgent": "Reparatur-Agent",
-        "fixAgentHint": "Jeder Fehlschlag auf {branch} geht an diesen einen Agenten, bis ein Lauf grün wird.",
-        "newestRun": "neuester roter Lauf #{runId}",
-        "open": "Öffnen",
-        "openFixer": "Unterhaltung des Reparatur-Agenten öffnen",
-        "reported": "Reparaturen sind ausgeschaltet, also wurde niemand geschickt.",
+    "mainFailure": {
+        "continueFix": "Reparatur fortsetzen",
+        "failingJobs": "Fehlschlagende Jobs",
+        "fixAgent": "Reparatur-Agent dran",
+        "fixAgentHint": "Jeder Fehlschlag auf {branch} geht an diesen einen Agenten, bis ein Lauf besteht.",
+        "fixWithAgent": "Mit Agent reparieren",
+        "handBackGone": "Agent weg",
+        "handBackInterrupted": "Runde abgebrochen",
+        "handBackNoChange": "Keine Lösung gefunden",
+        "handBackRefused": "Agent nicht erreichbar",
+        "handBackStopped": "Agent gestoppt",
+        "handBackTurnFailed": "Runde fehlgeschlagen",
+        "handBackTurns": "Keine Runden mehr",
+        "handedBack": "Zurückgegeben",
+        "handedBackHint": "Der Reparatur-Agent hat das zurückgegeben. Fahren Sie fort, um ihm seine Runden zurückzugeben, oder öffnen Sie ihn, um zu sehen, was er versucht hat.",
+        "moreJobs": "+{count} weitere",
+        "needsYou": "Braucht Sie",
+        "openFixer": "Agent öffnen",
+        "repairsOff": "Auto-Reparatur aus",
+        "repairsOffHint": "Reparaturen sind ausgeschaltet, also wurde kein Agent geschickt.",
         "since": "seit {when}",
-        "spent": "Der Reparatur-Agent hat seine Runden gehabt oder ist fertig geworden, ohne etwas zu ändern.",
-        "title": "{branch} ist rot",
-        "unassigned": "Noch kein Reparatur-Agent dran.",
-        "waitsForYou": "Wartet auf Sie"
+        "title": "{branch} schlägt fehl",
+        "unassigned": "Noch kein Reparatur-Agent"
     },
     "pipelineDagGraph": {
         "expand": "Aufklappen",
@@ -36,11 +46,11 @@
         "jobGraph": "{headline}: Job-Graph",
         "loadingJobs": "Jobs werden geladen",
         "noJobDetailsAvailable": "Für diesen Lauf sind keine Job-Details verfügbar.",
+        "passedAgainIn": "{branch} hat in diesem Lauf wieder bestanden: öffnen Sie ihn, um zu prüfen, ob der hier fehlgeschlagene Job überhaupt gelaufen ist",
         "reRun": "Erneut laufen lassen",
         "setAttemptAsideStart": "Diesen Versuch beiseitelegen und einen neuen beginnen — öffnet zuerst die Auswahl",
         "startOver": "Von vorn beginnen",
-        "supersededBy": "überholt von",
-        "wentGreenAgainIn": "{branch} ist in diesem Lauf wieder grün geworden: öffnen Sie ihn, um zu prüfen, ob der hier fehlgeschlagene Job überhaupt gelaufen ist"
+        "supersededBy": "überholt von"
     },
     "pipelinesSkeleton": {
         "loadingPipelines": "Pipelines werden geladen"

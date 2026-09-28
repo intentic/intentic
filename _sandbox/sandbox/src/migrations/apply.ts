@@ -95,7 +95,7 @@ export const applyMigration = async (
         if (!wanted.has(planned.item.id)) {
             continue;
         }
-        // Withheld, not failed: the owner chose no secrets; reported once below, not as a red row per key.
+        // Withheld, not failed: the owner chose no secrets; reported once below, not as a failed row per key.
         if (planned.apply.target === "secret" && !selection.includeSecrets) {
             withheld.push(planned.apply.key);
             continue;

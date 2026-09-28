@@ -166,9 +166,9 @@ const repoLine = (reading: RepoReading, withPaths: boolean): string => {
 const verificationLine = (standing: Pick<VerificationStanding, "state" | "check"> | undefined): string | undefined => {
     switch (standing?.state) {
         case "verified":
-            return `- Verification: passed, \`${standing.check ?? "a check"}\` ran green after the last edit.`;
+            return `- Verification: passed, \`${standing.check ?? "a check"}\` ran after the last edit and passed.`;
         case "failing":
-            return `- Verification: FAILING, \`${standing.check ?? "the last check"}\` was red when the turn stopped. Fix that before anything else.`;
+            return `- Verification: FAILING, \`${standing.check ?? "the last check"}\` was failing when the turn stopped. Fix that before anything else.`;
         case "unproven":
             return "- Verification: unproven, no check ran after the last edit. Run the tests and typecheck of the paths above (their package, not the whole repository) before building on them.";
         default:

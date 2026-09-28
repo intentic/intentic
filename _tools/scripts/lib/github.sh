@@ -40,7 +40,7 @@ gh_field() {
 
 # THE TOKEN, OR A DELIBERATE STAND-DOWN. Locally this skips so a release dry-run stays runnable; in CI it is
 # fatal, and it has to be — a quiet skip on a real release leaves a tagged version whose artifacts nobody can
-# reach and still reports green, which is the shape of how v1.177.0-v1.179.0 were tagged with nothing behind
+# reach and still reports a pass, which is the shape of how v1.177.0-v1.179.0 were tagged with nothing behind
 # them. The argument is what is LOST without the token, said in the error rather than left to be inferred.
 gh_require_token() {
     if [ -n "${GH_API_TOKEN:-}" ]; then
@@ -146,7 +146,7 @@ gh_delete_asset() {
 # state on GitHub's side rather than anything this repo can get wrong.
 #
 # ONLY THAT CLASS OF FAILURE RETRIES. A 401, 403, 404 or an unreadable file must fail on the FIRST attempt:
-# four silent backoffs before the same error turns a red release into a slow red release that reads like a
+# four silent backoffs before the same error turns a failed release into a slow failed release that reads like a
 # flake. So the decision is made on curl's own message, not on its exit status, which is 22 for every HTTP
 # verdict alike. BOTH DIRECTIONS ARE ASSERTED, against the text v1.289.0 actually printed, by the
 # `publish-retry` check (_tools/checks/publish-retry.mjs, shared with the registry and npm retries) — which

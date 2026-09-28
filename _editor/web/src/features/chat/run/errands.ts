@@ -54,7 +54,7 @@ export const errands = () =>
             kinds: [`verify-nudge`],
             opening: VERIFY_NUDGE_OPENING,
         },
-        // Sent back to a conversation whose land turned that check red.
+        // Sent back to a conversation whose land made that check fail.
         landBreakage: {
             icon: `wrench`,
             label: t(`chat.errands.fixingWhatLandBroke`),
@@ -62,20 +62,20 @@ export const errands = () =>
             kinds: [`land-breakage`],
             opening: LAND_BREAKAGE_OPENING,
         },
-        // The first prompt of a FRESH conversation started on a red check nobody holding the work could take: the same
+        // The first prompt of a FRESH conversation started on a failed check nobody holding the work could take: the same
         // kind of chore as the follow-up above, handed to somebody new.
         landFix: {
             icon: `wrench`,
-            label: t(`chat.errands.fixingRedMainLine`),
-            detail: t(`chat.errands.startedBySandboxRedMain`),
+            label: t(`chat.errands.fixingFailingMainLine`),
+            detail: t(`chat.errands.startedBySandboxFailingMain`),
             kinds: [`land-fix`, `land-fix-nudge`],
             opening: LAND_FIX_OPENING,
             matches: isLandFix,
         },
-        // Told, while it still worked, that the check went red on what it was working on.
+        // Told, while it still worked, that the check failed on what it was working on.
         landHeld: {
             icon: `wrench`,
-            label: t(`chat.errands.mainRedOnItsWork`),
+            label: t(`chat.errands.mainFailedOnItsWork`),
             detail: t(`chat.errands.sentBySandboxHeld`),
             kinds: [`land-held`],
         },

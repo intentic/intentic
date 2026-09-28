@@ -50,7 +50,7 @@ export const RuleActionSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("builtin"), name: RuleBuiltinSchema }),
 ]);
 export type RuleAction = z.infer<typeof RuleActionSchema>;
-// `checks-failed` was a clean turn whose `turn.ending` check went red. Nothing produces it now that no check runs inside a
+// `checks-failed` was a clean turn whose `turn.ending` check failed. Nothing produces it now that no check runs inside a
 // turn, and a check never holds work; it stays so older rules naming it still read.
 export const RuleOutcomeSchema = z.enum(["clean", "error", "conflict", "checks-failed"]);
 export type RuleOutcome = z.infer<typeof RuleOutcomeSchema>;
@@ -436,14 +436,14 @@ export const SandboxSettingsSchema = z.object({
     ),
     // Worth it since the container is recreated on every update or environment approval — otherwise approving a
     // Dockerfile change costs the run that asked for it.
-    // What happens when main's CI goes red (ci/main-fixer.ts): its first failed job starts one fix agent, which is sent
-    // every later failure on main until main is green, within a few turns, and a failure on the CI fleet itself is re-run
+    // What happens when main's CI fails (ci/main-fixer.ts): its first failed job starts one fix agent, which is sent
+    // every later failure on main until main passes, within a few turns, and a failure on the CI fleet itself is re-run
     // once instead. Off, it is only reported.
     autoRepair: z
         .boolean()
         .default(true)
         .describe(
-            "Whether main's CI going red is repaired without asking. The first job that fails on main starts one fix agent, without waiting for the rest of the run, and every later failure on main goes to that same agent until a run passes. It gets a few turns; when they are spent, or it finishes without changing anything (a failure that is not in the code), the red waits for you. A failure on the CI fleet itself is re-run once instead. Off, all of it is only reported.",
+            "Whether main's CI failing is repaired without asking. The first job that fails on main starts one fix agent, without waiting for the rest of the run, and every later failure on main goes to that same agent until a run passes. It gets a few turns; when they are spent, or it finishes without changing anything (a failure that is not in the code), the failure waits for you. A failure on the CI fleet itself is re-run once instead. Off, all of it is only reported.",
         ),
     // Where heavy work runs: a runner (the same image, on one of the owner's machines) instead of this sandbox. Keyed by
     // the heavy-command rule an agent's command matched (system/resources/heavy-commands.ts), each naming a runner id. A

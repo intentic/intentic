@@ -39,7 +39,7 @@
         "dollars": "dólares",
         "editLoop": "Editar el bucle",
         "everyPublicFunctionDoc": "Toda función pública tiene un comentario de documentación que explica por qué existe.",
-        "fixesFailuresOneAt": "arregla los fallos de uno en uno hasta que la suite esté verde",
+        "fixesFailuresOneAt": "arregla los fallos de uno en uno hasta que la suite pase",
         "freshContext": "Contexto nuevo",
         "howEnds": "Cómo termina",
         "idleRoundOneChanged": "Una ronda ociosa es una que no cambió nada en el árbol: eso, y no un error, es como suele torcerse un bucle.",

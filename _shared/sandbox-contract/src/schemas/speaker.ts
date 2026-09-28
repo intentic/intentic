@@ -69,7 +69,7 @@ export const speakerOwner = (speaker: TurnSpeaker): Pick<SessionOwner, "email" |
 export const spokenByPerson = (speaker: TurnSpeaker | undefined): boolean => speaker?.kind === "person";
 
 // WHAT A COMPOSED PROMPT IS FOR, when the sandbox or the app wrote it rather than whoever is named as speaking: the brief
-// a fix agent is handed (main's red CI, each later failure on main) and its nudges, a land conflict to resolve. Carried
+// a fix agent is handed (main's first failed job, each later failure on main) and its nudges, a land conflict to resolve. Carried
 // on the turn and the row it opens, so a reader shows it as the sandbox's words, not the owner's, and never has to
 // recognise the prompt by its opening; the four openings older rows are recognised by stay what they are
 // (events/errands.ts, errandOfPrompt). `verify-nudge`, the `land-*` errands and the `push-fix` pair (the hand-over of

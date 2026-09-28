@@ -61,7 +61,7 @@ need() {
 # runners keep their checkout between jobs (`clean: false`, docs/ops/ci-runner.md) and share the machine with five
 # others, so what is on disk can hold an untracked leftover, and it can CHANGE while the six-minute bundle build
 # runs: in job 92707727494 the .deb was packed with a cleanup.sh that the .rpm, bundled two seconds later, no
-# longer saw — three correct installers, a tree that moved under them, and a red build. A release ships what the
+# longer saw — three correct installers, a tree that moved under them, and a failed build. A release ships what the
 # commit says, so that is the thing worth asserting; a dirty working tree is the developer's business, not this
 # script's. The bundlers now read the commit too (stage-desktop-scripts.sh), which is what turned the two sides
 # of this comparison into one source — this reads it back out of the artifact rather than trusting that.

@@ -37,7 +37,7 @@ env:
   REGISTRIES: ghcr.io/intentic
 
 jobs:
-  # Plan while the caller holds the release lock. A no-release commit ends green here with the remaining jobs
+  # Plan while the caller holds the release lock. A no-release commit passes here, with the remaining jobs
   # skipped; a release names the version before any platform-specific artifact is built.
   plan:
     runs-on: [self-hosted, intentic]
@@ -81,7 +81,7 @@ jobs:
       # THE RELEASE THAT CANNOT PUBLISH IS THE ONE THAT MUST NOT BE CUT. npm refuses a name it has never seen
       # from a trusted publisher (check-publishable.mjs says why), and publish-npm.sh reads that at publish
       # time — which is after semantic-release has tagged, released and announced. v1.249.0 renamed a published
-      # package as collateral of a directory move and ended exactly there: a green release with nothing on npm.
+      # package as collateral of a directory move and ended exactly there: a passing release with nothing on npm.
       # Asked here instead, while the release is still a plan and a failure costs only this job. Only when a
       # release is actually planned: a no-release push owes the registry no question.
       - name: The publish set is publishable
@@ -188,7 +188,7 @@ jobs:
       # THE RELEASE GATE: this version's arm64 half is booted before anything moves onto it. `publish` needs
       # this job to succeed, so a daemon that cannot start means no tag, no GitHub Release, no npm publish and
       # — the one that reaches users — no `stable`. Version-tagged halves are all that exist at this point, so
-      # a red step orphans two tags nothing references and leaves every consumer on the previous release.
+      # a failed step orphans two tags nothing references and leaves every consumer on the previous release.
       # SMOKE_RMI for the hosted runner's disk, as ci.yml's arm64 half does.
       - run: SMOKE_RMI=1 bash _tools/scripts/image/smoke-image.sh "ghcr.io/intentic/sandbox:$RELEASE_VERSION-arm64" "ghcr.io/intentic/sandbox:core-$RELEASE_VERSION-arm64"
 
@@ -459,7 +459,7 @@ jobs:
       # `plan` computed PLANNED_RELEASE_VERSION before five build jobs ran; by the time this job starts, an
       # hour of commits has landed on main and semantic-release declines with "the local branch main is behind
       # the remote one". It exits 0. At this commit rate that is the ORDINARY outcome, and every step below
-      # publishes a tag that in that case was never pushed — which is how three of the ten most recent red
+      # publishes a tag that in that case was never pushed — which is how three of the ten most recent failed
       # pipelines died at the end of a 90-minute build with nothing wrong (the CI failure audit's class D, in
       # history before 2fed33289).
       #
@@ -496,8 +496,8 @@ jobs:
       # installer someone downloads either matches this repository at this commit or it does not, and
       # `gh attestation verify` answers that on their machine, offline, without our involvement.
       #
-      # AFTER semantic-release, not before — the assets do not exist until it has run. A failure here turns
-      # the release red with everything already published, which is the correct order of the two bad
+      # AFTER semantic-release, not before — the assets do not exist until it has run. A failure here fails
+      # the release with everything already published, which is the correct order of the two bad
       # outcomes: an attested release that reports failure can be re-attested, an unattested release that
       # reports success is a promise the README makes and the pipeline does not keep. Same reasoning as
       # npm-publish.yml's refusal to fall back when the provenance exchange fails.

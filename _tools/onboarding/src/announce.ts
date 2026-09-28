@@ -2,7 +2,7 @@ import { PrismaClient } from "@intentic/prisma";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 // "Connected" means `daemonUrl` is set on the row, the platform's record that a daemon reached it and was accepted, not
-// a UI text match (once false-green in 7s). `announceRefusal` turns silent non-arrival into a message. Returns the row
+// a UI text match (once a false pass in 7s). `announceRefusal` turns silent non-arrival into a message. Returns the row
 // because the CLI lane needs the daemon's hostname afterward.
 
 export interface AnnouncedSandbox {

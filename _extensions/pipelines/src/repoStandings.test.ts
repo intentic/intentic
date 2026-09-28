@@ -25,37 +25,37 @@ const run = (at: string, status: PipelineRun["status"], createdAt: number, branc
 
 test("a repository with a broken branch leads, whatever the discovery order was", () => {
     const standings = repoStandings(
-        [repo("a-quiet"), repo("b-green"), repo("c-broken")],
-        [run("b-green", "success", 90), run("c-broken", "failed", 10)],
+        [repo("a-quiet"), repo("b-passing"), repo("c-broken")],
+        [run("b-passing", "success", 90), run("c-broken", "failed", 10)],
     );
-    expect(standings.map((standing) => standing.repo.repo)).toEqual(["c-broken", "b-green", "a-quiet"]);
-    // Broken wins on tier, not on recency: b-green's run is the newer one by 80.
+    expect(standings.map((standing) => standing.repo.repo)).toEqual(["c-broken", "b-passing", "a-quiet"]);
+    // Broken wins on tier, not on recency: b-passing's run is the newer one by 80.
     expect(standings[0]).toMatchObject({ failing: 1, running: 0, silent: false });
 });
 
-test("running outranks green, and green outranks never-ran", () => {
-    const standings = repoStandings([repo("green"), repo("never"), repo("moving")], [run("green", "success", 90), run("moving", "running", 10)]);
-    expect(standings.map((standing) => standing.repo.repo)).toEqual(["moving", "green", "never"]);
+test("running outranks passing, and passing outranks never-ran", () => {
+    const standings = repoStandings([repo("passing"), repo("never"), repo("moving")], [run("passing", "success", 90), run("moving", "running", 10)]);
+    expect(standings.map((standing) => standing.repo.repo)).toEqual(["moving", "passing", "never"]);
 });
 
 test("queued shares the in-flight tier but is counted, and said, apart from running", () => {
-    const [waiting, green] = repoStandings([repo("green"), repo("waiting")], [run("green", "success", 90), run("waiting", "queued", 10)]);
+    const [waiting, passing] = repoStandings([repo("passing"), repo("waiting")], [run("passing", "success", 90), run("waiting", "queued", 10)]);
     // Unfinished business outranks a settled repository whether or not a runner has picked it up yet.
     expect(waiting?.repo.repo).toBe("waiting");
-    expect(green?.repo.repo).toBe("green");
+    expect(passing?.repo.repo).toBe("passing");
     expect(waiting).toMatchObject({ running: 0, queued: 1 });
     // The words are the point: "1 queued" sends a reader to look at their runners, "1 running" tells them to wait.
     expect(standingNote(waiting!)).toContain("1 queued");
     expect(standingNote(waiting!)).not.toContain("running");
 });
 
-test("a webhook warning outranks green and keeps the repository off the silent list", () => {
-    const [first, second] = repoStandings([repo("green"), repo("warned", "Could not register the hook")], [run("green", "success", 90)]);
+test("a webhook warning outranks passing and keeps the repository off the silent list", () => {
+    const [first, second] = repoStandings([repo("passing"), repo("warned", "Could not register the hook")], [run("passing", "success", 90)]);
     expect(first?.repo.repo).toBe("warned");
     // No runs at all, and still not silent: the warning is the explanation for the silence, so it earns a
     // section rather than being folded away into the rail.
     expect(first).toMatchObject({ runs: [], silent: false });
-    expect(second?.repo.repo).toBe("green");
+    expect(second?.repo.repo).toBe("passing");
 });
 
 test("inside a tier the newest run leads, and repositories with no runs fall back to their names", () => {

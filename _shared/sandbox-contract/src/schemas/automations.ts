@@ -29,7 +29,7 @@ import { ZoneSchema } from "../time/zone.js";
 // turn.settled: fires once per isolated turn regardless of outcome, while the diff is still on screen
 // agent.landed: fires only once work reaches the main tree, including a later manual Land
 // deps.broken/deps.fixed: retired with the check that ran after every land (2026-09-27). Nothing emits them any more;
-// they stay so an automation written for them still reads, and it never fires. Main's red CI is the `ci` listener's.
+// they stay so an automation written for them still reads, and it never fires. Main's failing CI is the `ci` listener's.
 export const WorkspaceEventKindSchema = z.enum(["turn.settled", "agent.landed", "deps.broken", "deps.fixed"]);
 export type WorkspaceEventKind = z.infer<typeof WorkspaceEventKindSchema>;
 // Payload of a workspace-triggered wake, delivered as JSON in $AUTOMATION_PAYLOAD and appended to the prompt.
@@ -45,7 +45,7 @@ export const WorkspaceEventSchema = z.object({
     outcome: z.enum(["landed", "conflict", "ready", "idle", "error"]),
     repos: z.array(z.object({ repo: z.string(), from: z.string(), dir: z.string() })),
     // Present only for `deps.*` events: which project broke, the command and exit code, a bounded log tail, and
-    // `attempt` counting consecutive reds since the last green.
+    // `attempt` counting consecutive failures since the last pass.
     deps: z
         .object({
             project: z.string(),

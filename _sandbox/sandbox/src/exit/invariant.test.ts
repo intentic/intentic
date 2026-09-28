@@ -60,7 +60,7 @@ test("no exits configured, or no readable routing table, is silence rather than 
 });
 
 test("both checks can fail, and neither throws at the daemon", () => {
-    // A check with no `on` triggers would never run: a green light with no subject to report on.
+    // A check with no `on` triggers would never run: a pass with no subject to report on.
     const registered = checks({ capabilities: store([]) });
     expect(registered.map((check) => check.name)).toEqual(["no-exit-route-in-the-main-table", "up-exits-come-out-where-they-were-asked"]);
     expect(registered.every((check) => check.on.length > 0)).toBe(true);

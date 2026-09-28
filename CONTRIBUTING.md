@@ -9,7 +9,7 @@ flowchart LR
     commit --> push["push<br/>nothing runs"]
     push --> ci(["CI on the fleet<br/>the push check and the verify groups"])
     ci --> main["main"]
-    main --> release["release on green"]
+    main --> release["release once it passes"]
 ```
 
 ## Set up
@@ -26,7 +26,7 @@ flowchart LR
 | `pnpm verify` | the whole repository, the way CI's verify groups do | by hand, when you ask for it |
 | `pnpm verify:push` | the push check over a range of commits: the checks with tidiness counted only where the range added it, the assertion ratchet, lint of the files it changed; by hand also the manifest and lockfile lockstep and rustfmt | CI's `quick` job, on every push; by hand, the branch against its upstream |
 
-No check refuses a land, a commit or a push. The commit-msg hook prints what commitlint finds and git goes on either way, and nothing runs at a push. Nothing runs after a land but a dependency install, so the whole repository is measured by CI, on the pushed commit: its `quick` job type-checks what the push changed and runs the push check within minutes, and the verify groups build and test the rest. By hand, `pnpm verify:push` exits non-zero on a finding. CI builds only branches in this repository: a pull request from a fork runs nothing until a maintainer reads it and pushes its branch here ([the fork boundary](docs/ops/ci-runner.md)). When main's CI goes red, the sandbox gives the red one fix agent ([sandbox.md](docs/architecture/sandbox.md#when-mains-ci-goes-red)).
+No check refuses a land, a commit or a push. The commit-msg hook prints what commitlint finds and git goes on either way, and nothing runs at a push. Nothing runs after a land but a dependency install, so the whole repository is measured by CI, on the pushed commit: its `quick` job type-checks what the push changed and runs the push check within minutes, and the verify groups build and test the rest. By hand, `pnpm verify:push` exits non-zero on a finding. CI builds only branches in this repository: a pull request from a fork runs nothing until a maintainer reads it and pushes its branch here ([the fork boundary](docs/ops/ci-runner.md)). When main's CI fails, the sandbox gives the failure one fix agent ([sandbox.md](docs/architecture/sandbox.md#when-mains-ci-fails)).
 
 ## Commits
 

@@ -81,7 +81,7 @@ const heldRouting = (settings: TurnSettings, session: SessionRef | undefined, op
 // A file that went out with a message the daemon never answered for, staged again in the composer as a finished chip.
 const chipOf = (file: ChatAttachment): PendingAttachment => ({ id: uuid(), name: file.name, path: file.path, status: `done`, progress: 100 });
 
-// What a waiting message's change was refused for, in the words the red line uses.
+// What a waiting message's change was refused for, in the words the error line uses.
 const queueRefusal = (refusal: SandboxHttpError): string => {
     if (refusal.status === 412) {
         return `That waiting message was changed in another window since you saw it: look again before changing it.`;
@@ -592,7 +592,7 @@ export class TurnClient {
     }
 
     // Takes a waiting message back before it goes out, as this window read it: refused when another window changed it
-    // since, which the red line says. False when nothing changed.
+    // since, which the error line says. False when nothing changed.
     async unqueue(message: QueuedMessage): Promise<boolean> {
         const { host } = this;
         const left = await orRefusal(
@@ -698,7 +698,7 @@ export class TurnClient {
                 return true;
             }
         } catch (error) {
-            // Unreachable, not refused: said on the red line, and the held turn stays for the next press.
+            // Unreachable, not refused: said on the error line, and the held turn stays for the next press.
             host.error.value = errorMessage(error, `The sandbox did not answer.`);
             return true;
         }

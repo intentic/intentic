@@ -429,9 +429,9 @@ describe("watchers", () => {
 
         // The visible half: a conversation waiting before the restart must not read as finished after it.
         it("puts the readout back on the card", async () => {
-            await armWatcher(specOf({ intervalSeconds: 30, timeoutSeconds: 600, note: "CI green on intentic/intentic" }));
+            await armWatcher(specOf({ intervalSeconds: 30, timeoutSeconds: 600, note: "CI passing on intentic/intentic" }));
             await restart();
-            expect(card("conv-1")).toMatchObject([{ note: "CI green on intentic/intentic", intervalSeconds: 30 }]);
+            expect(card("conv-1")).toMatchObject([{ note: "CI passing on intentic/intentic", intervalSeconds: 30 }]);
         });
 
         // The ghost this feature could have introduced, and why every disarm awaits its journal drop: a stopped watch

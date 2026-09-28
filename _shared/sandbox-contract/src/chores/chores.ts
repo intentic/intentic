@@ -340,7 +340,7 @@ const duplication: Chore = {
     done: `Done when every clone in the report has either a named extraction or a one-line reason it should stay.`,
 };
 
-// The only chore whose evidence is about the tests, not the code: a green suite proves a line ran, not that
+// The only chore whose evidence is about the tests, not the code: a passing suite proves a line ran, not that
 // anything depended on what it produced. The floor is set low on purpose, to catch decorative suites, not to grade good
 // ones.
 const MUTATION_FLOOR = 60;
@@ -374,7 +374,7 @@ const testStrength: Chore = {
             severity: `info`,
             why:
                 `Stryker caught ${killed} of ${killed + survived} injected faults in ${repoLabel(context.repo)} (${score}%), under the ${MUTATION_FLOOR}% floor. ` +
-                `Code that can be changed with every test still green: ${survivors.map((one) => `${one.file}:${one.line} (${one.mutator} → ${one.replacement})`).join(`; `)}.`,
+                `Code that can be changed with every test still passing: ${survivors.map((one) => `${one.file}:${one.line} (${one.mutator} → ${one.replacement})`).join(`; `)}.`,
         };
     },
     diagnosis: `Tests that run the code without checking what it produced pass whether or not the code is right, and no other check in this repository can tell the difference.`,

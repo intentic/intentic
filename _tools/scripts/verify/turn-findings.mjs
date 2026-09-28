@@ -98,7 +98,7 @@ export const judgeAgainstBase = (failed, before, root) =>
         }
         // A check that PASSED on the base and fails now is the caller's whatever its lines look like: `unmatched` being
         // empty there would mean the check reports in a shape `FINDING` does not recognise, and the safe way to be wrong
-        // about a new shape is to name the work that made it red, not to wave it through.
+        // about a new shape is to name the work that made it fail, not to wave it through.
         const wholeCheck = standing?.ok === true && unmatched.length === 0;
         return { verdict, added: wholeCheck ? [`${verdict.id} passed before this change and fails now`] : unmatched, unsure: [] };
     });

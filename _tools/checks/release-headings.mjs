@@ -81,7 +81,7 @@ if (describeLine === undefined) {
     rangeProblems.push(
         'publish-github.sh describes the previous release without `--exclude "$TAG"`. It runs in publishCmd, where this ' +
             "release's tag is already on HEAD, so git answers with THAT tag and the notes range collapses to nothing — " +
-            "a published Release with an empty body, and nothing else in the pipeline would go red",
+            "a published Release with an empty body, and nothing else in the pipeline would fail",
     );
 } else {
     rangeProblems.push(

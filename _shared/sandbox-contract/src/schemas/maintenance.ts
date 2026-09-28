@@ -137,7 +137,7 @@ export const MutationScoreSchema = z.object({
         .number()
         .describe("The share of injected faults the suite caught. Not a coverage figure: coverage says a line ran, this says an assertion depended on it."),
     killed: z.number().int().nonnegative().describe("Faults the suite caught."),
-    survived: z.number().int().nonnegative().describe("Faults it did not: code that can be broken with every test still green."),
+    survived: z.number().int().nonnegative().describe("Faults it did not: code that can be broken with every test still passing."),
     // A timeout counts as detected here (Stryker's own convention), not as inconclusive.
     inconclusive: z
         .number()

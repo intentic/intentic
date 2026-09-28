@@ -5,8 +5,8 @@
 #
 # The thing no unit test can tell you, and the thing this app got wrong for its whole life so far: every
 # release up to and including v1.213.0 shipped an app that checked once at startup, drew a notice reading "it
-# installs the next time you quit", and then installed nothing, on any path, ever. Nothing failed. Nothing was
-# red. The mechanism was simply absent, and the sentence on screen is the reason nobody went looking.
+# installs the next time you quit", and then installed nothing, on any path, ever. Nothing failed, and nothing
+# said so. The mechanism was simply absent, and the sentence on screen is the reason nobody went looking.
 #
 # So this asserts OUTCOMES, in the order they matter:
 #
@@ -180,7 +180,7 @@ until_true 15 "the release endpoint is serving" \
 # workspace webview — an error page in place of the stub, whose script is the only thing that ever presses the
 # button. Nothing downstream notices: the update still downloads (that half is Rust, on a timer), the window is
 # still there to be found, the app logs nothing because it was never asked to install anything, and the run
-# dies 120 seconds later on an assertion about the app. Job 103427489791 is that run — green on the same
+# dies 120 seconds later on an assertion about the app. Job 103427489791 is that run — passing on the same
 # commit, on the same runner, eight minutes earlier and fourteen minutes later.
 until_true 15 "the workspace page is serving" \
     python3 -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8099/').read()" || exit 1
@@ -208,7 +208,7 @@ fi
 # ~100 MB write before `Stage::Ready` is set and the page is told (update.rs `check_now`), so `staged_download` above
 # goes true inside that gap on a loaded runner. A press landing there reaches `act` in `Downloading` and is dropped by
 # its catch-all arm: no install, no restart, and — until the arm learned to say so — not one line in the app's log to
-# tell it from an app that ignored the link. Run 35072221066 is that race, green eight minutes either side of it.
+# tell it from an app that ignored the link. Run 35072221066 is that race, passing eight minutes either side of it.
 announced() { grep -q 'GET /announced' /tmp/stub.log; }
 until_true 60 "the app offered the update to the page" announced || {
     app_log

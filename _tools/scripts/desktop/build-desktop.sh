@@ -88,10 +88,10 @@ fi
 # A RELEASE WITHOUT THE SIGNING KEY IS A RELEASE NOBODY CAN BE UPDATED TO, and it used to be a line of output.
 #
 # The tail of this script skips the .sig files and latest.json when TAURI_SIGNING_PRIVATE_KEY is unset, prints
-# "no auto-update for this release", and exits green. That is exactly right for the CI and nightly builds,
+# "no auto-update for this release", and exits 0. That is exactly right for the CI and nightly builds,
 # which pass 0.0.0 and exist to prove the bundles install — and it is how every release up to and including
 # v1.213.0 shipped with a 404 where its manifest should be. No copy in the wild was ever offered an update, the
-# app said "it installs the next time you quit" over the top of it, and the pipeline was green throughout.
+# app said "it installs the next time you quit" over the top of it, and the pipeline passed throughout.
 #
 # A version that is not the 0.0.0 sentinel is a release. Refuse it here, before several minutes of building,
 # rather than announcing it afterwards.

@@ -56,7 +56,7 @@ export const composeProvisioner = (): Provisioner => {
             // Exactly the two commands the tab tells the user to run, in the folder holding the file.
             await sh(bootstrap, projectDir, `the compose bootstrap the wizard rendered`, 600_000);
 
-            // Waits on the platform's registry (daemonUrl), not wizard screen text, which false-greened in 7s once.
+            // Waits on the platform's registry (daemonUrl), not wizard screen text, which falsely passed in 7s once.
             await waitForAnnounce(world.databaseUrl ?? ``, startedAt, 300_000);
         },
 

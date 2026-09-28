@@ -5,8 +5,8 @@
     // this repo would have created a second, routeless Worker and reported success, while the live site went on
     // serving whatever was last pushed to `intentic` (2026-08-29).
     //
-    // That is not a hypothetical. It is how the site sat eight days behind main while every check here stayed
-    // green: the rename of the install scripts (computer.* -> device.*, b266789b5) shipped in the app, which
+    // That is not a hypothetical. It is how the site sat eight days behind main while every check here kept
+    // passing: the rename of the install scripts (computer.* -> device.*, b266789b5) shipped in the app, which
     // handed out https://intentic.dev/device.ps1, while the site still served /computer.ps1 and answered the new
     // path with the 404 page — piped straight into somebody's PowerShell.
     "name": "intentic",

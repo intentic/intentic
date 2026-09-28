@@ -14,8 +14,8 @@
 #
 # CI setup: GATE_ACTION_TOKEN, a fine-grained PAT with Contents: read+write on intentic/gate-action. Missing —
 # or present but unable to write, which reads identically from here — this SKIPS — loudly, even in CI: the sync
-# is meant to stay inert until the public repo and a usable secret exist, and a red release train over an
-# optional artifact would teach everyone to ignore red. The write check is the probe below. The first Marketplace
+# is meant to stay inert until the public repo and a usable secret exist, and a failed release train over an
+# optional artifact would teach everyone to ignore failures. The write check is the probe below. The first Marketplace
 # listing itself is a one-time manual step on the repo's first release (the developer agreement and categories
 # can only be accepted in the UI); every release after that shows up on the listing by itself.
 #   bash _tools/scripts/release/publish-action.sh 1.187.0
@@ -44,11 +44,11 @@ trap 'rm -rf "$work"' EXIT
 git clone --quiet --depth 1 "https://x-access-token:${GH_API_TOKEN}@github.com/${ACTION_REPO}.git" "$work/repo"
 
 # A TOKEN THAT CANNOT WRITE IS THE SAME SITUATION AS NO TOKEN, and until this probe existed it was not treated
-# like one: the sync ran to the first push and died there with exit 128, taking the release train red over the
+# like one: the sync ran to the first push and died there with exit 128, failing the release train over the
 # one artifact this file's header calls optional. The clone above proves nothing, because the action repo is
 # PUBLIC — git sends no credential for a read that is not challenged, so a token that is expired, scoped to the
 # wrong account, or simply missing Contents: write clones perfectly and is refused three commands later
-# ("Permission to ${ACTION_REPO} denied to <user>", 403). Worse than red: the refusal can land BETWEEN pushes,
+# ("Permission to ${ACTION_REPO} denied to <user>", 403). Worse than a failure: the refusal can land BETWEEN pushes,
 # leaving the public repo with a commit whose version tag never arrived.
 #
 # `push --dry-run` is that check and there is no lighter one. It negotiates git-receive-pack — the write
@@ -57,7 +57,7 @@ git clone --quiet --depth 1 "https://x-access-token:${GH_API_TOKEN}@github.com/$
 # be a weaker answer: it reports what the ACCOUNT may do, not what THIS token may do.
 #
 # Refusal skips loudly, with a `::warning::` so the run carries the reason on its summary rather than in a log
-# nobody opens — the release stays green, and the fix is one setting on the PAT, not a revert. Anything else
+# nobody opens — the release still passes, and the fix is one setting on the PAT, not a revert. Anything else
 # (network, DNS, the repo gone) is not a permission answer and still fails.
 if ! probe="$(git -C "$work/repo" push --dry-run --quiet origin "HEAD:refs/heads/main" 2>&1)"; then
   case "$probe" in

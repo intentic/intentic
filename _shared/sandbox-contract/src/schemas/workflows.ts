@@ -37,7 +37,7 @@ export const WorkflowStepSchema = z.object({
         .min(1)
         .optional()
         .describe(
-            "What the step is told to do. The goal is the suite is green; this is run the tests, take the top failure, fix it. Leaving it out hands over the run's own request untouched, which is right for a step whose whole job is do what was asked.",
+            "What the step is told to do. The goal is the suite passes; this is run the tests, take the top failure, fix it. Leaving it out hands over the run's own request untouched, which is right for a step whose whole job is do what was asked.",
         ),
     // Steps that must finish first; empty means a root. Must be acyclic with every id existing, checked on save.
     needs: z
@@ -116,7 +116,7 @@ export type GuardOutcome = z.infer<typeof GuardOutcomeSchema>;
 // value is the field as the step wrote it; absent means most blocked verdicts had nothing to read.
 export const GateVerdictSchema = z.object({
     outcome: GuardOutcomeSchema.describe(
-        "Ship it, do not, or we could not tell. That third answer exists because could not reach a judgement is not the product is broken: a gate that reported its own outages as failures is one a team switches off, so it should be the honest answer far more often than the convenient one, and it means a neutral build rather than a red one.",
+        "Ship it, do not, or we could not tell. That third answer exists because could not reach a judgement is not the product is broken: a gate that reported its own outages as failures is one a team switches off, so it should be the honest answer far more often than the convenient one, and it means a neutral build rather than a failed one.",
     ),
     // Why, in one line; realistically the only part of this a pipeline log will show.
     reason: z.string().describe("Why, in one line. Realistically the only part of this a build log will ever show."),
@@ -156,14 +156,14 @@ export const WorkflowSchema = z.object({
 });
 export type Workflow = z.infer<typeof WorkflowSchema>;
 
-// skipped means the step never ran because something it waited on didn't finish; that's why a failed run shows one red
-// node and a trail of grey ones.
+// skipped means the step never ran because something it waited on didn't finish; that's why a failed run shows one
+// failed node and a trail of skipped ones.
 export const WorkflowStepStateSchema = z.enum(["pending", "running", "done", "failed", "skipped", "stopped"]);
 export type WorkflowStepState = z.infer<typeof WorkflowStepStateSchema>;
 export const WorkflowStepRunSchema = z.object({
     stepId: StepIdSchema.describe("Which step this is."),
     state: WorkflowStepStateSchema.describe(
-        "How it went. Skipped carries what the others cannot: it never ran, because something it was waiting on did not finish. That is why a failed run shows one red step and a trail of grey ones.",
+        "How it went. Skipped carries what the others cannot: it never ran, because something it was waiting on did not finish. That is why a failed run shows one failed step and a trail of skipped ones.",
     ),
     // The conversation this step ran on; shared with its predecessor under continue, making them one card.
     conversationId: z

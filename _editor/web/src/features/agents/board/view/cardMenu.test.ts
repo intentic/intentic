@@ -50,7 +50,7 @@ const press = (items: readonly MenuItem[], label: string): void => {
 };
 
 const landed = card(`a1`, { branch: `agent/sleek-arrow-uzgj` });
-const WATCH = { id: `w`, note: `CI on main goes green`, intervalSeconds: 60, deadlineAt: 9_999 };
+const WATCH = { id: `w`, note: `CI on main passes`, intervalSeconds: 60, deadlineAt: 9_999 };
 
 describe(`what a card's menu offers`, () => {
     it(`opens, reviews at its own address, copies the session name and files a finished card away`, () => {

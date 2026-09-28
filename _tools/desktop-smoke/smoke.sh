@@ -7,7 +7,7 @@
 #
 #   1. INSTALL. `apt-get install` the built .deb on a host with no GUI libraries at all — so the package's own
 #      Depends field has to name everything the binary links against. Tauri's bundler generates that field and
-#      nothing else in the pipeline reads it; when it is wrong the build is green, the install is clean, and the
+#      nothing else in the pipeline reads it; when it is wrong the build passes, the install is clean, and the
 #      app dies on first launch with a linker error the user cannot act on.
 #   2. LAUNCH. The process survives startup and maps its workspace window. This is where a missing library, a
 #      broken resource path or a panic in `setup()` actually surfaces.

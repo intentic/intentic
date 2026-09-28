@@ -121,15 +121,15 @@ describe(`the landing verdict`, () => {
     /* No check takes part in landing: checks run over the main tree after the work lands, and never hold it. A rule
        written while one could may still name the retired `checks-failed` outcome, which no finished turn has now. */
     test(`a rule naming the retired checks-failed outcome never matches, and the rest of the table decides`, () => {
-        const holdsRed = verdict(`hold-red`, `hold`, { when: { outcome: [`checks-failed`] } });
+        const holdsFailing = verdict(`hold-failing`, `hold`, { when: { outcome: [`checks-failed`] } });
         const landsAll = verdict(`land-everything`, `allow`);
-        expect(landingVerdict([holdsRed, landsAll], { outcome: `clean` }, undefined)).toEqual({ land: true, rule: landsAll });
-        expect(landingVerdict([holdsRed], { outcome: `clean` }, undefined)).toEqual({ land: false });
+        expect(landingVerdict([holdsFailing, landsAll], { outcome: `clean` }, undefined)).toEqual({ land: true, rule: landsAll });
+        expect(landingVerdict([holdsFailing], { outcome: `clean` }, undefined)).toEqual({ land: false });
     });
 
-    test(`nothing outranks the per-agent override any more, not even a rule about red work`, () => {
-        const holdsRed = verdict(`hold-red`, `hold`, { when: { outcome: [`checks-failed`] } });
-        expect(landingVerdict([holdsRed], { outcome: `clean` }, true)).toEqual({ land: true });
+    test(`nothing outranks the per-agent override any more, not even a rule about failing work`, () => {
+        const holdsFailing = verdict(`hold-failing`, `hold`, { when: { outcome: [`checks-failed`] } });
+        expect(landingVerdict([holdsFailing], { outcome: `clean` }, true)).toEqual({ land: true });
         expect(landingVerdict([verdict(`land-everything`, `allow`)], { outcome: `clean` }, true)).toEqual({ land: true });
     });
 
@@ -141,7 +141,9 @@ describe(`the landing verdict`, () => {
             rule: verdict(`land-everything`, `allow`),
         });
         expect(landingVerdict([], facts, true)).toEqual({ land: true });
-        expect(landingVerdict([verdict(`hold-red`, `hold`, { when: { outcome: [`checks-failed`] } })], facts, undefined).rule?.id).toBe(`hold-red`);
+        expect(landingVerdict([verdict(`hold-failing`, `hold`, { when: { outcome: [`checks-failed`] } })], facts, undefined).rule?.id).toBe(
+            `hold-failing`,
+        );
     });
 
     test(`a clean turn is decided by the table and the override alone`, () => {

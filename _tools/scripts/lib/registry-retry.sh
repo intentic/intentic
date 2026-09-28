@@ -64,7 +64,7 @@
 #
 # ONLY THAT CLASS OF FAILURE RETRIES. A broken Dockerfile, a missing build context or a token that genuinely
 # lacks `packages: write` must fail on the FIRST attempt — three silent backoffs before the same error is how
-# a five-minute red pipeline becomes a twenty-minute one that reads like an infrastructure flake. So the
+# a pipeline that fails in five minutes becomes one that fails in twenty and reads like an infrastructure flake. So the
 # decision is made on the command's own output, not on its exit status, which is 1 for all of them alike.
 #
 # BOTH DIRECTIONS ARE ASSERTED, against the text those releases actually printed, by the `publish-retry` check

@@ -66,7 +66,7 @@ export interface CiFixRequest {
     readonly project: CiProject;
     readonly runId: number;
     // The failure the attempts are at, which the first wears as its id: the run's own (ciFixConversationId) unless the run
-    // is part of a red streak on main, whose one fix agent every failure goes to.
+    // is part of a failing streak on main, whose one fix agent every failure goes to.
     readonly base?: string;
     // The run, when the caller already read it; looked up otherwise.
     readonly run?: PipelineRun | undefined;

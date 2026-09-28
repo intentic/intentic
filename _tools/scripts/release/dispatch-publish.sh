@@ -5,7 +5,7 @@
 # It never did, not once in 200 releases: semantic-release pushes its tag with the built-in GITHUB_TOKEN, and
 # GitHub deliberately starts no workflow from an event that token created — the loop guard that stops a
 # workflow from triggering itself forever. The failure was silent in the worst way, because a trigger that
-# never fires looks exactly like a pipeline with nothing to do: every release went green while npm stopped at
+# never fires looks exactly like a pipeline with nothing to do: every release passed while npm stopped at
 # 1.176.3 and the tags ran on to 1.206.1.
 #
 # workflow_dispatch is the ONE exception the loop guard makes (with repository_dispatch), so it is the only
@@ -17,7 +17,7 @@
 # tagged commit, and a dispatch on main would have signed main's SHA over the tag's contents.
 #
 # Fatal in CI when the dispatch fails, for the same reason publish-github.sh is: a quiet skip here leaves a
-# tagged, released version that reaches no registry and still reports green, which is the exact shape of the
+# tagged, released version that reaches no registry and still reports a pass, which is the exact shape of the
 # silence this file was written to end.
 #
 #   bash _tools/scripts/release/dispatch-publish.sh 1.206.1
@@ -44,7 +44,7 @@ gh_require_token "it is the only thing that can start the publish workflows"
 
 # THE TAG HAS TO BE THERE, and saying so here is the difference between a diagnosis and a puzzle. A dispatch
 # at a ref that does not exist is a 422 with an empty body, which `curl --fail` reports as the bare line
-# `curl: (22) The requested URL returned error: 422` — three of the ten most recent red pipelines ended on
+# `curl: (22) The requested URL returned error: 422` — three of the ten most recent failed pipelines ended on
 # exactly that and nothing else. release.yml no longer calls this script
 # when semantic-release declined to release, so reaching here without the tag now means something worse than
 # the old race, and it should read that way.

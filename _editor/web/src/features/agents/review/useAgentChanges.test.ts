@@ -76,7 +76,7 @@ it("isolates viewed files when agent ids name object prototype properties", () =
 
 // Merged-and-nothing-moved is the one land outcome the review cannot show for itself: its rows are read off the branch
 // and do not move, so an unsaid one leaves the press looking exactly like one that worked. It is an outcome, not a
-// declined mutation, so it takes the floating receipt rather than the panel's red error line.
+// declined mutation, so it takes the floating receipt rather than the panel's error line.
 it("says so when a land carried nothing, and stays quiet when it carried work", async () => {
     const changes = useAgentChanges(ref(`c1`));
 

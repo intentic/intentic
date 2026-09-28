@@ -1,17 +1,27 @@
 {
-    "mainRed": {
-        "failing": "Fallando",
-        "fixAgent": "Agente de arreglo",
+    "mainFailure": {
+        "continueFix": "Continuar arreglo",
+        "failingJobs": "Tareas que fallan",
+        "fixAgent": "Agente de arreglo en ello",
         "fixAgentHint": "Cada fallo en {branch} va a este único agente hasta que una ejecución pase.",
-        "newestRun": "última ejecución en rojo #{runId}",
-        "open": "Abrir",
-        "openFixer": "Abrir la conversación del agente de arreglo",
-        "reported": "Las reparaciones están desactivadas, así que no se envió a nadie.",
+        "fixWithAgent": "Arreglar con un agente",
+        "handBackGone": "Agente no disponible",
+        "handBackInterrupted": "Turno cortado",
+        "handBackNoChange": "Sin arreglo",
+        "handBackRefused": "Agente inaccesible",
+        "handBackStopped": "Agente detenido",
+        "handBackTurnFailed": "Turno fallido",
+        "handBackTurns": "Sin turnos",
+        "handedBack": "Devuelto",
+        "handedBackHint": "El agente de arreglo lo ha devuelto. Continúa para devolverle sus turnos, o ábrelo para ver qué intentó.",
+        "moreJobs": "+{count} más",
+        "needsYou": "Te necesita",
+        "openFixer": "Abrir agente",
+        "repairsOff": "Arreglo automático desactivado",
+        "repairsOffHint": "Las reparaciones están desactivadas, así que no se envió ningún agente.",
         "since": "desde {when}",
-        "spent": "El agente de arreglo ya ha tenido sus turnos, o terminó sin cambiar nada.",
-        "title": "{branch} está en rojo",
-        "unassigned": "Todavía no hay ningún agente de arreglo en ello.",
-        "waitsForYou": "Te espera"
+        "title": "{branch} está fallando",
+        "unassigned": "Aún sin agente de arreglo"
     },
     "pipelineDagGraph": {
         "expand": "Expandir",
@@ -36,11 +46,11 @@
         "jobGraph": "{headline}: grafo de tareas",
         "loadingJobs": "Cargando las tareas",
         "noJobDetailsAvailable": "No hay detalles de tareas para esta ejecución.",
+        "passedAgainIn": "{branch} volvió a pasar en esta ejecución: ábrela para comprobar si la tarea que falló aquí llegó a ejecutarse",
         "reRun": "Volver a ejecutar",
         "setAttemptAsideStart": "Apartar este intento y empezar uno nuevo: primero abre el selector",
         "startOver": "Empezar de cero",
-        "supersededBy": "sustituida por",
-        "wentGreenAgainIn": "{branch} volvió a verde en esta ejecución: ábrela para comprobar si la tarea que falló aquí llegó a ejecutarse"
+        "supersededBy": "sustituida por"
     },
     "pipelinesSkeleton": {
         "loadingPipelines": "Cargando las pipelines"

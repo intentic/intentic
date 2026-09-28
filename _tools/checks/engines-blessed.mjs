@@ -25,7 +25,7 @@ for (const engine of ENGINE_PINS) {
     if (entry.blessed !== blessed) {
         problems.push(
             `engines.json blesses ${engine.id}@${entry.blessed}, but this repository pins ${blessed}. ` +
-                `Blessed means "this repo's suite ran against it": move the pin first, let CI go green, then bless it — ` +
+                `Blessed means "this repo's suite ran against it": move the pin first, let CI pass, then bless it — ` +
                 `\`node _tools/scripts/engines/bump-engines.mjs --apply\` does all three in the right order.`,
         );
     }

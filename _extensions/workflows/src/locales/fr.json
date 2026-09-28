@@ -35,7 +35,7 @@
         "createLoop": "Créer la boucle",
         "editLoop": "Modifier la boucle",
         "everyPublicFunctionDoc": "Chaque fonction publique a un commentaire de documentation expliquant pourquoi elle existe.",
-        "fixesFailuresOneAt": "corrige les échecs un par un jusqu'à ce que la suite soit verte",
+        "fixesFailuresOneAt": "corrige les échecs un par un jusqu'à ce que la suite réussisse",
         "freshContext": "Contexte neuf",
         "howEnds": "Comment elle se termine",
         "idleRoundOneChanged": "Une ronde à vide est une ronde qui n'a rien changé dans l'arbre : c'est cela, et non une erreur, qui fait habituellement dérailler une boucle.",

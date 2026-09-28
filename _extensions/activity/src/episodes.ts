@@ -100,7 +100,7 @@ const TYPE_LABELS: Readonly<Record<string, string>> = {
     // The rest were the steps of the check that ran over the main tree after every land, retired with it: nothing emits
     // them any more, and they keep their labels because the activity history still holds rows of them.
     "deps.install_lost": `Dependency install unwatched`,
-    "deps.verify_green": `Checks green`,
+    "deps.verify_green": `Checks passed`,
     "deps.verify_red": `Checks failed`,
     "deps.verify_skipped": `No checks to run`,
     "deps.verify_lost": `Checks unwatched`,
