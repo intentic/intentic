@@ -225,6 +225,7 @@ export const useComposerSend = (host: SendHost) => {
         // A scheduled send is an ordinary send with the limit answer set: the daemon tries it, turns it away at the door
         // for free, and fires it when the window opens. A failed write leaves the card's own control saying `wait`.
         if (intent.value === `scheduled` && options.now !== true) {
+            // allow(silent-catch): the write is optimistic and rolls back on failure, so the card's control saying `wait` is the report.
             void host.armLimitResend().catch(() => undefined);
         }
         // Nothing typed and a turn left hanging means Continue: every gate below reads a draft that isn't there.

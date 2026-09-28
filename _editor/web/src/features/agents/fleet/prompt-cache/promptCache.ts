@@ -1,6 +1,6 @@
 import { type CacheClock, type KeepWarm, keepWarmLeadMs, keepWarmRefreshes } from "@intentic/sandbox-contract";
 import { formatClock, formatTokens } from "@intentic/ui/format";
-import { type AgentStanding, formatElapsed, laneOf, turnInFlight } from "./agentStatus";
+import { type AgentStanding, formatElapsed, laneOf, turnInFlight } from "../agentStatus";
 import { t } from "@intentic/ui/i18n";
 
 // Whether picking a conversation up is about to stop being cheap. The daemon publishes a deadline

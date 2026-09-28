@@ -4,7 +4,7 @@ import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { activityIcon, formatElapsed, limitClosed, limitCountdown, turnInFlight, watching, watchLine } from "../../fleet/agentStatus";
-import { cacheCooling, cacheWarm, warmMark } from "../../fleet/promptCache";
+import { cacheCooling, cacheWarm, warmMark } from "../../fleet/prompt-cache/promptCache";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
 import { relativeTime } from "../../../chat/models/catalog";
 

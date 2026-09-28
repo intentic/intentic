@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, Card, InlineRename, resourcesSummary, SandboxLogo, SandboxResourcesDialog, StatusBadge, vAction } from "@intentic/ui";
+import { AnchoredOverlay, Card, InlineRename, resourcesSummary, SandboxLogo, SandboxResourcesDialog, StatusBadge, ui, vAction } from "@intentic/ui";
 import type { ResourcesForm } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref } from "vue";
@@ -192,8 +192,7 @@ const removeLogo = async (): Promise<void> => {
                         v-tooltip.bottom="
                             isOwner ? (logo ? t(`sandbox.sandboxOverview.changeRemoveLogo`) : t(`sandbox.sandboxOverview.addLogo`)) : undefined
                         "
-                        class="group relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden text-muted"
-                        :class="isOwner ? 'cursor-pointer' : ''"
+                        :class="ui.iconButton(`group h-12 w-12 overflow-hidden`)"
                         @click="pressLogo"
                     >
                         <SandboxLogo :size="48" :image="logo ?? null" :name="sandbox.active.value?.name" />

@@ -9,6 +9,7 @@ use std::net::TcpListener as StdListener;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
 use bytes::Bytes;
@@ -29,12 +30,32 @@ use tokio::sync::{Mutex, mpsc, watch};
 
 pub const SANDBOX_ID: &str = "abcdef012345";
 
+/// A port the front can be told to bind that nothing else will hold by then. `bind(0)` and drop raced: the kernel hands
+/// the same ephemeral range to every parallel test's upstream and to every outgoing connection's source port, so one of
+/// them took the port before the front bound it (it logged "could not bind" and the TLS test met a refused connect).
+/// So the port comes from below that range, where neither can land, off a counter this process never repeats, started
+/// at an offset by pid so two test processes on one host walk different ports.
 pub fn free_port() -> u16 {
-    StdListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port()
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+    const FLOOR: u16 = 10_000;
+    // Linux names its ephemeral range; elsewhere it starts higher than Linux's default, so that floor is safe.
+    let ephemeral = std::fs::read_to_string("/proc/sys/net/ipv4/ip_local_port_range")
+        .ok()
+        .and_then(|range| range.split_whitespace().next()?.parse::<u16>().ok())
+        .unwrap_or(32_768);
+    let span = u32::from(ephemeral.max(FLOOR + 1_024) - FLOOR);
+    let start = std::process::id().wrapping_mul(7_919) % span;
+    loop {
+        let taken = NEXT.fetch_add(1, Ordering::Relaxed);
+        assert!(
+            taken < span,
+            "every port below the ephemeral range was handed out"
+        );
+        let port = FLOOR + u16::try_from((start + taken) % span).unwrap();
+        if StdListener::bind(("127.0.0.1", port)).is_ok() {
+            return port;
+        }
+    }
 }
 
 /// Node's answer to where a preview host's request goes: its host, and whether it asks the probe's path.

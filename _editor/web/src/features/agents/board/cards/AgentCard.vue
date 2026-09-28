@@ -43,7 +43,7 @@ import {
 } from "../../fleet/agentStatus";
 import CardSeal from "./CardSeal.vue";
 import { cardProof, type ProofMark } from "./proofSeal";
-import KeepWarmPanel from "../../fleet/KeepWarmPanel.vue";
+import KeepWarmPanel from "../../fleet/prompt-cache/KeepWarmPanel.vue";
 // Not an emit: the destination is the same for every host this card has, and the review panel's own ladder sends the
 // user to exactly this place for exactly this refusal.
 import { type MatchSnippet, providerLabel } from "@intentic/sandbox-contract";

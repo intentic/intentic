@@ -438,10 +438,13 @@ test("agents.search reads the daemon transcript for a provider with no SDK promp
 test("a mid-write land is refused, and the same land with `force` goes through", async () => {
     let release: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => (release = resolve));
+    let entered: (() => void) | undefined;
+    const writing = new Promise<void>((resolve) => (entered = resolve));
     const client = clientFor(
         createApp(
             services({
                 async *agent() {
+                    entered?.();
                     await gate;
                     yield { kind: "done" };
                 },
@@ -449,6 +452,9 @@ test("a mid-write land is refused, and the same land with `force` goes through",
         ),
     );
     await client.agent.run({ prompt: "a long edit", conversationId: "conv1", isolated: true });
+    // `run` answers before the pre-turn rebase is done, and that rebase holds the land lease: a press then is refused
+    // as a second land. The body running means the rebase let go.
+    await writing;
     // Parked with nothing raised: still writing, the one state the guard refuses.
     expect(await errorCode(client.agents.land({ id: "conv1" }))).toBe("CONFLICT");
     // `force: true` is the user's override, the press behind the warning modal.
@@ -489,10 +495,13 @@ test("a turn parked on a question lands without a force: it is waiting for the u
 test("a forced land leaves the running turn's bookkeeping to the turn", async () => {
     let release: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => (release = resolve));
+    let entered: (() => void) | undefined;
+    const writing = new Promise<void>((resolve) => (entered = resolve));
     const client = clientFor(
         createApp(
             services({
                 async *agent() {
+                    entered?.();
                     await gate;
                     yield { kind: "usage", costUsd: 0.25, inputTokens: 4, outputTokens: 2 };
                     yield { kind: "done" };
@@ -501,6 +510,8 @@ test("a forced land leaves the running turn's bookkeeping to the turn", async ()
         ),
     );
     await client.agent.run({ prompt: "a long edit", conversationId: "conv1", isolated: true });
+    // Past the pre-turn rebase and its land lease, as in the test above.
+    await writing;
     await client.agents.land({ id: "conv1", force: true });
     // Status stays running: the forced land recorded its own outcome without touching the turn.
     expect((await client.agents.list()).agents[0]?.status).toBe("running");

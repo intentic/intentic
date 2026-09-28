@@ -3,7 +3,7 @@ import type { MatchSnippet } from "@intentic/sandbox-contract";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount } from "vue";
-import { cacheWarm } from "../../agents/fleet/promptCache";
+import { cacheWarm } from "../../agents/fleet/prompt-cache/promptCache";
 import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
 import ChildRows from "../../agents/board/cards/ChildRows.vue";
 import { subagentOnScreen } from "../panel/subagent/subagentView";

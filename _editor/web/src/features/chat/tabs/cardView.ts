@@ -13,7 +13,7 @@ import {
     turnInFlight,
 } from "../../agents/fleet/agentStatus";
 import { cardProof, type ProofMark } from "../../agents/board/cards/proofSeal";
-import { type CacheCooling, cacheCooling, type WarmMark, warmMark } from "../../agents/fleet/promptCache";
+import { type CacheCooling, cacheCooling, type WarmMark, warmMark } from "../../agents/fleet/prompt-cache/promptCache";
 import { snapshotFingerprint } from "../../agents/fleet/useAgents-registry";
 import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
 import { modelLabelFor } from "../accounts/providerCatalog";

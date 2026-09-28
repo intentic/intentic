@@ -4,10 +4,10 @@ import { useNow } from "@intentic/ui/async";
 import { formatClock, formatTokens } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
-import { turnInFlight } from "./agentStatus";
+import { useSandboxSettings } from "../../../sandbox/overview/useSandboxSettings";
+import { turnInFlight } from "../agentStatus";
 import { type CacheStanding, endedLine, keptWarm, refreshMinutes, warmChoices, warmOffer } from "./promptCache";
-import { useAgents } from "./useAgents";
+import { useAgents } from "../useAgents";
 
 // Priced in refreshes before the press, since every refresh spends the account's own allowance.
 

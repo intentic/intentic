@@ -13,7 +13,7 @@ import { landsByDefault } from "../../../sandbox/environment/rules";
 import { useSandboxSettings } from "../../../sandbox/overview/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 import { formatClock } from "@intentic/ui/format";
-import { keptWarm, warmOffer } from "../../fleet/promptCache";
+import { keptWarm, warmOffer } from "../../fleet/prompt-cache/promptCache";
 
 // Session-level actions (refresh, rename, land, hold, archive, discard), as opposed to diff actions; once-per-session
 // decisions live behind one glyph rather than permanently cluttering the toolbar.

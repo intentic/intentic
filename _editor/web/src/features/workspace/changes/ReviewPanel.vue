@@ -668,6 +668,7 @@ const copyLines = (lines: readonly string[]): void =>
     void clipboardOf(panelEl.value)
         .writeText(lines.join(`\n`))
         .then(() => say(t(`workspace.fileVerbs.pathCopied`)))
+        // allow(silent-catch): a clipboard the page may not write (no focus, no permission) is the only failure, and the missing "copied" says so.
         .catch(() => undefined);
 // Distinct paths, in the order drawn: a file staged and edited again is two rows over one path.
 const distinctPaths = (rows: readonly Row[], label: (row: Row) => string): string[] => [...new Set(rows.map(label))];
