@@ -4156,6 +4156,16 @@
         "changeOrigins": {
             "readingLandedDiff": "Lecture du diff intégré…"
         },
+        "changeRowMenu": {
+            "openChanges": "Ouvrir les modifications",
+            "openFile": "Ouvrir le fichier",
+            "revealInExplorer": "Afficher dans l'explorateur",
+            "discardChanges": "Annuler les modifications",
+            "copyPath": "Copier le chemin",
+            "copyPaths": "Copier {count} chemins",
+            "copyRepoPath": "Copier le chemin dans le dépôt",
+            "copyRepoPaths": "Copier {count} chemins dans le dépôt"
+        },
         "codebaseHealth": {
             "branchPoints": "Points de branchement",
             "branches": "branchements",

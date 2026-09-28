@@ -4193,6 +4193,16 @@
         "changeOrigins": {
             "readingLandedDiff": "Leyendo el diff integrado…"
         },
+        "changeRowMenu": {
+            "openChanges": "Abrir cambios",
+            "openFile": "Abrir archivo",
+            "revealInExplorer": "Mostrar en el explorador",
+            "discardChanges": "Descartar cambios",
+            "copyPath": "Copiar ruta",
+            "copyPaths": "Copiar {count} rutas",
+            "copyRepoPath": "Copiar ruta en el repositorio",
+            "copyRepoPaths": "Copiar {count} rutas en el repositorio"
+        },
         "codebaseHealth": {
             "branchPoints": "Puntos de ramificación",
             "branches": "ramificaciones",

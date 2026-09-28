@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { GitChange, GitDiffSide, LandedMessage, LandedMessageDraft, RepoChanges, RepoTarget } from "@intentic/api-contract";
 import { isScratch } from "@intentic/sandbox-contract";
-import { Button, ChangeStatusMark, growTextarea, ui, Modal, timeAgo, useDevice, type IconName, vAction } from "@intentic/ui";
+import { Button, ChangeStatusMark, clipboardOf, ContextMenu, growTextarea, ui, Modal, timeAgo, useDevice, type IconName, vAction } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { plural } from "@intentic/base/format";
@@ -47,6 +47,10 @@ import OtherSandboxChanges from "./OtherSandboxChanges.vue";
 import ModuleLabel from "../../../components/ModuleLabel.vue";
 import { useVocabulary } from "../../../core-views/vocabulary";
 import { useT } from "@intentic/ui/i18n";
+import type { MenuItem } from "primevue/menuitem";
+import { changeRowMenuItems } from "./changeRowMenu";
+import { useHome } from "../home/useHome";
+import { useNotifications } from "../../../shell/notifications/notifications";
 
 // VSCode's SCM pattern over the real repos: uncommitted work grouped by repo, then by git's staged/unstaged
 // sides (a path can be on both with different content). Staging IS the selection — no checkboxes; git already
@@ -71,7 +75,7 @@ const unscannable = computed(() => changes.repos.value.filter((repo) => repo.err
 const emit = defineEmits<{ "open-diff": [payload: DiffPayload, mode: OpenMode] }>();
 // The body lands in the tabs store directly, not through the host: on a phone the host swaps this panel out for the
 // viewer the moment the diff opens, and an emit from an unmounted panel reaches nobody.
-const { fillDiff } = useWorkspaceTabs();
+const { fillDiff, openFile } = useWorkspaceTabs();
 
 const collapsed = ref<ReadonlySet<string>>(new Set());
 const toggleGroup = (repo: string): void => {
@@ -651,6 +655,70 @@ const stageRow = (row: Row): Promise<void> => changes.stageGroups(byRepo(actingR
 // a truncated repo five hundred files at a time.
 const stageSide = (repo: RepoChanges, side: GitDiffSide): Promise<void> => changes.stageGroups([scoped(repo.repo, side)], movesIntoIndex(side));
 
+// The row's right-click menu (changeRowMenu.ts). Like the explorer's: right-clicking outside the selection collapses it
+// to that row, inside a multi-selection keeps it, and the verbs then act on the whole selection.
+const panelEl = ref<HTMLElement>();
+const rowMenu = ref<{ show: (event: Event) => void }>();
+const menuRow = ref<{ row: Row; change: GitChange } | undefined>(undefined);
+const home = useHome();
+const { say } = useNotifications();
+
+// Reached through this panel's root so a popped-out window writes its own clipboard; unavailability is swallowed.
+const copyLines = (lines: readonly string[]): void =>
+    void clipboardOf(panelEl.value)
+        .writeText(lines.join(`\n`))
+        .then(() => say(t(`workspace.fileVerbs.pathCopied`)))
+        .catch(() => undefined);
+// Distinct paths, in the order drawn: a file staged and edited again is two rows over one path.
+const distinctPaths = (rows: readonly Row[], label: (row: Row) => string): string[] => [...new Set(rows.map(label))];
+const workspacePath = (row: Row): string => (row.repo === `root` ? row.path : `${row.repo}/${row.path}`);
+
+const rowMenuItems = computed<MenuItem[]>(() => {
+    const target = menuRow.value;
+    if (target === undefined) {
+        return [];
+    }
+    const { row, change } = target;
+    const all = actingRows(row, false);
+    const multi = all.length > 1;
+    const paths = distinctPaths(all, workspacePath);
+    return changeRowMenuItems({
+        multi,
+        paths: paths.length,
+        sameSide: actingRows(row, true).length,
+        indexVerb: INDEX_VERB[row.side].one,
+        indexIcon: INDEX_VERB[row.side].icon,
+        deleted: change.status === `deleted`,
+        // Any acting row in a nested repo: a root repo's paths are already workspace paths.
+        nested: all.some((candidate) => candidate.repo !== `root`),
+        busy: changes.actionBusy.value,
+        verbs: {
+            openChanges: () => openDiff(row.repo, row.side, change, `keep`),
+            openFile: () => openFile(workspacePath(row), `keep`),
+            // The explorer reveals the current entry, so picking it and showing the tree is the whole move.
+            reveal: () => {
+                home.pick(workspacePath(row), `file`);
+                layout.setSidebarPanel(`files`);
+            },
+            stage: () => void stageRow(row),
+            discard: () => askDiscardRow(row, change),
+            copyPath: () => copyLines(paths),
+            copyRepoPath: () => copyLines(distinctPaths(all, (candidate) => candidate.path)),
+        },
+    });
+});
+const openRowMenu = (event: MouseEvent, row: Row, change: GitChange): void => {
+    event.preventDefault();
+    const key = rowKey(row);
+    if (!selected.value.has(key)) {
+        selected.value = new Set([key]);
+        anchor.value = key;
+    }
+    menuRow.value = { row, change };
+    rowMenu.value?.show(event);
+};
+
+
 // A modal confirm, like every other destructive git action here. The target is resolved when the user arms
 // it, so the prompt's wording and the action can never disagree with a poll landing in between.
 interface DiscardTarget {
@@ -887,7 +955,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
 </script>
 
 <template>
-    <div class="flex min-h-0 flex-1 flex-col">
+    <div ref="panelEl" class="flex min-h-0 flex-1 flex-col">
         <!-- No header row of its own: the mode switch above already reads "Changes" with the count. -->
 
         <!-- The one genuinely panel-wide failure: the review set itself couldn't be read, so nothing below is trustworthy. -->
@@ -1417,6 +1485,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                 <!-- Selection uses the primary tint instead of the row hover colour. -->
                                 <div
                                     class="group/file flex items-stretch gap-1 rounded transition-colors"
+                                    @contextmenu="openRowMenu($event, { repo: group.repo, side: section.side, path: change.path }, change)"
                                     :class="[
                                         isSelected({ repo: group.repo, side: section.side, path: change.path })
                                             ? 'bg-primary-500/15 hover:bg-primary-500/25'
@@ -1563,5 +1632,6 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
 
         <!-- The same card the chat tab strip raises for a session, mounted at body so it clears this sidebar's narrow column. -->
         <HoverCard ref="hoverCard" />
+        <ContextMenu ref="rowMenu" :model="rowMenuItems" />
     </div>
 </template>

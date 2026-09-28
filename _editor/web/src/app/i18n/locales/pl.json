@@ -4193,6 +4193,16 @@
         "changeOrigins": {
             "readingLandedDiff": "Odczytywanie scalonego diffa…"
         },
+        "changeRowMenu": {
+            "openChanges": "Otwórz zmiany",
+            "openFile": "Otwórz plik",
+            "revealInExplorer": "Pokaż w eksploratorze",
+            "discardChanges": "Odrzuć zmiany",
+            "copyPath": "Kopiuj ścieżkę",
+            "copyPaths": "Kopiuj ścieżki ({count})",
+            "copyRepoPath": "Kopiuj ścieżkę w repozytorium",
+            "copyRepoPaths": "Kopiuj ścieżki w repozytorium ({count})"
+        },
         "codebaseHealth": {
             "branchPoints": "Punkty rozgałęzień",
             "branches": "rozgałęzień",

@@ -4668,6 +4668,16 @@
         "changeOrigins": {
             "readingLandedDiff": "Reading the landed diff…"
         },
+        "changeRowMenu": {
+            "openChanges": "Open Changes",
+            "openFile": "Open File",
+            "revealInExplorer": "Reveal in Explorer",
+            "discardChanges": "Discard Changes",
+            "copyPath": "Copy Path",
+            "copyPaths": "Copy {count} Paths",
+            "copyRepoPath": "Copy Path in Repo",
+            "copyRepoPaths": "Copy {count} Paths in Repo"
+        },
         "codebaseHealth": {
             "branchPoints": "Branch points",
             "branches": "branches",

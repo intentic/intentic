@@ -4164,6 +4164,16 @@
         "changeOrigins": {
             "readingLandedDiff": "Das gelandete Diff wird gelesen…"
         },
+        "changeRowMenu": {
+            "openChanges": "Änderungen öffnen",
+            "openFile": "Datei öffnen",
+            "revealInExplorer": "Im Explorer anzeigen",
+            "discardChanges": "Änderungen verwerfen",
+            "copyPath": "Pfad kopieren",
+            "copyPaths": "{count} Pfade kopieren",
+            "copyRepoPath": "Pfad im Repo kopieren",
+            "copyRepoPaths": "{count} Pfade im Repo kopieren"
+        },
         "codebaseHealth": {
             "branchPoints": "Verzweigungspunkte",
             "branches": "Verzweigungen",
