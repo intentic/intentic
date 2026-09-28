@@ -6,7 +6,8 @@ import { floatingWindowPanel, raiseFloating } from "../../../shell/window/floati
 import { Conversation } from "../session/conversation";
 import { traceFocus } from "./focusTrace";
 import { showRun } from "./chatRun";
-import { snapshotTab } from "../tabs/tabSnapshot";
+import { closeSubagent, showSubagent } from "../panel/subagent/subagentView";
+import { snapshotTab, type StoredTab } from "../tabs/tabSnapshot";
 import { closeConversations, keepChat } from "../tabs/useChat-tabs";
 import { type Reveal, reveal, type RevealEntry } from "../panel/useChat-reveal";
 
@@ -23,7 +24,10 @@ export type Summons =
     | { readonly kind: `close`; readonly conversationIds: readonly string[] }
     // Promotes a peeked tab from the board press, since the panel holding it (and the sweep that would otherwise
     // reclaim it) is very often another window's.
-    | { readonly kind: `keep`; readonly conversationIds: readonly string[] };
+    | { readonly kind: `keep`; readonly conversationIds: readonly string[] }
+    // Shows a subagent its parent's runtime ran in-process, in the parent's column (subagentView.ts): the parent is
+    // brought to the focused column, as a look if it was not open, and steps into the subagent there.
+    | { readonly kind: `subagent`; readonly parent: StoredTab; readonly id: string };
 
 const portable = (entry: RevealEntry): RevealEntry => (entry instanceof Conversation ? snapshotTab(entry) : entry);
 
@@ -45,6 +49,15 @@ const apply = (summons: Summons): void => {
         }
         return;
     }
+    if (summons.kind === `subagent`) {
+        const parent = reveal({ verb: `focus`, entries: [summons.parent], focus: summons.parent.conversationId, caret: false, peek: true });
+        if (parent !== undefined) {
+            showSubagent(parent.conversationId, summons.id);
+        }
+        return;
+    }
+    // Showing a chat means the chat itself: one that was showing a subagent steps back out of it.
+    closeSubagent(summons.focus);
     const focused = reveal(summons);
     // Only the window holding the chat's own window sends a carried turn: every window applies this summons, and the
     // one that composed it kept the turn for itself unless it draws no chat (summonTurn).
@@ -58,6 +71,9 @@ const traced = (summons: Summons): Record<string, unknown> => {
     if (summons.kind === `reveal`) {
         // `carries` says a first turn rode along, the one summons whose effect is a turn rather than a tab.
         return { kind: summons.kind, verb: summons.verb, focus: summons.focus, ...(summons.deliver === undefined ? {} : { carries: true }) };
+    }
+    if (summons.kind === `subagent`) {
+        return { kind: summons.kind, parent: summons.parent.conversationId, subagent: summons.id };
     }
     return summons.kind === `run` ? { kind: summons.kind, run: summons.runId } : { kind: summons.kind, ids: summons.conversationIds.join(`,`) };
 };

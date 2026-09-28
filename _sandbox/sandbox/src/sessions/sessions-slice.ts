@@ -5,6 +5,7 @@ import type { TurnCheckpoints } from "../agent/checkpoints/turn-checkpoints.js";
 import type { PersistedAgent } from "../conversations/registry/agents-store.js";
 import type { AgentArchiveDeps } from "../conversations/registry/archive.js";
 import {
+    agentToolCard,
     agentToolChildren,
     agentTranscript,
     type AgentTranscriptDeps,
@@ -50,6 +51,8 @@ export interface SessionsSlice {
         readonly page: (agent: TranscriptAgent, window?: TranscriptWindow) => Promise<TranscriptPage>;
         // The calls under one tool card, which a page counts rather than carries; read on the press that opens it.
         readonly toolChildren: (agent: TranscriptAgent, toolId: string) => Promise<TranscriptTool[]>;
+        // One tool card whole, its calls and its result: what a delegation's card holds of an in-process subagent.
+        readonly toolCard: (agent: TranscriptAgent, toolId: string) => Promise<TranscriptTool | undefined>;
         // The newest assistant row's prose, read back from the tail rather than the whole record; what a land reads.
         readonly lastSaid: (agent: TranscriptAgent) => Promise<string | undefined>;
         // Opens a branch's record as a copy of the source's first `keep` rows; a no-op once the record exists.
@@ -193,6 +196,7 @@ export const createSessionsSlice = (deps: SessionsDeps): { readonly slice: Sessi
                 rows: (agent) => transcriptDeps.record.rows(agent.id),
                 page: (agent, window) => agentTranscriptPage(transcriptDeps, agent, window),
                 toolChildren: (agent, toolId) => agentToolChildren(transcriptDeps, agent, toolId),
+                toolCard: (agent, toolId) => agentToolCard(transcriptDeps, agent, toolId),
                 lastSaid: async (agent) => (await transcriptDeps.record.findBack(agent.id, (row) => row.role === "assistant"))?.text,
                 // A branch's opening history is the source conversation's record, copied once.
                 fork: (agent, source, keep) => transcriptDeps.record.fork(agent.id, source, keep),

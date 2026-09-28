@@ -1,5 +1,10 @@
 import type { SubagentSession } from "@intentic/sandbox-contract";
 import type { Router } from "vue-router";
+import { useAgents } from "../../../agents/fleet/useAgents";
+import { agentSeed } from "../../../agents/fleet/useAgents-actions";
+import { summonChat } from "../../run/summon";
+import { agentTabOf } from "../useChat-reveal";
+import { snapshotTab } from "../../tabs/tabSnapshot";
 import { fileLinkDecorator } from "../../../../lib/markdown/renderMarkdown";
 import { navigateInApp } from "../../../../shell/window/mainWindow";
 import { openWorkTerminal } from "../../../terminal/useWorkTerminals";
@@ -34,6 +39,22 @@ export const paneSurface = (conversation: () => Conversation, router: Router, su
         conversationRoute: (id) => `/agents/${encodeURIComponent(id)}`,
         subagent: (id) => subagents().find((session) => session.id === id),
         navigate,
+        // A spawned child opens as a look, as its row in the tray does; an in-process one steps this chat's column into it.
+        openSubagent: ({ id, kind }) => {
+            const agents = useAgents();
+            if (kind === `spawned`) {
+                const child = agents.agentById(id);
+                if (child === undefined) {
+                    navigate(`/agents/${encodeURIComponent(id)}`);
+                    return;
+                }
+                agents.open(child, `peek`);
+                return;
+            }
+            const chat = conversation();
+            const card = agents.agentById(chat.conversationId);
+            summonChat({ kind: `subagent`, parent: card === undefined ? snapshotTab(chat) : agentTabOf(agentSeed(card)), id });
+        },
     };
 };
 

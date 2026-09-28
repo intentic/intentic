@@ -240,6 +240,27 @@ describe(`ChatToolCard`, () => {
             expect(header(spawned, false, surfaceWith(blocked))).toMatchObject({ pills: [`background`, `needs input`], door: [`/agents/sub-x`, `Open its conversation`] });
         });
 
+        // Where the chat can show a subagent, both kinds get the door: an in-process one's transcript, a spawned one's chat,
+        // each shown in the chat rather than on another page; the spawned one's stays an address for a modified click.
+        it(`opens either kind of subagent in the chat where the chat can show it`, () => {
+            const opened: { id: string; kind: string }[] = [];
+            const showing: ChatSurface = { ...surfaceWith(), openSubagent: (subagent) => opened.push({ ...subagent }) };
+            const inProcessCard = mount(inProcess, true, showing);
+            const door = inProcessCard.querySelector<HTMLButtonElement>(`button[aria-label="Open its transcript"]`);
+            expect(door).not.toBeNull();
+            door?.click();
+            app?.unmount();
+            app = undefined;
+            const spawnedCard = mount(spawned, true, showing);
+            const link = spawnedCard.querySelector<HTMLAnchorElement>(`a[aria-label="Open its conversation"]`);
+            expect(link?.getAttribute(`href`)).toBe(`/agents/sub-x`);
+            link?.click();
+            expect(opened).toEqual([
+                { id: `call-1`, kind: `subagent` },
+                { id: `sub-x`, kind: `spawned` },
+            ]);
+        });
+
         // Its turn ended and the roster let it go: the record's last word is a snapshot, and its conversation keeps it.
         it(`still leads to a spawned subagent's own conversation once the roster lets it go, claiming nothing in flight`, () => {
             expect(header(spawned, false, surfaceWith())).toMatchObject({ pills: [], door: [`/agents/sub-x`, `Open its conversation`] });

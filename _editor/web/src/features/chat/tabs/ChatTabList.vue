@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Button, ui, ContextMenu, SearchBar, SegmentedControl } from "@intentic/ui";
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, provide, ref, watch } from "vue";
 import { type ChatGrouping, useChatGrouping } from "../transcript/chatGrouping";
 import ChatPersonaRail from "../personas/ChatPersonaRail.vue";
 import { agentDisplayTitle, type FleetLane } from "../../agents/fleet/agentStatus";
@@ -12,6 +12,9 @@ import RailCard from "../../../components/RailCard.vue";
 import RailLane from "../../../components/RailLane.vue";
 import { relativeTime } from "../models/catalog";
 import type { OpenChat } from "./cardView";
+import { useChatTrays } from "./chatTrays";
+import { CHILD_ROWS } from "../../agents/board/cards/childRows";
+import { closeSubagent } from "../panel/subagent/subagentView";
 import ChatRowList from "./ChatRowList.vue";
 import { laneOfTab, tabsInLane } from "./tabs";
 import { createChatRowActions, provideChatRowActions } from "./useChatRowActions";
@@ -51,7 +54,11 @@ const { agentById, fleet, loadArchived } = useAgents();
 // One set of row verbs for both cuts; this list draws only their menu, hover card, share dialog and rename error.
 const root = ref<HTMLElement | null>(null);
 const actions = createChatRowActions({
-    select: (id) => emit(`select`, id),
+    // A press on a card means that chat: one showing a subagent in its column steps back out of it (subagentView.ts).
+    select: (id) => {
+        closeSubagent(id);
+        emit(`select`, id);
+    },
     close: (ids) => emit(`close`, ids),
     // Reading order is whatever the open cut draws, top to bottom.
     rowOrder: () => [...(root.value?.querySelectorAll(`[data-chat-tab]`) ?? [])].map((row) => row.getAttribute(`data-chat-tab`) ?? ``),
@@ -90,6 +97,7 @@ const {
     active: filtering,
     matches: agentMatches,
     snippetOf,
+    idMatchOf,
     archivedMatches,
     sessionMatches,
     searching,
@@ -115,14 +123,26 @@ const runsIn = (lane: FleetLane): WorkflowRun[] =>
 // nothing live in the panes.
 const runOnScreen = (run: WorkflowRun): boolean => chatRun.value?.runId === run.runId && showingRunGraph(run, chatRun.value, panes.value);
 
+// The board's trays under the list's cards: every agent a chat's conversation started, riding under its card (chatTrays.ts).
+const openIds = computed(() => new Set(conversations.value.map((conversation) => conversation.conversationId)));
+const trays = useChatTrays({
+    filter: { active: filtering, needle, matchCase, matches: agentMatches },
+    idMatchOf,
+    activeId,
+    showing: actions.isSelected,
+    isOpen: (id) => openIds.value.has(id),
+    press: (event, id) => actions.click(event, id),
+});
+provide(CHILD_ROWS, trays.board);
+
 // A chat with no fleet entry matches on its title and messages (both roles), the same rule as useAgentFilter; a
-// notice-role message never counts.
+// notice-role message never counts. A card also stands for what rides under it, as on the board (boardTrays.answers).
 const tabMatches = (entry: OpenChat): boolean => {
     if (!filtering.value) {
         return true;
     }
     if (entry.agent !== undefined) {
-        return agentMatches(entry.agent);
+        return trays.answers(entry.agent);
     }
     const title = entry.conversation.title.value;
     return (
@@ -138,7 +158,8 @@ const lanes = computed<Record<FleetLane, OpenChat[]>>(() => {
     const ledger = runIdsInLedger(workflowRuns.value);
     for (const conversation of conversations.value) {
         const agent = agentById(conversation.conversationId);
-        if (agent !== undefined && insideRun(agent, ledger)) {
+        // A run's step rides in the run's row, and a child's own chat in its parent's tray while the parent is listed.
+        if ((agent !== undefined && insideRun(agent, ledger)) || trays.ridesUnder(agent)) {
             continue;
         }
         grouped[laneOfTab(conversation, agent)].push({ conversation, agent });
@@ -227,12 +248,14 @@ const cardsIn = (lane: FleetLane): OpenChat[] => laneCards.value[lane];
 
 // Matches outside this window: fleet agents, then archived agents, then agent-less conversations
 // (sessionMatches); each opens the conversation. Archive loads lazily on first query, not at mount.
-const openIds = computed(() => new Set(conversations.value.map((conversation) => conversation.conversationId)));
 const notOpen = computed<FleetAgent[]>(() => {
     if (!filtering.value) {
         return [];
     }
-    return [...fleet.value.filter((agent) => agentMatches(agent)), ...archivedMatches.value].filter((agent) => !openIds.value.has(agent.id));
+    // A child riding under an open chat's card is found in that card's tray, not a second time here.
+    return [...fleet.value.filter((agent) => agentMatches(agent)), ...archivedMatches.value].filter(
+        (agent) => !openIds.value.has(agent.id) && !trays.ridesUnder(agent),
+    );
 });
 const notOpenCount = computed(() => notOpen.value.length + sessionMatches.value.length);
 

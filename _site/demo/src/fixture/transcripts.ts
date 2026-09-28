@@ -390,7 +390,30 @@ const SUPPORT_CARD: AgentTranscript = {
     ],
 };
 
+// A helper the checkout agent spawned on Codex, mid-way: what its chat shows under the subagent bar.
+const WEBHOOK_TESTS: AgentTranscript = {
+    sessionId: `ses_sub-brisk-otter-4k2m`,
+    provider: `codex`,
+    harness: `native`,
+    messages: [
+        {
+            role: `user`,
+            text: `Write tests for the Stripe webhook handler in api/src/webhooks: a valid signature is accepted, a tampered one is refused with 400, and a replayed event is acknowledged without being processed twice.`,
+        },
+        {
+            role: `assistant`,
+            text: `The handler verifies with \`constructEvent\` and records processed event ids in \`processed_events\`. I'll sign fixtures with the test secret rather than mocking the verifier, so the tests exercise the real check.`,
+            tools: [
+                { id: `call_w1`, name: `Read`, category: `read`, status: `completed`, target: `api/src/webhooks/stripe.ts` },
+                { id: `call_w2`, name: `Edit`, category: `edit`, status: `completed`, target: `api/src/webhooks/stripe.test.ts` },
+                { id: `call_w3`, name: `Bash`, category: `execute`, status: `in_progress`, target: `pnpm -C api test src/webhooks` },
+            ],
+        },
+    ],
+};
+
 const TRANSCRIPTS: Record<string, AgentTranscript> = {
+    [`sub-brisk-otter-4k2m`]: WEBHOOK_TESTS,
     [REVIEW_AGENT_ID]: SOFT_DELETES,
     [WEB_MAIN_FIXER_ID]: WEB_MAIN_FIX,
     [API_MAIN_FIXER_ID]: API_MAIN_FIX,

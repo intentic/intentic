@@ -1,5 +1,5 @@
 import { procedure } from "../protocol/route-meta.js";
-import { AgentToolChildrenSchema, AgentTranscriptSchema } from "../events/transcript.js";
+import { AgentToolChildrenSchema, AgentTranscriptSchema, SessionTranscriptSchema } from "../events/transcript.js";
 import {
     AgentAssignSchema,
     AgentAutoLandSchema,
@@ -15,6 +15,7 @@ import {
     AgentRenameSchema,
     AgentStopJobSchema,
     AgentStopWatchingSchema,
+    AgentSubagentQuerySchema,
     AgentsArchivedSchema,
     AgentSearchQuerySchema,
     AgentSearchResultSchema,
@@ -107,6 +108,17 @@ export const agentsContract = {
         })
         .input(AgentToolChildrenQuerySchema)
         .output(AgentToolChildrenSchema),
+    subagentTranscript: procedure
+        .route({
+            method: "GET",
+            path: "/agents/{id}/subagents/{subagentId}/transcript",
+            summary: "One in-process subagent's own record",
+            description:
+                "What a subagent this conversation's runtime ran in-process said and did, as a transcript of its own: its ask, its thinking, its calls and its words. Read from the runtime's own record of the subagent where it keeps one, which it writes as the subagent works, else from the calls the delegation's card holds in this conversation's record. A subagent spawned as a conversation of its own is read through `transcript` instead.",
+        })
+        .meta({ guest: true })
+        .input(AgentSubagentQuerySchema)
+        .output(SessionTranscriptSchema),
     // Also forgets the provider session, rewind-style, so the next fresh session reads the placed line as the agent's
     // own.
     place: procedure

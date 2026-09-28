@@ -181,11 +181,13 @@ rebuild, a daemon restart from the host). Say plainly that nothing was changed.
   payment approvals render here. Each session card shows a badge for what its last turn showed of its own
   work.
 - **Agents** (`/agents`): the fleet board, every conversation as an agent with its branch and status. Every agent
-  a conversation started hangs under its card as a row, whichever way it was started: a conversation it spawned
-  (its row opens its own chat) and a subagent its runtime ran in-process (its row opens the parent's chat, where
-  its work is on the card of the call that started it). A spawned child's code goes back into its parent's
-  checkout, as an in-process subagent's edits do, so the family lands once, with the parent. **Land** applies a
-  conversation's delta to the main tree; a conflict card names the paths. With geek metrics
+  a conversation started hangs under its card as a row, whichever way it was started, and the chat's list of open
+  chats hangs the same rows under its cards: a conversation it spawned (its row opens its own chat) and a subagent
+  its runtime ran in-process (its row shows that subagent's own transcript in the parent's chat). Either way the chat
+  is read-only: a bar stands where the message box would, naming the parent and leading back to it, since the parent
+  directs its subagents; a spawned one can still be written to directly from the bar. A spawned child's code goes
+  back into its parent's checkout, as an in-process subagent's edits do, so the family lands once, with the parent.
+  **Land** applies a conversation's delta to the main tree; a conflict card names the paths. With geek metrics
   on (Settings ▸ Appearance), the board's status bar carries the sandbox's CPU, memory and disk, and opens a
   panel with every figure, memory by kind of process, and memory and CPU by session; each card shows its own
   conversation's.

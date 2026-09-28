@@ -293,7 +293,7 @@
             "needsInput": "Braucht eine Eingabe",
             "paused": "Pausiert",
             "completed": "Abgeschlossen",
-            "inProcessHint": "Lief im eigenen Zug dieses Agenten, daher steht seine Arbeit im Chat dieses Agenten"
+            "inProcessHint": "Lief im eigenen Zug dieses Agenten: Sein Protokoll öffnet sich im Chat dieses Agenten"
         },
         "liveMetrics": {
             "coresValue": "{cores} Kern | {cores} Kerne",
@@ -1211,6 +1211,17 @@
         "chatSideRail": {
             "chatWhatRun": "Dieser Chat und was Sie laufen lassen können"
         },
+        "chatSubagentBar": {
+            "backTo": "Zurück zu {title}",
+            "inProcessNote": "Teil des Zugs seines übergeordneten Agenten, daher nimmt er selbst keine Nachrichten an. Um seinen Kurs zu ändern, schreib dem übergeordneten Agenten.",
+            "spawnedNote": "Sein übergeordneter Agent lenkt ihn und liest seinen Bericht. Schreib ihm nur, wenn du ihn selbst lenken willst.",
+            "write": "Ihm schreiben"
+        },
+        "chatSubagentPane": {
+            "readFailed": "Das Protokoll dieses Subagenten konnte nicht gelesen werden.",
+            "nothingYet": "Noch nichts aufgezeichnet. Seine Arbeit erscheint hier, sobald sie passiert.",
+            "nothingRecorded": "Für diesen Subagenten wurde nichts aufgezeichnet."
+        },
         "chatSystemPrompt": {
             "baseClaude": "Der eigene Prompt von Claude Code",
             "baseCustom": "Ihr eigener Prompt",
@@ -1287,6 +1298,7 @@
             "more": "… {hidden} weitere",
             "needsInput": "braucht Eingabe",
             "openItsConversation": "Seine Unterhaltung öffnen",
+            "openItsTranscript": "Sein Protokoll öffnen",
             "viewLarger": "Größer anzeigen",
             "watchBrowser": "Dem Browser zusehen"
         },

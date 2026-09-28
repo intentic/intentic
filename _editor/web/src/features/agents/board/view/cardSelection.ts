@@ -1,4 +1,4 @@
-import type { WorkflowRun } from "@intentic/sandbox-contract";
+import type { SubagentSession, WorkflowRun } from "@intentic/sandbox-contract";
 import { computed, onScopeDispose, ref, type Ref, watch } from "vue";
 import type { LocationQuery, Router } from "vue-router";
 import { clickIntent, rangeSelect } from "../../../../lib/multiSelect";
@@ -202,6 +202,21 @@ export const useCardFocus = (host: FocusHost) => {
             void router.push(agentPath(agent));
         }
     };
+    // A tray row for a subagent the card's runtime ran in-process: it has no chat of its own, so its transcript is shown
+    // in the card's chat, in the card's column, the way a spawned child's row opens that child's chat. A phone walks to
+    // the card's page, where that chat is.
+    const focusSubagent = (card: FleetAgent, subagent: SubagentSession): void => {
+        if (host.drag.consumeSuppressedOpen()) {
+            return;
+        }
+        ring.flashId.value = undefined;
+        traceFocus(`board-click`, { id: card.id, subagent: subagent.id });
+        summon({ kind: `subagent`, parent: agentTabOf(agentSeed(card)), id: subagent.id });
+        agents.markSeen(card.id);
+        if (mobile.value) {
+            void router.push(agentPath(card));
+        }
+    };
     // The board's ×, the only exit for a card with no registry entry: ends the conversation everywhere, words and all,
     // unlike the chat rail's ×, which only takes a chat off that surface and sets its words aside.
     const closeAgent = (agent: FleetAgent): void => {
@@ -267,5 +282,5 @@ export const useCardFocus = (host: FocusHost) => {
         { immediate: true },
     );
 
-    return { focusAgent, reviewAgent, keepAgent, closeAgent, agentHref, openSession };
+    return { focusAgent, focusSubagent, reviewAgent, keepAgent, closeAgent, agentHref, openSession };
 };

@@ -297,7 +297,7 @@
             "needsInput": "Potrzebuje odpowiedzi",
             "paused": "Wstrzymany",
             "completed": "Ukończony",
-            "inProcessHint": "Działał w ramach tury tego agenta, więc jego praca jest w czacie tego agenta"
+            "inProcessHint": "Działał w turze tego agenta: jego zapis otwiera się w czacie tego agenta"
         },
         "liveMetrics": {
             "coresValue": "{cores} rdzeń | {cores} rdzenie | {cores} rdzeni",
@@ -1221,6 +1221,17 @@
         "chatSideRail": {
             "chatWhatRun": "Ten czat i to, co możesz uruchomić"
         },
+        "chatSubagentBar": {
+            "backTo": "Wróć do {title}",
+            "inProcessNote": "Jest częścią tury agenta nadrzędnego, więc sam nie przyjmuje wiadomości. Aby zmienić jego kurs, napisz do agenta nadrzędnego.",
+            "spawnedNote": "Kieruje nim agent nadrzędny, który czyta jego raport. Pisz do niego tylko, jeśli chcesz sam nim pokierować.",
+            "write": "Napisz do niego"
+        },
+        "chatSubagentPane": {
+            "readFailed": "Nie udało się odczytać zapisu tego subagenta.",
+            "nothingYet": "Jeszcze nic nie zapisano. Jego praca pojawia się tutaj na bieżąco.",
+            "nothingRecorded": "Dla tego subagenta nic nie zapisano."
+        },
         "chatSwitcherSheet": {
             "chats": "Czaty"
         },
@@ -1300,6 +1311,7 @@
             "more": "… {hidden} więcej",
             "needsInput": "czeka na wejście",
             "openItsConversation": "Otwórz jego rozmowę",
+            "openItsTranscript": "Otwórz jego zapis",
             "viewLarger": "Powiększ",
             "watchBrowser": "Obserwuj przeglądarkę"
         },

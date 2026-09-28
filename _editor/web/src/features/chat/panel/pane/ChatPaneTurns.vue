@@ -23,6 +23,12 @@ import { usePaneView } from "../useChat-view";
 
 const t = useT();
 
+const props = defineProps<{
+    // A subagent's own record (ChatSubagentPane), not a conversation: nothing was prompted into it that has a record of
+    // its own to disclose, and nothing in it can be forked from.
+    subagent?: boolean;
+}>();
+
 const { conversation, messages, streaming, ending, awaitingDecision } = usePaneView();
 const { showToolCalls } = useToolCalls();
 const { turns, turnShots, repeatedChecklists, isStreaming, showTurnStatus, stripOf, checklistViews, dayMarks, forkCuts, cutsAbove, skeleton } =
@@ -61,11 +67,14 @@ provide(CHAT_SURFACE, viewingIn(useChatSurface(), viewer));
             </button>
         </div>
         <!-- Where a forked chat says so, above its inherited turns; held back until the reader reaches that point. -->
-        <ChatForkLine v-if="!conversation.transcript.historyMore.value" />
+        <ChatForkLine v-if="!conversation.transcript.historyMore.value && !props.subagent" />
         <!-- What the conversation was told before its first word, at the one place in the column where that is
              true: above everything it has said. Drawn only at the real top, since in the middle of a paged
              history it would claim a beginning that isn't on screen. -->
-        <ChatSystemPrompt v-if="!conversation.transcript.historyMore.value && messages.length > 0" :conversation-id="conversation.conversationId" />
+        <ChatSystemPrompt
+            v-if="!conversation.transcript.historyMore.value && messages.length > 0 && !props.subagent"
+            :conversation-id="conversation.conversationId"
+        />
         <template v-if="messages.length > 0">
             <!-- One section per turn, so each prompt's sticky range ends where its own answer does. -->
             <!-- `index` is for the day marker below, the one row that cares about its column position, not its turn. -->
@@ -98,7 +107,7 @@ provide(CHAT_SURFACE, viewingIn(useChatSurface(), viewer));
                         class="contents"
                     >
                         <!-- Fork marks sit between message rows because row overflow clips marks above a row. -->
-                        <ChatForkCut v-if="cutsAbove.get(message.id) !== undefined" :cut="cutsAbove.get(message.id)!" />
+                        <ChatForkCut v-if="cutsAbove.get(message.id) !== undefined && !props.subagent" :cut="cutsAbove.get(message.id)!" />
                         <ChatMessageView
                             v-if="(!repeatedChecklists.has(message.id) || isStreaming(message)) && heldRow !== message.id"
                             :message="message"
@@ -111,7 +120,7 @@ provide(CHAT_SURFACE, viewingIn(useChatSurface(), viewer));
                     <!-- The pictures the turn's tools showed the agent, where its answer is read (ChatTurnShots). -->
                     <ChatTurnShots v-if="stripOf(turn)" :shots="stripOf(turn)!" :agent="conversation.scope.value" @view="viewer.view" />
                     <!-- The fork point sits after the answer and inside its hover region. -->
-                    <ChatForkCut :cut="forkCuts.get(turn.id) ?? messages.length" />
+                    <ChatForkCut v-if="!props.subagent" :cut="forkCuts.get(turn.id) ?? messages.length" />
                 </section>
             </template>
         </template>

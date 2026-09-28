@@ -45,6 +45,12 @@ import ChatPlacementMenu from "./ChatPlacementMenu.vue";
 import ChatPaneNotices from "./ChatPaneNotices.vue";
 import ChatPaneStatus from "./ChatPaneStatus.vue";
 import ChatPersonaMenu from "../personas/ChatPersonaMenu.vue";
+import ChatSubagentBar from "./subagent/ChatSubagentBar.vue";
+import { agentDisplayTitle } from "../../agents/fleet/agentStatus";
+import { agentSeed } from "../../agents/fleet/useAgents-actions";
+import { summonChat } from "../run/summon";
+import { agentTabOf } from "./useChat-reveal";
+import { parentCardOf, writesTo, writeTo } from "./subagent/subagentView";
 import ChatRunThroughMenu from "../models/run-settings/ChatRunThroughMenu.vue";
 import ComposerEffort from "../composer/ComposerEffort.vue";
 import ComposerModelPill from "../composer/ComposerModelPill.vue";
@@ -107,6 +113,23 @@ const commandPopover = ref<InstanceType<typeof ChatCommandPopover>>();
 const filePicker = ref<HTMLInputElement | null>(null);
 
 usePaneAttach({ conversation: () => props.conversation, focused: () => props.focused, streaming });
+
+// A SPAWNED SUBAGENT'S CHAT: its parent directs it, so the composer gives way to the subagent bar, which says whose it is
+// and leads back there (ChatSubagentBar); the reader can still choose to write to it. A child whose parent has left the
+// fleet is a conversation in its own right again (parentCardOf), and keeps its composer.
+const { agentById } = useAgents();
+const card = computed(() => agentById(props.conversation.conversationId));
+const subagentOf = computed(() => {
+    const parent = parentCardOf(card.value, agentById);
+    return parent === undefined || card.value === undefined || writesTo(props.conversation) ? undefined : { parent, child: card.value };
+});
+// Back to the parent, in this chat's own column: the child was a look, and the column goes back to whose it is.
+const backToParent = (): void => {
+    const parent = subagentOf.value?.parent;
+    if (parent !== undefined) {
+        summonChat({ kind: `reveal`, verb: `focus`, entries: [agentTabOf(agentSeed(parent))], focus: parent.id, caret: false });
+    }
+};
 
 // The roster the board's trays read too (one cache), so a subagent's card says how it is doing after its turn stopped.
 const { sessions: subagents } = useSubagentRoster();
@@ -359,10 +382,22 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                     <template v-if="!blocked">
                         <!-- This chat's standing: archived, the account gate, the trial, a credential to renew, an outage resuming (ChatPaneNotices). -->
                         <ChatPaneNotices />
-                        <!-- The turn stopped before finishing, and the way on (ChatContinueStrip). -->
-                        <ChatContinueStrip :visible="continueStrip" :ready="continueOffer" @continue="continueTurn" />
+                        <!-- The turn stopped before finishing, and the way on (ChatContinueStrip): a word to it, so a subagent's is its parent's. -->
+                        <ChatContinueStrip v-if="!subagentOf" :visible="continueStrip" :ready="continueOffer" @continue="continueTurn" />
                         <!-- The turn is over, but the chat is not: what it left running, and the watches it armed (ChatLeftRunning). -->
                         <ChatLeftRunning />
+                        <!-- A spawned subagent's chat: the bar in the composer's place, whose each press is the parent's or a stop. -->
+                        <ChatSubagentBar
+                            v-if="subagentOf"
+                            :child="subagentOf.child"
+                            :parent-title="agentDisplayTitle(subagentOf.parent)"
+                            :provider="subagentOf.parent.provider"
+                            :stoppable="streaming && !ending && canDrive"
+                            @back="backToParent()"
+                            @stop="conversation.turn.stop()"
+                            @write="writeTo(conversation)"
+                        />
+                        <template v-else>
                         <!-- What the queue holds is drawn at the transcript's foot (ChatPaneTurns); with no transcript, here, a line each. -->
                         <ChatHeldMessages v-if="bare" compact />
                         <!-- What waits for the next turn: the conversation's queue, the same in every window. -->
@@ -684,6 +719,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                         <p v-else-if="personaNotice" class="flex items-center gap-1.5 px-1 text-2xs text-warning">
                             <Icon name="exclamation-circle" class="shrink-0 text-2xs" />{{ personaNotice }}
                         </p>
+                        </template>
                     </template>
                 </div>
             </div>
@@ -692,7 +728,8 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
         <!-- The pane's status bar, the one part of the footer outside the scroller: it's about the pane (context, subscription, daemon liveness), not the message. -->
         <!-- Withheld from the strip, transcript or no transcript: floating over another page, readouts about a chat are a second row of text
              around a box asked for as one. -->
-        <ChatPaneStatus v-if="connected && !strip" :block="refusal" :hint="composerHint" />
+        <!-- The composer's own hints and refusals say nothing where the subagent bar stands in the composer's place. -->
+        <ChatPaneStatus v-if="connected && !strip" :block="subagentOf ? undefined : refusal" :hint="subagentOf ? `` : composerHint" />
 
         <!-- The four composer menus, each in the app's standard desktop-panel/mobile-sheet swap (ResponsiveOverlay), uncapped in height. -->
         <ResponsiveOverlay v-model="modelOpen" :anchor="modelPill?.el" :header="t(`shared.model`)" panel-class="w-[26rem]">

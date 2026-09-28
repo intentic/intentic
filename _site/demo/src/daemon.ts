@@ -60,6 +60,7 @@ import {
 } from "./fixture/sandbox";
 import { HANDOVER_CHANGE_PATH, HANDOVER_DOCX, HANDOVER_DOCX_BEFORE, HANDOVER_PATH, HANDOVER_TEXT, HANDOVER_TEXT_BEFORE } from "./fixture/document";
 import { transcriptFor } from "./fixture/transcripts";
+import { subagentTranscriptFor } from "./fixture/subagentTranscripts";
 import {
     agentChanges,
     deleteEntry,
@@ -544,6 +545,8 @@ export const procedures = {
         diff: ({ id }) => agentChanges(id),
         // A card that is not mid-turn reads its transcript instead of attaching.
         transcript: ({ id }) => transcriptFor(id),
+        // The checkout agent's in-process subagents, read as transcripts of their own from its tray and its cards.
+        subagentTranscript: ({ subagentId }) => subagentTranscriptFor(subagentId),
         systemPrompt: () => DEMO_SYSTEM_PROMPT,
         fileDiff: ({ repo, path }) => fileDiff(repo, path),
         rename: ({ id, title }) => agentAnswer(patchAgent(id, { title })),

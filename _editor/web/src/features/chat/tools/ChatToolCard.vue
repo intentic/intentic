@@ -140,28 +140,43 @@ const subagentFacts = computed<string[]>(() => {
     ];
 });
 
-// Where the card's door leads: a spawned subagent's own conversation, where its work lands and a person can speak to it,
-// and which keeps it for good. An in-process one has no place of its own: its work is this card's, drawn under it.
-const subagentDoor = computed<{ readonly href: string; readonly label: string } | undefined>(() => {
+// Where the card's door leads: the subagent's own work, shown in the chat. A spawned one's is its conversation, which is
+// also an address (a modified click opens its page); an in-process one's is its transcript, shown in the column of the
+// conversation whose turn ran it. A surface with no chat (a published page) offers no door.
+const subagentDoor = computed<{ readonly href: string | undefined; readonly label: string } | undefined>(() => {
     const seen = started.value;
-    const href = seen?.subagent.kind === `spawned` ? surface.conversationRoute?.(seen.id) : undefined;
-    return href === undefined ? undefined : { href, label: t(`chat.chatToolCard.openItsConversation`) };
+    if (seen === undefined) {
+        return undefined;
+    }
+    const spawned = seen.subagent.kind === `spawned`;
+    const href = spawned ? surface.conversationRoute?.(seen.id) : undefined;
+    if (href === undefined && surface.openSubagent === undefined) {
+        return undefined;
+    }
+    return { href, label: spawned ? t(`chat.chatToolCard.openItsConversation`) : t(`chat.chatToolCard.openItsTranscript`) };
 });
 
-// Behaves like any in-app link: a plain click is routed, a modified one (new tab/window) is left to the
-// browser, and a surface with no router just lets the anchor load. Hand-written rather than RouterLink (see
-// chatToolSurface.ts).
+// A plain click shows the subagent in the chat; a modified one on an address is left to the browser (a new tab or
+// window). Where the chat cannot show it, an address is routed like any in-app link.
 const openSubagent = (event: MouseEvent): void => {
+    const seen = started.value;
     const route = subagentDoor.value?.href;
     // Already answered: a popped-out window routes every in-app link to the app's own window first.
-    if (event.defaultPrevented || route === undefined || surface.navigate === undefined) {
+    if (event.defaultPrevented || seen === undefined) {
         return;
     }
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+    if (route !== undefined && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) {
         return;
     }
-    event.preventDefault();
-    surface.navigate(route);
+    if (surface.openSubagent !== undefined) {
+        event.preventDefault();
+        surface.openSubagent({ id: seen.id, kind: seen.subagent.kind });
+        return;
+    }
+    if (route !== undefined && surface.navigate !== undefined) {
+        event.preventDefault();
+        surface.navigate(route);
+    }
 };
 </script>
 
@@ -244,17 +259,19 @@ const openSubagent = (event: MouseEvent): void => {
             >
                 <Icon name="globe" class="text-2xs" />
             </button>
-            <!-- The third door: a spawned subagent's own conversation. -->
-            <a
+            <!-- The third door: the subagent's own work, shown in the chat; an address as well for a spawned one. -->
+            <component
+                :is="subagentDoor.href === undefined ? `button` : `a`"
                 v-if="subagentDoor"
                 :href="subagentDoor.href"
+                :type="subagentDoor.href === undefined ? `button` : undefined"
                 class="shrink-0 transition-colors hover:text-content"
                 v-tooltip.top="subagentDoor.label"
                 :aria-label="subagentDoor.label"
                 @click="openSubagent($event)"
             >
                 <Icon name="users" class="text-2xs" />
-            </a>
+            </component>
         </div>
         <template v-if="isOpen">
             <!-- What the child concluded (its own last words, or the tail of what it printed). -->

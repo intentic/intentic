@@ -296,7 +296,7 @@
             "needsInput": "Necesita una respuesta",
             "paused": "En pausa",
             "completed": "Completado",
-            "inProcessHint": "Se ejecutó dentro del turno de este agente, así que su trabajo está en el chat de este agente"
+            "inProcessHint": "Se ejecutó dentro del turno de este agente: su transcripción se abre en el chat de este agente"
         },
         "liveMetrics": {
             "coresValue": "{cores} núcleo | {cores} núcleos",
@@ -1220,6 +1220,17 @@
         "chatSideRail": {
             "chatWhatRun": "Este chat y lo que puedes ejecutar"
         },
+        "chatSubagentBar": {
+            "backTo": "Volver a {title}",
+            "inProcessNote": "Forma parte del turno de su agente principal, así que no recibe mensajes propios. Para cambiar su rumbo, escribe al principal.",
+            "spawnedNote": "Su agente principal lo dirige y lee su informe. Escríbele solo si quieres guiarlo tú.",
+            "write": "Escribirle"
+        },
+        "chatSubagentPane": {
+            "readFailed": "No se pudo leer la transcripción de este subagente.",
+            "nothingYet": "Aún no hay nada registrado. Su trabajo aparece aquí a medida que avanza.",
+            "nothingRecorded": "No se registró nada de este subagente."
+        },
         "chatSystemPrompt": {
             "baseClaude": "El propio prompt de Claude Code",
             "baseCustom": "Tu propio prompt",
@@ -1296,6 +1307,7 @@
             "more": "… {hidden} más",
             "needsInput": "necesita entrada",
             "openItsConversation": "Abrir su conversación",
+            "openItsTranscript": "Abrir su transcripción",
             "viewLarger": "Ver más grande",
             "watchBrowser": "Mirar el navegador"
         },

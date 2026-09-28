@@ -13,7 +13,7 @@ import { childLook } from "./childLook";
 // one press away; a row carries only what tells the children apart at a glance. A child asking what only the reader can
 // give wears its ask, in the card's own pill, and the row's one press opens its chat, where the ask is answered. Either
 // kind of child draws here, from one reading (childLook): a subagent its parent's runtime ran in-process has no chat of
-// its own, so its press opens its parent's, and it has no review or menu to offer.
+// its own, so its press shows its transcript in its parent's, and it has no review or menu to offer.
 
 const props = defineProps<{
     child: TrayChild;
@@ -23,6 +23,8 @@ const props = defineProps<{
     provider: AgentProvider;
     needle: string;
     matchCase: boolean;
+    // The surface drawing it offers a conversation's row a menu of its own; without one the browser's stays.
+    menus: boolean;
 }>();
 const emit = defineEmits<{ open: [event: MouseEvent]; review: []; menu: [event: MouseEvent] }>();
 
@@ -37,7 +39,7 @@ const review = (): void => {
     }
 };
 const menu = (event: MouseEvent): void => {
-    if (inProcess(props.child)) {
+    if (inProcess(props.child) || !props.menus) {
         return;
     }
     event.preventDefault();

@@ -292,7 +292,7 @@
             "needsInput": "Attend une réponse",
             "paused": "En pause",
             "completed": "Terminé",
-            "inProcessHint": "Exécuté dans le tour de cet agent : son travail se trouve dans le chat de cet agent"
+            "inProcessHint": "A tourné dans le tour de cet agent : sa transcription s'ouvre dans le chat de cet agent"
         },
         "liveMetrics": {
             "coresValue": "{cores} cœur | {cores} cœurs",
@@ -1213,6 +1213,17 @@
         "chatSideRail": {
             "chatWhatRun": "Ce chat et ce que vous pouvez lancer"
         },
+        "chatSubagentBar": {
+            "backTo": "Revenir à {title}",
+            "inProcessNote": "Fait partie du tour de son agent parent, il ne reçoit donc pas de messages. Pour changer sa route, écrivez au parent.",
+            "spawnedNote": "Son parent le dirige et lit son rapport. Écrivez-lui seulement pour le guider vous-même.",
+            "write": "Lui écrire"
+        },
+        "chatSubagentPane": {
+            "readFailed": "Impossible de lire la transcription de ce sous-agent.",
+            "nothingYet": "Rien d'enregistré pour l'instant. Son travail s'affiche ici au fur et à mesure.",
+            "nothingRecorded": "Rien n'a été enregistré pour ce sous-agent."
+        },
         "chatSystemPrompt": {
             "baseClaude": "Le prompt propre à Claude Code",
             "baseCustom": "Votre propre prompt",
@@ -1289,6 +1300,7 @@
             "more": "… {hidden} de plus",
             "needsInput": "attend une saisie",
             "openItsConversation": "Ouvrir sa conversation",
+            "openItsTranscript": "Ouvrir sa transcription",
             "viewLarger": "Agrandir",
             "watchBrowser": "Suivre le navigateur"
         },

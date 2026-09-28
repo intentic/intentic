@@ -517,6 +517,37 @@ const pair = async (actors: Actors, dir: string, holder: string): Promise<void> 
     await running;
 };
 
+/** What the roster knows of one subagent that a reader of its own transcript needs (subagent-transcript.ts). */
+export interface SubagentSource {
+    readonly kind: SubagentKind;
+    // The conversation whose turn started it.
+    readonly conversationId: string;
+    // Its one-line ask, the transcript's opening bubble where the runtime's own record carries no prompt.
+    readonly description: string | undefined;
+    // Where the Claude runtime keeps this child's own record, once it is paired to its meta file: the session it ran in
+    // (the directory `subagentsDir` sits in, named for it) and the SDK's id for the child. Absent for every other runtime.
+    readonly sdk: { readonly sessionId: string; readonly agentId: string } | undefined;
+}
+
+/** The roster's record of one subagent as its transcript's reader needs it, paired on the spot if it has not been yet. */
+export const subagentSource = async (actors: Actors, id: string): Promise<SubagentSource | undefined> => {
+    const record = actors.holdings(ROSTER).get(id);
+    if (record === undefined) {
+        return undefined;
+    }
+    const dir = record.turn.subagentsDir;
+    if (record.kind === "subagent" && record.agentId === undefined && dir !== undefined) {
+        await pair(actors, dir, record.conversationId);
+    }
+    const agentId = record.agentId;
+    return {
+        kind: record.kind,
+        conversationId: record.conversationId,
+        description: record.description,
+        sdk: dir === undefined || agentId === undefined ? undefined : { sessionId: basename(dirname(dir)), agentId },
+    };
+};
+
 /** Pairs only children still running; costs one directory read per session with an unpaired child. */
 export const pairLiveSubagents = async (actors: Actors): Promise<void> => {
     const known = new Set<string>();

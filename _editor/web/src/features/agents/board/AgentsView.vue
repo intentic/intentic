@@ -22,6 +22,7 @@ import { useWorkflowRuns } from "../fleet/useWorkflowRuns";
 import { useSubagentRoster } from "../fleet/subagentRoster";
 import { relativeTime } from "../../chat/models/catalog";
 import { chatWide } from "../../chat/panel/chatPanelLayout";
+import { subagentOnScreen } from "../../chat/panel/subagent/subagentView";
 import { openRunInChat } from "../../chat/run/openRun";
 import { summonChat } from "../../chat/run/summon";
 import { chatStrip } from "../../chat/panel/useChat-strip";
@@ -100,7 +101,7 @@ const focus = useCardFocus({
     strip: chatStrip,
     summon: summonChat,
 });
-const { focusAgent, reviewAgent, keepAgent, closeAgent, openSession } = focus;
+const { focusAgent, focusSubagent, reviewAgent, keepAgent, closeAgent, openSession } = focus;
 // The card the filter names by its id: the lanes lead with it, it is scrolled to, and Enter in the field opens it as a
 // click would; with nothing named, Enter does what it always did, which is nothing.
 const { found, openFound } = useFoundCard({ filter, lanes, move, reveal: revealCard, open: (agent) => focusAgent(agent) });
@@ -136,11 +137,13 @@ provide(CHILD_ROWS, {
     subagentsOf,
     stateOf: lanes.trayState,
     toggle: lanes.toggleTray,
-    selected: (id) => id === highlightId.value || inPane(id),
+    // An in-process row is on screen while this window's chat shows its transcript (subagentView.ts).
+    selected: (id) => id === highlightId.value || inPane(id) || subagentOnScreen.value?.id === id,
     needle,
     matchCase,
     idMatchOf,
     open: (child, event) => focusAgent(child, event),
+    openSubagent: focusSubagent,
     review: reviewAgent,
     menu: openCardMenu,
     setRowEl: setCardEl,

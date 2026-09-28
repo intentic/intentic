@@ -151,6 +151,18 @@ export const readWorkspaceSession = async (dir: string, id: string): Promise<Tra
     return restoredSessionMessages(scoped.length > 0 ? scoped : await sdk().getSessionMessages(id), dir);
 };
 
+// One subagent the Claude runtime ran inside a session, from the record the store keeps beside that session and writes
+// as the subagent works, by the same reducer; `dir` is the root attachment chips resolve against. Searched across every
+// project, since the turn's working dir is not kept with the subagent. Empty when the store holds nothing for it.
+export const readSubagentSession = async (dir: string, sessionId: string, agentId: string): Promise<TranscriptRow[]> => {
+    try {
+        return restoredSessionMessages(await sdk().getSubagentMessages(sessionId, agentId), dir);
+    } catch {
+        // allow(silent-catch): an unreadable store answers as one holding nothing; the caller falls back to the card's calls.
+        return [];
+    }
+};
+
 // Epoch ms the store stamped a message with, NaN when it carries none; the SDK's declared message type omits the field.
 const storedAt = (message: object): number => {
     const { timestamp } = message as { readonly timestamp?: unknown };

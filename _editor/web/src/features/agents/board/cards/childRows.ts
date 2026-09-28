@@ -17,17 +17,21 @@ export interface ChildRowsBoard {
     // Opens or shuts one of the card's folds: its settled children by default, or a group of children stopped on one
     // thing, named by what they stopped on (childFold.stopOf).
     readonly toggle: (card: FleetAgent, fold?: string) => void;
-    // This child's chat is on screen, in the docked panel or one of several panes.
+    // This child is on screen: a spawned one's chat in the docked panel or one of several panes, an in-process one's
+    // transcript in its parent's column (the chat's subagent view).
     readonly selected: (id: string) => boolean;
     readonly needle: Readonly<Ref<string>>;
     readonly matchCase: Readonly<Ref<boolean>>;
     // What the filter's id tier found on a child (idMatch.ts), drawn on its row as a card draws it.
     readonly idMatchOf: (child: FleetAgent) => IdMatch | undefined;
-    // The card's own presses, answered for a row exactly as for a card (useCardFocus, useCardMenu). An in-process
-    // subagent's row opens its parent's chat, where its work is: on the card of the call that started it.
+    // The card's own presses, answered for a row exactly as for a card (useCardFocus, useCardMenu); a surface with no
+    // menu of its own for a card leaves the browser's.
     readonly open: (child: FleetAgent, event?: MouseEvent) => void;
     readonly review: (child: FleetAgent) => void;
-    readonly menu: (child: FleetAgent, event: MouseEvent) => void;
+    readonly menu?: (child: FleetAgent, event: MouseEvent) => void;
+    // An in-process subagent's row: it has no chat of its own, so its transcript is shown in its parent's chat, in the
+    // parent's column (the `subagent` summons).
+    readonly openSubagent: (card: FleetAgent, subagent: SubagentSession) => void;
     // Registers a row with the board's motion (laneMotion), so a link can scroll to it and a child leaving its row for a
     // card of its own flies from where it stood.
     readonly setRowEl: (id: string, el: Element | ComponentPublicInstance | null) => void;

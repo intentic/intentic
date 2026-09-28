@@ -80,3 +80,14 @@ export const agentToolChildren = async (conversationId: string, toolId: string, 
     const delegation = await orRefusal(sandboxRpc.agents.toolChildren({ id: conversationId, toolId }, { context: { at } }));
     return delegation instanceof SandboxHttpError ? [] : delegation.children;
 };
+
+// A subagent the conversation's runtime ran in-process, as a transcript of its own (`agents.subagentTranscript`). Read
+// fresh on every call, never cached: its reader polls while the subagent works, and each read is the whole of it. A
+// failed read throws, since "could not read" and "nothing recorded yet" are different things to say.
+export const subagentTranscript = async (conversationId: string, subagentId: string, at?: string): Promise<TranscriptRow[]> => {
+    const record = await orRefusal(sandboxRpc.agents.subagentTranscript({ id: conversationId, subagentId }, { context: { at } }));
+    if (record instanceof SandboxHttpError) {
+        throw new Error(`Could not read that subagent's transcript.`);
+    }
+    return record.messages;
+};

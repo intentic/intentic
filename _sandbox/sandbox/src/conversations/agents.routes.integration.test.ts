@@ -14,7 +14,7 @@ import type { Services } from "../composition.js";
 
 import { extensionProcessKey } from "../extensions/extension-processes.js";
 
-import { toolChildrenOf, transcriptPageOf } from "../sessions/agent-transcript.js";
+import { toolCardOf, toolChildrenOf, transcriptPageOf } from "../sessions/agent-transcript.js";
 
 import { fileWebchatOutbox } from "../webchat/webchat-outbox.js";
 
@@ -405,6 +405,7 @@ test("agents.search reads the daemon transcript for a provider with no SDK promp
                 // Derived from the same record `read` returns, so the fake cannot disagree with itself.
                 page: async (agent, window = {}) => transcriptPageOf(codexSearchTranscript(agent.id), window),
                 toolChildren: async (agent, toolId) => toolChildrenOf(codexSearchTranscript(agent.id), toolId),
+                toolCard: async (agent, toolId) => toolCardOf(codexSearchTranscript(agent.id), toolId),
                 lastSaid: async (agent) => (codexSearchTranscript(agent.id)).findLast((row) => row.role === "assistant")?.text,
                 count: async (agent) => codexSearchTranscript(agent.id).length,
                 truncate: async (agent, keep) => Math.max(0, codexSearchTranscript(agent.id).length - keep),
@@ -580,6 +581,7 @@ test("agents.place appends the user's words as the agent's, retires the session,
                     // with.
                     page: async (agent, window = {}) => transcriptPageOf(records.get(agent.id) ?? [], window),
                     toolChildren: async (agent, toolId) => toolChildrenOf(records.get(agent.id) ?? [], toolId),
+                    toolCard: async (agent, toolId) => toolCardOf(records.get(agent.id) ?? [], toolId),
                     lastSaid: async (agent) => (records.get(agent.id) ?? []).findLast((row) => row.role === "assistant")?.text,
                     count: async (agent) => (records.get(agent.id) ?? []).length,
                     truncate: async () => 0,
@@ -634,6 +636,7 @@ test("agents.toolChildren hands back the calls the transcript page left counted"
                     append: async (agent, messages) => void records.set(agent.id, [...(records.get(agent.id) ?? []), ...messages]),
                     page: async (agent, window = {}) => transcriptPageOf(records.get(agent.id) ?? [], window),
                     toolChildren: async (agent, toolId) => toolChildrenOf(records.get(agent.id) ?? [], toolId),
+                    toolCard: async (agent, toolId) => toolCardOf(records.get(agent.id) ?? [], toolId),
                     lastSaid: async (agent) => (records.get(agent.id) ?? []).findLast((row) => row.role === "assistant")?.text,
                     count: async (agent) => (records.get(agent.id) ?? []).length,
                     truncate: async () => 0,
@@ -657,6 +660,66 @@ test("agents.toolChildren hands back the calls the transcript page left counted"
     // A card the record no longer holds answers empty; the chat folds open onto nothing rather than failing.
     expect(await client.agents.toolChildren({ id: "conv1", toolId: "call_missing" })).toEqual({ children: [] });
     expect(await errorCode(client.agents.toolChildren({ id: "ghost", toolId: "call_agent" }))).toBe("NOT_FOUND");
+});
+
+// A subagent the runtime ran in-process read as a transcript of its own. With no roster record and no runtime file (a
+// runtime that keeps none, or a record the roster let go), it is what the delegation's card holds: its calls under the
+// card, and the report its parent read.
+test("agents.subagentTranscript reads an in-process subagent off its delegation's card", async () => {
+    const records = new Map<string, TranscriptRow[]>();
+    const child: TranscriptTool = { id: "call_child", name: "Grep", category: "search", status: "completed", target: "createCheckoutSession" };
+    const client = clientFor(
+        createApp(
+            services({
+                async *agent() {
+                    yield { kind: "done" };
+                },
+                transcripts: {
+                    read: async (agent) => records.get(agent.id) ?? [],
+                    rows: async (agent) => records.get(agent.id) ?? [],
+                    fork: async () => {},
+                    append: async (agent, messages) => void records.set(agent.id, [...(records.get(agent.id) ?? []), ...messages]),
+                    page: async (agent, window = {}) => transcriptPageOf(records.get(agent.id) ?? [], window),
+                    toolChildren: async (agent, toolId) => toolChildrenOf(records.get(agent.id) ?? [], toolId),
+                    toolCard: async (agent, toolId) => toolCardOf(records.get(agent.id) ?? [], toolId),
+                    lastSaid: async (agent) => (records.get(agent.id) ?? []).findLast((row) => row.role === "assistant")?.text,
+                    count: async (agent) => (records.get(agent.id) ?? []).length,
+                    truncate: async () => 0,
+                    migrate: async () => {},
+                    sweep: async () => {},
+                },
+            }),
+        ),
+    );
+    await runAgentTurn(client, { prompt: "delegate it", conversationId: "conv1", isolated: true });
+    records.set("conv1", [
+        { role: "user", text: "delegate it" },
+        {
+            role: "assistant",
+            text: "done",
+            tools: [
+                {
+                    id: "call_agent",
+                    name: "Agent",
+                    category: "other",
+                    status: "completed",
+                    target: "Find every caller",
+                    content: [{ type: "text", text: "Two callers." }],
+                    children: [child],
+                },
+            ],
+        },
+    ]);
+
+    expect(await client.agents.subagentTranscript({ id: "conv1", subagentId: "call_agent" })).toEqual({
+        messages: [
+            { role: "user", text: "Find every caller" },
+            { role: "assistant", text: "Two callers.", tools: [child] },
+        ],
+    });
+    // Nothing recorded under that id is an empty transcript, not an error.
+    expect(await client.agents.subagentTranscript({ id: "conv1", subagentId: "call_missing" })).toEqual({ messages: [] });
+    expect(await errorCode(client.agents.subagentTranscript({ id: "ghost", subagentId: "call_agent" }))).toBe("NOT_FOUND");
 });
 
 // A channel conversation delivers the placed line through the provider's gateway before appending; a failed delivery
@@ -685,6 +748,7 @@ const channelPlaceHarness = (ports: Record<string, number>, activity?: unknown[]
                     // with.
                     page: async (agent, window = {}) => transcriptPageOf(records.get(agent.id) ?? [], window),
                     toolChildren: async (agent, toolId) => toolChildrenOf(records.get(agent.id) ?? [], toolId),
+                    toolCard: async (agent, toolId) => toolCardOf(records.get(agent.id) ?? [], toolId),
                     lastSaid: async (agent) => (records.get(agent.id) ?? []).findLast((row) => row.role === "assistant")?.text,
                     count: async (agent) => (records.get(agent.id) ?? []).length,
                     truncate: async () => 0,
@@ -840,6 +904,7 @@ test("agents.transcript serves the newest turns by default and walks back throug
                 append: async () => {},
                 page: async (_agent, window = {}) => transcriptPageOf(record, window),
                 toolChildren: async (_agent, toolId) => toolChildrenOf(record, toolId),
+                toolCard: async (_agent, toolId) => toolCardOf(record, toolId),
                 lastSaid: async () => record.findLast((row) => row.role === "assistant")?.text,
                 count: async () => record.length,
                 truncate: async () => 0,

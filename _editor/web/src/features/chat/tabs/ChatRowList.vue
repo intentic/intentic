@@ -5,6 +5,8 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount } from "vue";
 import { cacheWarm } from "../../agents/fleet/promptCache";
 import type { FleetAgent } from "../../agents/fleet/useAgents-fleet";
+import ChildRows from "../../agents/board/cards/ChildRows.vue";
+import { subagentOnScreen } from "../panel/subagent/subagentView";
 import { createCardViews, type OpenChat } from "./cardView";
 import ChatTabRow from "./ChatTabRow.vue";
 import { laneOfTab } from "./tabs";
@@ -43,13 +45,17 @@ const rows = computed(() => {
     return built;
 });
 
+// A card's ring means its own chat is on screen: while its column shows a subagent, the ring is on that subagent's row.
+const selected = (id: string): boolean => actions.isSelected(id) && subagentOnScreen.value?.parentId !== id;
+
 const drawnIds = computed<ReadonlySet<string>>(() => new Set(props.entries.map((entry) => entry.conversation.conversationId)));
 onBeforeUnmount(actions.registerDrawn(() => drawnIds.value));
 </script>
 
 <template>
     <div class="flex min-w-0 flex-col gap-2.5">
-        <template v-for="{ conversation: c, agent, view } in rows" :key="c.conversationId">
+        <!-- Each card with the tray of agents it started hung from it (ChildRows), read the way the board's cards read. -->
+        <div v-for="{ conversation: c, agent, view } in rows" :key="c.conversationId" class="flex min-w-0 flex-col">
             <!-- Replaces the card rather than nesting a field in it (a button can't host a usable input). -->
             <input
                 v-if="edit.editing && actions.renamingId.value === c.conversationId"
@@ -72,7 +78,7 @@ onBeforeUnmount(actions.registerDrawn(() => drawnIds.value));
                 :view="view"
                 :needle="props.needle"
                 :match-case="props.matchCase"
-                :selected="actions.isSelected(c.conversationId)"
+                :selected="selected(c.conversationId)"
                 :attention="laneOfTab(c, agent) === 'attention'"
                 :closable="actions.closable.value"
                 @select="actions.click($event, c.conversationId)"
@@ -84,6 +90,7 @@ onBeforeUnmount(actions.registerDrawn(() => drawnIds.value));
                 @keep="actions.keep(c.conversationId)"
                 @middle-close="actions.middleClose(c.conversationId)"
             />
-        </template>
+            <ChildRows v-if="agent !== undefined" :agent="agent" rail />
+        </div>
     </div>
 </template>

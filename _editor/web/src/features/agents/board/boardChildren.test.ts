@@ -10,6 +10,7 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import PrimeVue from "primevue/config";
 import { type App, createApp, h, nextTick } from "vue";
 import { useChat } from "../../chat/run/useChat";
+import { closeSubagent, subagentOnScreen } from "../../chat/panel/subagent/subagentView";
 import { rpcKey } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
 import { setAgents } from "../fleet/useAgents-registry";
@@ -52,6 +53,7 @@ afterEach(() => {
     app = undefined;
     document.body.replaceChildren();
     queryClient.removeQueries({ queryKey: rpcKey(`system.subagents`) });
+    closeSubagent();
 });
 
 const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
@@ -177,16 +179,20 @@ it(`carries the subagents its runtime ran in-process in the same tray, and a spa
     ]);
 });
 
-// Its work is in its parent's chat, on the card of the call that started it: the row's press opens that chat.
-it(`points the chat at the parent from an in-process subagent's row`, async () => {
+// It has no chat of its own, so the row's press shows its transcript in its parent's, in the parent's column, and the
+// row wears the ring while it is on screen there.
+it(`shows an in-process subagent's transcript in its parent's chat from its row`, async () => {
     setAgents([lead], 100);
     roster([inProcess(`call-map`, { description: `map the UI` })]);
     const board = await mountBoard();
 
     expect(rows(board)).toEqual([expect.stringMatching(/^map the UIExplore/)]);
-    tray(board)?.querySelector<HTMLButtonElement>(`button`)?.click();
+    const row = tray(board)?.querySelector<HTMLButtonElement>(`button`);
+    row?.click();
     await settle();
     expect(useChat().activeId.value).toBe(`lead`);
+    expect(subagentOnScreen.value).toEqual({ parentId: `lead`, id: `call-map` });
+    expect(row?.classList.contains(`ui-row-select-on`)).toBe(true);
 });
 
 it(`draws no tray for a card that started nothing`, async () => {

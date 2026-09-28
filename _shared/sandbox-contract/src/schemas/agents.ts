@@ -623,6 +623,9 @@ export const AgentTranscriptQuerySchema = AgentIdSchema.extend({
 export const AgentToolChildrenQuerySchema = AgentIdSchema.extend({
     toolId: z.string().min(1).describe("Which tool call, by the id its card carries."),
 });
+export const AgentSubagentQuerySchema = AgentIdSchema.extend({
+    subagentId: z.string().min(1).describe("Which subagent this conversation's runtime ran in-process, by the id of the call that started it."),
+});
 // Absent `ids` archives every archivable finished agent (the lane's "Clear"); unarchive always names its own ids.
 export const AgentIdsSchema = z.object({ ids: z.array(z.string().min(1)).min(1).max(500).describe("Which conversations.") });
 // What actually moved, not the roster afterward: two archives finishing at once would otherwise let a slower snapshot

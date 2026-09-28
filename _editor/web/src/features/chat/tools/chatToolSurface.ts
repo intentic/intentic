@@ -31,6 +31,9 @@ export interface ChatSurface {
     readonly conversationRoute?: (id: string) => string;
     // How a route is entered without a page load; present wherever `conversationRoute` is.
     readonly navigate?: (route: string) => void;
+    // Shows the subagent a card started in the chat, whichever kind: a spawned one's own conversation, an in-process
+    // one's transcript in the column of the conversation whose turn ran it. Absent where there is no chat to show it in.
+    readonly openSubagent?: (subagent: { readonly id: string; readonly kind: SubagentSession["kind"] }) => void;
 }
 
 // Nothing to follow: no pictures, nothing clickable. Used by published pages and cards mounted outside the chat.

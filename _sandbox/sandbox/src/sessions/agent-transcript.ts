@@ -72,7 +72,7 @@ export const agentTranscriptPage = async (deps: AgentTranscriptDeps, agent: Tran
 export const transcriptPageOf = (rows: readonly TranscriptRow[], window: TranscriptWindow = {}): Promise<TranscriptPage> => windowOf(rows, { ...window, fit: fitRow });
 
 // Depth-first, newest row back: a call's id is unique within a conversation, so the first hit is the only one.
-const toolIn = (tools: readonly TranscriptTool[], id: string): TranscriptTool | undefined => {
+export const toolIn = (tools: readonly TranscriptTool[], id: string): TranscriptTool | undefined => {
     for (const tool of tools) {
         if (tool.id === id) {
             return tool;
@@ -102,6 +102,25 @@ export const toolChildrenOf = (rows: readonly TranscriptRow[], toolId: string): 
         }
     }
     return [];
+};
+
+// Same lookup as `agentToolCard`, for a caller that already holds the whole record in memory.
+export const toolCardOf = (rows: readonly TranscriptRow[], toolId: string): TranscriptTool | undefined => {
+    for (let index = rows.length - 1; index >= 0; index -= 1) {
+        const found = toolIn(rows[index]?.tools ?? [], toolId);
+        if (found !== undefined) {
+            return fitNested(found);
+        }
+    }
+    return undefined;
+};
+
+// One tool card whole, its calls under it and its result: what a delegation's card holds of the subagent it started,
+// read back out of the record for a subagent whose own transcript is read from there.
+export const agentToolCard = async (deps: AgentTranscriptDeps, agent: TranscriptAgent, toolId: string): Promise<TranscriptTool | undefined> => {
+    const found = await deps.record.findBack(agent.id, (row) => toolIn(row.tools ?? [], toolId) !== undefined);
+    const card = found === undefined ? undefined : toolIn(found.tools ?? [], toolId);
+    return card === undefined ? undefined : fitNested(card);
 };
 
 // The calls under one tool card, for a delegation the page left counted. Read back out of the record, not the subagent

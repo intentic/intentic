@@ -15,6 +15,8 @@ import { useWorkflowRuns } from "../../agents/fleet/useWorkflowRuns";
 import { defaultChatWidth, maxChatWidth, MIN_CHAT_WIDTH, MIN_PANE_PX, useLayout } from "../../../shell/window/useLayout";
 import { toAppPx, toScreenPx, uiLength } from "../../../shell/window/uiScale";
 import ChatPane from "./ChatPane.vue";
+import ChatSubagentPane from "./subagent/ChatSubagentPane.vue";
+import { keepSubagentWhileShown, subagentOnScreen } from "./subagent/subagentView";
 import ChatSideRail from "./ChatSideRail.vue";
 import ChatRunGraph from "../transcript/ChatRunGraph.vue";
 import ChatTabs from "../tabs/ChatTabs.vue";
@@ -88,6 +90,15 @@ const shown = computed<Conversation[]>(() => {
 });
 // A split is what's drawn, not asked for: a claimed-but-unfilled column mustn't hide the single-pane close.
 const split = computed(() => shown.value.length > 1);
+
+// The column a subagent is shown in, by its parent (subagentView.ts): the strip has no room to step into one. The view
+// lasts only while that parent's column is drawn.
+const subagentIn = (conversation: Conversation): string | undefined =>
+    !bar && subagentOnScreen.value?.parentId === conversation.conversationId ? subagentOnScreen.value.id : undefined;
+watch(
+    () => shown.value.map((conversation) => conversation.conversationId),
+    (drawn) => keepSubagentWhileShown(drawn),
+);
 
 // Which subscriptions still have room, in the width panes can't use (rule: chatCapacity's railFitsBeside). Shown
 // only in the panel's own window — every other surface already has the Usage tab and the picker a click away.
@@ -313,17 +324,31 @@ const seamWidth = computed<number>({
                 :style="{ '--min-pane': minPaneLength }"
             >
                 <!-- A pane's own × only appears in a split: with one column, closing it is the panel's job, not a control living inside the pane. -->
-                <ChatPane
-                    v-for="conversation in shown"
-                    :key="conversation.conversationId"
-                    :conversation="conversation"
-                    :focused="conversation.conversationId === activeId"
-                    :closable="split"
-                    :bare="bar && !lifted"
-                    :strip="bar"
-                    @focus="setActive(conversation.conversationId)"
-                    @close="closePane(conversation.conversationId)"
-                />
+                <template v-for="conversation in shown" :key="conversation.conversationId">
+                    <!-- Kept mounted while a subagent is shown over it, so stepping back finds the parent where it was left. -->
+                    <ChatPane
+                        v-show="subagentIn(conversation) === undefined"
+                        :conversation="conversation"
+                        :focused="conversation.conversationId === activeId"
+                        :closable="split"
+                        :bare="bar && !lifted"
+                        :strip="bar"
+                        @focus="setActive(conversation.conversationId)"
+                        @close="closePane(conversation.conversationId)"
+                    />
+                    <!-- A subagent its runtime ran in-process, stepped into from its parent's column; keyed by the subagent, so another one is a fresh read.
+                         After the parent's pane, so the row's last drawn pane is the one the capacity rail pads (chat.css). -->
+                    <ChatSubagentPane
+                        v-if="subagentIn(conversation) !== undefined"
+                        :key="subagentIn(conversation)"
+                        :parent="conversation"
+                        :subagent-id="subagentIn(conversation)!"
+                        :focused="conversation.conversationId === activeId"
+                        :closable="split"
+                        @focus="setActive(conversation.conversationId)"
+                        @close="closePane(conversation.conversationId)"
+                    />
+                </template>
             </div>
         </div>
 

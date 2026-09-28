@@ -21,6 +21,8 @@ const props = defineProps<{
     agent: FleetAgent;
     // The card is drawn at the live lanes' weight (AgentCard's `live`), whose identity tile sits a step further in.
     live?: boolean;
+    // Hung from a chat list's card (RailCard) rather than the board's: its identity tile is smaller and sits further left.
+    rail?: boolean;
 }>();
 
 const t = useT();
@@ -34,12 +36,16 @@ const tray = computed(() => (board === undefined ? undefined : trayOf(children.v
 const title = computed(() => agentDisplayTitle(props.agent));
 const label = computed(() => t(`agents.childRows.startedBy`, { title: title.value }));
 
-// A conversation's row answers the card's own presses for itself; an in-process subagent's opens this card's chat,
-// where its work is, and joins no motion, being no card that could fly to a lane of its own.
+// A conversation's row answers the card's own presses for itself; an in-process subagent's shows its transcript in this
+// card's chat, and joins no motion, being no card that could fly to a lane of its own.
 const open = (child: TrayChild, event: MouseEvent): void => {
-    board?.open(inProcess(child) ? props.agent : child, event);
+    if (inProcess(child)) {
+        board?.openSubagent(props.agent, child);
+        return;
+    }
+    board?.open(child, event);
 };
-const selected = (child: TrayChild): boolean => !inProcess(child) && board?.selected(child.id) === true;
+const selected = (child: TrayChild): boolean => board?.selected(child.id) === true;
 const setRow = (child: TrayChild, el: Element | ComponentPublicInstance | null): void => {
     if (!inProcess(child)) {
         board?.setRowEl(child.id, el);
@@ -52,9 +58,11 @@ const review = (child: TrayChild): void => {
 };
 const menu = (child: TrayChild, event: MouseEvent): void => {
     if (!inProcess(child)) {
-        board?.menu(child, event);
+        board?.menu?.(child, event);
     }
 };
+// Where the rail drops from: the middle of the card's identity tile, whichever card it hangs from.
+const inset = computed(() => (props.rail ? `ml-6` : props.live ? `ml-7.5` : `ml-7`));
 </script>
 
 <template>
@@ -63,7 +71,7 @@ const menu = (child: TrayChild, event: MouseEvent): void => {
         role="group"
         :aria-label="label"
         class="flex flex-col border-l border-line pt-1 pl-1"
-        :class="live ? 'ml-7.5' : 'ml-7'"
+        :class="inset"
     >
         <ChildRow
             v-for="child in [...tray.asks, ...tray.lead]"
@@ -74,6 +82,7 @@ const menu = (child: TrayChild, event: MouseEvent): void => {
             :provider="agent.provider"
             :needle="board.needle.value"
             :match-case="board.matchCase.value"
+            :menus="board.menu !== undefined"
             @open="(event) => open(child, event)"
             @review="review(child)"
             @menu="(event) => menu(child, event)"
@@ -90,6 +99,7 @@ const menu = (child: TrayChild, event: MouseEvent): void => {
                 :provider="agent.provider"
                 :needle="board.needle.value"
                 :match-case="board.matchCase.value"
+                :menus="board.menu !== undefined"
                 @open="(event) => open(child, event)"
                 @review="review(child)"
                 @menu="(event) => menu(child, event)"
@@ -115,6 +125,7 @@ const menu = (child: TrayChild, event: MouseEvent): void => {
             :provider="agent.provider"
             :needle="board.needle.value"
             :match-case="board.matchCase.value"
+            :menus="board.menu !== undefined"
             @open="(event) => open(child, event)"
             @review="review(child)"
             @menu="(event) => menu(child, event)"

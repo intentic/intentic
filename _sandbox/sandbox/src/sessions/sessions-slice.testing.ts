@@ -1,7 +1,7 @@
 import { IN_MEMORY } from "@intentic/base/sqlite";
 import { capabilitiesOf } from "@intentic/sandbox-contract";
 import type { SliceFakeContext } from "../harness/slice-fake.testing.js";
-import { toolChildrenOf, transcriptPageOf } from "./agent-transcript.js";
+import { toolCardOf, toolChildrenOf, transcriptPageOf } from "./agent-transcript.js";
 import { openSearchIndex } from "./search-index.js";
 import type { SessionsSlice } from "./sessions-slice.js";
 import { spokenLinesOf } from "./transcript-search.js";
@@ -41,6 +41,7 @@ export const sessionsSliceFake = (context: SliceFakeContext) => {
             page: async (agent, window = {}) => transcriptPageOf(await self().transcripts.read(agent), window),
             // Same door, same source: a route test asking for a delegation's calls gets what the record-backed route would.
             toolChildren: async (agent, toolId) => toolChildrenOf(await self().transcripts.read(agent), toolId),
+            toolCard: async (agent, toolId) => toolCardOf(await self().transcripts.read(agent), toolId),
             lastSaid: async (agent) => (await self().transcripts.read(agent)).findLast((row) => row.role === "assistant")?.text,
             // Inert but present: a fork's first turn opens through this door, so a fake without it fails every forkOf
             // turn with a bare 500 that no type check catches.

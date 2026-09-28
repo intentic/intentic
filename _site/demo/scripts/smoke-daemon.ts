@@ -178,6 +178,7 @@ const samplesOf = ({ fleet, automations, ci, workflows, loops, devices }: Awaite
             seenAll: undefined,
             diff: { id: fleet.REVIEW_AGENT_ID },
             transcript: { id: fleet.REVIEW_AGENT_ID },
+            subagentTranscript: { id: fleet.FEATURED_AGENT_ID, subagentId: `toolu_01explore8k2m` },
             systemPrompt: { id: fleet.FEATURED_AGENT_ID },
             fileDiff: { id: fleet.REVIEW_AGENT_ID, repo: `api`, path: `src/db/schema.ts` },
             rename: { id: fleet.AWAITING_AGENT_ID, title: `Renamed by the smoke run` },

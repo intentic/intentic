@@ -361,7 +361,7 @@
             "needsInput": "Needs input",
             "paused": "Paused",
             "completed": "Completed",
-            "inProcessHint": "Ran inside this agent's own turn, so its work is in this agent's chat"
+            "inProcessHint": "Ran inside this agent's own turn: its transcript opens in this agent's chat"
         },
         "ownerMark": {
             "ownedBy": "Owned by {name}",
@@ -1286,6 +1286,17 @@
         "chatSideRail": {
             "chatWhatRun": "This chat and what you can run"
         },
+        "chatSubagentBar": {
+            "backTo": "Back to {title}",
+            "inProcessNote": "Part of its parent's turn, so it takes no messages of its own. To change its course, write to the parent.",
+            "spawnedNote": "Its parent directs it and reads its report. Write to it only to steer it yourself.",
+            "write": "Write to it"
+        },
+        "chatSubagentPane": {
+            "readFailed": "Could not read this subagent's transcript.",
+            "nothingYet": "Nothing recorded yet. Its work shows here as it goes.",
+            "nothingRecorded": "Nothing was recorded for this subagent."
+        },
         "chatSwitcherSheet": {
             "chats": "Chats"
         },
@@ -1365,6 +1376,7 @@
             "more": "… {hidden} more",
             "needsInput": "needs input",
             "openItsConversation": "Open its conversation",
+            "openItsTranscript": "Open its transcript",
             "viewLarger": "View larger",
             "watchBrowser": "Watch the browser"
         },

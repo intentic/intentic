@@ -33,7 +33,7 @@ import { automationRecord } from "./harness/route-stores.testing.js";
 import { memoryAutomationsStore } from "./automations/automations-slice.testing.js";
 import { memoryCapabilitiesStore } from "./capabilities/capabilities-slice.testing.js";
 import { runAgentTurn, startedRun } from "./harness/route-turns.testing.js";
-import { toolChildrenOf, transcriptPageOf } from "./sessions/agent-transcript.js";
+import { toolCardOf, toolChildrenOf, transcriptPageOf } from "./sessions/agent-transcript.js";
 
 // A raw route exists only under its declaration and every declaration is served, in the declared order: the order the
 // route matcher reads overlapping routes in, and so the policy every gate applies.
@@ -1047,6 +1047,7 @@ test("agent.run reopens a conversation whose session the sandbox never stored, s
                     append: async () => {},
                     page: async (_agent, window = {}) => transcriptPageOf(recorded, window),
                     toolChildren: async (_agent, toolId) => toolChildrenOf(recorded, toolId),
+                    toolCard: async (_agent, toolId) => toolCardOf(recorded, toolId),
                     lastSaid: async () => recorded.findLast((row) => row.role === "assistant")?.text,
                     count: async () => recorded.length,
                     truncate: async () => 0,
@@ -1087,6 +1088,7 @@ test("agent.run folds a switched conversation's history into the prompt as a rol
                     append: async () => {},
                     page: async (_agent, window = {}) => transcriptPageOf(recorded, window),
                     toolChildren: async (_agent, toolId) => toolChildrenOf(recorded, toolId),
+                    toolCard: async (_agent, toolId) => toolCardOf(recorded, toolId),
                     lastSaid: async () => recorded.findLast((row) => row.role === "assistant")?.text,
                     count: async () => recorded.length,
                     truncate: async () => 0,
@@ -1127,6 +1129,7 @@ test("agent.resume sends a turn the door turned away without seeding its refused
             append: async () => {},
             page: async (_agent, window = {}) => transcriptPageOf(recorded, window),
             toolChildren: async (_agent, toolId) => toolChildrenOf(recorded, toolId),
+            toolCard: async (_agent, toolId) => toolCardOf(recorded, toolId),
             lastSaid: async () => recorded.findLast((row) => row.role === "assistant")?.text,
             count: async () => recorded.length,
             truncate: async () => 0,
