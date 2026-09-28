@@ -1,4 +1,5 @@
-import { realpath } from "node:fs/promises";
+import type { Stats } from "node:fs";
+import { lstat, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 
 // Every path a window names is root-relative with forward slashes, as the contract carries it, and is only ever
@@ -51,8 +52,18 @@ export const resolveExisting = async (root: string, path: string): Promise<Resol
     return within(root, real) ? { kind: `found`, abs: real } : { kind: `refused`, why: `outside this folder` };
 };
 
-// Where a write to `path` lands: the real path of the file when it exists, else the path under its nearest existing
-// ancestor, which must itself be inside the root, since a linked folder half way down could lead out of it.
+// Why a write is refused at a link that resolves to nothing (dangling, or a loop): where it would land is unknowable
+// until the write creates it, and a link can name any place on the disk.
+export const BROKEN_LINK = `a link that points at nothing cannot be written through`;
+
+const entryOf = (abs: string): Promise<Stats | undefined> =>
+    // allow(silent-catch): nothing at the path at all, not even a link, is the undefined its caller walks past.
+    lstat(abs).catch(() => undefined);
+
+// Where a write to `path` lands, as a path with no link anywhere in it: the real path of the file when it exists, else
+// the real path of its nearest existing ancestor with the missing names below it, which the write creates fresh. The
+// ancestor is found by lstat, so a link that resolves to nothing is met as the thing it is and refused rather than
+// walked past: a write through it would create whatever it names, anywhere on the disk.
 export const resolveWritable = async (root: string, path: string): Promise<Resolved> => {
     const segments = segmentsOf(path);
     if (segments === undefined || segments.length === 0) {
@@ -63,14 +74,30 @@ export const resolveWritable = async (root: string, path: string): Promise<Resol
     if (real !== undefined) {
         return within(root, real) ? { kind: `found`, abs: real } : { kind: `refused`, why: `outside this folder` };
     }
-    for (let probe = dirname(abs); ; probe = dirname(probe)) {
+    for (let probe = abs; ; probe = dirname(probe)) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- one ancestor at a time, nearest first, stopping at the first that exists
-        const ancestor = await realOf(probe);
-        if (ancestor !== undefined) {
-            return within(root, ancestor) ? { kind: `found`, abs } : { kind: `refused`, why: `outside this folder` };
+        const entry = await entryOf(probe);
+        if (entry !== undefined) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- runs once, for the ancestor that ends the walk
+            return landingUnder(root, probe, relative(probe, abs), entry);
         }
         if (probe === root || dirname(probe) === probe) {
             return { kind: `refused`, why: `outside this folder` };
         }
     }
+};
+
+// The write's landing below the nearest thing that exists on its path: that thing must be a folder, really inside the
+// root, and not a link to nothing.
+const landingUnder = async (root: string, ancestor: string, rest: string, entry: Stats): Promise<Resolved> => {
+    const real = await realOf(ancestor);
+    if (real === undefined) {
+        return { kind: `refused`, why: entry.isSymbolicLink() ? BROKEN_LINK : `invalid path` };
+    }
+    if (!within(root, real)) {
+        return { kind: `refused`, why: `outside this folder` };
+    }
+    // allow(silent-catch): an ancestor gone since it was resolved holds nothing to write into.
+    const folder = await stat(real).catch(() => undefined);
+    return folder?.isDirectory() === true ? { kind: `found`, abs: join(real, rest) } : { kind: `refused`, why: `not a folder` };
 };

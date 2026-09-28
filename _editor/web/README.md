@@ -37,6 +37,11 @@ flowchart LR
   from the history menu), and reads the account a failed turn ran on only off its error frame. Nothing else is guessed
   either: a card without `awaitingWake` is not waiting on a wake, a reading without `memoryRoom` warns of nothing, and a
   device row's card is its own `card`, never parsed out of its key.
+- **A folder on this computer.** The desktop app's local face reaches a sidecar, not a daemon, whose hello says
+  `surface: "folder"` and lists only what it serves (`useDaemonRoutes.ts`). The file tree offers no verb whose route is
+  missing (`VERB_ROUTES` in `entryMenu.ts`: new folder, rename, delete, cut, copy, extract, a ZIP, a terminal), a
+  refused call says the feature is not there for a folder rather than asking for an update, and a recording plays or a
+  file downloads from its bytes over `/workspace/raw` where no media ticket is minted.
 - **Routes.** `/login` and `/setup` sit outside the shell. Everything else lives under `/` in
   `WorkspaceShell.vue`, guarded by `requireAuth` and `requireSetup`, which renders `ShellDesktop.vue` (rail, docked
   chat and terminal) or `ShellMobile.vue` (tab bar, full-screen views). A link naming a sandbox (`/?sandbox=<id>`, the

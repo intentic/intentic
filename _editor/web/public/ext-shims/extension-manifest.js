@@ -44,6 +44,7 @@ export const filesPoint = m["filesPoint"];
 export const fillTemplate = m["fillTemplate"];
 export const listenerPoint = m["listenerPoint"];
 export const manifestJsonSchema = m["manifestJsonSchema"];
+export const permissionProblem = m["permissionProblem"];
 export const powersOf = m["powersOf"];
 export const processesPoint = m["processesPoint"];
 export const sandboxRouteAllowed = m["sandboxRouteAllowed"];

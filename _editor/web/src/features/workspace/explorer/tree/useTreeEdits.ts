@@ -3,6 +3,8 @@ import { t } from "@intentic/ui/i18n";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { parentDir } from "@intentic/ui/path";
 import { computed, type Ref, ref, shallowRef } from "vue";
+import { supportsRoute } from "../../../sandbox/overview/useDaemonRoutes";
+import { VERB_ROUTES } from "../entryMenu";
 import { newNameError } from "../entryNames";
 import type { LandedEntry } from "../fileNesting";
 import { noteUserCreatedDir } from "../useEmptyDirs";
@@ -54,15 +56,17 @@ export interface TreeEditsHost {
 export const useTreeEdits = (host: TreeEditsHost) => {
     const { inline, rules, store } = host;
 
+    // Neither field opens for a write the backend does not serve (a folder on this computer has no rename, no new
+    // folder): a name typed into it could only be refused.
     const beginRename = (path: string): void => {
-        if (isLockedWorkspacePath(path) || rules.pending(path) || rules.refuseIn(host.targetDir(path))) {
+        if (!supportsRoute(VERB_ROUTES.rename) || isLockedWorkspacePath(path) || rules.pending(path) || rules.refuseIn(host.targetDir(path))) {
             return;
         }
         inline.apply({ kind: `rename`, path });
     };
     // The tree's own root draws no row to expand, so its phantom row sits in the preamble instead.
     const beginCreate = (dir: string, type: "file" | "dir"): void => {
-        if (rules.refuseIn(dir)) {
+        if ((type === `dir` && !supportsRoute(VERB_ROUTES.newFolder)) || rules.refuseIn(dir)) {
             return;
         }
         host.openLanding(dir, []);

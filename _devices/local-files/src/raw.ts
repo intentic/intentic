@@ -1,11 +1,8 @@
-import { createWriteStream } from "node:fs";
-import { mkdir, utimes } from "node:fs/promises";
+import { lutimes, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { json, type RawRoutes } from "@intentic/contract-serve";
 import type { LocalFolder, LocalOffice } from "@intentic/ext-onlyoffice/local-office";
-import { contentTypeFor, MAX_RAW_BYTES, MAX_WRITE_BYTES, openFile, writeFileWhole, type WriteRefusal } from "./files.js";
+import { contentTypeFor, MAX_RAW_BYTES, MAX_WRITE_BYTES, openFile, writeFileWhole, writePartAt, type WriteRefusal } from "./files.js";
 import { type Grant, mayWrite } from "./grants.js";
 import { cleanRelPath, resolveExisting, resolveWritable } from "./paths.js";
 
@@ -26,8 +23,9 @@ interface UploadTarget {
     readonly offset: number;
 }
 
-// The upload's target, or the answer refusing it: a path this window may write, a sane offset, and a body under the cap.
-const uploadTarget = async (grant: Grant, url: URL, request: Request): Promise<UploadTarget | Response> => {
+// The upload's target, or the answer refusing it: a path this window may write, a sane offset, and a declared length
+// under the cap. A body that declares none is held to the cap by the write itself (files.ts), which counts what arrives.
+const uploadTarget = async (grant: Grant, url: URL, request: Request, cap: number): Promise<UploadTarget | Response> => {
     const path = cleanRelPath(url.searchParams.get(`path`) ?? ``);
     if (path === undefined || path === ``) {
         return json({ error: `invalid path` }, 400);
@@ -40,24 +38,29 @@ const uploadTarget = async (grant: Grant, url: URL, request: Request): Promise<U
         return json({ error: resolved.kind === `refused` ? resolved.why : `invalid path` }, 400);
     }
     const offset = Number(url.searchParams.get(`offset`) ?? 0);
-    const declared = Number(request.headers.get(`content-length`));
     if (!Number.isInteger(offset) || offset < 0) {
         return json({ error: `invalid offset` }, 400);
     }
-    if (Number.isFinite(declared) && offset + declared > MAX_WRITE_BYTES) {
+    const declared = Number(request.headers.get(`content-length`) ?? 0);
+    if (offset + (Number.isFinite(declared) ? declared : 0) > cap) {
         return json({ error: `file too large` }, 413);
     }
     return { abs: resolved.abs, offset };
 };
 
-// Writes a drop's part at `offset`, as the daemon does: a later part lands in place rather than truncating the first.
-const writePart = async (abs: string, body: ReadableStream<Uint8Array>, offset: number): Promise<void> => {
-    await mkdir(dirname(abs), { recursive: true });
-    // SAFETY: a request body is a web byte stream; node's and the DOM's typings of it differ only in name.
-    await pipeline(Readable.fromWeb(body as never), createWriteStream(abs, { flags: offset === 0 ? `w` : `r+`, start: offset }));
+// Writes the upload where it goes. Its first part (and every save, which is one part) replaces the file whole; a drop's
+// later part lands in place rather than truncating the first, as the daemon's does. An empty later part adds nothing.
+const writeUpload = async (target: UploadTarget, request: Request, cap: number): Promise<WriteRefusal | undefined> => {
+    // The missing folders below the nearest one that exists, which resolveWritable found free of links.
+    await mkdir(dirname(target.abs), { recursive: true });
+    if (target.offset === 0) {
+        return writeFileWhole(target.abs, request.body ?? new Uint8Array(), request.headers.get(`x-intentic-base-hash`) ?? undefined, cap);
+    }
+    return request.body === null ? undefined : writePartAt(target.abs, request.body, target.offset, cap);
 };
 
-export const rawFor = (grant: Grant, office: LocalOffice, folder: LocalFolder) =>
+// `cap` bounds one upload, MAX_WRITE_BYTES but where a test sets it lower.
+export const rawFor = (grant: Grant, office: LocalOffice, folder: LocalFolder, cap = MAX_WRITE_BYTES) =>
     ({
         "GET /workspace/raw": async ({ url, request }) => {
             const resolved = await resolveExisting(grant.root, url.searchParams.get(`path`) ?? ``);
@@ -79,24 +82,19 @@ export const rawFor = (grant: Grant, office: LocalOffice, folder: LocalFolder) =
             return new Response(file.body(), { headers: { ...headers, "content-length": String(file.size) } });
         },
         "POST /workspace/upload": async ({ url, request }) => {
-            const target = await uploadTarget(grant, url, request);
+            const target = await uploadTarget(grant, url, request, cap);
             if (target instanceof Response) {
                 return target;
             }
-            const baseHash = request.headers.get(`x-intentic-base-hash`) ?? undefined;
-            // A save of the editor's whole text replaces the file in one step; a drop's part is written where it goes.
-            if (target.offset === 0 && (baseHash !== undefined || request.body === null)) {
-                const refused = await writeFileWhole(target.abs, new Uint8Array(await request.arrayBuffer()), baseHash);
-                if (refused !== undefined) {
-                    return json({ error: REFUSAL_STATUS[refused].error }, REFUSAL_STATUS[refused].status);
-                }
-            } else if (request.body !== null) {
-                await writePart(target.abs, request.body, target.offset);
+            const refused = await writeUpload(target, request, cap);
+            if (refused !== undefined) {
+                return json({ error: REFUSAL_STATUS[refused].error }, REFUSAL_STATUS[refused].status);
             }
             const mtime = Number(url.searchParams.get(`mtime`));
             if (Number.isFinite(mtime)) {
-                // allow(silent-catch): the time is a hint for the next drop's diff, never worth failing the write over.
-                await utimes(target.abs, new Date(mtime), new Date(mtime)).catch(() => undefined);
+                // allow(silent-catch): the time is a hint for the next drop's diff, never worth failing the write over. Set on
+                // the entry itself: a link put where the file was since it landed is not followed either.
+                await lutimes(target.abs, new Date(mtime), new Date(mtime)).catch(() => undefined);
             }
             return json({ ok: true });
         },

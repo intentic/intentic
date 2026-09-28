@@ -56,10 +56,12 @@ const locked = (): Record<string, LockedFile> => ({
     },
     // An update's undo record, written by the boot that converts stored files; a copy of a vault is a vault.
     "secrets/converting": {
+        // allow(contract-paths): a directory under the state dir, not a route
         subject: `${STATE_DIR}/secrets/converting`,
         holds: `copies of the files an update changed, kept so a version it rolls back to gets its own files back`,
     },
     "secrets/auth": {
+        // allow(contract-paths): a directory under the state dir, not a route
         subject: `${STATE_DIR}/secrets/auth`,
         holds: `the agents' sign-ins with their providers, plus the vaults behind your connections and your extensions' settings`,
         manage: { label: t(`workspace.lockedFile.agentSettings`), to: `/sandbox/agent` },

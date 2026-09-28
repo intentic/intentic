@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { packageRoot, repoRoot } from "@intentic/constants/node";
 import { defineConfig, type Plugin } from "vite";
 import { shared } from "../web/vite.shared.ts";
+import { withPlatformOrigin } from "./local/origin.ts";
 
 // The local face: the editor built from the same source as the app (../web/vite.shared.ts), entered through
 // local/main.ts, for the windows that show a folder of the user's own disk. It lands beside the launcher in the app's
@@ -24,6 +25,13 @@ const onePage = (): Plugin => ({
             next();
         });
     },
+});
+
+// The platform stand-in's origin, written into the page's window.env (local/origin.ts). Served and built alike, and
+// first: contentPolicy hashes the inline scripts afterwards, so the hash is of the script the window runs.
+const platformOrigin = (): Plugin => ({
+    name: `local-face-platform-origin`,
+    transformIndexHtml: { order: `pre`, handler: withPlatformOrigin },
 });
 
 // WHAT MAY RUN IN A WINDOW ON A FOLDER. It shows whatever the folder holds (a stranger's markdown, a document from a
@@ -69,7 +77,7 @@ const contentPolicy = (): Plugin => ({
 
 export default defineConfig({
     ...shared,
-    plugins: [...shared.plugins, onePage(), contentPolicy()],
+    plugins: [...shared.plugins, platformOrigin(), onePage(), contentPolicy()],
     resolve: {
         alias: {
             ...shared.resolve.alias,

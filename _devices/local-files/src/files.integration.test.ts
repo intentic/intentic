@@ -1,7 +1,7 @@
-import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openFile, readWindow, sha256Text, writeFileWhole } from "./files.js";
+import { openFile, readWindow, sha256Text, writeFileWhole, writePartAt } from "./files.js";
 
 let dir: string;
 beforeEach(() => {
@@ -46,6 +46,66 @@ describe(`writeFileWhole`, () => {
         chmodSync(join(dir, `run.sh`), 0o755);
         expect(await writeFileWhole(join(dir, `run.sh`), new TextEncoder().encode(`echo new`), undefined)).toBeUndefined();
         expect(statSync(join(dir, `run.sh`)).mode & 0o777).toBe(0o755);
+    });
+});
+
+// A body as a request carries it, `bytes` of `a` in 1 KiB pieces.
+const bodyOf = (bytes: number): ReadableStream<Uint8Array> => {
+    let sent = 0;
+    return new ReadableStream<Uint8Array>({
+        pull: (controller) => {
+            const size = Math.min(1024, bytes - sent);
+            if (size === 0) {
+                controller.close();
+                return;
+            }
+            sent += size;
+            controller.enqueue(new Uint8Array(size).fill(0x61));
+        },
+    });
+};
+
+describe(`writing never follows a link`, () => {
+    // The save lands by rename, which replaces the link itself: whatever it pointed at is never opened.
+    it(`replaces a link at the file with the saved file, and leaves what it pointed at alone`, async () => {
+        mkdirSync(join(dir, `elsewhere`));
+        writeFileSync(join(dir, `elsewhere`, `target.txt`), `untouched`);
+        symlinkSync(join(dir, `elsewhere`, `target.txt`), join(dir, `live.txt`));
+        symlinkSync(join(dir, `elsewhere`, `planted.txt`), join(dir, `dangling.txt`));
+        expect(await writeFileWhole(join(dir, `live.txt`), new TextEncoder().encode(`saved`), undefined)).toBeUndefined();
+        expect(await writeFileWhole(join(dir, `dangling.txt`), new TextEncoder().encode(`saved`), undefined)).toBeUndefined();
+        expect([lstatSync(join(dir, `live.txt`)).isFile(), readFileSync(join(dir, `live.txt`), `utf8`)]).toEqual([true, `saved`]);
+        expect(lstatSync(join(dir, `dangling.txt`)).isFile()).toBe(true);
+        expect(readFileSync(join(dir, `elsewhere`, `target.txt`), `utf8`)).toBe(`untouched`);
+        expect(readdirSync(join(dir, `elsewhere`))).toEqual([`target.txt`]);
+    });
+
+    it(`refuses a later part at a link, dangling or not, and writes nothing through it`, async () => {
+        writeFileSync(join(dir, `target.txt`), `untouched`);
+        symlinkSync(join(dir, `target.txt`), join(dir, `live.txt`));
+        symlinkSync(join(dir, `planted.txt`), join(dir, `dangling.txt`));
+        expect(await writePartAt(join(dir, `live.txt`), bodyOf(4), 2)).toBe(`changed`);
+        expect(await writePartAt(join(dir, `dangling.txt`), bodyOf(4), 2)).toBe(`changed`);
+        expect(readFileSync(join(dir, `target.txt`), `utf8`)).toBe(`untouched`);
+        expect(readdirSync(dir).toSorted()).toEqual([`dangling.txt`, `live.txt`, `target.txt`]);
+    });
+});
+
+describe(`the cap`, () => {
+    it(`holds a streamed save to the cap by what arrives, leaving the file as it was`, async () => {
+        writeFileSync(join(dir, `a.md`), `old`);
+        expect(await writeFileWhole(join(dir, `a.md`), bodyOf(4096), undefined, 4096)).toBeUndefined();
+        expect(statSync(join(dir, `a.md`)).size).toBe(4096);
+        expect(await writeFileWhole(join(dir, `a.md`), bodyOf(4097), undefined, 4096)).toBe(`too-large`);
+        expect(statSync(join(dir, `a.md`)).size).toBe(4096);
+        expect(readdirSync(dir)).toEqual([`a.md`]);
+    });
+
+    // 3 KiB are on disk, so the part may add 1 KiB: its first piece fits, and its second is refused before it lands.
+    it(`holds a later part to what the cap leaves after its offset`, async () => {
+        writeFileSync(join(dir, `drop.bin`), new Uint8Array(3072));
+        expect(await writePartAt(join(dir, `drop.bin`), bodyOf(2048), 3072, 4096)).toBe(`too-large`);
+        expect(statSync(join(dir, `drop.bin`)).size).toBe(4096);
     });
 });
 

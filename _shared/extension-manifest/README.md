@@ -16,8 +16,10 @@ flowchart LR
 - The runtime parse is lenient and the authoring schema strict, since an unknown key in an author's file is a typo.
   The generated schema is committed twice, here and in the site's `public/` behind `MANIFEST_SCHEMA_URL`, and the
   editor's `manifest-schema.test.ts` fails when either copy is stale.
-- `sandboxRouteAllowed` is the permission rule: an entry is `"<METHOD> <path-glob>"`, and each `*` matches one path
-  segment.
+- `sandboxRouteAllowed` is the permission rule: an entry is `"<METHOD> <path-glob>"`, and each `*` stands alone
+  between slashes and matches one whole path segment, never a `.` or `..` the URL would resolve away. A malformed entry
+  (`**`, a `*` inside a segment, an unknown method, a relative path) fails the manifest parse rather than the first
+  call it gates.
 - What a field MEANS to the host is declared on the field, with `.meta({ power, effect, mintsServer })`
   (`meaning.ts`), and read from there: the powers `diffPowers` folds a manifest into (so an update re-asks only
   when it adds one), the effects a card discloses in the capability catalog, and the capability kinds whose ids
@@ -27,7 +29,8 @@ flowchart LR
   card's `mcp`, its alias for one release. A `superRefine` on the envelope says what no single field can: tools need
   a `server` bundle or a declared process to serve them.
 - `HOST_PUBLISHED_SPECIFIERS` lists the only bare imports a published bundle may use: the modules the shell's import
-  map provides.
+  map provides. `bundleProblem` finds a bundle's imports with a small tokenizer rather than a line regex, since a
+  minified bundle puts them all on one line and a string or comment may spell the word.
 
 ## Key files
 
@@ -42,4 +45,5 @@ flowchart LR
 
 ```sh
 pnpm --filter @intentic/extension-manifest schema   # regenerate both copies of the authoring schema
+pnpm --filter @intentic/extension-manifest test     # the bundle scanner, the permission grammar, every power counting
 ```

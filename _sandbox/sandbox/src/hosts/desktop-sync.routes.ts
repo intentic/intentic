@@ -1,8 +1,9 @@
-import { DeviceReportSchema, MachineIdSchema } from "@intentic/sandbox-contract";
+import { DeviceReportSchema, type SyncEnrollmentAnswer, type SyncEnrollmentRequest, SyncEnrollmentRequestSchema } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import { revokeCardlessHost } from "./host-peer.js";
+import { sshdHostKey } from "./desktop-sync-ssh.js";
 import type { AppEnv } from "../app-env.js";
 import {
     deviceReports,
@@ -42,14 +43,15 @@ export const createSyncRoutes = (services: Services) => ({
                 return denied;
             }
         }
-        const body = (await c.req.json().catch(() => undefined)) as { key?: unknown; machineId?: unknown; environment?: unknown } | undefined;
-        const key = typeof body?.key === "string" ? body.key : undefined;
-        // Which computer and install is enrolling, when its agent is new enough to say; a malformed id is left unsaid.
-        const machineId = MachineIdSchema.safeParse(body?.machineId).data;
-        const environment = typeof body?.environment === "string" && body.environment !== "" ? body.environment : undefined;
-        if (key === undefined || !isValidAuthorizedKey(key)) {
+        const raw: unknown = await c.req.json().catch(() => undefined);
+        // Which computer and install is enrolling, when its agent is new enough to say; an identity that does not parse
+        // is left unsaid rather than refusing the key it came with.
+        const body: SyncEnrollmentRequest | undefined =
+            SyncEnrollmentRequestSchema.safeParse(raw).data ?? SyncEnrollmentRequestSchema.pick({ key: true }).safeParse(raw).data;
+        if (body === undefined || !isValidAuthorizedKey(body.key)) {
             return c.json({ error: "invalid key" }, 400);
         }
+        const { key, machineId, environment } = body;
         // Mode comes from the pairing, never the agent: a member's pairing can only enroll mirror.
         const mode: SyncMode = paired ?? "sync";
         // Sync enroll is single-holder: a conflict returns 423 before consuming the token, so a retry can reuse it.
@@ -63,7 +65,18 @@ export const createSyncRoutes = (services: Services) => ({
             await services.syncPairings.consume(pair);
         }
         // No address returned: the agent reaches sshd via this daemon's own sync-ssh route, at the URL it already uses.
-        return c.json({ ok: true, syncToken: result.syncToken, mode });
+        // The key that sshd presents rides along, so the agent pins it instead of trusting the first one it is shown;
+        // an unreadable one costs the pin, never the enrollment that already happened.
+        const answer: SyncEnrollmentAnswer = { ok: true, syncToken: result.syncToken, mode };
+        try {
+            const hostKey = await sshdHostKey(services.config.historyRoot);
+            if (hostKey !== undefined) {
+                answer.hostKey = hostKey;
+            }
+        } catch (err) {
+            services.logger.warn({ err }, "sync enrollment: the sshd host key could not be read, the machine will trust it on first use");
+        }
+        return c.json(answer);
     },
     /** GET /system/sync */
     state: async (c: Context<AppEnv>): Promise<Response> => {

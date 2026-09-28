@@ -8,6 +8,8 @@ import type { useUploadQueue } from "../../files/upload/useUploadQueue";
 import { joinPath } from "../entryNames";
 import type { LandedEntry } from "../fileNesting";
 import { filesOffered } from "../transfer/dragSource";
+import { supportsRoute } from "../../../sandbox/overview/useDaemonRoutes";
+import { VERB_ROUTES } from "../entryMenu";
 import { movableInto, pastePairs } from "../transfer/explorerPaste";
 import { beginEntryDrag, useEntryDrag } from "../transfer/useEntryDrag";
 import type { useWorkspaceTree } from "../useWorkspaceTree";
@@ -46,7 +48,11 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
 
     // Stages the selection, or the lead alone when nothing is selected. `async` also writes the paths as text to the OS
     // clipboard, since the menu has no clipboard event to hook.
+    // Nothing is staged for a paste the backend could not make (a folder on this computer moves and copies nothing).
     const stage = (mode: "copy" | "cut", system: "async" | "event"): readonly string[] => {
+        if (!supportsRoute(mode === `cut` ? VERB_ROUTES.cut : VERB_ROUTES.copy)) {
+            return [];
+        }
         const led = lead.value;
         const paths = rules.unlockedOnly(selection.value.size > 0 ? [...selection.value] : led !== null ? [led] : []);
         if (paths.length === 0) {
@@ -165,8 +171,9 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
     const onPointerDown = (event: PointerEvent, path: string): void => {
         const edit = host.inline.edit.value;
         const modified = event.shiftKey || event.ctrlKey || event.metaKey || event.altKey;
+        // A backend that moves nothing (a folder on this computer) has no drag to offer: the press stays a click.
         const held =
-            modified || (edit.kind === `renaming` && edit.path === path)
+            modified || (edit.kind === `renaming` && edit.path === path) || !supportsRoute(VERB_ROUTES.cut)
                 ? []
                 : // Dragging a selected entry moves the whole selection; otherwise just that entry.
                   rules.unlockedOnly(selection.value.has(path) ? [...selection.value] : [path]);
@@ -233,7 +240,7 @@ export const useTreeTransfer = (host: TreeTransferHost) => {
     // Unpacks an archive into the folder holding it, selected once the daemon answers: only it can say what the entry is
     // called, and a guessed name would mark the wrong row whenever the archive turned out to hold its own folder.
     const extract = async (path: string): Promise<void> => {
-        if (rules.refuseIn(host.targetDir(path))) {
+        if (!supportsRoute(VERB_ROUTES.extract) || rules.refuseIn(host.targetDir(path))) {
             return;
         }
         await store.run(async () => {

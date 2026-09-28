@@ -12,7 +12,7 @@
         "generate:icons": "node scripts/icons.mjs",
         "stage:downloads": "bash scripts/stage-local-downloads.sh",
         "stage:scripts": "bash ../../_tools/scripts/desktop/stage-desktop-scripts.sh",
-        "typecheck": "vue-tsc --noEmit -p tsconfig.json && vue-tsc --noEmit -p tsconfig.local.json",
+        "typecheck": "vue-tsc --noEmit -p tsconfig.json && vue-tsc --noEmit -p tsconfig.local.json && vue-tsc --noEmit -p tsconfig.test.json",
         "test": "suites",
         "test:watch": "suites --watch",
         "test:rust": "pnpm stage:scripts && pnpm stage:local && cargo test --manifest-path src-tauri/Cargo.toml",

@@ -1,6 +1,6 @@
 import { json, serve, servedProcedures } from "@intentic/contract-serve";
 import type { LocalFolder, LocalOffice } from "@intentic/ext-onlyoffice/local-office";
-import { RAW_ROUTE_LIST, SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
+import { RAW_ROUTE_LIST, type RawRouteKey, SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
 import { type Grant, type Grants, mayWrite } from "./grants.js";
 import { cleanRelPath, resolveExisting } from "./paths.js";
 import { type ProcedureContext, proceduresFor } from "./procedures.js";
@@ -21,6 +21,8 @@ export interface ServerDeps {
     // The app's own page origins (`tauri://localhost`, `http://tauri.localhost`, a dev server's).
     readonly origins: ReadonlySet<string>;
     readonly log: (line: string) => void;
+    // One upload's cap in bytes; MAX_WRITE_BYTES (files.ts) unless a test sets it lower.
+    readonly writeCap?: number;
 }
 
 export interface LocalFilesServer {
@@ -30,6 +32,8 @@ export interface LocalFilesServer {
 }
 
 const HOSTS = [`127.0.0.1`, `localhost`, `[::1]`];
+
+const HEALTH = `GET /health` satisfies RawRouteKey;
 
 // The answer to a browser's preflight from one of the app's pages: what it may send, and for how long it may cache that.
 const preflightAnswer = (request: Request, cors: Readonly<Record<string, string>>): Response => {
@@ -65,9 +69,11 @@ export const createLocalFilesServer = (deps: ServerDeps): LocalFilesServer => {
     const handlerFor = (grant: Grant): ((request: Request, url: URL) => Promise<Response>) => {
         let handler = handlers.get(grant.token);
         if (handler === undefined) {
-            const procedures = proceduresFor(grant, deps.context);
-            const raw = rawFor(grant, deps.office, folderOf(grant));
-            const served = new Set<string>([...servedProcedures(procedures), ...Object.keys(raw)]);
+            const raw = rawFor(grant, deps.office, folderOf(grant), deps.writeCap);
+            // What this side answers outside oRPC, the health probe the gates below answer included.
+            const rawServed = [HEALTH, ...Object.keys(raw)];
+            const procedures = proceduresFor(grant, deps.context, rawServed);
+            const served = new Set<string>([...servedProcedures(procedures), ...rawServed]);
             const unserved = Object.fromEntries(
                 [...SANDBOX_ROUTE_NAMES, ...RAW_ROUTE_LIST.map((route) => route.name)].filter((name) => !served.has(name)).map((name) => [name, NO_SANDBOX]),
             );

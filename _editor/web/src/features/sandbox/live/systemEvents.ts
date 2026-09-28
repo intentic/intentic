@@ -72,7 +72,7 @@ const applyHello = (event: Extract<SystemEvent, { kind: `hello` }>, sandboxId: s
     // Wakes held for approval arrive only via GET /agents, never the stream, so refetch them explicitly on every hello.
     void refreshAgents();
     // Route surface gates features for the rest of this connection; shapes ride the same frame.
-    setDaemonRoutes(event.routes, event.shapes);
+    setDaemonRoutes(event.routes, event.shapes, event.surface);
     // Daemon boot state, needed before other daemon queries are allowed to fire this tick.
     setDaemonBoot(event.boot);
     // Between events a cached read is taken as true (staleTime, queryPersistence), which makes a (re)connect the one

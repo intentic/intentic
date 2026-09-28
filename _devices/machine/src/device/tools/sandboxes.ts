@@ -18,6 +18,7 @@ import {
 import { z } from "zod";
 import { assertScope } from "../policy.js";
 import { ensureCurrentIc, icCandidates } from "./ic-binary.js";
+import { inFlightMarks } from "./in-flight.js";
 
 // The Intentic sandboxes running on this machine. A sandbox can't see its siblings itself (its docker socket
 // isn't mounted), so this is the only place "what runs here, start that one back up" can be answered. Scopes
@@ -102,12 +103,25 @@ export const fleet = async (): Promise<DeviceSandbox[]> => {
 // Which slugs an `ic` flow is touching right now, in this process. The background rounds (auto-prepare, the daily
 // backup, the probation watch) read it so a timer never starts work under an update someone is watching stream. Only
 // advisory: a person's click never waits on the timer's work, and the flows race benignly.
-export const icInFlight = new Set<string>();
+const flows = inFlightMarks();
+export const icInFlight: ReadonlySet<string> = flows.slugs;
 
 // The subset of those flows that move a container (every one but a prepare, a shape saved for later and its forget):
 // what an agent restart must not land in the middle of. A separate process's upgrade cannot see this set, and reads
 // ic's own record of the cutover instead (swap-records.ts).
-export const icSwapsInFlight = new Set<string>();
+const swaps = inFlightMarks();
+export const icSwapsInFlight: ReadonlySet<string> = swaps.slugs;
+
+// Marks one flow on `slug` in both sets it belongs to until the returned release runs. Counted per flow, so two flows
+// overlapping on one slug keep it marked until the second ends; the release is safe to call twice.
+export const holdIcFlow = (slug: string, { moves }: { readonly moves: boolean }): (() => void) => {
+    const releaseFlow = flows.hold(slug);
+    const releaseSwap = moves ? swaps.hold(slug) : undefined;
+    return () => {
+        releaseFlow();
+        releaseSwap?.();
+    };
+};
 
 // The answer is the JSON itself: the daemon's Devices view reads it verbatim (device-reports.ts), and a model
 // reads keys as well as prose.
@@ -449,15 +463,11 @@ export const icFlow = async (
     onLine: (line: string) => void,
     { env = {}, moves }: { readonly env?: Readonly<Record<string, string>>; readonly moves: boolean },
 ): Promise<{ code: number; output: string }> => {
-    icInFlight.add(slug);
-    if (moves) {
-        icSwapsInFlight.add(slug);
-    }
+    const release = holdIcFlow(slug, { moves });
     try {
         return await runIc(args, onLine, env);
     } finally {
-        icInFlight.delete(slug);
-        icSwapsInFlight.delete(slug);
+        release();
     }
 };
 

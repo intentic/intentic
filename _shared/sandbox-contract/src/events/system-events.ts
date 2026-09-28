@@ -56,6 +56,10 @@ export const HelloSchema = z.object({
     // A project sandbox's folder, workspace-relative (`my-app` for /work/my-app): the owner's own folder, synced live
     // with their computer, which the browser scopes the workspace to on arrival. Absent on every other sandbox.
     projectDir: z.string().optional(),
+    // What answers: a sandbox's daemon, or the desktop app's sidecar serving a folder on the user's own computer
+    // (_devices/local-files), whose `routes` are the few a folder has rather than a daemon's missing ones. Absent reads
+    // as a sandbox, which every daemon before this field was.
+    surface: z.enum(["sandbox", "folder"]).optional(),
 });
 export type Hello = z.infer<typeof HelloSchema>;
 

@@ -3219,6 +3219,9 @@
         "usageChart": {
             "n7Days": "7 días"
         },
+        "useDaemonRoutes": {
+            "folderLacks": "«{route}» no está disponible para una carpeta de este ordenador, solo en un sandbox."
+        },
         "useDevRebuild": {
             "rebuildSwapsSandboxOnto": "Tu reconstrucción pasa este sandbox a su imagen nueva cuando termina: medio minuto de silencio aproximadamente, y luego esta página se reconecta sola. Tus archivos en /work se conservan.",
             "restartingOntoImageBuilt": "Reiniciando sobre la imagen que construiste"

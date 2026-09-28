@@ -227,6 +227,15 @@
         "e2e:mobile": {
             "cache": false
         },
+        // The desktop app's local face (_tools/e2e/local-face): its built bundle in Chromium over the real
+        // intentic-files sidecar, granted a temp folder, with no Tauri. Hermetic like e2e:mobile, and for the same
+        // reason no dependsOn: the harness builds the face itself (its global setup), since the face is built from
+        // source and a CI workspace keeps an older `dist`. It runs in CI (`local-face` in ci.yml), which is why the
+        // browser's location passes through: the job installs it under /ci-cache, not $HOME.
+        "e2e:local": {
+            "cache": false,
+            "passThroughEnv": ["PLAYWRIGHT_BROWSERS_PATH", "LOCAL_FACE_REUSE_BUILD"]
+        },
         "bench:retrieval": {
             "dependsOn": ["^build", "build"],
             "cache": false,

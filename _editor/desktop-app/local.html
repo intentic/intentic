@@ -36,11 +36,13 @@
             } catch (e) {}
         </script>
 <!-- The runtime config the editor reads while its modules evaluate (src/app/environments/environment.ts). Its platform
-             is a stand-in answered inside the page (local/platform.ts); a local window talks to no server of ours. -->
+             is a stand-in answered inside the page (local/platform.ts), at the origin local/origin.ts names: the slot
+             below is filled as the page is served and built (vite.local.config.ts). A local window talks to no server
+             of ours. -->
         <script>
             window.env = {
                 production: true,
-                api: { url: "https://platform.local.invalid" },
+                api: { url: "%LOCAL_PLATFORM_ORIGIN%" },
                 auth: { googleClientId: "" },
                 analytics: { posthogKey: "", posthogHost: "" },
                 afterSignOut: "/",

@@ -515,6 +515,37 @@ export const DeviceSyncSchema = z.object({
     environment: z.string().optional(),
 });
 export type DeviceSync = z.infer<typeof DeviceSyncSchema>;
+
+// A public host key as a machine pins it in known_hosts: its type and base64 body, no comment and nothing after.
+export const SshHostKeySchema = z
+    .string()
+    .regex(/^(?:ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(?:256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+/]+={0,2}$/);
+
+// POST /system/authorized-key: a machine's agent enrolling its SSH key for desktop sync, redeeming a pairing token.
+// Every field past `key` is optional: an older agent sends none of them and is still enrolled.
+export const SyncEnrollmentRequestSchema = z.object({
+    // One authorized_keys line; its comment is the name the enrollment goes by (`DeviceSync.machine`).
+    key: z.string(),
+    // The computer and the environment on it that are enrolling, so the enrollment joins that machine's card.
+    machineId: MachineIdSchema.optional(),
+    environment: z.string().min(1).optional(),
+});
+export type SyncEnrollmentRequest = z.infer<typeof SyncEnrollmentRequestSchema>;
+
+// The daemon's answer to an enrollment. Every field is optional for the agent reading it, since each arrived in a later
+// daemon than the route: without `syncToken` the agent refuses the enrollment, without `mode` it reads "sync", and
+// without `hostKey` it falls back to recording whatever key the sandbox presents first.
+export const SyncEnrollmentAnswerSchema = z.object({
+    ok: z.literal(true).optional(),
+    // Authorizes the ports poll, the machine report and the SSH transport, sent as `x-intentic-sync`.
+    syncToken: z.string().optional(),
+    // What the pairing granted: a member's pairing only ever enrolls "mirror".
+    mode: z.enum(["sync", "mirror"]).optional(),
+    // The public key the sandbox's sshd presents (an SshHostKeySchema line), for the agent to pin under the pairing's
+    // alias. Checked by the agent on its own, so a key it cannot read costs the pin, never the enrollment.
+    hostKey: z.string().optional(),
+});
+export type SyncEnrollmentAnswer = z.infer<typeof SyncEnrollmentAnswerSchema>;
 export const DeviceSchema = z.object({
     // Stable row key: the reported hostname when either door produced one, else the name that door knows it by.
     key: z.string(),

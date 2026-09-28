@@ -48,7 +48,29 @@ export interface EntryMenuInput {
     readonly lead?: readonly MenuItem[];
     readonly tail?: readonly MenuItem[];
     readonly verbs: EntryVerbs;
+    // Whether the backend answers a contract route (`supportsRoute`): a verb whose route it does not serve is left out
+    // rather than offered to fail. Everything is served when absent.
+    readonly serves?: (route: string) => boolean;
 }
+
+// The contract route behind each verb a backend may not serve. A folder on the user's own computer serves none of them
+// (the desktop app's sidecar, which says what it does serve). New File and Keep folder write through the upload route
+// every backend has, Paste pastes only what Cut or Copy staged, and Download is below.
+export const VERB_ROUTES = {
+    newFolder: `workspace.mkdir`,
+    rename: `workspace.move`,
+    cut: `workspace.move`,
+    copy: `workspace.copy`,
+    remove: `workspace.delete`,
+    extract: `workspace.extract`,
+    openTerminal: `system.terminals`,
+} as const satisfies Partial<Record<keyof EntryVerbs, string>>;
+
+// A folder or a selection downloads as one ZIP the backend writes, by a download ticket. One file is always on offer: it
+// comes by a media ticket, or from its bytes where the backend mints none (downloadEntries.ts).
+export const ZIP_ROUTE = `workspace.downloadTicket`;
+
+const offers = (input: Pick<EntryMenuInput, "serves">, route: string): boolean => input.serves?.(route) ?? true;
 
 const lockedNote = (): MenuItem => ({ label: t(`workspace.words.keptPrivateBySandbox`), icon: `lock`, disabled: true });
 const readOnlyNote = (): MenuItem => ({ label: t(`workspace.words.readOnlyChangingFiles`), icon: `lock`, disabled: true });
@@ -57,8 +79,9 @@ const archiveNote = (): MenuItem => ({ label: t(`workspace.words.insideArchiveEx
 const withSeparator = (items: readonly MenuItem[]): MenuItem[] => (items.length === 0 ? [] : [{ separator: true }, ...items]);
 
 // Says up front that a folder or a selection arrives zipped, so the file that lands is the one the row promised.
-const downloadRow = ({ target, multi, count, verbs }: EntryMenuInput): MenuItem[] => {
-    if (target === undefined) {
+const downloadRow = (input: EntryMenuInput): MenuItem[] => {
+    const { target, multi, count, verbs } = input;
+    if (target === undefined || ((multi || target.type === `dir`) && !offers(input, ZIP_ROUTE))) {
         return [];
     }
     const label = multi
@@ -83,19 +106,22 @@ const joinGroups = (...groups: readonly (readonly MenuItem[])[]): MenuItem[] =>
 // (`lead`) are dropped with the rest, since none of them mean anything about a copy the daemon keeps out of sight.
 const archiveMenu = (input: EntryMenuInput): MenuItem[] => {
     const { target, multi, count, head = [], tail = [], verbs } = input;
-    const reads: MenuItem[] =
-        target === undefined ? [] : [{ label: multi ? `Copy ${count} items` : `Copy`, icon: `copy`, command: verbs.copy }, ...downloadRow(input)];
+    const copyRow: MenuItem[] = offers(input, VERB_ROUTES.copy) ? [{ label: multi ? `Copy ${count} items` : `Copy`, icon: `copy`, command: verbs.copy }] : [];
+    const reads: MenuItem[] = target === undefined ? [] : [...copyRow, ...downloadRow(input)];
     return joinGroups(head, reads, tail, [archiveNote()]);
 };
 
 // The rows that can only ever name one entry, which is why a bulk selection has none of them.
-const soleVerbs = (target: WorkspaceTreeEntry, barren: boolean, verbs: EntryVerbs): MenuItem[] => {
+const soleVerbs = (target: WorkspaceTreeEntry, input: EntryMenuInput): MenuItem[] => {
+    const { barren, verbs } = input;
     const items: MenuItem[] = [];
     // Offered by the same rule the daemon unpacks by, so the row can't promise what it would then refuse.
-    if (target.type === `file` && archiveFormat(target.name) !== undefined) {
+    if (target.type === `file` && archiveFormat(target.name) !== undefined && offers(input, VERB_ROUTES.extract)) {
         items.push({ label: t(`workspace.entryMenu.extract`), icon: `box`, command: verbs.extract });
     }
-    items.push({ label: t(`ui.action.rename`), icon: `pencil`, command: verbs.rename });
+    if (offers(input, VERB_ROUTES.rename)) {
+        items.push({ label: t(`ui.action.rename`), icon: `pencil`, command: verbs.rename });
+    }
     // Marks a barren folder intentional via a placeholder: durable, visible to git, not a private exclusion flag.
     if (target.type === `dir` && barren) {
         items.push({ label: t(`workspace.entryMenu.keepFolder`), icon: `check-circle`, command: verbs.keepFolder });
@@ -103,20 +129,22 @@ const soleVerbs = (target: WorkspaceTreeEntry, barren: boolean, verbs: EntryVerb
     return items;
 };
 
+// Two groups, each after a rule: what changes the entry itself, then what carries it elsewhere.
 const entryVerbs = (input: EntryMenuInput): MenuItem[] => {
-    const { target, multi, count, barren, verbs } = input;
+    const { target, multi, count, verbs } = input;
     if (target === undefined) {
         return [];
     }
-    return [
-        { separator: true },
-        ...(multi ? [] : soleVerbs(target, barren, verbs)),
-        { label: multi ? `Delete ${count} items` : `Delete`, icon: `trash`, command: verbs.remove },
-        { separator: true },
-        { label: multi ? `Cut ${count} items` : `Cut`, icon: `arrows-h`, command: verbs.cut },
-        { label: multi ? `Copy ${count} items` : `Copy`, icon: `copy`, command: verbs.copy },
+    const changes: MenuItem[] = [
+        ...(multi ? [] : soleVerbs(target, input)),
+        ...(offers(input, VERB_ROUTES.remove) ? [{ label: multi ? `Delete ${count} items` : `Delete`, icon: `trash`, command: verbs.remove }] : []),
+    ];
+    const carries: MenuItem[] = [
+        ...(offers(input, VERB_ROUTES.cut) ? [{ label: multi ? `Cut ${count} items` : `Cut`, icon: `arrows-h`, command: verbs.cut }] : []),
+        ...(offers(input, VERB_ROUTES.copy) ? [{ label: multi ? `Copy ${count} items` : `Copy`, icon: `copy`, command: verbs.copy }] : []),
         ...downloadRow(input),
     ];
+    return [...withSeparator(changes), ...withSeparator(carries)];
 };
 
 export const entryMenuItems = (input: EntryMenuInput): MenuItem[] => {
@@ -134,9 +162,9 @@ export const entryMenuItems = (input: EntryMenuInput): MenuItem[] => {
         ...head,
         ...(head.length > 0 ? [{ separator: true }] : []),
         { label: t(`workspace.entryMenu.newFile`), icon: `file`, command: verbs.newFile },
-        { label: t(`workspace.entryMenu.newFolder`), icon: `folder`, command: verbs.newFolder },
+        ...(offers(input, VERB_ROUTES.newFolder) ? [{ label: t(`workspace.entryMenu.newFolder`), icon: `folder`, command: verbs.newFolder }] : []),
         ...lead,
-        ...(input.target?.type === `dir` && !input.multi
+        ...(input.target?.type === `dir` && !input.multi && offers(input, VERB_ROUTES.openTerminal)
             ? [{ label: t(`workspace.entryMenu.openTerminal`), icon: `terminal`, command: verbs.openTerminal }]
             : []),
         ...entryVerbs(input),

@@ -1,15 +1,15 @@
-import type { HostedPlanState, SandboxSummary, TrashedSandbox, User } from "@intentic/api-contract";
+import { apiContract, type HostedPlanState, type SandboxSummary, type TrashedSandbox, type User } from "@intentic/api-contract";
 import { FREE_TIER, hostedTier } from "@intentic/constants";
 import { inviteRecords } from "./fixture/access";
 import { DESK_SANDBOX_NAME } from "./fixture/desk";
 import { deskEdition, demoTier } from "./mode";
 import { DEMO_DAEMON_ORIGIN, json } from "./transport";
 
-// Fetch handler for the three router gates before the workspace renders:
+// Fetch handler for the platform's half of the gates before the workspace renders:
 // GET /api/auth/get-session — session probe
 // GET /rpc/sandbox/list — zero sandboxes bounces to /setup
-// GET /rpc/billing/plan — the account badge, read lazily
-// `daemonUrl` points the sandbox client at the demo daemon's origin.
+// `daemonUrl` points the sandbox client at the demo daemon's origin. Every /rpc answer is keyed by the api contract's
+// own procedure (PlatformAnswers), so one the contract drops fails the typecheck here rather than being answered forever.
 
 export const DEMO_USER: User = { id: `demo-user`, email: `ada@acme.dev`, name: `Ada Lovelace`, image: null };
 
@@ -99,27 +99,63 @@ const SESSION = {
 // The accept link a demo invite hands back, pointing at the demo's own copy of that page.
 const INVITE_LINK = `${window.location.origin}${import.meta.env.BASE_URL}invite/demo-token`;
 
+type Api = typeof apiContract;
+
+// What a procedure answers, read off its output schema's Standard Schema types: the shape the editor's client expects.
+type OutputOf<C> = C extends { readonly "~orpc": { readonly outputSchema?: infer S } }
+    ? S extends { readonly "~standard": { readonly types?: infer T } }
+        ? NonNullable<T> extends { readonly output: infer O }
+            ? O
+            : never
+        : never
+    : never;
+
+// The procedures the demo stands in for, each held to its own output type.
+type PlatformAnswers = { readonly [G in keyof Api]?: { readonly [P in keyof Api[G]]?: () => OutputOf<Api[G][P]> } };
+
 // The platform's half of the Access tab. Its shape is the contract's (`members`, never `invites`), and its writes
 // are the mirror the real ones are: the tier and the cards were already pushed to the daemon by the owner's browser
 // before any of these is called, so each answers with the roster rather than writing it again.
 // A demo platform can't send mail, which is the `local-link` an owner is handed instead.
-const invite = (path: string): Response | undefined => {
-    switch (path) {
-        case `/rpc/invite/list`:
-        // `setRole` answers at /invite/role, and `create`/`resend` add the link to the same roster.
-        case `/rpc/invite/role`:
-        case `/rpc/invite/revoke`:
-            return json({ members: inviteRecords() });
-        case `/rpc/invite/create`:
-        case `/rpc/invite/resend`:
-            return json({ members: inviteRecords(), link: INVITE_LINK, delivery: `local-link` });
+const roster = () => ({ members: inviteRecords() });
+const sent = () => ({ members: inviteRecords(), link: INVITE_LINK, delivery: `local-link` as const });
+
+const ANSWERS: PlatformAnswers = {
+    sandbox: {
+        list: () => ({ sandboxes: [DEMO_SANDBOX] }),
+        trash: () => ({ sandboxes: [...DEMO_TRASH] }),
+    },
+    // Plan's on/off answer decides whether Settings shows the Billing tab.
+    hostedPlan: { state: () => DEMO_HOSTED_PLAN },
+    me: { get: () => DEMO_USER },
+    invite: {
+        list: roster,
+        setRole: roster,
+        revoke: roster,
+        create: sent,
+        resend: sent,
         // What the standalone accept page (/demo/invite/:token) reads; a demo link is always the one still pending.
-        case `/rpc/invite/preview`:
-            return json({ status: `pending`, sandboxName: DEMO_SANDBOX.name, invitedEmail: `rin@acme.dev`, role: `viewer` });
-        default:
-            return undefined;
-    }
+        preview: () => ({ status: `pending`, sandboxName: DEMO_SANDBOX.name, invitedEmail: `rin@acme.dev`, role: `viewer` }),
+    },
 };
+
+// A procedure's route path, read structurally as contract-serve reads the sandbox contract: `~orpc` is oRPC's own
+// metadata, which the contract's types do not spell.
+type RouteTables = Readonly<Record<string, Readonly<Record<string, { readonly "~orpc": { readonly route: { readonly path?: string } } } | undefined>> | undefined>>;
+// SAFETY: every group of apiContract is a record of oRPC procedures, each carrying its route under `~orpc`; a group or
+// name the contract lacks reads as undefined.
+const routeOf = (group: string, name: string): string | undefined => (apiContract as RouteTables)[group]?.[name]?.[`~orpc`].route.path;
+
+// Each answer at the path the editor's OpenAPILink calls it by: `/rpc` and the procedure's own route. Every output the
+// contract declares is an object, or null for no signed-in user.
+const ROUTED = new Map<string, () => Response>(
+    Object.entries(ANSWERS).flatMap(([group, procedures]) =>
+        Object.entries(procedures ?? {}).flatMap(([name, answer]: [string, (() => object | null) | undefined]) => {
+            const path = routeOf(group, name);
+            return path === undefined || answer === undefined ? [] : [[`/rpc${path}`, () => json(answer())] as const];
+        }),
+    ),
+);
 
 export const platform = async (request: Request, url: URL): Promise<Response> => {
     const path = url.pathname;
@@ -129,25 +165,10 @@ export const platform = async (request: Request, url: URL): Promise<Response> =>
         return json(path.endsWith(`/get-session`) ? SESSION : { ok: true });
     }
 
-    const invited = invite(path);
-    if (invited !== undefined) {
-        return invited;
+    const answer = ROUTED.get(path);
+    if (answer !== undefined) {
+        return answer();
     }
-
-    switch (path) {
-        case `/rpc/sandbox/list`:
-            return json({ sandboxes: [DEMO_SANDBOX] });
-        case `/rpc/sandbox/trash`:
-            return json({ sandboxes: DEMO_TRASH });
-        case `/rpc/billing/plan`:
-            return json({ plan: `pro`, entitlements: { sandboxes: 5, members: 10 } });
-        // Plan's on/off answer decides whether Settings shows the Billing tab.
-        case `/rpc/hosted-plan`:
-            return json(DEMO_HOSTED_PLAN);
-        case `/rpc/me`:
-            return json(DEMO_USER);
-        default:
-            console.info(`[demo] no fixture route for the platform's ${request.method} ${path}`);
-            return json({ message: `The demo doesn't serve ${path}.` }, 404);
-    }
+    console.info(`[demo] no fixture route for the platform's ${request.method} ${path}`);
+    return json({ message: `The demo doesn't serve ${path}.` }, 404);
 };

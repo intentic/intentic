@@ -3204,6 +3204,9 @@
         "usageChart": {
             "n7Days": "7 Tage"
         },
+        "useDaemonRoutes": {
+            "folderLacks": "„{route}“ gibt es für einen Ordner auf diesem Computer nicht, nur in einer Sandbox."
+        },
         "useDevRebuild": {
             "rebuildSwapsSandboxOnto": "Ihr Neubau wechselt diese Sandbox auf ihr neues Image, sobald er fertig ist: etwa eine halbe Minute Ruhe, dann verbindet sich diese Seite von selbst wieder. Ihre Dateien in /work bleiben erhalten.",
             "restartingOntoImageBuilt": "Startet auf dem Image neu, das Sie gebaut haben"

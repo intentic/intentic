@@ -5,11 +5,11 @@
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
+import { addEdge, cyclesOf } from "./lib/cycle-edges.mjs";
 import { importsOf } from "./lib/imports.mjs";
 import { ratchet } from "./lib/ratchet.mjs";
 import { finish } from "./lib/report.mjs";
 import { root } from "./lib/repo.mjs";
-import { stronglyConnected } from "./lib/strongly-connected.mjs";
 
 const src = join(root, "_sandbox/sandbox/src");
 const BASELINE_PATH = "_tools/checks/baselines/daemon-cycles.json";
@@ -109,13 +109,6 @@ const reportCalls = sources.flatMap(({ file, text }) =>
 
 // from -> to -> every `file:line` that makes the edge: value imports only, root files excluded on both ends.
 const edges = new Map();
-const addEdge = (from, to, site) => {
-    if (from === undefined || to === undefined || from === to) {
-        return;
-    }
-    const targets = edges.get(from) ?? edges.set(from, new Map()).get(from);
-    (targets.get(to) ?? targets.set(to, []).get(to)).push(site);
-};
 const targetSubsystem = (file, specifier) => {
     if (!specifier.startsWith(".")) {
         return undefined;
@@ -127,59 +120,12 @@ for (const { file, text } of sources) {
     const from = subsystemOf(file);
     for (const { specifier, typeOnly, line } of from === undefined ? [] : importsOf(text)) {
         if (!typeOnly) {
-            addEdge(from, targetSubsystem(file, specifier), `${relPath(file)}:${line}`);
+            addEdge(edges, from, targetSubsystem(file, specifier), `${relPath(file)}:${line}`);
         }
     }
 }
 
-// Sorted, so a component, a path back and every message come out the same on every run.
-const targetsOf = (node) => [...(edges.get(node)?.keys() ?? [])].sort();
-const nodes = [...new Set([...edges.keys(), ...[...edges.values()].flatMap((targets) => [...targets.keys()])])].sort();
-const componentOf = new Map();
-for (const component of stronglyConnected(nodes, targetsOf)) {
-    for (const node of component) {
-        componentOf.set(node, component);
-    }
-}
-
-// An edge closes a cycle exactly when its two ends share a component, which is the target reaching back to the source.
-const cycleEdges = new Map();
-for (const [from, targets] of edges) {
-    for (const to of targets.keys()) {
-        if (componentOf.get(from) === componentOf.get(to)) {
-            cycleEdges.set(`${from} -> ${to}`, [from, to]);
-        }
-    }
-}
-
-// The shortest way from `to` back to `from`, breadth first: [to, …, from].
-const wayBack = (from, to) => {
-    const previous = new Map([[to, undefined]]);
-    const queue = [to];
-    while (queue.length > 0 && !previous.has(from)) {
-        const node = queue.shift();
-        for (const next of targetsOf(node).filter((candidate) => !previous.has(candidate))) {
-            previous.set(next, node);
-            queue.push(next);
-        }
-    }
-    const path = [];
-    for (let node = from; node !== undefined; node = previous.get(node)) {
-        path.unshift(node);
-    }
-    return path;
-};
-
-const sitesOf = (from, to) => edges.get(from).get(to);
-// One `file:line` per importing file, the first import in it.
-const filesOf = (from, to) => [...new Map(sitesOf(from, to).map((site) => [site.replace(/:\d+$/, ""), site])).values()];
-const closes = ([from, to]) => {
-    const back = wayBack(from, to);
-    const hops = back.slice(1).map((node, at) => `${back[at]} -> ${node} (${sitesOf(back[at], node)[0]})`);
-    const files = filesOf(from, to);
-    const more = files.length > 3 ? ` and ${files.length - 3} more files` : "";
-    return `${from} -> ${to} closes ${[from, ...back].join(" -> ")}: imported at ${files.slice(0, 3).join(", ")}${more}; the way back is ${hops.join(", ")}`;
-};
+const { nodes, cycleEdges, closes } = cyclesOf(edges);
 
 // Each baseline key is one standing edge, its value the reason it stands ("" where none was recorded).
 // An edge stops closing a cycle when any edge on its way back goes, so any daemon source a land changed can lower one.

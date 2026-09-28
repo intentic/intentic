@@ -137,6 +137,7 @@ jobs:
       platform: ${{ steps.filter.outputs.platform }}
       perf-instr: ${{ steps.filter.outputs.perf-instr }}
       perf-browser: ${{ steps.filter.outputs.perf-browser }}
+      local-face: ${{ steps.filter.outputs.local-face }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -297,6 +298,14 @@ jobs:
       # repository suppresses on purpose (.github/zizmor.yml, each with its reason and what would retire it).
       - shell: bash
         run: bash _tools/scripts/verify/lint-workflows.sh
+      # THE CHECKS' OWN SUITES, and the scripts': the node:test files under _tools/checks and _tools/scripts, which
+      # pin what each check refuses (a template-joined route, an extension's manifest, an editor import cycle) and
+      # what verify, the fixers and the release scripts decide. They are plumbing rather than workspace packages, so
+      # `turbo run test` never reaches them; `pnpm verify` runs the same command by hand
+      # (_tools/scripts/verify/verify.mjs). Node's own runner with node's builtins, git and bash: no node_modules,
+      # under two seconds. The globs are quoted for node to expand: the shell reads `**` as `*` and would skip the
+      # suites at the top of _tools/checks.
+      - run: node --test "_tools/scripts/**/*.test.mjs" "_tools/checks/**/*.test.mjs"
 
   # THE FIRST ANSWER A PUSH GETS, a few minutes after it: the packages it changed type-checked, then the push check.
   # Nothing checks a land, a commit or a push on the way out, so this is where what a push broke is first said. The
@@ -936,6 +945,44 @@ jobs:
       - uses: ./.github/actions/pnpm-setup
       - run: pnpm --filter @intentic/perf exec playwright install --with-deps chromium
       - run: pnpm perf:browser
+
+  # The desktop app's local face, the editor a window on a folder shows (_tools/e2e/local-face): built, then booted in
+  # Chromium over the real intentic-files sidecar granted a temp folder, with no Tauri. It fails on what an editor
+  # change breaks there without touching the app: the boot, the tree, a save reaching the disk, and any read of a route
+  # the sidecar does not serve. On `local-face` (affected.mjs), whose graph from @intentic/desktop-app is everything the
+  # face is built from: the editor, the UI kit, the sidecar and the sandbox contract; and the tier's own files.
+  local-face:
+    needs: [changes, preflight]
+    if: ${{ !cancelled() && needs.changes.outputs.local-face == 'true' && needs.preflight.result == 'success' }}
+    runs-on: [self-hosted, intentic]
+    timeout-minutes: 20
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      PNPM_STORE: /ci-cache/pnpm-store
+      TURBO_CACHE_DIR: /ci-cache/turbo
+      # Not $HOME, which a job container maps to a throwaway /github/home.
+      PLAYWRIGHT_BROWSERS_PATH: /ci-cache/ms-playwright
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      - run: pnpm --filter @intentic/e2e exec playwright install --with-deps chromium
+      - run: pnpm e2e:local
+      - uses: ./.github/actions/upload-artifact-retry
+        if: failure()
+        with:
+          name: local-face-results
+          path: _tools/e2e/.cache/local-face-results/
+          retention-days: 7
 
   # The marketing site and the content/integration libs behind it. It gates no deploy — the site publishes from
   # Cloudflare's own git integration, outside this pipeline, so nothing here can stop a bad one — which makes

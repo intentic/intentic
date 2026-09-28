@@ -1,7 +1,10 @@
 import { STATE_DIR } from "@intentic/constants";
 import "@intentic/testing/dom";
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
+import { resetSandboxScope } from "@intentic/extension-api";
+import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
 import type { MenuItem } from "primevue/menuitem";
+import { setDaemonRoutes } from "../../../sandbox/overview/useDaemonRoutes";
 import { dir, file, type SurfaceOptions, treeSurface } from "../../../../testing/treeSurface";
 import type { RowAction } from "../rowActions";
 
@@ -158,6 +161,52 @@ describe(`what the menu offers`, () => {
             [`Copy`, `Download`, `—`, `Inside an archive: extract it to change anything`],
             [`Kept private by the sandbox`],
             [`What src is`, `—`, `Download as ZIP`, `—`, `Read-only: changing files needs writer access`],
+        ]);
+    });
+});
+
+// The menu reads what the backend said it serves (its /events hello): a folder on this computer, through the desktop
+// app's sidecar, serves the tree's reads and the upload route, and none of the verbs that move, copy, delete or unpack.
+describe(`what the backend serves`, () => {
+    const FOLDER = [`workspace.tree`, `workspace.children`, `workspace.file`, `system.events`, `GET /workspace/raw`, `POST /workspace/upload`];
+    afterEach(() => resetSandboxScope());
+
+    it(`hides the verbs a folder on this computer does not serve, and the same verbs reached by key do nothing`, () => {
+        setDaemonRoutes(FOLDER, undefined, `folder`);
+        const { menu, inline, edits, deleting, transfer, store, press, select } = menuOver();
+        press(ZIP);
+        const onArchive = labels(menu.menuItems.value);
+        press(SRC);
+        const onFolder = labels(menu.menuItems.value);
+        select(`app/src/main.ts`, `app/web`);
+        press(MAIN);
+        const onSelection = labels(menu.menuItems.value);
+        expect([onArchive, onFolder, onSelection]).toEqual([
+            [`New File`, `—`, `Download`],
+            [`New File`, `What src is`],
+            [`New File`],
+        ]);
+        // The same verbs reached without the menu (F2, Delete, Ctrl+X and Ctrl+C on the selection) open, stage and send nothing.
+        edits.beginRename(`app/src/main.ts`);
+        edits.beginCreate(`app/src`, `dir`);
+        deleting.requestDelete();
+        expect([inline.edit.value.kind, transfer.stage(`cut`, `event`), transfer.stage(`copy`, `event`), store.removeEntries.mock.calls]).toEqual([
+            `idle`,
+            [],
+            [],
+            [],
+        ]);
+    });
+
+    it(`still offers every verb to a daemon that serves them`, () => {
+        setDaemonRoutes([...SANDBOX_ROUTE_NAMES], undefined, `sandbox`);
+        const { menu, press } = menuOver();
+        press(ZIP);
+        const onArchive = labels(menu.menuItems.value);
+        press(SRC);
+        expect([onArchive, labels(menu.menuItems.value)]).toEqual([
+            [`New File`, `New Folder`, `—`, `Extract`, `Rename`, `Delete`, `—`, `Cut`, `Copy`, `Download`],
+            [`New File`, `New Folder`, `What src is`, `Open Terminal`, `—`, `Rename`, `Delete`, `—`, `Cut`, `Copy`, `Download as ZIP`],
         ]);
     });
 });

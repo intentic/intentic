@@ -45,8 +45,9 @@ flowchart LR
   appear, since two creators racing left one name holding two identical sessions. The agent keeps one session per
   name, terminating any extras, and recreates a session whose rules drifted once there are no conflicts left.
 - `setup` replaces what this agent's `known_hosts` holds for the pairing's alias (hashed entries included): with the
-  host key the enrollment carries when it carries one, else with nothing, so `accept-new` records the key the sandbox
-  presents now. Outside an enrollment a changed key is still refused. A sandbox whose ports poll has failed for ten
+  host key the enrollment carries when it carries one (a sandbox reads its sshd's public key off its history volume and
+  answers with it, `SyncEnrollmentAnswerSchema` in the contract), else with nothing, so `accept-new` records the key
+  the sandbox presents now, as it does for an older sandbox. Outside an enrollment a changed key is still refused. A sandbox whose ports poll has failed for ten
   minutes has its forwards taken off localhost, and they come back with its first answer. `sync uninstall` stops and
   unregisters Mutagen's daemon only when it is this agent's own copy, never a Mutagen the user installed.
 - Symbolic links travel only where the device can create them ([`sync/symlinks.ts`](src/sync/symlinks.ts)). A

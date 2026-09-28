@@ -1,5 +1,5 @@
-import { type FixtureRouter, Frames, refuse } from "@intentic/contract-serve";
-import { type SystemEvent, TRANSLATOR_PROVIDERS, TranslatorAccountsSchema } from "@intentic/sandbox-contract";
+import { type FixtureRouter, Frames, refuse, servedProcedures } from "@intentic/contract-serve";
+import { type Hello, type SystemEvent, TRANSLATOR_PROVIDERS, TranslatorAccountsSchema } from "@intentic/sandbox-contract";
 import type { Grant } from "./grants.js";
 import { readWindow } from "./files.js";
 import { resolveExisting } from "./paths.js";
@@ -8,7 +8,7 @@ import type { Watches } from "./watch.js";
 
 // The contract's procedures a window on a folder needs, answered for that window's grant: the explorer's two reads, the
 // text of a file, the event stream the editor holds open (its liveness, and what moved on disk), and the two extension
-// reads the viewers activate with. Everything else the contract declares is listed in unserved.ts.
+// reads the viewers activate with. Everything else the contract declares answers 404, and server.ts logs why.
 
 // Liveness: the editor's watchdog drops a stream that goes quiet for ten seconds.
 const HEARTBEAT_MS = 2_000;
@@ -53,14 +53,23 @@ export interface ProcedureContext {
     readonly startedAt: number;
 }
 
+// What the hello frame says this side is: a folder, answering exactly these routes. The editor offers only what is
+// listed (useDaemonRoutes.ts in the web app), so a verb a folder has no answer for (New Folder, Delete, a terminal) is
+// not shown rather than refused. No payload fingerprints ride along, as they do from a daemon: the sidecar and the page
+// that reads it ship in one build of the app.
+type Advertised = Required<Pick<Hello, `routes` | `surface`>>;
+
+const advertisedOf = (routes: readonly string[]): Advertised => ({ routes: [...routes].toSorted(), surface: `folder` });
+
 // The event stream a window holds open: its liveness, and what moved on disk under its folder.
-const eventsFor = (grant: Grant, context: ProcedureContext): Frames<SystemEvent> =>
+const eventsFor = (grant: Grant, context: ProcedureContext, advertised: Advertised): Frames<SystemEvent> =>
     new Frames<SystemEvent>((sink) => {
         sink.emit({
             kind: `hello`,
             workspaceId: `local-${grant.id}`,
             build: context.build,
             boot: { ready: true, startedAt: context.startedAt, steps: [] },
+            ...advertised,
         });
         const beat = setInterval(() => sink.emit({ kind: `heartbeat`, rev: 0 }), HEARTBEAT_MS);
         const unsubscribe = context.watches.subscribe(grant.root, (paths) => sink.emit({ kind: `workspaceChanged`, paths: [...paths] }));
@@ -70,13 +79,13 @@ const eventsFor = (grant: Grant, context: ProcedureContext): Frames<SystemEvent>
         };
     });
 
-export const proceduresFor = (grant: Grant, context: ProcedureContext) =>
+// Every procedure but the event stream, which advertises them.
+const readsFor = (grant: Grant) =>
     ({
         ...NO_SANDBOX_CHROME,
         system: {
             // Nobody else looks at a folder on this computer.
             presence: () => ({ ok: true as const }),
-            events: () => eventsFor(grant, context),
         },
         workspace: {
             // A conversation's own copy exists only in a sandbox; asking for one here is asking for nothing.
@@ -101,3 +110,10 @@ export const proceduresFor = (grant: Grant, context: ProcedureContext) =>
             settings: ({ id }) => ({ settings: id === OFFICE_ID ? { engine: `browser` } : {}, secretsSet: [] }),
         },
     }) satisfies FixtureRouter;
+
+// A window's procedures. `raw` names the routes it serves outside oRPC (raw.ts), which its hello advertises beside these.
+export const proceduresFor = (grant: Grant, context: ProcedureContext, raw: readonly string[]) => {
+    const reads = readsFor(grant);
+    const advertised = advertisedOf([...servedProcedures(reads), `system.events`, ...raw]);
+    return { ...reads, system: { ...reads.system, events: () => eventsFor(grant, context, advertised) } } satisfies FixtureRouter;
+};

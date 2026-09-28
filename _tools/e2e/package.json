@@ -7,6 +7,7 @@
         "typecheck": "tsc --noEmit",
         "e2e:browser": "playwright test",
         "e2e:mobile": "node --experimental-strip-types mobile/audit.mts",
+        "e2e:local": "playwright test -c local-face/local-face.playwright.config.ts",
         "smoke:signin": "node smoke-signin.mjs"
     },
     "devDependencies": {

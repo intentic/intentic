@@ -1,6 +1,7 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import type { MenuItem } from "primevue/menuitem";
-import { type EntryMenuInput, type EntryVerbs, entryMenuItems } from "./entryMenu";
+import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
+import { type EntryMenuInput, type EntryVerbs, entryMenuItems, VERB_ROUTES, ZIP_ROUTE } from "./entryMenu";
 
 const file: WorkspaceTreeEntry = { name: `a.ts`, path: `src/a.ts`, type: `file` };
 const dir: WorkspaceTreeEntry = { name: `src`, path: `src`, type: `dir`, children: [] };
@@ -180,5 +181,43 @@ describe(`the entry menu`, () => {
         const remove = entryMenuItems(spec).find((item) => item.label === `Delete`);
         remove?.command?.({ originalEvent: new Event(`click`), item: remove });
         expect(spec.verbs.remove).toHaveBeenCalledTimes(1);
+    });
+
+    // What the desktop app's sidecar answers for a folder on this computer: its reads, and none of the verbs' routes.
+    const FOLDER: ReadonlySet<string> = new Set([`workspace.tree`, `workspace.children`, `workspace.file`, `system.events`, `POST /workspace/upload`]);
+    const zip: WorkspaceTreeEntry = { name: `site.zip`, path: `drops/site.zip`, type: `file` };
+
+    it(`leaves out every verb whose route the backend does not serve, and keeps what it does`, () => {
+        const serves = (route: string): boolean => FOLDER.has(route);
+        expect(labels(entryMenuItems(input({ target: zip, serves })))).toEqual([`New File`, `—`, `Download`]);
+        expect(labels(entryMenuItems(input({ target: dir, barren: true, serves, tail: [{ label: `Collapse Folders` }] })))).toEqual([
+            `New File`,
+            `—`,
+            `Keep folder`,
+            `—`,
+            `Collapse Folders`,
+        ]);
+        expect(labels(entryMenuItems(input({ multi: true, count: 2, serves })))).toEqual([`New File`]);
+        expect(labels(entryMenuItems(input({ canEdit: false, target: dir, serves })))).toEqual([`Read-only: changing files needs writer access`]);
+        expect(labels(entryMenuItems(input({ archived: true, serves })))).toEqual([`Download`, `—`, `Inside an archive: extract it to change anything`]);
+    });
+
+    it(`keeps every verb for a daemon that serves the whole contract`, () => {
+        const daemon: ReadonlySet<string> = new Set(SANDBOX_ROUTE_NAMES);
+        // The routes the menu gates on are this build's own names, or a daemon level with it would lose the rows.
+        expect([...Object.values(VERB_ROUTES), ZIP_ROUTE].filter((route) => !daemon.has(route))).toEqual([]);
+        expect(labels(entryMenuItems(input({ target: zip, serves: (route) => daemon.has(route) })))).toEqual([
+            `New File`,
+            `New Folder`,
+            `—`,
+            `Extract`,
+            `Rename`,
+            `Delete`,
+            `—`,
+            `Cut`,
+            `Copy`,
+            `Download`,
+        ]);
+        expect(labels(entryMenuItems(input({ target: dir, serves: (route) => daemon.has(route) })))).toContain(`Open Terminal`);
     });
 });

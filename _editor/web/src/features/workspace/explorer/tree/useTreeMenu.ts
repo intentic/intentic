@@ -8,6 +8,7 @@ import type { RowAction } from "../rowActions";
 import type { useWorkspaceTree } from "../useWorkspaceTree";
 import type { useTreeRules } from "./useTreeRules";
 import type { MultiSelect } from "../../../../lib/multiSelect";
+import { supportsRoute } from "../../../sandbox/overview/useDaemonRoutes";
 
 // The right-click menu (entryMenu.ts) of a file surface: on a selected entry it acts on the whole selection.
 
@@ -111,6 +112,8 @@ export const useTreeMenu = (host: TreeMenuHost) => {
             lead: dirActionItems(target, multi),
             ...host.frame(target, multi),
             verbs: verbsFor(target, dir, multi),
+            // Read inside the computed, so a hello that arrives later redraws the menu.
+            serves: supportsRoute,
         });
     });
     // Right-clicking outside the current selection collapses it to that one row; inside a multi-selection keeps it.

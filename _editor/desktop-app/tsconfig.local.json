@@ -6,10 +6,13 @@
         "tsBuildInfoFile": "./.cache/tsbuildinfo-local",
         "types": ["vite/client"],
         "paths": {
+            "@intentic/web/main": ["./local/editor-entry.d.ts"],
             "@intentic/web/local": ["../../_editor/web/src/app/environments/local.ts"],
             "@intentic/api-contract": ["../../_shared/api-contract/src/index.ts"]
         }
     },
     "extends": "@intentic/tsconfig/tsconfig.vue.json",
-    "include": ["./local/**/*.ts"]
+    "include": ["./local/**/*.ts"],
+    /* The page's program only: its tests run under bun and are checked by tsconfig.test.json. */
+    "exclude": ["./local/**/*.test.ts"]
 }

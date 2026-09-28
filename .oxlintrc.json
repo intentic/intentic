@@ -462,15 +462,82 @@
                         ],
                         "patterns": [
                             {
+                                // A gitignore `*` stops at `/`, so each name is refused and allowed twice: bare, and
+                                // with a subpath (`@intentic/sandbox/src/x`). The test-file override below repeats
+                                // this group with @intentic/testing added, and _tools/checks/extension-deps.mjs holds
+                                // the manifests to the same list.
                                 "group": [
                                     "@intentic/*",
+                                    "@intentic/*/**",
+                                    "!@intentic/base",
+                                    "!@intentic/base/**",
                                     "!@intentic/connector-runtime",
+                                    "!@intentic/connector-runtime/**",
                                     "!@intentic/extension-api",
+                                    "!@intentic/extension-api/**",
                                     "!@intentic/extension-manifest",
+                                    "!@intentic/extension-manifest/**",
                                     "!@intentic/extension-ui",
-                                    "!@intentic/sandbox-contract"
+                                    "!@intentic/extension-ui/**",
+                                    "!@intentic/sandbox-contract",
+                                    "!@intentic/sandbox-contract/**"
                                 ],
-                                "message": "Extensions may depend only on @intentic/extension-api, @intentic/extension-manifest, @intentic/extension-ui, @intentic/connector-runtime, and @intentic/sandbox-contract — the extension SDK (browser and gateway halves), what it declares, and the shared wire contract. Reaching any other @intentic/* package couples the extension to app/engine internals. See _extensions/README.md."
+                                "message": "Extensions may depend only on @intentic/extension-api, @intentic/extension-manifest, @intentic/extension-ui, @intentic/connector-runtime, @intentic/sandbox-contract and @intentic/base (and their subpaths) — the extension SDK (browser and gateway halves), what it declares, the shared wire contract, and the dependency-free helpers the SDK itself stands on. Reaching any other @intentic/* package couples the extension to app/engine internals. See _extensions/README.md."
+                            },
+                            {
+                                "group": [
+                                    "**/_devices/**",
+                                    "**/_deploy/**",
+                                    "**/_editor/**",
+                                    "**/_platform/**",
+                                    "**/_sandbox/**",
+                                    "**/_search/**",
+                                    "**/_shared/**",
+                                    "**/_site/**"
+                                ],
+                                "message": "Extensions must not reach another package's internals BY PATH — the rule above decides which packages an extension may name, and a relative path is how that decision gets bypassed. Use @intentic/extension-ui for UI and @intentic/sandbox-contract for wire types. See _extensions/README.md."
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            // An extension's suites may also stand on the test kit (a devDependency, never shipped). An override
+            // replaces the rule whole, so the extension override above is repeated with @intentic/testing allowed.
+            "files": ["_extensions/**/*.test.ts", "_extensions/**/*.spec.ts"],
+            "rules": {
+                "no-restricted-imports": [
+                    "error",
+                    {
+                        "paths": [
+                            {
+                                "name": "bun:test",
+                                "allowTypeImports": true,
+                                "message": "A suite uses the globals `bun test` defines (describe, it, expect, jest, …). A value imported from \"bun:test\" shadows them and hides the file from the jest/* rules; import types only (`import type { Mock } from \"bun:test\"`)."
+                            }
+                        ],
+                        "patterns": [
+                            {
+                                "group": [
+                                    "@intentic/*",
+                                    "@intentic/*/**",
+                                    "!@intentic/base",
+                                    "!@intentic/base/**",
+                                    "!@intentic/connector-runtime",
+                                    "!@intentic/connector-runtime/**",
+                                    "!@intentic/extension-api",
+                                    "!@intentic/extension-api/**",
+                                    "!@intentic/extension-manifest",
+                                    "!@intentic/extension-manifest/**",
+                                    "!@intentic/extension-ui",
+                                    "!@intentic/extension-ui/**",
+                                    "!@intentic/sandbox-contract",
+                                    "!@intentic/sandbox-contract/**",
+                                    "!@intentic/testing",
+                                    "!@intentic/testing/**"
+                                ],
+                                "message": "An extension's suites may depend only on what the extension may (@intentic/extension-api, @intentic/extension-manifest, @intentic/extension-ui, @intentic/connector-runtime, @intentic/sandbox-contract, @intentic/base) plus the test kit, @intentic/testing (and their subpaths). Reaching any other @intentic/* package couples the extension to app/engine internals. See _extensions/README.md."
                             },
                             {
                                 "group": [

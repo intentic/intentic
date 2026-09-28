@@ -1,5 +1,14 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { DEV_VERSION, type DevicePairing, type DeviceReport, AGENT_STALL_AFTER_MS, DeviceScopesSchema } from "@intentic/sandbox-contract";
+import {
+    DEV_VERSION,
+    type DevicePairing,
+    type DeviceReport,
+    AGENT_STALL_AFTER_MS,
+    DeviceScopesSchema,
+    SshHostKeySchema,
+    type SyncEnrollmentAnswer,
+    SyncEnrollmentAnswerSchema,
+} from "@intentic/sandbox-contract";
 import { stubGlobal } from "@intentic/testing/bun";
 import { agentLine, buildSkewLine, conflictLines, linkLine, pairingLine, statusSummary } from "../status.js";
 import { enrollKey, placementChange, placementOf, projectAskedWithoutFlag, selectPairings, syncSwitchPlan } from "./commands.js";
@@ -8,6 +17,9 @@ import { syncSessionNames } from "./mutagen.js";
 
 const jsonResponse = (status: number, body: unknown): Response =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+
+// What a daemon answers an enrollment with, held to the shared contract so the fake cannot drift from the real route.
+const enrolledAnswer = (answer: SyncEnrollmentAnswer): Response => jsonResponse(200, SyncEnrollmentAnswerSchema.parse(answer));
 
 afterEach(() => {
     jest.restoreAllMocks();
@@ -18,7 +30,7 @@ describe("enrollKey", () => {
         const fetchMock = jest.fn<typeof fetch>()
             .mockResolvedValueOnce(new Response("bad gateway", { status: 502 }))
             .mockResolvedValueOnce(new Response("bad gateway", { status: 502 }))
-            .mockResolvedValueOnce(jsonResponse(200, { ok: true, syncToken: "ist_tok", mode: "mirror" }));
+            .mockResolvedValueOnce(enrolledAnswer({ ok: true, syncToken: "ist_tok", mode: "mirror" }));
         stubGlobal("fetch", fetchMock);
 
         const enrolled = await enrollKey("https://sandbox-abc.example.dev/", "pair-token", "ssh-ed25519 AAAA", { delayMs: 0 });
@@ -30,17 +42,17 @@ describe("enrollKey", () => {
     // A sandbox that hands its sshd's key over at enrollment is pinned by it (ssh.ts, replaceKnownHost); anything that is
     // not a public key line is dropped rather than written into known_hosts.
     it("carries the host key a sandbox hands over, and only a real key line", async () => {
-        const key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHostHostHostHostHostHostHostHostHostHost";
-        stubGlobal("fetch", jest.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse(200, { syncToken: "ist_tok", mode: "sync", hostKey: key })));
+        const key = SshHostKeySchema.parse("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHostHostHostHostHostHostHostHostHostHost");
+        stubGlobal("fetch", jest.fn<typeof fetch>().mockResolvedValueOnce(enrolledAnswer({ ok: true, syncToken: "ist_tok", mode: "sync", hostKey: key })));
         expect(await enrollKey("https://sandbox-abc.example.dev", "pair", "key", { delayMs: 0 })).toEqual({ syncToken: "ist_tok", mode: "sync", hostKey: key });
-        stubGlobal("fetch", jest.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse(200, { syncToken: "ist_tok", hostKey: `${key}\nevil ${key}` })));
+        stubGlobal("fetch", jest.fn<typeof fetch>().mockResolvedValueOnce(enrolledAnswer({ syncToken: "ist_tok", hostKey: `${key}\nevil ${key}` })));
         expect(await enrollKey("https://sandbox-abc.example.dev", "pair", "key", { delayMs: 0 })).toEqual({ syncToken: "ist_tok", mode: "sync", hostKey: undefined });
     });
 
     it("retries when fetch throws, and defaults mode to sync for a daemon that omits it", async () => {
         const fetchMock = jest.fn<typeof fetch>()
             .mockRejectedValueOnce(new Error("getaddrinfo ENOTFOUND"))
-            .mockResolvedValueOnce(jsonResponse(200, { syncToken: "ist_tok" }));
+            .mockResolvedValueOnce(enrolledAnswer({ syncToken: "ist_tok" }));
         stubGlobal("fetch", fetchMock);
 
         await expect(enrollKey("https://sandbox-abc.example.dev", "pair", "key", { delayMs: 0 })).resolves.toEqual({
@@ -55,11 +67,20 @@ describe("enrollKey", () => {
     // daemon that enrolls the key and hands back nothing to use it with fails here rather than as a Mutagen session
     // that silently never comes up.
     it("refuses an enrollment that comes back without a credential", async () => {
-        const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(jsonResponse(200, { ok: true, mode: "sync" }));
+        const fetchMock = jest.fn<typeof fetch>().mockResolvedValue(enrolledAnswer({ ok: true, mode: "sync" }));
         stubGlobal("fetch", fetchMock);
 
         await expect(enrollKey("https://sandbox-abc.example.dev", "pair", "key", { delayMs: 0 })).rejects.toThrow(/no sync credential/);
         expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    // An answer outside the contract (a mode this agent has no word for) is refused, not read as a grant it never made.
+    it("refuses an answer the shared contract does not describe", async () => {
+        stubGlobal("fetch", jest.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse(200, { ok: true, syncToken: "ist_tok", mode: "watch" })));
+
+        await expect(enrollKey("https://sandbox-abc.example.dev", "pair", "key", { delayMs: 0 })).rejects.toThrow(
+            'the sandbox enrolled this machine but its answer could not be read: ✖ Invalid option: expected one of "sync"|"mirror"\n  → at mode',
+        );
     });
 
     it("fails fast on 401 without retrying", async () => {

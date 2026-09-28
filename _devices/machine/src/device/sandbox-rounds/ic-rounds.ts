@@ -1,7 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import type { Log } from "@intentic/local-agent";
-import { icInFlight } from "../tools/sandboxes.js";
+import { holdIcFlow, icInFlight } from "../tools/sandboxes.js";
 
 // THE SHAPE OF EVERY BACKGROUND `ic` ROUND this agent runs over its sandboxes (auto-prepare.ts, auto-backup.ts,
 // probation-watch.ts): one slug at a time, never one a person's flow is touching, and a slug that keeps failing sits out
@@ -40,7 +40,7 @@ export interface SlugJob {
 export const lastLine = (output: string): string | undefined => output.split(/\r?\n/).findLast((line) => line.trim() !== "");
 
 const runOne = async (state: RoundState, slug: string, job: SlugJob, log: Log): Promise<void> => {
-    icInFlight.add(slug);
+    const release = holdIcFlow(slug, { moves: false });
     let run: IcRun;
     try {
         run = await job.run(slug);
@@ -48,7 +48,7 @@ const runOne = async (state: RoundState, slug: string, job: SlugJob, log: Log): 
         // runIc throws when this machine has no ic at all; backoff keeps that from repeating every round.
         run = { code: 1, output: errorMessage(error) };
     } finally {
-        icInFlight.delete(slug);
+        release();
     }
     if (run.code === 0) {
         state.failures.delete(slug);

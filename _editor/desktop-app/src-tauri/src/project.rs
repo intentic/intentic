@@ -22,23 +22,75 @@ const MANY_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 /// How far the count walks before it stops counting: enough to know "many".
 const COUNT_LIMIT: u64 = 60_000;
 
-/// Folders the sync leaves on this computer whatever they hold (`_devices/machine/src/sync/ssh.ts`), skipped by the
-/// count as they are by the sync.
-const NOT_SYNCED: [&str; 10] = [
-    ".git",
+/// What a project folder's sync leaves on this computer, at any depth (`PROJECT_IGNORES` in
+/// `_devices/machine/src/sync/ssh.ts`, which is what the sync actually does): skipped by the count as they are by
+/// the sync. Held to that list by `project-ignores.fixture.json`, which both sides' tests read.
+const NOT_SYNCED: [&str; 20] = [
     "node_modules",
     "dist",
-    ".next",
     ".turbo",
     ".cache",
+    ".next",
+    ".angular",
+    ".astro",
     ".venv",
     "venv",
     "__pycache__",
     ".gradle",
+    ".tmp",
+    ".env",
+    ".env.local",
+    ".env.*.local",
+    ".secrets.json",
+    "claude.json",
+    ".git",
+    ".pnpm-store",
+    ".image-out",
 ];
 
-/// A project folder name as the sandbox takes it: what ic and the daemon enforce in full (reserved names
-/// included, `_shared/sandbox-contract/src/ids/project-dir.ts`), checked here for its shape only.
+/// Whether a file or folder called `name` stays on this computer: a [`NOT_SYNCED`] pattern names it, where `*`
+/// stands for any run of characters, as in the sync's own ignore patterns.
+fn not_synced(name: &str) -> bool {
+    NOT_SYNCED.iter().any(|pattern| matches_name(pattern, name))
+}
+
+fn matches_name(pattern: &str, name: &str) -> bool {
+    let mut parts = pattern.split('*');
+    let Some(mut rest) = name.strip_prefix(parts.next().unwrap_or_default()) else {
+        return false;
+    };
+    let parts: Vec<&str> = parts.collect();
+    let Some((last, middle)) = parts.split_last() else {
+        return rest.is_empty();
+    };
+    for part in middle {
+        let Some(at) = rest.find(part) else {
+            return false;
+        };
+        rest = &rest[at + part.len()..];
+    }
+    rest.ends_with(last)
+}
+
+/// Top-level names the sandbox keeps for itself: `RESERVED_PROJECT_DIR_NAMES` in
+/// `_shared/sandbox-contract/src/ids/project-dir.ts`, as `_sandbox/ic/src/sandbox/project_dir.rs` holds them too.
+const RESERVED: [&str; 12] = [
+    "public",
+    "refs",
+    "site",
+    "root",
+    "intent",
+    "desired-state",
+    "app",
+    "AGENTS.md",
+    "node_modules",
+    "dist",
+    "venv",
+    "claude.json",
+];
+
+/// A project folder name as the sandbox takes it, the rule ic and the daemon enforce
+/// (`_shared/sandbox-contract/src/ids/project-dir.ts`), held to the same cases by `project-dir.fixture.json`.
 pub fn is_project_dir_name(name: &str) -> bool {
     let mut chars = name.chars();
     name.len() <= 64
@@ -46,6 +98,7 @@ pub fn is_project_dir_name(name: &str) -> bool {
             .next()
             .is_some_and(|first| first.is_ascii_alphanumeric())
         && chars.all(|rest| rest.is_ascii_alphanumeric() || matches!(rest, '.' | '_' | '-'))
+        && !RESERVED.contains(&name)
 }
 
 /// Why `path` cannot become a project, or nothing when it can. `taken` are the folders that already have one.
@@ -152,10 +205,11 @@ fn weigh(path: &Path) -> (u64, u64) {
             let Ok(kind) = entry.file_type() else {
                 continue;
             };
+            if not_synced(&entry.file_name().to_string_lossy()) {
+                continue;
+            }
             if kind.is_dir() {
-                if !NOT_SYNCED.contains(&entry.file_name().to_string_lossy().as_ref()) {
-                    pending.push(entry.path());
-                }
+                pending.push(entry.path());
             } else if kind.is_file() {
                 files += 1;
                 bytes += entry.metadata().map(|meta| meta.len()).unwrap_or(0);
@@ -316,6 +370,63 @@ pub fn remember(app: &AppHandle, args: &SetupArgs, slug: Option<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde::Deserialize;
+
+    #[derive(Deserialize)]
+    struct NameCase {
+        name: String,
+        valid: bool,
+    }
+
+    #[derive(Deserialize)]
+    struct NameCases {
+        names: Vec<NameCase>,
+    }
+
+    #[derive(Deserialize)]
+    struct Ignores {
+        ignores: Vec<String>,
+    }
+
+    #[test]
+    fn the_shared_name_cases_validate_as_the_contract_validates_them() {
+        let cases: NameCases = serde_json::from_str(include_str!(
+            "../../../../_shared/sandbox-contract/src/ids/project-dir.fixture.json"
+        ))
+        .unwrap();
+        assert!(cases.names.len() > 10);
+        for case in cases.names {
+            assert_eq!(
+                is_project_dir_name(&case.name),
+                case.valid,
+                "name {:?}",
+                case.name
+            );
+        }
+    }
+
+    /// What the confirmation counts without is what the machine agent's sync leaves behind, entry for entry.
+    #[test]
+    fn the_count_leaves_out_exactly_what_a_project_folder_s_sync_ignores() {
+        let fixture: Ignores = serde_json::from_str(include_str!(
+            "../../../../_devices/machine/src/sync/project-ignores.fixture.json"
+        ))
+        .unwrap();
+        assert_eq!(NOT_SYNCED.to_vec(), fixture.ignores);
+    }
+
+    #[test]
+    fn a_pattern_s_star_stands_for_any_run_of_characters_and_nothing_else_does() {
+        assert!(not_synced(".env.production.local"));
+        assert!(not_synced(".env..local"));
+        assert!(not_synced(".env.local"));
+        assert!(not_synced(".astro"));
+        assert!(!not_synced(".env.production"));
+        assert!(!not_synced(".env.example"));
+        assert!(!not_synced("my.env.local"));
+        assert!(!not_synced("dist-old"));
+        assert!(!not_synced("src"));
+    }
 
     #[test]
     fn a_project_name_is_a_plain_folder_name() {
@@ -390,8 +501,11 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("intentic-weigh-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("src")).unwrap();
         std::fs::create_dir_all(dir.join("node_modules/pkg")).unwrap();
+        std::fs::create_dir_all(dir.join("web/.astro")).unwrap();
         std::fs::write(dir.join("src/a.ts"), b"12345").unwrap();
         std::fs::write(dir.join("node_modules/pkg/index.js"), b"123").unwrap();
+        std::fs::write(dir.join("web/.astro/dev.json"), b"1234").unwrap();
+        std::fs::write(dir.join("web/.env.production.local"), b"SECRET=1").unwrap();
         assert_eq!(weigh(&dir), (1, 5));
         std::fs::remove_dir_all(&dir).unwrap();
     }

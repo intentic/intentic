@@ -47,8 +47,8 @@ A finding that is right where it stands is excused in one of two forms, each rea
 `@intentic/constants/allow`, so a guard suite such as `_editor/web/src/moduleState.guard.test.ts` reads it the same way):
 
 - `// allow(<check>): <reason>` at the site, on its line or in the comment block right above it. It sits on the
-  declaration it excuses, so a rename carries it and a deletion takes it away. `silent-catch` and the editor's
-  `module-state` guard read it.
+  declaration it excuses, so a rename carries it and a deletion takes it away. `silent-catch`, `contract-paths`,
+  `md-links` and the editor's `module-state` guard read it.
 - `Allow: <check> — <reason>` as a commit trailer, for a whole change: CI's push check (`verify-push.mjs`) accepts what
   that range adds to a tidy check with that manifest id.
 
@@ -82,7 +82,9 @@ pnpm checks                                  # all of them; pnpm checks:tidy for
 | [hooks-armed](hooks-armed.mjs) | a non-executable git hook, re-armed in place |
 | [invariant-registry](invariant-registry.mjs) | a daemon subsystem with no runtime invariant or stated reason |
 | [daemon-boundaries](daemon-boundaries.mjs) | a new whole-`Services` taker or cycle between daemon subsystems |
+| [editor-boundaries](editor-boundaries.mjs) | a static import cycle between web editor modules, or a new cycle between its subsystems |
 | [shared-boundary](shared-boundary.mjs) | a `_shared/` package depending on another part |
+| [extension-deps](extension-deps.mjs) | an extension manifest naming an `@intentic/*` package outside the extension SDK |
 | [contract-paths](contract-paths.mjs) | a contract route called by spelling its path |
 | [publish-set](publish-set.mjs) | a publish list that is not dependency-closed and ordered |
 | [publish-retry](publish-retry.mjs) | retry patterns that ride out the wrong release failures |

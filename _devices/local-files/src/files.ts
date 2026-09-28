@@ -1,10 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
-import { createReadStream } from "node:fs";
-import { chmod, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { constants, createReadStream } from "node:fs";
+import { chmod, lstat, open, readFile, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { errnoCode } from "@intentic/base/errors";
-import { webStream } from "@intentic/base/web-stream";
+import { nodeStream, webStream } from "@intentic/base/web-stream";
 
 // Reads and writes of one file, with the daemon's semantics for /work (_sandbox/sandbox/src/workspace/files/
 // workspace-files.ts): a text read is a window cut on character and line boundaries, never the whole file; a raw read
@@ -169,16 +170,70 @@ const refusalOf = (code: string | undefined): WriteRefusal | undefined => {
     if (code === `EBUSY` || (code === `EPERM` && process.platform === `win32`)) {
         return `busy`;
     }
+    // A link where the file was a moment ago, which the open refused to follow.
+    if (code === `ELOOP`) {
+        return `changed`;
+    }
     return code === `EACCES` || code === `EPERM` || code === `EROFS` ? `denied` : undefined;
 };
 
-// A save of `bytes` over `abs`. `baseHash`, when given, is the hash of the text the editor last read; a file whose text
-// no longer hashes to it is not overwritten. The replaced file's permissions carry over, so saving a script keeps it
-// runnable.
-export const writeFileWhole = async (abs: string, bytes: Uint8Array, baseHash: string | undefined): Promise<WriteRefusal | undefined> => {
-    if (bytes.byteLength > MAX_WRITE_BYTES) {
-        return `too-large`;
+// No write here follows a link at the file it opens. `O_NOFOLLOW` says so to the open where the platform has it (not
+// Windows, which the lstat before a part's write stands in for); the file a save creates must not exist at all, and
+// `O_EXCL` refuses a link there as well, dangling or not.
+const NO_FOLLOW = `O_NOFOLLOW` in constants ? constants.O_NOFOLLOW : 0;
+const CREATE_NEW = constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | NO_FOLLOW;
+const IN_PLACE = constants.O_WRONLY | NO_FOLLOW;
+
+// A body past the cap, caught by what it sends: one that declares no length (a chunked upload) is held to the cap all
+// the same.
+class TooLarge extends Error {
+    constructor() {
+        super(`file too large`);
     }
+}
+
+// Counts a body's bytes on their way to disk and fails the write at the chunk that would pass `limit`, so the file never
+// holds more than the cap.
+const capped = (limit: number): Transform => {
+    let seen = 0;
+    return new Transform({
+        transform(chunk: Uint8Array, _encoding, done) {
+            seen += chunk.byteLength;
+            if (seen > limit) {
+                done(new TooLarge());
+                return;
+            }
+            done(undefined, chunk);
+        },
+    });
+};
+
+// What a write takes: the bytes whole, or a request's body as it arrives.
+export type WriteSource = Uint8Array | ReadableStream<Uint8Array>;
+
+const readableOf = (source: WriteSource): Readable => (source instanceof Uint8Array ? Readable.from([source]) : Readable.fromWeb(nodeStream(source)));
+
+// Streams `source` into `abs` from byte `start`, opened with `flags` and held to `limit`.
+const streamInto = async (abs: string, flags: number, source: WriteSource, limit: number, start = 0): Promise<void> => {
+    const handle = await open(abs, flags);
+    try {
+        await pipeline(readableOf(source), capped(limit), handle.createWriteStream({ start }));
+    } finally {
+        await handle.close();
+    }
+};
+
+// A save of `source` over `abs`: the editor's text, or the first part of a drop. `baseHash`, when given, is the hash of
+// the text the editor last read; a file whose text no longer hashes to it is not overwritten. The replaced file's
+// permissions carry over, so saving a script keeps it runnable. The bytes stream into a new name beside the file and
+// replace it by rename, which replaces a link rather than following it, and a body past the cap leaves the file as it
+// was.
+export const writeFileWhole = async (
+    abs: string,
+    source: WriteSource,
+    baseHash: string | undefined,
+    cap = MAX_WRITE_BYTES,
+): Promise<WriteRefusal | undefined> => {
     if (baseHash !== undefined) {
         // allow(silent-catch): a file that is gone no longer holds the text the save was based on, which is the refusal.
         const current = await readFile(abs, `utf8`).catch(() => undefined);
@@ -187,18 +242,40 @@ export const writeFileWhole = async (abs: string, bytes: Uint8Array, baseHash: s
         }
     }
     // allow(silent-catch): a new file has no mode to keep.
-    const previous = await stat(abs).catch(() => undefined);
+    const previous = await lstat(abs).catch(() => undefined);
     const temporary = join(dirname(abs), `.${basename(abs)}${TEMPORARY_MARK}${randomBytes(4).toString(`hex`)}.tmp`);
     try {
-        await writeFile(temporary, bytes);
-        if (previous !== undefined) {
+        await streamInto(temporary, CREATE_NEW, source, cap);
+        if (previous?.isFile() === true) {
             await chmod(temporary, previous.mode & 0o7777);
         }
         await rename(temporary, abs);
         return undefined;
     } catch (error) {
         await rm(temporary, { force: true });
-        const refusal = refusalOf(errnoCode(error));
+        const refusal = error instanceof TooLarge ? `too-large` : refusalOf(errnoCode(error));
+        if (refusal !== undefined) {
+            return refusal;
+        }
+        throw error;
+    }
+};
+
+// A later part of a drop, written where it goes in the file its first part made, as the daemon does
+// (workspace-files-upload.ts). The file is looked at right before it is opened, and must still be a file: a link put
+// there since the path was resolved is refused, not followed. A part past the cap keeps what came before it, as the
+// daemon's does; a retry resends the drop from its first part.
+export const writePartAt = async (abs: string, body: ReadableStream<Uint8Array>, offset: number, cap = MAX_WRITE_BYTES): Promise<WriteRefusal | undefined> => {
+    // allow(silent-catch): nothing there is a file the first part made and something since removed, the refusal below.
+    const entry = await lstat(abs).catch(() => undefined);
+    if (entry?.isFile() !== true) {
+        return `changed`;
+    }
+    try {
+        await streamInto(abs, IN_PLACE, body, cap - offset, offset);
+        return undefined;
+    } catch (error) {
+        const refusal = error instanceof TooLarge ? `too-large` : refusalOf(errnoCode(error));
         if (refusal !== undefined) {
             return refusal;
         }

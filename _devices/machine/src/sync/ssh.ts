@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { REFERENCE_DIR, STATE_DIR } from "@intentic/constants";
 import { homeDir, type Log, writeSecretFile } from "@intentic/local-agent";
-import { STATE_GROUPS, stateGroupPaths, UNBACKED_STATE_PATHS } from "@intentic/sandbox-contract";
+import { SshHostKeySchema, STATE_GROUPS, stateGroupPaths, UNBACKED_STATE_PATHS } from "@intentic/sandbox-contract";
 import { baseDir } from "../config.js";
 import { isProjectPairing, knownHostsPath, type Pairing, sshConfigName, sshConfigPath, sshDir, sshKeyPath, userSshConfigPath } from "./config.js";
 import { runProcess } from "./exec.js";
@@ -16,7 +16,8 @@ import { syncSshPort } from "./tunnel.js";
 // Mutagen's two-way ignore set: also excludes secrets and the daemon's `.intentic` state, never the search-ignore
 // set's job. `.git` matches every level, since git state travels by git's own protocol (git-bridge.ts), not file sync.
 // Every name here is frozen into a session at its creation, so changing the list replaces every session this agent
-// holds, each from a settled state (mutagen.ts readyForReplacement).
+// holds, each from a settled state (mutagen.ts readyForReplacement). A project folder's share of it (PROJECT_IGNORES) is
+// also `project-ignores.fixture.json`, which the desktop app's NOT_SYNCED is held to: change them together.
 export const IGNORES = [
     "node_modules",
     "dist",
@@ -132,10 +133,8 @@ export const sshConfigBlock = (args: {
    over when it carries one, or with nothing, for `accept-new` to record the key the sandbox presents next. Outside an
    enrollment a changed key is still refused. */
 
-// A key line as the enrollment may carry it: its type and base64 body, nothing else.
-const HOST_KEY = /^(?:ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(?:256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+/]+={0,2}$/;
-
-export const hostKeyOf = (value: string | undefined): string | undefined => (value !== undefined && HOST_KEY.test(value.trim()) ? value.trim() : undefined);
+// A key line as the enrollment may carry it (SshHostKeySchema): its type and base64 body, nothing else.
+export const hostKeyOf = (value: string | undefined): string | undefined => SshHostKeySchema.safeParse(value?.trim()).data;
 
 // Whether one host pattern of a known_hosts line names any of `names`: written plainly, or hashed (`|1|salt|hash`,
 // which Debian and Ubuntu write by default through HashKnownHosts).

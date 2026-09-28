@@ -21,7 +21,9 @@ flowchart LR
 - Three contracts run the other way. `deviceContract`, `webextContract` and `runnerContract` are served by a user's
   machine, the browser extension and a runner over the socket each one opens, with the daemon as the client.
 - The daemon names the routes it implements on the `/events` hello frame, and the browser diffs that list against its
-  own build, so a route an older daemon lacks shows as a missing feature instead of a 404.
+  own build, so a route an older daemon lacks shows as a missing feature instead of a 404. The desktop app's folder
+  sidecar sends the same frame with `surface: "folder"` and only the few routes it serves, which the browser offers
+  and never reads as out of date.
 - Some rules live here as code, not only shapes, because both ends must reach the same answer. The main one is
   whether an account can serve a turn: `serviceState` in `src/models/plan-pools.ts` turns a revoked sign-in, a lost
   seat, a translator bench, a standing refusal and the plan limits into one `AccountState` (`ready` · `spent` ·

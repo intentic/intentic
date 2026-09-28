@@ -6,7 +6,7 @@ import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { createUi, homeDir, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
-import { environmentKeyOf, projectDirNameOf, sandboxIdFromUrl } from "@intentic/sandbox-contract";
+import { environmentKeyOf, projectDirNameOf, sandboxIdFromUrl, type SyncEnrollmentRequest, SyncEnrollmentAnswerSchema } from "@intentic/sandbox-contract";
 import { buildCommand, buildRouteMap, type CommandContext, type FlagParametersForType } from "@stricli/core";
 import { z } from "zod";
 import { postWhileWarming } from "../daemon-base.js";
@@ -109,7 +109,7 @@ export const enrollKey = async (
                 "x-intentic-pair": pairToken,
                 ...(takeover ? { "x-intentic-sync-takeover": "1" } : {}),
             },
-            body: JSON.stringify({ key, ...identity }),
+            body: JSON.stringify({ key, ...identity } satisfies SyncEnrollmentRequest),
         },
         {
             doing: "enrolling the sync key",
@@ -129,15 +129,18 @@ export const enrollKey = async (
     if (!response.ok) {
         throw new Error(`enrolling the sync key failed (${response.status}): ${await response.text()}`);
     }
-    // SAFETY: every field is optional, and each is checked before it is used: the token below, the key by hostKeyOf.
-    const body = (await response.json()) as { syncToken?: string; mode?: SyncMode; hostKey?: string };
+    const answer = SyncEnrollmentAnswerSchema.safeParse(await response.json());
+    if (!answer.success) {
+        throw new Error(`the sandbox enrolled this machine but its answer could not be read: ${z.prettifyError(answer.error)}`);
+    }
+    const body = answer.data;
     // The sync token authorizes the port read, the machine report and the SSH transport: without one, fail here, not as a dead session.
     if (body.syncToken === undefined) {
         throw new Error("the sandbox enrolled this machine but returned no sync credential: update the sandbox and enable sync again.");
     }
     // What the daemon granted: "sync" is file sync plus mirroring (one holder), "mirror" is ports only (any number). The
     // sshd host key, when a sandbox hands it over, is what this machine pins for it (ssh.ts, replaceKnownHost).
-    return { syncToken: body.syncToken, mode: body.mode ?? "sync", hostKey: hostKeyOf(z.string().optional().catch(undefined).parse(body.hostKey)) };
+    return { syncToken: body.syncToken, mode: body.mode ?? "sync", hostKey: hostKeyOf(body.hostKey) };
 };
 
 // Self-revoke this machine's enrollment (uninstall): DELETE /system/authorized-key authed by the sync token. A 404 is

@@ -282,6 +282,29 @@ export const geminiProviderConfig = (
               },
           };
 
+// createOpencodeServer inherits process.env with no override seam. It copies the environment and spawns `opencode serve`
+// in its synchronous prefix (before its first await), so `env` is pinned only across that call and every key is put
+// back as soon as it returns: a child the daemon spawns while the server boots (Claude, Codex, git) never inherits it.
+// A key given as undefined is left as it is.
+export const pinnedAcross = <T>(env: Readonly<Record<string, string | undefined>>, spawn: () => T): T => {
+    const pins = Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined);
+    const previous = pins.map(([key]) => [key, process.env[key]] as const);
+    for (const [key, value] of pins) {
+        process.env[key] = value;
+    }
+    try {
+        return spawn();
+    } finally {
+        for (const [key, value] of previous) {
+            if (value === undefined) {
+                delete process.env[key];
+            } else {
+                process.env[key] = value;
+            }
+        }
+    }
+};
+
 // Options bag rather than more positionals, so a production option never has to land after the test's fetch-injection
 // seam.
 export const createOpenCodeService = (
@@ -293,10 +316,13 @@ export const createOpenCodeService = (
         // Which port the server listens on; absent uses the SDK default (one per machine). Nameable so a second server
         // (e.g. the conformance tier, whose provider config is fixed at spawn) can run beside the daemon's.
         readonly port?: number;
+        // What starts `opencode serve`; the SDK's own unless a test watches the environment the spawn sees.
+        readonly spawnServer?: typeof createOpencodeServer;
     } = {},
 ): OpenCodeService => {
     const { gemini, workspaceRoot } = options;
     const fetchImpl = options.fetchImpl ?? fetch;
+    const spawnServer = options.spawnServer ?? createOpencodeServer;
     let booting: Promise<OpencodeClient> | undefined;
     // Directories already being watched; streams are scoped to one exact directory, so this keeps one watcher per
     // directory.
@@ -317,51 +343,37 @@ export const createOpenCodeService = (
         // allow(silent-catch): a failed catalog read costs Google its provider rather than Grok its runtime
         const geminiModels = gemini === undefined ? [] : await gemini.models().catch(() => []);
         const geminiProvider = geminiProviderConfig(gemini, geminiModels);
-        // createOpencodeServer inherits process.env with no override seam, so XDG_DATA_HOME and PATH are pinned only
-        // across the synchronous spawn and restored after, keeping other subprocess spawns (Claude/Codex) unaffected.
-        // PATH puts an engine-store OpenCode copy in front so an Environment-card install is actually used.
-        const previous = process.env["XDG_DATA_HOME"];
-        const previousPath = process.env["PATH"];
+        // The last await: the environment is read after it, so a PATH another caller changed meanwhile is the one kept.
         const stored = await engineBinary("opencode");
-        process.env["XDG_DATA_HOME"] = xdgDataHome;
-        if (stored !== undefined) {
-            process.env["PATH"] = `${dirname(stored)}:${previousPath ?? ""}`;
-        }
         // The SDK spawns `opencode serve` with no hook and no pid, inside its first synchronous step: stamped across that
         // step, the child is found by the stamp and put in the runtime class before it has started anything.
         const stamp = randomUUID();
-        process.env[SPAWN_STAMP_ENV] = stamp;
-        let server: { url: string; close(): void };
-        try {
-            const starting = createOpencodeServer({
-                timeout: BOOT_TIMEOUT_MS,
-                ...(options.port === undefined ? {} : { port: options.port }),
-                // No provider key: xAI auth is OAuth, stored by OpenCode. Runs autonomously since the container is the
-                // isolation boundary; every permission is answered (ALLOW_EVERY_PERMISSION).
-                config: {
-                    permission: ALLOW_EVERY_PERMISSION,
-                    provider: {
-                        xai: { models: Object.fromEntries(storeOptOut.map((id) => [id, { options: { store: false } }])) },
-                        ...geminiProvider,
+        // Pinned across the spawn call alone (pinnedAcross), never across the boot's wait for the listening line. PATH
+        // puts an engine-store OpenCode copy in front so an Environment-card install is actually used, and is left as
+        // it is without one.
+        const starting = pinnedAcross(
+            {
+                XDG_DATA_HOME: xdgDataHome,
+                PATH: stored === undefined ? undefined : `${dirname(stored)}:${process.env["PATH"] ?? ""}`,
+                [SPAWN_STAMP_ENV]: stamp,
+            },
+            () =>
+                spawnServer({
+                    timeout: BOOT_TIMEOUT_MS,
+                    ...(options.port === undefined ? {} : { port: options.port }),
+                    // No provider key: xAI auth is OAuth, stored by OpenCode. Runs autonomously since the container is the
+                    // isolation boundary; every permission is answered (ALLOW_EVERY_PERMISSION).
+                    config: {
+                        permission: ALLOW_EVERY_PERMISSION,
+                        provider: {
+                            xai: { models: Object.fromEntries(storeOptOut.map((id) => [id, { options: { store: false } }])) },
+                            ...geminiProvider,
+                        },
                     },
-                },
-            });
-            delete process.env[SPAWN_STAMP_ENV];
-            applyToStampedChild(stamp, { class: "agentRuntime", spawnDepth: 0 });
-            server = await starting;
-        } finally {
-            delete process.env[SPAWN_STAMP_ENV];
-            if (previous === undefined) {
-                delete process.env["XDG_DATA_HOME"];
-            } else {
-                process.env["XDG_DATA_HOME"] = previous;
-            }
-            if (previousPath === undefined) {
-                delete process.env["PATH"];
-            } else {
-                process.env["PATH"] = previousPath;
-            }
-        }
+                }),
+        );
+        applyToStampedChild(stamp, { class: "agentRuntime", spawnDepth: 0 });
+        const server = await starting;
         serverHandle = server;
         const client = createOpencodeClient({ baseUrl: server.url });
         // The permission watcher rides this boot; the workspace root is the one scope worth opening unasked, since an

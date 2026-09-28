@@ -1,0 +1,24 @@
+{
+    "ignores": [
+        "node_modules",
+        "dist",
+        ".turbo",
+        ".cache",
+        ".next",
+        ".angular",
+        ".astro",
+        ".venv",
+        "venv",
+        "__pycache__",
+        ".gradle",
+        ".tmp",
+        ".env",
+        ".env.local",
+        ".env.*.local",
+        ".secrets.json",
+        "claude.json",
+        ".git",
+        ".pnpm-store",
+        ".image-out"
+    ]
+}

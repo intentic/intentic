@@ -1,29 +1,19 @@
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { LocalOffice } from "@intentic/ext-onlyoffice/local-office";
+import { type ContractRoute, type Hello, HelloSchema, RAW_ROUTE_LIST, SANDBOX_ROUTES, sandboxRouteFor } from "@intentic/sandbox-contract";
 import { sha256Text } from "./files.js";
 import { type Grant, Grants } from "./grants.js";
-import { createLocalFilesServer, type LocalFilesServer } from "./server.js";
-import { Watches } from "./watch.js";
+import { APP, type Ask, askerOf, localServer, PORT } from "./testing.js";
 
 // The HTTP face, driven the way the editor drives it, over a real folder: the three gates first, then what each grant
 // may read and write.
 
-const PORT = 47001;
-const APP = `tauri://localhost`;
 const FOLDER_TOKEN = `f`.repeat(64);
 const FILE_TOKEN = `d`.repeat(64);
 
-// Office routes are the extension's own (onlyoffice/src/server/local-office.ts); these tests reach none of them.
-const office: LocalOffice = {
-    handle: async () => undefined,
-    release: async () => undefined,
-    close: async () => undefined,
-};
-
 let dir: string;
-let server: LocalFilesServer;
+let ask: (path: string, init?: Ask) => Promise<Response>;
 beforeEach(() => {
     dir = realpathSync(mkdtempSync(join(tmpdir(), `local-files-server-`)));
     mkdirSync(join(dir, `docs`));
@@ -34,27 +24,9 @@ beforeEach(() => {
     const file: Grant = { token: FILE_TOKEN, id: `w2`, root: dir, file: `notes.txt`, name: `notes.txt` };
     grants.add(folder);
     grants.add(file);
-    server = createLocalFilesServer({
-        grants,
-        office,
-        context: { watches: new Watches(() => undefined), build: `test`, startedAt: 0 },
-        origins: new Set([APP]),
-        log: () => undefined,
-    });
+    ask = askerOf(localServer(grants));
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
-
-const ask = (path: string, init: RequestInit & { token?: string; host?: string; origin?: string } = {}): Promise<Response> => {
-    const headers = new Headers(init.headers);
-    headers.set(`host`, init.host ?? `127.0.0.1:${PORT}`);
-    if (init.token !== undefined) {
-        headers.set(`authorization`, `Bearer ${init.token}`);
-    }
-    if (init.origin !== undefined) {
-        headers.set(`origin`, init.origin);
-    }
-    return server.fetch(new Request(`http://127.0.0.1:${PORT}${path}`, { ...init, headers }), PORT);
-};
 
 describe(`the gates`, () => {
     it(`refuses a request naming another host, as a rebound page's does`, async () => {
@@ -121,5 +93,51 @@ describe(`writing`, () => {
         expect((await ask(`/workspace/upload?path=notes.txt`, { method: `POST`, token: FILE_TOKEN, body: `new notes` })).status).toBe(200);
         expect((await ask(`/workspace/upload?path=docs/a.md`, { method: `POST`, token: FILE_TOKEN, body: `x` })).status).toBe(403);
         expect(readFileSync(join(dir, `notes.txt`), `utf8`)).toBe(`new notes`);
+    });
+});
+
+// The hello a stream opens with, read off its first `event: message`; the stream is let go once it has arrived.
+const helloOf = async (response: Response): Promise<Hello> => {
+    if (response.body === null) {
+        throw new Error(`the event stream answered without a body`);
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let text = ``;
+    for (let read = await reader.read(); !read.done; read = await reader.read()) {
+        text += decoder.decode(read.value, { stream: true });
+        if (text.includes(`\n\n`)) {
+            break;
+        }
+    }
+    await reader.cancel();
+    return HelloSchema.parse(JSON.parse(/^data: (.*)$/m.exec(text)?.[1] ?? `null`));
+};
+
+// A request that lands on `route` and nothing else: each `{param}` and a trailing `/*` filled in, an `ALL` asked as GET.
+const probeOf = (route: ContractRoute) => ({
+    method: route.method === `ALL` ? `GET` : route.method,
+    path: route.path.replaceAll(/\{[^}]+\}/g, `probe`).replace(/\/\*$/, `/probe`),
+});
+
+describe(`what a window's hello says it serves`, () => {
+    // Read from outside: a route is served when asking for it gets any answer but the router's own "doesn't serve", a
+    // refusal of the probe's made-up input included. A route another one shadows for every request is not probed.
+    it(`lists exactly the routes the window answers, and names the surface a folder`, async () => {
+        const events = new AbortController();
+        const hello = await helloOf(await ask(`/events`, { token: FOLDER_TOKEN, signal: events.signal }));
+        events.abort();
+        const probed = [...SANDBOX_ROUTES, ...RAW_ROUTE_LIST].filter((route) => sandboxRouteFor(probeOf(route).method, probeOf(route).path)?.name === route.name);
+        const answers = await Promise.all(
+            probed.map(async (route) => {
+                const stop = new AbortController();
+                const answer = await ask(probeOf(route).path, { method: probeOf(route).method, token: FOLDER_TOKEN, signal: stop.signal });
+                const unserved = answer.status === 404 && (await answer.text()).includes(`This folder view doesn't serve`);
+                stop.abort();
+                return unserved ? [] : [route.name];
+            }),
+        );
+        expect(hello).toMatchObject({ kind: `hello`, workspaceId: `local-w1`, surface: `folder` });
+        expect(hello.routes).toEqual(answers.flat().toSorted());
     });
 });

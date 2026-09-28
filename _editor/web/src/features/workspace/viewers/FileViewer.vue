@@ -2,11 +2,13 @@
 import type { WorkspaceFileWindow, WorkspaceTreeEntry } from "@intentic/api-contract";
 import { Button, CopyButton, ui, useDevice } from "@intentic/ui";
 import { errorMessage, useLatest } from "@intentic/ui/async";
-import { computed, ref, shallowRef, watch, type Component } from "vue";
+import { computed, onBeforeUnmount, ref, shallowRef, watch, type Component } from "vue";
 import { sandboxBlob } from "../../sandbox/client/sandboxClient";
 import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
+import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
 import { isArchiveContent } from "../files/archiveEntries";
 import { sha256Hex } from "../files/contentHash";
+import { downloadEntries } from "../files/downloadEntries";
 import { readFileWindow } from "../files/fileWindow";
 import { mediaUrl } from "../files/mediaUrl";
 import { useEditBuffers } from "../files/useEditBuffers";
@@ -68,6 +70,26 @@ const { ensureMonaco, ensureLanguage } = useMonaco();
 
 const readBlob = (target: string): Promise<Blob> => sandboxBlob(`/workspace/raw?${scopeQuery(new URLSearchParams({ path: target })).toString()}`);
 
+// A backend that mints no media tickets (a folder on this computer, whose file server has only /workspace/raw) plays a
+// recording from its bytes instead, through an object URL held for the one file on screen and let go with it.
+let heldUrl: string | undefined;
+const letGo = (): void => {
+    if (heldUrl !== undefined) {
+        URL.revokeObjectURL(heldUrl);
+        heldUrl = undefined;
+    }
+};
+const mediaSource = async (target: string): Promise<string> => {
+    if (supportsRoute(`workspace.mediaTicket`)) {
+        return mediaUrl(target);
+    }
+    const blob = await readBlob(target);
+    letGo();
+    heldUrl = URL.createObjectURL(blob);
+    return heldUrl;
+};
+onBeforeUnmount(letGo);
+
 // The one content prop a viewer's manifest `fetch` kind asks for; a `path` viewer reads through its own backend, so
 // it gets the scope it is viewed in and nothing when there is none.
 const viewerContentFor = (
@@ -81,7 +103,7 @@ const viewerContentFor = (
         case `blob`:
             return readBlob(target).then((blob) => ({ blob }));
         case `url`:
-            return mediaUrl(target).then((src) => ({ src }));
+            return mediaSource(target).then((src) => ({ src }));
         case `path`:
             return Promise.resolve(agent === undefined ? {} : { agent });
     }
@@ -189,6 +211,7 @@ watch(
         text.value = null;
         viewerContent.value = undefined;
         viewerComponent.value = undefined;
+        letGo();
         firstWindow.value = undefined;
         fromShared.value = false;
         error.value = null;
@@ -287,12 +310,11 @@ const reloadFromDisk = (): void => {
 };
 
 // Via /workspace/media, not /workspace/raw or a Blob: the daemon streams it as an attachment straight to disk,
-// so nothing is held in the tab and the 25 MiB raw-route ceiling doesn't apply.
+// so nothing is held in the tab and the 25 MiB raw-route ceiling doesn't apply. A backend with no media tickets hands
+// the bytes over instead (downloadEntries.ts).
 const download = async (): Promise<void> => {
     try {
-        const anchor = document.createElement(`a`);
-        anchor.href = await mediaUrl(path, { download: true });
-        anchor.click();
+        await downloadEntries([{ path, type: `file` }]);
     } catch (err) {
         error.value = errorMessage(err, `Could not download the file.`);
     }

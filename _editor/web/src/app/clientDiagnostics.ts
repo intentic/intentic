@@ -71,6 +71,7 @@ const flush = (): void => {
             return;
         }
         void sandboxAuthenticatedFetch(
+            // allow(contract-paths): a keepalive report that must outlive the page, kept off the typed client's trackPerf span (see above)
             new Request(`${target.base}/logs/client`, {
                 method: `POST`,
                 headers: { "content-type": `application/json` },

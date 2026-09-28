@@ -3220,6 +3220,9 @@
         "usageChart": {
             "n7Days": "7 dni"
         },
+        "useDaemonRoutes": {
+            "folderLacks": "„{route}” nie jest dostępne dla folderu na tym komputerze, tylko w sandboksie."
+        },
         "useDevRebuild": {
             "rebuildSwapsSandboxOnto": "Twoja przebudowa przestawia ten sandbox na nowy obraz, gdy skończy: jakieś pół minuty ciszy, a potem ta strona łączy się sama z powrotem. Twoje pliki w /work zostają.",
             "restartingOntoImageBuilt": "Restart na obrazie, który zbudowałeś"

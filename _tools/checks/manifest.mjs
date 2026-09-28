@@ -51,12 +51,28 @@ export const CHECKS = [
         about: "no new whole-Services taker, no new value import closing a cycle between subsystems, of any length (ratcheted), no SDK value around its loader",
     },
     {
+        id: "editor-boundaries",
+        ratchet: true,
+        file: "editor-boundaries.mjs",
+        needs: "checkout",
+        gate: "code",
+        about: "no static value import closing a cycle between web editor modules, and no new value import closing a cycle between its subsystems (ratcheted)",
+    },
+    {
         id: "shared-boundary",
         file: "shared-boundary.mjs",
         needs: "checkout",
         gate: "tidy",
         scoped: true,
         about: "nothing in _shared/ depends on another part, by manifest or import, beyond the exceptions it names with their reasons",
+    },
+    {
+        id: "extension-deps",
+        file: "extension-deps.mjs",
+        needs: "checkout",
+        gate: "tidy",
+        scoped: true,
+        about: "an extension's manifest names only the @intentic/* packages its imports may reach (the extension SDK, the wire contract, base; testing and tsconfig as devDependencies)",
     },
     {
         id: "contract-paths",

@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveExisting, resolveWritable } from "./paths.js";
+import { BROKEN_LINK, resolveExisting, resolveWritable } from "./paths.js";
 
 // A folder with a document, a subfolder, a link that stays inside and two that lead out (one to a file, one to a
 // folder), beside a sibling folder the links point into.
@@ -45,5 +45,26 @@ describe(`resolveWritable`, () => {
         expect(await resolveWritable(root, `key.txt`)).toEqual({ kind: `refused`, why: `outside this folder` });
         expect(await resolveWritable(root, `secrets/new.txt`)).toEqual({ kind: `refused`, why: `outside this folder` });
         expect(await resolveWritable(root, ``)).toEqual({ kind: `refused`, why: `invalid path` });
+    });
+
+    // lstat, not realpath, finds where the walk up stops: a link to nothing is met as a link, not walked past to the
+    // root, where the write would have followed it to whatever it names.
+    it(`refuses a link that points at nothing, as the file or as a folder on the way to it`, async () => {
+        symlinkSync(join(base, `secrets`, `planted.txt`), join(root, `dangling.txt`));
+        symlinkSync(join(base, `secrets`, `made`), join(root, `dangling-dir`));
+        symlinkSync(join(root, `dangling-loop`), join(root, `dangling-loop`));
+        expect(await resolveWritable(root, `dangling.txt`)).toEqual({ kind: `refused`, why: BROKEN_LINK });
+        expect(await resolveWritable(root, `dangling-dir/new.txt`)).toEqual({ kind: `refused`, why: BROKEN_LINK });
+        expect(await resolveWritable(root, `dangling-loop`)).toEqual({ kind: `refused`, why: BROKEN_LINK });
+    });
+
+    // The path a write is handed has no link left in it, so nothing between resolving and writing follows one.
+    it(`lands a new file under a linked folder that stays inside at the folder's real path`, async () => {
+        symlinkSync(join(root, `docs`), join(root, `docs-link`));
+        expect(await resolveWritable(root, `docs-link/new/b.md`)).toEqual({ kind: `found`, abs: join(root, `docs`, `new`, `b.md`) });
+    });
+
+    it(`refuses a path that runs through a file as if it were a folder`, async () => {
+        expect(await resolveWritable(root, `docs/a.md/b.md`)).toEqual({ kind: `refused`, why: `not a folder` });
     });
 });

@@ -33,8 +33,11 @@
     },
     "scripts": {
         "build": "tsgo",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
         "watch": "tsgo --build --watch",
-        "schema": "tsgo && node scripts/write-schema.mjs"
+        "schema": "tsgo && node scripts/write-schema.mjs",
+        "test": "suites",
+        "test:watch": "suites --watch"
     },
     "dependencies": {
         "@intentic/base": "workspace:*",
@@ -42,7 +45,9 @@
         "zod": "catalog:"
     },
     "devDependencies": {
+        "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:"
     }

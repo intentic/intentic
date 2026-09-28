@@ -19,12 +19,20 @@ flowchart LR
 - **Paths resolve twice.** Lexically first (no `..`, no drive, no backslash), then on disk: the real path of whatever
   exists must still be inside the granted folder, so a link cannot lead out (`paths.ts`). A folder grant reads and
   writes inside its folder. A single-document grant reads the document's folder, for the pictures and links beside
-  it, and writes only the document.
+  it and the folder the window can show, and writes only the document.
+- **No write follows a link.** A write lands on a path with no link left in it: the file's real path, or its nearest
+  existing folder's real path with the missing names below it. A link that points at nothing, as the file or on the
+  way to it, is refused. A save or a drop's first part streams into a new name beside the file and replaces it by
+  rename. A later part is opened with `O_NOFOLLOW` where the platform has it, after an lstat that must find a file.
+  The 256 MiB cap counts the bytes that arrive, so a body with no `Content-Length` is held to it too (413). A refused
+  first part leaves the file as it was (`files.ts`, `raw.ts`).
 - **The editor's own contract.** Answers are the sandbox contract's, through `@intentic/contract-serve`, so the
   editor's file views read a folder exactly as they read `/work`. The file semantics are the daemon's: 4 MiB text
   windows cut on line and character boundaries, an ETag on raw bytes, and saves that name the text they replace by
   hash and are refused (409) when the file moved under them. Every other route the editor's chrome reads (agents,
-  git changes, personas) answers its empty truth rather than a 404.
+  git changes, personas) answers its empty truth rather than a 404. The `/events` hello lists exactly the routes a
+  window is served, with `surface: "folder"`, so the editor offers nothing else: no new folder, rename, delete, move,
+  terminal or ZIP.
 - **Office documents** open in the ONLYOFFICE browser engine from `@intentic/ext-onlyoffice/local-office`, which
   downloads its editor bundle once into the app's cache and edits in the page, with no Docker.
 - **Watching.** Changes batch every 250 ms into `workspaceChanged` events. Windows and macOS watch a whole folder

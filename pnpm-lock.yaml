@@ -3165,9 +3165,15 @@ importers:
         specifier: 4.6.5
         version: 4.6.5
     devDependencies:
+      '@intentic/testing':
+        specifier: workspace:*
+        version: link:../../_tools/testing
       '@intentic/tsconfig':
         specifier: workspace:*
         version: link:../../_tools/tsconfig
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.2
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.6

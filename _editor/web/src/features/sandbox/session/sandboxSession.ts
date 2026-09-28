@@ -136,6 +136,7 @@ const stepUpFrom = (body: unknown): StepUp => {
 // recurse back into this module's own headers hook.
 const exchange = async (target: SandboxTarget, bearer: string): Promise<StoredSession | `unauthorized` | StepUp> => {
     try {
+        // allow(contract-paths): the exchange mints the session sandboxRpc's headers hook asks this module for, so the typed client would recurse
         const response = await fetch(`${target.base}/system/session`, {
             method: `POST`,
             headers: {

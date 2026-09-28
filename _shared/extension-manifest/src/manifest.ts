@@ -1,10 +1,21 @@
 import { z } from "zod";
 import { MARK_FIELDS } from "./mark.js";
+import { permissionProblem } from "./permissions.js";
 import { contributesSchema } from "./points/index.js";
 
 // The extension manifest (`intentic-extension.json`, not under .claude-plugin/): the approval surface the install
 // dialog renders, and the host refuses any runtime registration whose id it didn't declare here. This file is the
 // envelope only; contributions are assembled from points/.
+
+// One "<METHOD> <path-glob>" entry, refused at parse when malformed (permissions.ts), so a bad manifest fails where it is
+// read instead of inside the route gate on its first call.
+const permissionEntry = (): z.ZodString =>
+    z.string().superRefine((entry, ctx) => {
+        const problem = permissionProblem(entry);
+        if (problem !== undefined) {
+            ctx.addIssue({ code: "custom", message: problem });
+        }
+    });
 
 const ManifestShape = z.object({
     // Declared so it survives the parse instead of being silently stripped; nothing at runtime reads it.
@@ -54,11 +65,11 @@ const ManifestShape = z.object({
     permissions: z
         .object({
             sandbox: z
-                .array(z.string().meta({ power: { key: "sandbox:${value}", sentence: "its UI calls the sandbox route ${value}" } }))
+                .array(permissionEntry().meta({ power: { key: "sandbox:${value}", sentence: "its UI calls the sandbox route ${value}" } }))
                 .optional()
                 .describe("Daemon routes your UI half may call. Your own backend namespace needs no entry: its backend is your own code."),
             daemon: z
-                .array(z.string().meta({ power: { key: "daemon:${value}", sentence: "its backend calls the daemon route ${value}" } }))
+                .array(permissionEntry().meta({ power: { key: "daemon:${value}", sentence: "its backend calls the daemon route ${value}" } }))
                 .optional()
                 .describe(
                     "Daemon routes your SERVER half may call. Separate from `sandbox` because the two halves run as different principals: the UI as the owner's session, the backend as a minted per-extension token, so a grant to one must never quietly widen the other.",

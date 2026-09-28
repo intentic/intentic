@@ -8,6 +8,7 @@ import {
     driftedRouteReason,
     driftedRoutes,
     driftScope,
+    folderSurface,
     missingRoutes,
     setDaemonRoutes,
     staleDaemonReason,
@@ -229,5 +230,31 @@ describe(`staleDaemonReason`, () => {
         const reason = staleDaemonReason(`vpn.list`);
         expect(reason).toMatch(/sandbox/i);
         expect(reason).not.toMatch(/reload this page/i);
+    });
+});
+
+// The desktop app's sidecar serving a folder on this computer: it lists the few routes it has, and every other one is
+// missing by nature, not because anything is out of date.
+describe(`a folder on this computer`, () => {
+    const FOLDER = [`workspace.tree`, `workspace.children`, `workspace.file`, `system.events`, `GET /workspace/raw`, `POST /workspace/upload`];
+    beforeEach(() => resetSandboxScope());
+
+    it(`gates on what it lists, and is neither behind nor ahead of this page`, () => {
+        setDaemonRoutes(FOLDER, undefined, `folder`);
+        expect([folderSurface.value, supportsRoute(`workspace.tree`), supportsRoute(`workspace.mkdir`)]).toEqual([true, true, false]);
+        expect([missingRoutes.value, daemonBehind.value, unknownDaemonRoutes.value, appBehind.value]).toEqual([[], false, [], false]);
+    });
+
+    it(`says a missing route is not there for a folder, and never to update a sandbox`, () => {
+        setDaemonRoutes(FOLDER, undefined, `folder`);
+        expect(staleDaemonReason(`workspace.mkdir`)).toBe(`'workspace.mkdir' isn't available for a folder on this computer, only in a sandbox.`);
+        expect(staleDaemonReason(`workspace.file`)).toBeUndefined();
+    });
+
+    it(`reads a hello that names no surface as a sandbox's, as every daemon before the field sent`, () => {
+        setDaemonRoutes(FOLDER, undefined, `folder`);
+        setDaemonRoutes(withoutVpn);
+        expect([folderSurface.value, daemonBehind.value]).toEqual([false, true]);
+        expect(staleDaemonReason(`vpn.list`)).toMatch(/^This sandbox's daemon doesn't provide 'vpn\.list'\./);
     });
 });

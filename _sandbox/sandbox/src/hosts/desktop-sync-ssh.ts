@@ -1,5 +1,9 @@
+import { readFile } from "node:fs/promises";
 import { connect, type Socket } from "node:net";
+import { join } from "node:path";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { upgradeWebSocket, type WebSocketLike } from "@hono/node-server";
+import { SshHostKeySchema } from "@intentic/sandbox-contract";
 import type { WSContext } from "hono/ws";
 import type { WebSocket } from "ws";
 import type { Services } from "../composition.js";
@@ -11,6 +15,19 @@ import type { Services } from "../composition.js";
 // The container's own sshd, and the only address this route ever connects to.
 const SSHD_HOST = "127.0.0.1";
 const SSHD_PORT = 22;
+
+// The public half of the sshd host key docker-entrypoint.sh generates once onto the history volume (the sandbox's SSH
+// identity, stable across rebuilds), which its HostKey drop-in points sshd at.
+export const sshdHostKeyPath = (historyRoot: string): string => join(historyRoot, "ssh-host-keys", "ssh_host_ed25519_key.pub");
+
+// The key that sshd presents, as `<type> <base64>` with the comment dropped, for enrollment to hand to the machine, which
+// pins it rather than trusting whichever key answers first. Undefined where there is none (a daemon outside the image)
+// or it is not a key line; the machine then records the key it is first shown, as it always did.
+export const sshdHostKey = async (historyRoot: string): Promise<string | undefined> => {
+    const line = await readFile(sshdHostKeyPath(historyRoot), "utf8").catch(undefinedIfMissing);
+    const [type, body] = line?.trim().split(/\s+/) ?? [];
+    return type === undefined || body === undefined ? undefined : SshHostKeySchema.safeParse(`${type} ${body}`).data;
+};
 
 // Backpressure on the outbound side, which floods first: pause the TCP read above HIGH, resume below LOW.
 const BUFFER_HIGH = 1_048_576;

@@ -94,6 +94,8 @@ const LOOSE = {
     platform: /^(_tools\/scripts\/platform\/|_sandbox\/front\/crates\/(tunnel|browser-wire)\/|_shared\/relay\/|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
     "perf-instr": /^\.github\/workflows\/ci\.yml/,
     "perf-browser": /^\.github\/workflows\/ci\.yml/,
+    // The tier's own spec and harness live in @intentic/e2e, which nothing of the face depends on.
+    "local-face": /^(_tools\/e2e\/local-face\/|\.github\/workflows\/ci\.yml)/,
     "ci-base-changed": /^_tools\/ci-base\//,
     // ci-desktop's FROM is ci-base's mutable `latest`; a ci-base change forces a rebuild here too.
     "ci-desktop-changed": /^_tools\/ci-(desktop|base)\//,
@@ -117,6 +119,9 @@ const ROOTS = {
     // The counts are of the code the harness imports, and of the editor the demo serves.
     "perf-instr": ["@intentic/perf"],
     "perf-browser": ["@intentic/perf", "@intentic/demo"],
+    // What the local face is built from and served by: the editor, the UI kit, the sidecar and the contract all reach
+    // it through the desktop app's graph.
+    "local-face": ["@intentic/desktop-app", "@intentic/local-files"],
 };
 for (const [trigger, names] of Object.entries(ROOTS)) {
     for (const name of names) {

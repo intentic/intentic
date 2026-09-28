@@ -1,5 +1,6 @@
 import { sandboxRef } from "@intentic/extension-api";
-import { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } from "@intentic/sandbox-contract";
+import { type Hello, SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } from "@intentic/sandbox-contract";
+import { t } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { z } from "zod";
 import { contractUncompiled } from "./contractFreshness";
@@ -17,11 +18,21 @@ const advertised = sandboxRef<ReadonlySet<string> | undefined>(() => undefined);
 // mismatch.
 const advertisedShapes = sandboxRef<Readonly<Record<string, string>> | undefined>(() => undefined);
 
-// Called on every hello frame; nothing advertised leaves the assume-supported state.
-export const setDaemonRoutes = (routes: readonly string[] | undefined, shapes?: Readonly<Record<string, string>>): void => {
+// What answers: a sandbox's daemon, or the desktop app's sidecar serving a folder on this computer. A folder lacks most
+// routes by nature rather than by age, so it is never "behind" and its gaps are never an update away.
+export type DaemonSurface = NonNullable<Hello["surface"]>;
+const advertisedSurface = sandboxRef<DaemonSurface>(() => `sandbox`);
+
+// Called on every hello frame; nothing advertised leaves the assume-supported state. A hello that names no surface is
+// a daemon's, from before the field.
+export const setDaemonRoutes = (routes: readonly string[] | undefined, shapes?: Readonly<Record<string, string>>, surface?: DaemonSurface): void => {
     advertised.value = routes === undefined ? undefined : new Set(routes);
     advertisedShapes.value = shapes;
+    advertisedSurface.value = surface ?? `sandbox`;
 };
+
+// True for a window on a folder of this computer (the desktop app's local face).
+export const folderSurface = computed(() => advertisedSurface.value === `folder`);
 
 // An unknown daemon or route answers true; a feature only hides on positive evidence it's missing.
 export const supportsRoute = (name: string): boolean => advertised.value === undefined || advertised.value.has(name);
@@ -37,7 +48,7 @@ const OURS: ReadonlySet<string> = new Set(SANDBOX_ROUTE_NAMES);
 // How far behind the sandbox is; empty when the daemon is level or newer (extra daemon routes are never asked about).
 export const missingRoutes = computed<string[]>(() => {
     const known = advertised.value;
-    if (known === undefined) {
+    if (known === undefined || folderSurface.value) {
         return [];
     }
     return SANDBOX_ROUTE_NAMES.filter((name) => !known.has(name));
@@ -51,7 +62,7 @@ export const daemonBehind = computed(() => missingRoutes.value.length > 0);
 // only says which way a disagreement leans once something else has already proved there is one.
 export const unknownDaemonRoutes = computed<string[]>(() => {
     const known = advertised.value;
-    return known === undefined ? [] : [...known].filter((name) => !OURS.has(name)).toSorted();
+    return known === undefined || folderSurface.value ? [] : [...known].filter((name) => !OURS.has(name)).toSorted();
 });
 
 export const appBehind = computed(() => unknownDaemonRoutes.value.length > 0);
@@ -116,10 +127,14 @@ const eitherSideOlderRemedy = (): string => {
 };
 
 // Why a call to route `name` failed because this daemon predates it; undefined for one the daemon advertises. A
-// missing route is directional: only a daemon behind lacks a name this app has.
+// missing route is directional: only a daemon behind lacks a name this app has. A folder on this computer never has
+// it, and no update brings it.
 export const staleDaemonReason = (name: string): string | undefined => {
     if (supportsRoute(name)) {
         return undefined;
+    }
+    if (folderSurface.value) {
+        return t(`sandbox.useDaemonRoutes.folderLacks`, { route: name });
     }
     return `This sandbox's daemon doesn't provide '${name}'. ${daemonOlderRemedy()}`;
 };

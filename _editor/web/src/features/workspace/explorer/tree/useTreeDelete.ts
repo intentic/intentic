@@ -4,6 +4,8 @@ import { computed, type Ref, ref, watch } from "vue";
 import type { useNotifications } from "../../../../shell/notifications/notifications";
 import type { BarrenChain } from "../emptyDirs";
 import type { DeleteBatch } from "../undo/deleteUndo";
+import { supportsRoute } from "../../../sandbox/overview/useDaemonRoutes";
+import { VERB_ROUTES } from "../entryMenu";
 import { deletedReceipt, joinPath } from "../entryNames";
 import type { useEmptyDirs } from "../useEmptyDirs";
 import type { useWorkspaceTree } from "../useWorkspaceTree";
@@ -70,15 +72,17 @@ export const useTreeDelete = (host: TreeDeleteHost) => {
         void deleteEntries(host, paths, receipt);
         selecting.clear();
     };
+    // A backend that serves no delete (a folder on this computer) is offered neither the key nor the sweep line.
+    const deletes = (): boolean => supportsRoute(VERB_ROUTES.remove);
     const sweep = (roots: readonly string[]): void => {
-        if (roots.length === 0 || store.refuseWrite()) {
+        if (roots.length === 0 || !deletes() || store.refuseWrite()) {
             return;
         }
         remove(roots, sweepReceipt(roots, emptyDirs.chainOf));
     };
     // A barren-only selection reads as the sweep line does, since that is what it is.
     const requestDelete = (): void => {
-        if (host.rules.refuseIn(host.targetDir(selecting.lead.value))) {
+        if (!deletes() || host.rules.refuseIn(host.targetDir(selecting.lead.value))) {
             return;
         }
         const paths = host.rules.unlockedOnly([...selecting.selection.value]);
@@ -107,7 +111,9 @@ export const useTreeDelete = (host: TreeDeleteHost) => {
     // the tree to match name to row.
     const sweepOpen = ref(false);
     const pointedBarren = ref<string | undefined>(undefined);
-    const barrenBranches = computed<readonly BarrenBranch[]>(() => emptyDirs.roots.value.map((path) => branchOf(path, emptyDirs.chainOf)));
+    const barrenBranches = computed<readonly BarrenBranch[]>(() =>
+        deletes() ? emptyDirs.roots.value.map((path) => branchOf(path, emptyDirs.chainOf)) : [],
+    );
     // One branch needs no disclosure: the line just says it.
     const soleBarren = computed(() => (barrenBranches.value.length === 1 ? barrenBranches.value[0] : undefined));
     // Folds the disclosure closed once the list empties, so it can't spring open for an unrelated folder later.

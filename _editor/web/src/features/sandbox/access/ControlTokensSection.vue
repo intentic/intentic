@@ -117,6 +117,7 @@ const curlSnippet = computed(() =>
         ? ``
         : [
               `export INTENTIC_TOKEN=${minted.value.token}`,
+              // allow(contract-paths): a command the owner pastes into a shell, which no typed client reaches
               `curl "${origin.value}/git/root/status" \\`,
               `  -H "x-intentic-control: $INTENTIC_TOKEN"`,
           ].join(`\n`),

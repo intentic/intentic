@@ -1,0 +1,11 @@
+/* Type-checks the local face's TESTS along with its source: tsconfig.local.json, which leaves them out, plus the test
+   runner's globals and node's. The launcher's own tests (src/) are in tsconfig.json. */
+{
+    "extends": "./tsconfig.local.json",
+    "compilerOptions": {
+        "tsBuildInfoFile": "./.cache/tsbuildinfo-test",
+        "types": ["vite/client", "node", "bun", "@intentic/testing/globals"]
+    },
+    "include": ["./local/**/*.ts"],
+    "exclude": []
+}
