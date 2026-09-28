@@ -150,6 +150,8 @@ export const UNSERVED = {
     "POST /engines/channel": REAL_MACHINE,
     "POST /engines/update": REAL_MACHINE,
     "POST /engines/revert": REAL_MACHINE,
+    // Offered only beside an update, and the demo's /info never has one to offer.
+    "system.skipUpdate": REAL_MACHINE,
     "POST /bundles": REAL_MACHINE,
     "DELETE /bundles": REAL_MACHINE,
     "POST /bundles/ticket": REAL_MACHINE,
