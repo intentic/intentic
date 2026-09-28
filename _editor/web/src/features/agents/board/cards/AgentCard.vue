@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ProgressRing, ResponsiveOverlay, SegmentRing, ui, useDevice } from "@intentic/ui";
+import { Button, ProgressRing, ResponsiveOverlay, SandboxLogo, SegmentRing, ui, useDevice } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref, useTemplateRef } from "vue";
@@ -677,8 +677,7 @@ const grab = (event: PointerEvent): void => {
                     class="flex min-w-0 shrink-0 items-center gap-1 truncate rounded bg-content/10 px-2.5 py-1 text-muted"
                     v-tooltip.top="t(`agents.agentCard.inNotInSandbox`, { name: box.name })"
                 >
-                    <img v-if="box.image !== undefined" :src="box.image" alt="" class="h-3 w-3 shrink-0 rounded-sm object-cover" />
-                    <Icon v-else name="server" class="shrink-0 text-2xs" />
+                    <SandboxLogo :size="12" :image="box.image ?? null" :name="box.name" />
                     <span class="truncate">{{ box.name }}</span>
                 </span>
                 <!-- Whose it is leads what it runs on: for a card that isn't the reader's own, that outranks the model. -->

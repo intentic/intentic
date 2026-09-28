@@ -9,6 +9,7 @@ import {
     ConfirmDialog,
     Notice,
     osOptions,
+    SandboxLogo,
     SegmentedControl,
     useOsPreference,
 } from "@intentic/ui";
@@ -287,18 +288,14 @@ const confirmRemove = async (): Promise<void> => {
         <button
             ref="trigger"
             type="button"
-            class="sandbox-switcher flex items-center justify-center overflow-hidden rounded-lg border border-line transition-colors hover:border-line-strong hover:bg-overlay hover:text-content"
-            :class="route.path.startsWith('/sandbox') ? 'bg-primary-600/15 text-link' : 'bg-card text-muted'"
+            class="sandbox-switcher flex items-center justify-center overflow-hidden transition-opacity hover:opacity-80"
+            :class="route.path.startsWith('/sandbox') ? 'text-link' : 'text-muted'"
             :aria-label="t(`sandbox.sandboxSwitcher.switchSandbox`, { switcherLabel })"
             v-tooltip.right="switcherLabel"
             :aria-expanded="open"
             @click="open = !open"
         >
-            <img v-if="sandbox.active.value?.image" :src="sandbox.active.value.image" alt="" class="h-full w-full object-cover" />
-            <span v-else-if="sandbox.active.value?.name" class="text-base font-semibold uppercase text-content">{{
-                sandbox.active.value.name.charAt(0)
-            }}</span>
-            <Icon name="server" v-else class="text-lg" />
+            <SandboxLogo :image="sandbox.active.value?.image ?? null" :name="sandbox.active.value?.name" />
         </button>
         <!-- WHERE IT RUNS AND WHETHER IT ANSWERS, one mark on the corner presence has always been read off. The glyph
              is the machine, its ink the connection: quiet whenever the answer is neither "online" nor "wrong", so a
@@ -384,10 +381,7 @@ const confirmRemove = async (): Promise<void> => {
                 :class="option.id === sandbox.activeSandboxId.value ? 'bg-primary-600/15' : 'hover:bg-content/5'"
                 @click="pick(option)"
             >
-                <span class="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-card text-muted">
-                    <img v-if="option.image" :src="option.image" alt="" class="h-full w-full object-cover" />
-                    <Icon name="server" v-else class="text-xs" />
-                </span>
+                <SandboxLogo :size="20" :image="option.image ?? null" :name="option.name" />
                 <span class="min-w-0 flex-1 truncate" :class="option.id === sandbox.activeSandboxId.value ? 'text-link' : 'text-content'">{{
                     option.name
                 }}</span>

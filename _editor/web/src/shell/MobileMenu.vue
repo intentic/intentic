@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { SandboxSummary } from "@intentic/api-contract";
 import type { ViewBadge } from "@intentic/extension-api";
-import { Avatar, type IconName, vAction } from "@intentic/ui";
+import { Avatar, type IconName, SandboxLogo, vAction } from "@intentic/ui";
 import { computed, onMounted } from "vue";
 import { RouterLink } from "vue-router";
 import { useAudience } from "../app/useAudience";
@@ -199,10 +199,7 @@ const logout = async (): Promise<void> => {
                 :class="option.id === sandbox.activeSandboxId.value ? 'bg-primary-600/15' : ''"
                 @click="sandbox.select(option.id)"
             >
-                <span class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-card text-muted">
-                    <img v-if="option.image" :src="option.image" alt="" class="h-full w-full object-cover" />
-                    <Icon name="server" v-else />
-                </span>
+                <SandboxLogo :size="32" :image="option.image ?? null" :name="option.name" />
                 <span class="min-w-0 flex-1 truncate" :class="option.id === sandbox.activeSandboxId.value ? 'text-link' : 'text-content'">{{
                     option.name
                 }}</span>

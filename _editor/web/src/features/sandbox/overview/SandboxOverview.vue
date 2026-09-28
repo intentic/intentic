@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, Card, InlineRename, resourcesSummary, SandboxResourcesDialog, StatusBadge, vAction } from "@intentic/ui";
+import { AnchoredOverlay, Card, InlineRename, resourcesSummary, SandboxLogo, SandboxResourcesDialog, StatusBadge, vAction } from "@intentic/ui";
 import type { ResourcesForm } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref } from "vue";
@@ -81,7 +81,6 @@ const logoTrigger = ref<HTMLButtonElement | null>(null);
 const logoMenuOpen = ref(false);
 const logoBusy = ref(false);
 const logo = computed(() => sandbox.active.value?.image ?? undefined);
-const avatarLetter = computed(() => (sandbox.active.value?.name ?? ``).trim().charAt(0));
 
 // One line under the title, for the logo's own report and the sandbox's standing. The rename says nothing here:
 // it carries its own state inside its own box, so entering and leaving edit mode cannot move this card.
@@ -184,13 +183,11 @@ const removeLogo = async (): Promise<void> => {
                         v-tooltip.bottom="
                             isOwner ? (logo ? t(`sandbox.sandboxOverview.changeRemoveLogo`) : t(`sandbox.sandboxOverview.addLogo`)) : undefined
                         "
-                        class="group relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line-subtle bg-card text-muted"
-                        :class="isOwner ? 'cursor-pointer hover:border-line-strong' : ''"
+                        class="group relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden text-muted"
+                        :class="isOwner ? 'cursor-pointer' : ''"
                         @click="pressLogo"
                     >
-                        <img v-if="logo" :src="logo" alt="" class="h-full w-full object-cover" />
-                        <span v-else-if="avatarLetter" class="text-lg font-semibold uppercase text-content">{{ avatarLetter }}</span>
-                        <Icon name="server" v-else class="text-lg" />
+                        <SandboxLogo :size="48" :image="logo ?? null" :name="sandbox.active.value?.name" />
                         <span
                             v-if="isOwner"
                             class="absolute inset-0 flex items-center justify-center bg-canvas/70 text-content transition-opacity"

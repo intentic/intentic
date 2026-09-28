@@ -124,6 +124,8 @@ export {
 // Sandbox Resources… dialog: memory/CPU caps, privileged mode, GPU, applied as a recreate onto the same image.
 // Its arithmetic also ships DOM-free as `@intentic/ui/sandbox-resources`.
 export { default as SandboxResourcesDialog } from "./components/sandbox/SandboxResourcesDialog.vue";
+// The sandbox's switcher logo: picture, monogram, or server glyph, with no plate behind it.
+export { default as SandboxLogo } from "./components/sandbox/SandboxLogo.vue";
 export { askFrom, type EngineFacts, type ResourcesAsk, type ResourcesForm, runningShape } from "./components/sandbox/sandboxResources.js";
 // Verb row (buttons, order, labels, which one is destructive) for one sandbox's line; shared by the desktop
 // manager and the web Devices tab.
