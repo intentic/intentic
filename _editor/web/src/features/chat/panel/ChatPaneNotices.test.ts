@@ -51,6 +51,8 @@ jest.mock(`../../agents/fleet/useAgents`, () => ({
 }));
 // The account gate is its own component with its own test; this file is only about the trial strip beneath it.
 jest.mock(`../accounts/ChatAccountPanel.vue`, () => ({ default: defineComponent({ name: `ChatAccountPanel`, setup: () => () => undefined }) }));
+// The needs strip reads the sandbox's needs store, which is not what these notices are about.
+jest.mock(`../../needs/NeedsStrip.vue`, () => ({ default: defineComponent({ name: `NeedsStrip`, setup: () => () => undefined }) }));
 jest.mock(`vue-router`, () => ({
     ...vueRouterOriginal,
     RouterLink: RouterLinkStub as never,

@@ -4,6 +4,7 @@ import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema, Conversatio
 import { LoopStateSchema } from "./loops.js";
 import { LimitPolicySchema, RetryPolicySchema, TurnBreakPolicySchema, TurnBreakSchema } from "./turn-break.js";
 import { KeepWarmSchema } from "./keep-warm.js";
+import { AgentNeedSchema } from "./needs.js";
 import { EMOJI_MAX_LENGTH, isSingleEmoji } from "../text/emoji.js";
 // A fleet agent is any conversation with a registry entry, keyed by conversationId. Isolated ones own a git worktree
 // (branch agent/<id>); workspace conversations have none, but both share one status/activity/cost lifecycle.
@@ -56,7 +57,7 @@ export const AgentAttentionSchema = z.object({
     plan: z.boolean().describe("It has proposed a plan and is waiting for a yes."),
     question: z.boolean().describe("It has asked you something."),
     permission: z.boolean().describe("It wants to use a tool it needs permission for."),
-    // A missing capability (capabilities/offers/capability-offer.ts); lets the lane say "setup needed" rather than a generic
+    // A missing capability on a card from before needs (docs/architecture/needs.md); lets the lane say "setup needed" rather than a generic
     // pause.
     capability: z.boolean().describe("It needs something connected that is not connected yet."),
     // A gated credential parked on a named person's click; the one pause the board's reader may not be able to clear
@@ -65,6 +66,11 @@ export const AgentAttentionSchema = z.object({
         .boolean()
         .describe("It is waiting for a named person to release a credential. The one pause that may not be yours to clear, whatever your role."),
     conflict: z.boolean().describe("Its work cannot be merged without somebody resolving a clash."),
+    // A need outlives its turn (docs/architecture/needs.md), so this can stand on a card that is not running at all.
+    need: z
+        .boolean()
+        .optional()
+        .describe("It asked a person for something it still needs: a connection, a secret, wider reach, a tool. Absent from a daemon older than needs."),
 });
 export type AgentAttention = z.infer<typeof AgentAttentionSchema>;
 // What the last turn left open, measured at the moment it ended, unlike AgentAttentionSchema's live parked waits.
@@ -526,6 +532,13 @@ export const AgentSummarySchema = z.object({
         .optional()
         .describe(
             "Outside conditions this conversation is parked on, each of which will wake it. Absent means none, which is nearly every conversation: an armed watch is why a finished-looking agent starts working by itself, and why a hosted machine will not go idle.",
+        ),
+    // Kept in the needs store, so unlike `jobs` this survives a restart and stands while the conversation is idle.
+    needs: z
+        .array(AgentNeedSchema)
+        .optional()
+        .describe(
+            "What it is waiting on people for and has not got yet, oldest first. Absent means nothing: an open need is why an idle-looking agent still needs you.",
         ),
     // In memory only: a daemon restart leaves transcript rows naming jobs this list no longer carries.
     jobs: z

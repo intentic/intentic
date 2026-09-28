@@ -1019,6 +1019,8 @@
             "showCheck": "Mostrar la comprobación",
             "showCommand": "Mostrar el comando",
             "showMessage": "Mostrar el mensaje",
+            "skipCall": "Omitir y seguir",
+            "skipCallHint": "Rechaza solo esta llamada: el agente sigue sin ella",
             "skipFree": "Omitir: gratis",
             "spentToday": "{amountUsd} $ · {spentTodayUsd} $ de {dailyCapUsd} $ gastados hoy",
             "to": "A {payTo}",
@@ -2865,13 +2867,11 @@
             "untilOneAutomationSchedule": "Hasta que haya una, una automatización que programes no puede publicar en ninguna parte, y un chat llega a todas las cuentas que has conectado."
         },
         "sandboxSecrets": {
-            "activate": "Activar",
             "addSecret": "Añadir un secreto",
             "capabilityCredentials": "Credenciales de capacidades",
             "ciInSync": "CI sincronizada",
             "generatedByIntentic": "Generado por intentic",
             "intentDeclaresNoUser": "Tu intención todavía no declara secretos aportados por el usuario.",
-            "keepingOwnSecretsHere": "Guardar aquí tus propios secretos necesita DevOps activo.",
             "keyAccountWhatUses": "Clave, cuenta o quién lo usa…",
             "keyName": "NOMBRE_CLAVE",
             "manageCapabilities": "Gestionar capacidades",

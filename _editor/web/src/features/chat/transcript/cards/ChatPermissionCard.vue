@@ -4,7 +4,7 @@ import { ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { providerDisplayLabel } from "../../accounts/providerCatalog";
-import type { CardAnswer } from "../../session/cardReplies";
+import { type CardAnswer, SKIP_CALL } from "../../session/cardReplies";
 import ChatCommandBlock from "../../tools/ChatCommandBlock.vue";
 import type { ChatMessage } from "../transcript";
 import ChatCard from "./ChatCard.vue";
@@ -109,6 +109,15 @@ const allow = (): Promise<void> => {
                 :disabled="settling"
                 @click="reply({ kind: 'permission', decision: 'always' })"
                 >{{ card.alwaysLabel }}</ChatDecisionButton
+            >
+            <!-- A refusal of this one call that lets the turn go on: the agent is told to carry on another way, or without it. -->
+            <ChatDecisionButton
+                tone="secondary"
+                icon="forward"
+                :disabled="settling"
+                v-tooltip.bottom="t(`chat.chatMessageView.skipCallHint`)"
+                @click="reply(SKIP_CALL)"
+                >{{ t(`chat.chatMessageView.skipCall`) }}</ChatDecisionButton
             >
             <!-- Like the question card's Dismiss: a refusal with no redirect ends the turn. -->
             <ChatDecisionButton

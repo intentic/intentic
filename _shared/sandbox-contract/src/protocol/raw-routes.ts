@@ -83,9 +83,8 @@ export const RAW_ROUTES = {
     "GET /extensions/{id}/bundle": { lane: "bulk" },
     // An extension backend's own namespace, proxied verbatim.
     "ALL /x/*": {},
-    // The `capabilities` CLI: discovery by name, and the ask that parks on an owner-decided card.
+    // The `capabilities` CLI's discovery by name; its ask is the needs door (contracts/needs.contract.ts).
     "GET /capabilities/connectable": { floor: "maintainer", agent: true, control: "never" },
-    "POST /capabilities/ask": { floor: "maintainer", agent: true, control: "never" },
     // The `sandboxes` CLI; every create parks on a card in the owner's chat first.
     "GET /sandboxes": { agent: true },
     "POST /sandboxes": { agent: true },

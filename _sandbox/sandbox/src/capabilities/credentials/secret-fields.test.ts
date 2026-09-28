@@ -1,5 +1,6 @@
 import { type Capability, type CapabilityKind, CapabilitySchema, VAULTED } from "@intentic/sandbox-contract";
 import { partitionSecretValues } from "./secret-fields.js";
+import { generateSshKey } from "./ssh-keys.js";
 
 // Pins that a vaulted entry (secret fields replaced by VAULTED) still passes CapabilitySchema; a kind whose echo omits
 // a non-secret field would vault it silently and drop the entry on the next read.
@@ -27,6 +28,8 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
     ],
     ssh: [
         { id: "build-box", kind: "ssh", config: { auth: "key", host: "h.example.com", port: 22, user: "root", privateKey: "-----BEGIN-----" } },
+        // A key the sandbox generated: its echo adds the public half, which must not keep the private one out of the vault.
+        { id: "made-box", kind: "ssh", config: { auth: "generated", host: "h.example.com", port: 22, user: "root", privateKey: generateSshKey("c").privateKey } },
         { id: "jump", kind: "ssh", config: { auth: "password", host: "h.example.com", port: 22, user: "root", password: "pw" } },
     ],
     vpn: [

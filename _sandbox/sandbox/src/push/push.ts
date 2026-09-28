@@ -1,14 +1,15 @@
 import { channelId, type PushNotification } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import { idleEverywhere } from "../system/presence.js";
-import type { PushStore } from "./push-store.js";
+import { idleEverywhere, presentMembers } from "../system/presence.js";
+import type { PushStore, StoredChannel } from "./push-store.js";
 import { sendRelay } from "./senders/relay.js";
 import type { SendOutcome } from "./senders/send.js";
 import { sendWebPush } from "./senders/webpush.js";
 
-// Fans out a notification to every registered device (browsers over web push, native installs through the relay);
+// Fans out a notification to the registered devices (browsers over web push, native installs through the relay);
 // transports live in senders/ behind one outcome shape.
-// 1. Never notifies someone already watching (presence.ts tracks idle tabs via the /events stream).
+// 1. Never notifies someone already watching (presence.ts tracks idle tabs via the /events stream): a device is skipped
+//    while the member who registered it has a tab in use, and one that names no member while anybody does.
 // 2. A push failure never touches the caller: every send is fire-and-forget.
 
 // How many devices a send reached; the turn lifecycle ignores it, but the test button needs it to catch a silent zero.
@@ -20,15 +21,25 @@ export interface PushDelivery {
 export interface PushSender {
     // Resolves once every send settles; never rejects, a failing device is only a logged warning.
     readonly notify: (notification: PushNotification) => Promise<PushDelivery>;
-    // Skipped while anyone is watching a screen; `notify` remains for the settings page's explicit test send.
+    // Skips the devices of whoever is watching a screen; `notify` remains for the settings page's explicit test send.
     readonly notifyIfAway: (notification: PushNotification) => Promise<PushDelivery>;
 }
 
 const NOTHING_SENT: PushDelivery = { delivered: 0, failed: 0 };
 
+// Whether a device is one whose person is away, as presence stands now. Its member decides for it; a device naming none
+// cannot be matched to a tab, so it keeps the sandbox-wide rule and waits until every tab is idle.
+const awayNow = (): ((channel: StoredChannel) => boolean) => {
+    const present = presentMembers();
+    const nobodyWatching = idleEverywhere();
+    return (channel) => (channel.member === undefined ? nobodyWatching : !present.has(channel.member.toLowerCase()));
+};
+
 export const createPushSender = (store: PushStore, logger: Logger): PushSender => {
-    const notify = async (notification: PushNotification): Promise<PushDelivery> => {
-        const [keys, channels] = await Promise.all([store.keys(), store.list()]);
+    // Sends to every registered device `wanted` keeps.
+    const send = async (notification: PushNotification, wanted: (channel: StoredChannel) => boolean): Promise<PushDelivery> => {
+        const [keys, registered] = await Promise.all([store.keys(), store.list()]);
+        const channels = registered.filter(wanted);
         if (channels.length === 0) {
             return NOTHING_SENT;
         }
@@ -59,12 +70,8 @@ export const createPushSender = (store: PushStore, logger: Logger): PushSender =
     };
 
     return {
-        notify,
-        notifyIfAway: async (notification) => {
-            if (!idleEverywhere()) {
-                return NOTHING_SENT;
-            }
-            return notify(notification);
-        },
+        notify: (notification) => send(notification, () => true),
+        // Presence is read as the notification is asked for, not once the store answers.
+        notifyIfAway: (notification) => send(notification, awayNow()),
     };
 };

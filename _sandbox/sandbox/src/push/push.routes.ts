@@ -20,8 +20,10 @@ export const createPushRoutes = (services: PushRoutesDeps) => {
                 subscribed: input.id !== undefined && channels.some((entry) => channelId(entry) === input.id),
             };
         }),
-        subscribe: i.subscribe.handler(async ({ input }) => {
-            await services.push.add(input);
+        // Filed under the caller's verified identity, never one the device names, so a notification skips only the
+        // devices of the member who is looking.
+        subscribe: i.subscribe.handler(async ({ input, context }) => {
+            await services.push.add(input, context.identity?.email);
             return { ok: true } as const;
         }),
         unsubscribe: i.unsubscribe.handler(async ({ input }) => {

@@ -1,7 +1,7 @@
-import { type AgentCapabilities, type AgentHarness, type AgentProvider, type AgentTurn, type Area, type Persona, type SandboxSettings, capabilitiesOf, type RoutedAgentTurn } from "@intentic/sandbox-contract";
+import { type AgentCapabilities, type AgentHarness, type AgentProvider, type AgentTurn, type Area, type ConversationGrant, type Persona, type SandboxSettings, capabilitiesOf, type RoutedAgentTurn } from "@intentic/sandbox-contract";
 import { conversationFence } from "../../../areas/area-scope.js";
 import { compactedSinceLastTurn, type PersistedAgent } from "../../../conversations/registry/agents-store.js";
-import { type TurnPersona, turnPersona } from "../../../personas/personas.js";
+import { type TurnPersona, turnPersona, widenPersona } from "../../../personas/personas.js";
 import type { GuidanceVariant } from "../../prompt/guidance.js";
 import { type TurnBriefing, briefingOf } from "../../prompt/turn-briefing.js";
 import { armOf, EXPERIMENTS } from "./experiments.js";
@@ -35,6 +35,8 @@ export interface PremiseFacts {
     readonly settings: SandboxSettings;
     readonly personas: readonly Persona[];
     readonly areas: readonly Area[];
+    // What a person allowed this conversation beyond its persona (personas/conversation-grants.ts), if anything.
+    readonly grant?: ConversationGrant | undefined;
 }
 
 export interface TurnPremise {
@@ -73,12 +75,15 @@ const iqTeachingDue = (runtime: TurnRuntime, enabled: boolean): boolean =>
 export const premiseOf = (facts: PremiseFacts, input: AgentTurn, runtime: TurnRuntime): TurnPremise => {
     const { settings, entry } = facts;
     // The fence goes through the area manifest every turn, not frozen at birth, so editing an area moves its conversations.
-    const persona = turnPersona({
-        personas: facts.personas,
-        actsAs: input.actsAs,
-        unattended: input.unattended === true,
-        fence: conversationFence(facts.areas, entry?.identity),
-    });
+    const persona = widenPersona(
+        turnPersona({
+            personas: facts.personas,
+            actsAs: input.actsAs,
+            unattended: input.unattended === true,
+            fence: conversationFence(facts.areas, entry?.identity),
+        }),
+        facts.grant,
+    );
     const briefing = briefingOf(persona.persona);
     const search = armOf(EXPERIMENTS.iqSearch, settings, input.conversationId);
     const iqSearchEnabled = search ?? EXPERIMENTS.iqSearch.on(settings);

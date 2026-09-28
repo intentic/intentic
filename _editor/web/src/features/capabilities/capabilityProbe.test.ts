@@ -52,7 +52,7 @@ const testOn = (entry: CapabilityCatalogEntry | undefined, answer: () => Promise
 describe(`the Test`, () => {
     it(`dials the service with the form's answers under the name it would be saved as, and shows what it said`, async () => {
         const { form, test } = testOn(SSH, async () => ({ checked: true, ok: false, message: `Permission denied (publickey).` }));
-        Object.assign(form.values, { host: ` ops.acme.dev `, user: `ada`, privateKey: `KEY` });
+        Object.assign(form.values, { host: ` ops.acme.dev `, user: `ada`, auth: `key`, privateKey: `KEY` });
         form.name.value = `Ops Box`;
 
         await test.runProbe();

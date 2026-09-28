@@ -1021,6 +1021,8 @@
             "showCheck": "Pokaż sprawdzenie",
             "showCommand": "Pokaż polecenie",
             "showMessage": "Pokaż wiadomość",
+            "skipCall": "Pomiń i idź dalej",
+            "skipCallHint": "Odrzuca tylko to wywołanie: agent idzie dalej bez niego",
             "skipFree": "Pomiń: za darmo",
             "spentToday": "{amountUsd} $ · dziś wydano {spentTodayUsd} $ z {dailyCapUsd} $",
             "to": "Do {payTo}",
@@ -2865,13 +2867,11 @@
             "untilOneAutomationSchedule": "Dopóki żadnej nie ma, zaplanowana automatyzacja nie może nigdzie publikować, a czat sięga do każdego konta, które podłączyłeś."
         },
         "sandboxSecrets": {
-            "activate": "Aktywuj",
             "addSecret": "Dodaj sekret",
             "capabilityCredentials": "Poświadczenia możliwości",
             "ciInSync": "CI zsynchronizowane",
             "generatedByIntentic": "Wygenerowane przez intentic",
             "intentDeclaresNoUser": "Twoja intencja nie deklaruje jeszcze sekretów podawanych przez użytkownika.",
-            "keepingOwnSecretsHere": "Trzymanie tutaj własnych sekretów wymaga aktywnego DevOps.",
             "keyAccountWhatUses": "Klucz, konto albo to, co go używa…",
             "keyName": "NAZWA_KLUCZA",
             "manageCapabilities": "Zarządzaj możliwościami",

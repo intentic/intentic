@@ -1,5 +1,5 @@
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
-import { isForticlientCiphertext } from "@intentic/sandbox-contract";
+import { isForticlientCiphertext, stashedToken } from "@intentic/sandbox-contract";
 import { devFillGet, devFillSet } from "../../setup/devFill";
 import { type FormValues, secretFields } from "./form";
 
@@ -10,12 +10,12 @@ import { type FormValues, secretFields } from "./form";
 const keyOf = (entry: CapabilityCatalogEntry, fieldKey: string): string => `capability.${entry.id}.${fieldKey}`;
 
 // Remembered answers applied as a patch over a freshly seeded form; a value the daemon would now
-// reject is skipped.
+// reject is skipped, a generated key's marker among them (the add that remembered it spent its token).
 export const rememberedSecrets = (entry: CapabilityCatalogEntry): FormValues => {
     const values: FormValues = {};
     for (const field of secretFields(entry)) {
         const remembered = devFillGet(keyOf(entry, field.key));
-        if (remembered !== undefined && !isForticlientCiphertext(remembered)) {
+        if (remembered !== undefined && !isForticlientCiphertext(remembered) && stashedToken(remembered) === undefined) {
             values[field.key] = remembered;
         }
     }

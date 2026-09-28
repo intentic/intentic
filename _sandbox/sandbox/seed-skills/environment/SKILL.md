@@ -55,10 +55,11 @@ recurrence would waste sessions), or when the step is more than a package name �
 download the daemon cannot infer.
 
 1. Write your steps to `.intentic/config/environment.d/<tool>.Dockerfile`: one file per thing you need, named after
-   it (`ffmpeg.Dockerfile`, `rust.Dockerfile`). Do NOT write `.intentic/config/environment.Dockerfile`: the daemon
-   composes that from your drafts plus the already-approved custom section, and writing it directly would
-   clobber a parallel agent's request and drop steps the owner already approved. Naming the file after the
-   tool also means another agent needing the same one converges on your entry instead of duplicating it.
+   it (`ffmpeg.Dockerfile`, `rust.Dockerfile`), then run `environment propose <tool> --why "…"` (below). Do NOT
+   write `.intentic/config/environment.Dockerfile`: the daemon composes that from your drafts plus the
+   already-approved custom section, and writing it directly would clobber a parallel agent's request and drop
+   steps the owner already approved. Naming the file after the tool also means another agent needing the same
+   one converges on your entry instead of duplicating it.
 2. `RUN` and `ENV` lines only: NO `FROM` (the daemon owns the base image; a proposal containing one is
    rejected), no `# intentic:runtime` lines (reserved for capability fragments), and no `USER`, `ENTRYPOINT`,
    `CMD`, `EXPOSE`, `WORKDIR`, or `COPY` (there is no build context). Never put secrets in it.
@@ -125,14 +126,29 @@ Other package managers take the same treatment where they have a cache directory
    fragment is a second pin that drifts from the pack's, and on a standard image it builds the same binary a
    second time.
 
-## After writing the file
+## Ask for it: `environment propose`
 
-Keep going with the task: drafting is not a blocking handover. Use a workaround if one exists, and say
+```sh
+environment propose ffmpeg --why "to cut the demo video for the pull request"
+# reads .intentic/config/environment.d/ffmpeg.Dockerfile; --file <path> or --file - (stdin) for another source
+```
+
+The daemon checks the steps first (a `FROM`, a forbidden instruction or an apt install without its cache mounts
+is refused on the spot, with the reason), files them, and puts them on a card in this chat, where the owner
+reads them and approves or declines. The command answers like every ask: exit 0 when the running container
+already has the approved steps, exit 1 when refused or declined, and exit 3 while it waits, which is the usual
+case, since approving is followed by a rebuild. Once the container runs the approved image, the sandbox
+continues this conversation by itself: do not poll, and do not propose the same tool twice (`needs` lists what
+is still waiting).
+
+## Meanwhile
+
+Keep going with the task: proposing is not a blocking handover. Use a workaround if one exists, and say
 plainly which parts stay unavailable until the rebuild rather than pretending they work.
 
-Tell the owner to review and approve the change on the platform's **Sandbox page → Environment card**.
-Approving is theirs alone; the rebuild only runs outside this container, and who runs it depends on where the
-sandbox lives. On a HOSTED sandbox (a machine the platform runs, `SANDBOX_VM=1` in this container's env) the
+The owner approves on the card in the chat (or on the platform's **Sandbox page → Environment card**, which
+lists the same drafts). Approving is theirs alone; the rebuild only runs outside this container, and who runs
+it depends on where the sandbox lives. On a HOSTED sandbox (a machine the platform runs, `SANDBOX_VM=1` in this container's env) the
 owner presses **Rebuild now** on that card and the platform builds it on a machine of its own, which takes a
 few minutes and counts against the sandbox's awake hours. A server-managed sandbox applies it on the next
 `intentic deploy apply`. On a sandbox the owner runs themselves, the rebuild happens on their machine — and
@@ -148,7 +164,9 @@ rebuild.
 
 Some failures inside the nested engine look like missing tooling and are not: they are switches on the
 **Docker capability** (`/capabilities` → Docker). Never propose an overlay for these, and never edit the
-user's files to route around them:
+user's files to route around them. Ask for the switch on a card instead, which shows the change and what it
+costs (a rebuild, a dockerd restart) and applies it with one press: `capabilities request docker --set gpu=on
+--why "…"`, or `--set registryMirror=…`, `--set insecureRegistries=…`, `--set addressPool=…`.
 
 - `could not select device driver "nvidia" with capabilities: [[gpu]]` → **GPU access**. Needs an NVIDIA GPU
   and nvidia-container-toolkit on the machine the sandbox runs on, plus a rebuild. Do NOT delete a
@@ -160,7 +178,7 @@ user's files to route around them:
   subnet collides with the route, and the giveaway is that everything else still works.
 
 The last three apply on a dockerd restart (seconds, no rebuild) but the restart stops whatever the engine is
-running, so tell the user rather than assuming it's free. Say which parts of the task are blocked meanwhile.
+running; the card says so before the press, and your `--why` should say what is running that it would stop. Say which parts of the task are blocked meanwhile.
 
 For a SERVER-managed sandbox, also wire the approved overlay into the intent so `intentic deploy apply` builds it:
 in `intent/deploy.config.ts`, pass

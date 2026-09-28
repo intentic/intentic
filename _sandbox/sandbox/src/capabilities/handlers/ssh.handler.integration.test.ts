@@ -1,9 +1,10 @@
-import { mkdtempSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/files/workspace-files.js";
 import type { CapabilityCtx } from "../capability.js";
+import { generateSshKey } from "../credentials/ssh-keys.js";
 import { sshHandler } from "./ssh.handler.js";
 
 // A ctx exposing only what sshHandler touches (files + workspace.root + capabilities.list), over a fresh temp
@@ -63,6 +64,20 @@ test("password auth: writes a 0600 .pass file, no IdentityFile", async () => {
     expect(readFileSync(passPath, "utf8")).toBe("s3cret");
     expect(statSync(passPath).mode & 0o777).toBe(0o600);
     expect(readFileSync(confPath(home, "db"), "utf8")).not.toContain("IdentityFile");
+});
+
+// Where the key came from changes nothing about how it is used: the same IdentityFile, the same 0600 key file.
+test("generated auth: signs in with a key file exactly as a pasted key does", async () => {
+    const pair = generateSshKey("intentic-box");
+    const made: Capability = { id: "made", kind: "ssh", config: { auth: "generated", host: "5.6.7.8", port: 22, user: "deploy", privateKey: pair.privateKey } };
+    const { ctx, home } = tempCtx();
+    await drain(sshHandler.apply(ctx, "made", made.config));
+    const conf = readFileSync(confPath(home, "made"), "utf8");
+    expect(conf).toContain("User deploy");
+    expect(conf).toContain(`IdentityFile "${keyPath(home, "made")}"`);
+    expect(readFileSync(keyPath(home, "made"), "utf8")).toBe(pair.privateKey);
+    expect(statSync(keyPath(home, "made")).mode & 0o777).toBe(0o600);
+    expect(existsSync(join(home, ".ssh", "intentic-hosts", "made.pass"))).toBe(false);
 });
 
 test("remove drops the machine files but keeps the shared skill while another ssh machine remains", async () => {

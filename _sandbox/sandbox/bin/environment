@@ -1,0 +1,69 @@
+#!/usr/bin/env node
+// The in-sandbox environment command: put a tool the task needs into the sandbox image (docs/architecture/needs.md).
+// The steps are filed as a draft on the main tree at once, where the Environment card and a card in this chat both show
+// them, rather than waiting for this conversation's work to land; the owner approves that one tool, rebuilds, and the
+// conversation is continued once the running container has it.
+//
+// In an isolated turn the draft this reads sits in the conversation's own checkout; once the daemon has filed it on the
+// main tree, the local copy is removed, or the land would carry the same file in a second time.
+
+import { existsSync, readFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { die, parseArgs, raise, WAIT_HELP } from "./needs-cli.mjs";
+
+const COMMAND = "environment";
+
+// Where the main tree is mounted in an isolated turn; its presence is what says this shell is in a worktree.
+const MAIN_TREE = "/mnt/intentic-main";
+const DRAFTS = join(".intentic", "config", "environment.d");
+
+const USAGE = `environment — put a tool the task needs into the sandbox image
+
+  environment propose <tool> [--file <path> | --file -] [--why "…"] [--wait <seconds>]
+                          file the RUN/ENV steps for <tool> and ask the owner, on a card in this chat, to approve
+                          them. Reads ${DRAFTS}/<tool>.Dockerfile by default, another file with --file, or
+                          stdin with --file -. Only RUN and ENV lines; mount the build caches (the environment skill
+                          has the shapes).
+
+Approving and rebuilding are the owner's; the tool arrives when the container is rebuilt, and the conversation is
+continued then. Until then, say which parts wait on it rather than retrying.
+
+${WAIT_HELP}`;
+
+const draftPath = (tool) => join(process.cwd(), DRAFTS, `${tool.toLowerCase().replace(/[^a-z0-9._@+-]+/g, "-")}.Dockerfile`);
+
+const stepsFrom = (tool, file) => {
+    if (file === "-") {
+        return readFileSync(0, "utf8");
+    }
+    const path = file ?? draftPath(tool);
+    if (!existsSync(path)) {
+        return die(COMMAND, `no steps at ${path}: write them there, or pass --file`);
+    }
+    return readFileSync(path, "utf8");
+};
+
+const main = async () => {
+    const [command, ...args] = process.argv.slice(2);
+    if (command !== "propose") {
+        process.stdout.write(`${USAGE}\n`);
+        process.exit(command === undefined || command === "--help" || command === "-h" ? 0 : 1);
+    }
+    const { flags, rest } = parseArgs(COMMAND, args, { values: ["why", "wait", "file"] });
+    const [tool] = rest;
+    if (tool === undefined) {
+        return die(COMMAND, USAGE);
+    }
+    const steps = stepsFrom(tool, flags.file);
+    const local = flags.file === undefined ? draftPath(tool) : undefined;
+    // Removed before the call returns: `raise` exits the process with the answer. Filed on the main tree by the daemon
+    // before it answers, so a worktree's copy is a duplicate by then; on the main tree it IS the filed draft.
+    process.on("exit", (code) => {
+        if (code !== 1 && local !== undefined && existsSync(MAIN_TREE) && existsSync(local)) {
+            rmSync(local);
+        }
+    });
+    await raise(COMMAND, { kind: "environment", tool, steps }, flags);
+};
+
+main().catch((error) => die(COMMAND, error?.message ?? String(error)));

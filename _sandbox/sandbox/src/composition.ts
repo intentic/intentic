@@ -77,9 +77,11 @@ import { type DriftSweep, createDriftSweep } from "./environment/drift-sweep.js"
 import { fileRuntimeInstallsStore, runtimeInstallsDocument, type RuntimeInstallsStore } from "./environment/runtime-installs.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { cardDeps } from "./conversations/actor/card-offers.js";
+import { turnRunOf } from "./conversations/actor/conversation-holdings.js";
 import { dispatchWorkspaceEvent } from "./automations/workspace-events.js";
 import { clearTurnTaint } from "./guard/turn-taint.js";
-import { turnAwaiting, turnFinished } from "./push/notifications.js";
+import { turnFinished } from "./push/notifications.js";
+import { notifyAwaiting } from "./push/awaiting-detail.js";
 import { createDomainEvents, type DomainEvents } from "./seams/domain-events.js";
 import { type Announcer, createAnnouncer } from "./system/boot/announce.js";
 import { type ReachReporter, createReachReporter } from "./system/listeners/reach-report.js";
@@ -105,6 +107,8 @@ import { createWebextSlice, type WebextSlice } from "./webext/webext-slice.js";
 import { createRunnersSlice, type RunnersSlice } from "./runners/runners-slice.js";
 import { type AgentToolsMember, createCapabilitiesSlice, type CapabilitiesSlice } from "./capabilities/capabilities-slice.js";
 import { createSecretsSlice, type SecretsSlice } from "./secrets/secrets-slice.js";
+import { createNeedsSlice, type NeedsSlice } from "./needs/needs-slice.js";
+import { type ConversationGrants, conversationGrantsDocument, fileConversationGrants } from "./personas/conversation-grants.js";
 import { createExtensionsSlice, type ExtensionsSlice } from "./extensions/extensions-slice.js";
 import { type AutomationsSlice, createAutomationsSlice, type IntakeMembers } from "./automations/automations-slice.js";
 import { createLoopsSlice, type LoopsSlice, type WorkflowsMembers } from "./loops/loops-slice.js";
@@ -136,6 +140,7 @@ export interface Services
         RunnersSlice,
         CapabilitiesSlice,
         SecretsSlice,
+        NeedsSlice,
         ExtensionsSlice,
         AutomationsSlice,
         LoopsSlice,
@@ -189,6 +194,8 @@ export interface Services
     readonly platformTunnel: PlatformTunnel;
     // Named personas this sandbox shows outside; the turn path reads it to decide what a wake may act through.
     readonly personas: PersonasStore;
+    // What a person allowed one conversation beyond its persona, from a grant need's card; read as its turns are planned.
+    readonly conversationGrants: ConversationGrants;
     // Named parts of the workspace; every path fence resolves through it, for people and for the turns they start.
     readonly areas: AreasStore;
     // Maintenance evidence: the probe cache the background runner fills, and the ledger of what was done about it.
@@ -482,6 +489,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     });
     const { capabilities } = capabilitiesParts.slice;
     const secretsSlice = createSecretsSlice({ workspace, authRoot, secretVault: capabilitiesParts.secretVault, cards: cardDeps({ conversations, cards, events }) });
+    const conversationGrants = fileConversationGrants(join(authRoot, conversationGrantsDocument.path));
     const extensionsSlice = createExtensionsSlice({
         config,
         logger,
@@ -510,7 +518,11 @@ export const createServices = (config: Config, logger: Logger): Services => {
         logger,
         turnCheckpoints: conversationsParts.slice.turnCheckpoints,
         roster: () => [...agents.list(), ...agents.listArchived()].flatMap((summary) => agents.entry(summary.id) ?? []),
-        forget: (conversationId) => secretsSlice.credentialGrants.forget(conversationId),
+        forget: (conversationId) => {
+            secretsSlice.credentialGrants.forget(conversationId);
+            // A purged conversation's grants go with it, so a reused id inherits nothing it was not given.
+            void conversationGrants.forget(conversationId).catch((error: unknown) => logger.warn({ err: error, conversationId }, "conversation grants: forgetting failed"));
+        },
     });
     // A review's code-only counts outlive the process: a restart reopening every review tab reads them back.
     keepCodeCounts(statePath(workspace.root, ".intentic/local/cache/", "code-counts.db"));
@@ -533,6 +545,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ...conversationsParts.slice,
         ...capabilitiesParts.slice,
         ...secretsSlice,
+        ...createNeedsSlice({ workspaceRoot: workspace.root, logger, whole }),
         ...extensionsSlice,
         ...createAutomationsSlice({ workspaceRoot: workspace.root, archived: (conversationId) => agents.entry(conversationId)?.archivedAt !== undefined }),
         ...createLoopsSlice(workspace.root),
@@ -569,6 +582,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         trial,
         platformTunnel,
         personas,
+        conversationGrants,
         areas,
         chores,
         invariants,
@@ -616,7 +630,7 @@ export const wireReactions = (services: Services): void => {
         ),
     );
     services.events.subscribe("turn.awaiting", ({ conversationId, awaiting }) =>
-        services.pushSender.notifyIfAway(turnAwaiting(conversationId, awaiting)),
+        notifyAwaiting(services, { conversationId, kind: awaiting, run: turnRunOf(services.conversations, conversationId) }),
     );
     services.events.subscribe("turn.finished", ({ conversationId, prompt, outcome }) =>
         services.pushSender.notifyIfAway(turnFinished(conversationId, prompt, outcome)),

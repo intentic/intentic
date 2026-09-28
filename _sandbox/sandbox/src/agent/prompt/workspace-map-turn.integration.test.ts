@@ -76,6 +76,10 @@ const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, ov
         // Empty on purpose: planTurn reads the policy every turn whether or not a gate exists.
         credentialGates: unstubbed<Services["credentialGates"]>("credentialGates", { list: async () => [] }),
         credentialGrants: createCredentialGrants(),
+        // Where planning records what the turn reaches (turn-standing.ts), for the needs door to read.
+        conversations: memoryFleet().conversations,
+        // No conversation-level grants: what a conversation nobody has widened reads.
+        conversationGrants: unstubbed<Services["conversationGrants"]>("conversationGrants", { of: async () => undefined }),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
             get: async () => SandboxSettingsSchema.parse(settings),
         }),

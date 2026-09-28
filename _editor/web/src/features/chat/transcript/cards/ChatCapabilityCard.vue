@@ -25,6 +25,15 @@ const connect = async (): Promise<void> => {
 
 // The static catalog's description; absent for a contributed entry.
 const description = computed(() => CAPABILITY_CATALOG.find((entry) => entry.id === card.value.offer.entry)?.description);
+
+// "Connected", then who as when setup named an account, then the clause saying what the agent did next. Joined here,
+// since the template compiler drops the space a `<template v-if>` opens with; the clause brings its own lead-in (": …",
+// French " : …"), so nothing goes before it.
+const connectedLine = computed(() => {
+    const id = card.value.outcome?.id;
+    const connected = id === undefined || id === `` ? t(`shared.connected`) : `${t(`shared.connected`)} ${t(`chat.chatMessageView.as`, { id })}`;
+    return `${connected}${t(`chat.chatMessageView.agentContinuing`)}`;
+});
 </script>
 
 <template>
@@ -46,10 +55,7 @@ const description = computed(() => CAPABILITY_CATALOG.find((entry) => entry.id =
 
         <!-- How the accepted ask resolved: what the agent did next. -->
         <div v-if="card.outcome" class="chat-card-row">
-            <span v-if="card.outcome.outcome === 'connected'" class="text-2xs text-muted"
-                >{{ t(`shared.connected`) }}<template v-if="card.outcome.id">{{ t(`chat.chatMessageView.as`, { id: card.outcome.id }) }}</template
-                >{{ t(`chat.chatMessageView.agentContinuing`) }}</span
-            >
+            <span v-if="card.outcome.outcome === 'connected'" class="text-2xs text-muted">{{ connectedLine }}</span>
             <span v-else class="text-2xs text-muted">{{ t(`chat.chatMessageView.setupDidntFinishWhile`) }}</span>
         </div>
 

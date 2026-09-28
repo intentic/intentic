@@ -64,6 +64,15 @@ export const afterReply = (answer: CardAnswer): "end" | "stop" | "go on" => {
     return `go on`;
 };
 
+// The permission card's answer between allowing a call and stopping the turn: this one call refused, the turn left to go
+// on, which a denial with words to steer by does. The daemon hands those words to the model as the reason the call was
+// refused, so they are addressed to the agent.
+export const SKIP_CALL: Extract<CardAnswer, { kind: "permission" }> = {
+    kind: `permission`,
+    decision: `deny`,
+    feedback: `The user declined this one call but wants you to keep going. Do not retry it: carry on another way, or without it, and say what you left undone.`,
+};
+
 // A plan's rejection feedback: what was typed, and the staged files as `@`-prefixed workspace paths, the one text field
 // the wire reply has; undefined when there is neither.
 export const planFeedback = (text: string | undefined, attachments: readonly ChatAttachment[] = []): string | undefined => {

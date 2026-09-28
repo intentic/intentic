@@ -104,6 +104,15 @@ export const SshConfigSchema = z.discriminatedUnion("auth", [
         user: z.string().min(1).describe("Which user to connect as."),
         privateKey: z.string().min(1).describe("The private key, whole. Stored with tight permissions and never echoed back."),
     }),
+    // The sandbox made this key itself (capabilities.sshKey), so its private half never crossed the wire; stored and
+    // written exactly like a pasted one.
+    z.object({
+        auth: z.literal("generated").describe("Sign in with a key the sandbox generated. Its private half never left the sandbox."),
+        host: z.string().min(1).describe("The machine's address."),
+        port: z.coerce.number().default(22).describe("Which port it listens on."),
+        user: z.string().min(1).describe("Which user to connect as."),
+        privateKey: z.string().min(1).describe("The private half of the generated key. Stored with tight permissions and never echoed back."),
+    }),
     z.object({
         auth: z.literal("password").describe("Sign in with a password."),
         host: z.string().min(1).describe("The machine's address."),
@@ -112,6 +121,14 @@ export const SshConfigSchema = z.discriminatedUnion("auth", [
         password: z.string().min(1).describe("The password. Stored, never echoed back."),
     }),
 ]);
+// What a form sends where a generated key's private half goes: the token capabilities.sshKey answered with, which the
+// add swaps for the key the daemon kept. VAULTED's sibling (policy/capability-secrets.ts) for a value not stored yet; a
+// marker with nothing held behind it is refused, never written.
+const STASHED_PREFIX = "__intentic_stashed__:";
+export const stashedMarker = (token: string): string => `${STASHED_PREFIX}${token}`;
+// The token a marker names; undefined for anything else (a real key, VAULTED, a blank).
+export const stashedToken = (value: unknown): string | undefined =>
+    typeof value === "string" && value.startsWith(STASHED_PREFIX) && value.length > STASHED_PREFIX.length ? value.slice(STASHED_PREFIX.length) : undefined;
 // What is optional about the in-sandbox Docker Engine: `gpu` is an IMAGE option (rides the Dockerfile overlay, needs a
 // rebuild), everything else is an ENGINE option (rewrites daemon.json, restarts dockerd, no rebuild but stops running
 // containers). Flat strings, not nested booleans, to match the manifest's own two-state convention.
@@ -460,3 +477,14 @@ export const CapabilityProbeSchema = z.object({
     who: z.string().optional().describe("Who the service said the credential belongs to, when it said."),
 });
 export type CapabilityProbe = z.infer<typeof CapabilityProbeSchema>;
+// POST /capabilities/ssh-key: a key pair made inside the sandbox for a connection being set up. The public half is the
+// whole answer; the private half stays in the daemon until an add sends `stashedMarker(token)` where it goes.
+export const SshKeySchema = z.object({
+    publicKey: z.string().describe("The public half, as the one line a server's authorized_keys holds: `ssh-ed25519 AAAA… intentic-<sandbox>`."),
+    token: z
+        .string()
+        .describe(
+            "Stands for the private half, which never leaves the sandbox. Sent wrapped as a marker in the private key's place, it installs that key once, and it lapses after thirty minutes.",
+        ),
+});
+export type SshKey = z.infer<typeof SshKeySchema>;

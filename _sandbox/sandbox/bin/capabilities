@@ -1,137 +1,100 @@
 #!/usr/bin/env node
-// The in-sandbox capability command — how an agent discovers what this sandbox can be connected to and asks
-// the owner, in chat, to connect something the task needs. The ASK is the whole of it: `request` parks on
-// the daemon while a card goes up in the owner's chat (capabilities/offers/capability-offer.ts) titled with the
-// catalog's own words, and the call is answered by how the card settles — connected (the setup finished
-// while you waited; continue with it), skipped (continue without it), or expired. The agent never connects
-// anything itself and never sees a credential — the owner's setup happens in their own UI.
+// The in-sandbox capability command: what this sandbox can be connected to, and the ask that puts a card in the
+// owner's chat to connect one (docs/architecture/needs.md). The ASK is the whole of it: the daemon answers for THIS
+// turn, not for the sandbox, so a connection for a different site, one this conversation's persona or a gate
+// withholds, and one whose credential is being refused each get their own answer and their own card, rather than the
+// "already connected, use it" that once came back for all three. The agent never connects anything itself and never
+// sees a credential: the person does the setup, in the card, and the command resumes when it is live.
 //
-// node:http rather than fetch, deliberately: a parked `request` holds its connection for as long as the
-// owner takes to decide and set up (bounded by the daemon's own deadlines), and undici's default header
-// timeout would kill the wait with the card still up.
-//
-// Auth is the per-boot agent token from /run/intentic/agent.token; auth/grants.ts admits it to exactly the
-// two capability-gate routes — discovery names cards, never configs or secrets.
+// Every raising command shares needs-cli.mjs, so this one cannot drift from the route again: bin/needs-cli.test.mjs
+// runs it against the contract's own schemas.
 
-import { readFileSync } from "node:fs";
-import { request } from "node:http";
+import { call, die, parseArgs, raise, refusalOf, WAIT_HELP } from "./needs-cli.mjs";
 
-const TOKEN_PATH = "/run/intentic/agent.token";
-const PORT = process.env.SANDBOX_PORT ?? "8787";
+const COMMAND = "capabilities";
 
-// The conversation this shell was spawned for (platform/leftovers.ts workloadStamp) — what tells the daemon
-// WHOSE chat the ask card belongs in. The daemon falls back to the sole live turn when it is unset.
-const CONVERSATION = process.env.INTENTIC_TURN_OWNER ?? "";
+const USAGE = `capabilities — what this sandbox can be connected to, and the in-chat ask to connect one
 
-const USAGE = `capabilities — what this sandbox can be connected to, and the in-chat ask to connect it
+  capabilities list [--json]                 every connectable entry, what is connected, and what this workspace
+                                             looks like it wants
+  capabilities request <entry|connection>    ask the owner, on a card in their chat, to connect one, to fix one
+        [--target <site|host>]                 the site or host it is for, when the entry can hold several
+        [--set key=value]...                   settings you can fill in (never a credential), or a change to a
+                                               connected one's settings (a device switch, a Docker option)
+        [--reconnect]                          it is connected, but its credential is being refused
+        [--why "…"] [--wait <seconds>]         your one-line case for it, shown on the card
 
-  capabilities list                        every connectable card, and whether it is connected
-  capabilities request <card> [--why "…"]  ask the owner, on a card in their chat, to connect one;
-                                           --why is your one-line case for it
+${WAIT_HELP}`;
 
-\`request\` raises a card in the owner's chat and waits — for their decision, and then for the setup itself,
-so a connected answer means the capability is live and yours to use in this same turn. Hold the command
-open rather than timing it out. A skip or an expired ask answers with a sentence to act on: continue
-without it, and don't ask for the same card again in this conversation.`;
-
-const die = (message) => {
-    process.stderr.write(`${message}\n`);
-    process.exit(1);
-};
-
-// Read lazily, not at startup: `capabilities --help` has to work in any shell, including one where the
-// daemon isn't running yet — only an actual call needs the token.
-const token = () => {
-    try {
-        return readFileSync(TOKEN_PATH, "utf8").trim();
-    } catch {
-        return die(`capabilities: no daemon token at ${TOKEN_PATH} — is the intentic daemon running in this container?`);
-    }
-};
-
-// One loopback call, held open for as long as the daemon holds it — no timeout on purpose (see the header
-// note above). Resolves with whatever the daemon answered; only a transport failure rejects.
-const call = (method, path, body) =>
-    new Promise((resolve, reject) => {
-        const req = request({ host: "127.0.0.1", port: PORT, path, method }, (response) => {
-            let raw = "";
-            response.on("data", (chunk) => {
-                raw += chunk.toString();
-            });
-            response.on("end", () => resolve({ status: response.statusCode ?? 502, text: raw }));
-        });
-        req.on("error", reject);
-        req.setHeader("x-intentic-agent", token());
-        if (CONVERSATION !== "") {
-            req.setHeader("x-intentic-conversation", CONVERSATION);
-        }
-        if (body !== undefined) {
-            req.setHeader("content-type", "application/json");
-        }
-        req.end(body);
-    });
-
-// The daemon's refusals arrive as {error: {message}} — surface the sentence, which is already written to be
-// acted on.
-const refusalOf = (text) => {
-    try {
-        const parsed = JSON.parse(text);
-        if (typeof parsed?.error === "string") return parsed.error;
-        if (typeof parsed?.error?.message === "string") return parsed.error.message;
-    } catch {
-        // Not JSON — fall through to the raw text.
-    }
-    return text || "the daemon did not say why";
-};
-
-const list = async () => {
-    const { status, text } = await call("GET", "/capabilities/connectable");
+const list = async (flags) => {
+    const { status, text } = await call(COMMAND, "GET", "/capabilities/connectable");
     if (status !== 200) {
-        return die(`capabilities: ${refusalOf(text)}`);
+        return die(COMMAND, refusalOf(text));
     }
-    const { cards } = JSON.parse(text);
-    if (!Array.isArray(cards) || cards.length === 0) {
-        process.stdout.write("No capability cards are available.\n");
+    const parsed = JSON.parse(text);
+    if (flags.json === true) {
+        process.stdout.write(`${JSON.stringify(parsed, null, 2)}\n`);
         return;
     }
-    for (const card of cards) {
-        process.stdout.write(`${card.connected ? "[connected] " : ""}${card.card} — ${card.name}: ${card.description}\n`);
+    const entries = Array.isArray(parsed.entries) ? parsed.entries : [];
+    if (entries.length === 0) {
+        process.stdout.write("No capability entries are available.\n");
+        return;
+    }
+    for (const entry of entries) {
+        process.stdout.write(`${entry.connected ? "[connected] " : ""}${entry.entry} — ${entry.name}: ${entry.description}\n`);
+    }
+    const suggested = Array.isArray(parsed.suggested) ? parsed.suggested : [];
+    if (suggested.length > 0) {
+        process.stdout.write("\nThis workspace looks like it wants:\n");
+        for (const suggestion of suggested) {
+            process.stdout.write(`  ${suggestion.entry} — ${suggestion.claim} (from ${suggestion.evidence})\n`);
+        }
     }
 };
 
-const requestCard = async (args) => {
-    // `--why` can sit anywhere after `request`; what remains is `<card>`.
-    const rest = [];
-    let why;
-    for (let i = 0; i < args.length; i += 1) {
-        if (args[i] === "--why") {
-            why = args[i + 1] ?? "";
-            i += 1;
-        } else {
-            rest.push(args[i]);
-        }
+// `key=value` settings as the route takes them; a value may itself contain `=`.
+const settingsOf = (pairs) =>
+    Object.fromEntries(
+        (pairs ?? []).map((pair) => {
+            const at = pair.indexOf("=");
+            if (at <= 0) {
+                return die(COMMAND, `--set takes key=value, and "${pair}" is not`);
+            }
+            return [pair.slice(0, at), pair.slice(at + 1)];
+        }),
+    );
+
+const requestOne = async (args) => {
+    const { flags, rest } = parseArgs(COMMAND, args, { values: ["why", "target", "wait"], switches: ["reconnect"], repeated: ["set"] });
+    const [entry] = rest;
+    if (entry === undefined) {
+        return die(COMMAND, USAGE);
     }
-    const [card] = rest;
-    if (card === undefined) {
-        return die(USAGE);
-    }
-    const { status, text } = await call("POST", "/capabilities/ask", JSON.stringify({ card, ...(why !== undefined && why !== "" ? { why } : {}) }));
-    if (status < 200 || status >= 300) {
-        return die(`capabilities: ${refusalOf(text)}`);
-    }
-    const { message } = JSON.parse(text);
-    process.stdout.write(`${message ?? text}\n`);
+    const set = settingsOf(flags.set);
+    await raise(
+        COMMAND,
+        {
+            kind: "capability",
+            entry,
+            ...(flags.target === undefined ? {} : { target: flags.target }),
+            ...(Object.keys(set).length === 0 ? {} : { set }),
+            ...(flags.reconnect === true ? { reconnect: true } : {}),
+        },
+        flags,
+    );
 };
 
 const main = async () => {
     const [command, ...rest] = process.argv.slice(2);
     if (command === "list") {
-        return list();
+        return list(parseArgs(COMMAND, rest, { switches: ["json"] }).flags);
     }
     if (command === "request") {
-        return requestCard(rest);
+        return requestOne(rest);
     }
-    return die(USAGE);
+    process.stdout.write(`${USAGE}\n`);
+    process.exit(command === undefined || command === "--help" || command === "-h" ? 0 : 1);
 };
 
-main().catch((error) => die(`capabilities: ${error?.message ?? error}`));
+main().catch((error) => die(COMMAND, error?.message ?? String(error)));

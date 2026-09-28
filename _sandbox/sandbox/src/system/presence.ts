@@ -51,9 +51,13 @@ export const updatePresence = (identity: VerifiedIdentity, report: PresenceRepor
     broadcast();
 };
 
-// True when nobody is watching, gating push notifications. A whole-sandbox verdict: the daemon can't match a push
-// endpoint to a presence entry, so one present member suppresses everyone's notification.
+// True when nobody is watching: the push rule for a device that names no member (registered before devices were tied
+// to members, or by a caller with no identity), which one present member still silences.
 export const idleEverywhere = (): boolean => [...entries.values()].every((user) => user.idle);
+
+// Who is watching right now, a connected tab not idle, by lowercased email: push skips each one's own devices only.
+export const presentMembers = (): ReadonlySet<string> =>
+    new Set([...entries.values()].filter((user) => !user.idle).map((user) => user.email.toLowerCase()));
 
 // Live /events connections, not idleEverywhere: an idle tab is still a person who expects the workspace to stay alive.
 export const connectedCount = (): number => entries.size;

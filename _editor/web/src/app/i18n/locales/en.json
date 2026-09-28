@@ -184,6 +184,8 @@
             "permission": "Permission",
             "question": "Question for you",
             "readyToLand": "Ready to land",
+            "needsYou": "Needs you",
+            "seeWhatItNeeds": "See what it needs",
             "releaseNeeded": "Release needed",
             "removed": "Removed",
             "removedWorkspaceStillOn": "Removed from your workspace (still on its branch)",
@@ -826,6 +828,19 @@
             "showValue": "Show value",
             "storedInSandboxs": "Stored in your sandbox's"
         },
+        "sshKeyField": {
+            "authorizeAs": "Authorize it: run this on the server, signed in as {user}",
+            "authorizeAsUserAbove": "Authorize it: run this on the server, signed in as the user above",
+            "couldntGenerate": "Couldn't generate a key.",
+            "generateFirst": "Generate a key, and authorize it on the server, before saving.",
+            "generateKey": "Generate a key",
+            "generateNewKey": "Generate a new key",
+            "holdsKey": "This connection already signs in with a key.",
+            "privateHalfStays": "The private half never leaves the sandbox.",
+            "publicKey": "Public key",
+            "replacesOldKey": "Saving swaps this in for the key the connection used. The old one stays authorized on the server until you remove it there.",
+            "sandboxMakesPair": "The sandbox makes the key pair and keeps the private half. You only see the public half."
+        },
         "webExtConnectDialog": {
             "connectedAllowOnSite": "is connected. Allow it on a site in the extension, and the agent can work there from its next turn.",
             "extensionCodeOpenToolbar": "Your extension has the code. Open it (the toolbar icon is showing",
@@ -1060,6 +1075,8 @@
             "showCheck": "Show the check",
             "showMessage": "Show the message",
             "showCommand": "Show the command",
+            "skipCall": "Skip this, keep going",
+            "skipCallHint": "Declines only this call: the agent carries on without it",
             "skipFree": "Skip: free",
             "spentToday": "${amountUsd} · ${spentTodayUsd} of ${dailyCapUsd} spent today",
             "to": "To {payTo}",
@@ -1747,6 +1764,110 @@
         },
         "reconcileStatus": {
             "changesPending": "changes pending"
+        }
+    },
+    "needs": {
+        "inbox": {
+            "title": "Needs you",
+            "description": "Everything agents are waiting on a person for: a connection, a secret, access, a tool. Answer it here, and the conversation carries on by itself.",
+            "waiting": "One thing is waiting on you | {count} things are waiting on you",
+            "openChat": "Open the chat",
+            "untitled": "A conversation",
+            "nothing": "Nothing is waiting on you.",
+            "parked": "Waiting in their chats",
+            "parkedHint": "A turn is paused on these right now: a plan, a question, a permission, a payment or a hand-off. They are answered in their own chat.",
+            "showAnswered": "Show the {count} most recently answered",
+            "hideAnswered": "Hide the answered ones"
+        },
+        "strip": {
+            "waiting": "Waiting on you for one thing: | Waiting on you for {count} things:"
+        },
+        "plan": {
+            "alsoWaiting": "This plan also needs one thing from you: | This plan also needs {count} things from you:",
+            "answerThere": "Answer them on their cards, pinned above the message box: the steps that need them wait, the rest can start now."
+        },
+        "status": {
+            "met": "Done",
+            "declined": "Declined",
+            "withdrawn": "Withdrawn"
+        },
+        "card": {
+            "agentsCase": "The agent's case: {why}",
+            "unattended": "Asked by a run nobody was watching, so it waited for you.",
+            "settingUp": "Waiting for the setup to finish…",
+            "approvedRebuild": "Approved. It arrives when the sandbox is rebuilt.",
+            "toldCall": "The agent had the answer straight away.",
+            "toldTurn": "The agent was told, and carried on.",
+            "toldQueued": "The agent hears it as soon as its current work ends.",
+            "toldNot": "The agent has not been told yet: it hears when this conversation next runs.",
+            "answeredBy": "Answered by {who}",
+            "notNow": "Not now",
+            "declineNote": "Anything the agent should know (optional)",
+            "declineSend": "Decline",
+            "couldNotAnswer": "Could not record your answer."
+        },
+        "capability": {
+            "name": "Name",
+            "howToGet": "How to get it",
+            "createToken": "Create a token",
+            "connect": "Connect {name}",
+            "fullForm": "Full form",
+            "setUpOnPage": "This one is set up on its own page, with what the agent filled in carried there.",
+            "setUp": "Set up {name}",
+            "newCredential": "Its credential stopped working. Paste a new one for \"{id}\":",
+            "itWorks": "It works now",
+            "editConnection": "Edit the connection",
+            "apply": "Apply the change",
+            "effectRebuild": "Needs a one-time rebuild of the sandbox before it works.",
+            "effectRestart": "Restarts {process}, which stops whatever it is running.",
+            "effectGpu": "Claims every GPU on the machine the sandbox runs on.",
+            "effectPrivileged": "Runs privileged inside the sandbox.",
+            "couldNotConnect": "Could not connect it.",
+            "couldNotApply": "Could not apply the change.",
+            "notWorkingYet": "It is not working yet: finish its setup, then press again."
+        },
+        "secret": {
+            "where": "Used for: {where}",
+            "hint": "What it looks like: {hint}",
+            "replace": "The value stored as {name} is being refused. Paste a new one:",
+            "getOne": "Where to get one",
+            "stored": "Stored in this sandbox as {name}. The agent only ever sees its name, never the value.",
+            "save": "Save",
+            "addedElsewhere": "I added it elsewhere",
+            "couldNotSave": "Could not store the secret.",
+            "notStoredYet": "It is not stored yet: paste it here, or add it on the Secrets view."
+        },
+        "grant": {
+            "withheld": "This conversation cannot reach {label}.",
+            "withheldBy": "The persona {persona} leaves out {label}.",
+            "nextTurn": "Allowed now, it reaches the conversation from its next turn, and the agent carries on with it.",
+            "forConversation": "Allow for this conversation",
+            "onPersona": "Add to {persona}",
+            "site": "Waiting for you to allow {site} in your browser's Intentic extension."
+        },
+        "release": {
+            "whole": "Releasing it covers the rest of this conversation, from its next turn.",
+            "approvers": "Approvers: {approvers}",
+            "onlyThem": "Only {approvers} can answer this",
+            "release": "Release"
+        },
+        "grants": {
+            "title": "What you have allowed",
+            "hint": "Reach given to conversations beyond their persona or area, and credentials released to them. Taking one back applies from the conversation's next turn.",
+            "capability": "{what}, although its persona leaves it out",
+            "folder": "Files in {what}",
+            "shelf": "The {what} tools",
+            "release": "{what}, released to it",
+            "releasedBy": "by {who}, {when}",
+            "allowedBy": "allowed by {who}, {when}",
+            "takeBack": "Take back",
+            "couldNotTakeBack": "Could not take it back."
+        },
+        "environment": {
+            "approveOne": "Approving adds these steps for {tool} alone; anything else waiting stays for its own card.",
+            "approve": "Approve",
+            "rebuildToFinish": "Approved. {tool} arrives when the sandbox is rebuilt.",
+            "openRebuild": "Rebuild"
         }
     },
     "preview": {
@@ -3045,13 +3166,14 @@
             "untilOneAutomationSchedule": "Until there is one, an automation you schedule can't post anywhere, and a chat reaches every account you've connected."
         },
         "sandboxSecrets": {
-            "activate": "Activate",
             "addSecret": "Add a secret",
+            "generateRandom": "Generate a random one",
+            "generateHint": "For a value nobody has to find, like a session key or a signing secret: the sandbox makes it and keeps it, and nobody sees it.",
+            "couldNotGenerate": "Could not generate the secret.",
             "capabilityCredentials": "Capability credentials",
             "ciInSync": "CI in sync",
             "generatedByIntentic": "Generated by intentic",
             "intentDeclaresNoUser": "Your intent declares no user-supplied secrets yet.",
-            "keepingOwnSecretsHere": "Keeping your own secrets here needs DevOps active.",
             "keyAccountWhatUses": "Key, account or what uses it…",
             "keyName": "KEY_NAME",
             "manageCapabilities": "Manage capabilities",

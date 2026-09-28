@@ -1,5 +1,12 @@
-import type { CapabilityContribution } from "@intentic/extension-manifest";
-import { LOCAL_MODEL_INSTANT, LOCAL_MODEL_WINDOW_DEFAULT, LOCAL_MODEL_WINDOWS, LOCAL_MODELS, localModelChoice } from "@intentic/sandbox-contract";
+import { type CapabilityContribution, fieldApplies } from "@intentic/extension-manifest";
+import {
+    LOCAL_MODEL_INSTANT,
+    LOCAL_MODEL_WINDOW_DEFAULT,
+    LOCAL_MODEL_WINDOWS,
+    LOCAL_MODELS,
+    localModelChoice,
+    SshConfigSchema,
+} from "@intentic/sandbox-contract";
 import { CAPABILITY_CATALOG, contributionEntry } from "./index.js";
 
 // Real shapes from _extensions/connectors/intentic-extension.json, abridged to the card-relevant fields.
@@ -218,5 +225,30 @@ describe("the local model tile", () => {
 
     it("asks for a typed window only when the rungs are declined", () => {
         expect(field("contextTokens")?.when).toBe("context == 'custom'");
+    });
+});
+
+// The form and the daemon read one list of sign-ins: a choice the schema refuses is a form that can never save, and an
+// arm the form never offers is a way in nobody can pick.
+describe("the ssh tile", () => {
+    const tile = CAPABILITY_CATALOG.find((entry) => entry.id === "ssh")!;
+    const auth = tile.fields.find((field) => field.key === "auth");
+    const choices = auth?.options?.map((option) => option.value) ?? [];
+
+    it("offers every sign-in the daemon's schema accepts, and nothing else", () => {
+        expect(choices.toSorted()).toEqual(SshConfigSchema.options.map((arm) => arm.shape.auth.value).toSorted());
+    });
+
+    // The one choice that never puts a private key in the browser is the one a form left untouched makes.
+    it("defaults to the sandbox generating the key", () => {
+        expect(auth?.default).toBe("generated");
+    });
+
+    it("asks for the one credential each sign-in's schema arm requires, as a secret", () => {
+        const credentialOf = (choice: string): string[] =>
+            tile.fields.filter((field) => field.secret === true && fieldApplies(field, { auth: choice })).map((field) => field.key);
+        expect(credentialOf("generated")).toEqual(["privateKey"]);
+        expect(credentialOf("key")).toEqual(["privateKey"]);
+        expect(credentialOf("password")).toEqual(["password"]);
     });
 });

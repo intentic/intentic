@@ -533,6 +533,15 @@ COPY --chmod=755 _sandbox/sandbox/bin/otp /usr/local/bin/otp
 # ask the owner in chat to connect one. Same shape as vpn/otp — it relays through the daemon, which owns the
 # consent card and the setup watch; the CLI connects nothing and reads no credential.
 COPY --chmod=755 _sandbox/sandbox/bin/capabilities /usr/local/bin/capabilities
+# The one module every asking command shares (bin/needs-cli.mjs): how an ask reaches the needs door and what its exit
+# codes mean, so capabilities, secrets, grants, environment and needs answer alike (docs/architecture/needs.md). Beside
+# them, since each imports it by its relative path.
+COPY --chmod=644 _sandbox/sandbox/bin/needs-cli.mjs /usr/local/bin/needs-cli.mjs
+# The asks for reach a persona withholds, for a tool in the image, and the list of what a conversation still waits on.
+# Same shape as capabilities: they relay through the daemon, which owns every card; none reads a credential.
+COPY --chmod=755 _sandbox/sandbox/bin/grants /usr/local/bin/grants
+COPY --chmod=755 _sandbox/sandbox/bin/environment /usr/local/bin/environment
+COPY --chmod=755 _sandbox/sandbox/bin/needs /usr/local/bin/needs
 # The wallet command the wallet skill teaches: check the sandbox's USDC balance and pay x402-payable
 # endpoints under the owner's policy. Same shape as services — it relays through the daemon, which owns the
 # consent card and the ledger; the signing key lives with the platform and never enters this container.

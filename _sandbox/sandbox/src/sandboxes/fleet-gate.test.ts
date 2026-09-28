@@ -101,6 +101,51 @@ it("asks first, then provisions and builds, reporting where it landed", async ()
     expect(frames.map((frame) => frame.kind)).toEqual(["question", "resolved"]);
 });
 
+// The question card draws an option's label, description and preview and nothing else, so the agent's case goes where
+// the owner reads it. Pinned whole: a `why` riding beside those fields, which no card draws, fails here.
+it("shows the owner the agent's case, on the create it argues for", async () => {
+    const { deps, frames } = fake();
+    const pending = createSandboxThroughFleet(deps, ask());
+    await answerCard(frames, "Not now");
+    await pending;
+    expect(frames[0]).toEqual({
+        kind: "question",
+        requestId: expect.any(String),
+        questions: [
+            {
+                question: 'Create a new sandbox "reviewer" on radarsu-rog?',
+                header: "New sandbox",
+                multiSelect: false,
+                options: [
+                    {
+                        label: "Create it",
+                        description:
+                            "Makes it on your intentic account and brings it up on radarsu-rog. It is yours, and it outlives this conversation. The agent's case: somewhere to run the nightly review without competing for this box's cores",
+                    },
+                    { label: "Not now", description: "Nothing is created and nothing is spent." },
+                ],
+            },
+        ],
+    });
+});
+
+it("says nothing of a case the agent did not make", async () => {
+    for (const why of [undefined, ""]) {
+        const { deps, frames } = fake();
+        const pending = createSandboxThroughFleet(deps, ask({ why }));
+        await answerCard(frames, "Not now");
+        await pending;
+        const raised = frames[0];
+        expect(raised?.kind === "question" ? raised.questions[0]?.options : raised?.kind, JSON.stringify(why)).toEqual([
+            {
+                label: "Create it",
+                description: "Makes it on your intentic account and brings it up on radarsu-rog. It is yours, and it outlives this conversation.",
+            },
+            { label: "Not now", description: "Nothing is created and nothing is spent." },
+        ]);
+    }
+});
+
 it("a no touches the account at all: nothing is minted, so there is nothing to expire", async () => {
     const { deps, frames, provision, flows } = fake();
     const pending = createSandboxThroughFleet(deps, ask());

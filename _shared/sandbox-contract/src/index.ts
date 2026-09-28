@@ -32,6 +32,7 @@ import { netdiskContract } from "./contracts/netdisk.contract.js";
 import { providersContract } from "./contracts/providers.contract.js";
 import { pushContract } from "./contracts/push.contract.js";
 import { safetyContract } from "./contracts/safety.contract.js";
+import { needsContract } from "./contracts/needs.contract.js";
 import { secretsContract } from "./contracts/secrets.contract.js";
 import { sessionsContract } from "./contracts/sessions.contract.js";
 import { settingsContract } from "./contracts/settings.contract.js";
@@ -92,6 +93,7 @@ export { publicContract } from "./contracts/public.contract.js";
 export { providersContract, type RunnableProviders, RunnableProvidersSchema } from "./contracts/providers.contract.js";
 export { pushContract } from "./contracts/push.contract.js";
 export { safetyContract } from "./contracts/safety.contract.js";
+export { needsContract } from "./contracts/needs.contract.js";
 export { secretsContract } from "./contracts/secrets.contract.js";
 export { sessionsContract } from "./contracts/sessions.contract.js";
 export { settingsContract } from "./contracts/settings.contract.js";
@@ -115,6 +117,7 @@ export * from "./events/land-breakage.js";
 export * from "./events/land-conflict.js";
 export * from "./events/verify-nudge.js";
 export * from "./events/errands.js";
+export * from "./events/need-wake.js";
 export * from "./events/watch-wake.js";
 export * from "./policy/request-status.js";
 export * from "./events/child-run.js";
@@ -214,6 +217,7 @@ export * from "./schemas/providers/provider-subscriptions.js";
 export * from "./schemas/public.js";
 export * from "./schemas/push.js";
 export * from "./schemas/git/remote-refs.js";
+export * from "./schemas/needs.js";
 export * from "./schemas/secrets.js";
 export * from "./schemas/netdisk.js";
 export * from "./schemas/sessions.js";
@@ -285,6 +289,7 @@ export const sandboxContract = {
     public: publicContract,
     providers: providersContract,
     push: pushContract,
+    needs: needsContract,
     secrets: secretsContract,
     system: systemContract,
     translator: translatorContract,

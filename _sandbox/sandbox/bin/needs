@@ -1,0 +1,60 @@
+#!/usr/bin/env node
+// The in-sandbox needs command: what this conversation has asked people for, and how each stands
+// (docs/architecture/needs.md). An open need's answer reaches the conversation by itself, so this is for looking, not
+// for polling; `cancel` withdraws one the task stopped needing, and its card says so.
+
+import { call, die, refusalOf } from "./needs-cli.mjs";
+
+const COMMAND = "needs";
+
+const USAGE = `needs — what this conversation has asked people for
+
+  needs                 every need this conversation raised, open ones first, with its id and where it stands
+  needs cancel <id>     withdraw one the task no longer needs; its card says so
+
+An open need's answer arrives in this conversation by itself: do not poll it.`;
+
+const OPEN = new Set(["open", "working"]);
+
+const list = async () => {
+    const { status, text } = await call(COMMAND, "GET", "/needs/mine");
+    if (status !== 200) {
+        return die(COMMAND, refusalOf(text));
+    }
+    const { needs } = JSON.parse(text);
+    if (!Array.isArray(needs) || needs.length === 0) {
+        process.stdout.write("This conversation has not asked anyone for anything.\n");
+        return;
+    }
+    const ordered = [...needs.filter((need) => OPEN.has(need.status)), ...needs.filter((need) => !OPEN.has(need.status))];
+    for (const need of ordered) {
+        const said = need.outcome === undefined || need.outcome === "" ? "" : ` — ${need.outcome}`;
+        process.stdout.write(`${need.id}  ${need.status.padEnd(9)} ${need.title}${said}\n`);
+    }
+};
+
+const cancel = async (id) => {
+    if (id === undefined) {
+        return die(COMMAND, USAGE);
+    }
+    const { status, text } = await call(COMMAND, "POST", `/needs/${encodeURIComponent(id)}/withdraw`, "{}");
+    if (status < 200 || status >= 300) {
+        return die(COMMAND, refusalOf(text));
+    }
+    const need = JSON.parse(text);
+    process.stdout.write(`${need.id} is ${need.status}: ${need.title}.\n`);
+};
+
+const main = async () => {
+    const [command, ...rest] = process.argv.slice(2);
+    if (command === undefined || command === "list") {
+        return list();
+    }
+    if (command === "cancel") {
+        return cancel(rest[0]);
+    }
+    process.stdout.write(`${USAGE}\n`);
+    process.exit(command === "--help" || command === "-h" ? 0 : 1);
+};
+
+main().catch((error) => die(COMMAND, error?.message ?? String(error)));

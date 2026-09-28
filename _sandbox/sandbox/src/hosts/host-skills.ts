@@ -79,8 +79,9 @@ Two things to keep in mind, neither of them a reason not to act:
 1. **Anything that restarts, updates, rebuilds or removes YOUR OWN sandbox kills the turn you are in**, mid-sentence:
    your daemon is that container. Say what will happen, get a yes, and expect the call itself to return nothing —
    the owner's page reconnects on its own, and the next turn is where you confirm it worked.
-2. **A refusal names a switch on this device's capability card.** Report the switch; do not look for another way to
-   the same effect.
+2. **A refusal names a switch on this device's capability card.** Ask for it on a card the owner answers with one
+   press, \`capabilities request \${id} --set <switch>=on --why "…"\` (the switches: \`shell\`, \`write\`, \`screen\`,
+   \`control\`, \`sandboxes\`, \`destructive\`), and do not look for another way to the same effect.
 
 ## Using a website: always the browser tools, never the pointer
 
@@ -163,5 +164,5 @@ Things that will bite you:
   take another one rather than adjusting by feel.
 - **Nothing is undoable.** A click can confirm a dialog nobody read. Say what you are about to click and why
   before you click anything consequential, exactly as you would before deleting a file.
-- **If \`device\` says the permission is off**, that is the owner's decision. Tell them which switch to turn on
-  ("Use the mouse and keyboard" on this device's card); do not look for another route in.`;
+- **If \`device\` says the permission is off**, that is the owner's decision. Ask for the switch on a card,
+  \`capabilities request \${id} --set control=on --why "…"\`, and do not look for another route in.`;

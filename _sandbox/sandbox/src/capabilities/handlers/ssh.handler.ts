@@ -2,6 +2,7 @@ import type { SshConfig } from "@intentic/sandbox-contract";
 import { readFile, writeFile } from "node:fs/promises";
 import { removeLoadedSkill, writeLoadedSkill } from "../../store/loaded-skills.js";
 import type { CapabilityHandler } from "../capability.js";
+import { publicKeyOf } from "../credentials/ssh-keys.js";
 import { hostConfPath, hostKeyPath, hostPassPath, removeSshHost, writeSshHost } from "../ssh-hosts.js";
 
 // An SSH capability: give the AGENT a remote machine to operate. One capability = one machine; the id is its
@@ -31,11 +32,15 @@ Notes: first connect to a machine auto-accepts its host key (accept-new). \`<ali
 connected under.
 `;
 
+// A generated key and a pasted one differ only in where they came from; both sign in with a key file.
 export const sshHandler: CapabilityHandler = {
-    secret: (config) => ((config as SshConfig).auth === "key" ? "privateKey" : "password"),
+    secret: (config) => ((config as SshConfig).auth === "password" ? "password" : "privateKey"),
     echo: (config) => {
         const ssh = config as SshConfig;
-        return { host: ssh.host, port: ssh.port, user: ssh.user, auth: ssh.auth };
+        const echoed = { host: ssh.host, port: ssh.port, user: ssh.user, auth: ssh.auth };
+        // The public half, read off the key, so an edit form can show what to authorize on a server again.
+        const publicKey = ssh.auth === "password" ? undefined : publicKeyOf(ssh.privateKey);
+        return publicKey === undefined ? echoed : { ...echoed, publicKey };
     },
     // The id IS the ssh-config alias, so the re-apply writes the new machine block and this drops the old one,
     // otherwise `ssh <old-name>` would go on working, which is a second machine as far as anyone reading the
@@ -43,11 +48,11 @@ export const sshHandler: CapabilityHandler = {
     rename: { carry: async (_ctx, from) => removeSshHost(from) },
     async *apply(ctx, id, config) {
         const ssh = config as SshConfig;
-        await writeSshHost(id, { host: ssh.host, user: ssh.user, port: ssh.port, ...(ssh.auth === "key" ? { identityFile: hostKeyPath(id) } : {}) });
-        if (ssh.auth === "key") {
-            await writeFile(hostKeyPath(id), ssh.privateKey.endsWith("\n") ? ssh.privateKey : `${ssh.privateKey}\n`, { mode: 0o600 });
-        } else {
+        await writeSshHost(id, { host: ssh.host, user: ssh.user, port: ssh.port, ...(ssh.auth === "password" ? {} : { identityFile: hostKeyPath(id) }) });
+        if (ssh.auth === "password") {
             await writeFile(hostPassPath(id), ssh.password, { mode: 0o600 });
+        } else {
+            await writeFile(hostKeyPath(id), ssh.privateKey.endsWith("\n") ? ssh.privateKey : `${ssh.privateKey}\n`, { mode: 0o600 });
         }
         await writeLoadedSkill(ctx.files, ctx.workspace.root, "ssh", SSH_SKILL);
         yield { kind: "log", message: `Connected ${id}. The agent can reach it next turn via \`ssh ${id}\`.` };

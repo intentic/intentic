@@ -1,6 +1,7 @@
 import {
     type AgentEvent,
     type AgentJob,
+    type AgentNeed,
     type AgentOrigin,
     type AgentSummary,
     type AgentWatch,
@@ -157,6 +158,8 @@ export type ConversationEvent =
     | { readonly kind: "jobs-shown"; readonly jobs: readonly AgentJob[] }
     // The card's list of its armed watches, whole; empty once the last one fires or is stopped.
     | { readonly kind: "watches-shown"; readonly watches: readonly AgentWatch[] }
+    // The card's list of what it still waits on people for, whole; empty once the last need is met or answered.
+    | { readonly kind: "needs-shown"; readonly needs: readonly AgentNeed[] }
     // Where its loop stands, at each iteration boundary and once more at the end.
     | { readonly kind: "loop-shown"; readonly loop: NonNullable<AgentSummary["loop"]> }
     // The workflow step it runs, as that step starts.
@@ -676,6 +679,7 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
     "grant-taken": (state, event, now) => onGrantTaken(state, event.tool, now),
     "jobs-shown": (state, event) => ({ state: { ...state, jobs: event.jobs }, effects: BROADCAST, reply: undefined }),
     "watches-shown": (state, event) => ({ state: { ...state, watches: event.watches }, effects: BROADCAST, reply: undefined }),
+    "needs-shown": (state, event) => ({ state: { ...state, needs: event.needs }, effects: BROADCAST, reply: undefined }),
     "loop-shown": (state, event) => ({ state: { ...state, loop: event.loop }, effects: BROADCAST, reply: undefined }),
     "workflow-shown": (state, event) => ({ state: { ...state, workflow: event.workflow }, effects: BROADCAST, reply: undefined }),
     "steers-taken": (state) =>

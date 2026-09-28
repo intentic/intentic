@@ -149,7 +149,7 @@ const checklistOf = (entry: PersistedAgent, state: ConversationState | undefined
 };
 
 // What the actor keeps for its card between turns; nothing for a conversation this daemon has not heard from.
-const cardReadings = (state: ConversationState | undefined): Partial<Pick<ConversationState, "loop" | "workflow" | "watches" | "jobs">> =>
+const cardReadings = (state: ConversationState | undefined): Partial<Pick<ConversationState, "loop" | "workflow" | "watches" | "jobs" | "needs">> =>
     state ?? {};
 
 // The moment of measurement, not of the write: a settle that never observed the list learned nothing new, and stamping
@@ -463,7 +463,7 @@ const spentBy = (totals: Totals, usage: TurnUsage, running: number) => {
 // What the actor holds for the card: the live turn's readings, the checklist, and the loop, workflow, watches and jobs
 // its pumps last published. An empty list is turned absent, indistinguishable from never having watched.
 const liveReadings = (entry: PersistedAgent, state: ConversationState | undefined) => {
-    const { loop, workflow, watches, jobs } = cardReadings(state);
+    const { loop, workflow, watches, jobs, needs } = cardReadings(state);
     return {
         ...contextFill(state),
         ...opt("activity", state?.turn.activity),
@@ -474,6 +474,7 @@ const liveReadings = (entry: PersistedAgent, state: ConversationState | undefine
         ...(watches !== undefined && watches.length > 0 ? { watches: [...watches] } : {}),
         awaitingWake: state !== undefined && awaitingWake(state),
         ...(jobs !== undefined && jobs.length > 0 ? { jobs: [...jobs] } : {}),
+        ...(needs !== undefined && needs.length > 0 ? { needs: [...needs] } : {}),
     };
 };
 
@@ -886,6 +887,8 @@ export const createFleet = (
                 credential: parked.includes("credential_offer"),
                 // Reads the derived verdict, not a stored status; a cached status here was the original bug's shape.
                 conflict: status === "conflict",
+                // Stands while the turn is idle too: a need outlives the turn that raised it.
+                ...((state?.needs.length ?? 0) > 0 ? { need: true } : {}),
             },
             ...describedBy(entry),
             ...reportedUnfinished(entry, state),

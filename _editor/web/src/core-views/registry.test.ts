@@ -274,7 +274,7 @@ describe(`rail order`, () => {
     it(`tiles configuration below everything that lights up`, () => {
         // Workflows never badges; it held the third tile only by being filed beside Agents.
         expect(railRank(`workflows`)).toBe(railRank(`automations`) - 1);
-        for (const summons of [`approvals`, `acceptance`, `pipelines`, `deployments`, `maintenance`]) {
+        for (const summons of [`needs`, `approvals`, `acceptance`, `pipelines`, `deployments`, `maintenance`]) {
             expect(railRank(summons)).toBeLessThan(railRank(`workflows`));
         }
     });
@@ -286,9 +286,10 @@ describe(`rail order`, () => {
         expect(railPolicy(`pipelines`)).toBe(`signal`);
     });
 
-    it(`heads the decisions band with Approvals, the only one where nothing moves until the owner acts`, () => {
+    it(`heads the decisions band with Needs you, then Approvals: the two where nothing moves until the owner acts`, () => {
+        // Needs you first: what an agent is blocked on right now, in a conversation that resumes the moment it is answered.
         const judge = railGroups().find((group) => group.id === `judge`);
-        expect(judge?.items[0]?.id).toBe(`approvals`);
+        expect(judge?.items.slice(0, 2).map((item) => item.id)).toEqual([`needs`, `approvals`]);
     });
 
     it(`keeps an unlisted view at the end instead of letting it jump the queue`, () => {

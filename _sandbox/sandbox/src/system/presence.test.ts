@@ -1,5 +1,5 @@
 import type { PresenceUser } from "@intentic/sandbox-contract";
-import { registerPresence, subscribePresence, updatePresence } from "./presence.js";
+import { idleEverywhere, presentMembers, registerPresence, subscribePresence, updatePresence } from "./presence.js";
 
 // The registry is module-level state shared across tests; each test registers under unique clientIds and
 // unregisters what it created, so tests stay order-independent.
@@ -52,5 +52,28 @@ describe("presence registry", () => {
         expect(frames.at(-1)?.find((user) => user.clientId === "c3")?.view).toBeUndefined();
         unsubscribe();
         unregister();
+    });
+
+    // What push reads to skip a member's own devices (push/push.ts): who has a tab in use, by lowercased address.
+    test("present members are the ones with a tab in use, for as long as it stays connected", () => {
+        const leave = [
+            registerPresence("p1", { email: "Ada@X.com", role: "owner" }),
+            registerPresence("p2", { email: "bo@x.com", role: "collaborator" }),
+            registerPresence("p3", { email: "bo@x.com", role: "collaborator" }),
+            registerPresence("p4", { email: "cy@x.com", role: "viewer" }),
+        ];
+        updatePresence({ email: "bo@x.com" }, { clientId: "p2", idle: true });
+        updatePresence({ email: "cy@x.com" }, { clientId: "p4", idle: true });
+        // Bo's second tab is still in use; Cy's only tab went idle.
+        expect([...presentMembers()].toSorted()).toEqual(["ada@x.com", "bo@x.com"]);
+        expect(idleEverywhere()).toBe(false);
+
+        leave[0]?.();
+        updatePresence({ email: "bo@x.com" }, { clientId: "p3", idle: true });
+        expect([...presentMembers()]).toEqual([]);
+        expect(idleEverywhere()).toBe(true);
+        for (const unregister of leave.slice(1)) {
+            unregister();
+        }
     });
 });

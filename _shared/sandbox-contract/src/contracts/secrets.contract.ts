@@ -7,6 +7,8 @@ import {
     CredentialRequestSchema,
     SecretInventorySchema,
     SecretKeyParamSchema,
+    SecretGeneratedSchema,
+    SecretGenerateSchema,
     SecretKeysSchema,
     SecretRevealSchema,
     SecretSetSchema,
@@ -16,8 +18,8 @@ import { OkSchema } from "../schemas/shared.js";
 // Credentials are the operating tier's, reads included: maintainer is the highest revokable grant, and no token's.
 const secretRoute = procedure.meta({ floor: "maintainer", control: "never" });
 
-// User-supplied secrets, in the gitignored desired-state/.env; `apply` reloads them, no restart. `inventory` aggregates
-// every store (never values) and always answers; the rest refuse until desired-state is scaffolded. `reveal` alone
+// User-supplied secrets, in the gitignored desired-state/.env once DevOps is active and the sandbox's own store before
+// it; `apply` reloads them, no restart. `inventory` aggregates every store (never values) and always answers. `reveal` alone
 // returns a value, owner-only, POST so the key avoids the URL.
 export const secretsContract = {
     set: secretRoute
@@ -26,10 +28,22 @@ export const secretsContract = {
             path: "/secrets",
             summary: "Store a secret",
             description:
-                "Writes one name and value into the sandbox's own store, where running processes pick it up without a restart. Refused until the sandbox has somewhere to keep them.",
+                "Writes one name and value where the agent's references resolve it, without a restart: desired-state/.env once DevOps is active, the sandbox's own secret store before that.",
         })
         .input(SecretSetSchema)
         .output(OkSchema),
+    generate: secretRoute
+        .route({
+            method: "POST",
+            path: "/secrets/generate",
+            summary: "Make and store a random secret",
+            description:
+                "Makes a random value and stores it under a new name, where `set` would have put it, for a secret nobody has to find or paste (a session key, a signing secret, a password the task sets up itself). Answers the name and its length, never the value. Refused for a name something here already holds.",
+        })
+        // The `secrets generate` CLI, on the agent token: it creates a value, and hands none back.
+        .meta({ agent: true })
+        .input(SecretGenerateSchema)
+        .output(SecretGeneratedSchema),
     list: secretRoute
         .route({
             method: "GET",

@@ -457,6 +457,14 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Which heavy work runs on a runner on one of your machines instead of this sandbox: agents' commands by the kind the heavy-command rules sort them into (tests, typechecks, verify…). The code travels as it stands, uncommitted work included; the output streams back, and any file the command changed comes back with it. A machine that is offline, outdated or busy hands the work back to this sandbox, and the output says so.",
         ),
+    // A person answering a need is exactly the moment they want the work to go on (docs/architecture/needs.md), unlike a
+    // restart nobody watched, so this one is on to begin with.
+    continueWhenNeedMet: z
+        .boolean()
+        .default(true)
+        .describe(
+            "Whether a conversation carries on by itself once something it asked a person for arrives: a connection made, a secret given, access allowed, a tool built into the image. Off leaves the answer on the conversation's card until someone sends a message.",
+        ),
     autoResumeOnRestart: z
         .boolean()
         .default(false)

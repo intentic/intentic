@@ -5,6 +5,7 @@ import { LandConflictSchema } from "../schemas/agents.js";
 import { ContextTrimSchema } from "../schemas/context-trim.js";
 import { RateLimitInfoSchema } from "../schemas/providers/claude-gate.js";
 import { FastModeStateSchema } from "../schemas/providers/fast-mode.js";
+import { NeedSchema } from "../schemas/needs.js";
 import { PromptCacheOpeningSchema, PromptFingerprintSchema } from "../schemas/keep-warm.js";
 import { AgentReplySchema, UsageWindowSchema } from "../schemas/providers/plan-limits.js";
 import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
@@ -206,6 +207,9 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     // Who released it: `released` names the approver's verified address, `refused` means someone said no. Nothing is
     // pushed for a card nobody answered; `resolved` already says that.
     CredentialReceiptSchema.extend({ kind: z.literal("credential_receipt"), requestId: z.string() }),
+    // Something the agent asked a person for (docs/architecture/needs.md). Parks nothing: the turn carries on, the need
+    // outlives it in the needs store, and its card draws the store's live state by `need.id`.
+    z.object({ kind: z.literal("need"), need: NeedSchema }),
     // The named card is released and the turn resumes; emitted the moment its waiter settles, since nothing else on
     // this stream marks a park's end. `reply` is what a rebuilt transcript freezes the card with.
     z.object({ kind: z.literal("resolved"), requestId: z.string(), reply: AgentReplySchema.optional() }),

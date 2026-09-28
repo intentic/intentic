@@ -3,6 +3,7 @@ import { AgentHarnessSchema, AgentProviderSchema } from "../schemas/agent.js";
 import { ShareDetailSchema } from "../schemas/share.js";
 import { TurnErrandSchema, TurnSpeakerSchema } from "../schemas/speaker.js";
 import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
+import { NeedSchema } from "../schemas/needs.js";
 import { RetryLadderSchema } from "../schemas/turn-break.js";
 import type { ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind} from "./requests.js";
 import { browserHelpRequest, capabilityOfferRequest, CapabilityOutcomeSchema, credentialOfferRequest, CredentialReceiptSchema, paymentOfferRequest, PaymentReceiptSchema, PermissionAskSchema, permissionRequest, planRequest, questionRequest, terminalHelpRequest, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./requests.js";
@@ -155,6 +156,15 @@ export const TranscriptWatchWakeSchema = z.object({
 });
 export type TranscriptWatchWake = z.infer<typeof TranscriptWatchWakeSchema>;
 
+// A need's answer that reached this conversation as a prompt (need-wake.ts); the row keeps the prompt and names the need.
+export const TranscriptNeedWakeSchema = z.object({
+    outcome: z.enum(["met", "declined"]).describe("How the need ended: a person gave it, or said no."),
+    title: z.string().describe("The need, as its card leads with it."),
+    id: z.string().describe("The need's handle, which its live card is keyed by."),
+    sent: z.string().describe("The whole prompt the model received, disclosed under the row."),
+});
+export type TranscriptNeedWake = z.infer<typeof TranscriptNeedWakeSchema>;
+
 // Another agent's words that reached this conversation as a prompt; the row keeps the prompt and names the sender.
 export const TranscriptAgentWordsSchema = z.object({
     kind: z.enum(["peer", "child"]).describe("Who sent it: another conversation in the workspace, or a subagent this one started."),
@@ -299,6 +309,12 @@ export const TranscriptRowSchema = z.object({
     capabilityOffer: TranscriptCapabilityOfferSchema.optional().describe("The capability setup this row asked for, the decision, and the outcome."),
     paymentOffer: TranscriptPaymentOfferSchema.optional().describe("The payment this row asked for, the decision, and the receipt."),
     watchWake: TranscriptWatchWakeSchema.optional().describe("The condition watch that woke this conversation, and the prompt it was woken with."),
+    // A need is not a parked card: it holds no turn open, outlives the one that raised it, and its live state is the
+    // needs store's, keyed by `need.id`. What rides here is the need as it was raised, for a reader with no store.
+    need: NeedSchema.optional().describe(
+        "Something the agent asked a person for, as it was when raised. Its live state (answered, met) is read by its id, since it outlives the turn.",
+    ),
+    needWake: TranscriptNeedWakeSchema.optional().describe("The answered need that reached this conversation, and the prompt it came as."),
     agentWords: TranscriptAgentWordsSchema.optional().describe("Another agent's words that reached this conversation, whose they are, and the prompt they came as."),
     backgroundJob: TranscriptBackgroundJobSchema.optional().describe("The background job this row marks the start of."),
     credentialOffer: TranscriptCredentialOfferSchema.optional().describe(

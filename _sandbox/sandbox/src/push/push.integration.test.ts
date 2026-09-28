@@ -1,7 +1,7 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { RelayChannel, WebPushChannel } from "@intentic/sandbox-contract";
+import { channelId, type RelayChannel, type WebPushChannel } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { mocked } from "@intentic/testing/bun";
 import webpush, { WebPushError } from "web-push";
@@ -101,6 +101,33 @@ test("unsubscribe removes only the named endpoint", async () => {
     await store.add(subscription("https://push.example/b"));
     await store.remove("https://push.example/a");
     expect(idsOf(await store.list())).toEqual(["https://push.example/b"]);
+});
+
+test("a device keeps the member who registered it, and a re-registration files it under whoever registered it last", async () => {
+    const path = await storePath();
+    const store = filePushStore(path);
+    const filed = async (): Promise<[string, string | undefined][]> =>
+        (await filePushStore(path).list()).map((entry) => [channelId(entry), entry.member]);
+    await store.add(subscription("https://push.example/laptop"), "ada@example.com");
+    await store.add(relayChannel("phone"));
+    expect(await filed()).toEqual([
+        ["https://push.example/laptop", "ada@example.com"],
+        ["phone", undefined],
+    ]);
+
+    await store.add(subscription("https://push.example/laptop"), "bob@example.com");
+    expect(await filed()).toEqual([
+        ["phone", undefined],
+        ["https://push.example/laptop", "bob@example.com"],
+    ]);
+});
+
+test("a device registered before devices named their member still reads back, as nobody's", async () => {
+    const path = await storePath();
+    // push.json as the releases before this one wrote it: no member on any channel.
+    const earlier = [subscription("https://push.example/old"), relayChannel("old-phone")];
+    await writeFile(path, JSON.stringify({ publicKey: "public-key", privateKey: "private-key", channels: earlier }));
+    expect(await filePushStore(path).list()).toEqual(earlier);
 });
 
 test("a corrupt store file is replaced rather than crashing the daemon", async () => {
@@ -258,7 +285,7 @@ test("a failed turn reports the error, not the prompt", () => {
     expect(notification.body).not.toContain(prompt);
 });
 
-test("finished and awaiting notifications collapse per conversation, and only awaiting is sticky", () => {
+test("finished notifications, and awaiting ones with no card to name, collapse per conversation; only awaiting is sticky", () => {
     expect(turnAwaiting("conv-1", "permission").tag).toBe(turnAwaiting("conv-1", "question").tag);
     expect(turnAwaiting("conv-1", "plan").requireInteraction).toBe(true);
     expect(turnAwaiting("conv-2", "plan").tag).not.toBe(turnAwaiting("conv-1", "plan").tag);

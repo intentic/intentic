@@ -1,5 +1,5 @@
 import { wrapOutsideContent } from "@intentic/base/outside-text";
-import { type Capability,type webextContract,WEBEXT_HEARTBEAT_MS,type WebExtFacts,type WebExtHello,WebExtHelloSchema,type WebExtScopes,type WebExtSummary } from "@intentic/sandbox-contract";
+import { type Capability,grantSite,type webextContract,WEBEXT_HEARTBEAT_MS,type WebExtFacts,type WebExtHello,WebExtHelloSchema,type WebExtScopes,type WebExtSummary } from "@intentic/sandbox-contract";
 import type { ContractRouterClient } from "@orpc/contract";
 import type { Services } from "../composition.js";
 import { PEER_BRIDGES, type PeerDoor } from "../peers/peer.js";
@@ -137,10 +137,33 @@ export const ownBrowserReach = async (
     };
 };
 
+// An `ask_access` call's site and reason, when the message is one; the extension checks its own arguments, this only
+// reads what a card can say.
+export const accessAsked = (payload: unknown): { readonly origin: string; readonly reason: string } | undefined => {
+    const message = payload as { readonly method?: unknown; readonly params?: { readonly name?: unknown; readonly arguments?: Record<string, unknown> } } | undefined;
+    const args = message?.params?.arguments;
+    if (message?.method !== "tools/call" || message.params?.name !== "ask_access" || typeof args?.["origin"] !== "string") {
+        return undefined;
+    }
+    return { origin: args["origin"], reason: typeof args["reason"] === "string" ? args["reason"] : "" };
+};
+
 export const webextPeerRoutes = (services: Services) =>
     createPeerRoutes(services, WEBEXT_PEER, {
         store: services.webexts,
         hub: services.webextHub,
         summaries: () => webextSummaries(services),
         sealAnswer,
+        // The person's browser asks for a site by lighting its own badge; the same ask goes up as a card in the chat
+        // (docs/architecture/needs.md), met when that browser reports the site allowed, which continues the conversation.
+        beforeCall: async (payload, call) => {
+            const asked = accessAsked(payload);
+            if (asked !== undefined && call.conversationId !== undefined) {
+                const site = grantSite(asked.origin);
+                await services.needs
+                    .observe(call.conversationId, { kind: "grant", subject: "site", what: site, label: site }, `Allow ${site} in your browser`, asked.reason)
+                    .catch((error: unknown) => services.logger.warn({ err: error, site }, "webext: the site ask did not reach the chat"));
+            }
+            return undefined;
+        },
     });

@@ -40,7 +40,6 @@
     "browser -> secrets": "",
     "capabilities -> auth": "",
     "capabilities -> browser": "The browser and identity handlers own browser session storage, and a browser profile reads capability contributions.",
-    "capabilities -> conversations": "",
     "capabilities -> endpoints": "",
     "capabilities -> environment": "Handlers contribute image packs the environment composes from the capability registry.",
     "capabilities -> extensions": "An extension is a capability kind: its lifecycle runs through the registry, and handlers read the inventory.",

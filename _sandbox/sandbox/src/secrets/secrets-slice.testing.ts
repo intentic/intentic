@@ -8,9 +8,11 @@ import type { SecretsSlice } from "./secrets-slice.js";
 export const secretsSliceFake = () => {
     const uses: SecretUse[] = [];
     let gates: CredentialGate[] = [];
+    let kept: Record<string, string> = {};
     return {
-        // Nothing stored or spent; in-memory, not unstubbed, since the inventory route reads it every call.
-        secretRegistry: async () => [],
+        // What the sandbox's own store below holds, as the real registry unions it; nothing else is stored. In-memory,
+        // not unstubbed, since the inventory route reads it every call.
+        secretRegistry: async () => Object.entries(kept).map(([name, value]) => ({ name, value, source: "sandbox" as const })),
         secretUses: {
             record: async (use: SecretUse) => {
                 uses.push(use);
@@ -33,5 +35,19 @@ export const secretsSliceFake = () => {
         credentialGrants: createCredentialGrants(),
         // Nothing gated above, so this allows everything and asks nobody; tested where the real gate lives.
         credentialGate: { check: async () => ({ allow: true as const }) },
+        // The sandbox's own store, in memory: what a need's card and a DevOps-less Secrets view write.
+        sandboxSecrets: {
+            all: async () => kept,
+            get: async (name: string) => kept[name],
+            set: async (name: string, value: string) => {
+                kept = { ...kept, [name]: value };
+            },
+            remove: async (name: string) => {
+                const had = name in kept;
+                const { [name]: _dropped, ...rest } = kept;
+                kept = rest;
+                return had;
+            },
+        },
     } satisfies SecretsSlice;
 };

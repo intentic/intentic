@@ -1,5 +1,6 @@
 import {
     type Capability,
+    type ConversationGrant,
     type Fence,
     type Persona,
     type PersonaPowers,
@@ -120,6 +121,38 @@ export const turnPersona = ({ personas, actsAs, unattended, fence }: TurnPersona
         // drops that folder here rather than opening it.
         fence: fenceIntersection(fence, persona.workspace?.folders),
         reason: "persona",
+    };
+};
+
+// What a person allowed this one conversation beyond its persona and area (conversation-grants.ts), laid over the turn's
+// persona as planning settles it: a granted capability passes `allows`, a granted shelf opens, and a granted folder joins
+// a fence. It widens only what was granted; everything else still comes from the persona.
+export const widenPersona = (persona: TurnPersona, grant: ConversationGrant | undefined): TurnPersona => {
+    if (grant === undefined) {
+        return persona;
+    }
+    const capabilities = new Set(grant.capabilities);
+    const shelves = new Set(grant.shelves);
+    const powers: PersonaPowers = {
+        ...persona.powers,
+        ...(shelves.has("files") ? { files: "write" as const } : {}),
+        ...(shelves.has("shell") ? { shell: true } : {}),
+        ...(shelves.has("code") ? { code: true } : {}),
+        ...(shelves.has("web") ? { web: true } : {}),
+        ...(shelves.has("browser") ? { browser: true } : {}),
+        ...(shelves.has("delegate") ? { delegate: true } : {}),
+        ...(shelves.has("sandbox") ? { sandbox: true } : {}),
+        // A granted connector, device or server is one the persona's own lists now name, where it keeps lists at all.
+        ...(persona.powers.connectors === undefined ? {} : { connectors: [...new Set([...persona.powers.connectors, ...capabilities])] }),
+        ...(persona.powers.devices === undefined ? {} : { devices: [...new Set([...persona.powers.devices, ...capabilities])] }),
+        ...(persona.powers.mcp === undefined ? {} : { mcp: [...new Set([...persona.powers.mcp, ...capabilities])] }),
+    };
+    return {
+        ...persona,
+        allows: (capability) => capabilities.has(capability.id) || persona.allows(capability),
+        powers,
+        // An unfenced turn reaches the whole workspace already; a fenced one gains the granted folders.
+        fence: persona.fence === undefined || grant.folders.length === 0 ? persona.fence : [...new Set([...persona.fence, ...grant.folders])],
     };
 };
 

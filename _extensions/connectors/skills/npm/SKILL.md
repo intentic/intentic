@@ -29,6 +29,8 @@ itself. Only with neither the TOTP secret nor that browser connected do you stop
 ## Failure modes worth naming
 
 - A 401/403 from a token that worked before is almost always an EXPIRED token (npm caps write tokens at 90
-  days): tell the user to paste a fresh one under Sandbox ▸ Secrets rather than retrying.
+  days): ask for a fresh one with `capabilities request ${id} --reconnect --why "npm refuses the token (401)"`,
+  which puts a masked field for it in the owner's chat and continues the conversation once it is in, rather
+  than retrying.
 - A Bypass-2FA token may STAGE a publish for the owner to approve on npmjs.com instead of completing it:
   approve it in the connected npmjs.com browser, or report the staged state if that browser isn't connected.

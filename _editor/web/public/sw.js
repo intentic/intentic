@@ -20,8 +20,9 @@ self.addEventListener("push", (event) => {
             body: payload.body || "",
             icon: "/assets/intentic-logo-sized.png",
             badge: "/assets/intentic-logo-sized.png",
-            // Collapses a replacement onto its predecessor: see the daemon's notifications.ts for why each
-            // tag is per-conversation rather than per-event.
+            // Collapses a replacement onto its predecessor. The daemon's notifications.ts picks the grain: one
+            // per waiting card or need, so two waiting at once both stay on screen; one per conversation for a
+            // finished turn.
             tag: payload.tag,
             requireInteraction: payload.requireInteraction === true,
             // Read back by the click handler; `data` is the only channel from here to there.
@@ -32,7 +33,10 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
     event.notification.close();
-    const target = new URL(event.notification.data?.url || "/", self.location.origin);
+    // An in-app route, passed whole: the router reads `?conversation=` and ignores what it does not know (a
+    // need's `&need=`). Anything off this origin is not ours to open, as for the native shell's taps.
+    const asked = new URL(event.notification.data?.url || "/", self.location.origin);
+    const target = asked.origin === self.location.origin ? asked : new URL("/", self.location.origin);
     event.waitUntil(
         (async () => {
             const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });

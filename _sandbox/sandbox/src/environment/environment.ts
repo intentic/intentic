@@ -235,6 +235,119 @@ export const approveEnvironment = async (services: Services, hash: string): Prom
     return undefined;
 };
 
+// Instructions a draft may carry: the image is built from the daemon's own FROM, and nothing else has a build context.
+const DRAFT_LINE = /^\s*(RUN|ENV)\s/i;
+const CONTINUATION = /^\s/;
+
+// Why these steps cannot be a draft, or undefined when they can: RUN and ENV lines (with their continuations and comments)
+// only, no FROM, no runtime directive.
+export const draftProblem = (steps: string): string | undefined => {
+    if (invalidProposal(steps)) {
+        return "the steps may not contain FROM (the sandbox owns the base image) or an intentic:runtime line";
+    }
+    const lines = steps.split("\n");
+    const stray = lines.find((line) => line.trim() !== "" && !line.trim().startsWith("#") && !DRAFT_LINE.test(line) && !CONTINUATION.test(line));
+    return stray === undefined ? undefined : `only RUN and ENV lines may be proposed, and "${stray.trim().slice(0, 60)}" is neither`;
+};
+
+// The cache rule the published packs are held to (_tools/checks/build-cache-mounts.mjs), for apt, the install nearly
+// every proposal makes: every layer above the sandbox image rebuilds whenever it is published, and without the mounts
+// each rebuild downloads every package again. Said when an agent proposes, where the fix is one edit away, rather than
+// learned by the owner as a slow rebuild; a draft filed before the rule is still approvable.
+const APT_INSTALL = /\bapt(?:-get)?\s+(?:-\S+\s+)*install\b/u;
+const APT_CACHE = /--mount=type=cache,target=\/var\/cache\/apt\b/u;
+const APT_LISTS = /--mount=type=cache,target=\/var\/lib\/apt\/lists\b/u;
+const DELETES_LISTS = /\brm\s+(?:-\S+\s+)*[^\n]*\/var\/lib\/apt\/lists/u;
+
+// One instruction at a time, continuation lines included: a RUN's mounts sit on its first line, its install further down.
+const instructionsOf = (steps: string): string[] => {
+    const found: string[] = [];
+    let current: string | undefined;
+    for (const line of steps.split("\n")) {
+        const trimmed = line.trim();
+        if (current === undefined && (trimmed === "" || trimmed.startsWith("#"))) {
+            continue;
+        }
+        current = current === undefined ? line : `${current}\n${line}`;
+        if (!current.trimEnd().endsWith("\\")) {
+            found.push(current);
+            current = undefined;
+        }
+    }
+    return current === undefined ? found : [...found, current];
+};
+
+export const cacheProblem = (steps: string): string | undefined => {
+    if (instructionsOf(steps).some((step) => APT_INSTALL.test(step) && !(APT_CACHE.test(step) && APT_LISTS.test(step)))) {
+        return (
+            "an apt install must mount both apt caches on its RUN (--mount=type=cache,target=/var/cache/apt,sharing=locked " +
+            "and --mount=type=cache,target=/var/lib/apt/lists,sharing=locked), or every image update downloads it all again; " +
+            "the environment skill has the shape"
+        );
+    }
+    return DELETES_LISTS.test(steps)
+        ? "leave /var/lib/apt/lists alone: it is the cache mount the next rebuild reads, and it never reaches the image anyway"
+        : undefined;
+};
+
+// Files one tool's steps as a draft on the main tree, where the Environment card and the needs card both read it: an
+// agent's own draft would otherwise wait for its conversation to land before anyone could see it.
+export const proposeDraft = async (services: Services, tool: string, steps: string): Promise<{ readonly file: string } | { readonly problem: string }> => {
+    const file = draftFileName(tool);
+    if (file === undefined) {
+        return { problem: `"${tool}" cannot name a draft: use letters, digits and dashes` };
+    }
+    const problem = draftProblem(steps) ?? cacheProblem(steps);
+    if (problem !== undefined) {
+        return { problem };
+    }
+    await services.files.write(join(draftsDir(services), file), `${steps.trim()}\n`);
+    return { file };
+};
+
+// Whatever drafts remain, as the proposal, or no proposal once none do: a proposal of nothing asks approval for nothing.
+const recomposeProposal = async (services: Services): Promise<void> => {
+    if ((await readDrafts(services)) === "") {
+        await services.files.remove(proposalPath(services));
+        return;
+    }
+    await mergeProposalDrafts(services);
+};
+
+// Approves ONE tool's draft into the custom section, leaving every other draft pending: a person answering one agent's
+// card approves that agent's steps, not whatever else happens to be waiting. Answers the composed overlay's hash, which
+// the running container matches once it has been rebuilt from it.
+export const approveDraft = async (services: Services, tool: string): Promise<{ readonly hash: string | undefined } | { readonly problem: string }> => {
+    const file = draftFileName(tool);
+    const path = file === undefined ? undefined : join(draftsDir(services), file);
+    const draft = path === undefined ? undefined : (await services.files.read(path))?.trim();
+    if (path === undefined || draft === undefined || draft === "") {
+        return { problem: `no draft is waiting for ${tool}` };
+    }
+    const problem = draftProblem(draft);
+    if (problem !== undefined) {
+        return { problem };
+    }
+    const custom = ((await services.files.read(customPath(services))) ?? "").trim();
+    await services.files.write(customPath(services), `${[...(custom === "" ? [] : [custom]), `# ---- ${tool} ----\n${draft}`].join("\n\n")}\n`);
+    await services.files.remove(path);
+    await recomposeProposal(services);
+    return { hash: await composeEnvironment(services) };
+};
+
+// Drops ONE tool's draft; the rest stay pending.
+export const rejectDraft = async (services: Services, tool: string): Promise<void> => {
+    const file = draftFileName(tool);
+    if (file === undefined) {
+        return;
+    }
+    await services.files.remove(join(draftsDir(services), file));
+    await recomposeProposal(services);
+};
+
+// The overlay this container was built from, as the runner stamped it; empty for a container built with none.
+export const appliedEnvironmentHash = (services: Pick<Services, "config">): string => services.config.sandbox.environmentHash;
+
 // Drops the drafts too, or the next read composes the rejected proposal right back. Auto-drafted ones are also
 // tombstoned, so the sweep can't just re-earn and recreate them; agent-written ones are simply deleted, free to be
 // asked for again.

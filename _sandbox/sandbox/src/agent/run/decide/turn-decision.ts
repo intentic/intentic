@@ -61,6 +61,10 @@ export interface TurnDecision extends DecidedEffects {
     readonly context: TurnContext;
     // The manifest after the persona's shelves and the owner's gates: the only list an arm may mount from.
     readonly granted: Capability[];
+    // What the turn does not reach and why, by capability id: left out by its persona, or held by a gate for a named
+    // approver. Recorded as the turn's standing, which the needs door answers a turn's asks by.
+    readonly withheldByPersona: readonly string[];
+    readonly withheldByGate: readonly string[];
     // Where a failing command's dependencies are looked up, the start folder; the planner binds it to the live probe.
     readonly dependencyDir: string;
     readonly briefing: TurnBriefing;
@@ -195,7 +199,8 @@ export const decideTurn = (facts: TurnFacts, input: RoutedAgentTurn, context: Tu
     const trim = turnTrim(facts.declared?.window, capabilities.instructions);
     const settings = underRepoChecks(facts.settings, facts.repoChecks);
     // The owner's gates after the persona's shelves, once for every runtime; honoured notes what they withheld.
-    const mounts = gatedCapabilities(personaCapabilities(facts.installed, persona), facts.gates, facts.releases, input.conversationId);
+    const reachable = personaCapabilities(facts.installed, persona);
+    const mounts = gatedCapabilities(reachable, facts.gates, facts.releases, input.conversationId);
     // A child is a whole agent holding shell and write, so spawning needs the delegate shelf and full agency.
     const spawn = context.children !== undefined && input.conversationId !== undefined && mayDelegate(persona);
     const notes = fieldNotesOf(facts, premise.arms.notes, trim);
@@ -225,6 +230,8 @@ export const decideTurn = (facts: TurnFacts, input: RoutedAgentTurn, context: Tu
         ...opt("accountMove", facts.accountRoute?.kind === "move" ? facts.accountRoute.to : undefined),
         context: planned,
         granted: mounts.capabilities,
+        withheldByPersona: facts.installed.filter((capability) => !reachable.includes(capability)).map((capability) => capability.id),
+        withheldByGate: mounts.withheld.map((gate) => gate.subject),
         dependencyDir: premise.startIn ?? "",
         spawn,
         briefing: premise.briefing,

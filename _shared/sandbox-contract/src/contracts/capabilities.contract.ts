@@ -13,6 +13,7 @@ import {
     CapabilitySchema,
     CapabilitySecretInputSchema,
     CapabilityStatusSchema,
+    SshKeySchema,
 } from "../schemas/capabilities.js";
 import { MarketplaceRequestSchema, MarketplaceSchema } from "../schemas/marketplace.js";
 import { RemoteRefsRequestSchema, RemoteRefsSchema } from "../schemas/git/remote-refs.js";
@@ -22,7 +23,7 @@ import { OkSchema } from "../schemas/shared.js";
 const capabilityRoute = procedure.meta({ floor: "maintainer", control: "never" });
 
 // The sandbox's unified capability manifest, spanning `list`/`add`/`remove`/`status`/`marketplace`. A VAULTED marker
-// with nothing stored behind it is refused rather than silently written.
+// with nothing stored behind it, or a stashed one (`sshKey`) with nothing held, is refused rather than silently written.
 export const capabilitiesContract = {
     list: capabilityRoute
         .route({
@@ -56,6 +57,18 @@ export const capabilitiesContract = {
         .meta({ panel: false })
         .input(CapabilitySchema)
         .output(CapabilityProbeSchema),
+    // The private half waits in the daemon's memory under the token; an add naming it installs the key.
+    sshKey: capabilityRoute
+        .route({
+            method: "POST",
+            path: "/capabilities/ssh-key",
+            summary: "Generate an SSH key for a connection",
+            description:
+                "Makes an ed25519 key pair inside the sandbox and answers with its public half, to authorize on the server, and a one-time token. The private half is never in the answer: it waits in the sandbox until an add sends the token where the private key goes, and lapses if none does within thirty minutes.",
+        })
+        // Mints the credential a later add installs: withheld from the panel token every panel process holds.
+        .meta({ panel: false })
+        .output(SshKeySchema),
     remove: capabilityRoute
         .route({
             method: "DELETE",

@@ -46,6 +46,7 @@ import {
     saveKnowledgeNote,
 } from "./fixture/knowledge";
 import { demoRegistry } from "./fixture/registry";
+import { answerDemoNeed, demoGrants, demoNeeds, provideDemoSecret, revokeDemoGrant } from "./fixture/needs";
 import {
     demoCapabilities,
     demoLocalModelFit,
@@ -102,6 +103,16 @@ const roster = {
     rev: 1,
 };
 
+// What each card still waits on people for, read from the needs fixture every time the roster goes out, as the daemon's
+// registry reads its needs store: answering one in the inbox takes the chip off the board on the next frame.
+const withNeeds = (agent: AgentSummary): AgentSummary => {
+    const open = demoNeeds().filter((need) => need.conversationId === agent.id && (need.status === `open` || need.status === `working`));
+    return open.length === 0
+        ? agent
+        : { ...agent, attention: { ...agent.attention, need: true }, needs: open.map((need) => ({ id: need.id, kind: need.subject.kind, title: need.title, status: need.status })) };
+};
+const boardAgents = (): AgentSummary[] => roster.agents.map(withNeeds);
+
 // Held automation approvals project onto the board's attention lane; a desk runs no automations.
 const heldApprovals = () => (deskEdition ? [] : automationApprovals(Date.now()));
 const listeners = new Set<(event: SystemEvent) => void>();
@@ -109,7 +120,7 @@ const runs = new Map<string, Run>();
 
 const broadcastRoster = (): void => {
     roster.rev += 1;
-    const frame: SystemEvent = { kind: `agents`, agents: roster.agents, rev: roster.rev };
+    const frame: SystemEvent = { kind: `agents`, agents: boardAgents(), rev: roster.rev };
     for (const listener of listeners) {
         listener(frame);
     }
@@ -162,7 +173,7 @@ const events = (): Frames<SystemEvent> =>
         listeners.add(listener);
 
         sink.emit({ kind: `hello`, workspaceId: `demo-workspace`, build: `demo`, boot: { ready: true, startedAt: STARTED_AT, steps: [] } });
-        sink.emit({ kind: `agents`, agents: roster.agents, rev: roster.rev });
+        sink.emit({ kind: `agents`, agents: boardAgents(), rev: roster.rev });
         sink.emit({ kind: `reposChanged`, repos: [...REPOS] });
         sink.emit({ kind: `presence`, users: demoMode.teammate ? [OWNER, TEAMMATE] : [OWNER] });
 
@@ -531,7 +542,7 @@ export const procedures = {
     },
     agents: {
         // `held` mirrors /automations/pending's approval queue, projected onto the board.
-        list: () => ({ agents: roster.agents, rev: roster.rev, held: heldApprovals() }),
+        list: () => ({ agents: boardAgents(), rev: roster.rev, held: heldApprovals() }),
         archived: () => ({ agents: [], rev: roster.rev, held: [] }),
         search: ({ query, caseSensitive }) => searchAgents(query, caseSensitive === true),
         seenAll: () => ({ agents: roster.agents, rev: roster.rev, held: heldApprovals() }),
@@ -768,6 +779,29 @@ export const procedures = {
     },
     secrets: {
         inventory: () => ({ entries: [] }),
+    },
+    // What the agents wait on people for, answered for real against the fixture store (docs/architecture/needs.md).
+    needs: {
+        list: ({ conversationId, open }) => ({
+            needs: demoNeeds().filter(
+                (need) => (conversationId === undefined || need.conversationId === conversationId) && (open !== true || need.status === `open` || need.status === `working`),
+            ),
+        }),
+        answer: ({ id, answer }) => {
+            const need = answerDemoNeed(id, answer);
+            broadcastRoster();
+            return need;
+        },
+        provideSecret: ({ id }) => {
+            const need = provideDemoSecret(id);
+            broadcastRoster();
+            return need;
+        },
+        grants: () => demoGrants(),
+        revokeGrant: (grant) => {
+            revokeDemoGrant(grant);
+            return { ok: true };
+        },
     },
     ports: {
         list: () => ({ ports: [] }),

@@ -90,6 +90,10 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
         // runtime.
         credentialGates: unstubbed<Services["credentialGates"]>("credentialGates", { list: async () => [] }),
         credentialGrants: createCredentialGrants(),
+        // Where planning records what the turn reaches (turn-standing.ts), for the needs door to read.
+        conversations: memoryFleet().conversations,
+        // No conversation-level grants: what a conversation nobody has widened reads.
+        conversationGrants: unstubbed<Services["conversationGrants"]>("conversationGrants", { of: async () => undefined }),
         // Read on every turn, not just a pinned one: an unattended wake naming no persona must still answer "no
         // accounts".
         personas: unstubbed<Services["personas"]>("personas", { list: async () => [] }),

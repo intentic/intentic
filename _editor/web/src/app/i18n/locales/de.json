@@ -1010,6 +1010,8 @@
             "showCheck": "Die Prüfung anzeigen",
             "showCommand": "Den Befehl anzeigen",
             "showMessage": "Die Nachricht anzeigen",
+            "skipCall": "Überspringen und weitermachen",
+            "skipCallHint": "Lehnt nur diesen Aufruf ab: der Agent macht ohne ihn weiter",
             "skipFree": "Überspringen: kostenlos",
             "spentToday": "{amountUsd} $ · heute {spentTodayUsd} $ von {dailyCapUsd} $ ausgegeben",
             "to": "An {payTo}",
@@ -2851,13 +2853,11 @@
             "untilOneAutomationSchedule": "Solange es keine gibt, kann eine Automation, die Sie planen, nirgendwo posten, und ein Chat erreicht jedes Konto, das Sie verbunden haben."
         },
         "sandboxSecrets": {
-            "activate": "Aktivieren",
             "addSecret": "Ein Geheimnis hinzufügen",
             "capabilityCredentials": "Zugangsdaten für Fähigkeiten",
             "ciInSync": "CI synchron",
             "generatedByIntentic": "Von intentic erzeugt",
             "intentDeclaresNoUser": "Ihre Absicht deklariert noch keine vom Benutzer gelieferten Geheimnisse.",
-            "keepingOwnSecretsHere": "Eigene Geheimnisse hier zu behalten braucht aktives DevOps.",
             "keyAccountWhatUses": "Schlüssel, Konto oder wer es benutzt…",
             "keyName": "SCHLÜSSEL_NAME",
             "manageCapabilities": "Fähigkeiten verwalten",

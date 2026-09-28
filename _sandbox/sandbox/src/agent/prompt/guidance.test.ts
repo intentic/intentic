@@ -52,6 +52,10 @@ test("the lean form keeps the rules nothing else in the prompt carries", () => {
     expect(lean).toContain("TaskCreate");
     expect(lean).toContain("commit only when asked");
     expect(lean).toContain("{{secret:name}}");
+    // Asking for what the sandbox lacks, on a card, instead of handing the owner setup steps.
+    expect(lean).toContain("`capabilities request <entry>`");
+    expect(lean).toContain("`secrets ask NAME`");
+    expect(lean).toContain("the answer continues this conversation by itself");
     expect(lean).toContain("<untrusted-content");
     expect(lean).toContain("`public/`");
     expect(lean).toContain("`refs/`");

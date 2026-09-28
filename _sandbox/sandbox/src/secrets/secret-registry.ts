@@ -4,17 +4,18 @@ import { parseEnv } from "node:util";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
 import type { SecretVault } from "../capabilities/credentials/secret-vault.js";
+import type { SandboxSecrets } from "./sandbox-secrets.js";
 
 // Every credential value under a stable name (a `{{secret:name}}` token): masking replaces a value with its reference,
-// resolution replaces it back only where it leaves. Unions three stores (env, deploy-generated, capability vault); env
-// wins a name collision. Read fresh each call, never cached, so a mid-turn credential masks from the very next tool
+// resolution replaces it back only where it leaves. Unions four stores (env, the sandbox's own, deploy-generated,
+// capability vault); env wins a name collision. Read fresh each call, never cached, so a mid-turn credential masks from the very next tool
 // result.
 
 export interface NamedSecret {
     // The reference name: an env key (`CLOUDFLARE_API_TOKEN`) or `<capability>/<field>` (`reddit/password`).
     readonly name: string;
     readonly value: string;
-    readonly source: "env" | "generated" | "capability";
+    readonly source: "env" | "sandbox" | "generated" | "capability";
 }
 
 // Double braces, not a value-lookalike, since substitution must be exact-match; a key-shaped token invites a model to
@@ -101,13 +102,14 @@ const readJson = async (path: string): Promise<Record<string, unknown>> => {
     }
 };
 
-export const secretRegistryOf = (vault: SecretVault, desiredStateRepo: () => string) => async (): Promise<readonly NamedSecret[]> => {
-    const [vaulted, envRaw, generated] = await Promise.all([
+export const secretRegistryOf = (vault: SecretVault, desiredStateRepo: () => string, sandbox: Pick<SandboxSecrets, "all">) => async (): Promise<readonly NamedSecret[]> => {
+    const [vaulted, envRaw, generated, kept] = await Promise.all([
         vault.all(),
         readFile(join(desiredStateRepo(), ENV_FILE), "utf8")
             .catch(undefinedIfMissing)
             .then((text) => text ?? ""),
         readJson(join(desiredStateRepo(), SECRETS_FILE)),
+        sandbox.all(),
     ]);
     const byName = new Map<string, NamedSecret>();
     const add = (name: string, value: unknown, source: NamedSecret["source"]): void => {
@@ -118,6 +120,10 @@ export const secretRegistryOf = (vault: SecretVault, desiredStateRepo: () => str
     // parseEnv's Dict has only string values, which is all this reads.
     for (const [key, value] of Object.entries(parseEnv(envRaw) as Record<string, string>)) {
         add(key, value, "env");
+    }
+    // A person's own secrets without DevOps (sandbox-secrets.ts); the desired-state `.env` wins a name both hold.
+    for (const [key, value] of Object.entries(kept)) {
+        add(key, value, "sandbox");
     }
     for (const [key, value] of Object.entries(generated)) {
         add(key, value, "generated");

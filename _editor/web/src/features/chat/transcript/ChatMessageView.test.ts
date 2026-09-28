@@ -168,6 +168,8 @@ jest.mock("../composer/ChatAttachmentStrip.vue", () => ({ default: { render: () 
 jest.mock("./ChatTodoList.vue", () => ({ default: { render: () => undefined } }));
 jest.mock("../tools/ChatToolCard.vue", () => ({ default: { render: () => undefined } }));
 jest.mock("../tools/ChatToolGroup.vue", () => ({ default: { render: () => undefined } }));
+// A need's card reads the sandbox's needs store and carries a connection's whole form; its states are the needs suites'.
+jest.mock("../../needs/NeedCard.vue", () => ({ default: { render: () => undefined } }));
 
 // Stubs the pane's own view, not the focused one (useChat's PANE_VIEW), since this row reads its pane's conversation.
 jest.mock("../panel/useChat-view", () => {
@@ -702,7 +704,8 @@ describe(`ChatMessageView child-agent card`, () => {
         expect(element.textContent).toContain(`Account: work`);
         expect(element.textContent).toContain(`On rog`);
         expect(element.textContent).toContain(`Requested because: this turn has taken in content from outside (shell-fetch)`);
-        expect(answers(element)).toEqual([`Start it`, `No`]);
+        // Skipping refuses this child alone and lets the turn go on; No ends the turn, as on every permission card.
+        expect(answers(element)).toEqual([`Start it`, `Skip this, keep going`, `No`]);
     });
 
     it(`opens the shell picker over the child's run, offering its knobs, and allows with the owner's pick`, async () => {
@@ -763,7 +766,7 @@ describe(`ChatMessageView child-agent card`, () => {
         expect(element.textContent).toContain(`Now the lexer too.`);
         expect(element.textContent).toContain(`Claude Opus 4.6`);
         expect(chip(element)).toBeNull();
-        expect(answers(element)).toEqual([`Send it`, `No`]);
+        expect(answers(element)).toEqual([`Send it`, `Skip this, keep going`, `No`]);
     });
 
     it(`once settled, reads what started and what the agent had asked for, and offers nothing`, () => {

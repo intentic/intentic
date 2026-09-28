@@ -19,6 +19,7 @@ import { usePaneView } from "../panel/useChat-view";
 import ChatAttachmentStrip from "../composer/ChatAttachmentStrip.vue";
 import ChatBrowserHelpCard from "./cards/ChatBrowserHelpCard.vue";
 import ChatCapabilityCard from "./cards/ChatCapabilityCard.vue";
+import NeedCard from "../../needs/NeedCard.vue";
 import ChatCredentialCard from "./cards/ChatCredentialCard.vue";
 import ChatPaymentCard from "./cards/ChatPaymentCard.vue";
 import ChatPermissionCard from "./cards/ChatPermissionCard.vue";
@@ -165,7 +166,7 @@ const waitClock = computed(() => {
 
 // What the model was told, for a row nobody at the composer typed; one press away.
 const watchEvidence = ref(false);
-const unspokenSent = computed(() => props.message.watchWake?.sent ?? props.message.agentWords?.sent);
+const unspokenSent = computed(() => props.message.watchWake?.sent ?? props.message.needWake?.sent ?? props.message.agentWords?.sent);
 // A watch that never saw its condition, or a child that failed, calls for a different next step.
 const watchGaveUp = computed(
     () => (props.message.watchWake !== undefined && props.message.watchWake.outcome !== `met`) || props.message.agentWords?.failed === true,
@@ -174,6 +175,10 @@ const watchGaveUp = computed(
 const noticeIcon = computed(() => {
     if (props.message.watchWake !== undefined) {
         return `eye`;
+    }
+    // An answered need: the same glyph as its card, so the two read as one thread.
+    if (props.message.needWake !== undefined) {
+        return props.message.needWake.outcome === `met` ? `check-circle` : `times`;
     }
     if (props.message.agentWords !== undefined) {
         return props.message.agentWords.kind === `peer` ? `comments` : `users`;
@@ -533,6 +538,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         <ChatJobRow v-else-if="message.role === 'notice' && message.backgroundJob" :job="message.backgroundJob" />
         <!-- A low-memory hold: one line, whether it still holds a message or only says it once did. -->
         <NoticeMemory v-else-if="isMemoryHold(message)" :message="message" />
+        <!-- Something the agent asked a person for: a card of its own, drawn from the need's live state, which outlives the turn (docs/architecture/needs.md). -->
+        <NeedCard v-else-if="message.role === 'notice' && message.need" :need-id="message.need.id" :snapshot="message.need" />
         <div
             v-else-if="message.role === 'notice' && message.text !== ''"
             class="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 self-center py-0.5 text-2xs"

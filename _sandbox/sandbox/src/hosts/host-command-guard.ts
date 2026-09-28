@@ -8,7 +8,7 @@ import {
 import { judgeCommand } from "../agent/tools/command-judge.js";
 import { cardDeps, raiseRequest } from "../conversations/actor/card-offers.js";
 import { RoleModelUnsetError } from "../seams/role-model-unset.js";
-import { turnRunOf } from "../conversations/actor/conversation-holdings.js";
+import { type LiveRun, turnRunOf } from "../conversations/actor/conversation-holdings.js";
 import type { Services } from "../composition.js";
 import { commandRun } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
@@ -36,6 +36,14 @@ export interface HostGateRefusal {
 }
 
 const refusal = (text: string): HostGateRefusal => ({ refusal: text });
+
+// What the agent reads when nobody answered the card: the deadline passed with its turn still running, or the turn ended
+// first. Only an agent still working reads the first, which is why it says what to do next.
+const unanswered = (machine: string, turnEnded: boolean): string =>
+    turnEnded
+        ? `The turn ended before anyone answered, so it was not run on "${machine}". Do not retry it unasked.`
+        : `Nobody answered within ${DEADLINE_MS / 60_000} minutes, so it was not run on "${machine}". ` +
+          `Do not retry it unasked: carry on without it and say what was left undone.`;
 
 // The command inside a run_command tools/call, or undefined for anything else; a hostile or notification-shaped payload
 // is forwarded to the machine rather than gated, since there'd be nowhere to send a refusal.
@@ -91,6 +99,64 @@ const hostVerdict = async (
         }),
     );
     return { verdict, judging };
+};
+
+// The call a card asks about, and the moment its verdict was logged at, which is the log entry the answer amends.
+interface DeviceAsk {
+    readonly conversationId: string;
+    readonly machine: string;
+    readonly command: string;
+    readonly sentence: string;
+    readonly at: number;
+}
+
+// Asks the owner on a card in the live turn and holds the call until it settles: undefined forwards the command, a
+// refusal is what the agent reads for the way the card ended.
+const askOwner = async (services: Services, run: LiveRun, ask: DeviceAsk): Promise<HostGateRefusal | undefined> => {
+    const answerNotRecorded = (error: unknown): void =>
+        services.logger.warn({ err: error, machine: ask.machine }, "safety log: the owner's answer on a device command was not recorded");
+    // The turn's end settles the card at once: nobody answers a card in a turn that is over, and a yes given after it
+    // would run the command with nobody left to read what it did.
+    const ended = new AbortController();
+    void run.waitUntilFinished().then(() => ended.abort());
+    const answered = await raiseRequest(
+        cardDeps(services),
+        { conversationId: ask.conversationId, push: (event) => run.push(event) },
+        {
+            kind: "permission",
+            // Carries no words: an unanswered card is worded below, by whether the turn it was raised in is over.
+            onAbort: { kind: "permission", requestId: "", decision: "deny" },
+            // Card names the machine in its title: routine in a container, irreversible on somebody's actual laptop.
+            raised: (requestId) => ({
+                kind: "permission",
+                requestId,
+                toolName: `${ask.machine}__${RUN_COMMAND}`,
+                title: `Run this on ${ask.machine}?`,
+                displayName: `Run on ${ask.machine}`,
+                // No marked spans: the title already says what matters here, that it runs on the machine, not the
+                // container.
+                program: { text: excerptProgram(ask.command), language: "bash", truncated: false, spans: [] },
+                // `explain` and not `reason`: they would be the same sentence, printed twice on one card.
+                explain: ask.sentence,
+            }),
+            approves: (answer) => answer.decision !== "deny",
+            signal: ended.signal,
+            deadlineMs: DEADLINE_MS,
+        },
+    );
+    if (answered.decision === "unanswered") {
+        void services.safetyLog.answered(ask.at, "unanswered", "refused").catch(answerNotRecorded);
+        return refusal(unanswered(ask.machine, ended.signal.aborted));
+    }
+    if (answered.decision === "declined") {
+        void services.safetyLog.answered(ask.at, "declined", "refused").catch(answerNotRecorded);
+        return refusal(
+            answered.reply.feedback?.trim() ||
+                `The user declined this. Do not run it on "${ask.machine}", and do not look for another way to achieve the same thing.`,
+        );
+    }
+    void services.safetyLog.answered(ask.at, "allowed", "allowed").catch(answerNotRecorded);
+    return undefined;
 };
 
 // Judges one command headed for `machine`; undefined forwards it, a refusal answers the agent and never touches the
@@ -166,38 +232,5 @@ export const judgeHostCommand = async (
         );
     }
     record("asked");
-    const answerNotRecorded = (error: unknown): void =>
-        services.logger.warn({ err: error, machine: input.machine }, "safety log: the owner's answer on a device command was not recorded");
-    const answered = await raiseRequest(
-        cardDeps(services),
-        { conversationId, push: (event) => run.push(event) },
-        {
-            kind: "permission",
-            onAbort: { kind: "permission", requestId: "", decision: "deny", feedback: "The turn ended before you answered." },
-            // Card names the machine in its title: routine in a container, irreversible on somebody's actual laptop.
-            raised: (requestId) => ({
-                kind: "permission",
-                requestId,
-                toolName: `${input.machine}__${RUN_COMMAND}`,
-                title: `Run this on ${input.machine}?`,
-                displayName: `Run on ${input.machine}`,
-                // No marked spans: the title already says what matters here, that it runs on the machine, not the
-                // container.
-                program: { text: excerptProgram(input.command), language: "bash", truncated: false, spans: [] },
-                // `explain` and not `reason`: they would be the same sentence, printed twice on one card.
-                explain: verdict.sentence,
-            }),
-            approves: (answer) => answer.decision !== "deny",
-            deadlineMs: DEADLINE_MS,
-        },
-    );
-    if (answered.decision !== "approved") {
-        void services.safetyLog.answered(at, "declined", "refused").catch(answerNotRecorded);
-        return refusal(
-            answered.reply.feedback?.trim() ||
-                `The user declined this. Do not run it on "${input.machine}", and do not look for another way to achieve the same thing.`,
-        );
-    }
-    void services.safetyLog.answered(at, "allowed", "allowed").catch(answerNotRecorded);
-    return undefined;
+    return askOwner(services, run, { conversationId, machine: input.machine, command: input.command, sentence: verdict.sentence, at });
 };

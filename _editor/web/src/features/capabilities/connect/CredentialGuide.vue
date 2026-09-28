@@ -2,29 +2,14 @@
 <script setup lang="ts">
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { computed } from "vue";
-import { guideParts, guidePartsPrefixed } from "./credentialGuide";
+import { guideParts, guidePartsPrefixed, guideTokenUrl } from "./credentialGuide";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
 const { entry, values } = defineProps<{ entry: CapabilityCatalogEntry; values: Record<string, string> }>();
 
-// Token page link: absolute for a hosted provider, or built from the instance-URL field for a self-hostable one.
-// Hidden until that field holds a real http(s) URL, so no broken path-only href is shown.
-const tokenUrl = computed<string | undefined>(() => {
-    const guide = entry.guide;
-    if (guide === undefined) {
-        return undefined;
-    }
-    if (guide.urlFromField !== undefined) {
-        const base = (values[guide.urlFromField] ?? ``).trim().replace(/\/+$/, ``);
-        if (!/^https?:\/\//i.test(base)) {
-            return undefined;
-        }
-        return guide.path !== undefined ? `${base}${guide.path}` : base;
-    }
-    return guide.url;
-});
+const tokenUrl = computed<string | undefined>(() => guideTokenUrl(entry, values));
 
 // Weight and colour mark a literal, not a chip or mono span: those visually outweighed the short surrounding prose.
 const literal = `font-medium text-content`;

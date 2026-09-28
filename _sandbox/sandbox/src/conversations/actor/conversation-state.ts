@@ -1,4 +1,4 @@
-import type { AgentJob, AgentSummary, AgentWatch, KeepWarm, ParkKind, TodoItem, TurnProof } from "@intentic/sandbox-contract";
+import type { AgentJob, AgentNeed, AgentSummary, AgentWatch, KeepWarm, ParkKind, TodoItem, TurnProof } from "@intentic/sandbox-contract";
 import type { TurnCheckpoint } from "../../agent/checkpoints/turn-checkpoints.js";
 import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
 import type { HeldTurn } from "../../agent/run/turn/turn-resume.js";
@@ -129,6 +129,9 @@ export interface ConversationState {
     // Its armed watches as the card lists them, as watchers.ts last published them: armed as one turn ends, fired hours
     // later, so no turn resets this either.
     readonly watches: readonly AgentWatch[];
+    // What it still waits on people for, as needs.ts last published it: a need outlives the turn that raised it, so no
+    // turn resets this either.
+    readonly needs: readonly AgentNeed[];
     // The loop running on it and the workflow step it is, as their pumps last published them; a workflow step's is kept
     // after its run ends, since the card is read long after to say why the branch exists.
     readonly loop: NonNullable<AgentSummary["loop"]> | undefined;
@@ -183,6 +186,7 @@ export const idleConversation = (queue: TurnQueue = NO_QUEUE): ConversationState
     grant: undefined,
     jobs: [],
     watches: [],
+    needs: [],
     loop: undefined,
     workflow: undefined,
     journal: undefined,

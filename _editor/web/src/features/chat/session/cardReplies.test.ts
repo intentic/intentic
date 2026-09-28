@@ -12,7 +12,7 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 const { replyRoute } = { replyRoute: jest.fn<SandboxRpc["agent"]["reply"]>(async () => ({ ok: true as const })) };
 jest.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agent: { reply: replyRoute } }) }));
 
-const { CardReplies, afterReply, planFeedback, refusalOf, requestIdOf } = await import("./cardReplies");
+const { CardReplies, SKIP_CALL, afterReply, planFeedback, refusalOf, requestIdOf } = await import("./cardReplies");
 const { TranscriptClock } = await import("../transcript/transcriptClock");
 type CardAnswer = Parameters<InstanceType<typeof CardReplies>["reply"]>[1];
 
@@ -193,6 +193,28 @@ describe(`reply`, () => {
         expect(denied.turn.stop).toHaveBeenCalledTimes(1);
         expect(denied.turn.endedByReader).not.toHaveBeenCalled();
     });
+
+    // The permission card's Skip: this one call refused, the turn left running, and the agent told why in words it steers by.
+    it(`declines one call and lets the turn go on`, async () => {
+        const skipped = parkedOn({ kind: `permission`, requestId: `r1`, toolName: `Bash` });
+
+        expect(await skipped.replies.reply(`r1`, SKIP_CALL)).toBe(true);
+
+        expect(replyRoute.mock.calls).toEqual([
+            [
+                {
+                    kind: `permission`,
+                    requestId: `r1`,
+                    decision: `deny`,
+                    feedback: `The user declined this one call but wants you to keep going. Do not retry it: carry on another way, or without it, and say what you left undone.`,
+                },
+                { context: { at: `box-2` } },
+            ],
+        ]);
+        expect(skipped.cardOf(`permission`, `r1`)).toMatchObject({ status: `denied` });
+        expect(skipped.turn.stop).not.toHaveBeenCalled();
+        expect(skipped.turn.endedByReader).not.toHaveBeenCalled();
+    });
 });
 
 describe(`afterReply`, () => {
@@ -202,6 +224,8 @@ describe(`afterReply`, () => {
         expect(afterReply({ kind: `permission`, decision: `deny` })).toBe(`stop`);
         // A denial with something to steer by carries the turn on instead.
         expect(afterReply({ kind: `permission`, decision: `deny`, feedback: `use the other file` })).toBe(`go on`);
+        // The permission card's Skip is one of those.
+        expect(afterReply(SKIP_CALL)).toBe(`go on`);
         expect(afterReply({ kind: `permission`, decision: `once` })).toBe(`go on`);
         expect(afterReply({ kind: `plan`, approve: false })).toBe(`go on`);
     });

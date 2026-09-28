@@ -81,6 +81,8 @@ test("an unknown name refuses the command and names what exists", async () => {
     const resolved = await resolveCommandSecrets("echo {{secret:NOPE}}", bundle);
     expect(resolved).toEqual({ refusal: expect.stringContaining('"NOPE"') });
     expect((resolved as { refusal: string }).refusal).toContain("CLOUDFLARE_API_TOKEN");
+    // How to get one rides with the refusal: the card the owner pastes it into, never the chat.
+    expect((resolved as { refusal: string }).refusal).toContain('ask for it with `secrets ask NOPE --why "…"`');
     expect(uses).toEqual([]);
 });
 

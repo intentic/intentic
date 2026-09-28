@@ -101,7 +101,7 @@ describe(`a press of submit`, () => {
 
     it(`writes once however often it is pressed while the write is in flight`, async () => {
         const { form, add, submit, submitting } = submitOn(SSH, { state: `active` });
-        Object.assign(form.values, { host: `ops.acme.dev`, user: `ada`, privateKey: `KEY` });
+        Object.assign(form.values, { host: `ops.acme.dev`, user: `ada`, auth: `key`, privateKey: `KEY` });
         let land: () => void = () => undefined;
         add.mockImplementationOnce(() => new Promise<void>((resolve) => (land = resolve)));
 
@@ -118,7 +118,7 @@ describe(`a press of submit`, () => {
 describe(`an add`, () => {
     it(`sends the form under the name it would be saved as, opens the install's terminal, and moves on to the walk's next tile`, async () => {
         const { form, add, submit, walk, handOff } = submitOn(SSH, { state: `active` });
-        Object.assign(form.values, { host: ` ops.acme.dev `, user: `ada`, privateKey: `KEY` });
+        Object.assign(form.values, { host: ` ops.acme.dev `, user: `ada`, auth: `key`, privateKey: `KEY` });
         form.name.value = `Ops Box`;
 
         await submit();
@@ -136,7 +136,7 @@ describe(`an add`, () => {
 
     it(`stays on the tile when the connection is still pending, hands the step over, and starts over on the next free name`, async () => {
         const { form, submit, walk, handOff, state } = submitOn(SSH, { state: `pending`, detail: `waiting for the host key` });
-        Object.assign(form.values, { host: `ops.acme.dev`, user: `ada`, privateKey: `KEY` });
+        Object.assign(form.values, { host: `ops.acme.dev`, user: `ada`, auth: `key`, privateKey: `KEY` });
 
         await submit();
 
@@ -146,7 +146,7 @@ describe(`an add`, () => {
 
     it(`says the add failed, in the daemon's words, and stays where it was`, async () => {
         const { form, add, submit, walk, state } = submitOn(SSH, { state: `active` });
-        Object.assign(form.values, { host: `ops.acme.dev`, user: `ada`, privateKey: `KEY` });
+        Object.assign(form.values, { host: `ops.acme.dev`, user: `ada`, auth: `key`, privateKey: `KEY` });
         add.mockRejectedValueOnce(new Error(`host key verification failed`));
 
         await submit();

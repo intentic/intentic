@@ -41,6 +41,8 @@ const PUSHED_READS: Readonly<Record<string, readonly ProcedureName[]>> = {
     "git/changes": WORKING_REVIEW,
     "loop-designs": [`loops.designs`],
     manifests: [`system.manifestProblems`],
+    // What agents wait on people for: the chat's need cards, the conversation strip, the board and the inbox share it.
+    needs: [`needs.list`, `needs.grants`],
     panels: [`panels.list`],
     personas: [`personas.list`, `personas.kit`],
     "push-checks": [`workspace.pushChecks`],

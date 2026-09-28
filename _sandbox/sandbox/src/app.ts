@@ -378,7 +378,6 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // Registered before the oRPC catch-all so the exact paths win over the /capabilities REST surface.
     const askRoutes = createCapabilityAskRoutes(services);
     serve("GET /capabilities/connectable", askRoutes.connectable);
-    serve("POST /capabilities/ask", askRoutes.ask);
 
     // The `sandboxes` CLI: the owner's other sandboxes, and the one door a new one is created through. `/sandboxes`
     // rather than `/fleet`, which the conversation-fleet reads already own.

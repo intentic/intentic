@@ -201,6 +201,9 @@ export const blocked = (agent: AgentStanding): boolean =>
           agent.attention.permission ||
           agent.attention.capability ||
           agent.attention.conflict ||
+          // A need outlives its turn (docs/architecture/needs.md): a conversation still running carries on beside it
+          // and stays in Active, one that stopped is waiting on nothing but the answer.
+          (agent.attention.need === true && agent.status !== `running`) ||
           BLOCKING_ENDINGS.has(agent.status);
 
 // The half of `blocked` that is literally waiting on an answer (plan, question, permission, capability), narrower
@@ -218,6 +221,7 @@ export const onlyOwnerCanAnswer = (agent: AgentStanding): boolean =>
     agent.attention.permission ||
     agent.attention.capability ||
     agent.attention.credential ||
+    agent.attention.need === true ||
     (agent.status === `awaiting` && !agent.attention.question) ||
     ((agent.attention.conflict || agent.status === `conflict`) && conflictIsYours(agent));
 
@@ -245,6 +249,9 @@ const attentionWords = () =>
         // yes/no rather than a decision to read. Verb names the destination, not the action ("Release" would promise
         // something the reader may be unable to do).
         credential: { chip: t(`agents.agentStatus.releaseNeeded`), verb: t(`agents.agentStatus.seeRequest`) },
+        // Something the agent asked a person for that outlives the turn (a connection, a secret, reach, a tool): ranked
+        // with a setup, since it is one, and worded for what the reader does, which is answer it where it is drawn.
+        need: { chip: t(`agents.agentStatus.needsYou`), verb: t(`agents.agentStatus.seeWhatItNeeds`) },
         question: { chip: t(`agents.agentStatus.question`), verb: t(`ui.action.answer`) },
         // Ranked last, the most routine and cheapest park to clear: a plan, a spend or a setup wants reading first. Chip
         // reads "Permission" alone, not "Approval needed" (a plan's word) or "Permission needed" (too long at the card's
@@ -260,6 +267,7 @@ const attentionWords = () =>
 const ATTENTION_RANK = [
     `plan`,
     `capability`,
+    `need`,
     `credential`,
     `question`,
     `permission`,

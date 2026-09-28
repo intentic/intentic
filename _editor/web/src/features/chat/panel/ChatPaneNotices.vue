@@ -12,6 +12,7 @@ import { useSandbox } from "../../sandbox/client/useSandbox";
 import { hoursLeftLine } from "../../settings/hosted-plan/hostedHours";
 import { useHostedPlan } from "../../settings/hosted-plan/useHostedPlan";
 import ChatAccountPanel from "../accounts/ChatAccountPanel.vue";
+import NeedsStrip from "../../needs/NeedsStrip.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // What this chat's standing is, above the composer: strips for a state the conversation arrived at by itself
@@ -107,6 +108,8 @@ const activeAccountReauth = computed(() => {
 </script>
 
 <template>
+    <!-- What this conversation still waits on people for (docs/architecture/needs.md): answerable here, above the composer. -->
+    <NeedsStrip :conversation-id="conversation.conversationId" />
     <!-- This conversation's agent is off the board. -->
     <div v-if="activeArchived !== undefined" class="flex items-center gap-2 rounded-xl border border-line bg-card px-3 py-2 text-2xs text-muted">
         <Icon name="box" class="shrink-0" />

@@ -11,6 +11,10 @@ export interface CredentialGrant {
 export interface CredentialGrants {
     readonly grant: (conversationId: string, subject: string, grant: CredentialGrant) => void;
     readonly has: (conversationId: string, subject: string) => CredentialGrant | undefined;
+    // Every release standing now, for the page where a person reviews and takes them back.
+    readonly all: () => readonly { readonly conversationId: string; readonly subject: string; readonly grant: CredentialGrant }[];
+    // Takes one release back; whether there was one. The conversation's next turn mounts without it.
+    readonly revoke: (conversationId: string, subject: string) => boolean;
     // Drops everything a conversation was granted, so a reused conversation id inherits no live release.
     readonly forget: (conversationId: string) => void;
 }
@@ -27,6 +31,16 @@ export const createCredentialGrants = (): CredentialGrants => {
             existing.set(subject, grant);
         },
         has: (conversationId, subject) => byConversation.get(conversationId)?.get(subject),
+        all: () =>
+            [...byConversation].flatMap(([conversationId, subjects]) => [...subjects].map(([subject, grant]) => ({ conversationId, subject, grant }))),
+        revoke: (conversationId, subject) => {
+            const subjects = byConversation.get(conversationId);
+            const revoked = subjects?.delete(subject) === true;
+            if (subjects !== undefined && subjects.size === 0) {
+                byConversation.delete(conversationId);
+            }
+            return revoked;
+        },
         forget: (conversationId) => {
             byConversation.delete(conversationId);
         },

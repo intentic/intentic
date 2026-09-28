@@ -16,6 +16,7 @@ import { isLandConflict } from "../events/land-conflict.js";
 import { turnedAwayCode } from "../policy/turned-away.js";
 import { mentionedPathTokens } from "./mentions.js";
 import { unspokenPromptRow } from "../events/agent-words.js";
+import { needRowText } from "../events/need-wake.js";
 
 // Folds a turn's frames into rows once, live and for the settled record alike, so a reopened chat matches what was on
 // screen. `tag` selects the stream read: undefined is the main turn, a tool-call id is the subagent it spawned; other
@@ -408,6 +409,9 @@ export class TranscriptFold {
                 return this.park(event.requestId, { paymentOffer: { requestId: event.requestId, offer: event.offer, status: "pending" } });
             case "credential_offer":
                 return this.park(event.requestId, { credentialOffer: { requestId: event.requestId, offer: event.offer, status: "pending" } });
+            case "need":
+                // A row of its own, not a park: the turn goes on, and the card reads the need's live state by its id.
+                return this.pushRow({ role: "notice", text: needRowText(event.need), need: event.need });
             case "resolved":
                 // Releases the card; the answering window already froze it locally, so this is a no-op there.
                 return this.patchParked(event.requestId, (row) => Object.assign(row, settledRequests(row, event.reply)));

@@ -93,7 +93,8 @@ export const WORKSPACE_VIEW_ID = `workspace`;
 const judge = (): RailGroup => ({
     id: `judge`,
     label: t(`views.registry.judge`),
-    items: [signal(`approvals`), signal(`acceptance`), signal(`pipelines`), signal(`deployments`), signal(`maintenance`)],
+    // Needs you leads the band: what agents are waiting on a person for, on the rail only while anything is.
+    items: [signal(`needs`), signal(`approvals`), signal(`acceptance`), signal(`pipelines`), signal(`deployments`), signal(`maintenance`)],
 });
 // Authored once, then left alone. Automations never badges: a held wake is counted by Approvals instead.
 const setup = (): RailGroup => ({ id: `setup`, label: t(`views.words.setUp`), items: [signal(`workflows`), signal(`automations`)] });

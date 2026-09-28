@@ -9,6 +9,7 @@ import {
     turnPersona,
     UNATTENDED_ACCOUNTS_TITLE,
     unattendedAccountsNote,
+    widenPersona,
 } from "./personas.js";
 
 const personaOf = (id: string, capabilities: readonly string[], extra: Partial<Persona> = {}): Persona => ({
@@ -356,4 +357,35 @@ test("no note when nothing was withheld, and none for a turn wearing a persona",
     // A persona says the same thing from the other end (personaNote), so this one would be the second voice saying it.
     const wearing = turnPersona({ personas: CAST, actsAs: "work", unattended: true });
     expect(unattendedAccountsNote(wearing, personaWithheldAccounts([browser("npmjs")], wearing))).toBeUndefined();
+});
+
+// What a person allowed one conversation beyond its persona (conversation-grants.ts), laid over the turn's persona:
+// exactly what was granted opens, and nothing else moves.
+describe("widenPersona", () => {
+    const reddit: Capability = { id: "reddit-work", kind: "browser", config: { platform: "reddit" } };
+    const linear: Capability = { id: "linear", kind: "cli", config: { provider: "linear" } };
+    const narrow = turnPersona({
+        personas: [{ id: "research", capabilities: [], powers: { ...PersonaPowersSchema.parse({}), shell: false, connectors: [] }, workspace: { folders: ["intentic"] } }],
+        actsAs: "research",
+        unattended: false,
+    });
+
+    it("leaves the persona as it is when nothing was granted", () => {
+        expect(widenPersona(narrow, undefined)).toBe(narrow);
+    });
+
+    it("opens a granted capability, shelf and folder, and only those", () => {
+        const wide = widenPersona(narrow, { capabilities: ["reddit-work"], folders: ["refs/sdk"], shelves: ["shell"], updatedAt: 1 });
+        expect(narrow.allows(reddit)).toBe(false);
+        expect(wide.allows(reddit)).toBe(true);
+        expect(wide.allows(linear)).toBe(false);
+        expect(wide.powers.shell).toBe(true);
+        expect(wide.powers.web).toBe(narrow.powers.web);
+        expect(wide.fence).toEqual(["intentic", "refs/sdk"]);
+    });
+
+    it("keeps an unfenced turn unfenced: it already reaches the whole workspace", () => {
+        const open = turnPersona({ personas: [], actsAs: undefined, unattended: false });
+        expect(widenPersona(open, { capabilities: [], folders: ["refs/sdk"], shelves: [], updatedAt: 1 }).fence).toBeUndefined();
+    });
 });

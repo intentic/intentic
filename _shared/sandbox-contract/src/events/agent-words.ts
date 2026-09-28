@@ -1,5 +1,6 @@
 import type { SubagentVerification } from "../schemas/terminal.js";
 import type { TranscriptAgentWords, TranscriptRow } from "./transcript.js";
+import { needWakeRow } from "./need-wake.js";
 import { watchWakeRow } from "./watch-wake.js";
 
 // Composer and parser of another agent's prompt (a peer's message, a child's report) are one piece of knowledge.
@@ -124,4 +125,4 @@ export const agentWordsRow = (prompt: string): TranscriptRow | undefined => {
 };
 
 /** The row for a prompt nobody at the composer typed; every transcript reader asks this one function. */
-export const unspokenPromptRow = (prompt: string): TranscriptRow | undefined => watchWakeRow(prompt) ?? agentWordsRow(prompt);
+export const unspokenPromptRow = (prompt: string): TranscriptRow | undefined => watchWakeRow(prompt) ?? needWakeRow(prompt) ?? agentWordsRow(prompt);

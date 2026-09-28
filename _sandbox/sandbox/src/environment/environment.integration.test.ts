@@ -12,6 +12,7 @@ import { AUTO_MARKER } from "./auto-drafts.js";
 import { fileRuntimeInstallsStore } from "./runtime-installs.js";
 import { hasOfficialBase } from "@intentic/sandbox-contract";
 import {
+    approveDraft,
     approvedPath,
     approveEnvironment,
     composeEnvironment,
@@ -20,7 +21,9 @@ import {
     draftsDir,
     baseImageOf,
     proposalPath,
+    proposeDraft,
     readEnvironment,
+    rejectDraft,
     rejectEnvironment,
     withoutRuntimeDirectives,
 } from "./environment.js";
@@ -436,4 +439,65 @@ test("withoutRuntimeDirectives drops the directive lines and any fragment with n
         "# vpn tools\nRUN apt-get install -y openconnect\n# intentic:runtime --cap-add=NET_ADMIN\n# intentic:runtime --device=/dev/net/tun";
     expect(withoutRuntimeDirectives([directiveOnly, install])).toEqual(["# vpn tools\nRUN apt-get install -y openconnect"]);
     expect(withoutRuntimeDirectives([])).toEqual([]);
+});
+
+// One tool at a time, as a need's card answers it (needs/kinds/environment-need.ts): filed on the main tree at once,
+// approved or dropped alone, with every other agent's draft left pending.
+const FFMPEG =
+    "RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \\\n" +
+    "    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \\\n" +
+    "    apt-get update && apt-get install -y --no-install-recommends ffmpeg";
+
+test("a proposed tool is filed as its own draft, approved alone into the custom section, and the others stay pending", async () => {
+    const services = stubServices();
+    expect(await proposeDraft(services, "ffmpeg", `${FFMPEG}\n`)).toEqual({ file: "ffmpeg.Dockerfile" });
+    expect(await proposeDraft(services, "Rust Toolchain", "RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y\nENV PATH=/root/.cargo/bin:$PATH")).toEqual({
+        file: "rust-toolchain.Dockerfile",
+    });
+    const approved = await approveDraft(services, "ffmpeg");
+    expect(approved).toEqual({ hash: expect.any(String) });
+    expect(await services.files.read(customPath(services))).toBe(`# ---- ffmpeg ----\n${FFMPEG}\n`);
+    expect(await services.files.read(join(draftsDir(services), "ffmpeg.Dockerfile"))).toBeUndefined();
+    // The other agent's draft is still the proposal, carried with the custom section it would join.
+    expect(await services.files.read(proposalPath(services))).toContain("# ---- rust-toolchain ----");
+    // The composed overlay holds what was approved, and its hash is what a rebuilt container will report.
+    const overlay = await services.files.read(approvedPath(services));
+    expect(overlay).toContain(FFMPEG);
+    expect("hash" in approved ? approved.hash : undefined).toBe(sha256Hex(overlay ?? ""));
+});
+
+test("a dropped tool's draft goes, and with no drafts left there is no proposal asking for nothing", async () => {
+    const services = stubServices();
+    await proposeDraft(services, "ffmpeg", FFMPEG);
+    await readEnvironment(services);
+    expect(await services.files.read(proposalPath(services))).toContain("ffmpeg");
+    await rejectDraft(services, "ffmpeg");
+    expect(await services.files.read(join(draftsDir(services), "ffmpeg.Dockerfile"))).toBeUndefined();
+    expect(await services.files.read(proposalPath(services))).toBeUndefined();
+});
+
+test("a draft is RUN and ENV lines only, and approving a tool with no draft says so", async () => {
+    const services = stubServices();
+    expect(await proposeDraft(services, "evil", "FROM alpine\nRUN true")).toEqual({
+        problem: "the steps may not contain FROM (the sandbox owns the base image) or an intentic:runtime line",
+    });
+    expect(await proposeDraft(services, "copy", "COPY . /app")).toEqual({ problem: 'only RUN and ENV lines may be proposed, and "COPY . /app" is neither' });
+    expect(await proposeDraft(services, "!!!", "RUN true")).toEqual({ problem: '"!!!" cannot name a draft: use letters, digits and dashes' });
+    expect(await approveDraft(services, "ghost")).toEqual({ problem: "no draft is waiting for ghost" });
+});
+
+test("a proposed apt install carries both cache mounts and leaves the lists alone, while an older draft stays approvable", async () => {
+    const services = stubServices();
+    // Refused where the agent can fix it in one edit, not discovered by the owner as a rebuild that downloads it all again.
+    expect(await proposeDraft(services, "ffmpeg", "RUN apt-get update && apt-get install -y ffmpeg")).toEqual({ problem: expect.stringContaining("must mount both apt caches") });
+    const halfMounted = "RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \\\n    apt install -y ffmpeg";
+    expect(await proposeDraft(services, "ffmpeg", halfMounted)).toEqual({ problem: expect.stringContaining("must mount both apt caches") });
+    expect(await proposeDraft(services, "ffmpeg", `${FFMPEG} \\\n    && rm -rf /var/lib/apt/lists/*`)).toEqual({ problem: expect.stringContaining("leave /var/lib/apt/lists alone") });
+    // A mount on one RUN does not vouch for an install on the next.
+    expect(await proposeDraft(services, "two", `${FFMPEG}\nRUN apt-get install -y sox`)).toEqual({ problem: expect.stringContaining("must mount both apt caches") });
+    // What installs nothing with apt owes no mounts.
+    expect(await proposeDraft(services, "rust", "RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y")).toEqual({ file: "rust.Dockerfile" });
+    // A draft filed before the rule (by hand, or by an older daemon) is still the owner's to approve.
+    await services.files.write(join(draftsDir(services), "sox.Dockerfile"), "RUN apt-get install -y sox\n");
+    expect(await approveDraft(services, "sox")).toEqual({ hash: expect.any(String) });
 });

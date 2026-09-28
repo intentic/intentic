@@ -1,4 +1,4 @@
-import type { Area, Capability, CredentialGate, Persona, Rule, SandboxSettings, TurnNote } from "@intentic/sandbox-contract";
+import type { Area, Capability, ConversationGrant, CredentialGate, Persona, Rule, SandboxSettings, TurnNote } from "@intentic/sandbox-contract";
 import type { Services } from "../../../composition.js";
 import { readPersonaPrompt } from "../../../personas/persona-kit.js";
 import type { ShortMemory } from "@intentic/constants/memory-room";
@@ -48,6 +48,8 @@ export interface AdmittedTurnFacts {
     readonly setup: readonly ProjectSetupStatus[];
     readonly personas: readonly Persona[];
     readonly areas: readonly Area[];
+    // What a person allowed this conversation beyond its persona, if anything.
+    readonly grant: ConversationGrant | undefined;
     readonly skillCatalogNote: string | undefined;
     readonly contextNote: TurnNote | undefined;
     // Undefined when retrieval was never attempted, which is a different fact from a lookup that skipped.
@@ -187,6 +189,7 @@ export type TurnFactsDeps = ServiceabilityDeps &
     | "areas"
     | "capabilities"
     | "config"
+    | "conversationGrants"
     | "credentialGates"
     | "credentialGrants"
     | "dependencies"
@@ -229,7 +232,9 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
         settings,
     );
     const [gates, accountRoute] = await Promise.all([gatesOf(services), accountRouteOf(services, input, entry)]);
-    const premise = premiseOf({ entry, settings, personas, areas }, input, runtime);
+    // A conversation's own grants (personas/conversation-grants.ts) widen its persona from the turn after they are given.
+    const grant = input.conversationId === undefined ? undefined : await services.conversationGrants.of(input.conversationId);
+    const premise = premiseOf({ entry, settings, personas, areas, grant }, input, runtime);
     const iqTeaching = await iqTeachingFor(services, premise);
     // What checks the work, on the turns that owe it to a card that did not drop it (turn-premise.ts).
     const landingChecksNote = premise.send.landingChecks ? LANDING_CHECKS_NOTE : undefined;
@@ -247,6 +252,7 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
         setup,
         personas,
         areas,
+        grant,
         skillCatalogNote,
         contextNote,
         turnContext,

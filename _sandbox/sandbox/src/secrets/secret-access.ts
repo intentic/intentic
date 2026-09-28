@@ -50,10 +50,13 @@ export const resolveCommandSecrets = async (command: string, secrets: SecretAcce
     const { text, used, unknown } = resolveSecretReferences(command, registry);
     if (unknown.length > 0) {
         const known = registry.map((secret) => secret.name);
+        // The way to get one is part of the refusal: a card the person pastes the value into, never the chat, so the
+        // agent neither stops to write instructions nor asks for a value it would then hold (docs/architecture/needs.md).
+        const ask = unknown.map((name) => `\`secrets ask ${name} --why "…"\``).join(" or ");
         return {
             refusal: `no stored secret named ${unknown.map((name) => `"${name}"`).join(", ")}: ${
-                known.length === 0 ? "nothing is stored yet; ask the owner to add it on the Secrets view" : `stored names: ${known.join(", ")}`
-            }`,
+                known.length === 0 ? "nothing is stored yet" : `stored names: ${known.join(", ")}`
+            }. If it is a different name above, use that; if the task needs one nobody has stored, ask for it with ${ask}, which puts a card with a masked field in front of the owner and answers once it is stored.`,
         };
     }
     // After the all-names-known check: a command with one gated and one nonexistent name shouldn't spend anyone's

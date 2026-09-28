@@ -132,6 +132,10 @@ const STATE_FILES = [
     // needing, not what one machine did. The drift snapshot self-expires on a move since its `bornAt` won't match the
     // new container.
     { path: ".intentic/records/runtime-installs.json", invalidates: ["environment"], portability: "carry" },
+    // What agents are waiting on people for (docs/architecture/needs.md): every open need and the recent closed ones.
+    // Holds no credential (a secret need names the secret, its value goes to the secret store), so it may `carry`: a
+    // question a moved sandbox still has to ask. `needs` is the chat cards', the board's and the inbox's shared read.
+    { path: ".intentic/records/needs.json", invalidates: ["needs"], portability: "carry" },
     // Where each agent engine's version comes from: blessed list, upstream newest, a pin, or the image
     // (schemas/engines.ts). The versions themselves are machine state on the daemon's volume (architecture-specific
     // binaries); the policy here travels. `versioned`: a human decision worth reviewing. Own key, not `environment`'s:

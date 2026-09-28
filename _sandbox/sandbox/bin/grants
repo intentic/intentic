@@ -1,0 +1,42 @@
+#!/usr/bin/env node
+// The in-sandbox grants command: ask the owner, on a card in this chat, for reach this conversation's persona or area
+// withholds (docs/architecture/needs.md). A persona decides what a turn may touch by leaving things out, so a
+// withheld account or folder is simply absent; this is the door to ask for it rather than stopping to say so in prose.
+// The person allows it for this conversation, or on the persona itself; either way it reaches the conversation's next
+// turn, and the sandbox continues the conversation with it.
+
+import { die, parseArgs, raise, WAIT_HELP } from "./needs-cli.mjs";
+
+const COMMAND = "grants";
+
+const USAGE = `grants — ask for reach this conversation's persona or area withholds
+
+  grants request capability <id> [--why "…"] [--wait <seconds>]
+                                             a connected account, connector, device or server the persona leaves out
+  grants request folder <path> [--why "…"] [--wait <seconds>]
+                                             a workspace folder outside this conversation's reach
+  grants request shelf <name> [--why "…"] [--wait <seconds>]
+                                             a whole shelf of tools: files, shell, code, web, browser, delegate, sandbox
+
+A grant reaches this conversation from its NEXT turn: finish what you can, and the sandbox continues the conversation
+once it is allowed. A refusal is a person's decision: carry on without it, never around it.
+
+${WAIT_HELP}`;
+
+const SUBJECTS = new Set(["capability", "folder", "shelf"]);
+
+const main = async () => {
+    const [command, ...args] = process.argv.slice(2);
+    if (command !== "request") {
+        process.stdout.write(`${USAGE}\n`);
+        process.exit(command === undefined || command === "--help" || command === "-h" ? 0 : 1);
+    }
+    const { flags, rest } = parseArgs(COMMAND, args, { values: ["why", "wait"] });
+    const [subject, what] = rest;
+    if (subject === undefined || !SUBJECTS.has(subject) || what === undefined) {
+        return die(COMMAND, USAGE);
+    }
+    await raise(COMMAND, { kind: "grant", subject, what }, flags);
+};
+
+main().catch((error) => die(COMMAND, error?.message ?? String(error)));

@@ -40,12 +40,34 @@ const secretsWorkspace = (): ReturnType<typeof workspacePaths> => {
     return workspace;
 };
 
-test("secrets.set / list / remove / reveal refuse until DevOps is active (the desired-state repo is absent under test)", async () => {
+test("without DevOps, set / list / reveal / remove use the sandbox's own store (the desired-state repo is absent under test)", async () => {
+    // Keeping a key for the agent never waits on a deploy pipeline being scaffolded first.
     const client = clientFor(createApp(services()));
-    expect(await errorCode(client.secrets.set({ key: "CLOUDFLARE_API_TOKEN", value: "x" }))).toBe("PRECONDITION_FAILED");
-    expect(await errorCode(client.secrets.list())).toBe("PRECONDITION_FAILED");
-    expect(await errorCode(client.secrets.remove({ key: "CLOUDFLARE_API_TOKEN" }))).toBe("PRECONDITION_FAILED");
-    expect(await errorCode(client.secrets.reveal({ key: "CLOUDFLARE_API_TOKEN" }))).toBe("PRECONDITION_FAILED");
+    expect(await client.secrets.set({ key: "CLOUDFLARE_API_TOKEN", value: "x" })).toEqual({ ok: true });
+    expect(await client.secrets.list()).toEqual({ keys: ["CLOUDFLARE_API_TOKEN"] });
+    expect(await client.secrets.reveal({ key: "CLOUDFLARE_API_TOKEN" })).toEqual({ value: "x" });
+    expect(await client.secrets.remove({ key: "CLOUDFLARE_API_TOKEN" })).toEqual({ ok: true });
+    expect(await client.secrets.list()).toEqual({ keys: [] });
+    expect(await errorCode(client.secrets.remove({ key: "CLOUDFLARE_API_TOKEN" }))).toBe("NOT_FOUND");
+    expect(await errorCode(client.secrets.reveal({ key: "CLOUDFLARE_API_TOKEN" }))).toBe("NOT_FOUND");
+});
+
+test("secrets.generate stores a random value under a new name and answers its length, never the value", async () => {
+    const client = clientFor(createApp(services()));
+    const made = await client.secrets.generate({ key: "SESSION_SECRET", bytes: 32, format: "hex" });
+    expect(made).toEqual({ key: "SESSION_SECRET", length: 64, stored: "sandbox" });
+    const { value } = await client.secrets.reveal({ key: "SESSION_SECRET" });
+    expect(value).toMatch(/^[0-9a-f]{64}$/u);
+    expect(JSON.stringify(made)).not.toContain(value);
+    // Defaults: 32 bytes of hex, the shape most readers accept.
+    expect(await client.secrets.generate({ key: "WEBHOOK_SECRET" })).toEqual({ key: "WEBHOOK_SECRET", length: 64, stored: "sandbox" });
+});
+
+test("secrets.generate refuses a name something already holds, rather than breaking whatever reads it", async () => {
+    const client = clientFor(createApp(services()));
+    await client.secrets.set({ key: "SESSION_SECRET", value: "the-one-in-use" });
+    expect(await errorCode(client.secrets.generate({ key: "SESSION_SECRET" }))).toBe("CONFLICT");
+    expect(await client.secrets.reveal({ key: "SESSION_SECRET" })).toEqual({ value: "the-one-in-use" });
 });
 
 test("secrets.inventory merges artifact requirements, .env keys, credentialed capabilities, and provider accounts", async () => {

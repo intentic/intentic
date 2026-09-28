@@ -81,8 +81,9 @@ describe("capabilityEffects", () => {
         });
     });
 
-    it("always stores an ssh credential on disk, for both auth modes", () => {
-        for (const auth of ["key", "password"]) {
+    // A generated key is written to disk like a pasted one: where it came from changes nothing about where it lives.
+    it("always stores an ssh credential on disk, for every auth mode", () => {
+        for (const auth of ["key", "generated", "password"]) {
             expect(capabilityEffects({ kind: "ssh", config: { auth } })).toEqual([
                 { kind: "secret", exposure: "disk" },
                 { kind: "skill", name: "ssh" },

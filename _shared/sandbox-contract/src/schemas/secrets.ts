@@ -19,6 +19,29 @@ export const SecretKeysSchema = z.object({
 export const SecretKeyParamSchema = z.object({ key: secretKey.describe("Which secret, by name.") });
 export const SecretRevealSchema = z.object({ value: z.string().describe("The value itself. The only place in this API one is ever returned.") });
 
+// A secret nobody has to find or paste: a session key, a webhook signing secret, a database password the task sets up
+// itself. The sandbox makes it and keeps it; the caller gets its reference and length, never the value.
+export const SECRET_FORMATS = ["hex", "base64url", "alnum"] as const;
+export const SecretGenerateSchema = z.object({
+    key: secretKey.describe("The name to store it under: a name nothing here holds yet, since a new value would break whatever uses the old one."),
+    bytes: z
+        .number()
+        .int()
+        .min(16)
+        .max(128)
+        .default(32)
+        .describe("How much randomness, in bytes. 32 unless whatever reads it demands a particular length."),
+    format: z
+        .enum(SECRET_FORMATS)
+        .default("hex")
+        .describe("How it is spelled: `hex` (0-9, a-f), `base64url` (letters, digits, - and _), or `alnum` (letters and digits only, for readers that refuse symbols)."),
+});
+export const SecretGeneratedSchema = z.object({
+    key: z.string().describe("The name it is stored under."),
+    length: z.number().int().describe("How many characters it is, which a reader's validation may care about."),
+    stored: z.enum(["env", "sandbox"]).describe("Where it was kept: desired-state/.env once DevOps is active, the sandbox's own store before that."),
+});
+
 // A wall against the agent's own judgment, not a compromised container: a shell here can read the policy same as the
 // vault. Approvers are an exact list, never a role floor; the owner isn't on it unless added.
 export const CredentialGateScopeSchema = z

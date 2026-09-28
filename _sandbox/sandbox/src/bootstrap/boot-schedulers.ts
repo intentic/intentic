@@ -21,6 +21,12 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
         scheduler.start();
     }
 
+    // Open needs outlive every turn and every restart (docs/architecture/needs.md): their cards are told what they wait
+    // on, answers a restart interrupted are delivered, and the checks against the world start.
+    if (role.container) {
+        shutdown.push(services.needs.start());
+    }
+
     // Stop clears timers only; the watch journal survives for the next boot to restore. What a turn left running is
     // judged and handed to a watch by the turn's own close (agent/run/placement/turn-close.ts), which needs this bound.
     shutdown.push(startWatchers(services));

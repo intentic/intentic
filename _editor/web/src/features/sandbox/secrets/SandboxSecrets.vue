@@ -3,7 +3,7 @@ import { Button, ui, FilterBar, type NoticeModel, NoticeStack, Row, RowGroup, Ro
 import { noticeFrom } from "@intentic/ui/async";
 import { SECRET_KEY_MAX, SECRET_KEY_RE } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, useRoute } from "vue-router";
 import SecretEntryRow from "../../capabilities/connect/SecretEntryRow.vue";
 import SecretField from "../../capabilities/connect/SecretField.vue";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
@@ -94,9 +94,12 @@ const emptyNote = computed<string | undefined>(() => {
     return rows.value.length === 0 ? `Nothing in this sandbox holds a credential yet.` : `Nothing matches that filter.`;
 });
 
-// Add-a-secret (any env key the user wants available at apply time); collapsed until invoked.
-const adding = ref(false);
-const newKey = ref(``);
+// Add-a-secret (any env key the user wants available at apply time); collapsed until invoked, or opened on arrival by
+// a link naming the key (`/sandbox/secrets?add=NAME`), which is how an agent's message points at the one to add.
+const route = useRoute();
+const linked = typeof route.query[`add`] === `string` ? route.query[`add`] : ``;
+const adding = ref(SECRET_KEY_RE.test(linked));
+const newKey = ref(SECRET_KEY_RE.test(linked) ? linked : ``);
 const newKeyValid = computed(() => SECRET_KEY_RE.test(newKey.value) && newKey.value.length <= SECRET_KEY_MAX);
 // A name already here would be overwritten by Save with no warning; said before the box can be used, not after.
 const newKeyTaken = computed(() => newKeyValid.value && inventory.value.some((entry) => entry.key === newKey.value));
@@ -115,6 +118,27 @@ const newKeyProblem = computed<string | undefined>(() => {
 const cancelAdd = (): void => {
     adding.value = false;
     newKey.value = ``;
+};
+
+// A value nobody has to find (a session key, a signing secret): the daemon makes and keeps it, and this page never
+// holds it. Offered only for a new name, since a new value would break whatever reads the old one.
+const generating = ref(false);
+const generateError = ref<NoticeModel | undefined>(undefined);
+const generateOne = async (): Promise<void> => {
+    if (!newKeyValid.value || newKeyTaken.value) {
+        return;
+    }
+    generating.value = true;
+    generateError.value = undefined;
+    try {
+        await sandboxRpc.secrets.generate({ key: newKey.value });
+        newKey.value = ``;
+        refreshInventory();
+    } catch (err) {
+        generateError.value = noticeFrom(err, t(`sandbox.sandboxSecrets.couldNotGenerate`));
+    } finally {
+        generating.value = false;
+    }
 };
 
 // CI sync: a stale entry gets the "Push to CI" action, which streams `intentic deploy secrets push`.
@@ -209,25 +233,8 @@ const pushToCi = async (): Promise<void> => {
                     />
                 </RowGroup>
 
-                <!-- Gate sits on the group it gates, not atop the page: everything else here works with DevOps off. -->
-                <!-- A navigating row is `<Row>` wrapped in `<RouterLink>` (the pattern it documents), at the list's own tier. -->
-                <RowGroup v-else-if="!devopsActive && !filtering" :label="t(`sandbox.sandboxSecrets.secrets`)">
-                    <RouterLink to="/capabilities" class="block no-underline">
-                        <Row
-                            interactive
-                            chevron
-                            icon="exclamation-triangle"
-                            tone="warning"
-                            :title="t(`sandbox.sandboxSecrets.keepingOwnSecretsHere`)"
-                        >
-                            <template #meta
-                                ><span class="font-medium text-link">{{ t(`sandbox.sandboxSecrets.activate`) }}</span></template
-                            >
-                        </Row>
-                    </RouterLink>
-                </RowGroup>
-
-                <RowGroup v-if="devopsActive && groupVisible(yours)" :label="t(`sandbox.sandboxSecrets.secrets`)" :count="yours.length">
+                <!-- A person's own secrets need no DevOps: without it they go to the sandbox's own store, the one a need's card writes to too. -->
+                <RowGroup v-if="groupVisible(yours)" :label="t(`sandbox.sandboxSecrets.secrets`)" :count="yours.length">
                     <SecretEntryRow
                         v-for="row in yours"
                         :key="row.entry.key"
@@ -252,9 +259,22 @@ const pushToCi = async (): Promise<void> => {
                             <span v-if="newKeyProblem" :class="newKeyTaken ? `text-2xs text-subtle` : `text-2xs text-warning`">
                                 {{ newKeyProblem }}
                             </span>
-                            <button type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="cancelAdd">
-                                {{ t(`ui.action.cancel`) }}
-                            </button>
+                            <div class="flex items-center gap-3">
+                                <button
+                                    v-if="newKeyValid && !newKeyTaken"
+                                    type="button"
+                                    :class="ui.textAction(`text-2xs text-link`)"
+                                    :disabled="generating"
+                                    :title="t(`sandbox.sandboxSecrets.generateHint`)"
+                                    @click="generateOne"
+                                >
+                                    {{ t(`sandbox.sandboxSecrets.generateRandom`) }}
+                                </button>
+                                <button type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="cancelAdd">
+                                    {{ t(`ui.action.cancel`) }}
+                                </button>
+                            </div>
+                            <NoticeStack :of="[generateError]" />
                         </div>
                     </RowNote>
                 </RowGroup>

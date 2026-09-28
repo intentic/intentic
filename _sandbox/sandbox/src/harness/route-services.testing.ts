@@ -24,6 +24,7 @@ import { grokSliceFake } from "../runtimes/grok/grok-provider.testing.js";
 import { kimiSliceFake } from "../runtimes/kimi/kimi-provider.testing.js";
 import { mintedSliceFake } from "../runtimes/minted/minted-provider.testing.js";
 import { secretsSliceFake } from "../secrets/secrets-slice.testing.js";
+import { memoryConversationGrants } from "../personas/conversation-grants.js";
 import { createDomainEvents } from "../seams/domain-events.js";
 import { sessionsSliceFake } from "../sessions/sessions-slice.testing.js";
 import { createAnnouncer } from "../system/boot/announce.js";
@@ -72,6 +73,9 @@ const inertOwnMembers = () =>
         presentation: async () => undefined,
         // Nothing on record, and an append is dropped.
         activity: { append: async () => {}, list: async () => [] },
+        // No conversation widened past its persona until a suite answers a grant need; in memory, since every planned
+        // turn reads it.
+        conversationGrants: memoryConversationGrants(),
         // Inert: archive/discard hard-stop on every press; a route suite has no tmux, processes or browsers to reap.
         reaper: { start: () => {}, stop: () => {}, sweep: async () => {}, reapConversation: async () => {}, metrics: () => ({}) },
     }) satisfies Partial<Services>;

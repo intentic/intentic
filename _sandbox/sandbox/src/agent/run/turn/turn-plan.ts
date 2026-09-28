@@ -6,7 +6,9 @@ import type { TurnTrimState } from "../../prompt/window/context-trim.js";
 import { armSupervisor } from "../../subagents/children.js";
 import { dependencyDirForCommand } from "../../tools/agent-deps.js";
 import type { TurnBase } from "../../providers/agent-request.js";
-import { decideTurn } from "../decide/turn-decision.js";
+import { decideTurn, type TurnDecision } from "../decide/turn-decision.js";
+import { recordTurnStanding, type TurnStanding } from "../../../conversations/actor/turn-standing.js";
+import { capabilitiesOf, PersonaPowersSchema } from "@intentic/sandbox-contract";
 import { gatherTurnFacts } from "../decide/turn-facts.js";
 import { opt } from "../../../opt.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
@@ -51,6 +53,25 @@ export type TurnPlan =
           readonly contextTrim?: TurnTrimState;
       });
 
+// The turn's standing as its decision settled it: what it mounted, what its persona and the gates withheld, and how its
+// runtime treats a secret reference.
+const standingOf = (decision: TurnDecision, input: TurnInput): TurnStanding => {
+    const { persona } = decision.context;
+    const runtime = capabilitiesOf(decision.provider, decision.harness);
+    return {
+        at: Date.now(),
+        unattended: input.unattended === true,
+        persona: persona?.persona === undefined ? undefined : { id: persona.persona.id, name: persona.persona.label ?? persona.persona.id },
+        granted: decision.granted.map((capability) => capability.id),
+        withheldByPersona: decision.withheldByPersona,
+        withheldByGate: decision.withheldByGate,
+        fence: persona?.fence,
+        powers: persona?.powers ?? PersonaPowersSchema.parse({}),
+        runtime: runtime.runtime,
+        secrets: runtime.secrets,
+    };
+};
+
 // Facts, then a decision with no I/O, then the arm: dispatched through the adapter table composition wires rather than an
 // if/else chain, so the set of runtimes has one declaration and the picker's health probe sits beside the arm it predicts.
 export const planTurn = async (services: Services, sent: TurnInput, context: TurnContext): Promise<TurnPlan> => {
@@ -67,6 +88,10 @@ export const planTurn = async (services: Services, sent: TurnInput, context: Tur
     if (!decision.ok) {
         const { warnings: _logged, spawn: _armed, ...refusal } = decision;
         return refusal;
+    }
+    // What the turn reaches and why not, for the doors its own CLIs call (needs/): recorded once it is let through.
+    if (input.conversationId !== undefined) {
+        recordTurnStanding(services.conversations, input.conversationId, standingOf(decision, input));
     }
     // The move off a blocked account is the conversation's, not only this turn's: switchAccount's profile write, so every
     // later turn and every window reads where it runs now. Its session carries across (already chosen before planning),

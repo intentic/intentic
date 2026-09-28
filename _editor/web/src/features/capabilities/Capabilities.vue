@@ -53,8 +53,10 @@ import { deviceConnections } from "./model/deviceConnections";
 import { advancedLabel, inlineField } from "./model/form";
 import { hostGrantSummary, matchHostPreset } from "./model/previews";
 import { picksVersion } from "./model/refs";
+import { generatesKey } from "./model/sshKey";
 import { catalogEntries, entryIcon } from "./model/tiles";
 import { useSetupWalk } from "./setupWalk";
+import SshKeyField from "./ssh/SshKeyField.vue";
 import { useTilePane } from "./tilePane";
 
 // Capabilities give the agent tools (GitHub, MCP servers, SSH hosts, Stripe) and scaffold managed repos. Core tiles are
@@ -136,7 +138,7 @@ const form = useCapabilityForm({
 const { name, nameEdited, savedName, namePreview, nameCollision, nameProblem, values, attempted, shaking, pasteNotes, advancedOpen } = form;
 const { probeResult, finishName, finishField, onFieldInput, onFieldPaste, fieldAlarm, fieldQuiet, fieldChecked, fieldUrlFix, applyUrlFix } = form;
 const { fieldConfSummary, fieldPlaceholder, mainFields, advancedFields, versionToken, formSummary, liveEffects, hostPresetOptions } = form;
-const { applyHostPreset, applyRegistryPick, pickForticlient, auditable, updateFrom, submitLabel } = form;
+const { applyHostPreset, applyRegistryPick, pickForticlient, auditable, updateFrom, submitLabel, keptSecrets } = form;
 const { probing, canProbe, runProbe } = useCapabilityProbe({ selected, form, error });
 // Has an agent read the pinned code, or what an update changes, before the install is approved.
 const startAudit = (): void => void startAgent(auditPrompt(name.value, values, updateFrom.value));
@@ -460,6 +462,15 @@ onBeforeUnmount(() => {
                                     :url="values['url'] ?? ''"
                                     :token="versionToken"
                                     :keeping="editing?.id"
+                                    :alarm="fieldAlarm(field)"
+                                    @left="finishField(field)"
+                                />
+                                <!-- A key the sandbox makes: the private half never reaches this page, only the public half to authorize. -->
+                                <SshKeyField
+                                    v-else-if="generatesKey(selected, field, values)"
+                                    :field="field"
+                                    :values="values"
+                                    :stored="keptSecrets.has(field.key)"
                                     :alarm="fieldAlarm(field)"
                                     @left="finishField(field)"
                                 />

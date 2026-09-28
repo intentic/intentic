@@ -24,6 +24,8 @@ import type { Config } from "./env.config.js";
 import type { Services } from "./composition.js";
 import type { Said, Steer, TurnInput, TurnStarter } from "./seams/turn-starter.js";
 import { opt } from "./opt.js";
+import { type NeedsStore, needsStoreOver } from "./needs/needs-store.js";
+import type { NeedsFile } from "@intentic/sandbox-contract";
 
 // Test-support seams specific to this daemon; the generic stand-in for a wide interface is `unstubbed` in
 // @intentic/testing. Excluded from the build but type-checked via tsconfig.test.json, alongside every *.test.ts.
@@ -266,6 +268,20 @@ export const fakeTurns = (over: { readonly live?: boolean; readonly busy?: numbe
         },
     };
     return fake;
+};
+
+// The needs store held in memory, read and written the way the daemon's file is (needs/needs-store.ts).
+export const memoryNeedsStore = (now: () => number = Date.now): NeedsStore => {
+    let needs: NeedsFile = {};
+    return needsStoreOver(
+        {
+            read: async () => needs,
+            update: async (change) => {
+                needs = change(needs);
+            },
+        },
+        now,
+    );
 };
 
 // A turn's MCP mounts as the daemon composes them, over routers that never start a browser: every planned turn leases

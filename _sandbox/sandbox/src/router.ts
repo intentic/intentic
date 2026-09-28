@@ -1,3 +1,6 @@
+import type { Router } from "@orpc/server";
+import type { sandboxContract } from "@intentic/sandbox-contract";
+import type { OrpcContext } from "./app-env.js";
 import { createActivityRoutes } from "./activity/activity.routes.js";
 import { createAgentRoutes } from "./agent/routes/agent.routes.js";
 import { createProvidersRoutes } from "./agent/routes/providers.routes.js";
@@ -30,6 +33,8 @@ import { createPublicRoutes } from "./public/public.routes.js";
 import { createNetdiskRoutes } from "./netdisk/netdisk.routes.js";
 import { createPushRoutes } from "./push/push.routes.js";
 import { createSecretsRoutes } from "./secrets/secrets.routes.js";
+import { createNeedsRoutes } from "./needs/needs.routes.js";
+import { provenanceOf, visibleTo } from "./auth/fleet-scope.js";
 import { providerSecretEntries } from "./agent/providers/provider-registry.js";
 import { createSessionsRoutes } from "./sessions/sessions.routes.js";
 import { createSafetyRoutes } from "./safety/safety.routes.js";
@@ -47,8 +52,12 @@ import { createWorkspaceRoutes } from "./workspace/workspace.routes.js";
 import { pruneStore } from "./workspace/watch/state-janitor.js";
 
 // The implemented oRPC router, the per-domain route factories assembled into the sandboxContract shape. The
-// OpenAPIHandler in app.ts serves it.
-export const createRouter = (services: Services) => ({
+// OpenAPIHandler in app.ts serves it. Typed by the contract it implements rather than inferred: the inferred type
+// outgrew what the compiler will write into a declaration file (TS7056), and naming the contract also checks here that
+// every procedure it declares is served.
+export type SandboxRouter = Router<typeof sandboxContract, OrpcContext>;
+
+export const createRouter = (services: Services): SandboxRouter => ({
     accounts: createAccountsRoutes(services),
     activity: createActivityRoutes(services),
     agent: createAgentRoutes(services),
@@ -85,6 +94,15 @@ export const createRouter = (services: Services) => ({
     push: createPushRoutes(services),
     translator: createTranslatorRoutes(services),
     secrets: createSecretsRoutes(services, () => providerSecretEntries(services)),
+    // A need is as visible as the conversation that raised it.
+    needs: createNeedsRoutes({
+        needs: services.needs,
+        grants: { conversationGrants: services.conversationGrants, credentialGrants: services.credentialGrants },
+        visible: (caller, conversationId) => {
+            const entry = services.agents.entry(conversationId);
+            return entry === undefined || visibleTo(caller, provenanceOf(entry));
+        },
+    }),
     // The device procedures live in hosts/devices.routes.ts beside the devices they act on, the storage ones beside the
     // disk; merged here, above all three, so no subsystem has to import another's values.
     system: {

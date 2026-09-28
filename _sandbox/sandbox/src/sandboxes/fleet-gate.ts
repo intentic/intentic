@@ -82,6 +82,14 @@ const machineFor = async (deps: FleetGateDeps, on: string | undefined): Promise<
     return { id: chosen };
 };
 
+// What picking the create means, then the agent's case for it, capped as every card caps it. The case rides on the
+// choice it argues for because the question card draws an option's label, description and preview and nothing else.
+const approveDescription = (machineId: string, why: string | undefined): string => {
+    const means = `Makes it on your intentic account and brings it up on ${machineId}. It is yours, and it outlives this conversation.`;
+    const agentsCase = whyOf(why).why;
+    return agentsCase === undefined ? means : `${means} The agent's case: ${agentsCase}`;
+};
+
 // The owner's decision, as the only thing standing between an agent and a sandbox on their account. Undefined is a
 // yes; anything else is the refusal to answer with, worded for whichever way it was not a yes.
 const askOwner = async (deps: FleetGateDeps, ask: CreateAsk, machineId: string): Promise<CliAnswer | undefined> => {
@@ -101,11 +109,7 @@ const askOwner = async (deps: FleetGateDeps, ask: CreateAsk, machineId: string):
                     header: "New sandbox",
                     multiSelect: false,
                     options: [
-                        {
-                            label: APPROVE,
-                            description: `Makes it on your intentic account and brings it up on ${machineId}. It is yours, and it outlives this conversation.`,
-                            ...whyOf(ask.why),
-                        },
+                        { label: APPROVE, description: approveDescription(machineId, ask.why) },
                         { label: DECLINE, description: "Nothing is created and nothing is spent." },
                     ],
                 },

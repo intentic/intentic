@@ -99,7 +99,7 @@ const devicesFull = ({ ids, self, slug, machines }: HostDeviceReach): string => 
         `mirroring, file syncing and container management, and they are reading your message rather than sitting at its ` +
         `terminal. Two limits ride with it: anything that restarts, updates, rebuilds or removes THIS sandbox ends your ` +
         `own turn mid-sentence, so say so and get a yes first; and a call refused for a switch that is off is the owner's ` +
-        `decision, to be reported with the switch's name, never routed around.${(machines ?? []).map((machine) => ` ${machineFull(machine)}`).join("")}`
+        `decision, never routed around: ask for it on a card with \`capabilities request <device> --set <switch>=on --why "…"\`.${(machines ?? []).map((machine) => ` ${machineFull(machine)}`).join("")}`
     );
 };
 
@@ -109,7 +109,7 @@ const devicesLean = ({ ids, self, slug, machines }: HostDeviceReach): string => 
             ? `\`list_sandboxes\` says which one runs this sandbox${slug === undefined ? "" : ` (its slug is \`${slug}\`)`}.`
             : `\`${self}\` runs this sandbox.`;
     return (
-        `The owner's computers ${ids.map((id) => `\`${id}\``).join(", ")} are connected (ToolSearch \`+mcp__${ids[0] ?? "device"}__\`); ${which} Do work on them yourself rather than writing commands for the owner to run. Get a yes before anything that restarts, rebuilds or removes this sandbox, and report a call refused by a switch instead of working around it.${ 
+        `The owner's computers ${ids.map((id) => `\`${id}\``).join(", ")} are connected (ToolSearch \`+mcp__${ids[0] ?? "device"}__\`); ${which} Do work on them yourself rather than writing commands for the owner to run. Get a yes before anything that restarts, rebuilds or removes this sandbox, and never work around a call refused by a switch: ask for it with \`capabilities request <device> --set <switch>=on\`.${ 
         (machines ?? []).map((machine) => ` ${machineLean(machine)}`).join("")}`
     );
 };
@@ -333,8 +333,9 @@ const ENTRIES: readonly GuidanceEntry[] = [
             "command (a curl body, an env assignment, a config payload) and the real value is substituted at execution; " +
             "the transcript and permission cards keep the token. To put one into a web form, focus the field with the " +
             "browser tools and call `mcp__secrets__type_secret`. A name that does not exist fails the command and lists " +
-            "the names that do. In files you write, keep the reference, never a raw value, and never ask the user to " +
-            "paste one into chat. " +
+            "the names that do; when the task needs one nobody has stored, `secrets ask NAME --why \"…\"` puts a masked " +
+            "field for it in front of the owner. In files you write, keep the reference, never a raw value, and never ask " +
+            "the user to paste one into chat. " +
             "Some names, and some connected accounts, are gated to a named approver. Using one raises a card in the " +
             "chat for those people and the turn waits; a refusal names who can release it, so carry on without it and " +
             "say plainly what you left undone rather than looking for another way in. A gated account is not loaded " +
@@ -345,6 +346,32 @@ const ENTRIES: readonly GuidanceEntry[] = [
             "and keep it as-is in files; never write a raw value or ask the user to paste one. `mcp__secrets__type_secret` " +
             "types one into a focused web field. A gated secret or account raises an approval card: if it is refused, " +
             "carry on without it and say what you left undone (`secrets gates` lists what is gated).",
+    },
+    {
+        id: "needs",
+        // The asking commands answer the same way whichever runtime runs them, but the skills they point at load only here.
+        reach: "loop",
+        full:
+            "When the task needs something this sandbox does not have, ask for it on a card rather than describing setup " +
+            "for the owner to do by hand. A connection it lacks (a connector, an account, a server, Docker, a device, or " +
+            'a setting on one): `capabilities request <entry> --why "…"`, where `capabilities list` names the entries, ' +
+            "`--target` names the site or host and `--set key=value` fills in what you can (never a credential). A secret " +
+            'nobody has stored: `secrets ask NAME --why "…"`, or, for one the task can make itself (a session key, a ' +
+            "signing secret, a password it sets up), `secrets generate NAME`, which needs nobody and never shows the value " +
+            "to anyone. A tool missing from the image: `environment propose <tool>` " +
+            "(the `environment` skill has the steps). Reach this conversation's persona or area withholds: " +
+            '`grants request capability|folder|shelf <what> --why "…"`. Ask as soon as you know the task needs it, before ' +
+            "presenting a plan when you can, not when you reach the step. Each answers the same way: exit 0 means usable " +
+            "now; exit 1 means refused or declined, so carry on without it and say what it would have enabled; exit 3 means " +
+            "still waiting, so carry on with what does not need it. The answer continues this conversation by itself, so " +
+            "never poll and never ask twice; `needs` lists what is still waiting.",
+        lean:
+            "When the task needs something this sandbox lacks, ask on a card instead of describing setup: `capabilities " +
+            "request <entry>` (a connection, or a setting on one), `secrets ask NAME` (a secret nobody stored; " +
+            "`secrets generate NAME` makes one the task can invent itself), " +
+            '`environment propose <tool>` (a tool for the image), `grants request` (reach the persona withholds), each with ' +
+            '`--why "…"`, as early as you know. Exit 0: usable now. Exit 1: declined, so carry on without it. Exit 3: still ' +
+            "waiting, so carry on; the answer continues this conversation by itself.",
     },
     {
         id: "outside",

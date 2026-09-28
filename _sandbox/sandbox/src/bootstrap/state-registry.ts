@@ -35,8 +35,10 @@ import { syncEnrollmentsDocument } from "../hosts/desktop-sync.js";
 import { hostSetupSeededDocument } from "../hosts/host-seed.js";
 import { issuesDocument } from "../issues/issues-store.js";
 import { loopDesignsDocument, loopsDocument } from "../loops/loops-store.js";
+import { needsDocument } from "../needs/needs-store.js";
 import { hostEnrollmentsDocument, hostPairConsumedDocument, runnerEnrollmentsDocument, runnerPairConsumedDocument, syncPairConsumedDocument, webextEnrollmentsDocument, webextPairConsumedDocument } from "../peers/enrollment.js";
 import { peerToolsDocument } from "../peers/peer-tool-memory.js";
+import { conversationGrantsDocument } from "../personas/conversation-grants.js";
 import { personasDocument } from "../personas/personas-store.js";
 import { bundleManifestDocument } from "../portability/bundle-arrival.js";
 import { definitionDocument } from "../portability/definition.js";
@@ -46,6 +48,7 @@ import { runnerIdentityDocument } from "../runners/runner-identity.js";
 import { claudeSeatsDocument } from "../runtimes/claude/claude-seats.js";
 import { safetyLogDocument } from "../safety/safety-log.js";
 import { autostartDocument } from "../scaffold/autostart.js";
+import { sandboxSecretsDocument } from "../secrets/sandbox-secrets.js";
 import { secretUsesDocument } from "../secrets/secret-uses.js";
 import { threadSessionsDocument } from "../sessions/thread-sessions.js";
 import { settingsDocument } from "../settings/settings-store.js";
@@ -108,6 +111,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     issuesDocument,
     loopDesignsDocument,
     loopsDocument,
+    needsDocument,
     hostEnrollmentsDocument,
     hostPairConsumedDocument,
     runnerEnrollmentsDocument,
@@ -116,6 +120,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     webextEnrollmentsDocument,
     webextPairConsumedDocument,
     peerToolsDocument,
+    conversationGrantsDocument,
     personasDocument,
     bundleManifestDocument,
     definitionDocument,
@@ -125,6 +130,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     claudeSeatsDocument,
     safetyLogDocument,
     autostartDocument,
+    sandboxSecretsDocument,
     secretUsesDocument,
     threadSessionsDocument,
     settingsDocument,

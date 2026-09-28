@@ -16,6 +16,8 @@ import { enabledExtensions } from "../extensions/installed-extensions.js";
 import { type CapabilityCtx, capabilityCtx } from "./capability.js";
 import { echoConfig, secretField } from "./summary.js";
 import { secretFieldsOf } from "./credentials/secret-fields.js";
+import { createSecretStash, type SecretStash, spendStashed, StashRefusal, unstash } from "./credentials/secret-stash.js";
+import { generateSshKey, keyComment } from "./credentials/ssh-keys.js";
 import { contributionFor, contributionRegistry } from "./contributions.js";
 import { totpCode } from "./credentials/totp.js";
 import { browseMarketplace } from "./marketplace.js";
@@ -63,15 +65,18 @@ const repointCapabilityReferences = async (services: Services, ctx: CapabilityCt
     }
 };
 
-// Resolves a VAULTED field (the edit form never sees existing secrets) back to the stored value before apply runs. A
-// marker with nothing stored behind it is refused, not passed through, so it can't land in a real config file.
-const withKeptSecrets = async (services: Services, input: Capability): Promise<Capability> => {
+// Resolves the markers a form sends where a credential goes, before apply runs: VAULTED back to the stored value (the
+// edit form never sees existing secrets), and a stashed one to the key the sandbox generated for the form (its private
+// half never crossed the wire). A marker with nothing behind it is refused, not passed through, so it can't land in a
+// real config file. A stashed key is only looked at here: the add spends its token once the entry is written.
+const withKeptSecrets = async (services: Services, stash: SecretStash, input: Capability): Promise<Capability> => {
     const config = input.config as Record<string, unknown>;
     const kept = Object.keys(config).filter((key) => isVaulted(config[key]));
-    if (kept.length === 0) {
+    const generated = generatedSecrets(stash, input);
+    if (kept.length === 0 && Object.keys(generated).length === 0) {
         return input;
     }
-    const stored = await services.capabilities.get(input.id);
+    const stored = kept.length === 0 ? undefined : await services.capabilities.get(input.id);
     // A different kind stored under the same id is not this connection; its config is not the secret being kept.
     const storedConfig = (stored?.kind === input.kind ? stored.config : {}) as Record<string, unknown>;
     const missing = kept.filter((key) => typeof storedConfig[key] !== "string" || isVaulted(storedConfig[key]));
@@ -80,7 +85,20 @@ const withKeptSecrets = async (services: Services, input: Capability): Promise<C
             message: `nothing stored for ${missing.join(", ")} on "${input.id}", enter the value rather than keeping it`,
         });
     }
-    return CapabilitySchema.parse({ ...input, config: { ...config, ...Object.fromEntries(kept.map((key) => [key, storedConfig[key]])) } });
+    const keptValues = Object.fromEntries(kept.map((key) => [key, storedConfig[key]]));
+    return CapabilitySchema.parse({ ...input, config: { ...config, ...keptValues, ...generated } });
+};
+
+// The stashed half of withKeptSecrets: a marker it cannot resolve is the form's to fix, so it answers 400 in its words.
+const generatedSecrets = (stash: SecretStash, input: Capability): Record<string, string> => {
+    try {
+        return unstash(stash, input.kind, input.config);
+    } catch (error) {
+        if (error instanceof StashRefusal) {
+            throw new ORPCError("BAD_REQUEST", { message: error.message });
+        }
+        throw error;
+    }
 };
 
 // The same keep-the-credential move as withKeptSecrets, for the one read that happens before there is a config to
@@ -112,6 +130,8 @@ export const createCapabilitiesRoutes = (services: Services) => {
     const ctx = capabilityCtx(services);
     // One add per id at once, or a concurrent same-id add interleaves handler runs and races the manifest upsert.
     const adding = new Set<string>();
+    // Generated keys waiting for the add that installs them (sshKey), in memory only.
+    const stash = createSecretStash();
     const statuses = createStatusCache(
         () => publishRuntimeChange("capabilities"),
         (error) => services.logger.warn({ err: error }, "capability status probe failed; its last answer stands"),
@@ -160,11 +180,13 @@ export const createCapabilitiesRoutes = (services: Services) => {
             }
             // Resolved before the id is claimed, so a bad "keep" request refuses plainly instead of erroring
             // mid-stream.
-            const entry = await withKeptSecrets(services, input);
+            const entry = await withKeptSecrets(services, stash, input);
             adding.add(input.id);
             try {
                 yield* handler.apply(ctx, entry.id, entry.config);
                 await services.capabilities.upsert(entry);
+                // Stored for good: a generated key's token has done its one job and cannot install the key again.
+                spendStashed(stash, input.config);
                 // Brings the extension's declared autoStart processes up, the same post-apply seam composeEnvironment
                 // uses.
                 if (input.kind === "extension") {
@@ -208,8 +230,14 @@ export const createCapabilitiesRoutes = (services: Services) => {
         // Tries the settings without saving them: nothing is written, applied, or claimed, so this stays a pure
         // question. Kept credentials resolve the same way `add` does, for the same reason (the form never saw them).
         probe: i.probe.handler(async ({ input }) => {
-            const entry = await withKeptSecrets(services, input);
+            const entry = await withKeptSecrets(services, stash, input);
             return probeCapability(await contributionRegistry(services), entry);
+        }),
+        // Made here so its private half never crosses the wire: the answer is the public half to authorize on the
+        // server and a token, which the add that installs the key trades back for it.
+        sshKey: i.sshKey.handler(() => {
+            const pair = generateSshKey(keyComment(services.config.sandbox.name));
+            return { publicKey: pair.publicKey, token: stash.put({ kind: "ssh", field: "privateKey", value: pair.privateKey }) };
         }),
         // A migration, not a label edit: the id is the agent's handle in its skill file, tool prefix, env var, ssh
         // alias and browser directory; add-and-remove would lose all of it. State moves first, then the manifest, then

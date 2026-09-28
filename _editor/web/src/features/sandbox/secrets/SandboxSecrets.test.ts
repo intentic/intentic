@@ -45,10 +45,12 @@ jest.mock(`../../extensions/useExtensions`, () => ({ useExtensions: () => ({ ena
 // Reached only by the CI push, which nothing here presses: faked because the client has no environment here.
 jest.mock(`../client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc() }));
 
-// The two "Manage..." controls are links now, so the mock carries a stand-in for them.
+// The two "Manage..." controls are links now, so the mock carries a stand-in for them. No `?add=` on the address: the
+// page arrives with the add row folded, as from the rail.
 jest.mock(`vue-router`, () => ({
     ...vueRouterOriginal,
     useRouter: () => ({ push: jest.fn() }) as never,
+    useRoute: () => ({ query: {} }) as never,
     RouterLink: RouterLinkStub as never,
 }));
 

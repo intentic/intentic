@@ -4,6 +4,8 @@ import { useT } from "@intentic/ui/i18n";
 import { planParts } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { useMarkdown } from "../../../../lib/markdown/useMarkdown";
+import { NEED_ICONS } from "../../../needs/needStatus";
+import { useNeeds } from "../../../needs/useNeeds";
 import { usePaneView } from "../../panel/useChat-view";
 import type { CardAnswer } from "../../session/cardReplies";
 import type { ChatMessage } from "../transcript";
@@ -25,6 +27,11 @@ const plan = useMarkdown(
     () => conversation.value.scope.value,
 );
 const title = computed(() => planParts(card.value.text).title ?? `Proposed plan`);
+
+// What the agent asked people for before presenting this (docs/architecture/needs.md): said on the plan, so approving it
+// is read beside what it still waits on, and every one is answered in the same sitting rather than mid-run.
+const { openFor } = useNeeds();
+const needs = openFor(() => conversation.value.conversationId);
 </script>
 
 <template>
@@ -47,6 +54,11 @@ const title = computed(() => planParts(card.value.text).title ?? `Proposed plan`
             max-height="min(58dvh, 40rem)"
             class="chat-card-doc-top-rule chat-card-doc-bottom-rule"
         />
+        <div v-if="card.status === 'pending' && needs.length > 0" class="chat-card-row flex flex-col gap-1 text-2xs">
+            <span class="font-medium text-content">{{ t(`needs.plan.alsoWaiting`, { count: needs.length }, needs.length) }}</span>
+            <span v-for="need in needs" :key="need.id" class="flex items-center gap-1.5 text-content/85"><Icon :name="NEED_ICONS[need.subject.kind]" class="text-warning" />{{ need.title }}</span>
+            <span class="text-subtle">{{ t(`needs.plan.answerThere`) }}</span>
+        </div>
         <template v-if="card.status === 'pending'" #actions>
             <!-- Single approval, not a posture menu: approving a plan approves the work inside the isolation boundary. -->
             <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="reply({ kind: 'plan', approve: true })">{{

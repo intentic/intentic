@@ -62,6 +62,7 @@ import PresenceAvatars from "./presence/PresenceAvatars.vue";
 import QuickOpen from "./commands/QuickOpen.vue";
 import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
 import SandboxSwitcher from "../features/sandbox/gates/SandboxSwitcher.vue";
+import { useNeeds } from "../features/needs/useNeeds";
 import { useT } from "@intentic/ui/i18n";
 
 // A rail element; the identity half (id, route, label, icon) is RailTile, shared with the rail's memory.
@@ -260,9 +261,23 @@ const subagentTile = computed<SectionTile | undefined>(() => {
         ...(live > 0 ? { badge: { count: live, tone: `neutral` as const, tooltip: t(`shell.shellDesktop.stillWorking`, { live }) } } : {}),
     };
 });
+// What agents wait on people for (docs/architecture/needs.md): on the rail only while something is, badged in the
+// warning tone, since every one of them is a person's to answer.
+const { open: openNeeds } = useNeeds();
+const needsTile = computed<SectionTile | undefined>(() =>
+    openNeeds.value.length === 0
+        ? undefined
+        : {
+              id: `needs`,
+              to: `/needs`,
+              label: t(`needs.inbox.title`),
+              icon: `exclamation-circle`,
+              badge: { count: openNeeds.value.length, tone: `warning` as const, tooltip: t(`needs.inbox.waiting`, { count: openNeeds.value.length }, openNeeds.value.length) },
+          },
+);
 // Same SectionTile shape as the nav tiles, so badges render through one path instead of per hand-rolled link.
 const runtimeTiles = computed<readonly SectionTile[]>(() =>
-    [browserTile.value, subagentTile.value].filter((tile) => tile !== undefined).filter((tile) => sectionReachable(tile.to)),
+    [needsTile.value, browserTile.value, subagentTile.value].filter((tile) => tile !== undefined).filter((tile) => sectionReachable(tile.to)),
 );
 // RailIcon selects bespoke glyphs by view id and validates extension fallbacks before drawing them.
 const extensionTile = (active: ActiveExtension): SectionTile => {

@@ -6,6 +6,7 @@ import { createCredentialGate, type CredentialGate } from "./credential-gate.js"
 import { type CredentialGatesStore, fileCredentialGates } from "./credential-gates.js";
 import { createCredentialGrants, type CredentialGrants } from "./credential-grants.js";
 import { type NamedSecret, secretRegistryOf } from "./secret-registry.js";
+import { fileSandboxSecrets, type SandboxSecrets, sandboxSecretsDocument } from "./sandbox-secrets.js";
 import { fileSecretUses, secretUsesDocument, type SecretUsesStore } from "./secret-uses.js";
 
 // Secret references, their uses, and the named-approver gates on spending them.
@@ -18,6 +19,8 @@ export interface SecretsSlice {
     readonly credentialGates: CredentialGatesStore;
     readonly credentialGrants: CredentialGrants;
     readonly credentialGate: CredentialGate;
+    // Secrets a person keeps without DevOps: pasted into a need's card, or added on the Secrets view.
+    readonly sandboxSecrets: SandboxSecrets;
 }
 
 export interface SecretsDeps {
@@ -34,8 +37,10 @@ export interface SecretsDeps {
 export const createSecretsSlice = ({ workspace, authRoot, secretVault, cards }: SecretsDeps): SecretsSlice => {
     const credentialGates = fileCredentialGates(join(authRoot, "credential-gates.json"));
     const credentialGrants = createCredentialGrants();
+    const sandboxSecrets = fileSandboxSecrets(join(authRoot, sandboxSecretsDocument.path));
     return {
-        secretRegistry: secretRegistryOf(secretVault, () => workspace.repos["desired-state"]),
+        sandboxSecrets,
+        secretRegistry: secretRegistryOf(secretVault, () => workspace.repos["desired-state"], sandboxSecrets),
         secretUses: fileSecretUses(join(workspace.root, secretUsesDocument.path)),
         credentialGates,
         credentialGrants,

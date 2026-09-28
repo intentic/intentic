@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
 import { capabilitySecretsDocument, fileSecretVault } from "../capabilities/credentials/secret-vault.js";
 import { resolveSecretReferences, secretReference, secretRegistryOf } from "./secret-registry.js";
+import { fileSandboxSecrets } from "./sandbox-secrets.js";
 
 // Secrets live in three stores (capability vault, DevOps .env, deploy-generated values); pins that the registry unions
 // all three, each value keeps its reference name, and a store that fails fails the read: its values could not be masked.
@@ -17,7 +18,8 @@ const withStores = () => {
         await mkdir(repo, { recursive: true });
         await writeFile(join(repo, file), body);
     };
-    return { vault, write, registry: secretRegistryOf(vault, () => repo) };
+    const sandbox = fileSandboxSecrets(join(root, "auth", "sandbox-secrets.json"));
+    return { vault, write, sandbox, registry: secretRegistryOf(vault, () => repo, sandbox) };
 };
 
 test("the registry is the union of all three stores, each value under its name", async () => {
@@ -54,6 +56,7 @@ test("an unreadable vault fails the whole read rather than answering without its
             values: async () => [],
         },
         () => repo,
+        { all: async () => ({}) },
     );
     await expect(broken()).rejects.toThrow("EACCES");
 });
@@ -84,4 +87,14 @@ test("resolution replaces known references, reports uses once, and names the unk
     expect(resolved.text).toContain(secretReference("NOPE"));
     expect(resolved.used).toEqual(["CLOUDFLARE_API_TOKEN"]);
     expect(resolved.unknown).toEqual(["NOPE"]);
+});
+
+test("a secret kept without DevOps resolves by its plain name, and the desired-state .env wins a name both hold", async () => {
+    const { sandbox, write, registry } = withStores();
+    await sandbox.set("OPENAI_API_KEY", "sk-sandbox-kept-value-01");
+    await sandbox.set("SHARED_NAME", "from-the-sandbox-store");
+    await write(ENV_FILE, "SHARED_NAME=from-the-env-file\n");
+    const byName = new Map((await registry()).map((secret) => [secret.name, secret]));
+    expect(byName.get("OPENAI_API_KEY")).toEqual({ name: "OPENAI_API_KEY", value: "sk-sandbox-kept-value-01", source: "sandbox" });
+    expect(byName.get("SHARED_NAME")).toEqual({ name: "SHARED_NAME", value: "from-the-env-file", source: "env" });
 });

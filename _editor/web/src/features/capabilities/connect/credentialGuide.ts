@@ -1,3 +1,22 @@
+import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
+
+// Token page link: absolute for a hosted provider, or built from the instance-URL field for a self-hostable one.
+// Undefined until that field holds a real http(s) URL, so no broken path-only href is shown.
+export const guideTokenUrl = (entry: CapabilityCatalogEntry, values: Readonly<Record<string, string>>): string | undefined => {
+    const guide = entry.guide;
+    if (guide === undefined) {
+        return undefined;
+    }
+    if (guide.urlFromField !== undefined) {
+        const base = (values[guide.urlFromField] ?? ``).trim().replace(/\/+$/, ``);
+        if (!/^https?:\/\//i.test(base)) {
+            return undefined;
+        }
+        return guide.path !== undefined ? `${base}${guide.path}` : base;
+    }
+    return guide.url;
+};
+
 // Backticks in a guide's prose mark literals (scope, menu item, host, command, port); everything else is prose.
 // Authored, not detected: a pattern-matcher can't reliably tell a GitHub scope from an English word, but whoever
 // wrote the sentence already knows.

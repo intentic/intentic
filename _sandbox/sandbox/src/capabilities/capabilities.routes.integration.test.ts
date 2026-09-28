@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { RESERVED_MCP_SERVER_NAMES, VAULTED } from "@intentic/sandbox-contract";
+import { RESERVED_MCP_SERVER_NAMES, stashedMarker, VAULTED } from "@intentic/sandbox-contract";
 
 import { createApp } from "../app.js";
 import { hasSession, markConnected, sessionDir } from "../browser/sessions/session-store.js";
@@ -13,7 +13,9 @@ import { tempWorkspace } from "../harness/route-fakes.testing.js";
 import { fakeFiles } from "../workspace/workspace-slice.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { memoryPersonasStore } from "../harness/route-stores.testing.js";
+import { testConfig } from "../testing.js";
 import { memoryCapabilitiesStore, memoryDismissalsStore } from "./capabilities-slice.testing.js";
+import { publicKeyOf } from "./credentials/ssh-keys.js";
 
 // Capabilities routes, driven over the HTTP surface exactly as the browser does; split from app.integration.test.ts.
 // Fakes and the client are shared (route-services.testing.ts and its siblings); what lives here is what these routes
@@ -209,4 +211,46 @@ test("capabilities.add keeps a credential the sender never saw, and refuses to k
 test("capabilities.refs refuses a remote git could only read by prompting someone", async () => {
     const client = clientFor(createApp(services({ workspace: tempWorkspace([]), capabilities: memoryCapabilitiesStore([]) })));
     expect(await errorCode(client.capabilities.refs({ url: "ssh://git@github.com/owner/repo.git" }))).toBe("BAD_REQUEST");
+});
+
+// The key the sandbox makes for an ssh form, over the wire: the answer is the public half and a token, never the private
+// half; the add trades the token for the key once; the list shows the public half again and withholds the rest.
+test("capabilities.sshKey answers a public key and a one-time token, which one add trades for the private half", async () => {
+    process.env["HOME"] = mkdtempSync(join(tmpdir(), "app-ssh-key-home-"));
+    const disk = new Map<string, string>();
+    const memoryFiles = fakeFiles({
+        read: async (path) => disk.get(path),
+        write: async (path, content) => {
+            disk.set(path, String(content));
+        },
+        remove: async (path) => {
+            disk.delete(path);
+        },
+    });
+    const store = memoryCapabilitiesStore();
+    const config = { ...testConfig, sandbox: { ...testConfig.sandbox, name: "Ada's box" } };
+    const client = clientFor(createApp(services({ files: memoryFiles, capabilities: store, config })));
+    const addFailure = (input: Parameters<typeof client.capabilities.add>[0]): Promise<string | undefined> =>
+        errorCode((async () => collect(await client.capabilities.add(input)))());
+
+    const key = await client.capabilities.sshKey();
+    // Only what the browser may hold: the line to authorize, and the token standing in for the rest.
+    expect(Object.keys(key).toSorted()).toEqual(["publicKey", "token"]);
+    expect(key.publicKey).toMatch(/^ssh-ed25519 AAAAC3NzaC1lZDI1NTE5\S+ intentic-Ada-s-box$/);
+
+    const form = { auth: "generated" as const, host: "box.example.com", port: 22, user: "deploy", privateKey: stashedMarker(key.token) };
+    await collect(await client.capabilities.add({ id: "box", kind: "ssh", config: form }));
+
+    // Stored is the key that public line belongs to, never the marker.
+    const stored = await store.get("box");
+    const storedKey = stored?.kind === "ssh" && stored.config.auth === "generated" ? stored.config.privateKey : "";
+    expect(publicKeyOf(storedKey)).toBe(key.publicKey);
+    const [listed] = (await client.capabilities.list()).capabilities;
+    expect(listed?.config).toEqual({ host: "box.example.com", port: 22, user: "deploy", auth: "generated", publicKey: key.publicKey });
+    expect(listed?.secrets).toEqual(["privateKey"]);
+
+    // The token has done its one job: a second add naming it is refused, as is a token never issued.
+    expect(await addFailure({ id: "again", kind: "ssh", config: form })).toBe("BAD_REQUEST");
+    expect(await addFailure({ id: "forged", kind: "ssh", config: { ...form, privateKey: stashedMarker("never-issued") } })).toBe("BAD_REQUEST");
+    expect(await store.get("again")).toBeUndefined();
 });

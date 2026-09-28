@@ -50,7 +50,8 @@ export const secretsServer = (deps: SecretsToolsDeps): McpSdkServerConfigWithIns
                     if (entry === undefined) {
                         return fail(
                             `no typeable secret named "${name}": the name is what ${secretReference("…")} masking shows, and only user-kept ` +
-                                "secrets (the Secrets view's own entries) can be typed; ask the owner to add it there if it does not exist yet",
+                                `secrets (the Secrets view's own entries) can be typed. If it does not exist yet, ask for it with \`secrets ask ${name} --why "…"\`: ` +
+                                "the owner pastes it into a card, and it can be typed here from then on",
                         );
                     }
                     const page = browserAccountPage(owner);

@@ -192,6 +192,13 @@ const routes: RouteRecordRaw[] = [
                 meta: { title: () => t(`shared.agents`) },
                 component: asyncView(() => import(`../features/agents/fleet/Agents.vue`)),
             },
+            // Everything agents wait on people for, answered in place (docs/architecture/needs.md).
+            {
+                path: `needs`,
+                name: `needs`,
+                meta: { title: () => t(`needs.inbox.title`) },
+                component: asyncView(() => import(`../features/needs/NeedsInbox.vue`)),
+            },
             // Drill-in for one agent: full-screen chat plus isolated diff review; an agent's conversation is its chat
             // surface.
             {
