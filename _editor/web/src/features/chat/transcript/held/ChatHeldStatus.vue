@@ -41,7 +41,7 @@ const why = computed(() => {
             <span aria-hidden="true">·</span>
             <span
                 class="min-w-0"
-                :class="detail !== undefined && `cursor-help underline decoration-dotted underline-offset-2`"
+                :class="detail !== undefined && `cursor-help`"
                 v-tooltip.top="detail"
                 >{{ why }}</span
             >
