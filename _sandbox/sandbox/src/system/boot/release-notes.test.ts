@@ -1,6 +1,16 @@
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { isDevBuild } from "../../version.js";
-import { breakingNotes, parseBreakingNotes, parseReleaseNotes, refreshReleaseNotes, startReleaseNotesCheck, updateNotes } from "./release-notes.js";
+import {
+    breakingNotes,
+    parseBreakingNotes,
+    parseReleaseNotes,
+    parseWithdrawn,
+    readReleases,
+    refreshReleaseNotes,
+    startReleaseNotesCheck,
+    updateNotes,
+    withdrawnRelease,
+} from "./release-notes.js";
 
 afterEach(() => {
     unstubAllGlobals();
@@ -121,4 +131,44 @@ test("a dev build never fetches, for the same reason it is never offered an upda
     startReleaseNotesCheck().stop();
     await Promise.resolve();
     expect(fetched).toBe(false);
+});
+
+// The body the release pipeline's rollback leaves on a release it takes back: its reason on a line of its own, above
+// the notes the release shipped with.
+const WITHDRAWN_BODY = ["Withdrawn: it lost conversations on boot for some sandboxes", "", ...RELEASE_BODY.split("\n")].join("\n");
+
+test("a release is withdrawn by a line that starts `Withdrawn:`, with or without a reason", () => {
+    expect(parseWithdrawn(WITHDRAWN_BODY)).toEqual({ reason: "it lost conversations on boot for some sandboxes" });
+    expect(parseWithdrawn(`## What's new\n\n  Withdrawn:   \n`)).toEqual({});
+    expect(parseWithdrawn(RELEASE_BODY)).toBeUndefined();
+    // A note that merely mentions the word, or a bullet, withdraws nothing.
+    expect(parseWithdrawn("## What's new\n\n- Withdrawn: releases are marked on the update card.\n")).toBeUndefined();
+});
+
+test("a withdrawn release is read though the rollback marked it a pre-release, and its notes are never offered", () => {
+    const read = readReleases([
+        { tag_name: "v1.189.0", body: "## What's new\n\n- Newest thing.\n" },
+        { tag_name: "v1.188.0", body: WITHDRAWN_BODY, prerelease: true },
+        { tag_name: "v1.187.0", body: "Withdrawn:\n\n## What's new\n\n- Taken back too.\n" },
+        { tag_name: "v1.186.0", body: "## What's new\n\n- Beta thing.\n", prerelease: true },
+        { tag_name: "v1.185.0", body: "Withdrawn: a draft is nobody's release", draft: true },
+    ]);
+    expect(read).toEqual({
+        notes: [{ version: "1.189.0", notes: ["Newest thing."], breaking: [] }],
+        withdrawn: [{ version: "1.188.0", reason: "it lost conversations on boot for some sandboxes" }, { version: "1.187.0" }],
+    });
+});
+
+test("a sandbox running a withdrawn release is told so, and one on a standing release is not", async () => {
+    stubGlobal("fetch", async () =>
+        releasesResponse([
+            { tag_name: "v1.189.0", body: "## What's new\n\n- Newest thing.\n" },
+            { tag_name: "v1.188.0", body: WITHDRAWN_BODY, prerelease: true },
+        ]),
+    );
+    await refreshReleaseNotes();
+    expect(withdrawnRelease("1.188.0")).toEqual({ version: "1.188.0", reason: "it lost conversations on boot for some sandboxes" });
+    expect(withdrawnRelease("1.189.0")).toBeUndefined();
+    // Its notes are no update notes, whoever is behind it.
+    expect(updateNotes("1.187.0")).toEqual(["Newest thing."]);
 });

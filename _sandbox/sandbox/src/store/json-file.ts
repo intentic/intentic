@@ -73,9 +73,10 @@ export const asideOf = async (path: string): Promise<string> =>
     (await lstat(`${path}.corrupt`).catch(undefinedIfMissing)) === undefined ? `${path}.corrupt` : `${path}.corrupt.${Date.now()}`;
 
 // Writes one JSON file atomically (temp file, then rename); used by jsonFile and by stores that must own their own read
-// path.
-export const writeJsonFile = (path: string, value: unknown, mode?: number): Promise<void> =>
-    writeFileAtomic(path, `${JSON.stringify(value, undefined, 2)}\n`, mode);
+// path. `durable` flushes it to the disk first, for the files nothing may replace (the owner's, `onUnreadable:
+// "refuse"`) and the conversion journal: a power cut must not leave any of them an empty name.
+export const writeJsonFile = (path: string, value: unknown, mode?: number, durable = false): Promise<void> =>
+    writeFileAtomic(path, `${JSON.stringify(value, undefined, 2)}\n`, mode, { durable });
 
 interface Read<T> {
     readonly state: JsonFileState<T>;
@@ -167,7 +168,7 @@ const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
                     return updated;
                 }
                 if (carry !== undefined) {
-                    await writeJsonFile(path, carry(updated), mode);
+                    await writeJsonFile(path, carry(updated), mode, onUnreadable === "refuse");
                     return updated;
                 }
                 // Content this build could not read is never overwritten: refused, or set aside where a later
@@ -179,7 +180,7 @@ const openJsonFile = <T>(path: string, store: Store<T>): JsonFile<T> => {
                     }
                     await rename(path, await asideOf(path)).catch(undefinedIfMissing);
                 }
-                await writeJsonFile(path, updated, mode);
+                await writeJsonFile(path, updated, mode, onUnreadable === "refuse");
                 return updated;
             }),
     };

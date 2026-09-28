@@ -89,6 +89,12 @@ export const digestOf = async (ref: ImageRef): Promise<string | undefined> => {
     return digest !== null && digest.startsWith(`sha256:`) ? digest : undefined;
 };
 
+// The `sha256:…` a pinned reference names (`repo@sha256:…`, `repo:tag@sha256:…`), or undefined for a bare tag.
+export const digestIn = (ref: string): string | undefined => {
+    const digest = ref.slice(ref.lastIndexOf(`@`) + 1);
+    return ref.includes(`@`) && digest.startsWith(`sha256:`) ? digest : undefined;
+};
+
 let cached: { readonly ref: string; readonly pinned: string; readonly at: number } | undefined;
 
 // Tests reset the memo; nothing else should touch it.

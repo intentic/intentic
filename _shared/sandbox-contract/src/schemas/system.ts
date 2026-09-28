@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { StatePlanSchema } from "./state-plan.js";
+import { UpdateOutcomeSchema, WithdrawnReleaseSchema } from "./updates.js";
 // version is this build's baked-in version; latest/updateAvailable come from comparing it to the published stable
 // release.
 // Whether a runtime can serve a turn, probed off the turn path. "unknown" reads as available-but-unverified, never as
@@ -82,6 +83,20 @@ export const InfoSchema = z.object({
     staged: StagedUpdateSchema.optional().describe(
         "An update already downloaded and built on the machine running this container, waiting only for the restart that applies it. That restart is seconds, where an unprepared update is minutes, which is a different decision entirely. Absent when nothing is waiting.",
     ),
+    // What the host last did about this sandbox's version (update-outcome.json on /history, written by ic); absent
+    // when no host has said, which is every hosted sandbox and every host older than the file.
+    lastUpdate: UpdateOutcomeSchema.optional().describe(
+        "What the machine running this sandbox last did about its version: an update that took, one it gave up on and why, and until when the previous version stays ready. Absent when that machine has never said.",
+    ),
+    // The running version was taken back after it shipped; absent for every version still standing.
+    withdrawn: WithdrawnReleaseSchema.optional().describe(
+        "Set when the version this sandbox runs was withdrawn after it shipped, which is the moment to go back to the one before it. Absent for every version still standing.",
+    ),
+    // The owner's "not this one" (POST /system/update/skip); updateAvailable reads false while `latest` is it.
+    skippedVersion: z
+        .string()
+        .optional()
+        .describe("A release the owner chose to skip. While it is the newest, no update is offered; a newer one is. Absent when nothing is skipped."),
 });
 export type Info = z.infer<typeof InfoSchema>;
 // What the daemon could not read in its own `.intentic/` state files, and in the files on its volume that

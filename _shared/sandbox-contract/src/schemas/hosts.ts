@@ -68,10 +68,13 @@ export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 // - `set-shape`: the `set-shape`/`forget-shape` ops, and `start`/`restart` applying a saved shape, all through an `ic`
 //   whose `ic sandbox shape` takes the contract's own shape (`--set`); advertised only when the agent's `ic` does.
 //   Both features ride that verb, so an agent advertises both or neither.
-export const DeviceFeatureSchema = z.enum(["reshape-later", "set-shape"]);
+// - `rollback-to`: the `rollback` op's `to`, going back to an older version kept on the machine rather than the
+//   previous one; advertised only when the agent's `ic sandbox rollback` takes `--to`.
+export const DeviceFeatureSchema = z.enum(["reshape-later", "set-shape", "rollback-to"]);
 export type DeviceFeature = z.infer<typeof DeviceFeatureSchema>;
 export const DEVICE_FEATURE_RESHAPE_LATER: DeviceFeature = "reshape-later";
 export const DEVICE_FEATURE_SET_SHAPE: DeviceFeature = "set-shape";
+export const DEVICE_FEATURE_ROLLBACK_TO: DeviceFeature = "rollback-to";
 // The features an agent advertised that this build knows; an unknown one is a newer agent's and means nothing here.
 export const deviceFeatures = (facts: Pick<DeviceFacts, "features"> | undefined): DeviceFeature[] =>
     (facts?.features ?? []).flatMap((feature) => {

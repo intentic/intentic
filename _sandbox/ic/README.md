@@ -28,8 +28,36 @@ flowchart LR
   read-only mounts of the container's data (`/work`, `/history`, and `/agent-auth` where the container has it: the run
   contract's `DATA_MOUNTS`, held to it by a golden test) (`preflight.rs`) and refuses if one would fail;
   `--skip-preflight` overrides. `prepare` records the staged image's plan in the marker it leaves the sandbox, the
-  planner's line verbatim, so the update card says what an update converts before anyone accepts it. A new version that never commits its state journal is rolled back
-  onto the parked container.
+  planner's line verbatim, so the update card says what an update converts before anyone accepts it. It also refuses a
+  run line that would put the sandbox on other storage than it has (`storage.rs`: a renamed or dropped volume would
+  otherwise boot a healthy-looking sandbox on empty volumes).
+- **Nothing old is let go until the new version has proved itself.** A swap parks the old container, and a new version
+  that never answers, never commits its state journal or reports its conversion failed is undone at once. After that
+  first check the old container stays parked for a 24-hour probation (`probation.rs`): `ic sandbox watch`, which the
+  machine agent runs every minute while a probation is on, puts it back by itself (a rename and a start, nothing
+  downloaded or built) when the new version keeps crashing, never becomes ready, or loses the tunnel the old one had.
+  The same look finishes or undoes a swap that died halfway (Ctrl-C, a dropped SSH session, an agent restart, a
+  reboot): the channel record names the swap in flight before anything stops. What happened is written to the
+  sandbox's `/history/update-outcome.json` (`outcome.rs`), which its daemon shows the owner. The dogfood `dev` loop
+  keeps no probation. `IC_PROBATION_SECONDS` and `IC_WATCH_GRACE_SECONDS` shorten both windows for the nightly drill.
+- **The ways back.** `rollback` returns to `previous` (pressing it twice goes forward again); up to two older builds
+  are kept behind it when the disk allows, and `ic sandbox versions` lists them for `rollback --to <version>`. A
+  release nothing kept is downloaded by its version tag. Every build a swap leaves is pinned under a tag no other flow
+  writes, chosen by image identity (`identity.rs`): an environment overlay is labelled with the base it was built on,
+  since its base tag moves whenever anything on the machine pulls it.
+- **One record, one run at a time.** The channel record is fsynced, and copied onto the sandbox's own `/history`
+  volume so every `ic` that drives the same Docker engine (the Windows side and a WSL distro, `sudo`) reads the same one
+  (`mirror.rs`). A per-sandbox lock (`lock.rs`) orders ic runs from a terminal, the desktop app and the machine agent;
+  a background run skips a busy sandbox instead of waiting.
+- **Backups outside Docker.** `ic sandbox backup` copies `/work` and `/history` into an encrypted, incremental restic
+  repository in `~/.intentic/backups/<slug>/`, keyed by `~/.intentic/keys/backup-<slug>.key` (`backup.rs`), so a Docker
+  reset or a lost WSL disk does not take the sandbox with it. The machine agent runs it daily (`--auto`); every swap
+  takes a quick one of the state an update converts first. `backups` lists them, and `backup-restore` puts one into a
+  folder or back into a sandbox's volumes.
+- `ic sandbox tidy` removes what updates leave behind (images and records of sandboxes that are gone, superseded
+  environment builds, the trash past its window) and names volumes that belong to no sandbox without touching them.
+  `ic sandbox reset-owner <slug>` moves an unreadable owner file aside, the one way back in for an owner the daemon
+  locks out because it cannot read who owns it.
 - A sandbox's **shape** is the owner's own ask for memory, CPUs, privileged and GPU, always whole
   ([`shape.rs`](src/shape.rs)). `ic sandbox shape <slug> … --when now` restarts onto it; `--when next-restart` checks
   it against the image's run contract (a bad value is refused here, not by the next update) and saves it as the
@@ -46,7 +74,7 @@ flowchart LR
 - `ic sandbox logs [<slug>] [--tail N]` prints the tail of a sandbox's own log, both streams: what the machine
   agent's Logs button and `sandbox_logs` tool read.
 - `ic sandbox doctor` walks the reachability chain (machine, container, daemon, platform, edge) and names the broken
-  link with its fix.
+  link with its fix, a sandbox an interrupted swap left parked and a probation in progress among them.
 - The image owns its `docker run` flags. `ic` asks the image for its run command (`contract.rs`) instead of
   writing one, so a flag change ships with the image.
 - `ic docker prepare` checks and, with consent, installs what Docker needs; `ic machine enroll` makes the host a deploy
@@ -57,8 +85,8 @@ flowchart LR
 - [src/main.rs](src/main.rs) — every command and flag, with its help text.
 - [src/sandbox/connect.rs](src/sandbox/connect.rs) — the setup one-liner's flow after Docker: claim, launch, reachability.
 - [src/sandbox/recreate.rs](src/sandbox/recreate.rs) — every image swap (update, prepare, rollback, rebuild, reshape) as one flow.
+- [src/sandbox/probation.rs](src/sandbox/probation.rs) — the watch that finishes interrupted swaps and rolls a failing new version back.
 - [src/contract.rs](src/contract.rs) — asks the image for its `docker run` command.
-- [src/sandbox/desired.rs](src/sandbox/desired.rs) — the shape saved for the next restart: set, check, forget, and the old file's conversion.
 - [src/prepare/mod.rs](src/prepare/mod.rs) — `ic docker prepare`: facts, plan, fixes.
 
 ## Commands

@@ -18,6 +18,19 @@ describe("writeFileAtomic", () => {
         expect(readdirSync(at)).toEqual(["device.json"]);
     });
 
+    // The durable write is the same write, flushed: same bytes, same exact mode, nothing left beside it.
+    it("writes a durable file the same way, with its mode, and leaves no staging file", async () => {
+        const at = dir();
+        const path = join(at, "owner.json");
+        writeFileSync(path, `{"email":"old@example.com"}`);
+
+        await writeFileAtomic(path, `{"email":"new@example.com"}`, 0o600, { durable: true });
+
+        expect(readFileSync(path, "utf8")).toBe(`{"email":"new@example.com"}`);
+        expect(statSync(path).mode & 0o777).toBe(0o600);
+        expect(readdirSync(at)).toEqual(["owner.json"]);
+    });
+
     // Every reader of these files acts on what it read, and the one that read a torn device.json wiped every link.
     it("never shows a reader anything but one whole version while writes race", async () => {
         const path = join(dir(), "state.json");

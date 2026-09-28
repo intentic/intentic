@@ -99,6 +99,15 @@ pub fn image_version(image: &str) -> Option<String> {
     ])?)
 }
 
+/// The version the image a RUNNING container runs reports, asked inside it (no second container to start). None for a
+/// stopped container or anything that does not answer cleanly.
+pub fn container_version(container: &str) -> Option<String> {
+    version_token(&docker::exec_capture(
+        container,
+        &["intentic", "--version"],
+    )?)
+}
+
 /// The first version-shaped token in `--version` output, so a CLI that prints `intentic 1.4.2` and one that
 /// prints `1.4.2` both answer. Anything else answers None rather than a guess: a wrong version on the update
 /// card is worse than no version, because the card would name a release the user is not about to get.

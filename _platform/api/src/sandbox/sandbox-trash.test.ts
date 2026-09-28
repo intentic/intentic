@@ -38,6 +38,7 @@ const trashRow = {
     region: `iad`,
     flyImage: `registry/overlay:1`,
     baseImage: `registry/base:1`,
+    baseDigest: `sha256:${`1`.repeat(64)}`,
     environmentHash: `abc123`,
     tier: `free`,
     cpuKind: `shared`,
@@ -142,8 +143,9 @@ describe(`restoreSandbox`, () => {
         // The same app, machine and volume: a restore that provisioned new ones would come back on an empty disk.
         const [[row]] = create.mock.calls as [[{ data: Record<string, unknown> }]];
         expect(row.data).toMatchObject({ appName: `intentic-sbx-a`, machineId: `m1`, volumeId: `vol1`, region: `iad` });
-        // The overlay it was built on, so it comes back as the environment it had.
-        expect(row.data).toMatchObject({ image: `registry/overlay:1`, environmentHash: `abc123` });
+        // The overlay it was built on, so it comes back as the environment it had, on the base digest it was built on: a
+        // base forgotten here would read as moved, and cost the owner a rebuild on their next restart.
+        expect(row.data).toMatchObject({ image: `registry/overlay:1`, environmentHash: `abc123`, baseDigest: `sha256:${`1`.repeat(64)}` });
         // A config replacement carries the new connect token; a start would cost uptime the owner did not ask for.
         expect(fly.called(`POST`, `/machines/m1`)).toHaveLength(1);
         expect(fly.called(`POST`, `/machines/m1/start`)).toEqual([]);

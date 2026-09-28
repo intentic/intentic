@@ -1,6 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
@@ -258,6 +257,9 @@ export const ROTATE_LOG_SH = `[ -f "$1" ] && [ "$(wc -c < "$1")" -ge "$2" ] && m
 
 // Restart=on-failure keeps a deliberate stop stopped, but needs the agent to exit non-zero on a signal;
 // RestartForceExitStatus forces a restart anyway for SIGHUP/INT/TERM/PIPE, which systemd otherwise treats as clean.
+// KillMode=process stops the agent's own process and nothing else: systemd's default ends the unit's whole cgroup, which
+// took down what the agent had started to outlive it (an `ic` mid-swap, whose container was left parked with nothing
+// started in its place, and Mutagen's daemon). What must not outlive it the agent ends itself as it stops.
 export const systemdUserUnit = (spec: AutostartSpec, launcher: CliLauncher): string => {
     return `[Unit]
 Description=${spec.desktopName}: ${spec.desktopComment}
@@ -273,6 +275,7 @@ Restart=on-failure
 RestartSec=5
 RestartForceExitStatus=SIGHUP SIGINT SIGTERM SIGPIPE
 StartLimitIntervalSec=0
+KillMode=process
 Environment=PATH=${supervisedPath()}
 
 [Install]
@@ -316,7 +319,8 @@ ${[...launcher, ...spec.foregroundArgs].map((arg) => `        <string>${arg}</st
 export type AutostartKind = "task" | "run-key" | "systemd" | "launchd" | "xdg" | "none";
 
 export interface Autostart {
-    // Writes the login entry, or with `repair` only puts back one that is missing; never starts anything.
+    // Writes the login entry, or with `repair` only puts back one that is missing or, for the file-based mechanisms,
+    // rewrites one whose content is not what this build writes; never starts anything.
     readonly register: (options?: { readonly repair?: boolean }) => Promise<AutostartKind>;
     // Starts the agent through its entry; false where the entry cannot start one and the caller has to spawn it.
     readonly start: () => Promise<boolean>;
@@ -360,18 +364,40 @@ const windowsAutostart = (spec: AutostartSpec, launcher: CliLauncher, log: Log):
     },
 });
 
+// What a login entry's file holds now; undefined when it is not there (or cannot be read, which a rewrite then settles).
+// allow(silent-catch): an unreadable entry is one to write again, the same as a missing one
+const currentEntry = async (path: string): Promise<string | undefined> => await readFile(path, "utf8").catch(() => undefined);
+
+// Whether `repair` may leave a file-based entry as it is: when it holds exactly what this build would write, or when it
+// launches something else (another install's entry, which a repair is not the moment to take over). An entry launching
+// this same command with an older build's settings (a unit without KillMode=process, say) is rewritten, since its
+// supervisor keeps reading the old one. `launch` picks out the part of an entry that names what it starts.
+export const entryCurrent = (current: string | undefined, wanted: string, launch: (entry: string) => string | undefined): boolean =>
+    current !== undefined && (current === wanted || launch(current) !== launch(wanted));
+
+// What each kind of entry starts: the line under its key, or for a plist its argument array.
+const launchLine =
+    (key: string) =>
+    (entry: string): string | undefined =>
+        entry.split("\n").find((line) => line.startsWith(key));
+const plistArguments = (entry: string): string | undefined => {
+    const from = entry.indexOf("<key>ProgramArguments</key>");
+    return from < 0 ? undefined : entry.slice(from, entry.indexOf("</array>", from));
+};
+
 // Exactly one of a systemd user unit or an XDG entry is written, never both, or a desktop machine starts it twice.
 // Lingering keeps the user manager (and the unit) alive without a session, or a headless box never autostarts.
 const linuxAutostart = (spec: AutostartSpec, launcher: CliLauncher, log: Log): Autostart => ({
     register: async ({ repair = false } = {}) => {
         if (systemdUserAvailable()) {
             const unit = systemdUnitPath(spec);
-            if (repair && existsSync(unit)) {
+            const wanted = systemdUserUnit(spec, launcher);
+            if (repair && entryCurrent(await currentEntry(unit), wanted, launchLine("ExecStart="))) {
                 return "systemd";
             }
             await rm(linuxDesktopPath(spec), { force: true });
             await mkdir(dirname(unit), { recursive: true });
-            await writeFile(unit, systemdUserUnit(spec, launcher), { mode: 0o644 });
+            await writeFile(unit, wanted, { mode: 0o644 });
             spawnSync("loginctl", ["enable-linger"], { stdio: "ignore" });
             // daemon-reload so a rewritten unit is picked up, not the version systemd already parsed.
             spawnSync("systemctl", ["--user", "daemon-reload"], { stdio: "ignore" });
@@ -380,9 +406,10 @@ const linuxAutostart = (spec: AutostartSpec, launcher: CliLauncher, log: Log): A
             return "systemd";
         }
         const file = linuxDesktopPath(spec);
-        if (!(repair && existsSync(file))) {
+        const entry = linuxDesktopEntry(spec, launcher);
+        if (!(repair && entryCurrent(await currentEntry(file), entry, launchLine("Exec=")))) {
             await mkdir(dirname(file), { recursive: true });
-            await writeFile(file, linuxDesktopEntry(spec, launcher), { mode: 0o644 });
+            await writeFile(file, entry, { mode: 0o644 });
         }
         if (process.env["XDG_CURRENT_DESKTOP"] === undefined) {
             log(
@@ -392,7 +419,7 @@ const linuxAutostart = (spec: AutostartSpec, launcher: CliLauncher, log: Log): A
         return "xdg";
     },
     start: async () =>
-        await Promise.resolve(systemdUserAvailable() && existsSync(systemdUnitPath(spec)) && quietly("systemctl", ["--user", "start", systemdUnitName(spec)])),
+        systemdUserAvailable() && (await currentEntry(systemdUnitPath(spec))) !== undefined && quietly("systemctl", ["--user", "start", systemdUnitName(spec)]),
     // Both mechanisms, unconditionally: the one left behind would resurrect the agent at the next boot. `--now` stops it.
     unregister: async () => {
         spawnSync("systemctl", ["--user", "disable", "--now", systemdUnitName(spec)], { stdio: "ignore" });
@@ -408,9 +435,10 @@ const macAutostart = (spec: AutostartSpec, agent: LaunchAgentSpec, launcher: Cli
     const domain = `gui/${process.getuid?.() ?? 0}`;
     return {
         register: async ({ repair = false } = {}) => {
-            if (!(repair && existsSync(plist))) {
+            const wanted = macLaunchAgentXml(spec, agent, launcher);
+            if (!(repair && entryCurrent(await currentEntry(plist), wanted, plistArguments))) {
                 await mkdir(dirname(plist), { recursive: true });
-                await writeFile(plist, macLaunchAgentXml(spec, agent, launcher), { mode: 0o644 });
+                await writeFile(plist, wanted, { mode: 0o644 });
             }
             return "launchd";
         },

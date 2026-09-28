@@ -112,6 +112,32 @@ test("a grant that does not satisfy the contract is refused before it reaches th
     expect(scopesNow()).toEqual(scopes());
 });
 
+// A newer sandbox's grant carries switches this agent has never heard of. Refused, the link dropped and the sandbox
+// redialled it forever; accepted with them off, the link stays up and enforces everything it knows.
+test("a grant carrying a switch this agent does not know is taken, with that switch off, and said once", async () => {
+    const { client, logged, scopesNow } = connectedPair();
+    const pushed = { shell: "off", write: "off", screen: "on", control: "off", network: "on" } as const;
+    expect(await client.setScopes(pushed)).toEqual({ ok: true });
+    expect(scopesNow()).toEqual({ shell: "off", write: "off", screen: "on", control: "off", sandboxes: "off", destructive: "off" });
+    await client.setScopes(pushed);
+    expect(logged.filter((line) => line.includes("does not know"))).toEqual([
+        "https://sandbox.example.dev: the permissions it pushed include network, which this agent does not know; they stay off here until the agent is updated.",
+    ]);
+});
+
+// `to` is a rollback's alone; an update carrying one is refused rather than run as a plain update.
+test("a flow carrying a rollback's version for any other op is refused before anything runs", async () => {
+    const { client } = connectedPair();
+    const frames: unknown[] = [];
+    const drain = async (): Promise<void> => {
+        for await (const frame of await client.runSandboxFlow({ op: "update", slug: "work", to: "1.4.1" })) {
+            frames.push(frame);
+        }
+    };
+    await expect(drain()).rejects.toThrow('"to" names a version to go back to, which only a rollback takes, not update.');
+    expect(frames).toEqual([]);
+});
+
 test("an MCP message rides the one opaque procedure and comes back answered", async () => {
     const { client } = connectedPair();
     const response = (await client.mcp({ jsonrpc: "2.0", id: 1, method: "tools/list" })) as { result: { tools: { name: string }[] } };

@@ -97,6 +97,12 @@ export const sandboxContract = {
         .route({ method: "POST", path: "/sandbox/hosted-restart" })
         .input(sandboxIdInput)
         .output(z.object({ ok: z.boolean() })),
+    // Back onto the image the machine ran before its last image change, through the same state gate as any other
+    // change; CONFLICT when the platform kept none. Served by the platform, so it works while the daemon is down.
+    hostedRollback: oc
+        .route({ method: "POST", path: "/sandbox/hosted-rollback" })
+        .input(sandboxIdInput)
+        .output(z.object({ ok: z.boolean() })),
     // Builds the approved overlay into the image and reboots; re-hashed against what the owner approved.
     hostedRebuild: oc.route({ method: "POST", path: "/sandbox/hosted-rebuild" }).input(HostedRebuildInputSchema).output(HostedBuildStateSchema),
     hostedBuildStatus: oc.route({ method: "POST", path: "/sandbox/hosted-build-status" }).input(sandboxIdInput).output(HostedBuildStatusSchema),

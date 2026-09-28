@@ -1,16 +1,18 @@
 import { execFile, spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { readdir, readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { probe, waitForPort } from "./cdp.js";
+import { pollUntil } from "@intentic/base/async";
+import { browserTargetPath } from "./cdp.js";
 import { BrowserError } from "./types.js";
 
-// Gets a browser that speaks CDP; only one started with --remote-debugging-port qualifies, so an existing endpoint
-// is reused if present, else a separate instance launches with its own profile under ~/.intentic/browser, one
-// directory per browser. The user's own browser, cookies and session are never opened or automated.
-
-// Fixed rather than random, so a user can find it and a restart can reconnect to the browser it left running.
-export const DEFAULT_PORT = 9222;
+// Gets a browser that speaks CDP: one this package started, with its own profile under ~/.intentic/browser (one
+// directory per browser) and a debugging port the browser picked itself. Only that browser is ever driven. A DevTools
+// endpoint found anywhere else, on 9222 or any port, may be a developer's own Chrome with every session they are signed
+// into, so it is never adopted: the browser this package started is found again through the port file Chromium writes
+// into the profile, and checked against the browser actually answering. The user's own browser, cookies and session
+// are never opened or automated.
 
 // The directory name a binary's profile gets: its own filename, so two browsers never share one. Both separators, not
 // node's `basename`: a Windows path is parsed here whenever it is read off a Windows registry on a non-Windows build.
@@ -171,10 +173,11 @@ const findBrowser = async (platform: NodeJS.Platform = process.platform): Promis
         browserCandidates(platform).filter((path) => existsSync(path)),
     );
 
-// `--remote-debugging-port` is the point; the rest suppress a person-like UI (crash-restore prompt, first-run
-// tour, default-browser check).
-const flags = (binary: string, port: number, url: string | undefined): string[] => [
-    `--remote-debugging-port=${port}`,
+// `--remote-debugging-port=0` has the browser pick a free port and write it, with its own target's path, into the
+// profile (ACTIVE_PORT_FILE): a fixed port could already be anybody's. The rest suppress a person-like UI (crash-restore
+// prompt, first-run tour, default-browser check).
+const flags = (binary: string, url: string | undefined): string[] => [
+    "--remote-debugging-port=0",
     `--user-data-dir=${profileDir(binary)}`,
     "--no-first-run",
     "--no-default-browser-check",
@@ -183,14 +186,60 @@ const flags = (binary: string, port: number, url: string | undefined): string[] 
     ...(url === undefined ? [] : [url]),
 ];
 
+// The file Chromium writes into the profile it runs when it picked its own debugging port: the port on the first line,
+// the path of the browser's own debugging target (`/devtools/browser/<id>`, new every start) on the second.
+export const ACTIVE_PORT_FILE = "DevToolsActivePort";
+
+export interface ActivePort {
+    readonly port: number;
+    readonly path: string;
+}
+
+export const parseActivePort = (text: string): ActivePort | undefined => {
+    const [first, second] = text.split(/\r?\n/);
+    const port = Number(first);
+    const path = second?.trim() ?? "";
+    return Number.isInteger(port) && port > 0 && port < 65_536 && path.startsWith("/devtools/browser/") ? { port, path } : undefined;
+};
+
+// Whether the endpoint answering on the file's port is the browser that wrote the file: the target path is new with every
+// start, so a file an earlier run left behind, or another browser since given that port, never matches.
+export const ownsEndpoint = (file: ActivePort | undefined, answered: string | undefined): boolean => file !== undefined && answered === file.path;
+
+const profilesRoot = (): string => join(homedir(), ".intentic", "browser");
+
+// allow(silent-catch): a profile with no port file has no browser of ours running on it
+const activePortIn = async (profile: string): Promise<ActivePort | undefined> => parseActivePort(await readFile(join(profile, ACTIVE_PORT_FILE), "utf8").catch(() => ""));
+
+const ownEndpointIn = async (profile: string): Promise<number | undefined> => {
+    const file = await activePortIn(profile);
+    return file !== undefined && ownsEndpoint(file, await browserTargetPath(file.port)) ? file.port : undefined;
+};
+
+// The debugging port of a browser running one of this package's own profiles, whichever browser it is; undefined when
+// none runs. This, and nothing that merely answers on a port, is the browser every action drives.
+export const ownEndpoint = async (): Promise<number | undefined> => {
+    // allow(silent-catch): no profiles yet is no browser of ours
+    const families = await readdir(profilesRoot()).catch((): string[] => []);
+    for (const family of families) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- a profile or two, each one file and one loopback call
+        const port = await ownEndpointIn(join(profilesRoot(), family));
+        if (port !== undefined) {
+            return port;
+        }
+    }
+    return undefined;
+};
+
 // How long a cold browser start is given. Chrome on a laptop that has not run it today is genuinely slow.
 const START_TIMEOUT_MS = 20_000;
 
-// Ensures something listens on the debugging port and reports whether it had to start one. Idempotent: costs one
-// loopback probe when a browser is already up.
-export const ensureBrowser = async (port: number = DEFAULT_PORT, url?: string): Promise<{ started: boolean }> => {
-    if (await probe(port)) {
-        return { started: false };
+// Ensures this package's own browser is running and answers its debugging port, reporting whether it had to start one.
+// Idempotent: costs a file read and one loopback call when that browser is already up.
+export const ensureBrowser = async (url?: string): Promise<{ readonly started: boolean; readonly port: number }> => {
+    const running = await ownEndpoint();
+    if (running !== undefined) {
+        return { started: false, port: running };
     }
     const binary = await findBrowser();
     if (binary === undefined) {
@@ -199,9 +248,22 @@ export const ensureBrowser = async (port: number = DEFAULT_PORT, url?: string): 
             "Install Brave (or Google Chrome) and try again.",
         );
     }
+    const profile = profileDir(binary);
+    // What an earlier run left there would answer the wait below with a port that is not this start's.
+    await rm(join(profile, ACTIVE_PORT_FILE), { force: true });
     // Detached with streams discarded: the browser must outlive this call and not block on an undrained pipe.
-    const child = spawn(binary, flags(binary, port, url), { detached: true, stdio: "ignore" });
+    const child = spawn(binary, flags(binary, url), { detached: true, stdio: "ignore" });
     child.unref();
-    await waitForPort(port, START_TIMEOUT_MS);
-    return { started: true };
+    let port: number | undefined;
+    const answered = async (): Promise<boolean> => {
+        port = await ownEndpointIn(profile);
+        return port !== undefined;
+    };
+    if (!(await pollUntil(answered, { intervalMs: 150, timeoutMs: START_TIMEOUT_MS })) || port === undefined) {
+        throw new BrowserError(
+            "The browser did not open its debugging port in time.",
+            `If a window of it is still open from before, with the profile in ${profile}, close it and try again: a browser already running that profile ignores what a new start asks of it.`,
+        );
+    }
+    return { started: true, port };
 };

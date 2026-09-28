@@ -1,5 +1,5 @@
 import type { UpgradeOutcome } from "../upgrade.js";
-import { machineTarget, type MachineIo, upgradeMachine } from "./machine-upgrade.js";
+import { machineTarget, type MachineIo, skippedRefusal, upgradeMachine } from "./machine-upgrade.js";
 
 describe("machineTarget", () => {
     // The newest thing this PC or the channel has: a side already ahead pulls the rest of the machine up to it.
@@ -14,6 +14,24 @@ describe("machineTarget", () => {
         expect(machineTarget(undefined, ["0.0.0"])).toBeUndefined();
         expect(machineTarget("1.305.0", ["0.0.0"])).toBe("1.305.0");
         expect(machineTarget(undefined, [])).toBeUndefined();
+    });
+});
+
+// An agent that crash-looped here was rolled back (agent-trial.ts); moving this side onto it again would loop. The
+// Windows side's own tick skips it too, and a leg refusing it is what backs a machine-wide upgrade off it.
+describe("skippedRefusal", () => {
+    const config = { skippedAgent: { version: "1.305.0", at: Date.UTC(2026, 8, 20) } };
+
+    it("refuses exactly the release this environment rolled back from, and says how to take it anyway", () => {
+        expect(skippedRefusal(config, "1.305.0", false)).toBe(
+            "the agent 1.305.0 kept stopping on this machine and was rolled back on 2026-09-20, so it is skipped until a newer release is published (`intentic-machine upgrade --force` installs it anyway).",
+        );
+    });
+
+    it("lets a newer release through, and the skipped one when forced", () => {
+        expect(skippedRefusal(config, "1.306.0", false)).toBeUndefined();
+        expect(skippedRefusal(config, "1.305.0", true)).toBeUndefined();
+        expect(skippedRefusal({}, "1.305.0", false)).toBeUndefined();
     });
 });
 

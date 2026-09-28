@@ -12,7 +12,7 @@ import { SETTLES, waitFor } from "@intentic/testing/bun";
 
 import { createApp } from "./app.js";
 import { workspacePaths } from "./workspace/workspace.js";
-import { PasskeyRequiredError } from "./auth/auth.js";
+import { OwnerUnreadableError, PasskeyRequiredError } from "./auth/auth.js";
 import { createAuthConnections } from "./auth/connections.js";
 
 import { createLogger } from "./logger.js";
@@ -369,6 +369,17 @@ test("bearer middleware maps a ForbiddenError to 403 (wrong account) and any oth
     const unauth = await unauthApp.request("/environment");
     expect(unauth.status).toBe(401);
     expect(await unauth.json()).toEqual({ error: "unauthorized" });
+});
+
+test("an owner file nobody can read refuses every sign-in with a 401 that names only that", async () => {
+    const unreadable = async (): Promise<never> => {
+        throw new OwnerUnreadableError("the file is not valid JSON");
+    };
+    const app = createApp(services({ auth: { authorize: unreadable, authorizeOwner: unreadable } }));
+    const refused = await app.request("/environment", { headers: { authorization: "Bearer a-real-google-token" } });
+    expect(refused.status).toBe(401);
+    // Fail-closed, and nothing of the file itself: not its path, its contents, nor what was wrong with it.
+    expect(await refused.json()).toEqual({ error: "unauthorized", reason: "owner-unreadable" });
 });
 
 test("the enrollment-minted sync token reads /ports, files its own machine report, and nothing else", async () => {

@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { HOST_STATE_ROOT } from "@intentic/constants";
 import {
+    entryCurrent,
     linuxDesktopEntry,
     macLaunchAgentXml,
     ROTATE_LOG_SH,
@@ -91,6 +92,13 @@ describe("systemdUserUnit", () => {
         expect(unit).not.toContain("Restart=always");
     });
 
+    // systemd's default ends the unit's whole cgroup with the agent: an `ic` it had started mid-swap died with it and left
+    // the sandbox's container parked with nothing started in its place, and Mutagen's daemon, meant to outlive the agent,
+    // went too. Only the agent's own process is stopped; what must not outlive it, the agent ends itself.
+    it("stops only the agent's own process, leaving what it started to outlive it", () => {
+        expect(systemdUserUnit(SPEC, BINARY)).toContain("\nKillMode=process\n");
+    });
+
     // Without StartLimitIntervalSec=0, systemd gives up after a few restarts and silently parks the unit in `failed`.
     it("never gives up on a unit that keeps restarting", () => {
         expect(systemdUserUnit(SPEC, BINARY)).toContain("StartLimitIntervalSec=0");
@@ -127,6 +135,25 @@ describe("systemdUserUnit", () => {
         // What systemd's parser hands `sh -c`: the double-quoted word with its C escapes undone, which must be the script.
         expect(rotate?.[1]?.replaceAll(/\\(.)/g, "$1")).toBe(ROTATE_LOG_SH);
         expect(rotate?.slice(2)).toEqual([LOG, String(LOG_ROTATE_BYTES)]);
+    });
+});
+
+// A repair used to put back only a MISSING entry, so a unit an older build wrote kept its old rules for good: the
+// systemd default KillMode above never left a machine that had once registered. An entry starting this same command is
+// kept only when it holds exactly what this build writes; one starting something else is another install's.
+describe("entryCurrent", () => {
+    const execStart = (entry: string): string | undefined => entry.split("\n").find((line) => line.startsWith("ExecStart="));
+
+    it("rewrites a missing entry, or this command's entry with an older build's settings", () => {
+        const unit = systemdUserUnit(SPEC, BINARY);
+        expect(entryCurrent(unit, unit, execStart)).toBe(true);
+        expect(entryCurrent(unit.replace("KillMode=process\n", ""), unit, execStart)).toBe(false);
+        expect(entryCurrent(undefined, unit, execStart)).toBe(false);
+    });
+
+    // A checkout run in the foreground repairs its supervisor too, and must not take over the installed agent's unit.
+    it("leaves an entry that starts another install alone", () => {
+        expect(entryCurrent(systemdUserUnit(SPEC, NODE), systemdUserUnit(SPEC, BINARY), execStart)).toBe(true);
     });
 });
 

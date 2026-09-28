@@ -40,6 +40,8 @@ when the daemon runs from a checkout), the process environment, then command-lin
   ([src/runners/runner-mode.ts](../src/runners/runner-mode.ts)).
 - The daemon sets `INTENTIC_LOG_DIR`, `INTENTIC_TERMINAL_LOGS_DIR` and `INTENTIC_AGENT_TMUX` for its own children
   ([src/bootstrap/daemon-env.ts](../src/bootstrap/daemon-env.ts)).
+- The nightly update drill sets `INTENTIC_FAULT` (`crash-at-boot`, `crash-after-ready`, `fail-conversion`) to make a
+  build fail on purpose ([src/system/boot/fault.ts](../src/system/boot/fault.ts)); no production image sets it.
 
 ## Refusals
 

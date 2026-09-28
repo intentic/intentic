@@ -31,13 +31,24 @@ import {
     LIVE_STATES,
 } from "./fly/fly.js";
 import { AT_CAPACITY_MESSAGE, HostedAtCapacity, hostedCapacity, noteProviderAtCapacity, providerWords } from "./hosted-capacity.js";
-import { resolveHostedImage } from "./build/hosted-image.js";
+import { digestIn, resolveHostedImage } from "./build/hosted-image.js";
 import { hostedSlotUse } from "./hosted-plan.js";
 import { assertHostedIdentity, HostedAlreadyProvisioned, HostedProvisionCancelled, lockHostedSandbox, withHostedApp } from "./hosted-cleanup.js";
 import { hostedShapeFor, shapeOfRow, volumeOptions } from "./hosted-shape.js";
 import { dropHostedMachine } from "./hosted-usage.js";
 import { startAfterUpdate } from "./gate/start-after-update.js";
-import { HostedImageKept, HostedMachineBusy, type HostedStrandingRecord, STATE_PROBE_ENV, switchHostedImage } from "./gate/state-gate.js";
+import {
+    type HostedComposer,
+    type HostedGateRecord,
+    HostedImageKept,
+    HostedMachineBusy,
+    ROLLBACK_WORDS,
+    runningImageOf,
+    STATE_PROBE_ENV,
+    startOnTrial,
+    STOCK_FACTS,
+    switchHostedImage,
+} from "./gate/state-gate.js";
 
 // Where every caller has always found it; it lives beside the gate that starts machines too.
 export { startAfterUpdate } from "./gate/start-after-update.js";
@@ -210,10 +221,35 @@ export interface HostedWakeTarget {
     readonly volumeId: string;
     readonly image?: string | null;
     readonly environmentHash?: string | null;
+    // An image applied without its daemon seen to come up (gate/gate-row.ts), which this start has to judge.
+    readonly unprovenImage?: string | null;
+    // The platform digest the owner rolled back from, which a heal does not move the machine onto.
+    readonly skippedDigest?: string | null;
 }
 
 // States a config replacement is safe from; anything mid-transition is left to the plain start and its own verdict.
 const HEALABLE_STATES = new Set([`stopped`, `suspended`, `started`]);
+
+/* HOW A MACHINE'S CONFIG READS AROUND ANY IMAGE IT MAY GO BACK TO, composed the way its change composes the target: an
+ * overlay with the recipe it carried, or the stock image. The state gate needs it to put back a version Fly no longer
+ * holds a config for (gate/state-gate.ts). */
+export const composerFor =
+    (config: Config, args: HostedProvisionArgs, hosted: { appName: string; volumeId: string }, guest?: HostedShape): HostedComposer =>
+    (image, environmentHash) =>
+        hostedMachineConfig(config, args, hosted.appName, hosted.volumeId, environmentHash === null ? STOCK_OVERLAY : { image, environmentHash }, image, guest);
+
+/* THE STOCK IMAGE A RESTART OR A WAKE'S HEAL MOVES A MACHINE ONTO: today's digest, unless the owner rolled back from it
+ * and `:stable` still resolves to it; then the digest the machine runs, since a restart must not silently undo a
+ * rollback. Once `:stable` names anything else, that is where the machine goes. */
+const stockTargetOf = async (config: Config, hosted: { appName: string; machineId: string; skippedDigest?: string | null }, logger?: Logger): Promise<string> => {
+    const today = await resolveHostedImage(config, logger);
+    const skipped = hosted.skippedDigest ?? null;
+    if (skipped === null || digestIn(today) !== skipped) {
+        return today;
+    }
+    logger?.info({ app: hosted.appName, skipped }, `hosted: the owner went back from today's stock image; the machine keeps the version it runs until :stable moves`);
+    return runningImageOf(config, hosted);
+};
 
 // The wake's config replacement, under the state gate. A machine kept on its version and running there is a woken
 // machine, which is what was asked for; anything else is the wake's failure. It does not wait for another change to
@@ -223,15 +259,48 @@ const healHosted = async (
     hosted: HostedWakeTarget,
     args: HostedProvisionArgs,
     logger: Logger | undefined,
-    stranding: HostedStrandingRecord | undefined,
+    record: HostedGateRecord | undefined,
 ): Promise<void> => {
     const overlay: HostedOverlay = { image: hosted.image ?? null, environmentHash: hosted.environmentHash ?? null };
-    const target = hostedMachineConfig(config, args, hosted.appName, hosted.volumeId, overlay, await resolveHostedImage(config), shapeOfRow(hosted));
+    const guest = shapeOfRow(hosted);
+    const stockImage = overlay.image === null ? await stockTargetOf(config, hosted, logger) : config.hosted.image;
+    const target = hostedMachineConfig(config, args, hosted.appName, hosted.volumeId, overlay, stockImage, guest);
     try {
-        await switchHostedImage(config, hosted, target, { start: true, keepImage: true, busy: `refuse`, stranding, logger });
+        await switchHostedImage(config, hosted, target, {
+            start: true,
+            keepImage: true,
+            busy: `refuse`,
+            record,
+            compose: composerFor(config, args, hosted, guest),
+            facts: overlay.image === null ? STOCK_FACTS : undefined,
+            logger,
+        });
     } catch (error) {
         if (!(error instanceof HostedImageKept && error.running)) {
             throw error;
+        }
+    }
+};
+
+/* THE WAKE'S START OF AN IMAGE ON TRIAL, judged; a version put back and running there is a woken machine, as a heal's.
+ * When the image was a rebuild's, its build row says why it was not kept, in the words an apply that failed at once
+ * records (build/hosted-build.ts), since that is where the owner's Environment card reads what became of a build. */
+const startTrialHosted = async (config: Config, hosted: HostedWakeTarget, args: HostedProvisionArgs, logger: Logger | undefined, record: HostedGateRecord): Promise<void> => {
+    try {
+        await startOnTrial(config, hosted, { record, compose: composerFor(config, args, hosted, shapeOfRow(hosted)), logger });
+    } catch (error) {
+        if (!(error instanceof HostedImageKept && error.running)) {
+            throw error;
+        }
+        logger?.warn({ app: hosted.appName, reason: error.message }, `hosted wake: the image on trial did not come up; the machine runs the version before it`);
+        const digest = digestIn(hosted.unprovenImage ?? ``);
+        if (digest !== undefined) {
+            await record.prisma.hostedBuild
+                .updateMany({
+                    where: { hostedMachineId: record.hostedMachineId, digest },
+                    data: { error: `built, but the machine could not be switched to it: ${error.message}` },
+                })
+                .catch((failure) => logger?.error({ err: failure, app: hosted.appName }, `hosted wake: recording why the rebuild was not kept failed`));
         }
     }
 };
@@ -250,13 +319,15 @@ const healHosted = async (
  * keeps its overlay, whose base is the owner's rebuild to move. `heal` is lazy because only this case needs the
  * sandbox's identity. A read that fails is not a verdict: the plain start runs and the next wake asks again. A probe
  * caught mid-transition is a gate at work, never a machine to start: HostedMachineBusy, as when the heal meets the
- * app's lock held. Answers whether it healed. */
+ * app's lock held. A machine whose image is ON TRIAL (a rebuild applied while it slept) has that start judged like any
+ * image change's (gate/state-gate.ts), and goes back to the image before it when it does not come up. Answers whether
+ * it healed. */
 export const wakeHosted = async (
     config: Config,
     hosted: HostedWakeTarget,
     heal?: () => HostedProvisionArgs,
     logger?: Logger,
-    stranding?: HostedStrandingRecord,
+    record?: HostedGateRecord,
 ): Promise<boolean> => {
     if (heal !== undefined && ingressEnabled(config)) {
         // allow(silent-catch): a read that fails is not a verdict; the plain start below runs and the next wake asks again
@@ -265,12 +336,16 @@ export const wakeHosted = async (
         if (launch?.env !== undefined && HEALABLE_STATES.has(launch.state)) {
             const args = heal();
             if (!tunnelEnvCurrent(config, args.connectToken, launch.env) || probing) {
-                await healHosted(config, hosted, args, logger, stranding);
+                await healHosted(config, hosted, args, logger, record);
                 return true;
             }
         } else if (probing) {
             throw new HostedMachineBusy(`this sandbox is being changed right now; try again in a moment`);
         }
+    }
+    if (heal !== undefined && record !== undefined && (hosted.unprovenImage ?? null) !== null) {
+        await startTrialHosted(config, hosted, heal(), logger, record);
+        return false;
     }
     await startHosted(config, hosted);
     return false;
@@ -477,21 +552,96 @@ export const provisionHosted = async (
 // Explicit repair/update boundary: a plain stop/start can't fix a boot-crashing machine pinned to its original rootfs,
 // so this replaces the full config while stopped, then wakes it as one metered transition. A stock machine moves onto
 // today's stock digest, under the state gate (gate/state-gate.ts): a target that cannot convert this sandbox's state
-// leaves it on its version with the fresh config, and one that does not start is put back; both throw HostedImageKept.
-// It waits its turn behind any other change to this machine (the gate's lock).
+// leaves it on its version with the fresh config, and one that does not start or come up is put back; both throw
+// HostedImageKept. A digest the owner rolled back from is not moved onto while `:stable` still names it. It waits its
+// turn behind any other change to this machine (the gate's lock).
 export const refreshHosted = async (
     config: Config,
     args: HostedProvisionArgs,
-    hosted: { appName: string; machineId: string; volumeId: string; image?: string | null; environmentHash?: string | null },
+    hosted: {
+        appName: string;
+        machineId: string;
+        volumeId: string;
+        image?: string | null;
+        environmentHash?: string | null;
+        skippedDigest?: string | null;
+    },
     logger?: Logger,
-    stranding?: HostedStrandingRecord,
+    record?: HostedGateRecord,
 ): Promise<void> => {
     // Keeps the machine's existing overlay; a moved base image is a rebuild's job (hosted-build.ts), not this call's.
     const overlay: HostedOverlay = { image: hosted.image ?? null, environmentHash: hosted.environmentHash ?? null };
     // Resolved to a digest, so a restart on the digest the machine already runs converts nothing and asks nothing.
-    const stockImage = overlay.image === null ? await resolveHostedImage(config, logger) : config.hosted.image;
+    const stockImage = overlay.image === null ? await stockTargetOf(config, hosted, logger) : config.hosted.image;
     const target = hostedMachineConfig(config, args, hosted.appName, hosted.volumeId, overlay, stockImage);
-    await switchHostedImage(config, hosted, target, { start: true, keepImage: true, stranding, logger });
+    await switchHostedImage(config, hosted, target, {
+        start: true,
+        keepImage: true,
+        record,
+        compose: composerFor(config, args, hosted),
+        facts: overlay.image === null ? STOCK_FACTS : undefined,
+        logger,
+    });
+};
+
+/* THE ROW KEEPS NO EARLIER IMAGE FOR THIS MACHINE: it has not changed image since the platform began keeping one, or
+ * the last change was undone automatically. Nothing was touched. */
+export class HostedNothingKept extends Error {}
+
+// A machine's row as the owner's rollback reads it: what it runs, what it keeps, and its own guest.
+export interface HostedRollbackTarget {
+    readonly cpuKind: string;
+    readonly cpus: number;
+    readonly memoryMb: number;
+    readonly volumeGb: number;
+    readonly appName: string;
+    readonly machineId: string;
+    readonly volumeId: string;
+    readonly image?: string | null;
+    readonly baseDigest?: string | null;
+    readonly previousImage?: string | null;
+    readonly previousEnvironmentHash?: string | null;
+}
+
+// The platform digest a rollback leaves, which later restarts skip: the one a stock machine runs, or the base its overlay
+// was built on (the one `:stable` names today, when that was never recorded). Null when neither can be said.
+const leftDigestOf = async (config: Config, hosted: HostedRollbackTarget, logger: Logger | undefined): Promise<string | null> => {
+    if ((hosted.image ?? null) === null) {
+        return digestIn(await runningImageOf(config, hosted)) ?? null;
+    }
+    return hosted.baseDigest ?? digestIn(await resolveHostedImage(config, logger)) ?? null;
+};
+
+/* THE OWNER'S WAY BACK: the image the machine ran before its last image change, through the same gate as any change (its
+ * planner asked over the volume, its daemon waited for), inside the fresh config a restart writes. The image it leaves
+ * becomes the way back, so a second press goes forward again; and the platform digest it leaves is skipped by later
+ * restarts and heals while `:stable` still resolves to it. The platform's own act: it needs nothing of the daemon, so it
+ * works while the daemon is down. Throws HostedNothingKept, and what switchHostedImage throws. */
+export const rollbackHosted = async (
+    config: Config,
+    args: HostedProvisionArgs,
+    hosted: HostedRollbackTarget,
+    logger?: Logger,
+    record?: HostedGateRecord,
+): Promise<void> => {
+    const back = hosted.previousImage ?? null;
+    if (back === null) {
+        throw new HostedNothingKept(`this sandbox has no earlier version kept to go back to`);
+    }
+    const environmentHash = hosted.previousEnvironmentHash ?? null;
+    const compose = composerFor(config, args, hosted, shapeOfRow(hosted));
+    const skip = await leftDigestOf(config, hosted, logger);
+    // The base an earlier overlay was built on is not kept beside it: unknown, which the next rebuild check reads as moved.
+    // A refusal puts back the config the machine held as it was: this target's recipe is the earlier version's, not its.
+    await switchHostedImage(config, hosted, compose(back, environmentHash), {
+        start: true,
+        record,
+        compose,
+        facts: { environmentHash, baseImage: null, baseDigest: null },
+        skip,
+        words: ROLLBACK_WORDS,
+        logger,
+    });
 };
 
 // Tears the app down (machines and volume go with it); 404-tolerant by fly.ts's contract.

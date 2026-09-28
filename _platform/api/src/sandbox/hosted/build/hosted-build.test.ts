@@ -3,7 +3,7 @@ import type { PrismaClient } from "@intentic/prisma";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { CLEAR_STATE_PLAN, type FakeFlyCall, installFakeFly } from "@intentic/testing/fly-fake";
 import type { Config } from "../../../config.js";
-import { fakeHostedAppLock, testIngressConfig } from "../../../testing.js";
+import { checkingIn, fakeHostedAppLock, testIngressConfig } from "../../../testing.js";
 import { BUILD_ENV, BUILD_PATHS } from "./hosted-build-script.js";
 import {
     buildStateOf,
@@ -16,6 +16,7 @@ import {
     sweepHostedBuilds,
 } from "./hosted-build.js";
 import { hostedInstanceId } from "../hosted.js";
+import { forgetHostedImage } from "./hosted-image.js";
 import { STATE_PROBE_ENV } from "../gate/state-gate.js";
 import * as timersPromisesOriginal from "node:timers/promises";
 
@@ -75,6 +76,9 @@ const config = (over?: Partial<Config[`hosted`]>): Config =>
 const OVERLAY = `# Composed by the intentic sandbox daemon: do not edit by hand.\n\nFROM ${BASE}\n\n# ---- custom (owner-approved) ----\nRUN apt-get install -y gnucobol\n`;
 const HASH = sha256Hex(OVERLAY);
 const DIGEST = `sha256:${`d`.repeat(64)}`;
+// The digests `:stable` has named: the base an overlay was built on, and the release it names since.
+const OLD_BASE = `sha256:${`1`.repeat(64)}`;
+const NEW_BASE = `sha256:${`2`.repeat(64)}`;
 
 const owner = { id: `u1`, email: `owner@example.com` };
 const machineRow = (over: Record<string, unknown> = {}) => ({
@@ -94,8 +98,10 @@ const machineRow = (over: Record<string, unknown> = {}) => ({
     volumeGb: 10,
     image: null,
     baseImage: null,
+    baseDigest: null,
     environmentHash: null,
     buildingId: null,
+    skippedDigest: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     sandbox: { token: `tok`, owner },
@@ -106,6 +112,7 @@ const buildRow = (over: Record<string, unknown> = {}) => ({
     hostedMachineId: `h1`,
     hash: HASH,
     baseImage: BASE,
+    baseDigest: null,
     content: OVERLAY,
     state: `building`,
     image: `registry.fly.io/intentic-sbx-abc:env`,
@@ -174,6 +181,8 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof j
             deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
             ...overrides[`hostedBuild`],
         },
+        // A swap's gate waits for the sandbox to check in after the start; this one does, every time.
+        sandbox: { findUnique: checkingIn(), ...overrides[`sandbox`] },
     }) as unknown as PrismaClient;
 
 // Fly's two APIs behind one fetch: the Machines REST client and the GraphQL token mint, recorded per call.
@@ -192,6 +201,12 @@ const stubFetch = (routes: { match: (method: string, url: string) => boolean; re
     return calls;
 };
 const json = (payload: unknown, status = 200) => new Response(JSON.stringify(payload), { status });
+
+// The registry beside Fly, answering which digest `:stable` names now.
+const registryRoute = (digest: string) => ({
+    match: (method: string, url: string) => method === `HEAD` && url.includes(`/v2/intentic/sandbox/manifests/`),
+    respond: () => new Response(null, { status: 200, headers: { "docker-content-digest": digest } }),
+});
 
 // One route answers org lookup, mint, and revoke, matched by keywords in the query text.
 const graphqlRoute = () => ({
@@ -233,6 +248,8 @@ const configOf = (fly: ReturnType<typeof sandboxFly>) => fly.machines.get(`m1`)?
 
 afterEach(() => {
     unstubAllGlobals();
+    // The resolved-image memo: a case that answers a registry would otherwise hand its digest to the cases after it.
+    forgetHostedImage();
 });
 
 describe(`requesting a build: every refusal spends nothing`, () => {
@@ -387,19 +404,60 @@ describe(`requesting a build: the start`, () => {
         expect(releases.at(-1)?.data.buildingId).toBeNull();
     });
 
-    it(`answers the standing build for a recipe the machine already runs on the current base`, async () => {
-        const calls = stubFetch([]);
+    it(`answers the standing build for a recipe the machine already runs on the base the platform's image names now`, async () => {
+        const calls = stubFetch([registryRoute(OLD_BASE)]);
         const built = buildRow({ state: `built`, digest: DIGEST, finishedAt: new Date() });
         const prisma = fakePrisma({
             hostedMachine: {
                 findUnique: jest.fn().mockResolvedValue(
-                    machineRow({ environmentHash: HASH, baseImage: BASE, image: `registry.fly.io/intentic-sbx-abc@${DIGEST}` }),
+                    machineRow({ environmentHash: HASH, baseImage: BASE, baseDigest: OLD_BASE, image: `registry.fly.io/intentic-sbx-abc@${DIGEST}` }),
                 ),
             },
             hostedBuild: { findFirst: jest.fn().mockResolvedValue(built) },
         });
         expect((await requestHostedBuild(prisma, config(), logger, request())).state).toBe(`built`);
-        expect(calls).toHaveLength(0);
+        // The registry was asked which base `:stable` names; nothing was built, swapped or even asked of Fly.
+        expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual([`HEAD https://ghcr.io/v2/intentic/sandbox/manifests/stable`]);
+    });
+
+    /* `:stable` IS A MOVING TAG: the same string names a new release, so "already on the current base" is a digest
+     * question. The same recipe on a moved base is built again, FROM the digest the tag names now, and that digest kept. */
+    it(`builds the same recipe again when :stable names a new base under the same tag, pinned to that base`, async () => {
+        const calls = stubFetch([
+            registryRoute(NEW_BASE),
+            graphqlRoute(),
+            { match: (method, url) => method === `POST` && url.endsWith(`/apps/intentic-sbx-abc/machines`), respond: () => json({ id: `mb1`, state: `created` }) },
+        ]);
+        const prisma = fakePrisma({
+            hostedMachine: {
+                findUnique: jest.fn().mockResolvedValue(
+                    machineRow({ environmentHash: HASH, baseImage: BASE, baseDigest: OLD_BASE, image: `registry.fly.io/intentic-sbx-abc@${DIGEST}` }),
+                ),
+            },
+        });
+        expect((await requestHostedBuild(prisma, config(), logger, request())).state).toBe(`building`);
+        // SAFETY: the stubbed create is a jest.fn, and its first argument is the row the module wrote.
+        const created = (prisma.hostedBuild.create as ReturnType<typeof jest.fn>).mock.calls[0]?.[0] as { data: Record<string, unknown> };
+        expect(created.data).toMatchObject({ hash: HASH, baseImage: BASE, baseDigest: NEW_BASE });
+        // SAFETY: the builder's create call carries the machine config fly.ts sent, files included.
+        const builder = calls.find((call) => call.method === `POST` && call.url.endsWith(`/machines`))?.body as {
+            config: { files: { guest_path: string; raw_value: string }[] };
+        };
+        const dockerfile = builder.config.files.find((file) => file.guest_path === BUILD_PATHS.dockerfile)?.raw_value ?? ``;
+        expect(Buffer.from(dockerfile, `base64`).toString(`utf8`)).toBe(OVERLAY.replace(`FROM ${BASE}`, `FROM ${BASE}@${NEW_BASE}`));
+    });
+
+    // A build of this recipe on the base `:stable` named before is not this recipe on the base it names now.
+    it(`does not reuse a build on a base the tag no longer names`, async () => {
+        stubFetch([
+            registryRoute(NEW_BASE),
+            graphqlRoute(),
+            { match: (method, url) => method === `POST` && url.endsWith(`/apps/intentic-sbx-abc/machines`), respond: () => json({ id: `mb1`, state: `created` }) },
+        ]);
+        const stale = buildRow({ state: `built`, digest: DIGEST, baseDigest: OLD_BASE, finishedAt: new Date() });
+        const prisma = fakePrisma({ hostedBuild: { findFirst: jest.fn().mockResolvedValue(stale) } });
+        expect((await requestHostedBuild(prisma, config(), logger, request())).state).toBe(`building`);
+        expect(prisma.hostedBuild.create).toHaveBeenCalledTimes(1);
     });
 
     it(`re-applies an image already built for this recipe and base instead of building it again`, async () => {
@@ -468,9 +526,20 @@ describe(`the builder's report`, () => {
         const applied = configOf(fly);
         expect(applied.image).toBe(`registry.fly.io/intentic-sbx-abc@${DIGEST}`);
         expect(applied.env[`SANDBOX_ENVIRONMENT_HASH`]).toBe(HASH);
+        // What the machine now holds, written by the gate in one update: the overlay's facts, the stock image it replaced as
+        // the way back, and the overlay ON TRIAL, since nothing has started it yet; its next wake judges it.
         expect(prisma.hostedMachine.update).toHaveBeenCalledWith({
             where: { id: `h1` },
-            data: { image: `registry.fly.io/intentic-sbx-abc@${DIGEST}`, baseImage: BASE, environmentHash: HASH },
+            data: {
+                image: `registry.fly.io/intentic-sbx-abc@${DIGEST}`,
+                baseImage: BASE,
+                baseDigest: null,
+                environmentHash: HASH,
+                previousImage: STOCK,
+                previousEnvironmentHash: null,
+                unprovenImage: `registry.fly.io/intentic-sbx-abc@${DIGEST}`,
+                skippedDigest: null,
+            },
         });
         expect(fly.machines.get(`m1`)?.state).toBe(`stopped`);
     });
@@ -685,12 +754,74 @@ describe(`a moved base image`, () => {
         expect(created.data).toMatchObject({ requestedBy: `platform`, baseImage: `ghcr.io/intentic/sandbox:1.61.0`, hash: HASH });
     });
 
-    it(`does nothing for a stock machine or one already on the current base`, async () => {
-        const calls = stubFetch([]);
+    it(`does nothing for a stock machine or one already on the base the platform's image names now`, async () => {
+        const calls = stubFetch([registryRoute(OLD_BASE)]);
         const prisma = fakePrisma();
         await rebuildOnMovedBase(prisma, config(), logger, machineRow(), owner);
-        await rebuildOnMovedBase(prisma, config(), logger, machineRow({ image: `x`, baseImage: BASE, environmentHash: HASH }), owner);
         expect(calls).toHaveLength(0);
+        await rebuildOnMovedBase(prisma, config(), logger, machineRow({ image: `x`, baseImage: BASE, baseDigest: OLD_BASE, environmentHash: HASH }), owner);
+        // The registry is asked which base `:stable` names, and nothing else happens.
+        expect(calls.map((call) => call.method)).toEqual([`HEAD`]);
+        expect(prisma.hostedBuild.findFirst).toHaveBeenCalledTimes(0);
+    });
+
+    /* THE MOVING TAG. `HOSTED_IMAGE` is `:stable`, whose string never changes while the release it names does: the
+     * overlay's base moved when the digest did, and "Restart & update" rebuilds the approved recipe on the new one. */
+    it(`rebuilds the recipe when :stable names a new base under the same tag`, async () => {
+        const calls = stubFetch([
+            registryRoute(NEW_BASE),
+            graphqlRoute(),
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines`), respond: () => json({ id: `mb2`, state: `created` }) },
+        ]);
+        const row = machineRow({ image: `registry.fly.io/intentic-sbx-abc@${DIGEST}`, baseImage: BASE, baseDigest: OLD_BASE, environmentHash: HASH });
+        const prisma = fakePrisma({
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue(row) },
+            hostedBuild: { findFirst: jest.fn().mockResolvedValueOnce({ hash: HASH, content: OVERLAY }).mockResolvedValue(null) },
+        });
+        await rebuildOnMovedBase(prisma, config(), logger, row, owner);
+        // SAFETY: the stubbed create is a jest.fn, and its first argument is the row the module wrote.
+        const created = (prisma.hostedBuild.create as ReturnType<typeof jest.fn>).mock.calls[0]?.[0] as { data: Record<string, unknown> };
+        expect(created.data).toMatchObject({ requestedBy: `platform`, baseImage: BASE, baseDigest: NEW_BASE, hash: HASH });
+        // One registry answer serves every question the rebuild asks of it.
+        expect(calls.filter((call) => call.method === `HEAD`)).toHaveLength(1);
+    });
+
+    // An overlay built before digests were kept cannot say which base it is on: the next restart rebuilds it once.
+    it(`rebuilds an overlay whose base digest was never kept, once the registry names one`, async () => {
+        stubFetch([
+            registryRoute(NEW_BASE),
+            graphqlRoute(),
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines`), respond: () => json({ id: `mb2`, state: `created` }) },
+        ]);
+        const row = machineRow({ image: `registry.fly.io/intentic-sbx-abc@${DIGEST}`, baseImage: BASE, baseDigest: null, environmentHash: HASH });
+        const prisma = fakePrisma({
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue(row) },
+            hostedBuild: { findFirst: jest.fn().mockResolvedValueOnce({ hash: HASH, content: OVERLAY }).mockResolvedValue(null) },
+        });
+        await rebuildOnMovedBase(prisma, config(), logger, row, owner);
+        expect(prisma.hostedBuild.create).toHaveBeenCalledTimes(1);
+    });
+
+    // A restart must not silently undo the owner's rollback: the base they went back from is not built on again.
+    it(`does not rebuild on the base the owner rolled back from while :stable still names it`, async () => {
+        const calls = stubFetch([registryRoute(NEW_BASE)]);
+        const prisma = fakePrisma();
+        await rebuildOnMovedBase(
+            prisma,
+            config(),
+            logger,
+            machineRow({ image: `x`, baseImage: BASE, baseDigest: OLD_BASE, environmentHash: HASH, skippedDigest: NEW_BASE }),
+            owner,
+        );
+        expect(calls.map((call) => call.method)).toEqual([`HEAD`]);
+        expect(prisma.hostedBuild.findFirst).toHaveBeenCalledTimes(0);
+    });
+
+    // With no registry answer only the tag can say, and it has not changed.
+    it(`leaves the base alone when the registry cannot say and the tag is the same`, async () => {
+        stubFetch([]);
+        const prisma = fakePrisma();
+        await rebuildOnMovedBase(prisma, config(), logger, machineRow({ image: `x`, baseImage: BASE, baseDigest: OLD_BASE, environmentHash: HASH }), owner);
         expect(prisma.hostedBuild.findFirst).toHaveBeenCalledTimes(0);
     });
 });

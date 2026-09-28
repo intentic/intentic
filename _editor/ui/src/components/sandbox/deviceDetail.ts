@@ -1,4 +1,5 @@
 import { t } from "../../i18n/index.js";
+import { formatUntil } from "../../lib/timeWindow.js";
 
 // Derivations behind DeviceDetail.vue: what one device is doing for a sandbox, arranged the way it's read.
 // The report arrives as two flat lists tagged by sandbox id; folded here into one block per sandbox so
@@ -84,7 +85,28 @@ export interface DeviceSandboxRow {
     // Its share of the machine, when the caller inspected the container for it; absent from a `docker
     // ps`-only reader.
     resources?: DeviceSandboxResources | undefined;
+    // What the running image says it is. The three below it too are read off an `ic` new enough to know them.
+    version?: string | undefined;
+    // An update was interrupted with the old container set aside and no replacement: down until Start puts it back.
+    parked?: boolean | undefined;
+    // Until when the version before the last swap stays parked and ready (ms): going back takes seconds until then.
+    probationUntil?: number | undefined;
+    // What a rollback can go back to, newest first.
+    rollbackTargets?: readonly { readonly image: string; readonly version?: string | undefined }[] | undefined;
 }
+
+/**
+ * The open row's version line: what runs, and while the version before the last swap is still parked, until when.
+ * Undefined when the machine said neither.
+ */
+export const versionLine = (sandbox: DeviceSandboxRow, now: number): string | undefined => {
+    const until = sandbox.probationUntil;
+    const ready = until !== undefined && until > now ? t(`ui.deviceDetail.previousReadyUntil`, { when: formatUntil(until, now) }) : undefined;
+    if (sandbox.version === undefined) {
+        return ready;
+    }
+    return ready === undefined ? sandbox.version : `${sandbox.version} · ${ready}`;
+};
 
 // One line, e.g. "12 GiB · 4 CPUs · privileged · GPU"; only what was set is said, since every core is
 // the resting state and needs no words.
@@ -397,6 +419,10 @@ const summaryFacts = (group: DeviceSandboxGroup): string[] => {
 
 const summaryWarnings = (group: DeviceSandboxGroup): string[] => {
     const warnings: string[] = [];
+    // First, since it is why the sandbox is down, and it names the one press that brings it back.
+    if (group.sandbox?.parked === true) {
+        warnings.push(t(`ui.deviceDetail.interruptedUpdate`));
+    }
     const taken = countOf(group, `held-by-sandbox`);
     // A pairing that syncs nothing is how it was set up, not a fault: one word on the closed line rather
     // than an opened row repeating it.

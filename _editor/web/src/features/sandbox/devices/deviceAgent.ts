@@ -109,6 +109,14 @@ const publishedNote = (row: DeviceRow, latest: string): AgentNote => {
     };
 };
 
+// The `ic` this agent drives is older than the agent and fetching the current one failed, which is what leaves a
+// current agent without the verbs its release has (logs, saving a shape for the next restart). In the agent's own
+// sentence: it names both versions and why the fetch failed, and that the next sandbox action tries again.
+const icNote = (device: Device): AgentNote | undefined => {
+    const stale = device.facts?.icOutOfDate;
+    return stale === undefined || stale.trim() === `` ? undefined : { text: stale, tone: `warning` };
+};
+
 // One sentence per distinct errand, worst first; a stale loop and a published release can both be true at
 // once (replaced but not restarted, and something newer out since), so neither hides the other. A settled agent
 // says nothing: whether this sandbox knows the newest release is a fact about this sandbox, not about the
@@ -116,7 +124,7 @@ const publishedNote = (row: DeviceRow, latest: string): AgentNote => {
 // agent asking for nothing lives on Update's own hint.
 const notesOf = (row: DeviceRow, latest: string | undefined): AgentNote[] => {
     const behind = latest !== undefined && agentBehind(row.device, latest);
-    return [agentStateNote(row.agent), agentSkewNote(row.agent?.staleBuild), behind ? publishedNote(row, latest) : undefined].filter(
+    return [agentStateNote(row.agent), agentSkewNote(row.agent?.staleBuild), icNote(row.device), behind ? publishedNote(row, latest) : undefined].filter(
         (note) => note !== undefined,
     );
 };

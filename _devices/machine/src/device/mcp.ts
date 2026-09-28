@@ -333,7 +333,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     tool({
         name: "list_sandboxes",
         description:
-            "The Intentic sandboxes on this device, as JSON, as the device's `ic` reports them: each one's slug, whether it is running, whether its tunnel is up, and under `resources` its share of this machine as docker enforces it (memory cap in bytes, CPU cap, privileged, GPU, and which of those the approved environment demands versus the owner asked for), the shape it runs with (`shape`: memoryGib, cpus, privileged, gpu as the owner asked; null is the default) and, when one is saved, the shape its next restart applies (`desired`). `staged` names an update downloaded and waiting. Only sandbox containers; nothing else on the machine is listed. Requires 'Run commands' or 'Manage sandboxes on this device'.",
+            "The Intentic sandboxes on this device, as JSON, as the device's `ic` reports them: each one's slug, whether it is running, whether its tunnel is up, and under `resources` its share of this machine as docker enforces it (memory cap in bytes, CPU cap, privileged, GPU, and which of those the approved environment demands versus the owner asked for), the shape it runs with (`shape`: memoryGib, cpus, privileged, gpu as the owner asked; null is the default) and, when one is saved, the shape its next restart applies (`desired`). `staged` names an update downloaded and waiting. From a current `ic` also: `version`, `parked` (a swap was interrupted and the sandbox is down; manage_sandbox start brings it back), `probationUntil` (the host is still watching a new version and goes back by itself if it fails), `lastUpdate` (what the host last did about its version, and why) and `rollbackTargets` (what swap_sandbox rollback can return to, newest first). Only sandbox containers; nothing else on the machine is listed. Requires 'Run commands' or 'Manage sandboxes on this device'.",
         effect: "read",
         input: NO_ARGS,
         run: async (_args, scopes) => textResult(await listSandboxes(scopes)),
@@ -358,8 +358,11 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
             op: SandboxSwapSchema,
             slug: required.describe("The sandbox's slug, from list_sandboxes."),
             hash: required.optional().describe("sha256 of the approved overlay, required for 'rebuild', ignored otherwise."),
+            to: required
+                .optional()
+                .describe("'rollback' only: a version or image from the sandbox's `rollbackTargets` (list_sandboxes) to go back to instead of the previous one."),
         }),
-        run: async ({ op, slug, hash }, scopes) => textResult(await swapSandbox(op, slug, hash, scopes, () => {})),
+        run: async ({ op, slug, hash, to }, scopes) => textResult(await swapSandbox(op, slug, hash, scopes, () => {}, to)),
     }),
     tool({
         name: "reshape_sandbox",

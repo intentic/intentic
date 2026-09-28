@@ -55,7 +55,7 @@ const daemonOn = async () => {
     const workspaceRoot = join(base, "work");
     await mkdir(workspaceRoot, { recursive: true });
     const db = openConversationsDb(conversationsDbPath(historyRoot));
-    const units = conversationUnits(historyRoot, sqliteAgentsStore(db).has);
+    const units = conversationUnits(historyRoot, { ...sqliteAgentsStore(db), recreated: false });
     const { agents, conversations } = createFleet(fleetStoreOver(db, units), noStandings, noPresences);
     await agents.init();
     const deps = {
@@ -74,7 +74,7 @@ const daemonOn = async () => {
 // checkpoint, an armed watch, its transcript, its prompt record and, fenced, its own runtime session store.
 const live = async (daemon: Awaited<ReturnType<typeof daemonOn>>, id: string): Promise<void> => {
     const { historyRoot, db, conversations } = daemon;
-    conversations.send(id, { kind: "journalled", entry: { kind: "turn", turn: { conversationId: id, prompt: "go" }, startedAt: 1, attempts: 0 } });
+    conversations.send(id, { kind: "journalled", run: `run-${id}`, entry: { kind: "turn", turn: { conversationId: id, prompt: "go" }, startedAt: 1, attempts: 0 } });
     await beginTurn(conversations, { conversationId: id, isolated: false, prompt: "go", profile: {}, areas: ["finance"] }, 1_000);
     await sqliteTurnCheckpoints(db).record(id, 0, { kind: "tree", snapshot: "s-0" });
     await sqliteWatchJournal(db).record({

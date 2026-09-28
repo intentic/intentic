@@ -1,4 +1,4 @@
-import { shapeFlow, shapeSevers, TOO_OLD_TO_SAVE } from "./shapeFlow";
+import { shapeFlow, shapeSevers, TOO_OLD_TO_SAVE, tooOldToSave } from "./shapeFlow";
 
 // What the resources form's answer becomes on the wire. An agent with `set-shape` is sent the whole shape and nothing is
 // merged on this side; an older one is sent only the old op's delta, now, and can save nothing.
@@ -31,4 +31,15 @@ test(`only a shape applied now takes the container, and the connection through i
     expect(shapeSevers({ shape: bigger, when: `now` })).toBe(true);
     expect(shapeSevers({ shape: bigger, when: `nextRestart` })).toBe(false);
     expect(shapeSevers({ forget: true })).toBe(false);
+});
+
+// A machine can lack the save for two reasons, and the refusal says the true one: an agent older than the feature is
+// updated to fix it, but an agent as new as the feature over an `ic` it failed to fetch says so itself, and that
+// sentence is the one to show.
+test(`refuses a save in the agent's own words about its stale ic when it gave them`, () => {
+    const stale = `ic is out of date: the installed ic is 1.310.0, this agent is 1.316.0, and fetching ic 1.316.0 failed (offline).`;
+    expect(tooOldToSave({ icOutOfDate: stale })).toBe(stale);
+    expect(tooOldToSave({})).toBe(TOO_OLD_TO_SAVE);
+    expect(tooOldToSave(undefined)).toBe(TOO_OLD_TO_SAVE);
+    expect(() => shapeFlow({ shape: bigger, when: `nextRestart` }, false, running, stale)).toThrow(stale);
 });

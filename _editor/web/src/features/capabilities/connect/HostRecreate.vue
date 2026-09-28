@@ -13,8 +13,8 @@ import {
     useOsPreference,
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import { computed, ref } from "vue";
-import { manageDeviceSandbox, useHostRunning } from "../../sandbox/devices/useDevices";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { manageDeviceSandbox, swapServingSandbox, useHostRunning } from "../../sandbox/devices/useDevices";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 import { expectRestart, type RestartQuiet } from "../../sandbox/live/sandboxRestart";
 import { useHubWork } from "../../../shell/hub/hubWork";
@@ -28,6 +28,11 @@ import { useT } from "@intentic/ui/i18n";
 // across four surfaces: a button on a connected device or the desktop app, else a copyable per-OS command. Mode
 // rides the argument shape (a hash rebuilds that pinned overlay, no hash pulls :stable), not a flag. `Download` runs
 // the same flow but stops before the container is touched.
+//
+// Every caller hands it the slug of the sandbox serving this page (read off its own /environment), so every swap run
+// from here is relayed by the very daemon it replaces: the stream dies at the cutover. That is the swap happening, not
+// contact lost, so the button waits for the sandbox to come back and then gets out of the way; what the swap did is
+// read off the sandbox that answered (the update card's `lastUpdate`).
 
 const t = useT();
 
@@ -51,7 +56,15 @@ const props = defineProps<{
     // No cost line beneath the button and no column of its own: the caller says the cost once (the update tile) or
     // leaves it to the confirmation (the Environment card), and lays the pieces out itself.
     bare?: boolean;
+    // The button's own words when the caller has better ones than "{action} now": "Try again" for an update the
+    // machine already gave up on once.
+    label?: string;
+    // The caller says what the swap keeps (the update card's reassurance under its button), so the cost here says only
+    // what it costs rather than saying the files are kept a second time.
+    keepsSaid?: boolean;
 }>();
+// The sandbox answered again after a swap this ran: the caller's moment to say how it went.
+const emit = defineEmits<{ back: [] }>();
 
 const { cmdOs } = useOsPreference();
 const { activeSandboxId, reachable } = useSandbox();
@@ -76,10 +89,14 @@ const cost = computed(() => {
     if (props.action === `Rebuild`) {
         return t(`capabilities.hostRecreate.costRebuild`);
     }
-    if (props.ready === true) {
-        return t(`capabilities.hostRecreate.costRestartOnly`);
+    // Neither does a rollback: the image it goes back to is already on that machine.
+    if (props.action === `Roll back`) {
+        return t(`capabilities.hostRecreate.costRollBack`);
     }
-    return t(`capabilities.hostRecreate.costBuildThenRestart`);
+    if (props.ready === true) {
+        return props.keepsSaid === true ? t(`capabilities.hostRecreate.costRestartOnlyShort`) : t(`capabilities.hostRecreate.costRestartOnly`);
+    }
+    return props.keepsSaid === true ? t(`capabilities.hostRecreate.costBuildThenRestartShort`) : t(`capabilities.hostRecreate.costBuildThenRestart`);
 });
 
 // What the hub row this is rendered on says while the machine works: the same button sits on Environment and on
@@ -147,6 +164,47 @@ const QUIET = computed((): Partial<Record<Action, RestartQuiet>> => ({
     },
 }));
 
+// FROM THE CUTOVER UNTIL THE SANDBOX ANSWERS AGAIN. The stream carrying the swap died with the daemon relaying it, so
+// the only sign the swap is over is this page's own connection coming back. A stream that died while the sandbox never
+// went quiet was not the cutover: said as lost contact once the grace below runs out, since nothing is coming back.
+const CUTOVER_GRACE_MS = 60_000;
+const awaiting = ref(false);
+const wentDown = ref(false);
+let graceTimer: ReturnType<typeof setTimeout> | undefined;
+
+const awaitReturn = (): void => {
+    awaiting.value = true;
+    wentDown.value = !reachable.value;
+    clearTimeout(graceTimer);
+    graceTimer = setTimeout(() => {
+        if (awaiting.value && !wentDown.value) {
+            awaiting.value = false;
+            failure.value = { tone: `warning`, title: t(`capabilities.hostRecreate.lostBeforeRestart`) };
+        }
+    }, CUTOVER_GRACE_MS);
+};
+
+watch(reachable, (up) => {
+    if (!awaiting.value) {
+        return;
+    }
+    if (!up) {
+        wentDown.value = true;
+        return;
+    }
+    if (wentDown.value) {
+        awaiting.value = false;
+        clearTimeout(graceTimer);
+        // The log described a container that is gone; how the swap went is the answering sandbox's to say.
+        lines.value = [];
+        emit(`back`);
+    }
+});
+onBeforeUnmount(() => clearTimeout(graceTimer));
+
+// What the lines under a waiting button say: the restart this is, and that the page picks it up by itself.
+const comingBack = computed(() => t(`capabilities.hostRecreate.comingBack`, { what: QUIET.value[props.action]?.title ?? verb.value }));
+
 const execute = async (): Promise<void> => {
     confirming.value = false;
     const id = hostId.value;
@@ -163,29 +221,30 @@ const execute = async (): Promise<void> => {
     const sandbox = activeSandboxId.value;
     const expecting = quiet !== undefined && sandbox !== undefined;
     const working = expecting ? expectRestart({ sandbox, id: `recreate`, what: workingWords()[props.action], quiet }) : undefined;
-    let swapping = false;
+    const payload = { ...(props.hash === undefined ? {} : { hash: props.hash }), onLine: (line: string) => void lines.value.push(line) };
+    let severed = false;
     try {
-        done.value = await hubWork.track(workingWords()[props.action], () =>
-            manageDeviceSandbox(id, props.slug, OP[props.action], {
-                ...(props.hash === undefined ? {} : { hash: props.hash }),
-                onLine: (line) => lines.value.push(line),
-            }),
+        // A download never touches the container, so its stream dying is lost contact like any other.
+        const said = await hubWork.track(workingWords()[props.action], () =>
+            props.action === DOWNLOAD
+                ? manageDeviceSandbox(id, props.slug, OP[props.action], payload)
+                : swapServingSandbox(id, props.slug, OP[props.action], payload),
         );
-        swapping = true;
+        severed = said === undefined;
+        done.value = said;
     } catch (error) {
-        // THIS REQUEST DIES WITH THE CONTAINER IT REPLACES: it is relayed by the daemon that the recreate throws
-        // away, so a failure here is as likely to BE the restart as to be a refusal of one. A sandbox that is still
-        // answering is what tells the two apart — nothing was replaced, so nothing is coming back.
-        swapping = !reachable.value;
-        failure.value = noticeFrom(error, `Couldn't rebuild this host.`);
+        failure.value = noticeFrom(error, t(`capabilities.hostRecreate.didntGoThrough`, { action: verb.value }));
     } finally {
         running.value = false;
         working?.();
         // Handed to the sandbox's own return: this page cannot see the container come up, and the ledger's record is
         // what every other surface reads the silence by until it does.
-        if (swapping && expecting) {
+        if (severed && expecting) {
             expectRestart({ sandbox, id: `recreate`, what: workingWords()[props.action], quiet, untilAnswered: true });
         }
+    }
+    if (severed) {
+        awaitReturn();
     }
 };
 
@@ -226,13 +285,13 @@ const command = computed(() => {
                         ? t(`capabilities.hostRecreate.downloadOnly`)
                         : running
                           ? t(`capabilities.hostRecreate.running`, { action: verb })
-                          : t(`capabilities.hostRecreate.now`, { action: verb })
+                          : (label ?? t(`capabilities.hostRecreate.now`, { action: verb }))
                 "
                 size="small"
                 class="self-start"
                 :severity="text || action === DOWNLOAD ? `secondary` : undefined"
                 :text="text"
-                :loading="running"
+                :loading="running || awaiting"
                 @click="runOnMachine"
             >
                 <template v-if="!text" #icon><Icon :name="action === DOWNLOAD ? `download` : `bolt`" /></template>
@@ -245,7 +304,11 @@ const command = computed(() => {
                 :empty="t(`capabilities.hostRecreate.startingOnDevice`)"
                 :note="t(`capabilities.hostRecreate.runningOnDeviceKeeps`)"
             />
-            <Notice v-if="failure" :of="failure" />
+            <!-- The cutover, said as the restart it is rather than as the connection it cost. -->
+            <p v-if="awaiting" class="flex items-center gap-1.5 text-2xs text-muted" role="status">
+                <Icon name="spinner" spin class="shrink-0" aria-hidden="true" />{{ comingBack }}
+            </p>
+            <Notice v-else-if="failure" :of="failure" />
             <p v-else-if="done" class="text-2xs text-muted">{{ done }}</p>
 
             <!-- Not destructive: every action here keeps the sandbox's files and just moves it to another image. -->
@@ -268,7 +331,7 @@ const command = computed(() => {
         <!-- Desktop deep link covers all three swaps including rollback. -->
         <template v-else-if="desktop && action !== DOWNLOAD">
             <Button
-                :label="t(`capabilities.hostRecreate.now`, { action: verb })"
+                :label="label ?? t(`capabilities.hostRecreate.now`, { action: verb })"
                 size="small"
                 class="self-start"
                 @click="openDesktopLink(desktopRecreateLink(slug, hash, action === `Roll back`))"

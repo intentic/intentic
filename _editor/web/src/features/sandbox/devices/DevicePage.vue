@@ -28,6 +28,7 @@ import DeviceRunners from "./runners/DeviceRunners.vue";
 import SandboxBatchBar from "./SandboxBatchBar.vue";
 import { boardRoute, cardRoute } from "./deviceLinks";
 import { canSetShape } from "./shapeFlow";
+import { rollbackChoices } from "./rollbackChoices";
 import { deviceAgentPanel, machineAgent } from "./deviceAgent";
 import { blockAttention, deviceAttention } from "./health/deviceAttention";
 import {
@@ -402,13 +403,16 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
                     <template #actions="{ group }">
                         <!-- No `busy`: the row's own status glyph spins while it works (DeviceDetail `busy`), and a
                              second spinner on the ⋯ beside it would say the same thing twice. -->
+                        <!-- Roll back offers each version this machine kept, where its agent can go back to any of them. -->
                         <SandboxVerbs
                             v-if="manager && manageable(manager.device, group)"
                             :compact="true"
                             :running="group.sandbox?.running === true"
                             :disabled="ops.working.value"
                             :logs-open="ops.logShown(group)"
+                            :rollback-choices="rollbackChoices(manager.device.facts, group.sandbox)"
                             @act="(verb) => ops.act(group, verb)"
+                            @rollback-to="(choice) => ops.act(group, `rollback`, choice)"
                         />
                         <SandboxVerbs
                             v-else-if="removableHere(machine, group)"
@@ -640,6 +644,7 @@ const selection = useSandboxSelection(() => machine, () => ownSlug, ops);
             :open="ops.confirmingAct.value !== undefined"
             :header="ops.actPrompt.value?.header ?? ``"
             :confirm-label="ops.actPrompt.value?.label ?? t(`ui.action.continue`)"
+            :destructive="false"
             @cancel="ops.confirmingAct.value = undefined"
             @confirm="ops.confirmAct()"
         >

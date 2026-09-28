@@ -15,6 +15,7 @@ import { PresenceReportSchema } from "../schemas/logs.js";
 import { SandboxMetricsSchema, StorageCleanInputSchema, StorageCleanResultSchema, StorageReportSchema } from "../schemas/metrics.js";
 import { OkSchema } from "../schemas/shared.js";
 import { DaemonSessionSchema, InfoSchema, ManifestProblemsSchema, ManifestRepairSchema } from "../schemas/system.js";
+import { SkipUpdateInputSchema } from "../schemas/updates.js";
 import {
     BrowserNameParamSchema,
     BrowsersListSchema,
@@ -44,6 +45,19 @@ export const systemContract = {
         })
         .meta({ guest: true })
         .output(InfoSchema),
+    // The owner's "not this one" for the update card; /info's `skippedVersion` reads it back.
+    skipUpdate: systemRoute
+        .route({
+            method: "POST",
+            path: "/system/update/skip",
+            summary: "Stop offering one release",
+            description:
+                "Stops offering the named release as an update, typically one this sandbox already tried and went back from. A newer release is offered as usual. Null offers the newest release again.",
+        })
+        // Which version the sandbox runs is the operator's decision, like the update itself.
+        .meta({ floor: "maintainer" })
+        .input(SkipUpdateInputSchema)
+        .output(OkSchema),
     // Own route, not a field on /info: it goes stale on a manifest changing on disk, not on identity changing.
     manifestProblems: systemRoute
         .route({

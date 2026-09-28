@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { keyedLock } from "@intentic/base/async";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { isConversationId, type TranscriptRow, TranscriptRowSchema } from "@intentic/sandbox-contract";
-import { conversationsRoot, conversationUnit } from "../store/conversation-units.js";
+import { conversationsRoot, conversationUnit, quarantinedUnits } from "../store/conversation-units.js";
 import { syncParents } from "./record/record-io.js";
 import { getBlob, hashOf, putBlob, sweepBlobs } from "./record/record-blobs.js";
 import { type Converted, convertLegacy, framesByTurn, keptLines, type PutBlob } from "./record/record-convert.js";
@@ -14,9 +14,11 @@ import { blobNamesIn, callsOf, keptLine, previewOf, wholeOf } from "./record/rec
 // settled turn and made durable before the append resolves. Not the live path; a running turn is served from its frame
 // log and lands here once it settles. `zstdcat` reads a record as the JSONL it holds.
 
+// A record's name inside its conversation's directory, wherever that directory sits.
+const RECORD_NAME = "transcript.jsonl.zst";
+
 // Where one conversation's record lives; also what `agents show` names as the record's path.
-export const transcriptFile = (historyRoot: string, conversationId: string): string =>
-    join(conversationUnit(historyRoot, conversationId), "transcript.jsonl.zst");
+export const transcriptFile = (historyRoot: string, conversationId: string): string => join(conversationUnit(historyRoot, conversationId), RECORD_NAME);
 
 // The plain JSONL record this build converts from (record/record-migration.ts), read and converted until it is gone.
 export const legacyTranscriptFile = (historyRoot: string, conversationId: string): string =>
@@ -341,17 +343,20 @@ export const fileTranscriptRecord = (historyRoot: string): FileTranscriptRecord 
             : undefined;
 
     // Every write since the logs were read is named, and every write in flight pinned, so what the scan missed is
-    // exactly what nothing will name; a plain record names no blob.
+    // exactly what nothing will name; a plain record names no blob. A record the orphan sweep set aside names its blobs
+    // too, until it is removed for good: moved back, it must find its tool outputs where it left them.
     const sweepOnce = async (gone: ReadonlySet<string>): Promise<number> => {
         named.clear();
         const referenced = new Set<string>();
-        for (const entry of (await readdir(conversationsRoot(historyRoot), { withFileTypes: true }).catch(undefinedIfMissing)) ?? []) {
-            if (entry.isDirectory() && isConversationId(entry.name) && !gone.has(entry.name)) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- one record at a time; the sweep is never waited on.
-                for (const line of await scanned(transcriptFile(historyRoot, entry.name))) {
-                    for (const hash of blobNamesIn(line)) {
-                        referenced.add(hash);
-                    }
+        const live = ((await readdir(conversationsRoot(historyRoot), { withFileTypes: true }).catch(undefinedIfMissing)) ?? [])
+            .filter((entry) => entry.isDirectory() && isConversationId(entry.name) && !gone.has(entry.name))
+            .map((entry) => transcriptFile(historyRoot, entry.name));
+        const setAside = (await quarantinedUnits(historyRoot)).map((dir) => join(dir, RECORD_NAME));
+        for (const record of [...live, ...setAside]) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- one record at a time; the sweep is never waited on.
+            for (const line of await scanned(record)) {
+                for (const hash of blobNamesIn(line)) {
+                    referenced.add(hash);
                 }
             }
         }

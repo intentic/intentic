@@ -58,15 +58,15 @@ describe("runUpgrade", () => {
     });
 
     // Swapping first means whoever restarts the agent (systemd, the logon task, the Windows side) starts the new file:
-    // stopping first left a window in which a supervisor brought the OLD build back.
-    it("swaps the new binary in before restarting through the supervisor, and never stops the agent first", async () => {
+    // stopping first left a window in which a supervisor brought the OLD build back. The replaced binary is KEPT: the new
+    // agent drops it once it has run for ten minutes, and puts it back if it keeps crashing first (agent-trial.ts).
+    it("swaps the new binary in before restarting through the supervisor, never stops the agent first, and keeps the old one", async () => {
         const { steps, exec } = scripted();
         await upgrade(exec, "1.0.0");
         expect(steps.filter((step) => !step.startsWith("fetch") && !step.startsWith("probe"))).toEqual([
             `swap ${agentPath} → ${previous}`,
             `swap ${staged} → ${agentPath}`,
             `restart`,
-            `discard ${previous}`,
         ]);
     });
 
@@ -105,12 +105,29 @@ describe("runUpgrade", () => {
         expect(steps).not.toContain(`discard ${previous}`);
     });
 
-    // A deliberately stopped agent stays stopped; upgrading isn't consent to start it.
+    // A deliberately stopped agent stays stopped; upgrading isn't consent to start it. Its trial begins at its first
+    // start, so the binary it replaced is kept for that.
     it("doesn't start an agent that wasn't running before", async () => {
         const { steps, exec } = scripted({ running: undefined });
         expect(await upgrade(exec, "1.0.0")).toEqual({ kind: "upgraded", from: "1.0.0", to: TARGET });
         expect(steps).not.toContain("restart");
-        expect(steps).toContain(`discard ${previous}`);
+        expect(steps).not.toContain(`discard ${previous}`);
+    });
+
+    // A direct start whose agent stopped at once THROWS (spawnDetached). Escaping from here, it skipped the put-back and
+    // left the new, broken binary installed with nothing running.
+    it("puts the previous agent back when the restart throws, and restarts that one", async () => {
+        let restarts = 0;
+        const { steps, exec } = scripted({
+            restart: async () => {
+                restarts += 1;
+                steps.push("restart");
+                return restarts === 1 ? await Promise.reject(new Error("the background agent started and stopped immediately")) : "1.0.0";
+            },
+        });
+        const outcome = await upgrade(exec, "1.0.0");
+        expect(outcome).toEqual({ kind: "failed", reason: `the new agent (${TARGET}) wouldn't start, so 1.0.0 was restored and is running again.` });
+        expect(steps.slice(-3)).toEqual(["restart", `swap ${previous} → ${agentPath}`, "restart"]);
     });
 
     // The swap landed but something else is serving; not a rollback, since the bytes are in place.

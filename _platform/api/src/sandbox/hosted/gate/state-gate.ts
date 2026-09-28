@@ -1,5 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
-import type { PrismaClient } from "@intentic/prisma";
+import type { Prisma } from "@intentic/prisma";
 import { type PlanFailure, PlanFailureSchema, STATE_PLAN_FORMAT } from "@intentic/sandbox-contract";
 import { FLY_VOLUME_LAYOUT, type FlyMachineConfig } from "@intentic/sandbox-run/fly";
 import type { Logger } from "pino";
@@ -8,9 +8,12 @@ import type { Config } from "../../../config.js";
 import { digestOf, parseImageRef } from "../build/hosted-image.js";
 import { execMachine, type FlyExecAnswer, type FlyMachineCurrent, getMachineConfig, stopMachine, updateMachine } from "../fly/fly.js";
 import { withHostedAppLock } from "../hosted-app-lock.js";
+import { awaitDaemon, baselineOf, type DaemonVerdict } from "./daemon-health.js";
+import { checkInSince, type HostedGateRecord, type HostedImageFacts, imageColumns, type KeptImage, type KeptVersions, keptVersionsOf, writeKept } from "./gate-row.js";
 import { startAfterUpdate } from "./start-after-update.js";
 
-/* A HOSTED IMAGE CHANGE ASKS THE TARGET IMAGE FIRST, AND PUTS THE MACHINE BACK WHEN THE NEW ONE WILL NOT START.
+/* A HOSTED IMAGE CHANGE ASKS THE TARGET IMAGE FIRST, WAITS FOR ITS DAEMON AFTER, AND PUTS THE MACHINE BACK WHEN EITHER
+ * SAYS NO.
  *
  * The self-hosted update runs the target image's own planner (`state-plan.js`, the daemon's conversion engine run
  * without writing) over the sandbox's data before it swaps anything (_sandbox/ic/src/sandbox/preflight.rs). A Fly
@@ -21,23 +24,36 @@ import { startAfterUpdate } from "./start-after-update.js";
  * - `ok: false` puts the previous config back (or, for a caller that asks `keepImage`, the target config on the image
  *   the machine already runs), starts it again when the caller asked for a running machine, and throws HostedImageKept
  *   with the failures in the owner's words. Nothing on the volume was converted.
+ * - a planner that ran and failed, or answered something that is not a plan, refuses the same way: a check that
+ *   crashed has not said the conversions would work, and a broken planner is a broken image.
  * - `ok: true` applies the target config.
- * - no plan at all (an image from before the engine, a probe that would not start, a planner that failed or hung, an
- *   answer in no format this reads) applies the target config too, as every image change did before this gate: a
- *   question an image cannot answer must not cost an update that would have worked. It is logged.
+ * - no plan to be had (an image from before the engine, a plan in a format newer than this platform reads, a probe
+ *   that would not start, an exec Fly would not run) applies the target config too, as every image change did before
+ *   this gate: a question an image cannot answer must not cost an update that would have worked. It is logged.
  *
- * Either way, a machine asked to start that does not start on the target is put back on the config it had, pinned to
- * the digest it was running, and started there (HostedImageKept again). An episode the new build opened and never
- * committed is restored by the previous build's own boot (state-journal.ts), so the files go back with the image.
+ * THEN THE DAEMON IS WAITED FOR (daemon-health.ts). Started, the new version has to answer its own `/health` ready with
+ * its state journal committed, and check in with the platform, within that module's budget. One that does not start,
+ * crashes, never answers, reports its journal failed or never commits it, or never checks in, is put back on the
+ * config it had, pinned to the digest it was running, and started there (HostedImageKept again). An episode the new
+ * build opened and never committed is restored by the previous build's own boot (state-journal.ts), so the files go
+ * back with the image.
  *
- * A config replacement that keeps the running digest converts nothing, so it skips the probe. A crash between the probe
- * and the final config leaves the probe's marker in the machine's environment, naming the image it ran before: the wake
- * reads it as a config to re-apply (../hosted.ts), and the next gate as the version to go back to.
+ * WHAT THE ROW KEEPS (gate-row.ts). A change that took leaves the image it replaced on the machine's row as the way back,
+ * which the owner's rollback returns to (../hosted.ts). A change applied to a machine left stopped (a rebuild applied
+ * while it sleeps), or one whose daemon was stopped from outside while it was waited for (an operator, the daemon's own
+ * idle-stop), is ON TRIAL: the next start of that image, whoever asks for it, runs the same wait and goes back to the
+ * kept image when it fails.
  *
- * ONE CHANGE AT A TIME. The whole gate, probe to final start, runs under the app's lock (../hosted-app-lock.ts), the one
- * migrate and cleanup take: a second gate on the same machine would replace the first one's probe under its exec, and
- * that exec's failure reads as "no plan", which goes ahead, so a refusal would be lost. A restart and a rebuild wait
- * their turn; a wake does not wait (it is the browser's reflex, repeated on its own) and answers HostedMachineBusy.
+ * A config replacement that keeps the running digest converts nothing, so it skips the probe, and waits for the daemon
+ * only when that digest is on trial. A crash between the probe and the final config leaves the probe's marker in the
+ * machine's environment, naming the image it ran before: the wake reads it as a config to re-apply (../hosted.ts), and
+ * the next gate as the version to go back to.
+ *
+ * ONE CHANGE AT A TIME. The whole gate, probe to the daemon's verdict, runs under the app's lock (../hosted-app-lock.ts),
+ * the one migrate and cleanup take and the meter's stop tries (../hosted-meter.ts): a second gate on the same machine
+ * would replace the first one's probe under its exec, and that exec's failure reads as "no plan", which goes ahead, so a
+ * refusal would be lost. A restart and a rebuild wait their turn; a wake does not wait (it is the browser's reflex,
+ * repeated on its own) and answers HostedMachineBusy.
  *
  * WHAT THE PROBE CANNOT PROMISE. ic's probe mounts the data `:ro` with `--network none`. Fly has neither a read-only
  * volume mount nor a machine without a network, so here the volume is mounted read-write and the probe can reach the
@@ -46,12 +62,9 @@ import { startAfterUpdate } from "./start-after-update.js";
  * `--plan` flag because planning is all it does); the probe's environment carries none of the platform's credentials,
  * as ic's carries none; and nothing else boots.
  *
- * WHAT THE ROLLBACK DOES NOT COVER. A start counts as success once Fly reads the machine `starting` or `started`: the
- * daemon's `/health` and its state journal are not waited for, so a version whose machine starts and whose daemon then
- * fails to boot stays on that version: nothing here puts it back. A machine asked to stay stopped
- * (a rebuild applied while it sleeps) is never started, so nothing is judged and nothing is rolled back. A rollback that
- * itself fails is logged at error and recorded on the machine's row, which hosted health reports and mails
- * (../hosted-health.ts) until the machine checks in again. */
+ * WHAT THE ROLLBACK DOES NOT COVER. The version put back is started, not waited for: it is the one that ran before. A
+ * rollback that itself fails is logged at error and recorded on the machine's row, which hosted health reports and
+ * mails (../hosted-health.ts) until the machine checks in again. */
 
 // The planner the target image carries; an image built before the conversion engine has none.
 export const STATE_PLANNER = `/opt/sandbox/dist/state-plan.js`;
@@ -88,14 +101,18 @@ export class HostedMachineBusy extends Error {}
 type HostedPlanVerdict =
     | { readonly kind: "clear"; readonly version: string }
     | { readonly kind: "refused"; readonly version: string; readonly failures: readonly PlanFailure[] }
+    // The planner ran and failed, or answered what is not a plan: refused, with the reason in the owner's words.
+    | { readonly kind: "broken"; readonly reason: string }
+    // No plan to be had: the change goes ahead as it did before the gate.
     | { readonly kind: "unknown"; readonly reason: string };
 
-// Read loosely, like ic: a refusal that lost a failure to a missing field would stop an update for a reason it cannot show.
+// Read loosely, like ic: a refusal that lost a failure to a missing field would stop an update for a reason it cannot
+// show. A field of the wrong type is a field that is not there.
 const PlanLineSchema = z.object({
-    plan: z.unknown().optional(),
-    ok: z.unknown().optional(),
-    version: z.string().optional(),
-    failures: z.array(z.unknown()).optional(),
+    plan: z.number().optional().catch(undefined),
+    ok: z.boolean().optional().catch(undefined),
+    version: z.string().optional().catch(undefined),
+    failures: z.array(z.unknown()).optional().catch(undefined),
 });
 
 const lastLine = (text: string): string | undefined =>
@@ -114,8 +131,10 @@ const failuresOf = (raw: readonly unknown[] | undefined): PlanFailure[] =>
         return document === `` && detail === `` ? [] : [{ document, detail }];
     });
 
-/* The planner's answer as a verdict. Pure, and tolerant where tolerance is safe: only a plan that says `"ok": false`
- * in so many words refuses. The same reading as preflight.rs's `verdict` and `read_plan`. */
+/* The planner's answer as a verdict. Pure. Only a plan that says `"ok": false` in so many words refuses for what it
+ * says; a planner that exited on an error, answered nothing, or answered what is not a plan of the format this platform
+ * reads refuses as broken. What is not the planner's fault stays "no plan": an image from before the engine (node
+ * cannot find the planner at all) and a plan in a format newer than this platform reads. */
 export const readPlanAnswer = (answer: FlyExecAnswer): HostedPlanVerdict => {
     if (answer.exitCode !== 0) {
         if (answer.stderr.includes(`Cannot find module`) && answer.stderr.includes(STATE_PLANNER)) {
@@ -125,33 +144,49 @@ export const readPlanAnswer = (answer: FlyExecAnswer): HostedPlanVerdict => {
             .split(`\n`)
             .map((line) => line.trim())
             .findLast((line) => line.includes(`Error`));
-        return { kind: `unknown`, reason: `the planner exited with status ${answer.exitCode}${error === undefined ? `` : `: ${clip(error, 200)}`}` };
+        return { kind: `broken`, reason: `the planner exited with status ${answer.exitCode}${error === undefined ? `` : `: ${clip(error, 200)}`}` };
     }
     const line = lastLine(answer.stdout);
     if (line === undefined) {
-        return { kind: `unknown`, reason: `the planner answered nothing` };
+        return { kind: `broken`, reason: `the planner answered nothing` };
     }
     let parsed: z.infer<typeof PlanLineSchema>;
     try {
         parsed = PlanLineSchema.parse(JSON.parse(line));
     } catch {
-        return { kind: `unknown`, reason: `the planner's answer is not a plan: ${clip(line, 120)}` };
+        return { kind: `broken`, reason: `the planner's answer is not a plan: ${clip(line, 120)}` };
+    }
+    if (parsed.plan === undefined) {
+        return { kind: `broken`, reason: `the planner's answer names no plan format` };
     }
     if (parsed.plan !== STATE_PLAN_FORMAT) {
-        return { kind: `unknown`, reason: `the planner answered plan format ${String(parsed.plan)}, which this platform does not read` };
+        return { kind: `unknown`, reason: `the planner answered plan format ${parsed.plan}, which this platform does not read` };
     }
     const version = parsed.version ?? `the new version`;
     if (parsed.ok === false) {
         return { kind: `refused`, version, failures: failuresOf(parsed.failures) };
     }
-    return parsed.ok === true ? { kind: `clear`, version } : { kind: `unknown`, reason: `the planner's plan does not say whether it would succeed` };
+    return parsed.ok === true ? { kind: `clear`, version } : { kind: `broken`, reason: `the planner's plan does not say whether it would succeed` };
 };
 
+/* HOW THE OWNER'S MESSAGES NAME A CHANGE: the version it moves to and the move itself. An update by default; the
+ * owner's rollback moves to an earlier version, which "the new version" would misname. */
+export interface HostedChangeWords {
+    readonly target: string;
+    readonly change: string;
+}
+const UPDATE_WORDS: HostedChangeWords = { target: `the new version`, change: `update` };
+export const ROLLBACK_WORDS: HostedChangeWords = { target: `the earlier version`, change: `rollback` };
+
 // The refusal the owner reads: what failed, and that nothing was converted.
-const refusalMessage = (version: string, failures: readonly PlanFailure[]): string => {
+const refusalMessage = (version: string, failures: readonly PlanFailure[], words: HostedChangeWords): string => {
     const named = failures.map((failure) => (failure.detail === `` ? failure.document : `${failure.document === `` ? `(unnamed document)` : failure.document}: ${failure.detail}`));
-    return `intentic ${version} cannot convert this sandbox's stored state, so the update was stopped before it began and the sandbox stays on the version it had${named.length === 0 ? `` : ` (${named.join(`; `)})`}`;
+    return `intentic ${version} cannot convert this sandbox's stored state, so the ${words.change} was stopped before it began and the sandbox stays on the version it had${named.length === 0 ? `` : ` (${named.join(`; `)})`}`;
 };
+
+// A planner that broke: what it did, and that nothing was converted.
+const brokenMessage = (reason: string, words: HostedChangeWords): string =>
+    `${words.target} could not check this sandbox's stored state (${reason}), so the ${words.change} was stopped before it began and the sandbox stays on the version it had`;
 
 // The image a config replacement keeps when it must not change what runs: the config's own image when it names a
 // digest, else the digest that tag resolved to when the machine last started, so a re-resolved tag cannot move it.
@@ -172,6 +207,11 @@ export const probeConfig = (target: FlyMachineConfig, previousImage: string): Fl
         restart: { policy: `no` },
     };
 };
+
+interface HostedGateMachine {
+    readonly appName: string;
+    readonly machineId: string;
+}
 
 // Reads the machine until it says `wanted`, bounded. Answers that reading, or the last one when it never did (undefined
 // when none answered): the caller decides what a machine that would not settle means.
@@ -206,7 +246,8 @@ interface Probed {
 }
 
 /* Runs the target image's planner over this machine's volume, and leaves the machine stopped on the probe config. Any
- * way it can fail is an `unknown` verdict, never a throw: the caller's fail-safe decides what that means. */
+ * way it can fail short of the planner's own answer is an `unknown` verdict, never a throw: the caller's fail-safe
+ * decides what that means. */
 const preflightHosted = async (config: Config, machine: HostedGateMachine, target: FlyMachineConfig, previousImage: string): Promise<Probed> => {
     const { flyApiToken } = config.hosted;
     try {
@@ -227,22 +268,37 @@ const preflightHosted = async (config: Config, machine: HostedGateMachine, targe
     }
 };
 
-interface HostedGateMachine {
-    readonly appName: string;
-    readonly machineId: string;
-}
-
-// Where a machine the gate could not put back is written down: its row, which hosted health reads (../hosted-health.ts).
-export interface HostedStrandingRecord {
-    readonly prisma: PrismaClient;
-    readonly hostedMachineId: string;
-}
-
 // The two versions a change moves between, named in every line about it.
 interface HostedChange {
     readonly machine: HostedGateMachine;
     readonly previousImage: string;
     readonly targetImage: string;
+}
+
+// How this machine's config reads around another image and the overlay recipe it carries (null: the stock image): what
+// going back to a version Fly no longer holds a config for needs. Without it the config the machine holds is kept
+// around the image, which runs the right version with the wrong recipe named.
+export type HostedComposer = (image: string, environmentHash: string | null) => FlyMachineConfig;
+
+export interface HostedSwitchOptions {
+    // Leave the machine running at the end, on whichever config it ends on.
+    readonly start: boolean;
+    // On a refusal, apply the target config on the image the machine already runs, rather than its whole previous
+    // config: for a change whose config is worth having without its image (a restart's fresh grant, a wake's tunnel).
+    readonly keepImage?: boolean;
+    // When another change holds this machine: wait for it (the default), or answer HostedMachineBusy at once.
+    readonly busy?: "wait" | "refuse";
+    // The machine's row (gate-row.ts): what it keeps is read and written, a failed rollback is stamped on it, and the
+    // sandbox's check-in is waited for. Without it the gate keeps nothing and waits for no check-in.
+    readonly record?: HostedGateRecord | undefined;
+    readonly compose?: HostedComposer | undefined;
+    // What the row says beside the target image once it holds it; the row's own facts stay when absent.
+    readonly facts?: HostedImageFacts | undefined;
+    // The platform digest later restarts must not move this machine onto (the owner's rollback, the one it leaves);
+    // absent, a change of digest clears the one kept.
+    readonly skip?: string | null | undefined;
+    readonly words?: HostedChangeWords | undefined;
+    readonly logger?: Logger | undefined;
 }
 
 // A machine left on neither version, as loudly as this can say it: an error line naming both images, and the row
@@ -253,13 +309,13 @@ const strand = async (change: HostedChange, error: Error, options: HostedSwitchO
         { err: error, app: machine.appName, machineId: machine.machineId, previousImage, targetImage },
         `hosted image gate: putting the previous version back failed; the machine is on neither version and needs a person`,
     );
-    const { stranding } = options;
-    if (stranding === undefined) {
+    const { record } = options;
+    if (record === undefined) {
         return;
     }
     try {
-        await stranding.prisma.hostedMachine.update({
-            where: { id: stranding.hostedMachineId },
+        await record.prisma.hostedMachine.update({
+            where: { id: record.hostedMachineId },
             data: { strandedAt: new Date(), strandedDetail: `moving ${previousImage} to ${targetImage}, putting the previous version back failed: ${clip(error.message, 400)}` },
         });
     } catch (failure) {
@@ -293,29 +349,170 @@ const imageBefore = (current: FlyMachineCurrent): string => {
 export const runningImageOf = async (config: Config, machine: HostedGateMachine): Promise<string> =>
     imageBefore(await getMachineConfig(config.hosted.flyApiToken, machine.appName, machine.machineId));
 
-// What the machine ran before this change, and the config to go back to. A probe left by a gate that died is never
-// that config: the target's config is put around the image its marker names.
-interface PreviousMachine {
-    readonly image: string;
+/* A VERSION TO GO BACK TO: the image, its recipe, and the config to put back around them. `fromRow` when it came off the
+ * machine's row because the image the machine holds is on trial, which going back has to write down too. */
+interface Version extends KeptImage {
     readonly config: FlyMachineConfig;
+    readonly fromRow: boolean;
 }
-const previousOf = (current: FlyMachineCurrent, target: FlyMachineConfig): PreviousMachine => {
+
+// What the machine holds now, as the version a change leaves. A probe left by a gate that died is never the config to go
+// back to: the target's config is put around the image its marker names.
+const heldOf = (current: FlyMachineCurrent, target: FlyMachineConfig, kept: KeptVersions): Version => {
     const image = imageBefore(current);
-    return { image, config: current.config.env[STATE_PROBE_ENV] === undefined ? { ...current.config, image } : { ...target, image } };
+    const config = current.config.env[STATE_PROBE_ENV] === undefined ? { ...current.config, image } : { ...target, image };
+    return { image, environmentHash: kept.image === image ? kept.environmentHash : null, config, fromRow: false };
 };
 
-interface HostedSwitchOptions {
-    // Leave the machine running at the end, on whichever config it ends on.
-    readonly start: boolean;
-    // On a refusal, apply the target config on the image the machine already runs, rather than its whole previous
-    // config: for a change whose config is worth having without its image (a restart's fresh grant, a wake's tunnel).
-    readonly keepImage?: boolean;
-    // When another change holds this machine: wait for it (the default), or answer HostedMachineBusy at once.
-    readonly busy?: "wait" | "refuse";
-    // The row a failed rollback is recorded on; without it the error line is all there is.
-    readonly stranding?: HostedStrandingRecord | undefined;
-    readonly logger?: Logger | undefined;
+// What a change goes back to when its target fails: the version the machine holds, unless that is on trial and the row
+// keeps the one before it, which is then composed around the machine's config.
+const lastGoodOf = (held: Version, kept: KeptVersions, compose: HostedComposer | undefined): Version => {
+    const { previous } = kept;
+    if (kept.unprovenImage !== held.image || previous === undefined) {
+        return held;
+    }
+    return { ...previous, config: compose?.(previous.image, previous.environmentHash) ?? { ...held.config, image: previous.image }, fromRow: true };
+};
+
+// The versions one change works with, read before it touches anything.
+interface Versions {
+    readonly held: Version;
+    readonly lastGood: Version;
 }
+
+/* THE ROW ONCE THE MACHINE HOLDS `target`, running and seen healthy, or ON TRIAL. The way back is the last version seen
+ * good, unless the target is that very version (the owner going back while the image held was on trial), when it is
+ * the one left. A way back that is not pinned is no way back: a tag would re-resolve to whatever it names by then. */
+const noteChange = async (target: string, versions: Versions, change: { readonly onTrial: boolean; readonly moved: boolean }, options: HostedSwitchOptions): Promise<void> => {
+    const way = versions.lastGood.image === target ? versions.held : versions.lastGood;
+    const previousImage = way.image.includes(`@sha256:`) ? way.image : null;
+    const data: Prisma.HostedMachineUpdateInput = {
+        previousImage,
+        previousEnvironmentHash: previousImage === null ? null : way.environmentHash,
+        unprovenImage: change.onTrial && previousImage !== null ? target : null,
+    };
+    if (options.skip !== undefined) {
+        data.skippedDigest = options.skip;
+    } else if (change.moved) {
+        data.skippedDigest = null;
+    }
+    if (options.facts !== undefined) {
+        Object.assign(data, imageColumns(target, options.facts));
+    }
+    await writeKept(options.record, data, options.logger);
+};
+
+// Back on the version kept before an image on trial: the row names it again, and keeps nothing before it.
+const noteBack = async (lastGood: Version, options: HostedSwitchOptions): Promise<void> => {
+    await writeKept(
+        options.record,
+        {
+            previousImage: null,
+            previousEnvironmentHash: null,
+            unprovenImage: null,
+            ...imageColumns(lastGood.image, { environmentHash: lastGood.environmentHash, baseImage: null, baseDigest: null }),
+        },
+        options.logger,
+    );
+};
+
+// The version moved to did not come up: back onto the last good one, running, and the owner told which of the two it is on.
+const rollBack = async (config: Config, change: HostedChange, lastGood: Version, headline: string, failure: Error, options: HostedSwitchOptions): Promise<never> => {
+    options.logger?.error(
+        { err: failure, app: change.machine.appName, previousImage: lastGood.image, targetImage: change.targetImage },
+        `hosted image gate: ${headline}; putting the previous one back`,
+    );
+    const back = await restore(config, change, lastGood.config, true, options);
+    if (back && lastGood.fromRow) {
+        await noteBack(lastGood, options);
+    }
+    throw new HostedImageKept(
+        back
+            ? `${headline}, so the sandbox was put back on the version it had: ${failure.message}`
+            : `${headline}, and putting the previous version back failed too: ${failure.message}`,
+        `rolled-back`,
+        back,
+        { cause: failure },
+    );
+};
+
+// Starts the machine on the config it holds and waits for its daemon. A start Fly will not make throws, as
+// startAfterUpdate does; everything after the start is the verdict.
+const startAndWait = async (config: Config, machine: HostedGateMachine, options: HostedSwitchOptions): Promise<DaemonVerdict> => {
+    const baseline = await baselineOf(config, machine);
+    const checkedIn = options.record === undefined ? undefined : await checkInSince(options.record, options.logger);
+    await startAfterUpdate(config, machine);
+    return awaitDaemon(config, machine, baseline, checkedIn);
+};
+
+/* THE MACHINE HOLDS `target` AND IS TO RUN IT: started, its daemon waited for, the row told what came of it. A version
+ * that does not come up goes back to the last good one; a wait someone stopped leaves it on trial. */
+const runAndJudge = async (config: Config, change: HostedChange, versions: Versions, moved: boolean, options: HostedSwitchOptions): Promise<void> => {
+    const words = options.words ?? UPDATE_WORDS;
+    const { targetImage } = change;
+    let verdict: DaemonVerdict;
+    try {
+        verdict = await startAndWait(config, change.machine, options);
+    } catch (error) {
+        return rollBack(config, change, versions.lastGood, `${words.target} did not start`, error instanceof Error ? error : new Error(String(error)), options);
+    }
+    if (verdict.kind === `down`) {
+        return rollBack(config, change, versions.lastGood, `${words.target} did not come up`, new Error(verdict.reason), options);
+    }
+    if (verdict.kind === `interrupted`) {
+        options.logger?.warn(
+            { app: change.machine.appName, image: targetImage, reason: verdict.reason },
+            `hosted image gate: the machine was stopped before its daemon could be judged; the version stays on trial for its next start`,
+        );
+    } else if (verdict.slow) {
+        options.logger?.warn({ app: change.machine.appName, image: targetImage }, `hosted image gate: the daemon is still booting after its budget; kept as a slow boot`);
+    }
+    return noteChange(targetImage, versions, { onTrial: verdict.kind === `interrupted`, moved }, options);
+};
+
+// Puts the version the machine held back after a refusal, and starts it when asked: judged, when it is itself on trial.
+const keepHeld = async (config: Config, change: HostedChange, back: FlyMachineConfig, versions: Versions, options: HostedSwitchOptions): Promise<boolean> => {
+    if (!options.start || !versions.lastGood.fromRow) {
+        return restore(config, change, back, options.start, options);
+    }
+    if (!(await restore(config, change, back, false, options))) {
+        return false;
+    }
+    await runAndJudge(config, { ...change, targetImage: versions.held.image }, versions, false, options);
+    return true;
+};
+
+// Throws HostedImageKept for a plan that refuses or a planner that broke, after putting the machine back; logs "no plan".
+const refuseUnlessClear = async (
+    config: Config,
+    change: HostedChange,
+    probed: Probed,
+    target: FlyMachineConfig,
+    versions: Versions,
+    options: HostedSwitchOptions,
+): Promise<void> => {
+    const { verdict } = probed;
+    const { logger } = options;
+    if (verdict.kind === `clear`) {
+        return;
+    }
+    if (verdict.kind === `unknown`) {
+        logger?.warn({ app: change.machine.appName, image: target.image, reason: verdict.reason }, `hosted image gate: no state plan; switching as before the gate`);
+        return;
+    }
+    logger?.warn(
+        { app: change.machine.appName, image: target.image, ...(verdict.kind === `refused` ? { failures: verdict.failures } : { reason: verdict.reason }) },
+        `hosted image gate: the target cannot convert this sandbox's state, or could not say; the machine keeps its version`,
+    );
+    const back = options.keepImage === true ? { ...target, image: versions.held.image } : versions.held.config;
+    const running = await keepHeld(config, change, back, versions, options);
+    const words = options.words ?? UPDATE_WORDS;
+    throw new HostedImageKept(
+        verdict.kind === `refused` ? refusalMessage(verdict.version, verdict.failures, words) : brokenMessage(verdict.reason, words),
+        `refused`,
+        running,
+    );
+};
 
 // A target named by a tag, pinned to the digest the registry holds for it now, so the probe and the switch after it
 // run the same image. A registry that will not say leaves the tag, and the digest the probe ran pins it instead.
@@ -333,6 +530,45 @@ const pinTarget = async (target: FlyMachineConfig, logger: Logger | undefined): 
     return { ...target, image: `${ref.registry}/${ref.repository}@${digest}` };
 };
 
+// The same digest converts nothing: a plain replacement, as before the gate, whose start is judged only when that
+// digest is on trial.
+const switchInPlace = async (config: Config, machine: HostedGateMachine, pinned: FlyMachineConfig, versions: Versions, options: HostedSwitchOptions): Promise<void> => {
+    await updateMachine(config.hosted.flyApiToken, machine.appName, machine.machineId, pinned);
+    if (options.facts !== undefined) {
+        await writeKept(options.record, imageColumns(pinned.image, options.facts), options.logger);
+    }
+    if (!options.start) {
+        return;
+    }
+    if (!versions.lastGood.fromRow) {
+        await startAfterUpdate(config, machine);
+        return;
+    }
+    await runAndJudge(config, { machine, previousImage: versions.lastGood.image, targetImage: pinned.image }, versions, false, options);
+};
+
+const gateAndSwitch = async (config: Config, machine: HostedGateMachine, requested: FlyMachineConfig, options: HostedSwitchOptions): Promise<void> => {
+    const { flyApiToken } = config.hosted;
+    const [current, kept] = await Promise.all([getMachineConfig(flyApiToken, machine.appName, machine.machineId), keptVersionsOf(options.record)]);
+    const held = heldOf(current, requested, kept);
+    const versions: Versions = { held, lastGood: lastGoodOf(held, kept, options.compose) };
+    const pinned = await pinTarget(requested, options.logger);
+    if (pinned.image === held.image && pinned.image.includes(`@sha256:`)) {
+        await switchInPlace(config, machine, pinned, versions, options);
+        return;
+    }
+    const probed = await preflightHosted(config, machine, pinned, held.image);
+    const target = { ...pinned, image: probed.image };
+    const change: HostedChange = { machine, previousImage: versions.lastGood.image, targetImage: target.image };
+    await refuseUnlessClear(config, change, probed, target, versions, options);
+    await updateMachine(flyApiToken, machine.appName, machine.machineId, target);
+    if (!options.start) {
+        await noteChange(target.image, versions, { onTrial: true, moved: true }, options);
+        return;
+    }
+    await runAndJudge(config, change, versions, true, options);
+};
+
 /* REPLACES A MACHINE'S CONFIG WITH `target` UNDER THE STATE GATE (see the header), holding the app's lock throughout.
  * Throws HostedImageKept when the machine stays on the version it had, and HostedMachineBusy when asked not to wait. */
 export const switchHostedImage = async (config: Config, machine: HostedGateMachine, target: FlyMachineConfig, options: HostedSwitchOptions): Promise<void> => {
@@ -345,58 +581,29 @@ export const switchHostedImage = async (config: Config, machine: HostedGateMachi
     }
 };
 
-// The new version did not start: back onto the one it had, running, and the owner told which of the two it is on.
-const rollBack = async (config: Config, change: HostedChange, previous: FlyMachineConfig, error: Error, options: HostedSwitchOptions): Promise<never> => {
-    options.logger?.error(
-        { err: error, app: change.machine.appName, previousImage: change.previousImage, targetImage: change.targetImage },
-        `hosted image gate: the new version did not start; putting the previous one back`,
-    );
-    const back = await restore(config, change, previous, true, options);
-    throw new HostedImageKept(
-        back
-            ? `the new version did not start, so the sandbox was put back on the version it had: ${error.message}`
-            : `the new version did not start, and putting the previous version back failed too: ${error.message}`,
-        `rolled-back`,
-        back,
-        { cause: error },
-    );
+/* STARTS A MACHINE WHOSE IMAGE IS ON TRIAL, and judges it: the wake of a machine a rebuild was applied to while it slept.
+ * The same wait and the same way back as a change's own start. Under the app's lock without waiting, like the wake's
+ * heal: HostedMachineBusy when another change holds the machine. One no longer on trial once the lock is held (another
+ * start judged it meanwhile) is simply started. */
+export const startOnTrial = async (
+    config: Config,
+    machine: HostedGateMachine,
+    options: Omit<HostedSwitchOptions, "start" | "busy" | "facts" | "skip" | "keepImage">,
+): Promise<void> => {
+    const done = await withHostedAppLock(config, machine.appName, false, async () => {
+        const [current, kept] = await Promise.all([getMachineConfig(config.hosted.flyApiToken, machine.appName, machine.machineId), keptVersionsOf(options.record)]);
+        const held = heldOf(current, current.config, kept);
+        const versions: Versions = { held, lastGood: lastGoodOf(held, kept, options.compose) };
+        if (!versions.lastGood.fromRow) {
+            await startAfterUpdate(config, machine);
+            return true;
+        }
+        await runAndJudge(config, { machine, previousImage: versions.lastGood.image, targetImage: held.image }, versions, false, { ...options, start: true });
+        return true;
+    });
+    if (done === undefined) {
+        throw new HostedMachineBusy(`this sandbox is being changed right now (a restart, a rebuild or a move); try again in a moment`);
+    }
 };
 
-const gateAndSwitch = async (config: Config, machine: HostedGateMachine, requested: FlyMachineConfig, options: HostedSwitchOptions): Promise<void> => {
-    const { flyApiToken } = config.hosted;
-    const { start, logger } = options;
-    const previous = previousOf(await getMachineConfig(flyApiToken, machine.appName, machine.machineId), requested);
-    const pinned = await pinTarget(requested, logger);
-    // The same digest converts nothing: a plain replacement, as before the gate.
-    if (pinned.image === previous.image && pinned.image.includes(`@sha256:`)) {
-        await updateMachine(flyApiToken, machine.appName, machine.machineId, pinned);
-        if (start) {
-            await startAfterUpdate(config, machine);
-        }
-        return;
-    }
-    const probed = await preflightHosted(config, machine, pinned, previous.image);
-    const target = { ...pinned, image: probed.image };
-    const { verdict } = probed;
-    const change: HostedChange = { machine, previousImage: previous.image, targetImage: target.image };
-    if (verdict.kind === `refused`) {
-        logger?.warn(
-            { app: machine.appName, image: target.image, failures: verdict.failures },
-            `hosted image gate: the target cannot convert this sandbox's state; the machine keeps its version`,
-        );
-        const back = await restore(config, change, options.keepImage === true ? { ...target, image: previous.image } : previous.config, start, options);
-        throw new HostedImageKept(refusalMessage(verdict.version, verdict.failures), `refused`, back);
-    }
-    if (verdict.kind === `unknown`) {
-        logger?.warn({ app: machine.appName, image: target.image, reason: verdict.reason }, `hosted image gate: no state plan; switching as before the gate`);
-    }
-    await updateMachine(flyApiToken, machine.appName, machine.machineId, target);
-    if (!start) {
-        return;
-    }
-    try {
-        await startAfterUpdate(config, machine);
-    } catch (error) {
-        await rollBack(config, change, previous.config, error instanceof Error ? error : new Error(String(error)), options);
-    }
-};
+export { type HostedGateRecord, type HostedImageFacts, STOCK_FACTS } from "./gate-row.js";

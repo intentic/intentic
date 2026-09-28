@@ -19,9 +19,20 @@ const JOURNAL_BUDGET: Duration = Duration::from_secs(600);
 
 /// Returns the first answer, which the readiness wait reads too (see [`wait_ready`]).
 pub fn wait_answering(container: &str, log: &Log, remedy: &str) -> Result<String> {
+    let started = crate::sandbox::now_ms();
     for _ in 0..15 {
         if let Some(answer) = docker::exec_capture(container, &["curl", "-sf", HEALTH_URL]) {
             return Ok(answer);
+        }
+        // A daemon that recorded why it could not start has answered, just not over HTTP: no point waiting out the
+        // rest of the budget on the front's "restarting" while it fails the same way again.
+        if let Some(error) = crate::sandbox::probation::boot_failure_since(container, started) {
+            log.section(&format!("container logs ({container})"));
+            docker::logs_into(container, "500", log);
+            bail!(
+                "the new version could not start: {error}\n       Its logs are saved to {}.{remedy}",
+                log.path.display()
+            );
         }
         std::thread::sleep(Duration::from_secs(2));
     }
@@ -56,6 +67,10 @@ pub fn wait_ready(container: &str, answered: &str) -> Result<()> {
         if readiness.admits(parsed.as_ref()) {
             return Ok(());
         }
+        // A conversion that failed is not something more waiting can fix.
+        if readiness.journal_failed {
+            break;
+        }
         if let Some(step) = parsed.as_ref().and_then(running_step) {
             if step != last_step {
                 // The boot chain names its own steps; they are detail under the wait, never steps of their
@@ -76,6 +91,9 @@ pub fn wait_ready(container: &str, answered: &str) -> Result<()> {
             break;
         }
         std::thread::sleep(Duration::from_secs(1));
+    }
+    if readiness.journal_failed {
+        bail!("the new version could not convert this sandbox's stored files; it put them back as they were.");
     }
     if readiness.journal_open {
         bail!(
@@ -102,12 +120,15 @@ struct Readiness {
     journal_seen: bool,
     /// The newest readable answer still did.
     journal_open: bool,
+    /// An answer reported the journal failed: the new version could not convert the files and put them back.
+    journal_failed: bool,
 }
 
 impl Readiness {
     fn note(&mut self, health: &serde_json::Value) {
         self.journal_open = journal_open(health);
         self.journal_seen |= self.journal_open;
+        self.journal_failed |= journal_failed(health);
     }
 
     /// May the wait end on this answer? None is no readable answer at all: an empty or unparsable body, or no
@@ -117,7 +138,7 @@ impl Readiness {
             return !self.journal_seen;
         };
         self.note(health);
-        !self.journal_open && ready_flag(health) != Some(false)
+        !self.journal_open && !self.journal_failed && ready_flag(health) != Some(false)
     }
 }
 
@@ -140,6 +161,25 @@ pub fn journal_open(health: &serde_json::Value) -> bool {
         .and_then(|state| state.get("journal"))
         .and_then(|journal| journal.as_str())
         == Some("open")
+}
+
+/// Whether a health document reports that this boot's state conversion failed (`"state":{"journal":"failed"}`): the
+/// daemon put the files back and runs on read-time conversion, which is a version that did not take.
+pub fn journal_failed(health: &serde_json::Value) -> bool {
+    health
+        .get("state")
+        .and_then(|state| state.get("journal"))
+        .and_then(|journal| journal.as_str())
+        == Some("failed")
+}
+
+/// How a running sandbox's own reach probe reads right now (`reachable`, `unreachable`, `checking`, `off`): what a swap
+/// records before it stops the container, so the new version is held to the tunnel the old one had. None when the
+/// container does not answer or its daemon is too old to probe.
+pub fn reach_state(container: &str) -> Option<String> {
+    let health = docker::exec_capture(container, &["curl", "-sf", "-m", "10", HEALTH_URL])?;
+    let parsed: serde_json::Value = serde_json::from_str(&health).ok()?;
+    parsed["reach"]["state"].as_str().map(str::to_string)
 }
 
 /// The label of any object in the health document with `"state":"running"` — a tree walk rather than a

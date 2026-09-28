@@ -19,6 +19,11 @@ flowchart LR
 - `autostart` registers the agent at login under something that restarts it, with no elevation: a per-user logon
   task through [`intentic-launch.exe`](../win-launcher) on Windows (a `HKCU\…\Run` value when the stub is absent), a
   systemd user unit on Linux (an XDG autostart entry without a user manager), a LaunchAgent on macOS.
+- The systemd unit says `KillMode=process`: stopping or restarting the agent stops its own process only, so what it
+  started to outlive it (an `ic` mid-swap, Mutagen's daemon) is not ended with the unit's cgroup, and the agent ends
+  what must not outlive it itself. `register({ repair: true })` puts back a missing entry and rewrites one that starts
+  this same command with other settings, so a unit an older build wrote picks up the change at the agent's next start;
+  an entry starting something else (another install) is left to a full `register()`.
 - A pidfile stores a boot token beside the pid, so a pid reused after a reboot never reads as a running agent, and
   `claimPidFile` settles two starters racing for one file.
 - `cliLauncher` rebuilds the argv that re-invokes the current CLI, both as `node dist/cli.js` and as a bun-compiled binary.

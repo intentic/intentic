@@ -24,6 +24,7 @@
         "openFolder": "Ouvrir son dossier",
         "openWorkspace": "Ouvrir l'espace de travail",
         "pickingUpWhereRestart": "Reprise là où le redémarrage s'était arrêté. Rien à faire : cette fenêtre continue toute seule.",
+        "removesSandboxKeepsFiles": "Cela retire le sandbox de cet appareil. Ses fichiers et son historique restent récupérables pendant une semaine : lancez ic sandbox restore {slug} sur cet ordinateur pour le récupérer.",
         "runningOnDeviceKeeps": "En cours sur cet appareil : cela continue même si vous fermez cette fenêtre.",
         "sandbox": "votre sandbox",
         "sandboxRunsInDocker": "Votre sandbox tourne dans Docker, qui n'est pas encore lancé. Nous vérifions d'abord ce dont votre PC a besoin, et nous demandons avant de changer quoi que ce soit.",

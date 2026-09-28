@@ -20,11 +20,16 @@ export const WINDOWS_SUPERVISOR = "windows";
 export const supervisedByWindows = (env: NodeJS.ProcessEnv = process.env): boolean => env[SUPERVISOR_ENV] === WINDOWS_SUPERVISOR;
 
 // Absent switches are on; `children` names distros by WSL registration name; `upgradeFailure` paces retries of one target.
+// `skippedAgent` is a release whose agent kept stopping here and was rolled back from (agent-trial.ts): no upgrade
+// moves this environment onto it again, only a newer one.
 export interface MachineConfig {
     readonly children?: readonly string[];
     readonly agentUpdates?: boolean;
     readonly sandboxUpdates?: boolean;
+    readonly sandboxBackups?: boolean;
+    readonly sandboxTidy?: boolean;
     readonly upgradeFailure?: { readonly target: string; readonly count: number; readonly at: number };
+    readonly skippedAgent?: { readonly version: string; readonly at: number };
 }
 
 // A missing file is a machine that has never been configured; one that will not parse is a fault and propagates.

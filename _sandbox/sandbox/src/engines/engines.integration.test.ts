@@ -116,6 +116,28 @@ test("a revert returns to the version kept behind the current one", async () => 
     expect((await readEngineState("opencode")).active).toBe("9.9.8");
 });
 
+// The owner's revert sticks: the daily check (the channel's own target) does not put back the version they went back
+// from while it is still the blessed one, and choosing it again by hand does.
+test("a version the owner went back from is not installed again until they choose it", async () => {
+    stubGlobal("fetch", jest.fn().mockResolvedValue(jsonResponse({ engines: { opencode: { blessed: "9.9.9" } } })));
+    const install = installer();
+    await updateEngine(host(workspace), "opencode", { version: "9.9.8" }, install);
+    await updateEngine(host(workspace), "opencode", undefined, install);
+    expect(install.calls).toEqual(["9.9.8", "9.9.9"]);
+
+    await revertEngine(host(workspace), "opencode");
+    expect(await updateEngine(host(workspace), "opencode", undefined, install)).toBeUndefined();
+    expect(install.calls).toEqual(["9.9.8", "9.9.9"]);
+    const reverted = await readEngineState("opencode");
+    expect(reverted.active).toBe("9.9.8");
+    expect(reverted.quarantined.map((entry) => entry.version)).toEqual(["9.9.9"]);
+
+    await updateEngine(host(workspace), "opencode", { version: "9.9.9" }, install);
+    const chosen = await readEngineState("opencode");
+    expect(chosen.active).toBe("9.9.9");
+    expect(chosen.quarantined).toEqual([]);
+});
+
 // The update-anyway path: the caller holds a floor, not a version, since a turn just died on it.
 test("a floor is resolved to the lowest published version that clears it", async () => {
     stubGlobal(

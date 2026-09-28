@@ -388,9 +388,11 @@ export const existingSyncSessions = (mutagen: string, names: readonly string[]):
     return names.filter((name) => listed.has(name));
 };
 
-// Pauses a sandbox unreachable for an hour, without touching a deliberate manual pause. Both sessions
-// pause/resume as a pair; already-idle or already-paused pairings are left alone.
-export const pauseUnreachableSync = (mutagen: string, pairing: Pairing): boolean => {
+// Pauses a pairing's file sync, without touching a deliberate manual pause: answers whether it paused anything, and a
+// pairing whose sessions are all paused already (or that has none) is left alone, so its pause is not this caller's to
+// undo. Both sessions pause/resume as a pair. Used for a sandbox unreachable for an hour, and for one being swapped on
+// this machine (swap-pause.ts).
+export const pauseRunningSync = (mutagen: string, pairing: Pairing): boolean => {
     if (pairing.mode !== "sync") {
         return false;
     }
@@ -401,6 +403,17 @@ export const pauseUnreachableSync = (mutagen: string, pairing: Pairing): boolean
     }
     const result = spawnSync(mutagen, ["sync", "pause", ...names], { stdio: "ignore", windowsHide: true });
     return result.status === 0;
+};
+
+export const pauseUnreachableSync = pauseRunningSync;
+
+// Lifts the pause a swap of the sandbox put on its file sync. Every session the pairing has: that pause paused them all.
+export const resumeSwapPausedSync = (mutagen: string, pairing: Pairing): boolean => {
+    const names = existingSyncSessions(mutagen, syncSessionNames(pairing.sandboxId));
+    if (names.length === 0) {
+        return false;
+    }
+    return spawnSync(mutagen, ["sync", "resume", ...names], { stdio: "ignore", windowsHide: true }).status === 0;
 };
 
 export const resumeAutoPausedSync = (mutagen: string, pairing: Pairing): boolean => {
@@ -654,6 +667,17 @@ const resolveOnPath = (command: string): string | undefined => {
     return first === undefined || first === "" || !existsSync(first) ? undefined : first;
 };
 
+// The copy this agent downloads and runs when the machine has no Mutagen of its own.
+export const ownMutagenPath = (): string => join(binDir, `mutagen${exe}`);
+
+// Whether a resolved Mutagen is that copy, rather than the user's own install found on PATH: only this agent's copy's
+// daemon is this agent's to stop and unregister, since the user's may hold sessions of their own. Paths compare as the
+// platform does (case-insensitively on Windows).
+export const isOwnMutagen = (mutagen: string, own: string = ownMutagenPath(), platform: NodeJS.Platform = process.platform): boolean => {
+    const fold = (path: string): string => (platform === "win32" ? path.replaceAll("/", "\\").toLowerCase() : path);
+    return fold(mutagen) === fold(own);
+};
+
 // Resolves mutagen to an absolute path and never a bare name (see resolveOnPath): the user's own install if
 // present, else the pinned copy, downloaded and extracted only when our bin isn't already at that version.
 export const ensureMutagen = async (): Promise<string> => {
@@ -661,7 +685,7 @@ export const ensureMutagen = async (): Promise<string> => {
     if (own !== undefined && installedVersion(own, ["version"]) !== undefined) {
         return own;
     }
-    const dest = join(binDir, `mutagen${exe}`);
+    const dest = ownMutagenPath();
     if (installedVersion(dest, ["version"]) === MUTAGEN_VERSION) {
         return dest;
     }

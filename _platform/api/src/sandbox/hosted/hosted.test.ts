@@ -13,9 +13,11 @@ import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel
 import {
     hostedEnabled,
     hostedInstanceId,
+    HostedNothingKept,
     provisionHosted,
     reapHostedOrphans,
     refreshHosted,
+    rollbackHosted,
     startAfterUpdate,
     wakeHosted,
     type HostedProvisionArgs,
@@ -26,7 +28,8 @@ import { AT_CAPACITY_MESSAGE, forgetProviderCapacity, HostedAtCapacity } from ".
 import { forgetHostedImage } from "./build/hosted-image.js";
 import { HostedImageKept, HostedMachineBusy, STATE_PROBE_ENV } from "./gate/state-gate.js";
 import { CLEAR_STATE_PLAN, type FakeFly, type FakeFlyCall, type FakeFlyMachine, installFakeFly } from "@intentic/testing/fly-fake";
-import { fakeHostedAppLock, testIngressConfig } from "../../testing.js";
+import { checkingIn, fakeGateRecord, fakeHostedAppLock, healthAnswer, machineAnswers, testIngressConfig } from "../../testing.js";
+import { DAEMON_HEALTH_COMMAND } from "./gate/daemon-health.js";
 import { createApp } from "../../app.js";
 import { RECOVERY_WINDOW_MS } from "../../durations.js";
 import * as timersPromisesOriginal from "node:timers/promises";
@@ -776,6 +779,9 @@ const configuredFly = (env: Record<string, string>, state = `stopped`, beside: (
 };
 // Every config replacement, the probe's included.
 const updatesIn = (fly: FakeFly): FakeFlyCall[] => fly.called(`POST`, `/machines/m1`);
+// What was run inside the machine, in order: the state planner in a probe, and the new daemon's /health once it ran.
+const execsIn = (fly: FakeFly): string[] =>
+    fly.called(`POST`, `/machines/m1/exec`).map((exec) => (JSON.stringify(exec.body).includes(DAEMON_HEALTH_COMMAND[0]) ? `health` : `planner`));
 // The config the machine ends on: the last one written.
 // SAFETY: the fake holds the config fly.ts last wrote, which is a FlyMachineConfig.
 const finalConfigOf = (fly: FakeFly) =>
@@ -830,8 +836,9 @@ describe(`wakeHosted`, () => {
             sandboxIdFromToken(WAKE_TOKEN),
         );
         expect(env[STATE_PROBE_ENV]).toBeUndefined();
-        // A new digest is an image change: its planner was asked first, in a probe, and the machine runs the real config.
-        expect(fly.called(`POST`, `/machines/m1/exec`)).toHaveLength(1);
+        // A new digest is an image change: its planner was asked first, in a probe, and the machine runs the real config
+        // once its daemon has said it came up.
+        expect(execsIn(fly)).toEqual([`planner`, `health`]);
         expect(runningIn(fly)).toBe(true);
     });
 
@@ -930,6 +937,74 @@ describe(`wakeHosted`, () => {
         await expect(wakeHosted(config(), WAKE_TARGET, wakeArgs)).rejects.toBeInstanceOf(HostedMachineBusy);
         expect(fly.called(`POST`, `/machines/m1/start`)).toEqual([]);
         expect(updatesIn(fly)).toHaveLength(0);
+    });
+
+    /* A REBUILD APPLIED WHILE THE MACHINE SLEPT IS ON TRIAL, and the wake is its first start: judged like any image
+     * change's, and a version that does not come up goes back to the one before it, which is still a woken machine. */
+    describe(`an image on trial`, () => {
+        const OVERLAY = `registry.fly.io/intentic-sbx-a@sha256:${`c`.repeat(64)}`;
+        const onTrial = () => {
+            const fly = configuredFly(currentTunnelEnv());
+            machineIn(fly).config = { image: OVERLAY, env: currentTunnelEnv() };
+            return fly;
+        };
+        const trialTarget = { ...WAKE_TARGET, image: OVERLAY, environmentHash: `h1`, unprovenImage: OVERLAY };
+
+        it(`goes back to the version before it, freshly configured and running, when its daemon does not come up`, async () => {
+            const fly = onTrial();
+            fly.commands.answer = machineAnswers({ health: () => healthAnswer({ state: { journal: `failed` } }) });
+            const { record, row, prisma } = fakeGateRecord({ image: OVERLAY, environmentHash: `h1`, unprovenImage: OVERLAY, previousImage: PINNED });
+            await expect(wakeHosted(config(), trialTarget, wakeArgs, logger, record)).resolves.toBe(false);
+            // The stock image it ran before the rebuild, in the config a stock machine gets: no overlay recipe named.
+            expect(finalConfigOf(fly).image).toBe(PINNED);
+            expect(finalConfigOf(fly).env[`SANDBOX_ENVIRONMENT_HASH`]).toBeUndefined();
+            expect(finalConfigOf(fly).env[`INGRESS_URL`]).toBe(testIngressConfig.url);
+            expect(runningIn(fly)).toBe(true);
+            expect(row).toMatchObject({ image: null, environmentHash: null, unprovenImage: null, previousImage: null });
+            // The rebuild that made the image says why it was not kept, where the owner reads a build's fate.
+            expect(prisma.hostedBuild.updateMany).toHaveBeenCalledWith({
+                where: { hostedMachineId: `h1`, digest: `sha256:${`c`.repeat(64)}` },
+                data: {
+                    error: `built, but the machine could not be switched to it: the new version did not come up, so the sandbox was put back on the version it had: it could not convert this sandbox's stored files, and put them back as they were`,
+                },
+            });
+        });
+
+        it(`keeps it once its daemon comes up, with the version before it as the way back`, async () => {
+            const fly = onTrial();
+            fly.commands.answer = machineAnswers({});
+            const { record, row } = fakeGateRecord({ image: OVERLAY, environmentHash: `h1`, unprovenImage: OVERLAY, previousImage: PINNED });
+            await expect(wakeHosted(config(), trialTarget, wakeArgs, logger, record)).resolves.toBe(false);
+            expect(finalConfigOf(fly).image).toBe(OVERLAY);
+            expect(execsIn(fly)).toEqual([`health`]);
+            expect(row).toMatchObject({ image: OVERLAY, unprovenImage: null, previousImage: PINNED });
+        });
+    });
+});
+
+/* THE OWNER'S WAY BACK: the image kept before the last change, through the same gate, and pressed again, forward. */
+describe(`rollbackHosted`, () => {
+    const TODAY = `ghcr.io/intentic/sandbox@${STABLE_DIGEST}`;
+
+    it(`goes back to the kept image, skips the digest it left, and pressed again goes forward`, async () => {
+        const fly = configuredFly(currentTunnelEnv());
+        machineIn(fly).config = { image: TODAY, env: currentTunnelEnv() };
+        const { record, row } = fakeGateRecord({ previousImage: PINNED });
+        await rollbackHosted(config(), wakeArgs(), { ...WAKE_TARGET, ...row }, logger, record);
+        expect(finalConfigOf(fly).image).toBe(PINNED);
+        expect(execsIn(fly)).toEqual([`planner`, `health`]);
+        expect(row).toMatchObject({ previousImage: TODAY, skippedDigest: STABLE_DIGEST, unprovenImage: null });
+
+        await rollbackHosted(config(), wakeArgs(), { ...WAKE_TARGET, ...row }, logger, record);
+        expect(finalConfigOf(fly).image).toBe(TODAY);
+        // Going forward leaves the old digest skipped, which `:stable` does not name: a skip that changes nothing.
+        expect(row).toMatchObject({ previousImage: PINNED, skippedDigest: `sha256:${`a`.repeat(64)}` });
+    });
+
+    it(`refuses when the row keeps no earlier image, and touches nothing`, async () => {
+        const fly = configuredFly(currentTunnelEnv());
+        await expect(rollbackHosted(config(), wakeArgs(), WAKE_TARGET, logger, fakeGateRecord().record)).rejects.toBeInstanceOf(HostedNothingKept);
+        expect(fly.calls).toEqual([]);
     });
 });
 
@@ -1265,7 +1340,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         });
         const summary = await call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `t0k3n` }, { context: routeContext({ prisma }) });
         // `warm` is read off the app name: a pool claim keeps its pool-assigned name.
-        expect(summary.hosted).toEqual({ region: `iad`, warm: true });
+        expect(summary.hosted).toEqual({ region: `iad`, warm: true, canRollBack: false });
         expect(fetchSpy).toHaveLength(0);
     });
 
@@ -1296,7 +1371,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         });
         const context = routeContext({ prisma, headers: new Headers() });
         const summary = await call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `t0k3n` }, { context });
-        expect(summary.hosted).toEqual({ region: `iad`, warm: true });
+        expect(summary.hosted).toEqual({ region: `iad`, warm: true, canRollBack: false });
         expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(`/apps/intentic-sbx-`))).toBe(true);
     });
 
@@ -1337,19 +1412,26 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             url.endsWith(`/api/v2/namespaces`) ? json([{ namespaceToken: `ns-1`, name: `public`, open: true }]) : undefined,
         );
         const hosted = { ...RESTART_ROW };
+        const update = jest.fn().mockResolvedValue({});
         const prisma = fakePrisma({
-            sandbox: { findFirst: jest.fn().mockResolvedValue(ownedRow) },
-            hostedMachine: { findUnique: jest.fn().mockResolvedValue(hosted), update: jest.fn().mockResolvedValue({}) },
+            sandbox: { findFirst: jest.fn().mockResolvedValue(ownedRow), findUnique: checkingIn({ tokenDigest: sha256Hex(`t0k3n`) }) },
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue(hosted), update },
         });
 
         expect(await call(sandboxRoutes.hostedRestart, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).toEqual({ ok: true });
-        // Today's stock digest, on the same volume, with this sandbox's identity; the planner was asked first.
+        // Today's stock digest, on the same volume, with this sandbox's identity; the planner was asked first, and the new
+        // daemon once it ran.
         const applied = finalConfigOf(fly);
         expect(applied.image).toBe(`ghcr.io/intentic/sandbox@${STABLE_DIGEST}`);
         expect(applied.mounts).toEqual([{ volume: `vol_1`, path: `/data` }]);
         expect(applied.env[`CONNECT_TOKEN`]).toBe(`t0k3n`);
         expect(applied.env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
-        expect(fly.called(`POST`, `/machines/m1/exec`)).toHaveLength(1);
+        expect(execsIn(fly)).toEqual([`planner`, `health`]);
+        // The digest it ran before is the way back the owner's rollback takes.
+        expect(update).toHaveBeenCalledWith({
+            where: { id: `h1` },
+            data: { previousImage: PINNED, previousEnvironmentHash: null, unprovenImage: null, skippedDigest: null, image: null, environmentHash: null, baseImage: null, baseDigest: null },
+        });
         // Restart replaces the config too, so it must observe the machine running rather than merely asking it to.
         const lastUpdate = fly.calls.findLastIndex((entry) => entry.method === `POST` && entry.path.endsWith(`/machines/m1`));
         expect(fly.calls.findLastIndex((entry) => entry.path.endsWith(`/machines/m1/start`))).toBeGreaterThan(lastUpdate);
@@ -1382,6 +1464,94 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         expect(finalConfigOf(fly).env[STATE_PROBE_ENV]).toBeUndefined();
         expect(runningIn(fly)).toBe(true);
         expect(stretch).toHaveBeenCalledWith(expect.objectContaining({ where: { id: `h1` }, data: expect.objectContaining({ wokeAt: expect.any(Date) }) }));
+    });
+
+    /* A RESTART MUST NOT SILENTLY UNDO A ROLLBACK. The owner went back from today's `:stable`; while `:stable` still
+     * names it, a restart keeps the version the machine runs, and once it names another, moves as always. */
+    it(`hostedRestart keeps the version the owner went back to while :stable still names the one they left`, async () => {
+        const fly = configuredFly(currentTunnelEnv(), `started`);
+        const prisma = fakePrisma({
+            sandbox: { findFirst: jest.fn().mockResolvedValue(ownedRow), findUnique: checkingIn({ tokenDigest: sha256Hex(`t0k3n`) }) },
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue({ ...RESTART_ROW, skippedDigest: STABLE_DIGEST }), update: jest.fn().mockResolvedValue({}) },
+        });
+        expect(await call(sandboxRoutes.hostedRestart, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).toEqual({ ok: true });
+        expect(finalConfigOf(fly).image).toBe(PINNED);
+        expect(finalConfigOf(fly).env[`CONNECT_TOKEN`]).toBe(`t0k3n`);
+        // Its own digest converts nothing and is not on trial: nothing was asked of a planner or a daemon.
+        expect(execsIn(fly)).toEqual([]);
+        expect(runningIn(fly)).toBe(true);
+    });
+
+    it(`hostedRestart moves as always once :stable names another digest than the one skipped`, async () => {
+        const fly = configuredFly(currentTunnelEnv(), `started`);
+        const prisma = fakePrisma({
+            sandbox: { findFirst: jest.fn().mockResolvedValue(ownedRow), findUnique: checkingIn({ tokenDigest: sha256Hex(`t0k3n`) }) },
+            hostedMachine: {
+                findUnique: jest.fn().mockResolvedValue({ ...RESTART_ROW, skippedDigest: `sha256:${`9`.repeat(64)}` }),
+                update: jest.fn().mockResolvedValue({}),
+            },
+        });
+        expect(await call(sandboxRoutes.hostedRestart, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).toEqual({ ok: true });
+        expect(finalConfigOf(fly).image).toBe(`ghcr.io/intentic/sandbox@${STABLE_DIGEST}`);
+    });
+
+    // The platform's own act: it needs nothing of the daemon, and says so before it stops anything.
+    it(`hostedRollback answers CONFLICT when no earlier image is kept, and stops nothing`, async () => {
+        const fetchSpy = stubFetch([]);
+        const prisma = fakePrisma({
+            sandbox: { findFirst: jest.fn().mockResolvedValue(ownedRow) },
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue({ ...RESTART_ROW, previousImage: null }) },
+        });
+        await expect(call(sandboxRoutes.hostedRollback, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).rejects.toMatchObject({
+            code: `CONFLICT`,
+            message: `this sandbox has no earlier version kept to go back to`,
+        });
+        expect(fetchSpy).toHaveLength(0);
+    });
+
+    it(`hostedRollback goes back to the image kept before the last change, through the gate, and meters the run`, async () => {
+        const fly = configuredFly(currentTunnelEnv(), `started`);
+        machineIn(fly).config = { image: `ghcr.io/intentic/sandbox@${STABLE_DIGEST}`, env: currentTunnelEnv() };
+        const update = jest.fn().mockResolvedValue({});
+        const row = { ...RESTART_ROW, cpuKind: `shared`, cpus: 2, memoryMb: 4096, volumeGb: 10, image: null, previousImage: PINNED, previousEnvironmentHash: null };
+        const prisma = fakePrisma({
+            sandbox: { findFirst: jest.fn().mockResolvedValue(ownedRow), findUnique: checkingIn({ tokenDigest: sha256Hex(`t0k3n`) }) },
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue(row), update },
+        });
+        expect(await call(sandboxRoutes.hostedRollback, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).toEqual({ ok: true });
+        // The kept digest, in the fresh config a restart writes; its planner asked, and its daemon waited for.
+        expect(finalConfigOf(fly).image).toBe(PINNED);
+        expect(finalConfigOf(fly).env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
+        expect(execsIn(fly)).toEqual([`planner`, `health`]);
+        expect(runningIn(fly)).toBe(true);
+        // The digest it left is the way forward, and skipped by restarts while `:stable` still names it.
+        expect(update).toHaveBeenCalledWith({
+            where: { id: `h1` },
+            data: {
+                previousImage: `ghcr.io/intentic/sandbox@${STABLE_DIGEST}`,
+                previousEnvironmentHash: null,
+                unprovenImage: null,
+                skippedDigest: STABLE_DIGEST,
+                image: null,
+                environmentHash: null,
+                baseImage: null,
+                baseDigest: null,
+            },
+        });
+        expect(update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: `h1` }, data: expect.objectContaining({ wokeAt: expect.any(Date) }) }));
+    });
+
+    it(`says a hosted machine can go back once the platform kept the image it ran before`, async () => {
+        stubFetch([]);
+        const prisma = fakePrisma({
+            sandbox: {
+                findFirst: jest.fn().mockResolvedValue(ownedRow),
+                findUniqueOrThrow: jest.fn().mockResolvedValue({ ...ownedRow, hosted: { region: `iad`, warm: false, previousImage: PINNED } }),
+            },
+            hostedMachine: { findUnique: jest.fn().mockResolvedValue({ appName: `intentic-sbx-a`, machineId: `m1` }), count: jest.fn() },
+        });
+        const summary = await call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `t0k3n` }, { context: routeContext({ prisma }) });
+        expect(summary.hosted).toEqual({ region: `iad`, warm: false, canRollBack: true });
     });
 
     // Same sandbox identity (name, address, sharing) on a fresh, empty disk; nothing on a destroyed machine is worth
@@ -1560,7 +1730,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         };
         const stretch = jest.fn().mockResolvedValue({});
         const prisma = fakePrisma({
-            sandbox: { findFirst: jest.fn().mockResolvedValue(row) },
+            sandbox: { findFirst: jest.fn().mockResolvedValue(row), findUnique: checkingIn({ tokenDigest: sha256Hex(WAKE_TOKEN) }) },
             hostedMachine: { findUnique: jest.fn().mockResolvedValue({ wokeAt: null }), update: stretch },
         });
         const member = { id: `u2`, email: `member@example.com`, name: `Member`, image: null };

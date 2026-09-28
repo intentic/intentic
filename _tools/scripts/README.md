@@ -33,7 +33,7 @@ flowchart LR
   in the re-runs of failures alone, is held under a memory ceiling (`lib/memory-ceiling.mjs`) that kills and names a
   runaway suite.
 - Every verify script runs each independent step and prints all failures in one digest at the end of its output (`lib/steps.mjs`).
-- A release is semantic-release on `main`: `release-prepare.sh` checks the artifacts CI built, then `publish-github.sh`, `release-images.sh` and `ship-stable.sh`, which moves `stable` last. `rollback-stable.sh`, run from the manual `rollback.yml` workflow, moves it back.
+- A release is semantic-release on `main`: `release-prepare.sh` checks the artifacts CI built, then `publish-github.sh`, `release-images.sh` and `ship-stable.sh`, which moves `stable` last. `rollback-stable.sh`, run from the manual `rollback.yml` workflow, moves it back and marks the release it left withdrawn (a pre-release whose notes open with `Withdrawn: <reason>`, which sandboxes running it are told).
 - Versions are stamped in CI only (`release/set-versions.sh`); the repository keeps `0.0.0`. `lib/packages.sh` is the one list of published npm packages.
 
 ## Layout

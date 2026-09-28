@@ -18,7 +18,9 @@ flowchart LR
   state and time, `announce` says whether the platform was reached, and `reach` / `reachedBy` say how the world gets in.
 - On the host, `ic sandbox doctor` walks the sandbox's reachability chain and names the broken link.
 - `docker logs` shows the daemon's JSON lines and `intentic-front`'s own log (its level from `FRONT_LOG`). A daemon
-  that refuses its config says why on stderr and exits with code 78.
+  that refuses its config says why on stderr and exits with code 78. One whose boot fails before it is ready writes
+  why to `/history/boot-failure.json` and exits 1, and the front starts it again with backoff; the next boot that gets
+  all the way removes the file.
 
 ## Log files
 
@@ -51,6 +53,12 @@ pretty-prints to stdout instead of writing `daemon.log`.
 
 - `/history`: `conversations.db` (the conversation registry), `conversations/` (one directory per conversation),
   `worktrees/`, `gits/` (every repository's git dir), `scopes/` (workspace history snapshots), `engines/`.
+- A `conversations.db.corrupt-<ms>` beside the registry is one a boot found damaged and set aside, never deleted; the
+  live file is what could be copied out of it, or a new one. `trash/conversations/` holds the directories no registry
+  row owned, moved there by the boot's sweep and removed 14 days later.
+- `update-staged.json`, `update-outcome.json` (what the host last did about the version) and `boot-failure.json` are
+  written by `ic` and a failed boot for each other; `update-skipped.json` is the release the owner chose not to be
+  offered.
 - A conversation's transcript is a zstd log, one frame per settled turn behind a skippable frame naming its length,
   rows and CRC (`src/sessions/record/record-log.ts`): read it with `zstdcat` or frame by frame, never with one
   `zstdDecompressSync`, which stops at that first skippable frame and answers nothing. A tool output of 16 KiB or more

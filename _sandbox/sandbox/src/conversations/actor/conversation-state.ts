@@ -136,9 +136,9 @@ export interface ConversationState {
     // after its run ends, since the card is read long after to say why the branch exists.
     readonly loop: NonNullable<AgentSummary["loop"]> | undefined;
     readonly workflow: NonNullable<AgentSummary["workflow"]> | undefined;
-    // The in-flight record of the run that holds, or is about to hold, the turn (turn-journal.ts): unwritten until the
-    // `begin` that writes it with the turn's entry, so neither is ever on disk without the other.
-    readonly journal: { readonly entry: JournalledTurn; readonly written: boolean } | undefined;
+    // The in-flight record of the run that holds, or is about to hold, the turn (turn-journal.ts), and which run filed
+    // it: unwritten until the `begin` that writes it with the turn's entry, so neither is ever on disk without the other.
+    readonly journal: { readonly run: string; readonly entry: JournalledTurn; readonly written: boolean } | undefined;
     // What waits for its next turn (conversation-queue.ts), written onto the entry at every change and read back from it
     // by an actor made after a restart.
     readonly queue: TurnQueue;

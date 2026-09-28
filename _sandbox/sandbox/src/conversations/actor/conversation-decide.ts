@@ -105,10 +105,10 @@ export type ConversationEvent =
     // Claims the conversation for a turn unless it is archived, or a turn or a rewind holds it.
     | { readonly kind: "begin"; readonly turn: BeginTurn }
     // The in-flight record of the run that holds, or is about to hold, this conversation's turn, whole as of now: held
-    // for the `begin` that writes it with its entry, then written through as it changes.
-    | { readonly kind: "journalled"; readonly entry: JournalledTurn }
-    // That run is over and its transcript is down; its record goes.
-    | { readonly kind: "unjournalled" }
+    // for the `begin` that writes it with its entry, then written through as it changes. `run` names the run filing it.
+    | { readonly kind: "journalled"; readonly run: string; readonly entry: JournalledTurn }
+    // That run is over and its transcript is down; its record goes, unless a later run's record has taken its place.
+    | { readonly kind: "unjournalled"; readonly run: string }
     // One frame of the live turn, folded into what the card shows.
     | { readonly kind: "frame"; readonly frame: AgentEvent }
     // A stop or a dismissal, recorded the instant it lands, ahead of the seconds-long unwind.
@@ -414,7 +414,7 @@ const onBegin = (state: ConversationState, turn: BeginTurn, now: number, entry: 
         return unchanged(state, "busy");
     }
     const session = entry?.sessionId;
-    const staged = state.journal?.written === false ? state.journal.entry : undefined;
+    const staged = state.journal?.written === false ? state.journal : undefined;
     const kept = state.keepWarm;
     return {
         state: {
@@ -426,11 +426,11 @@ const onBegin = (state: ConversationState, turn: BeginTurn, now: number, entry: 
                 promptToFile: session === undefined ? turn.prompt : undefined,
                 keptWarm: kept === undefined || kept.ended !== undefined ? undefined : { forMs: now - kept.since, refreshes: kept.refreshes },
             },
-            journal: staged === undefined ? state.journal : { entry: staged, written: true },
+            journal: staged === undefined ? state.journal : { ...staged, written: true },
             keepWarm: undefined,
         },
         effects: [
-            { kind: "entry-opened", turn, ...opt("inFlight", staged) },
+            { kind: "entry-opened", turn, ...opt("inFlight", staged?.entry) },
             // An entry opened just now missed what already waits: a message sent while the first turn was starting.
             ...(entry === undefined && state.queue.items.length > 0 ? [{ kind: "queue-written", queue: state.queue } as const] : []),
             ...(session === undefined ? [] : [{ kind: "session-prompt", sessionId: session, prompt: turn.prompt } as const]),
@@ -501,17 +501,24 @@ const onAbandon = (state: ConversationState, reason: string, entry: PersistedAge
     };
 };
 
-// Held until the `begin` that writes it with the turn's entry; once that has happened, every newer version is written.
-const onJournalled = (state: ConversationState, entry: JournalledTurn): Decision<undefined> =>
+// Held until the `begin` that writes it with the turn's entry; once that has happened, every newer version is written,
+// a next run's included: the row is the conversation's, and the newest run is the one a restart resumes.
+const onJournalled = (state: ConversationState, run: string, entry: JournalledTurn): Decision<undefined> =>
     state.journal?.written === true
-        ? { state: { ...state, journal: { entry, written: true } }, effects: [{ kind: "journal-written", entry }], reply: undefined }
-        : unchanged({ ...state, journal: { entry, written: false } }, undefined);
+        ? { state: { ...state, journal: { run, entry, written: true } }, effects: [{ kind: "journal-written", entry }], reply: undefined }
+        : unchanged({ ...state, journal: { run, entry, written: false } }, undefined);
 
-// A record never written has nothing to delete.
-const onUnjournalled = (state: ConversationState): Decision<undefined> =>
-    state.journal?.written === true
+// A record never written has nothing to delete. One another run filed since is that run's: a run ends (and a next one
+// may start) before its transcript is down and its clear arrives, and the row is keyed by the conversation, so taking
+// it off then would leave the next turn running with no record a restart could resume.
+const onUnjournalled = (state: ConversationState, run: string): Decision<undefined> => {
+    if (state.journal?.run !== run) {
+        return unchanged(state, undefined);
+    }
+    return state.journal.written
         ? { state: { ...state, journal: undefined }, effects: [{ kind: "journal-cleared" }], reply: undefined }
         : unchanged({ ...state, journal: undefined }, undefined);
+};
 
 // The card reads `landing` from the first holder's claim; each release counts one off, and the last one hides it.
 const onLandLeased = (state: ConversationState): Decision<undefined> => ({
@@ -650,8 +657,8 @@ type Handler<K extends ConversationEvent["kind"]> = (
 
 const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
     begin: (state, event, now, entry) => onBegin(state, event.turn, now, entry),
-    journalled: (state, event) => onJournalled(state, event.entry),
-    unjournalled: onUnjournalled,
+    journalled: (state, event) => onJournalled(state, event.run, event.entry),
+    unjournalled: (state, event) => onUnjournalled(state, event.run),
     frame: (state, event, now) => onFrame(state, event.frame, now),
     stop: (state, event) => onStop(state, event.ending),
     "proof-noted": (state, event) => unchanged({ ...state, turn: { ...state.turn, proof: event.proof } }, undefined),

@@ -1,13 +1,16 @@
 import { EventEmitter } from "node:events";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
+import { version } from "../../version.js";
 
 // Each register attempt's outcome comes off a queue: `{ status }` acks with that code, `{ err: true }` simulates a
-// transport failure.
+// transport failure. Every body an attempt sent is kept, in order.
 const outcomes: Array<{ status?: number; err?: boolean }> = [];
+const bodies: unknown[] = [];
 // The response is an emitter like the real one: the exchange reads its body to the end before it answers.
 const requestMock = jest.fn((_url: URL, _opts: unknown, cb: (res: EventEmitter & { statusCode: number; headers: Record<string, string> }) => void) => {
-    const req = new EventEmitter() as EventEmitter & { end: () => void };
-    req.end = () => {
+    const req = new EventEmitter() as EventEmitter & { end: (payload?: string) => void };
+    req.end = (payload) => {
+        bodies.push(payload === undefined ? undefined : JSON.parse(payload));
         const outcome = outcomes.shift() ?? { status: 200 };
         if (outcome.err === true) {
             req.emit("error", new Error("boom"));
@@ -33,6 +36,7 @@ const logger = { info: jest.fn(), warn: jest.fn() } as unknown as Parameters<typ
 beforeEach(() => {
     jest.useFakeTimers();
     outcomes.length = 0;
+    bodies.length = 0;
     requestMock.mockClear();
 });
 afterEach(() => jest.useRealTimers());
@@ -45,6 +49,12 @@ const settle = async (): Promise<void> => {
 };
 
 describe("createAnnouncer", () => {
+    it("announces this build's version beside the address it is reached at", () => {
+        outcomes.push({ status: 200 });
+        createAnnouncer(config, logger).start();
+        expect(bodies).toEqual([{ daemonUrl: "https://sandbox-x.intentic.dev", version }]);
+    });
+
     it("registers once on a 200 and then goes silent: never a heartbeat", () => {
         outcomes.push({ status: 200 });
         createAnnouncer(config, logger).start();

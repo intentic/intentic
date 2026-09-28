@@ -28,7 +28,7 @@ flowchart LR
   edge serves one (`features/terminal/channel/`).
 - **Older sandboxes.** A view drawn from fields an older daemon does not send never rebuilds them from what it did
   send. It shows what was served as served, and `SandboxOutdatedNotice.vue` says the sandbox needs an update, what the
-  view lacks until then, and how to update: the sandbox page's Update card, or `ic sandbox update` for a sandbox
+  view lacks until then, and how to update: the sandbox page's Update card, or `ic sandbox update <slug>` for a sandbox
   installed by hand. The persona rail and the chat's accounts read "older" off the routes the daemon advertises
   (`supportsRoute`, `accountsOutdated`): `agent.switchAccount` arrived in v1.313, the same release as the `lastActsAs`
   the rail groups chats by. Such a sandbox's account rows carry no verdict (`state`) and read as unknown, no held turn

@@ -54,7 +54,7 @@ export const conversationsSliceFake = (context: SliceFakeContext) => {
     // Real registry over an in-memory conversations database, with every conversation's directory under the suite's own
     // history root.
     const conversationsDb = openConversationsDb(IN_MEMORY);
-    const units = conversationUnits(context.historyRoot, sqliteAgentsStore(conversationsDb).has);
+    const units = conversationUnits(context.historyRoot, { ...sqliteAgentsStore(conversationsDb), recreated: false });
     const { agents, conversations } = memoryFleet(fleetStoreOver(conversationsDb, units));
     return {
         agents,

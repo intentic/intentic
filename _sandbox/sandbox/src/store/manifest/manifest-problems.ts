@@ -14,6 +14,11 @@ export type { ManifestProblem, ManifestProblemReport };
 // Keyed by the file's absolute path, as jsonFile holds it; made workspace-relative on the way out.
 const byPath = new Map<string, readonly ManifestProblem[]>();
 
+// What was wrong with a whole file when this process opened it, which no later read of its contents clears: the
+// conversation database found missing or damaged at boot, and what was done about it. Kept for the process's life,
+// since the file this build now reads is a different one from the file that was wrong.
+const standing = new Map<string, readonly ManifestProblem[]>();
+
 // Called on every manifest read, healthy or not; always calling is what makes the registry self-clearing, since a
 // healthy read erases the previous complaint.
 export const recordManifestProblems = (path: string, problems: readonly ManifestProblem[]): void => {
@@ -22,6 +27,11 @@ export const recordManifestProblems = (path: string, problems: readonly Manifest
         return;
     }
     byPath.set(path, problems);
+};
+
+// Reported ahead of whatever the file's reads record, and replaced by none of them.
+export const recordStandingProblem = (path: string, problem: ManifestProblem): void => {
+    standing.set(path, [...(standing.get(path) ?? []), problem]);
 };
 
 // Manifests with a problem a person can act on, sorted by path for a stable poll; recording is indiscriminate, the
@@ -62,8 +72,8 @@ const reportedPath = (root: string, historyRoot: string | undefined, path: strin
         : relative(root, path);
 
 export const manifestProblems = (root: string, historyRoot?: string): ManifestProblemReport[] =>
-    [...byPath.entries()]
-        .map(([path, problems]) => ({ rel: reportedPath(root, historyRoot, path), problems }))
+    [...new Set([...standing.keys(), ...byPath.keys()])]
+        .map((path) => ({ rel: reportedPath(root, historyRoot, path), problems: [...(standing.get(path) ?? []), ...(byPath.get(path) ?? [])] }))
         .filter(({ rel }) => isReportedManifest(rel))
         // Copied on the way out, never by reference, since this is the registry's own array.
         .map(({ rel, problems }) => ({ path: rel, problems: withSkewHint(problems, version, newestRunVersion()) }))
@@ -73,4 +83,7 @@ export const manifestProblems = (root: string, historyRoot?: string): ManifestPr
 export const recordedProblems = (path: string): readonly ManifestProblem[] => byPath.get(path) ?? [];
 
 // Test seam: resets the module-level registry between suites.
-export const clearManifestProblems = (): void => byPath.clear();
+export const clearManifestProblems = (): void => {
+    byPath.clear();
+    standing.clear();
+};

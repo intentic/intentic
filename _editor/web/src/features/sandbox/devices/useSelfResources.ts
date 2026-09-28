@@ -1,7 +1,7 @@
 import { hostRunningSandbox } from "@intentic/sandbox-contract";
 import { type DeviceSandboxResources, type DeviceSandboxRow, type EngineFacts, type ResourcesForm, runningShape } from "@intentic/ui";
 import { computed, type ComputedRef, ref, type Ref } from "vue";
-import { canSetShape, type ShapeIntent, shapeFlow, shapeSevers } from "./shapeFlow";
+import { canSetShape, type ShapeIntent, shapeFlow, shapeSevers, tooOldToSave } from "./shapeFlow";
 import { manageDeviceSandbox, useDevices } from "./useDevices";
 import { useSandbox } from "../client/useSandbox";
 
@@ -74,7 +74,7 @@ export function useSelfResources(): SelfResources {
         if (sendTo === undefined || name === undefined || share === undefined) {
             throw new Error(`This sandbox's machine is not connected, so its share can't be changed from here.`);
         }
-        const { op, payload } = shapeFlow(intent, canSave.value, runningShape(share));
+        const { op, payload } = shapeFlow(intent, canSave.value, runningShape(share), tooOldToSave(door.value?.facts));
         applying.value = true;
         try {
             // `severing`: applying recreates the container, and the daemon relaying this call lives in it, so no

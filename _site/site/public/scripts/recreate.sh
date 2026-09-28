@@ -8,9 +8,15 @@
 #   sh recreate.sh <SLUG> --prepare                                      # download the next update, apply later
 #   sh recreate.sh <SLUG> --channel <tag>                                # move onto a release channel
 #   sh recreate.sh <SLUG> --rollback                                     # back to the previous image
+#   sh recreate.sh <SLUG> --rollback-to <version|image>                  # back to an older version kept here
+#   sh recreate.sh <SLUG> --versions                                     # the versions it can go back to
 #   sh recreate.sh <SLUG> --reshape --memory 12g --cpus 4 …              # same image, a different share of the machine
 #   sh recreate.sh <SLUG> --shape --memory 12g … --when next-restart      # a shape now, or for the next restart
 #   sh recreate.sh <SLUG> --start|--stop|--restart                       # power, applying a saved shape
+#   sh recreate.sh <SLUG> --watch                                        # finish a cut-off swap, judge a new version
+#   sh recreate.sh <SLUG> --backup                                       # back its data up now
+#   sh recreate.sh <SLUG> --doctor                                       # what stands between you and it, and the fix
+#   sh recreate.sh <SLUG> --remove                                       # to the trash: recoverable for a week
 #   sh recreate.sh --list                                                 # every sandbox here, as JSON
 #   sh recreate.sh --dev [SLUG]                                          # dev: the locally-built dev image
 #
@@ -132,6 +138,21 @@ case "${1:-}" in
         case "${1:-}" in
             "") exec "$IC" sandbox update "$slug" ;;
             --rollback) exec "$IC" sandbox rollback "$slug" ;;
+            # An older version than the one before the last update, among those this machine kept (--versions).
+            --rollback-to)
+                shift
+                exec "$IC" sandbox rollback "$slug" --to "${1:?--rollback-to needs a version or an image, e.g. --rollback-to 1.200.0}"
+                ;;
+            # ic's own flags (--json) forwarded verbatim, as for --reshape: these two also answer programs.
+            --versions | --watch)
+                verb="${1#--}"
+                shift
+                exec "$IC" sandbox "$verb" "$slug" "$@"
+                ;;
+            --backup | --doctor) exec "$IC" sandbox "${1#--}" "$slug" ;;
+            # Into ic's trash, never deleted on the spot: /work and /history stay recoverable for a week
+            # (`ic sandbox restore`). -y because whoever runs this has already been asked (the desktop app's Remove).
+            --remove) exec "$IC" sandbox remove "$slug" -y ;;
             # Download and build the next update without applying it — the sandbox keeps running, and the
             # update that follows is a restart rather than a wait.
             --prepare) exec "$IC" sandbox prepare "$slug" ;;

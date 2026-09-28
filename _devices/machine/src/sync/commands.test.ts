@@ -22,8 +22,18 @@ describe("enrollKey", () => {
 
         const enrolled = await enrollKey("https://sandbox-abc.example.dev/", "pair-token", "ssh-ed25519 AAAA", { delayMs: 0 });
 
-        expect(enrolled).toEqual({ syncToken: "ist_tok", mode: "mirror" });
+        expect(enrolled).toEqual({ syncToken: "ist_tok", mode: "mirror", hostKey: undefined });
         expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+
+    // A sandbox that hands its sshd's key over at enrollment is pinned by it (ssh.ts, replaceKnownHost); anything that is
+    // not a public key line is dropped rather than written into known_hosts.
+    it("carries the host key a sandbox hands over, and only a real key line", async () => {
+        const key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHostHostHostHostHostHostHostHostHostHost";
+        stubGlobal("fetch", jest.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse(200, { syncToken: "ist_tok", mode: "sync", hostKey: key })));
+        expect(await enrollKey("https://sandbox-abc.example.dev", "pair", "key", { delayMs: 0 })).toEqual({ syncToken: "ist_tok", mode: "sync", hostKey: key });
+        stubGlobal("fetch", jest.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse(200, { syncToken: "ist_tok", hostKey: `${key}\nevil ${key}` })));
+        expect(await enrollKey("https://sandbox-abc.example.dev", "pair", "key", { delayMs: 0 })).toEqual({ syncToken: "ist_tok", mode: "sync", hostKey: undefined });
     });
 
     it("retries when fetch throws, and defaults mode to sync for a daemon that omits it", async () => {
@@ -35,6 +45,7 @@ describe("enrollKey", () => {
         await expect(enrollKey("https://sandbox-abc.example.dev", "pair", "key", { delayMs: 0 })).resolves.toEqual({
             syncToken: "ist_tok",
             mode: "sync",
+            hostKey: undefined,
         });
         expect(fetchMock).toHaveBeenCalledTimes(2);
     });

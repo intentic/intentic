@@ -6,12 +6,13 @@ import { version } from "../version.js";
 import { stateRelPath } from "../state-paths.js";
 import { defineDocument } from "./evolution/documents.js";
 
-// Stamp of the newest intentic that ran this workspace, recorded by the boot step before any store opens and moved
-// only forward: its release version, the digest of the conversions it ran (store/evolution/documents.ts), and the
-// conversion count builds before the digest compared. manifest-problems.ts explains a post-rollback schema rejection as
-// a newer file rather than a broken one; json-file.ts refuses to set such a file aside; the state plan reports a
-// downgrade when the stamp names a newer release than its own. Plain read/write, not jsonFile: daemon-only state,
-// written at most once per boot.
+// Stamp of the newest intentic that ran this workspace, moved only forward: its release version, the digest of the
+// conversions it ran (store/evolution/documents.ts), and the conversion count builds before the digest compared. The
+// boot step reads it before any store opens, and a build writes it once its boot has converged (state-convergence.ts,
+// commitState), so a build that never got that far is not what a rolled-back one reads as newer. manifest-problems.ts
+// explains a post-rollback schema rejection as a newer file rather than a broken one; json-file.ts refuses to set such
+// a file aside; the state plan reports a downgrade when the stamp names a newer release than its own. Plain
+// read/write, not jsonFile: daemon-only state, written at most once per boot.
 
 // Declared for its shape, which the shape generator freezes; its reader below takes each field only when it is there.
 // A stamp from before the digest carries `version` and `engine`, and one from before the engine only `version`.

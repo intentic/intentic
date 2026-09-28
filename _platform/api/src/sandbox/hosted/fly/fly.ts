@@ -298,7 +298,11 @@ const machineDetailSchema = z.object({
                 type: z.string().optional(),
                 timestamp: z.number().optional(),
                 request: z
-                    .object({ exit_event: z.object({ exit_code: z.number().optional(), oom_killed: z.boolean().optional() }).optional() })
+                    .object({
+                        exit_event: z
+                            .object({ exit_code: z.number().optional(), oom_killed: z.boolean().optional(), requested_stop: z.boolean().optional() })
+                            .optional(),
+                    })
                     .optional(),
             }),
         )
@@ -312,20 +316,27 @@ export interface FlyMachineDetail {
     readonly imageDigest: string | undefined;
     readonly exitCode: number | undefined;
     readonly oomKilled: boolean;
+    // When the newest exit happened, as Fly stamps its events; undefined for a machine that has not exited. Only ever
+    // compared with an earlier reading of the same machine, never with this server's clock.
+    readonly exitedAt: number | undefined;
+    // That exit was a stop someone asked Fly for (the platform, an operator), not the process ending on its own.
+    readonly requestedStop: boolean;
 }
 
 export const getMachineDetail = async (token: string, app: string, machineId: string): Promise<FlyMachineDetail> => {
     const parsed = machineDetailSchema.parse(await call(token, `GET`, `/apps/${encodeURIComponent(app)}/machines/${encodeURIComponent(machineId)}`));
-    const exit = [...(parsed.events ?? [])]
+    const newest = [...(parsed.events ?? [])]
         .toSorted((left, right) => (right.timestamp ?? 0) - (left.timestamp ?? 0))
-        .map((event) => event.request?.exit_event)
-        .find((event) => event !== undefined);
+        .find((event) => event.request?.exit_event !== undefined);
+    const exit = newest?.request?.exit_event;
     return {
         state: parsed.state,
         updatedAt: parsedDate(parsed.updated_at),
         imageDigest: parsed.image_ref?.digest,
         exitCode: exit?.exit_code,
         oomKilled: exit?.oom_killed === true,
+        exitedAt: newest?.timestamp,
+        requestedStop: exit?.requested_stop === true,
     };
 };
 

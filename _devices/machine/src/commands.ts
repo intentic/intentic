@@ -1,5 +1,6 @@
 import { buildCommand, buildRouteMap, type CommandContext } from "@stricli/core";
 import { deviceCommands, deviceUninstall } from "./device/commands.js";
+import { sandboxRoutes } from "./device/sandbox-cli.js";
 import { environmentRoutes, updates } from "./environments/commands.js";
 import { realMachineIo, upgradeMachine } from "./environments/machine-upgrade.js";
 import { runForeground } from "./resident.js";
@@ -9,7 +10,8 @@ import { syncCommands, syncUninstall } from "./sync/commands.js";
 import { MACHINE_VERSION } from "./version.js";
 
 // intentic-machine: the agent on a user's own device. `device` connects a sandbox to this machine; `sync` mirrors
-// folders/ports; both share one resident agent (`run`), `status`, `upgrade`, `updates` and `uninstall`.
+// folders/ports; both share one resident agent (`run`), `status`, `upgrade`, `updates` and `uninstall`. `sandbox`
+// passes ic's own verbs through, for repairing a sandbox on this machine without a browser.
 
 interface RunFlags {
     readonly foreground: boolean;
@@ -66,7 +68,7 @@ const upgrade = buildCommand<UpgradeFlags>({
         flags: {
             force: {
                 kind: "boolean",
-                brief: "Install the published agent even over one built from source (which is otherwise left alone)",
+                brief: "Install the published agent even over one built from source, or onto a release this machine rolled back from (both otherwise left alone)",
             },
             level: { kind: "boolean", brief: "Bring every side to the newest release one of them already runs, without asking for a newer one", default: false, hidden: true },
         },
@@ -106,6 +108,7 @@ export const commands = buildRouteMap({
             routes: syncCommands,
             docs: { brief: "Mirror a sandbox's files and ports onto this machine (the Desktop sync card)" },
         }),
+        sandbox: sandboxRoutes,
         environment: environmentRoutes,
         run,
         status,

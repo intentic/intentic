@@ -20,8 +20,10 @@ import DocsLayout from "../../components/docs/DocsLayout.astro";
         </li>
         <li>
             <strong>The worst outcome of an update is the sandbox you already had.</strong> An update that can't come up healthy puts your
-            previous sandbox back by itself. And every update keeps one step back: if the new version misbehaves, rollback is a single
-            command, offered right on the same card.
+            previous sandbox back by itself. On your own machine, the previous version then stays ready for 24 hours: if the new one keeps
+            crashing, never becomes ready or loses its connection in that time, the machine goes back to it by itself, and the update card
+            says what happened and why. Going back by hand is one press on the update card, or one command on the machine, on Linux, macOS
+            and Windows alike.
         </li>
         <li>
             <strong>Breaking changes are flagged before you take them, not after.</strong> When an update removes or changes something you may rely on, its card stops looking routine: it becomes a warning naming what stops working and what to do instead, and asks you to read it before handing over the command. The <a href="/changelog/">changelog</a> carries the same lines
@@ -40,9 +42,9 @@ import DocsLayout from "../../components/docs/DocsLayout.astro";
         is what you get, and a fix reaches you the day it is written rather than two days later.
     </p>
     <p>
-        The trade is that we carry the risk on our side rather than yours. If a release turns out badly we put the previous version back
-        centrally, in one step, and your sandbox simply stops being offered the bad one. Anything already running keeps running,
-        because the older release is never withdrawn.
+        The trade is that we carry the risk on our side rather than yours. If a release turns out badly we withdraw it and put the
+        previous version back centrally, in one step, and your sandbox simply stops being offered the bad one. A sandbox already running
+        it is told so on its update card, with the way back beside it.
     </p>
 
     <h2>What can change freely</h2>
@@ -52,6 +54,12 @@ import DocsLayout from "../../components/docs/DocsLayout.astro";
 
     <h2>If an update went badly anyway</h2>
     <p>
-        Open the update card and take the rollback it offers: your files stay as they are and only the software moves back. If a settings file then reads as unreadable, that is usually the older version looking at a newer file, and the notice says so rather than asking you to fix something that is not broken.
+        Open the update card and take the rollback it offers: your files stay as they are and only the software moves back. A version you
+        don't want can be skipped there too; the next release is offered as usual. If the sandbox doesn't come back at all, the page offers
+        the same way back without it after a few minutes: a button in the desktop app, or a command to run on the machine that runs your
+        sandbox. A sandbox we host goes back from its update card or the sandbox switcher, once we have kept the version it ran before.
+    </p>
+    <p>
+        If a settings file then reads as unreadable, that is usually the older version looking at a newer file, and the notice says so rather than asking you to fix something that is not broken.
     </p>
 </DocsLayout>

@@ -180,6 +180,9 @@ model Sandbox {
     daemonUrl          String?
     // When the daemon last announced — the setup wizard treats a recent value as "connected".
     lastSeenAt         DateTime?
+    // What the daemon said it is on its last accepted announce (`version`, semver). Null until one names itself, and
+    // again after an announce from a daemon too old to: a stale version is worse than none.
+    daemonVersion      String?
     // When the daemon FIRST announced — the activation moment, written once and never updated. lastSeenAt
     // cannot answer "when did this sandbox come alive" (it moves on every check-in), and time-to-activate
     // and retention cohorts both need the moment that does not move. Null = never announced.
@@ -276,6 +279,10 @@ model HostedMachine {
     /* These fields identify the applied image, environment overlay, and at-most-one active build. */
     image           String?
     baseImage       String?
+    // The digest `baseImage` resolved to when the overlay was built (api hosted-build.ts): a moving tag such as
+    // `:stable` names a new base without its string changing, so whether the base moved is a digest question. Null
+    // for an overlay built before this was kept, or while the registry could not say.
+    baseDigest      String?
     environmentHash String?
     buildingId      String?
     builds          HostedBuild[]
@@ -289,6 +296,19 @@ model HostedMachine {
      * clears it, since a later check-in is what says the machine runs again. */
     strandedAt     DateTime?
     strandedDetail String?
+    /* THE WAY BACK, AND WHAT IS STILL ON TRIAL (api gate/state-gate.ts, the owner's hostedRollback).
+     * `previousImage` is the image this machine ran before its last image change, pinned to a digest, and
+     * `previousEnvironmentHash` the overlay recipe it carried (null for the stock image): what the owner's rollback
+     * goes back to, and what a start that fails its health wait on an image still on trial goes back to. A rollback
+     * swaps it with what runs, so pressing it again goes forward.
+     * `unprovenImage` is an image the gate applied without seeing its daemon come up (a rebuild applied to a stopped
+     * machine, a start stopped from outside mid-check): the next start of it runs the same wait.
+     * `skippedDigest` is the platform image digest the owner rolled back from: a restart or a wake's heal does not
+     * move the machine onto it, nor rebuild its overlay on it, while `:stable` still resolves to it. */
+    previousImage           String?
+    previousEnvironmentHash String?
+    unprovenImage           String?
+    skippedDigest           String?
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 
@@ -379,6 +399,7 @@ model SandboxTrash {
     // The overlay the machine last ran, so a restore comes back on the environment it had rather than the base image.
     flyImage        String?
     baseImage       String?
+    baseDigest      String?
     environmentHash String?
     // The machine's rung and shape, so a restore puts back the disk's own machine; null exactly when appName is.
     tier     String?
@@ -402,6 +423,9 @@ model HostedBuild {
     machine           HostedMachine @relation(fields: [hostedMachineId], references: [id], onDelete: Cascade)
     hash              String
     baseImage         String
+    // The digest `baseImage` resolved to when the build started, which the overlay's FROM is pinned to; null when the
+    // registry could not say and the builder resolved the tag itself.
+    baseDigest        String?
     content           String
     state             String
     // The tag the builder pushes to and the digest it reports; the machine boots the digest, never the tag.

@@ -78,6 +78,11 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: "engines/", portability: "derived" },
     // An update the host downloaded and built for this sandbox (`ic sandbox prepare`); about this machine only.
     { path: "update-staged.json", portability: "derived" },
+    // What the host last did about this sandbox's version (ic writes it), the owner's skipped release, and why the
+    // last boot could not start (the daemon writes it, the host's probation reads it): all rebuilt by whoever next says.
+    { path: "update-outcome.json", portability: "derived" },
+    { path: "update-skipped.json", portability: "derived" },
+    { path: "boot-failure.json", portability: "derived" },
 
     /* ---- credentials ---- */
 

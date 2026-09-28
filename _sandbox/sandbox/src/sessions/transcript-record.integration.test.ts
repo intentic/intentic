@@ -7,6 +7,7 @@ import { type AgentEvent, type AgentHarness, type AgentProvider, PROVIDERS, HARN
 import { foldTurn } from "@intentic/sandbox-contract/transcript-fold";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { conversationUnits, QUARANTINE_MS } from "../store/conversation-units.js";
 import { blobsRoot } from "./record/record-blobs.js";
 import { backupFile } from "./record/record-convert.js";
 import { BLOB_GRACE_MS, fileTranscriptRecord, legacyTranscriptFile, transcriptFile } from "./transcript-record.js";
@@ -183,6 +184,31 @@ describe("fileTranscriptRecord", () => {
         expect(await record.sweep(new Set(["gone-1"]))).toBe(1);
         expect(await blobs()).toHaveLength(2);
         expect(await record.read("kept-1")).toEqual(kept);
+    });
+
+    it("keeps the blobs a record the orphan sweep set aside names, until that record is removed for good", async () => {
+        const root = await dir();
+        const record = fileTranscriptRecord(root);
+        const ran = (dump: string): TranscriptRow => ({
+            role: "assistant",
+            text: "ran it",
+            tools: [{ id: "t1", name: "Bash", category: "execute", status: "completed", target: "cat", content: [{ type: "text", text: dump }] }],
+        });
+        await record.append("orphan-1", [ran("o".repeat(20_000))]);
+        await record.append("kept-1", [ran("k".repeat(20_000))]);
+        const later = Date.now() + 2 * 60 * 60_000;
+        const units = conversationUnits(root, { has: (id) => id === "kept-1", any: () => true, recreated: false });
+        expect(await units.sweep(later)).toEqual({ quarantined: ["orphan-1"], pruned: [] });
+        const blobs = async (): Promise<string[]> => (await readdir(blobsRoot(root), { recursive: true })).filter((name) => name.endsWith(".zst"));
+        const past = new Date(Date.now() - 2 * BLOB_GRACE_MS);
+        await Promise.all((await blobs()).map((name) => utimes(join(blobsRoot(root), name), past, past)));
+
+        expect(await record.sweep(new Set())).toBe(0);
+        expect(await blobs()).toHaveLength(2);
+
+        expect(await units.sweep(later + QUARANTINE_MS + 1)).toEqual({ quarantined: [], pruned: ["orphan-1"] });
+        expect(await record.sweep(new Set())).toBe(1);
+        expect(await blobs()).toHaveLength(1);
     });
 
     it("ignores an id that is not filename-safe rather than letting it reach a path", async () => {

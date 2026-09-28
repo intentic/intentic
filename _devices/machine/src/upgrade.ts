@@ -7,6 +7,8 @@ import { binDir } from "./config.js";
 import { agentAssetUrl, agentPath, download, launcherAssetUrl, launcherPath, renameIfPresent, versionOf } from "./release.js";
 
 // One environment to one exact release: download → probe → swap → restart through the supervisor → verify → roll back.
+// The binary replaced stays beside the new one as `<bin>.previous` until the new agent has run for ten minutes
+// (agent-trial.ts): a release that passes this restart and then keeps crashing is still undone.
 
 // What an upgrade did, as a value the command prints and tests assert. `restarted` already had the right bytes
 // but served the old build; `agent-behind` is a swap that landed but didn't take.
@@ -25,7 +27,8 @@ export interface UpgradeExec {
     readonly swap: (from: string, to: string) => Promise<void>;
     // The build the agent holding the pidfile runs now; undefined when none runs, which an upgrade leaves that way.
     readonly runningBuild: () => Promise<string | undefined>;
-    // Restarts the agent through its supervisor and answers the build that came up; undefined when none did.
+    // Restarts the agent through its supervisor and answers the build that came up; undefined when none did. May throw
+    // (a direct start whose agent stopped at once), which this file reads as nothing having come up.
     readonly restart: () => Promise<string | undefined>;
     readonly discard: (path: string) => Promise<void>;
     // The Windows launcher ships beside the agent there, so it moves with it: both or neither.
@@ -56,6 +59,17 @@ const refusal = (probed: string | undefined, target: string): string | undefined
     return probed === target ? undefined : `the ${target} download reports itself as ${probed}, keeping the one you have.`;
 };
 
+// A restart that throws is one that brought nothing up, said with its reason: the caller's next step (putting the
+// previous agent back) must still run, which an exception escaping from here would skip.
+const restartAgent = async (exec: UpgradeExec, log: Log): Promise<string | undefined> => {
+    try {
+        return await exec.restart();
+    } catch (error) {
+        log(`The agent did not come back up: ${errorMessage(error)}`);
+        return undefined;
+    }
+};
+
 // The binary can be current while the agent isn't: replacing the file doesn't touch the process.
 const reconcileAgent = async (exec: UpgradeExec, installed: string, log: Log): Promise<UpgradeOutcome> => {
     const running = await exec.runningBuild();
@@ -63,7 +77,7 @@ const reconcileAgent = async (exec: UpgradeExec, installed: string, log: Log): P
         return { kind: "current", version: installed };
     }
     log(`The background agent is still running ${running}: restarting it on ${installed}.`);
-    const came = await exec.restart();
+    const came = await restartAgent(exec, log);
     if (came === installed) {
         return { kind: "restarted", from: running, to: installed };
     }
@@ -102,28 +116,28 @@ const discardAll = async (exec: UpgradeExec, paths: readonly string[]): Promise<
     await Promise.all(paths.map(async (path) => await exec.discard(path)));
 };
 
-// After the swap: the restart is the proof, and the only step whose failure puts the previous build back.
+// After the swap: the restart is the first proof, and a failed one puts the previous build back at once. The previous
+// pieces stay either way: the new agent drops them once it has run for ten minutes (agent-trial.ts), and puts them back
+// itself if it keeps crashing before then.
 const restartOnto = async (exec: UpgradeExec, pieces: readonly Piece[], target: string, installed: string, log: Log): Promise<UpgradeOutcome> => {
-    const came = await exec.restart();
+    const came = await restartAgent(exec, log);
     if (came === target) {
-        await discardAll(
-            exec,
-            pieces.map((piece) => piece.previous),
-        );
         return { kind: "upgraded", from: installed, to: target };
     }
     // The bytes are in place and something else is serving: a supervisor race or a survived process, not a bad build.
     if (came !== undefined) {
-        await discardAll(
-            exec,
-            pieces.map((piece) => piece.previous),
-        );
         return { kind: "agent-behind", installed: target, running: came };
     }
     log(`The new agent didn't stay running: putting the previous one back.`);
     await swapOut(exec, pieces);
-    await exec.restart();
-    return { kind: "failed", reason: `the new agent (${target}) wouldn't start, so ${installed} was restored and is running again.` };
+    const back = await restartAgent(exec, log);
+    return {
+        kind: "failed",
+        reason:
+            back === undefined
+                ? `the new agent (${target}) wouldn't start, so ${installed} was put back, but it did not come up either: start it with \`intentic-machine run\` and check its log.`
+                : `the new agent (${target}) wouldn't start, so ${installed} was restored and is running again.`,
+    };
 };
 
 // Never backwards: a machine already on `target` or past it keeps what it has, and a from-source build needs `force`.
@@ -154,11 +168,8 @@ export const runUpgrade = async (exec: UpgradeExec, target: string, installed: s
     }
     const wasRunning = (await exec.runningBuild()) !== undefined;
     await swapIn(exec, pieces);
+    // Nothing was running to restart: the new agent's trial begins at its first start, whenever that is.
     if (!wasRunning) {
-        await discardAll(
-            exec,
-            pieces.map((piece) => piece.previous),
-        );
         return { kind: "upgraded", from: installed, to: target };
     }
     return await restartOnto(exec, pieces, target, installed, log);

@@ -39,7 +39,7 @@ const startedTurns: string[] = [];
 jest.mock(`../../agents/fleet/agentActions`, () => ({ startAgent: (prompt?: string) => startedTurns.push(prompt ?? ``) }));
 // Container verbs, recorded the same way: which op left for which machine, and for `reshape`, what the form
 // asked for.
-const verbCalls: { hostId: string; slug: string; op: string; resources?: unknown; shape?: unknown; when?: string }[] = [];
+const verbCalls: { hostId: string; slug: string; op: string; resources?: unknown; shape?: unknown; when?: string; to?: string }[] = [];
 let holdVerb = false;
 let releaseVerb: (() => void) | undefined;
 // Both of the above in one list, in the order they left: which half of a removal goes first is a rule of its own,
@@ -57,15 +57,20 @@ jest.mock(`./useDevices`, () => {
     return {
         ...useDevicesOriginal,
         useDevices: () => ({ devices, readAt, error: ref(undefined), isLoading: devicesLoading, refetch: () => {} }),
-        manageDeviceSandbox: (hostId: string, slug: string, op: string, payload?: { resources?: unknown; shape?: unknown; when?: string }) => {
-            verbCalls.push({
+        manageDeviceSandbox: (hostId: string, slug: string, op: string, payload?: { resources?: unknown; shape?: unknown; when?: string; to?: string }) => {
+            const call: (typeof verbCalls)[number] = {
                 hostId,
                 slug,
                 op,
                 ...(payload?.resources === undefined ? {} : { resources: payload.resources }),
                 ...(payload?.shape === undefined ? {} : { shape: payload.shape }),
                 ...(payload?.when === undefined ? {} : { when: payload.when }),
-            });
+            };
+            // The kept version a rollback goes to, when the row's choice named one.
+            if (payload?.to !== undefined) {
+                call.to = payload.to;
+            }
+            verbCalls.push(call);
             flow.push(`${op}:${slug}`);
             const answer = `Reshaped sandbox "${slug}".`;
             return holdVerb
@@ -462,6 +467,36 @@ it(`offers Start, and no Stop, on a sandbox that is not running`, async () => {
     await nextTick();
     expect(menuRows()).toContain(`Start`);
     expect(menuRows()).not.toContain(`Stop`);
+});
+
+// The versions this machine kept, when its agent can go back to any of them: Roll back becomes one row per version, and
+// the one chosen is named in the question and sent as the rollback's `to`. The newest is the plain rollback, sent
+// without one.
+it(`offers each version the machine kept as its own Roll back, and sends the one chosen`, async () => {
+    granted();
+    const row = managed(true);
+    const box = row.sandboxes?.[0];
+    if (box === undefined) {
+        throw new Error(`the managed fixture lists its container`);
+    }
+    const kept: Device = {
+        ...row,
+        facts: { os: `linux`, arch: `x64`, shell: `bash`, home: `/home/dev`, roots: [`/home/dev`], features: [`set-shape`, `rollback-to`] },
+        sandboxes: [{ ...box, version: `1.316.0`, rollbackTargets: [{ image: `intentic-sandbox:kept-1`, version: `1.315.0` }, { image: `intentic-sandbox:kept-2`, version: `1.314.0` }] }],
+    };
+    const el = mount([kept]);
+    el.querySelector<HTMLButtonElement>(`button[aria-label="More actions"]`)?.click();
+    await nextTick();
+    // The plain verb gives way to the versions, the newest said to be the one before this.
+    expect(menuRows()).not.toContain(`Roll back`);
+    expect(menuRows()).toContain(`Roll back to 1.315.0the version before this one`);
+    menuRow(`Roll back to 1.314.0`)?.click();
+    await nextTick();
+    expect(everything()).toContain(`Roll work back to 1.314.0?`);
+    expect(everything()).toContain(`The sandbox restarts onto 1.314.0, an older version this machine kept. Its files are kept.`);
+    dialogButton(`Roll back`)?.click();
+    await nextTick();
+    expect(verbCalls).toEqual([{ hostId: `host-1`, slug: `work`, op: `rollback`, to: `1.314.0` }]);
 });
 
 // Pinned as vocabulary rather than via the teleported overlay, since the model is what both apps read.

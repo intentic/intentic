@@ -551,6 +551,7 @@ describe(`sandbox.delete on a hosted sandbox`, () => {
         region: `iad`,
         image: `registry/overlay:1`,
         baseImage: `registry/base:1`,
+        baseDigest: `sha256:${`1`.repeat(64)}`,
         environmentHash: `abc123`,
         tier: `free`,
         cpuKind: `shared`,
@@ -650,6 +651,7 @@ describe(`sandbox.delete on a hosted sandbox`, () => {
             region: hostedMachineRow.region,
             flyImage: hostedMachineRow.image,
             baseImage: hostedMachineRow.baseImage,
+            baseDigest: hostedMachineRow.baseDigest,
             environmentHash: hostedMachineRow.environmentHash,
         });
     });

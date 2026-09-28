@@ -1,4 +1,4 @@
-import { access, chmod, mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, open, rename, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -55,18 +55,60 @@ const renameOver = async (from: string, to: string): Promise<void> => {
 // Per write, not per process: two writes of one path in flight at once must not share a staging file.
 let writes = 0;
 
+// The bytes on the disk before the rename publishes them, and the rename itself flushed with its directory: for a file
+// whose loss locks someone out or loses the only way back (an owner file, a conversion journal), where a power cut
+// right after an ordinary write can leave a name pointing at nothing. A directory cannot be opened for this on Windows,
+// which orders the rename itself.
+const writeDurably = async (staging: string, content: string | Uint8Array, mode: number | undefined): Promise<void> => {
+    const handle = await open(staging, "w", mode);
+    try {
+        await handle.writeFile(content);
+        await handle.sync();
+    } finally {
+        await handle.close();
+    }
+};
+
+const syncDirectory = async (dir: string): Promise<void> => {
+    if (process.platform === "win32") {
+        return;
+    }
+    let handle: Awaited<ReturnType<typeof open>> | undefined;
+    try {
+        handle = await open(dir, "r");
+        await handle.sync();
+    } catch {
+        // allow(silent-catch): the rename already happened; a filesystem that cannot flush a directory has no better answer to give.
+    } finally {
+        await handle?.close();
+    }
+};
+
+export interface WriteOptions {
+    // Flushed to the disk before and after the rename (writeDurably); for the few files whose loss costs more than the
+    // write's time, never for a file written on every turn.
+    readonly durable?: boolean;
+}
+
 // A reader sees the old file or the new one whole. `mode` is exact, the umask not applied; without one, the umask decides.
-export const writeFileAtomic = async (path: string, content: string | Uint8Array, mode?: number): Promise<void> => {
+export const writeFileAtomic = async (path: string, content: string | Uint8Array, mode?: number, options: WriteOptions = {}): Promise<void> => {
     writes += 1;
     // The leading dot keeps a watcher's path table from prefix-matching the target.
     const staging = join(dirname(path), `.${basename(path)}.${process.pid}.${writes}.tmp`);
     await mkdir(dirname(path), { recursive: true });
     try {
-        await writeFile(staging, content, mode === undefined ? undefined : { mode });
+        if (options.durable === true) {
+            await writeDurably(staging, content, mode);
+        } else {
+            await writeFile(staging, content, mode === undefined ? undefined : { mode });
+        }
         if (mode !== undefined) {
             await chmod(staging, mode);
         }
         await renameOver(staging, path);
+        if (options.durable === true) {
+            await syncDirectory(dirname(path));
+        }
     } finally {
         // Already gone after the rename; after a failure, a partial file no later write would ever reuse.
         await rm(staging, { force: true });

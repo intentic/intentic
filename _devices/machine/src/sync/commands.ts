@@ -7,6 +7,7 @@ import { plural } from "@intentic/base/format";
 import { createUi, homeDir, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
 import { environmentKeyOf, sandboxIdFromUrl } from "@intentic/sandbox-contract";
 import { buildCommand, buildRouteMap, type CommandContext, type FlagParametersForType } from "@stricli/core";
+import { z } from "zod";
 import { postWhileWarming } from "../daemon-base.js";
 import { completeSetup, prepareSetup } from "../install.js";
 import { machineId } from "../machine-id.js";
@@ -31,6 +32,7 @@ import {
     ensureMutagen,
     existingSyncSessions,
     healDerivedConflicts,
+    isOwnMutagen,
     registerMutagenAutostart,
     retireOrphanSessions,
     runMutagen,
@@ -42,10 +44,12 @@ import { syncSshPort, tunnelReady } from "./tunnel.js";
 import {
     assertSshConfigVisible,
     ensureSshKey,
+    hostKeyOf,
     mutagenSshPath,
     pairingSshConfig,
     probeSshTransport,
     removeManagedSshConfig,
+    replaceKnownHost,
     sanitizeId,
     sshAlias,
     writeManagedSshConfig,
@@ -91,7 +95,7 @@ export const enrollKey = async (
         // machine's card; an older sandbox ignores both.
         identity?: { readonly machineId: string; readonly environment: string };
     } = {},
-): Promise<{ syncToken: string; mode: SyncMode }> => {
+): Promise<{ syncToken: string; mode: SyncMode; hostKey: string | undefined }> => {
     const response = await postWhileWarming(
         sandboxUrl,
         "/system/authorized-key",
@@ -121,13 +125,15 @@ export const enrollKey = async (
     if (!response.ok) {
         throw new Error(`enrolling the sync key failed (${response.status}): ${await response.text()}`);
     }
-    const body = (await response.json()) as { syncToken?: string; mode?: SyncMode };
+    // SAFETY: every field is optional, and each is checked before it is used: the token below, the key by hostKeyOf.
+    const body = (await response.json()) as { syncToken?: string; mode?: SyncMode; hostKey?: string };
     // The sync token authorizes the port read, the machine report and the SSH transport: without one, fail here, not as a dead session.
     if (body.syncToken === undefined) {
         throw new Error("the sandbox enrolled this machine but returned no sync credential: update the sandbox and enable sync again.");
     }
-    // What the daemon granted: "sync" is file sync plus mirroring (one holder), "mirror" is ports only (any number).
-    return { syncToken: body.syncToken, mode: body.mode ?? "sync" };
+    // What the daemon granted: "sync" is file sync plus mirroring (one holder), "mirror" is ports only (any number). The
+    // sshd host key, when a sandbox hands it over, is what this machine pins for it (ssh.ts, replaceKnownHost).
+    return { syncToken: body.syncToken, mode: body.mode ?? "sync", hostKey: hostKeyOf(z.string().optional().catch(undefined).parse(body.hostKey)) };
 };
 
 // Self-revoke this machine's enrollment (uninstall): DELETE /system/authorized-key authed by the sync token. A 404 is
@@ -200,7 +206,7 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     const publicKey = await ensureSshKey();
     // Enrollment can retry for ~30s while the sandbox tunnel warms; overlapped with the two binary downloads
     // (independent: distinct endpoints, distinct install paths).
-    const [{ syncToken, mode }, mutagen] = await Promise.all([
+    const [{ syncToken, mode, hostKey }, mutagen] = await Promise.all([
         enrollKey(flags.url, flags.pair, publicKey, {
             takeover: flags.takeover,
             identity: { machineId: machineId(), environment: environmentKeyOf({ wsl: await wslEnvironment() }) },
@@ -211,6 +217,9 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
 
     const sandboxId = flags.sandboxId ?? sanitizeId(new URL(flags.url).host);
     const alias = sshAlias(sandboxId);
+    // Enrolling again is the owner vouching that this is the same sandbox, whatever key its sshd presents now: the one
+    // known_hosts holds for the alias is replaced, which is the only moment a changed key is ever accepted.
+    await replaceKnownHost(alias, syncSshPort(sandboxId), hostKey);
 
     // File sync exists only in "sync" mode; a mirror-only enrollment has no local dir, just port forwards. A `~`
     // prefix can reach us verbatim (SYNC_DIR travels as data, no shell expands it). The default folder is named for
@@ -608,9 +617,10 @@ export const syncUninstall = async (out: Log, sandbox?: string): Promise<void> =
     await ensureResident(out);
     await teardownAllForwards(mutagen, out);
     await removeManagedSshConfig();
-    // Our downloaded Mutagen copy exists only for this agent, so retire its daemon completely. A system-installed
-    // `mutagen` on PATH may hold the user's own sessions: leave its daemon alone and say so instead.
-    const ownCopy = mutagen !== "mutagen";
+    // Our downloaded Mutagen copy exists only for this agent, so retire its daemon completely. A `mutagen` of the user's
+    // own, found on PATH, may hold their own sessions: leave its daemon alone and say so instead. ensureMutagen answers an
+    // absolute path either way, so which one this is is read off where it lives.
+    const ownCopy = isOwnMutagen(mutagen);
     if (ownCopy) {
         unregisterMutagenAutostart(mutagen);
         spawnSync(mutagen, ["daemon", "stop"], { stdio: "ignore", windowsHide: true });

@@ -753,7 +753,13 @@
             "workingDownload": "Downloading the update",
             "workingRebuild": "Rebuilding this sandbox",
             "workingRollBack": "Rolling this sandbox back",
-            "workingUpdate": "Updating this sandbox"
+            "workingUpdate": "Updating this sandbox",
+            "comingBack": "{what}. This page picks it up again by itself once it's back.",
+            "lostBeforeRestart": "Lost contact with that device before this sandbox restarted. It may still finish: refresh in a minute to see where it got to.",
+            "didntGoThrough": "{action} didn't go through on that device.",
+            "costRollBack": "It restarts your sandbox onto the version it ran before, which takes about half a minute.",
+            "costRestartOnlyShort": "It is already downloaded, so this is just the restart: about half a minute.",
+            "costBuildThenRestartShort": "It downloads and builds first, which interrupts nothing, then restarts your sandbox for about half a minute."
         },
         "normalize": {
             "sMailServer993": "{domain}'s mail server is {host}:993, filled in for you."
@@ -3211,7 +3217,8 @@
             "sandboxSettings": "Sandbox settings",
             "switchSandbox": "Switch sandbox: {switcherLabel}",
             "toAlsoRemoveMachine": "To also remove it from the machine hosting it: including its files, run there:",
-            "waitingIn": "{option} waiting for you in {name}"
+            "waitingIn": "{option} waiting for you in {name}",
+            "rollBackHosted": "Roll back to the version before its last update"
         },
         "sandboxSyncToggles": {
             "folderOnComputer": "Folder on this computer",
@@ -3260,7 +3267,20 @@
             "updateConvertsStoredFiles": "On its first boot, this update converts one stored file: | On its first boot, this update converts {count} stored files:",
             "convertedFilesKeptAside": "Each is copied aside first and put back if the new version does not start; afterwards the change shows on the workspace timeline.",
             "updateWouldStopBeforeTouching": "This update would stop before touching anything: a conversion fails on this sandbox's files.",
-            "newerVersionConvertedTheseFiles": "A newer version already converted some of these files; this one opens them read-only."
+            "newerVersionConvertedTheseFiles": "A newer version already converted some of these files; this one opens them read-only.",
+            "couldntShowAgain": "Couldn't offer that version again.",
+            "couldntSkip": "Couldn't skip that version.",
+            "skipThisVersion": "Skip this version",
+            "updateHeldBack": "Update held back",
+            "withdrawnBadge": "withdrawn",
+            "skippedBadge": "skipped",
+            "fullLogOnMachine": "Full log, on that machine:",
+            "skippedLine": "You skipped {version}, so it isn't offered.",
+            "showItAgain": "Show it again",
+            "filesStay": "Your files and conversations stay.",
+            "tryAgain": "Try again",
+            "notOfferedUntilFixed": "So it isn't offered here. A release that can convert these files is offered as usual.",
+            "previousStaysReady": "The previous version stays ready on this machine for 24 hours afterwards, so going back takes seconds."
         },
         "sandboxUsage": {
             "apiPricingBasis": "Token usage valued at providers’ API rates.",
@@ -3643,6 +3663,40 @@
             "recentDecisions": "Recent decisions",
             "worthBetterModelThan": "Worth a better model than the rest of the automatic jobs: it reads the command as data, and on a turn that has taken in something from outside, that text may be arguing for its own approval.",
             "chatDefault": "chat default"
+        },
+        "updateOutcome": {
+            "wentBackFromTo": "Went back from {from} to {to}.",
+            "wentBack": "Went back to the previous version.",
+            "updatedFromTo": "Updated from {from} to {to}.",
+            "updated": "This sandbox was updated.",
+            "previousReadyUntil": "The previous version stays ready on this machine until {when}.",
+            "newDidntStart": "The new version didn't start, so the previous one was put back.",
+            "updateDidntStart": "The update to {to} didn't start, so the previous version was put back.",
+            "versionDidntStart": "{to} didn't start, so the previous version was put back.",
+            "keptFailingWentBackTo": "{to} kept failing, so this machine went back to {from} by itself.",
+            "newKeptFailing": "The new version kept failing, so this machine went back to the previous one by itself.",
+            "keptFailingWentBack": "{to} kept failing, so this machine went back to the previous version by itself.",
+            "withdrawn": "Version {version} was withdrawn.",
+            "withdrawnBecause": "Version {version} was withdrawn: {reason}"
+        },
+        "hostedRollback": {
+            "header": "Roll {name} back?",
+            "body": "It restarts onto the version it ran before its last update, which takes about half a minute. Its files and conversations stay.",
+            "couldntRollBack": "Couldn't roll this sandbox back."
+        },
+        "sandboxRecovery": {
+            "title": "{name} hasn't come back",
+            "detail": "It has been out of reach for a few minutes.",
+            "gateHeading": "Get it running again",
+            "lead": "Its files and conversations are kept. On the machine that runs it, one of these usually gets it going again:",
+            "hostedLead": "Its files and conversations are kept. If the last update is what stopped it, going back to the version before usually brings it back.",
+            "restartInApp": "Restart it in the app",
+            "rollBackCommand": "Go back to the version before the last update",
+            "restartCommand": "Restart it",
+            "doctorCommand": "Find out what's wrong (changes nothing)",
+            "siblingReaches": "{name} can reach {machine} too:",
+            "openItsDevices": "manage this sandbox from its Devices page",
+            "yourSandbox": "Your sandbox"
         }
     },
     "settings": {

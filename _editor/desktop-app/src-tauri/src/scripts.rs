@@ -611,7 +611,7 @@ use intentic_bounded::{await_drain, DRAIN_GRACE};
 /// Run a script to completion, streaming every line to the window as it arrives. BLOCKING — call it from
 /// `spawn_blocking`; the scripts pull multi-gigabyte images and a setup legitimately takes minutes.
 ///
-/// stdin is closed. These scripts prompt when they have a terminal (cleanup's "which sandbox?", connect's
+/// stdin is closed. These scripts prompt when they have a terminal (`ic`'s "Proceed?" before a removal, connect's
 /// "install Docker?"), and a prompt written to a pipe nobody answers is a run that hangs forever with no UI
 /// for it — so every caller passes the non-interactive flags instead (`-y`, `INSTALL_DOCKER=1`).
 pub fn run(app: &AppHandle, id: &str, script: ScriptRun) -> Result<(), String> {

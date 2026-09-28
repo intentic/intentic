@@ -124,7 +124,11 @@
         "running": "running",
         "show": "show it",
         "stopped": "stopped",
-        "working": "working…"
+        "working": "working…",
+        "version": "Version",
+        "interruptedUpdate": "interrupted update — Start puts it back",
+        "interruptedUpdateHint": "An update was interrupted and the previous version set aside: Start puts it back.",
+        "previousReadyUntil": "previous version ready until {when}"
     },
     "imageView": {
         "actualSize1": "Actual size (1)",
@@ -209,9 +213,13 @@
         "savingKeepsItRunning": "Saving keeps the sandbox running as it is. ic keeps the new share and applies it on the sandbox's next restart through ic: Restart here, Start, an update, a rollback or a rebuild. Docker restarting the container by itself, after a crash or a reboot, does not apply it."
     },
     "sandboxSandboxVerbs": {
-        "deletesSandboxEverythingIn": "This deletes the sandbox and everything in it — its files and its history — from that device. This cannot be undone.",
+        "deletesSandboxEverythingIn": "This removes the sandbox and everything in it (its files and its history) from that device. It stays recoverable there for a week: `ic sandbox restore` on that machine brings it back.",
         "sandboxRestartsOntoImage": "The sandbox restarts onto the image it ran before its last update. Its files are kept.",
-        "sandboxRestartsOntoNewest": "The sandbox restarts onto the newest image and is unavailable while that happens — seconds if the update is already downloaded, a few minutes if not. Its files are kept."
+        "sandboxRestartsOntoNewest": "The sandbox restarts onto the newest image and is unavailable while that happens — seconds if the update is already downloaded, a few minutes if not. Its files are kept.",
+        "rollBackTo": "Roll back to {version}",
+        "versionBefore": "the version before this one",
+        "rollBackToHeader": "Roll {name} back to {version}?",
+        "sandboxRestartsOntoVersion": "The sandbox restarts onto {version}, an older version this machine kept. Its files are kept."
     },
     "searchBar": {
         "aa": "Aa",
@@ -222,7 +230,9 @@
         "done": "{title}: done"
     },
     "timeWindow": {
-        "all": "All"
+        "all": "All",
+        "todayAt": "{time} today",
+        "tomorrowAt": "{time} tomorrow"
     },
     "useOsPreference": {
         "linuxMacos": "Linux / macOS",

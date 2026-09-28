@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, readdir, rm, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { conversationsRoot, conversationUnit, conversationUnits } from "./conversation-units.js";
+import { conversationsRoot, conversationUnit, conversationUnits, QUARANTINE_MS, quarantineRoot, type UnitOwners } from "./conversation-units.js";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -16,6 +16,9 @@ const historyRoot = async (): Promise<string> => {
     return root;
 };
 
+// A database holding the rows named, made this boot or not.
+const owning = (ids: readonly string[], recreated = false): UnitOwners => ({ has: (id) => ids.includes(id), any: () => ids.length > 0, recreated });
+
 // A unit holding one file, its directory last touched `ageMs` before `now`.
 const unitAged = async (root: string, id: string, now: number, ageMs: number): Promise<void> => {
     const dir = conversationUnit(root, id);
@@ -27,7 +30,7 @@ const unitAged = async (root: string, id: string, now: number, ageMs: number): P
 
 test("removing takes each named directory whole, nested stores included, and nothing beside it", async () => {
     const root = await historyRoot();
-    const units = conversationUnits(root, () => false);
+    const units = conversationUnits(root, owning([]));
     await mkdir(join(units.dir("gone"), "sessions", "projects"), { recursive: true });
     await writeFile(join(units.dir("gone"), "sessions", "projects", "s.jsonl"), "{}\n");
     await unitAged(root, "kept", Date.now(), 0);
@@ -37,7 +40,7 @@ test("removing takes each named directory whole, nested stores included, and not
     expect(await readdir(conversationsRoot(root))).toEqual(["kept"]);
 });
 
-test("the sweep takes an unowned directory past the grace, and leaves an owned one, a young one and anything not a unit", async () => {
+test("the sweep moves an unowned directory past the grace aside, and leaves an owned one, a young one and anything not a unit", async () => {
     const root = await historyRoot();
     const now = Date.now();
     await unitAged(root, "owned", now, 2 * HOUR_MS);
@@ -46,17 +49,73 @@ test("the sweep takes an unowned directory past the grace, and leaves an owned o
     await unitAged(root, "opening", now, 60_000);
     await writeFile(join(conversationsRoot(root), "notes.txt"), "not a unit");
 
-    expect(await conversationUnits(root, (id) => id === "owned").sweep(now)).toEqual(["orphan"]);
+    expect(await conversationUnits(root, owning(["owned"])).sweep(now)).toEqual({ quarantined: ["orphan"], pruned: [] });
     expect((await readdir(conversationsRoot(root))).toSorted()).toEqual(["notes.txt", "opening", "owned"]);
+    // Moved whole, nothing deleted, and stamped with the moment it was set aside.
+    expect(await readFile(join(quarantineRoot(root), "orphan", "transcript.jsonl"), "utf8")).toBe("{}\n");
+    expect((await stat(join(quarantineRoot(root), "orphan"))).mtimeMs).toBe(now);
+});
+
+test("a directory set aside is removed for good only once it has been kept its while", async () => {
+    const root = await historyRoot();
+    const now = Date.now();
+    const units = conversationUnits(root, owning(["owned"]));
+    await unitAged(root, "owned", now, 2 * HOUR_MS);
+    await unitAged(root, "orphan", now, 2 * HOUR_MS);
+    await units.sweep(now);
+
+    expect(await units.sweep(now + QUARANTINE_MS)).toEqual({ quarantined: [], pruned: [] });
+    expect(await readdir(quarantineRoot(root))).toEqual(["orphan"]);
+    expect(await units.sweep(now + QUARANTINE_MS + 1)).toEqual({ quarantined: [], pruned: ["orphan"] });
+    expect(await readdir(quarantineRoot(root))).toEqual([]);
+});
+
+test("an orphan whose id was set aside before goes beside it, not over it", async () => {
+    const root = await historyRoot();
+    const now = Date.now();
+    const units = conversationUnits(root, owning(["owned"]));
+    await unitAged(root, "owned", now, 2 * HOUR_MS);
+    await unitAged(root, "orphan", now, 2 * HOUR_MS);
+    await units.sweep(now);
+    await unitAged(root, "orphan", now + 1, 2 * HOUR_MS);
+
+    expect(await units.sweep(now + 1)).toEqual({ quarantined: ["orphan"], pruned: [] });
+    expect((await readdir(quarantineRoot(root))).toSorted()).toEqual(["orphan", `orphan.${String(now + 1)}`]);
+});
+
+test("a database holding no conversation while their directories remain moves nothing: that is a lost database, not a fleet of orphans", async () => {
+    const root = await historyRoot();
+    const now = Date.now();
+    await unitAged(root, "one", now, 2 * HOUR_MS);
+    await unitAged(root, "two", now, 30 * 24 * HOUR_MS);
+
+    expect(await conversationUnits(root, owning([])).sweep(now)).toEqual({ held: "database-empty", quarantined: [], pruned: [] });
+    expect((await readdir(conversationsRoot(root))).toSorted()).toEqual(["one", "two"]);
+    await expect(readdir(quarantineRoot(root))).rejects.toThrow("ENOENT");
+});
+
+test("a database made again this boot moves nothing, and removes nothing set aside before it", async () => {
+    const root = await historyRoot();
+    const now = Date.now();
+    // Set aside by an earlier boot, long enough ago that a trusted sweep would remove it now.
+    const earlier = now - QUARANTINE_MS - 1;
+    await unitAged(root, "owned", earlier, 2 * HOUR_MS);
+    await unitAged(root, "orphan", earlier, 2 * HOUR_MS);
+    await conversationUnits(root, owning(["owned"])).sweep(earlier);
+    await unitAged(root, "stranger", now, 2 * HOUR_MS);
+
+    expect(await conversationUnits(root, owning(["owned"], true)).sweep(now)).toEqual({ held: "database-recreated", quarantined: [], pruned: [] });
+    expect((await readdir(conversationsRoot(root))).toSorted()).toEqual(["owned", "stranger"]);
+    expect(await readdir(quarantineRoot(root))).toEqual(["orphan"]);
 });
 
 test("a volume with no units yet sweeps nothing rather than failing boot", async () => {
-    expect(await conversationUnits(await historyRoot(), () => false).sweep(Date.now())).toEqual([]);
+    expect(await conversationUnits(await historyRoot(), owning([])).sweep(Date.now())).toEqual({ quarantined: [], pruned: [] });
 });
 
 test("files lists the first ones by path under the unit with their sizes, and how many there are in all", async () => {
     const root = await historyRoot();
-    const units = conversationUnits(root, () => true);
+    const units = conversationUnits(root, owning(["c1"]));
     await mkdir(join(units.dir("c1"), "sessions"), { recursive: true });
     await Promise.all([
         writeFile(join(units.dir("c1"), "transcript.jsonl"), "12345"),

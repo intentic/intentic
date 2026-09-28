@@ -34,4 +34,11 @@ describe("withSwitches", () => {
     it("leaves a switch nobody named as it was", () => {
         expect(withSwitches({ agentUpdates: false }, { sandboxes: "on" })).toEqual({ agentUpdates: false });
     });
+
+    // The daily backup and the daily tidy are switches of their own, stored the same way beside the update ones.
+    it("stores the backup and tidy switches off under their own keys, and on as their absence", () => {
+        const off = withSwitches({ sandboxUpdates: false }, { backups: "off", tidy: "off" });
+        expect(off).toEqual({ sandboxUpdates: false, sandboxBackups: false, sandboxTidy: false });
+        expect(withSwitches(off, { backups: "on" })).toEqual({ sandboxUpdates: false, sandboxTidy: false });
+    });
 });

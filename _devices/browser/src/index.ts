@@ -1,11 +1,11 @@
 import { sleep } from "@intentic/base/async";
 import { attach, type CdpSession, listTargets, newTab } from "./cdp.js";
-import { DEFAULT_PORT, ensureBrowser } from "./launch.js";
+import { ensureBrowser, ownEndpoint } from "./launch.js";
 import { type PageState, type RawSnapshot, refIndex, toPageState } from "./page.js";
 import { SNAPSHOT_SCRIPT } from "./snapshot.js";
 import { type Browser, BrowserError } from "./types.js";
 
-export { DEFAULT_PORT, browserCandidates, ensureBrowser, profileDir } from "./launch.js";
+export { browserCandidates, ensureBrowser, ownEndpoint, profileDir } from "./launch.js";
 export { SNAPSHOT_SCRIPT } from "./snapshot.js";
 export { renderPage, refIndex, toPageState, type RawSnapshot, type PageElement, type PageState } from "./page.js";
 export { BrowserError, type Browser } from "./types.js";
@@ -40,15 +40,25 @@ const withElement = (ref: string, body: string): string => {
 })()`;
 };
 
-export const browser = (port: number = DEFAULT_PORT): Browser => {
+export const browser = (): Browser => {
     let session: CdpSession | undefined;
     let targetId: string | undefined;
+
+    // This package's own browser's debugging port, found again whenever it is needed without a session: the browser may
+    // have been restarted on another port since, and whatever else answers on some port is never driven (launch.ts).
+    const endpoint = async (): Promise<number> => {
+        const port = await ownEndpoint();
+        if (port === undefined) {
+            throw new BrowserError("No browser of this agent's is open.", "Open a page first: that starts one.");
+        }
+        return port;
+    };
 
     const connect = async (preferred?: string): Promise<CdpSession> => {
         if (session !== undefined && (preferred === undefined || preferred === targetId)) {
             return session;
         }
-        const targets = await listTargets(port);
+        const targets = await listTargets(await endpoint());
         const target = preferred === undefined ? targets[0] : targets.find((candidate) => candidate.id === preferred);
         if (target?.webSocketDebuggerUrl === undefined) {
             throw new BrowserError(preferred === undefined ? "The browser has no open page." : `There is no tab "${preferred}" any more.`);
@@ -66,7 +76,7 @@ export const browser = (port: number = DEFAULT_PORT): Browser => {
 
     return {
         open: async (url) => {
-            await ensureBrowser(port, url);
+            const { port } = await ensureBrowser(url);
             if (url !== undefined) {
                 // Fresh tab rather than navigating what's in front: the agent's page and the user's page must differ.
                 const target = await newTab(port, url);
@@ -132,7 +142,7 @@ export const browser = (port: number = DEFAULT_PORT): Browser => {
         },
 
         tabs: async () =>
-            (await listTargets(port)).map((target) => ({ id: target.id, title: target.title, url: target.url, active: target.id === targetId })),
+            (await listTargets(await endpoint())).map((target) => ({ id: target.id, title: target.title, url: target.url, active: target.id === targetId })),
 
         selectTab: async (id) => {
             await connect(id);

@@ -350,11 +350,12 @@ export function startTurnRun(
     run.journalled = journalled;
     runs.hold(input.conversationId, input.conversationId, run);
     const provider = input.agent;
-    // Told to the actor in order, which writes them in order; a failed write costs the journal, never the turn.
+    // Told to the actor in order, which writes them in order; a failed write costs the journal, never the turn. Each
+    // names this run, so its clear cannot take off the record of a run started after it finished.
     const journal = (event: { readonly kind: "journalled"; readonly entry: JournalledTurn } | { readonly kind: "unjournalled" }): void => {
         if (journalled) {
             // allow(silent-catch): a failed journal write costs the journal, never the turn.
-            void deps.conversations.send(input.conversationId, event).settled.catch(() => undefined);
+            void deps.conversations.send(input.conversationId, { ...event, run: run.id }).settled.catch(() => undefined);
         }
     };
     // Journal entry's live fields; snapshotted synchronously so a rewrite always carries all of them.

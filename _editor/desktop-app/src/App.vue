@@ -17,6 +17,7 @@ import {
     type SandboxVerb,
     SandboxVerbs,
     sandboxVerbPrompt,
+    type SandboxVerbPrompt,
     ui,
     VERB_LABEL,
     vAction,
@@ -942,6 +943,13 @@ const toggleLogs = async (slug: string): Promise<void> => {
     busy.value = undefined;
 };
 
+// The kit's removal prompt is worded for the web, about "that device". Here the machine is this one and the slug is known,
+// so the body names the exact command that brings the sandbox back out of ic's trash (recreate --remove) within the week.
+const promptFor = (verb: SandboxVerb, name: string, slug: string): SandboxVerbPrompt | undefined => {
+    const asked = sandboxVerbPrompt(verb, name);
+    return verb === `remove` && asked !== undefined ? { header: asked.header, body: t(`desktop.app.removesSandboxKeepsFiles`, { slug }) } : asked;
+};
+
 const act = async (group: DeviceSandboxGroup, verb: SandboxVerb): Promise<void> => {
     const slug = slugOf(group);
     if (slug === undefined || busy.value !== undefined || running.value) {
@@ -956,7 +964,7 @@ const act = async (group: DeviceSandboxGroup, verb: SandboxVerb): Promise<void> 
         return;
     }
     // Title and message match the web tab's ConfirmDialog header/body split.
-    const asked = sandboxVerbPrompt(verb, group.title);
+    const asked = promptFor(verb, group.title, slug);
     if (asked !== undefined && !(await confirm(asked.body, { title: asked.header, kind: `warning`, okLabel: VERB_LABEL[verb] }))) {
         return;
     }

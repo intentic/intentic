@@ -23,6 +23,7 @@ import {
     resourcesSummary,
     sandboxGroups,
     shortCommand,
+    versionLine,
 } from "./deviceDetail.js";
 import StatusBadge from "../feedback/StatusBadge.vue";
 import { useT } from "../../i18n/index.js";
@@ -155,17 +156,23 @@ watch(
     () => (folded.value = new Set([...folded.value].filter((id) => !open.includes(id)))),
 );
 
-// The status glyph's words: its accessible name, and on hover the sentence behind it.
+// The status glyph's words: its accessible name, and on hover the sentence behind it. A stopped sandbox an update left
+// set aside says so, since its remedy (Start) is not what "stopped" suggests.
+const stoppedWord = (group: DeviceSandboxGroup): string =>
+    group.sandbox?.parked === true ? t(`ui.deviceDetail.interruptedUpdate`) : t(`ui.deviceDetail.stopped`);
 const statusWord = (group: DeviceSandboxGroup): string =>
     busy.includes(group.sandboxId)
         ? t(`ui.deviceDetail.working`)
         : groupStatus(group) === `running`
           ? t(`ui.deviceDetail.running`)
           : groupStatus(group) === `stopped`
-            ? t(`ui.deviceDetail.stopped`)
+            ? stoppedWord(group)
             : t(`ui.deviceDetail.notRunningHere`);
 const statusHint = (group: DeviceSandboxGroup): string =>
     groupStatus(group) === `elsewhere` && !busy.includes(group.sandboxId) ? t(`ui.deviceDetail.notRunningHereHint`) : statusWord(group);
+
+// Read at render: a machine's report is re-read on the page's own poll, and a probation that ended drops off its next one.
+const versionOf = (sandbox: DeviceSandboxRow): string | undefined => versionLine(sandbox, Date.now());
 
 // A port shows no fill or colour: with a chip on every port plus a green running dot, colour had stopped
 // signalling anything. Only a port that reached localhost is shown as `localhost:<port>`.
@@ -426,6 +433,16 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                 </template>
                             </div>
                             <div v-if="$slots[`ports`]" :class="VERBS"><slot name="ports" :group="group" /></div>
+                        </dd>
+                    </div>
+
+                    <!-- What runs, and while the version before the last update is still parked and ready, until when; or
+                         that an update was interrupted and Start puts the old one back. -->
+                    <div v-if="group.sandbox && (versionOf(group.sandbox) || group.sandbox.parked)" :class="SECTION">
+                        <dt :class="LABEL">{{ t(`ui.deviceDetail.version`) }}</dt>
+                        <dd :class="LINE" class="flex-1 flex-wrap gap-x-2 gap-y-1">
+                            <span v-if="versionOf(group.sandbox)" class="text-xs text-muted">{{ versionOf(group.sandbox) }}</span>
+                            <span v-if="group.sandbox.parked" class="text-xs text-warning">{{ t(`ui.deviceDetail.interruptedUpdateHint`) }}</span>
                         </dd>
                     </div>
 

@@ -25,6 +25,12 @@ const fatalReports = (dir: string, pid: number): string[] => {
     }
 };
 
+// Whether this process found the previous run dead without its exit hook having run: set by claimBootMarker, read by
+// what is worth checking only after such a death (the conversation database's integrity, conversations-db.ts).
+let previousDied = false;
+
+export const previousRunDied = (): boolean => previousDied;
+
 // Reads the previous run's fate, logs it if it died unannounced, and claims the marker for this run. Never throws: a
 // sandbox that cannot write its marker still runs, just with worse forensics.
 export const claimBootMarker = (logsDir: string, logger: Logger): { markExited: (code: number) => void } => {
@@ -37,6 +43,7 @@ export const claimBootMarker = (logsDir: string, logger: Logger): { markExited: 
             return { markExited: () => undefined };
         }
         if (previous.state === "running") {
+            previousDied = true;
             const reports = fatalReports(logsDir, previous.pid);
             logger.error(
                 {

@@ -34,19 +34,45 @@ const LIST_TIMEOUT_MS = 60_000;
 // Room for every container's share, well past exec's 1 MB default.
 const MAX_BUFFER = 8 * 1024 * 1024;
 
+// One row of the listing as it arrived, before it is read as the contract's.
+const ListedRowSchema = z.record(z.string(), z.json());
+type ListedRow = z.infer<typeof ListedRowSchema>;
+
+// What a row is (which sandbox, its container, whether it runs, on what image) against what an ic newer than this agent
+// may say about it in a way this agent cannot read yet: a new outcome word, a new kind of rollback target.
+const REQUIRED_FIELDS: ReadonlySet<string> = new Set(["slug", "container", "running", "image"]);
+
+// A row read as the contract's, dropping only the optional fields that do not parse, so a newer ic's answer about one
+// of them costs that field rather than the whole listing. A row whose identity does not parse is no row at all.
+const rowFrom = (row: ListedRow): DeviceSandbox | undefined => {
+    const whole = DeviceSandboxSchema.safeParse(row);
+    if (whole.success) {
+        return whole.data;
+    }
+    const failed = new Set(whole.error.issues.map((issue) => String(issue.path[0] ?? "")));
+    if ([...failed].some((field) => REQUIRED_FIELDS.has(field) || field === "")) {
+        return undefined;
+    }
+    const kept = DeviceSandboxSchema.safeParse(Object.fromEntries(Object.entries(row).filter(([field]) => !failed.has(field))));
+    return kept.success ? kept.data : undefined;
+};
+
 // `ic sandbox list --json` prints one line of JSON on stdout (notes, if any, go to stderr), in the contract's own
 // shape: running state, the share docker enforces, the shape the container runs with, the shape saved for its next
-// restart, and the update staged for it. Parsed, not trusted: a line that is not that shape is ic too old or broken.
+// restart, the update staged for it, and (from a newer ic) its version, whether it is parked mid-swap, its probation
+// and what it can roll back to. Parsed, not trusted: a line that is not a list of rows is ic too old or broken.
 export const fleetFrom = (stdout: string): DeviceSandbox[] => {
     const line = stdout
         .split(/\r?\n/)
         .map((text) => text.trim())
         .findLast((text) => text.startsWith("["));
-    const parsed = line === undefined ? undefined : z.array(DeviceSandboxSchema).safeParse(JSON.parse(line));
-    if (parsed?.success !== true) {
+    const parsed = line === undefined ? undefined : z.array(ListedRowSchema).safeParse(JSON.parse(line));
+    const rows = parsed?.success === true ? parsed.data.map(rowFrom) : [undefined];
+    const read = rows.filter((row) => row !== undefined);
+    if (read.length !== rows.length) {
         throw new Error("The `ic` on this device did not answer `ic sandbox list --json`. Re-run the sandbox's install command on it to update ic.");
     }
-    return parsed.data;
+    return read;
 };
 
 // What runs on this machine, as ic answers it. Exported for the auto-prepare tick (../auto-prepare.ts): one producer of
@@ -73,10 +99,15 @@ export const fleet = async (): Promise<DeviceSandbox[]> => {
     throw new Error("no ic candidate was tried");
 };
 
-// Which slugs an `ic` flow is touching right now, in this process. The background auto-prepare tick reads it so
-// a timer never starts a pull under an update someone is watching stream. Only advisory: a person's click never
-// waits on the timer's work, and the flows race benignly.
+// Which slugs an `ic` flow is touching right now, in this process. The background rounds (auto-prepare, the daily
+// backup, the probation watch) read it so a timer never starts work under an update someone is watching stream. Only
+// advisory: a person's click never waits on the timer's work, and the flows race benignly.
 export const icInFlight = new Set<string>();
+
+// The subset of those flows that move a container (every one but a prepare, a shape saved for later and its forget):
+// what an agent restart must not land in the middle of. A separate process's upgrade cannot see this set, and reads
+// ic's own record of the cutover instead (swap-records.ts).
+export const icSwapsInFlight = new Set<string>();
 
 // The answer is the JSON itself: the daemon's Devices view reads it verbatim (device-reports.ts), and a model
 // reads keys as well as prose.
@@ -93,16 +124,19 @@ export const SandboxOpSchema = z.enum(["start", "stop", "restart"]);
 export type SandboxOp = z.infer<typeof SandboxOpSchema>;
 
 // Which container the slug means, or the machine's own answer that it means none: one lookup for every op, so a
-// wrong slug gets the same sentence whichever button sent it, and so a flow that will take minutes is refused now.
-const find = async (slug: string): Promise<DeviceSandbox> => {
-    const boxes = await fleet();
+// wrong slug gets the same sentence whichever button sent it, and so a flow that will take minutes is refused now. A
+// sandbox an interrupted swap left parked is listed under its own slug, not running, and is found like any other:
+// start, rollback and update are exactly what bring it back.
+export const findIn = (boxes: readonly DeviceSandbox[], slug: string): DeviceSandbox => {
     const target = boxes.find((box) => box.slug === slug);
     if (target !== undefined) {
         return target;
     }
-    const known = boxes.map((box) => box.slug).join(", ");
+    const known = boxes.map((box) => (box.parked === true ? `${box.slug} (parked mid-swap)` : box.slug)).join(", ");
     throw new Error(`No sandbox "${slug}" on this device. ${known === "" ? "It runs none." : `It has: ${known}.`}`);
 };
+
+const find = async (slug: string): Promise<DeviceSandbox> => findIn(await fleet(), slug);
 
 // Start, stop or restart, through ic: it powers the tunnel sidecar with its sandbox (down first, up last), and a start
 // or restart with a shape saved for the next restart is the recreate that applies it.
@@ -114,7 +148,7 @@ export const manageSandbox = async (
 ): Promise<string> => {
     assertScope(scopes, "sandboxes");
     const target = await find(slug);
-    const run = await icFlow(slug, icPowerArgs(op, slug), onLine);
+    const run = await icFlow(slug, icPowerArgs(op, slug), onLine, { moves: true });
     if (run.code !== 0) {
         throw new Error(`That ${op} failed on this device.\n\n${run.output}`);
     }
@@ -133,15 +167,20 @@ export type SandboxSwap = z.infer<typeof SandboxSwapSchema>;
 
 // The argv for each swap: `rebuild` takes the approved overlay's digest as a required second positional (the
 // trust anchor), while update and rollback take the slug alone. An argument in the wrong position binds to a
-// different parameter and fails silently, much later, as something else.
-export const icSwapArgs = (swap: SandboxSwap, slug: string, hash: string | undefined): string[] => {
+// different parameter and fails silently, much later, as something else. `to` is rollback's alone: a version or pinned
+// image from the sandbox's `rollbackTargets` to go back to instead of the previous one, refused on any other swap
+// rather than dropped, since a swap carried out without it would be a different swap.
+export const icSwapArgs = (swap: SandboxSwap, slug: string, hash: string | undefined, to?: string): string[] => {
+    if (to !== undefined && swap !== "rollback") {
+        throw new Error(`"to" names a version to go back to, which only a rollback takes, not ${swap}.`);
+    }
     if (swap === "rebuild") {
         if (hash === undefined || hash === "") {
             throw new Error(`"hash" is required to rebuild: it is the digest of the overlay the owner approved.`);
         }
         return ["sandbox", "rebuild", slug, hash];
     }
-    return ["sandbox", swap, slug];
+    return to === undefined ? ["sandbox", swap, slug] : ["sandbox", swap, slug, "--to", to];
 };
 
 // Removal confirms itself: there is no terminal on this end, so `ic`'s own "are you sure" would hang forever.
@@ -307,6 +346,10 @@ export const lineSplitter = (onLine: (line: string) => void): LineSplitter => {
 // lines are collected into the answer a caller reports at the end. Both streams go to one place: `ic` writes progress
 // to stdout and diagnostics to stderr. `missing` is ENOENT alone — the program isn't there — which the caller answers
 // for, since only it knows what was supposed to be at that path.
+// On POSIX the child gets a process group of its own: a signal meant for the agent's group (a supervisor stopping it, a
+// terminal's Ctrl-C) never reaches an ic that has parked a container and not yet started its replacement. Nothing here
+// ever kills it either, when the link or request that asked goes away: the swap finishes, and the probation watch
+// judges it. Windows has no groups to leave, and a detached child there would get a console window.
 const runStreamed = (
     binary: string,
     args: readonly string[],
@@ -326,7 +369,7 @@ const runStreamed = (
         err.end();
     };
     return new Promise((resolve) => {
-        const child = spawn(binary, [...args], { windowsHide: true, env: { ...process.env, ...env } });
+        const child = spawn(binary, [...args], { windowsHide: true, env: { ...process.env, ...env }, detached: process.platform !== "win32" });
         let missing = false;
         child.stdout.setEncoding("utf8").on("data", out.push);
         child.stderr.setEncoding("utf8").on("data", err.push);
@@ -370,18 +413,51 @@ export const runIc = async (
     throw new Error("no ic candidate was tried");
 };
 
-// One `ic` run on one slug, marked in flight for its whole length so the background tick never pulls under it.
+// The same `ic`, run in a person's own terminal (`intentic-machine sandbox …`): its streams are the terminal's, so its
+// prompts, colours and JSON reach them untouched, and it stays in the terminal's process group, where Ctrl-C belongs to
+// the person watching. Answers ic's exit code.
+export const runIcAttached = async (args: readonly string[]): Promise<number> => {
+    await ensureCurrentIc();
+    const candidates = icCandidates(process.platform, homeDir());
+    for (const [index, binary] of candidates.entries()) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are tried in order; ENOENT means try the next
+        const code = await new Promise<number | "missing">((resolve) => {
+            const child = spawn(binary, [...args], { stdio: "inherit", windowsHide: true });
+            child.once("error", (error: NodeJS.ErrnoException) => {
+                if (error.code !== "ENOENT") {
+                    process.stderr.write(`${error.message}\n`);
+                }
+                resolve(error.code === "ENOENT" ? "missing" : 1);
+            });
+            child.once("close", (exit) => resolve(exit ?? 1));
+        });
+        if (code !== "missing") {
+            return code;
+        }
+        if (index === candidates.length - 1) {
+            throw new Error("This device has no `ic` command. Re-run a sandbox's install command on it to get one.");
+        }
+    }
+    throw new Error("no ic candidate was tried");
+};
+
+// One `ic` run on one slug, marked in flight for its whole length so the background rounds never start work under it,
+// and, when it `moves` a container, so this agent does not restart under it either (tools/agent.ts, auto-upgrade.ts).
 export const icFlow = async (
     slug: string,
     args: readonly string[],
     onLine: (line: string) => void,
-    env: Readonly<Record<string, string>> = {},
+    { env = {}, moves }: { readonly env?: Readonly<Record<string, string>>; readonly moves: boolean },
 ): Promise<{ code: number; output: string }> => {
     icInFlight.add(slug);
+    if (moves) {
+        icSwapsInFlight.add(slug);
+    }
     try {
         return await runIc(args, onLine, env);
     } finally {
         icInFlight.delete(slug);
+        icSwapsInFlight.delete(slug);
     }
 };
 
@@ -391,13 +467,14 @@ export const swapSandbox = async (
     hash: string | undefined,
     scopes: DeviceScopes,
     onLine: (line: string) => void,
+    to?: string,
 ): Promise<string> => {
     assertScope(scopes, "sandboxes");
     // Built before the fleet is read, so a rebuild with no digest is refused instantly rather than after a docker
     // round trip.
-    const args = icSwapArgs(swap, slug, hash);
+    const args = icSwapArgs(swap, slug, hash, to);
     await find(slug);
-    const { code, output } = await icFlow(slug, args, onLine);
+    const { code, output } = await icFlow(slug, args, onLine, { moves: swap !== "prepare" });
     if (code !== 0) {
         throw new Error(`That ${swap} failed on this device.\n\n${output}`);
     }
@@ -406,7 +483,7 @@ export const swapSandbox = async (
     if (swap === "prepare") {
         return `The next update for "${slug}" is downloaded and built. Applying it is now a short restart.`;
     }
-    const verb = { update: "Updated", rebuild: "Rebuilt", rollback: "Rolled back" }[swap];
+    const verb = { update: "Updated", rebuild: "Rebuilt", rollback: to === undefined ? "Rolled back" : `Rolled back to ${to}` }[swap];
     return `${verb} sandbox "${slug}". Its files and its history were kept.`;
 };
 
@@ -425,7 +502,7 @@ export const shapeSandbox = async (
         throw new Error("A shape has to set something: a memory or CPU cap, or a privileged/GPU switch. To apply what is saved, restart the sandbox.");
     }
     await find(slug);
-    const run = await icFlow(slug, icShapeArgs(slug, fields, when), onLine);
+    const run = await icFlow(slug, icShapeArgs(slug, fields, when), onLine, { moves: when === "now" });
     if (run.code !== 0) {
         throw new Error(`That shape was not ${when === "now" ? "applied" : "saved"} on this device.\n\n${run.output}`);
     }
@@ -437,7 +514,7 @@ export const shapeSandbox = async (
 export const forgetShape = async (slug: string, scopes: DeviceScopes, onLine: (line: string) => void): Promise<string> => {
     assertScope(scopes, "sandboxes");
     await find(slug);
-    const run = await icFlow(slug, icForgetShapeArgs(slug), onLine);
+    const run = await icFlow(slug, icForgetShapeArgs(slug), onLine, { moves: false });
     if (run.code !== 0) {
         throw new Error(`That could not be forgotten on this device.\n\n${run.output}`);
     }
@@ -495,7 +572,7 @@ export const reconnectSandbox = async (
     const env = icConnectEnv(platformUrl);
     // find(slug) first: redeeming the claim for a slug not on this machine would burn it for nothing.
     await find(slug);
-    const run = await icFlow(slug, args, onLine, env);
+    const run = await icFlow(slug, args, onLine, { env, moves: true });
     if (run.code !== 0) {
         throw new Error(`That reconnect failed on this device.\n\n${run.output}`);
     }
@@ -520,7 +597,7 @@ export const createSandbox = async (
     if ((await fleet()).some((box) => box.slug === slug)) {
         throw new Error(`This device already runs a sandbox called "${slug}". Nothing was created and the setup code was not spent.`);
     }
-    const run = await icFlow(slug, args, onLine, env);
+    const run = await icFlow(slug, args, onLine, { env, moves: true });
     if (run.code !== 0) {
         throw new Error(`That sandbox could not be created on this device.\n\n${run.output}`);
     }
@@ -533,7 +610,7 @@ export const createSandbox = async (
 export const removeSandbox = async (slug: string, scopes: DeviceScopes, onLine: (line: string) => void): Promise<string> => {
     assertScope(scopes, "sandboxes");
     await find(slug);
-    const run = await icFlow(slug, icRemoveArgs(slug), onLine);
+    const run = await icFlow(slug, icRemoveArgs(slug), onLine, { moves: true });
     if (run.code !== 0) {
         throw new Error(`That removal failed on this device.\n\n${run.output}`);
     }

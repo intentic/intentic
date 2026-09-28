@@ -180,11 +180,11 @@ describe(`POST /sandbox/presentation`, () => {
     });
 });
 
-const announce = (prisma: PrismaClient, token: string | undefined, daemonUrl: unknown) =>
+const announce = (prisma: PrismaClient, token: string | undefined, daemonUrl: unknown, version?: unknown) =>
     createApp(config, prisma, logger).app.request(`/sandbox/announce`, {
         method: `POST`,
         headers: { "content-type": `application/json`, ...(token === undefined ? {} : { "x-intentic-connect": token }) },
-        body: JSON.stringify({ daemonUrl }),
+        body: JSON.stringify({ daemonUrl, version }),
     });
 
 const farewell = (prisma: PrismaClient, token: string | undefined, removedBy?: unknown) =>
@@ -248,15 +248,35 @@ describe(`POST /sandbox/announce`, () => {
         expect(updateMany).toHaveBeenCalledWith({
             where: { id: `s1`, tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) },
             // The refusal record clears here: a sandbox just accepted at its proper address no longer has one. So does
-            // the removal tombstone: a box announcing is a box that is here, whatever was deleted before it.
+            // the removal tombstone: a box announcing is a box that is here, whatever was deleted before it. A daemon
+            // that names no version leaves none standing: the one stored was an earlier daemon's.
             data: {
                 daemonUrl: `https://sandbox-abc.intentic.dev`,
+                daemonVersion: null,
                 lastSeenAt: expect.any(Date),
                 announceRefusal: Prisma.DbNull,
                 removedAt: null,
                 removedBy: null,
             },
         });
+    });
+
+    // What the daemon says it is, stored on the row it announces for; the platform's only word on what each one runs.
+    it(`stores the version the daemon names`, async () => {
+        const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+        const findUnique = jest.fn().mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null });
+        const res = await announce(fakePrisma({ sandbox: { findUnique, updateMany } }), `tok`, `https://sandbox-abc.intentic.dev`, `1.62.0-rc.1+build.7`);
+        expect(res.status).toBe(200);
+        expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ daemonVersion: `1.62.0-rc.1+build.7` }) }));
+    });
+
+    // A version is short and semver-shaped; anything else is not trusted, and costs the announce nothing.
+    it.each([[`latest`], [`1.2`], [`1.2.3 ; drop table`], [`1.2.${`9`.repeat(80)}`], [42]])(`announces but stores no version for %j`, async (version) => {
+        const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+        const findUnique = jest.fn().mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null });
+        const res = await announce(fakePrisma({ sandbox: { findUnique, updateMany } }), `tok`, `https://sandbox-abc.intentic.dev`, version);
+        expect(res.status).toBe(200);
+        expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ daemonVersion: null }) }));
     });
 
     it(`404s an unknown token with no oracle`, async () => {
@@ -465,6 +485,26 @@ describe(`GET /api/reachability/:sandboxId`, () => {
         const res = await ask(fakePrisma({ sandbox: { findUnique: jest.fn().mockResolvedValue({ id: `s1`, hosted: null }) } }), id);
         expect(res.status).toBe(200);
         expect(await res.json()).toEqual({ ok: true, lane: `tunnel` });
+    });
+});
+
+/* A REQUEST THAT WAITS ON A MACHINE KEEPS ITS CONNECTION. Bun closes one that sends nothing for its idle timeout (10s by
+ * default) with no response; a restart or a rollback waits minutes for the new daemon, and the owner is owed its answer. */
+describe(`the idle timeout on machine changes`, () => {
+    // Bun's server, as Bun.serve hands it to fetch; only the per-request timeout is read.
+    const served = () => ({ timeout: jest.fn() });
+
+    it.each([[`/rpc/sandbox/hosted-restart`], [`/rpc/sandbox/hosted-rollback`], [`/rpc/sandbox/wake`], [`/rpc/hosted-plan/tier`]])(`lifts it for %s`, async (path) => {
+        const server = served();
+        await createApp(config, fakePrisma({}), logger).app.request(path, { method: `POST`, body: `{}` }, server);
+        expect(server.timeout).toHaveBeenCalledTimes(1);
+        expect(server.timeout).toHaveBeenCalledWith(expect.any(Request), 0);
+    });
+
+    it(`leaves it for every other route`, async () => {
+        const server = served();
+        await createApp(config, fakePrisma({}), logger).app.request(`/rpc/sandbox/hosted-offer`, { method: `GET` }, server);
+        expect(server.timeout).not.toHaveBeenCalled();
     });
 });
 

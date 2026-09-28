@@ -514,6 +514,38 @@ describe(`turn runs`, () => {
         await waitFor(() => expect(writes).toEqual([`record`, `clear:c-transcript-commit`]));
     });
 
+    it(`a turn started while the one before it still writes its transcript keeps its journal row: an ended run clears only its own`, async () => {
+        const first = crankedTurn();
+        const { writes, journalDeps, beginning } = journalledFleet();
+        let commit!: () => void;
+        const transcript = jest.fn(
+            () =>
+                new Promise<boolean>((resolve) => {
+                    commit = () => resolve(true);
+                }),
+        );
+        const settled: string[] = [];
+        journalDeps.events.subscribe(`run.settled`, ({ conversationId }) => void settled.push(conversationId));
+        startTurnRun(journalDeps, beginning(first.turnFn), turn(`c-next`), { journalled: true, transcript });
+        first.push({ kind: `done` });
+        first.close();
+        await waitFor(() => expect(transcript).toHaveBeenCalledTimes(1));
+
+        // The first run is over and its transcript not yet down: the conversation's next turn may start, and files its row.
+        const second = crankedTurn();
+        started(startTurnRun(journalDeps, beginning(second.turnFn), turn(`c-next`), { journalled: true }));
+        await waitFor(() => expect(writes).toEqual([`record`, `record`]));
+        commit();
+        await waitFor(() => expect(settled).toEqual([`c-next`]));
+
+        // The first run's clear came and went; the second's row stands, and keeps being written through.
+        second.push({ kind: `session`, sessionId: `sess-2` });
+        await waitFor(() => expect(writes).toEqual([`record`, `record`, `record:sess-2`]));
+        second.push({ kind: `done` });
+        second.close();
+        await waitFor(() => expect(writes).toEqual([`record`, `record`, `record:sess-2`, `clear:c-next`]));
+    });
+
     it(`journals a raised card, keeps the session beside it, and takes the card back off when it resolves`, async () => {
         const { turnFn, push, close } = crankedTurn();
         const { entries, journalDeps, beginning, conversations } = journalledFleet();

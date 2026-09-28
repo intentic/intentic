@@ -24,6 +24,7 @@
         "openFolder": "Otwórz jego folder",
         "openWorkspace": "Otwórz przestrzeń roboczą",
         "pickingUpWhereRestart": "Wracamy tam, gdzie skończył restart. Nic nie trzeba robić: to okno samo idzie dalej.",
+        "removesSandboxKeepsFiles": "To usuwa sandbox z tego urządzenia. Jego pliki i historię można odzyskać jeszcze przez tydzień: uruchom ic sandbox restore {slug} na tym komputerze, aby go przywrócić.",
         "runningOnDeviceKeeps": "Działa na tym urządzeniu: pracuje dalej, nawet jeśli zamkniesz to okno.",
         "sandbox": "Twój sandbox",
         "sandboxRunsInDocker": "Twój sandbox działa w Dockerze, a ten jeszcze nie działa. Najpierw sprawdzamy, czego potrzebuje Twój komputer, i pytamy przed każdą zmianą.",

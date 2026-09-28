@@ -1,6 +1,7 @@
 import type { Logger } from "pino";
 import type { Config } from "../env.config.js";
 import { AGENT_SESSION_ENV, type ContainerRole } from "../system/boot/container-owner.js";
+import type { BootFault } from "../system/boot/fault.js";
 import type { ProfileTraits } from "../system/boot/profile.js";
 import { statePath } from "../state-paths.js";
 import type { DocumentSpec } from "../store/evolution/documents.js";
@@ -32,11 +33,14 @@ interface StateBoot {
     // Every document and step this build knows: main.ts hands in state-registry.ts, generated beside this module.
     readonly documents: readonly DocumentSpec[];
     readonly steps: readonly StructuralStep[];
+    // The update drill's fault, when this boot was asked to fail its conversion (system/boot/fault.ts).
+    readonly fault?: BootFault | undefined;
 }
 
-// Never fatal: a failure here leaves every file as it was or journaled, and the stores still convert on read, which is
+// Never fatal: a conversion that fails partway is put back before this returns, /health reports the journal failed for
+// the rest of the boot (which a host takes as the update not having taken), and the stores convert on read, which is
 // strictly better than a daemon that cannot start (a hosted sandbox has no previous image to roll back to).
-export const convergeStateAtBoot = async ({ config, logger, traits, role, documents, steps }: StateBoot): Promise<void> => {
+export const convergeStateAtBoot = async ({ config, logger, traits, role, documents, steps, fault }: StateBoot): Promise<void> => {
     try {
         await convergeState({
             roots: stateRootsOf(config),
@@ -45,9 +49,10 @@ export const convergeStateAtBoot = async ({ config, logger, traits, role, docume
             version,
             logger,
             mayWrite: mayConverge(traits, role),
+            failConversion: fault === "fail-conversion",
         });
     } catch (error) {
-        logger.error({ err: error }, "state: converging this workspace's stored files failed; the stores convert on read instead");
+        logger.error({ err: error }, "state: converging this workspace's stored files failed and what it had changed was put back; the stores convert on read instead");
     }
 };
 

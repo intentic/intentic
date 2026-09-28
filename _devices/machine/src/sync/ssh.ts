@@ -1,11 +1,12 @@
 import { spawnSync } from "node:child_process";
+import { createHmac } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { REFERENCE_DIR, STATE_DIR } from "@intentic/constants";
-import { homeDir, type Log } from "@intentic/local-agent";
+import { homeDir, type Log, writeSecretFile } from "@intentic/local-agent";
 import { STATE_GROUPS, stateGroupPaths, UNBACKED_STATE_PATHS } from "@intentic/sandbox-contract";
 import { baseDir } from "../config.js";
 import { knownHostsPath, sshConfigName, sshConfigPath, sshDir, sshKeyPath, userSshConfigPath } from "./config.js";
@@ -99,6 +100,53 @@ export const sshConfigBlock = (args: {
         `    HostKeyAlias ${args.alias}`,
         "",
     ].join("\n");
+
+/* THE HOST KEY A SANDBOX PRESENTS, which `accept-new` above records once and then refuses ever to see change. A sandbox
+   set up again (another container, restored elsewhere, its /history lost) presents a new key under the same alias, and
+   sync to it failed for good with REMOTE HOST IDENTIFICATION HAS CHANGED. Enrolling again is the owner saying this is
+   the same sandbox, so enrollment replaces what known_hosts holds for the alias: with the key the enrollment handed
+   over when it carries one, or with nothing, for `accept-new` to record the key the sandbox presents next. Outside an
+   enrollment a changed key is still refused. */
+
+// A key line as the enrollment may carry it: its type and base64 body, nothing else.
+const HOST_KEY = /^(?:ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(?:256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+/]+={0,2}$/;
+
+export const hostKeyOf = (value: string | undefined): string | undefined => (value !== undefined && HOST_KEY.test(value.trim()) ? value.trim() : undefined);
+
+// Whether one host pattern of a known_hosts line names any of `names`: written plainly, or hashed (`|1|salt|hash`,
+// which Debian and Ubuntu write by default through HashKnownHosts).
+const namesHost = (pattern: string, names: readonly string[]): boolean => {
+    if (!pattern.startsWith("|1|")) {
+        return names.includes(pattern);
+    }
+    const [, , salt, hash] = pattern.split("|");
+    return salt !== undefined && hash !== undefined && names.some((name) => createHmac("sha1", Buffer.from(salt, "base64")).update(name).digest("base64") === hash);
+};
+
+// known_hosts with every entry for `alias` gone (ssh records it bare, since HostKeyAlias replaces host and port alike,
+// and `[alias]:port` is how a non-default port is written without it), and `hostKey` pinned in their place when there is
+// one. Every other line, comments and markers included, is kept as it was.
+export const knownHostsFor = (current: string, alias: string, port: number, hostKey: string | undefined): string => {
+    const names = [alias, `[${alias}]:${port}`];
+    const kept = current.split(/\r?\n/).filter((line) => {
+        const fields = line.trim().split(/\s+/);
+        const hosts = fields[0]?.startsWith("@") === true ? fields[1] : fields[0];
+        return hosts === undefined || hosts === "" || hosts.startsWith("#") || !hosts.split(",").some((pattern) => namesHost(pattern, names));
+    });
+    while (kept.at(-1) === "") {
+        kept.pop();
+    }
+    return [...kept, ...(hostKey === undefined ? [] : [`${alias} ${hostKey}`])].map((line) => `${line}\n`).join("");
+};
+
+// The enrollment's half: this alias's entries replaced in this agent's own known_hosts (never the user's).
+export const replaceKnownHost = async (alias: string, port: number, hostKey: string | undefined): Promise<void> => {
+    const current = (await readFile(knownHostsPath, "utf8").catch(undefinedIfMissing)) ?? "";
+    const next = knownHostsFor(current, alias, port, hostKey);
+    if (next !== current) {
+        await writeSecretFile(knownHostsPath, baseDir, next);
+    }
+};
 
 // Relative on purpose: OpenSSH anchors a relative include at ~/.ssh in every build, but an absolute Windows path
 // is recognized only by Microsoft's client, not the Cygwin-based ones Mutagen tries first, which then silently include

@@ -44,6 +44,20 @@ export interface SandboxVerbPrompt {
     readonly body: string;
 }
 
+// ONE OF THE VERSIONS A MACHINE KEPT, as the row's Roll back offers it. `to` is what the machine is sent to name it (a
+// version, or the pinned image when it would not say), and absent for the newest, which is where a plain rollback goes
+// anyway. Offered only by a caller whose machine can take `to` at all.
+export interface RollbackChoice {
+    readonly version: string;
+    readonly to: string | undefined;
+}
+
+/** The question before going back to an older version than the one before, naming it. */
+export const rollbackToPrompt = (name: string, version: string): SandboxVerbPrompt => ({
+    header: t(`ui.sandboxSandboxVerbs.rollBackToHeader`, { name, version }),
+    body: t(`ui.sandboxSandboxVerbs.sandboxRestartsOntoVersion`, { version }),
+});
+
 export const sandboxVerbPrompt = (verb: SandboxVerb, name: string): SandboxVerbPrompt | undefined => {
     switch (verb) {
         case `remove`:

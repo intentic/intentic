@@ -1,3 +1,28 @@
+/* PROGRESS NOBODY IS READING ANY MORE MUST NOT STOP A SWAP. std's print macros panic when their stream is gone (a
+machine agent restarted mid-update, an SSH session that dropped, a desktop window closed), and a panic between parking
+the old container and starting the new one leaves the sandbox down. These shadow them for every module below: the same
+bytes, and a closed stream is let go. */
+macro_rules! println {
+    () => {{
+        use std::io::Write as _;
+        let _ = writeln!(std::io::stdout());
+    }};
+    ($($arg:tt)*) => {{
+        use std::io::Write as _;
+        let _ = writeln!(std::io::stdout(), $($arg)*);
+    }};
+}
+macro_rules! eprintln {
+    () => {{
+        use std::io::Write as _;
+        let _ = writeln!(std::io::stderr());
+    }};
+    ($($arg:tt)*) => {{
+        use std::io::Write as _;
+        let _ = writeln!(std::io::stderr(), $($arg)*);
+    }};
+}
+
 mod checks;
 mod cloudflare;
 mod contract;
@@ -123,14 +148,89 @@ enum SandboxCommand {
         #[arg(long = "skip-preflight")]
         skip_preflight: bool,
     },
-    /// Back to the image this sandbox ran before its last update
+    /// Back to the image this sandbox ran before its last update (or, with --to, an older one kept here)
     Rollback {
         /// The sandbox to roll back (omit when this machine runs exactly one)
         slug: Option<String>,
+        /// Go back to this version (or kept image) instead of the previous one: see `ic sandbox versions`. A release
+        /// version nothing kept here is downloaded by its tag
+        #[arg(long)]
+        to: Option<String>,
         /// Swap without first running the target image's state conversions against read-only mounts of
         /// /work and /history — the pre-flight that refuses a swap whose conversions would fail
         #[arg(long = "skip-preflight")]
         skip_preflight: bool,
+    },
+    /// Finish or undo a swap that was interrupted, and judge the probation after an update: go back to the parked
+    /// previous version by itself if the new one keeps crashing, never becomes ready, or loses its tunnel
+    Watch {
+        /// The sandbox to look at (omit for every sandbox on this machine)
+        slug: Option<String>,
+        /// One line of JSON per sandbox: what was done (the machine agent reads this)
+        #[arg(long)]
+        json: bool,
+    },
+    /// What this sandbox runs and every version it can go back to without a download (read-only)
+    Versions {
+        /// The sandbox (omit when this machine runs exactly one)
+        slug: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Back up the sandbox's /work and /history, encrypted, to this machine's own disk outside Docker
+    Backup {
+        /// The sandbox to back up (omit when this machine runs exactly one)
+        slug: Option<String>,
+        /// Unattended mode (the machine agent's daily tick): skip when a backup ran within a day, the disk is
+        /// short, or a swap is in flight
+        #[arg(long)]
+        auto: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// The backups kept for a sandbox on this machine (read-only)
+    Backups {
+        /// The sandbox (omit when this machine runs exactly one)
+        slug: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Restore a backup: into a folder to look through, or into a sandbox's own volumes
+    #[command(name = "backup-restore", group = ArgGroup::new("where").required(true).args(["to", "into"]))]
+    BackupRestore {
+        /// The sandbox whose backups to restore from
+        slug: String,
+        /// Which backup (an id from `ic sandbox backups`, or `latest`)
+        #[arg(long)]
+        snapshot: String,
+        /// A folder on this machine to restore the files into
+        #[arg(long)]
+        to: Option<std::path::PathBuf>,
+        /// A sandbox whose volumes the backup is written back into (it is stopped for it and started again)
+        #[arg(long)]
+        into: Option<String>,
+        /// Skip the confirmation (scripts)
+        #[arg(short = 'y', long = "yes")]
+        yes: bool,
+    },
+    /// Remove what updates left behind: images and records of sandboxes that are gone, superseded builds, and the
+    /// trash past its window. Never deletes a volume
+    Tidy {
+        /// Say what would be removed and remove nothing
+        #[arg(long = "dry-run")]
+        dry_run: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// The way back in when the sandbox's owner file cannot be read: move it aside so the owner's next sign-in binds
+    /// the sandbox again
+    #[command(name = "reset-owner")]
+    ResetOwner {
+        /// The sandbox (always named: this changes who can sign in)
+        slug: String,
+        /// Skip the confirmation (scripts)
+        #[arg(short = 'y', long = "yes")]
+        yes: bool,
     },
     /// Swap onto the locally-built intentic-sandbox:dev image (the dogfood loop)
     Dev {
@@ -433,12 +533,26 @@ fn main() {
             ),
             SandboxCommand::Rollback {
                 slug,
+                to,
                 skip_preflight,
             } => sandbox::recreate::run(
-                sandbox::recreate::Mode::Rollback,
+                sandbox::recreate::Mode::Rollback { to },
                 slug,
                 preflight(skip_preflight),
             ),
+            SandboxCommand::Watch { slug, json } => sandbox::probation::run(slug, json),
+            SandboxCommand::Versions { slug, json } => sandbox::versions::run(slug, json),
+            SandboxCommand::Backup { slug, auto, json } => sandbox::backup::run(slug, auto, json),
+            SandboxCommand::Backups { slug, json } => sandbox::backup::list(slug, json),
+            SandboxCommand::BackupRestore {
+                slug,
+                snapshot,
+                to,
+                into,
+                yes,
+            } => sandbox::backup::restore(slug, snapshot, to, into, yes),
+            SandboxCommand::Tidy { dry_run, json } => sandbox::tidy::run(dry_run, json),
+            SandboxCommand::ResetOwner { slug, yes } => sandbox::owner::run(slug, yes),
             SandboxCommand::Dev {
                 slug,
                 skip_preflight,
@@ -1218,6 +1332,92 @@ mod tests {
         assert_eq!(seed_value(Some("12g".into())), Some("12g".to_string()));
         assert_eq!(seed_value(Some("12G".into())), Some("12G".to_string()));
         assert_eq!(seed_value(None), None);
+    }
+
+    #[test]
+    fn rollback_takes_an_optional_target_and_the_watch_and_backup_verbs_parse() {
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Rollback { slug, to, .. }),
+        }) = parse(&["sandbox", "rollback", "abc", "--to", "1.315.0"])
+        else {
+            panic!("rollback --to did not parse")
+        };
+        assert_eq!(
+            (slug.as_deref(), to.as_deref()),
+            (Some("abc"), Some("1.315.0"))
+        );
+        assert!(parse(&["sandbox", "rollback", "abc", "--to"]).is_err());
+        // The machine agent's own command lines.
+        assert!(matches!(
+            parse(&["sandbox", "watch", "--json"]),
+            Ok(Cli {
+                command: Command::Sandbox(SandboxCommand::Watch {
+                    slug: None,
+                    json: true
+                })
+            })
+        ));
+        assert!(matches!(
+            parse(&["sandbox", "backup", "abc", "--auto", "--json"]),
+            Ok(Cli {
+                command: Command::Sandbox(SandboxCommand::Backup {
+                    auto: true,
+                    json: true,
+                    ..
+                })
+            })
+        ));
+        assert!(
+            parse(&["sandbox", "update", "abc", "--to", "1.0.0"]).is_err(),
+            "--to is a rollback's alone"
+        );
+    }
+
+    #[test]
+    fn a_restore_says_where_the_files_go_and_reset_owner_names_its_sandbox() {
+        assert!(parse(&[
+            "sandbox",
+            "backup-restore",
+            "abc",
+            "--snapshot",
+            "latest",
+            "--to",
+            "/tmp/x"
+        ])
+        .is_ok());
+        assert!(parse(&[
+            "sandbox",
+            "backup-restore",
+            "abc",
+            "--snapshot",
+            "latest",
+            "--into",
+            "def"
+        ])
+        .is_ok());
+        assert!(parse(&["sandbox", "backup-restore", "abc", "--snapshot", "latest"]).is_err());
+        assert!(
+            parse(&["sandbox", "backup-restore", "abc", "--to", "/tmp/x"]).is_err(),
+            "which backup is never guessed"
+        );
+        assert!(parse(&["sandbox", "reset-owner"]).is_err());
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::ResetOwner { slug, yes }),
+        }) = parse(&["sandbox", "reset-owner", "abc"])
+        else {
+            panic!("reset-owner did not parse")
+        };
+        assert_eq!(slug, "abc");
+        assert!(!yes, "consent is never a default");
+        assert!(matches!(
+            parse(&["sandbox", "tidy", "--dry-run"]),
+            Ok(Cli {
+                command: Command::Sandbox(SandboxCommand::Tidy {
+                    dry_run: true,
+                    json: false
+                })
+            })
+        ));
     }
 
     #[test]

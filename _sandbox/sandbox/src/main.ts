@@ -1,4 +1,5 @@
 import { DisposableStore } from "@intentic/base/lifecycle";
+import { HISTORY_ROOT } from "@intentic/constants";
 import { startRoomSocket } from "./workload/room-socket.js";
 import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
 import { startProviderBoot } from "./agent/providers/provider-registry.js";
@@ -22,7 +23,9 @@ import { createServices } from "./composition.js";
 import { stateDocuments, stateSteps } from "./bootstrap/state-registry.js";
 import { logsRoot } from "./logs/log-files.js";
 import { loadConfig } from "./env.config.js";
+import { type BootAttempt, clearBootFailure, failBoot } from "./system/boot/boot-failure.js";
 import { claimContainer } from "./system/boot/container-owner.js";
+import { type BootFault, bootFault, CRASH_AFTER_READY_MS } from "./system/boot/fault.js";
 import { finishPrewarm } from "./system/boot/prewarm.js";
 import { listenHost, profileTraits, requireLocalContract } from "./system/boot/profile.js";
 import { checks as containerChecks, owner as containerOwner } from "./system/invariant.js";
@@ -30,7 +33,7 @@ import { readCgroup } from "./system/resources/cgroup.js";
 import { startBootProfile } from "./system/resources/loop/boot-profile.js";
 import { startLoopWatchdog } from "./system/resources/loop/loop-watchdog.js";
 import { answers } from "./ports/port-probe.js";
-import { runnerModeRequested, startRunnerMode } from "./runners/runner-mode.js";
+import { type RunnerModeEnv, runnerModeRequested, startRunnerMode } from "./runners/runner-mode.js";
 import { appPanelKey } from "./workspace/layout/app-previews.js";
 
 // Sandbox container's entrypoint; config comes from env injected at run time, never baked in. It settles the process,
@@ -38,20 +41,37 @@ import { appPanelKey } from "./workspace/layout/app-previews.js";
 // immediately (`/health`, `/events`), data routes wait behind the readiness gate until the boot chain finishes, and
 // everything past the gate is background machinery no queued request depends on. Each phase owns its own subject and
 // registers its own teardown, so nothing here enumerates what to stop.
-const main = async (): Promise<void> => {
+// A boot that fails before the gate opens records why and exits (system/boot/boot-failure.ts), rather than lingering
+// as a daemon that answers /health and never serves: the front restarts it with backoff, and the host reads the record.
+
+// What the rest of the boot needs once the gate has opened.
+interface Ready {
+    readonly phase: BootPhase;
+    readonly runnerEnv: RunnerModeEnv | undefined;
+    readonly prewarm: boolean;
+}
+
+// Everything up to and including the gate opening. Throws whatever stops the boot short of it.
+const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): Promise<Ready> => {
     // Runner mode is validated before anything else builds: a misassembled runner (runner-mode.ts) crashes here with
     // the reason logged, rather than half-booting. A well-formed runner otherwise boots like any loopback sandbox.
     const runnerEnv = runnerModeRequested(process.env);
     const config = loadConfig();
+    attempt.historyRoot = config.historyRoot;
     requireAuthWhenReachable(config);
     requireLocalContract(config);
     // Profile differences below read a named trait, never the profile value directly (system/boot/profile.ts).
     const traits = profileTraits(config);
     const host = listenHost(config);
     const logger = prepareDaemonProcess(config, traits);
+    attempt.logger = logger;
+    if (fault !== undefined) {
+        logger.warn({ fault }, "boot: INTENTIC_FAULT is set, so this run fails on purpose for the update drill");
+    }
 
     // Every subsystem registers its own teardown at creation; nothing here enumerates what to stop.
     const shutdown = new DisposableStore();
+    attempt.shutdown = shutdown;
     // Stall detector: logs the lag and the machine's pressure numbers when the event loop freezes.
     const loopWatchdog = startLoopWatchdog(logger);
     shutdown.push(() => loopWatchdog.stop());
@@ -62,13 +82,22 @@ const main = async (): Promise<void> => {
     // Claims container ownership before anything container-wide runs, since a container can hold more than one daemon
     // (container-owner.ts). LOCAL never claims: it owns nothing container-wide, and its role is pinned, not derived.
     // Ahead of the services, since the claim holder alone converges the stored files below.
+    attempt.stage = "Claiming the container";
     const role = traits.convergeHome
         ? await claimContainer({ workspaceRoot: config.workspaceRoot, historyRoot: config.historyRoot }, logger)
         : { container: false, roots: true };
+    attempt.role = role;
+    if (fault === "crash-at-boot") {
+        throw new Error("INTENTIC_FAULT=crash-at-boot: this boot fails on purpose before it converges the stored files");
+    }
     // Brings every stored file to this build's shapes before a single store opens (store/evolution/state-convergence.ts), under a
-    // journal a rolled-back build undoes; committed once the boot chain converges, below.
-    await convergeStateAtBoot({ config, logger, traits, role, documents: stateDocuments(), steps: stateSteps() });
+    // journal a rolled-back build undoes; committed once the boot chain converges, below. A conversion that fails is
+    // put back and logged there, never thrown here: boot goes on converting on read.
+    attempt.stage = "Converging the stored files";
+    await convergeStateAtBoot({ config, logger, traits, role, documents: stateDocuments(), steps: stateSteps(), fault });
+    attempt.stage = "Building the services";
     const services = createServices(config, logger);
+    attempt.services = services;
     shutdown.push(() => services.resources.stop());
     // The budget's verdict for heavy commands and test fan-outs, on a socket of its own; one per container, so the
     // daemon that claimed the container serves it.
@@ -112,16 +141,32 @@ const main = async (): Promise<void> => {
     // Declares the readiness gate data routes await (app.ts): an early request waits instead of reading half-built
     // state, and a browser is told which step is running. Before the listeners, or a request could slip past it.
     declareBootSteps(services);
+    attempt.stage = "Opening the front door";
     const reach = await startFrontDoor(phase, host);
     startPlatformPresence(phase, reach);
 
+    attempt.stage = "Running the boot chain";
     await runBootSteps(phase, runnerEnv);
     wireDependencyCoordinator(services);
     // Converged state opens the gate; everything below is background machinery no queued request depends on.
     services.boot.finish();
+    return { phase, runnerEnv, prewarm };
+};
+
+// Everything past the gate: none of it is a boot failure, and a throw here is only logged.
+const pastGate = async ({ phase, runnerEnv, prewarm }: Ready, fault: BootFault | undefined): Promise<void> => {
+    const { config, logger, role, services, shutdown } = phase;
+    // This boot got all the way, so the last one's failure is no longer the news: the host reads the record's absence.
+    if (role.container) {
+        void clearBootFailure(config.historyRoot, logger);
+    }
     // The build booted all the way on the files it converted: nothing needs undoing, and the host's update gate reads
     // the committed journal off /health.
     void commitStateAtBoot(phase);
+    if (fault === "crash-after-ready") {
+        logger.warn({ inMs: CRASH_AFTER_READY_MS }, "boot: INTENTIC_FAULT=crash-after-ready, so this daemon exits soon after the gate opened");
+        setTimeout(() => process.exit(1), CRASH_AFTER_READY_MS);
+    }
 
     // After the gate, so the editor is live while the dev servers come up; still after the stale-session sweep, which
     // must run before anything starts a session, and after the baseline, so a dev server's first build can't dirty it.
@@ -172,6 +217,19 @@ const main = async (): Promise<void> => {
             .catch((error: unknown) => logger.error({ err: error }, "prewarm: could not finish; the claimed boot prepares whatever is missing"))
             .finally(stop);
     }
+};
+
+const main = async (): Promise<void> => {
+    // Read once: the update drill's hook (system/boot/fault.ts), never set on a production image.
+    const fault = bootFault();
+    const attempt: BootAttempt = { stage: "Reading the configuration", historyRoot: process.env["HISTORY_ROOT"] ?? HISTORY_ROOT };
+    let ready: Ready;
+    try {
+        ready = await bootToGate(attempt, fault);
+    } catch (thrown) {
+        return failBoot(attempt, thrown instanceof Error ? thrown : new Error(String(thrown)));
+    }
+    await pastGate(ready, fault);
 };
 
 void main();

@@ -189,16 +189,29 @@ export const revertEngine = async (host: EngineHost, id: EngineId): Promise<Engi
     }
 };
 
+// A version the owner went back from is set aside for automatic selection, so the next daily check or boot does not
+// install it again while it is still what the channel blesses: the revert sticks until a newer version is blessed, and
+// choosing it again by hand ("Update to") takes it out of the list, as it does for any quarantined version.
+const REVERTED = "the owner went back from it; it is not installed again until a newer version is blessed or it is chosen by hand";
+
+const setAsideReverted = async (id: EngineId, left: string | undefined): Promise<void> => {
+    if (left !== undefined) {
+        await quarantineVersion(id, left, REVERTED, new Date().toISOString());
+    }
+};
+
 const revertOnce = async (host: EngineHost, id: EngineId): Promise<EngineApplied> => {
     const state = await readEngineState(id);
     const previous = state.previous;
     if (previous !== undefined && (await installedVersions(id)).includes(previous)) {
         await activateVersion(id, previous);
+        await setAsideReverted(id, state.active === previous ? undefined : state.active);
         forgetEngineResolution(id);
-        host.logger.info({ engine: id, version: previous }, "engine reverted");
+        host.logger.info({ engine: id, version: previous, ...opt("setAside", state.active) }, "engine reverted");
         return { ok: true, version: previous, source: "store", fromNextTurn: true };
     }
     await deactivate(id);
+    await setAsideReverted(id, state.active);
     forgetEngineResolution(id);
     const baked = await engineDescriptor(id).baked();
     host.logger.info({ engine: id, ...opt("version", baked) }, "engine reverted to the image's copy");

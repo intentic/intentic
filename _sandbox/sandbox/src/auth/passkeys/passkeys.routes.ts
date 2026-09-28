@@ -9,7 +9,7 @@ import type { Context } from "hono";
 import type { z } from "zod";
 import type { AppEnv } from "../../app-env.js";
 import type { Services } from "../../composition.js";
-import { bearerFrom, ForbiddenError, type Proof } from "../auth.js";
+import { bearerFrom, ForbiddenError, OWNER_UNREADABLE, OwnerUnreadableError, type Proof } from "../auth.js";
 import { ownershipDenied } from "../owner-gates.js";
 import { mintRecoveryCodes, PasskeyError, type StoredCredential, summaryOf } from "./passkey-store.js";
 
@@ -34,8 +34,13 @@ const bodyOf = async <T extends z.ZodType>(c: Context, schema: T): Promise<z.inf
     schema.safeParse(await c.req.json().catch(() => undefined)).data;
 
 // A bearer refusal on the doors that check their own: 403 for a verified stranger, 401 for everything else.
-const denied = (c: Context, error: unknown): Response =>
-    error instanceof ForbiddenError ? c.json({ error: error.message }, 403) : c.json({ error: "unauthorized" }, 401);
+const denied = (c: Context, error: unknown): Response => {
+    if (error instanceof ForbiddenError) {
+        return c.json({ error: error.message }, 403);
+    }
+    // A passkey sign-in refused by an owner file nobody can read says so, as every other door does (app.ts).
+    return error instanceof OwnerUnreadableError ? c.json({ error: "unauthorized", reason: OWNER_UNREADABLE }, 401) : c.json({ error: "unauthorized" }, 401);
+};
 
 const sessionOf = (minted: { readonly token: string; readonly expiresAt: number }, email: string) => ({ token: minted.token, expiresAt: minted.expiresAt, email });
 

@@ -3,12 +3,29 @@ import {
     CONFLICT_PATHS_MAX,
     conflictsFrom,
     forwardSessionName,
+    isOwnMutagen,
     parseForwardNames,
     parseForwardPorts,
     parseOrphanForwardNames,
     parseOrphanSyncNames,
     sessionName,
 } from "./mutagen.js";
+
+// `sync uninstall` stops and unregisters Mutagen's daemon only when it is this agent's own copy: a user's own install,
+// found on PATH, may hold sessions of theirs. The old check compared against a bare name ensureMutagen never answers.
+describe("isOwnMutagen", () => {
+    it("is this agent's downloaded copy only, never an install found on PATH", () => {
+        expect(isOwnMutagen("/home/ada/.intentic/machine/bin/mutagen", "/home/ada/.intentic/machine/bin/mutagen", "linux")).toBe(true);
+        expect(isOwnMutagen("/usr/local/bin/mutagen", "/home/ada/.intentic/machine/bin/mutagen", "linux")).toBe(false);
+        expect(isOwnMutagen("/opt/homebrew/bin/mutagen", "/Users/ada/.intentic/machine/bin/mutagen", "darwin")).toBe(false);
+    });
+
+    it("compares Windows paths the way Windows does", () => {
+        const own = "C:\\Users\\Ada\\.intentic\\machine\\bin\\mutagen.exe";
+        expect(isOwnMutagen("c:\\users\\ada\\.intentic\\machine\\bin\\MUTAGEN.EXE", own, "win32")).toBe(true);
+        expect(isOwnMutagen("C:\\Program Files\\Mutagen\\mutagen.exe", own, "win32")).toBe(false);
+    });
+});
 
 // What the per-tick reconcile cannot learn from its own baseline: which ports this device is actually holding.
 describe("parseForwardPorts", () => {

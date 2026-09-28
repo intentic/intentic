@@ -40,8 +40,15 @@ export type StatePlan = z.infer<typeof StatePlanSchema>;
 
 // The `state` of `/health`: whether an update's state changes are still uncommitted. The host rolls an update back when
 // the journal stays open, so this rides the same probe as the boot's progress.
+// `failed`: a conversion or structural step threw partway through this boot; the daemon put back every file the episode
+// had touched and keeps running on read-time conversions, and a host rolls the update back as it would an open journal
+// that never commits (this version could not bring the files to its shape, the one before it can read them as they are).
 export const StateStatusSchema = z.object({
-    journal: z.enum(["open", "none"]).describe("Open from the start of a boot that changed stored files until that boot has converged."),
+    journal: z
+        .enum(["open", "none", "failed"])
+        .describe(
+            "Open from the start of a boot that changed stored files until that boot has converged. Failed when a conversion threw partway: the files were put back as they were, and a host takes that as the update not having taken.",
+        ),
     engine: z.number().describe("The running build's conversion count."),
 });
 export type StateStatus = z.infer<typeof StateStatusSchema>;

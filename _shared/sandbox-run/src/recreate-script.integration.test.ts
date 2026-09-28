@@ -79,7 +79,33 @@ test("power, shape and the listing reach ic's own verbs, with ic's flags forward
     expect(argv(shimArgs("--list"))).toEqual(["sandbox", "list", "--json"]);
 });
 
+// The ways back and the checks around an update, each naming the sandbox. --versions and --watch forward ic's own
+// flags (--json) like --shape does; the rest take none.
+test("rollback-to, versions, watch, backup and doctor reach ic's own verbs", () => {
+    expect(argv(shimArgs("abc123", "--rollback-to", "1.200.0"))).toEqual(["sandbox", "rollback", "abc123", "--to", "1.200.0"]);
+    expect(argv(shimArgs("abc123", "--rollback-to", "ghcr.io/intentic/sandbox:1.200.0"))).toEqual([
+        "sandbox",
+        "rollback",
+        "abc123",
+        "--to",
+        "ghcr.io/intentic/sandbox:1.200.0",
+    ]);
+    expect(argv(shimArgs("abc123", "--versions"))).toEqual(["sandbox", "versions", "abc123"]);
+    expect(argv(shimArgs("abc123", "--versions", "--json"))).toEqual(["sandbox", "versions", "abc123", "--json"]);
+    expect(argv(shimArgs("abc123", "--watch"))).toEqual(["sandbox", "watch", "abc123"]);
+    expect(argv(shimArgs("abc123", "--watch", "--json"))).toEqual(["sandbox", "watch", "abc123", "--json"]);
+    expect(argv(shimArgs("abc123", "--backup"))).toEqual(["sandbox", "backup", "abc123"]);
+    expect(argv(shimArgs("abc123", "--doctor"))).toEqual(["sandbox", "doctor", "abc123"]);
+});
+
+// The desktop app's Remove: into ic's trash, unasked because the app has already asked, and never `--now`, which is the
+// one spelling of remove that deletes the data on the spot.
+test("--remove moves the sandbox to ic's trash without a prompt, never deleting it outright", () => {
+    expect(argv(shimArgs("abc123", "--remove"))).toEqual(["sandbox", "remove", "abc123", "-y"]);
+});
+
 test("--channel needs a tag and an unknown flag is refused rather than read as an overlay hash", () => {
     expect(shimArgs("slug", "--channel").err).toContain("--channel needs a tag");
+    expect(shimArgs("slug", "--rollback-to").err).toContain("--rollback-to needs a version or an image");
     expect(shimArgs("slug", "--nonsense").err).toContain("unknown option");
 });

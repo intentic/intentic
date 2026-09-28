@@ -3,7 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Logger, pino } from "pino";
-import { claimBootMarker } from "./boot-marker.js";
+import { claimBootMarker, previousRunDied } from "./boot-marker.js";
 import { processIdentity, type ProcessIdentity } from "../resources/proc-stat.js";
 
 const setup = async (): Promise<{ dir: string; lines: object[]; logger: Logger }> => {
@@ -41,6 +41,8 @@ test("a marker still saying running is reported as an unannounced death", async 
     const died = deadPid();
     await writeFile(join(dir, "daemon-exit.json"), JSON.stringify({ state: "running", pid: died, startTimeTicks: 1, startedAt: 1_000 }));
     claimBootMarker(dir, logger);
+    // What checks the conversation database before anything reads it (store/conversations-db-recovery.ts).
+    expect(previousRunDied()).toBe(true);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatchObject({ level: 50, diedPid: died });
     expect(lines[0]).not.toHaveProperty("fatalReports");

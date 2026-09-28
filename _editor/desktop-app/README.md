@@ -19,16 +19,19 @@ flowchart LR
   (or the `appUrl` setting, or `INTENTIC_APP_URL`) as remote content with no IPC. The launcher face is this
   package's `src/` bundle: local, and the only window granted Tauri commands (`src-tauri/capabilities/launcher.json`).
   A panel the editor floats out gets a frameless window of its own.
-- **Native work is the public scripts.** Setup, sync, recreate and cleanup run the same `connect`, `sync`,
-  `recreate` and `cleanup` scripts the copy-paste one-liners run. `stage-desktop-scripts.sh` copies them from
+- **Native work is the public scripts.** Setup, sync and everything done to a sandbox run the same `connect`,
+  `sync` and `recreate` scripts the copy-paste one-liners run. `stage-desktop-scripts.sh` copies them from
   `_site/site/public/scripts` at the current commit, so an uncommitted script edit does not reach `tauri dev` or a
   local installer.
 - **What runs is `ic`'s to say.** The manager's list is `ic sandbox list --json` from the installed `ic` (the shim's
   `--list` when that one is missing or older than this app, whose fetch brings it level). Start, stop and restart are
   `recreate --start|--stop|--restart`, and the Resources form's Apply and Save are `recreate --shape`, all `ic` verbs
   behind the shim's switch, so a Restart here applies a shape saved for the next restart exactly as a Restart from
-  the web does. The app reads nothing off `docker inspect`; the short children it waits on (Docker probes, the
-  listing, the agent's status) share `ic`'s time-limited capture crate, `_sandbox/ic/bounded`.
+  the web does. Remove is `recreate --remove`, `ic sandbox remove -y`: the sandbox goes into `ic`'s trash, and its
+  `/work` and `/history` stay recoverable for a week (`ic sandbox restore`), as they do from every other door. The
+  confirmation says so, in place of the kit's "cannot be undone". The app reads nothing off `docker inspect`; the
+  short children it waits on (Docker probes, the listing, the agent's status) share `ic`'s time-limited capture
+  crate, `_sandbox/ic/bounded`.
 - **Tray-resident.** The × hides the workspace. The tray reopens it, opens "This device", shows the machine agent
   and update state, and quits. Updates download in the background and install on quit or from the editor's banner;
   deb and rpm installs cannot replace themselves and link to the download page instead.

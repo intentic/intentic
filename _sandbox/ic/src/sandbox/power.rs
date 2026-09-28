@@ -3,7 +3,9 @@ use std::time::Duration;
 use crate::docker;
 use crate::record;
 use crate::sandbox::recreate::{self, Preflight};
-use crate::sandbox::{desired, resolve_slug, CONTAINER_PREFIX, TUNNEL_PREFIX};
+use crate::sandbox::{
+    desired, lock, parked_of, probation, resolve_slug, CONTAINER_PREFIX, TUNNEL_PREFIX,
+};
 use crate::shape::Ask;
 use crate::util::{bail, Result};
 
@@ -48,9 +50,16 @@ fn order(power: Power, container: &str, sidecar: Option<&str>) -> Vec<String> {
 pub fn run(power: Power, slug: Option<String>) -> Result<()> {
     docker::require_daemon()?;
     let slug = resolve_slug(slug, &format!("ic sandbox {}", power.verb()))?;
+    let _held = lock::hold_for_person(&slug)?;
     let container = format!("{CONTAINER_PREFIX}{slug}");
     if !docker::container_exists(&container) {
-        bail!("sandbox container {container} does not exist on this machine.");
+        // An interrupted swap parked the sandbox with no replacement: starting it IS putting it back.
+        if power != Power::Stop && docker::container_exists(&parked_of(&slug)) {
+            probation::watch_one(&slug)?;
+            println!("intentic: {slug} was left set aside by an interrupted update — it is back under its own name.");
+        } else {
+            bail!("sandbox container {container} does not exist on this machine.");
+        }
     }
     let tunnel = format!("{TUNNEL_PREFIX}{slug}");
     // Optional: a sandbox reached over the owner's own proxy has none.

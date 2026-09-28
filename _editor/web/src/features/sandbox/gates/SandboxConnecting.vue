@@ -9,6 +9,8 @@ import { useSandbox } from "../client/useSandbox";
 import { useGoogleIdentity } from "../../auth/useGoogleIdentity";
 import { restartExpected } from "../live/sandboxRestart";
 import { connectionNotice } from "./connectionNotice";
+import SandboxRecovery from "./SandboxRecovery.vue";
+import { useRecoveryDue } from "./useRecovery";
 import { stalledPaths } from "../../../app/perf";
 import { DEADLINE_MS } from "../client/sandboxAuthFetch";
 import { useT } from "@intentic/ui/i18n";
@@ -66,6 +68,9 @@ const notice = computed(() =>
     }),
 );
 
+// A silence that has outlasted its patience gets the ways back that need nothing from the sandbox (SandboxRecovery).
+const recovering = useRecoveryDue();
+
 // Carries the sandbox id so /setup resumes this sandbox rather than offering a blank create form.
 const setupTo = computed(() => ({ path: `/setup`, query: { sandbox: active.value?.id } }));
 // Drops both credentials so re-establishing goes through a fresh Google proof with the account chooser.
@@ -102,6 +107,12 @@ const signIn = async (): Promise<void> => {
                 </Button>
                 <Button :as="RouterLink" :to="setupTo" :label="t(`sandbox.words.runOnMyComputer`)" severity="secondary" />
             </template>
+        </template>
+        <template v-if="recovering" #below>
+            <div class="flex flex-col gap-3 border-t border-line pt-4">
+                <p class="text-left text-sm font-medium text-content">{{ t(`sandbox.sandboxRecovery.gateHeading`) }}</p>
+                <SandboxRecovery />
+            </div>
         </template>
     </GateCard>
 </template>

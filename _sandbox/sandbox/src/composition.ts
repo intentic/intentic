@@ -458,7 +458,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const authRoot = config.agentAuthDir !== "" ? config.agentAuthDir : statePath(workspace.root, ".intentic/secrets/auth/");
     const providers = createProviderAreas(config, logger, authRoot, whole);
     // Who may call this daemon, and how: the roster, passkeys, sessions and every per-boot and per-extension token.
-    const authSlice = createAuthSlice(config, workspace.root);
+    const authSlice = createAuthSlice(config, workspace.root, logger);
     // Hoisted: worktree ops and the Changes scan must file into the same tracker the summary line reads.
     const perf = createPerfTracker(logger, createPerfLogger(config));
     const conversationsParts = createConversationsSlice({ historyRoot: config.historyRoot, workspace, logger, perf, whole });

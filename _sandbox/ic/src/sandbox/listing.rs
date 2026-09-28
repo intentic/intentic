@@ -4,8 +4,9 @@ use std::time::Duration;
 use serde_json::{json, Map, Value};
 
 use crate::docker;
+use crate::record::Phase;
 use crate::record::{self, ChannelRecord};
-use crate::sandbox::{desired, CONTAINER_PREFIX, TUNNEL_PREFIX};
+use crate::sandbox::{desired, versions, CONTAINER_PREFIX, PARKED_SUFFIX, TUNNEL_PREFIX};
 use crate::shape::Shape;
 use crate::util::{bail, Result};
 
@@ -134,6 +135,24 @@ fn resources_from(inspected: &Value, desired: Option<&Shape>) -> Value {
     Value::Object(resources)
 }
 
+/// The sandbox a container row stands for, and whether the row is a parked container. A parked row beside its live one
+/// is the previous version on probation and is not listed; a parked row alone is the sandbox, down, which an interrupted
+/// swap left set aside. Pure.
+fn row_slug<'a>(row: &'a Row, rows: &[Row]) -> Option<(&'a str, bool)> {
+    let name = row.name.strip_prefix(CONTAINER_PREFIX)?;
+    match name.strip_suffix(PARKED_SUFFIX) {
+        None => Some((name, false)),
+        Some(slug)
+            if rows
+                .iter()
+                .any(|other| other.name == format!("{CONTAINER_PREFIX}{slug}")) =>
+        {
+            None
+        }
+        Some(slug) => Some((slug, true)),
+    }
+}
+
 /// What `prepare` built and left waiting for this sandbox, when anything is.
 fn staged_of(record: &ChannelRecord) -> Option<Value> {
     let image = record.staged.as_ref()?;
@@ -160,13 +179,32 @@ fn listing(
         .iter()
         .filter(|row| !is_sidecar(&row.name, rows))
         .filter_map(|row| {
-            let slug = row.name.strip_prefix(CONTAINER_PREFIX)?;
+            let (slug, parked) = row_slug(row, rows)?;
             let record = records.get(slug);
             let mut sandbox = Map::new();
             sandbox.insert("slug".into(), json!(slug));
             sandbox.insert("container".into(), json!(row.name));
-            sandbox.insert("running".into(), json!(row.state == "running"));
+            sandbox.insert("running".into(), json!(row.state == "running" && !parked));
             sandbox.insert("image".into(), json!(row.image));
+            if parked {
+                sandbox.insert("parked".into(), json!(true));
+            }
+            if let Some(record) = record {
+                if let Some(version) = &record.current_version {
+                    sandbox.insert("version".into(), json!(version));
+                }
+                if let Some(until) = record
+                    .swap
+                    .as_ref()
+                    .filter(|swap| swap.phase == Phase::Probation)
+                    .and_then(|swap| swap.until)
+                {
+                    sandbox.insert("probationUntil".into(), json!(until));
+                }
+                if !record.targets().is_empty() {
+                    sandbox.insert("rollbackTargets".into(), versions::targets_json(record));
+                }
+            }
             // Absent when there is no sidecar at all, which is not the same fact as a sidecar that is down.
             if let Some(tunnel) = rows
                 .iter()
@@ -231,7 +269,7 @@ pub fn list_json() -> Result<()> {
     };
     let mut records = HashMap::new();
     for row in rows.iter().filter(|row| !is_sidecar(&row.name, &rows)) {
-        let Some(slug) = row.name.strip_prefix(CONTAINER_PREFIX) else {
+        let Some((slug, _parked)) = row_slug(row, &rows) else {
             continue;
         };
         // A share an older ic saved becomes the record's desired shape here as anywhere; a record that cannot be
@@ -257,6 +295,23 @@ mod tests {
              intentic-sandbox-tunnel-work\texited\tcloudflare/cloudflared\n\
              intentic-sandbox-tunnel-lab\tcreated\tintentic-sandbox-env-lab:abc\n",
         )
+    }
+
+    #[test]
+    fn a_parked_container_is_listed_as_its_sandbox_only_when_it_stands_alone() {
+        let probation = rows_from(
+            "intentic-sandbox-work\trunning\timg:new\nintentic-sandbox-work.previous\texited\timg:old\n",
+        );
+        let listed = listing(&probation, &HashMap::new(), &HashMap::new());
+        assert_eq!(listed.as_array().map(Vec::len), Some(1));
+        assert_eq!(listed[0]["slug"], "work");
+        assert!(listed[0].get("parked").is_none());
+
+        let interrupted = rows_from("intentic-sandbox-work.previous\texited\timg:old\n");
+        let listed = listing(&interrupted, &HashMap::new(), &HashMap::new());
+        assert_eq!(listed[0]["slug"], "work");
+        assert_eq!(listed[0]["parked"], true);
+        assert_eq!(listed[0]["running"], false);
     }
 
     #[test]

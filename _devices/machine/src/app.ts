@@ -5,8 +5,8 @@ import { MACHINE_VERSION } from "./version.js";
 
 // The intentic-machine CLI: `device setup` (redeem a device card's pairing and stay connected at login),
 // `sync setup` (redeem a Desktop sync card's pairing and keep a folder + ports mirrored), then the shared
-// residency: `run` (the one background agent for both), `status`, `upgrade`, `uninstall`. Command names map to
-// kebab-case flags per stricli's scanner.
+// residency: `run` (the one background agent for both), `status`, `upgrade`, `uninstall`, and `sandbox`, ic's own
+// verbs for this machine's sandboxes. Command names map to kebab-case flags per stricli's scanner.
 export const app = buildApplication(commands, {
         name: "intentic-machine",
         // `--version`/`-v` is what a person types; the `version` command stays because the release build and `upgrade`

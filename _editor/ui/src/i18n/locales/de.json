@@ -194,7 +194,7 @@
         "savingKeepsItRunning": "Speichern lässt die Sandbox so weiterlaufen, wie sie ist. ic behält den neuen Anteil und übernimmt ihn beim nächsten Neustart der Sandbox über ic: Neu starten hier, Starten, ein Update, ein Rollback oder ein Neubau. Startet Docker den Container selbst neu, nach einem Absturz oder einem Neustart des Rechners, wird er nicht übernommen."
     },
     "sandboxSandboxVerbs": {
-        "deletesSandboxEverythingIn": "Das löscht die Sandbox und alles darin — ihre Dateien und ihre Historie — von diesem Gerät. Das lässt sich nicht rückgängig machen.",
+        "deletesSandboxEverythingIn": "Das entfernt die Sandbox und alles darin (ihre Dateien und ihre Historie) von diesem Gerät. Eine Woche lang lässt sie sich dort wiederherstellen: `ic sandbox restore` auf diesem Rechner holt sie zurück.",
         "sandboxRestartsOntoImage": "Die Sandbox startet auf dem Image neu, das sie vor ihrem letzten Update hatte. Ihre Dateien bleiben erhalten.",
         "sandboxRestartsOntoNewest": "Die Sandbox startet auf dem neuesten Image neu und ist währenddessen nicht verfügbar — Sekunden, wenn das Update schon heruntergeladen ist, sonst ein paar Minuten. Ihre Dateien bleiben erhalten."
     },

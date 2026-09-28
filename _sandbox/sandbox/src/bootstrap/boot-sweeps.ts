@@ -3,6 +3,7 @@ import { capabilityCtx } from "../capabilities/capability.js";
 import { unloadIdleLocalModels } from "../capabilities/handlers/localmodel.handler.js";
 import { LOCAL_MODEL_IDLE_MS, LOCAL_MODEL_IDLE_SWEEP_MS } from "../endpoints/local-model-idle.js";
 import { runGitMaintenance } from "../git/ops/maintenance.js";
+import { QUARANTINE_MS, quarantineRoot } from "../store/conversation-units.js";
 import { logsRoot, pruneLogFiles } from "../logs/log-files.js";
 import { panelKeyOf } from "@intentic/sandbox-contract/session-names";
 import { type ReapPolicy, reapFinishedSessions } from "../terminal/terminal-session.js";
@@ -13,6 +14,7 @@ import type { BootPhase } from "./boot-phase.js";
 // Recurring passes over the daemon's own state: none gates anything, every one may fail, each is scoped by role.
 
 const HOURLY_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOURLY_MS;
 
 // Reads the registry through callbacks and takes per-repo locks, so a turn starting mid-walk is safe.
 const sweepVanishedWorktrees = async ({ logger, services }: BootPhase): Promise<void> => {
@@ -41,11 +43,26 @@ const sweepVanishedWorktrees = async ({ logger, services }: BootPhase): Promise<
 };
 
 // Directories no conversation row owns: a purge that deleted the rows and died before the directory, or a fork whose
-// opening turn never began.
+// opening turn never began. Moved aside rather than deleted, and removed for good only QUARANTINE_MS later
+// (store/conversation-units.ts); held altogether while the database cannot be trusted to name every conversation.
 const sweepOrphanUnits = async ({ logger, services }: BootPhase): Promise<void> => {
     const swept = await services.conversationUnits.sweep(Date.now());
-    if (swept.length > 0) {
-        logger.info({ count: swept.length }, "conversations: swept directories no conversation owns");
+    if (swept.held === "database-recreated") {
+        logger.warn("conversations: the database was made again this boot, so no conversation's directory is taken for an orphan");
+        return;
+    }
+    if (swept.held === "database-empty") {
+        logger.warn("conversations: the database holds no conversation while conversation directories remain, so none is taken for an orphan");
+        return;
+    }
+    if (swept.quarantined.length > 0) {
+        logger.info(
+            { count: swept.quarantined.length, ids: swept.quarantined, to: quarantineRoot(services.config.historyRoot), keptDays: QUARANTINE_MS / DAY_MS },
+            "conversations: moved directories no conversation owns aside, where they are kept before being removed",
+        );
+    }
+    if (swept.pruned.length > 0) {
+        logger.info({ count: swept.pruned.length }, "conversations: removed directories set aside past their keeping");
         // Their records went with them, and with those the only names some blobs had.
         await services.transcripts.sweep(new Set());
     }

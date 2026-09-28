@@ -71,7 +71,9 @@ flowchart LR
   document (`cacheFile`); `store/documents-coverage.test.ts` fails on any other. Before any store opens, `store/evolution/state-convergence.ts` does only what a read
   cannot (documents that moved, structural steps: a regroup, a database schema, an import) under a journal a
   rolled-back build undoes, committed once boot converges; it runs each document's conversions without writing, so one
-  that would fail is named first. `src/state-plan.ts` is the same plan, read-only, for `ic`'s pre-flight. Both
+  that would fail is named first. A step or write that throws partway is put back at once, `/health` reports the
+  journal `failed` for the rest of that boot (a host takes it as the update not having taken), and the stores go on
+  converting on read; nothing of that boot commits. `src/state-plan.ts` is the same plan, read-only, for `ic`'s pre-flight. Both
   take every document and structural step from `bootstrap/state-registry.ts` (`main.ts` hands it to the boot step),
   never from what a process loaded; it sits in the boot wiring, above every subsystem, because it imports them all.
   `store/shapes/write-state-shapes.ts --freeze` (which the fixers run in a worktree before its land, when the change
@@ -81,13 +83,31 @@ flowchart LR
   `--checks` (this package's `pretypecheck`) derives the uncommitted `state-shapes.ts` from it: every released shape
   must still fit today's schema after its conversions and lose no key without a `drop` or `rename`
   (`store/evolution/conversion-types.ts`).
-- A rollback is decided by release: `.intentic/local/newest-run.json` names the newest version that ran here, and a
-  build older than it reports a downgrade and keeps its hands off what it cannot read. The digest of a build's
+- A rollback is decided by release: `.intentic/local/newest-run.json` names the newest version that booted all the way
+  here (a build stamps it when it commits, never before), and a build older than it reports a downgrade and keeps its
+  hands off what it cannot read. A build whose boot failed leaves no stamp, so the version a host puts back is no
+  downgrade. The digest of a build's
   conversions (every conversion's description, earlier address and step id) identifies its journal episode: only a
   build with the same digest resumes one, and any other open episode is put back. The conversion count earlier builds
   compared is still written for them, and decides nothing.
 - A `rename` conversion moves a key and nothing more: there is no grace window writing both names. A build rolled back
   past a committed rename keeps the new name as a key it does not know, and reads its own default for the old one.
+- A boot that fails before the readiness gate writes why to `/history/boot-failure.json` (`system/boot/boot-failure.ts`:
+  when, this build's version, the error with the first lines of its stack, the step) and exits 1, so the front starts
+  it again with backoff instead of a daemon that answers `/health` and never serves; `ic` reads the file, and the next
+  boot that reaches the gate removes it. `INTENTIC_FAULT` is the nightly update drill's hook for exercising that and the
+  host's rollback (`system/boot/fault.ts`): `crash-at-boot` fails the boot before convergence, `crash-after-ready` exits 1
+  twenty seconds after the gate opens, `fail-conversion` makes convergence throw with an episode open. Production images
+  never set it; any other value is ignored.
+- `conversations.db` never keeps the daemon down (`store/conversations-db-recovery.ts`): after a run that died
+  unannounced it is quick-checked before anything reads it, and a file that fails to open or to pass is moved aside with
+  its sidecars as `conversations.db.corrupt-<ms>` (never deleted), what still reads of it is copied into a new file with
+  `VACUUM INTO`, or an empty one is made, and the owner's settings-problems card names the whole file. One missing while
+  conversation directories remain is made again empty the same way.
+- The boot's orphan sweep (`store/conversation-units.ts`) moves a conversation directory no database row owns to
+  `/history/trash/conversations/` rather than deleting it, and removes it 14 days later; the blob sweep counts the
+  records there as names still standing. It moves nothing on a boot whose database was made again, or while the
+  database holds no conversation but directories remain: a lost database is not a fleet of orphans.
 
 - `agent/` runs one turn: its prompt, tools, provider seam and the pipeline in `agent/run/stream-agent.ts`.
   `conversations/` is what turns belong to: the actors, the registry, each conversation's worktree and its land.

@@ -13,10 +13,12 @@ import {
     readState,
     removePairing,
     setFileSyncAutoPaused,
+    setFileSyncSwapPaused,
     type SkippedPort,
     updateState,
 } from "./config.js";
 import { createDaemonBases, type DaemonBases, type Dialed, dialedPairings } from "../daemon-base.js";
+import { readSwapRecords } from "../device/swap-records.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import {
     ensureMutagen,
@@ -27,15 +29,18 @@ import {
     healDerivedConflicts,
     mutagenForwardArgs,
     ourForwardSessions,
+    pauseRunningSync,
     pauseUnreachableSync,
     retireOrphanSessions,
     resumeAutoPausedSync,
+    resumeSwapPausedSync,
     runMutagenAsync,
     syncSessionNames,
 } from "./mutagen.js";
 import { quieted } from "./repeats.js";
 import { deviceReport, scopedReport } from "./report.js";
 import { pairingSshConfig, sshAlias, writeManagedSshConfig } from "./ssh.js";
+import { holdsSync, recordOf, RELEASE_FORWARDS_MS, shouldReleaseForwards, swapPauseStep } from "./swap-pause.js";
 import { createTunnelPool, tunnelTargets } from "./tunnel.js";
 
 // Mirrors every workspace port in a paired sandbox onto the same port on this machine's localhost, over Mutagen
@@ -413,13 +418,21 @@ const absorbRejectedPoll = async (
 };
 
 // Past the pause threshold, an unreachable sandbox's Mutagen sessions are stopped to end permanent reconnect/rescan
-// load. Returns whether this pass paused them, so the git bridge below doesn't immediately undo it.
+// load. Returns whether this pass paused them, so the git bridge below doesn't immediately undo it. Before that, at ten
+// minutes, its forwarded ports come off localhost (swap-pause.ts): the reconcile of its first answer puts them back.
 const absorbUnreachablePoll = async (mutagen: string, pairing: Pairing, unreachable: Map<string, Unreachable>, log: Log): Promise<boolean> => {
     const now = Date.now();
     // The first failure of a run sets the clock; every later one only records that a poll was spent, so the hour
     // below is wall-clock and survives the backoff stretching the gaps between them.
     const since = unreachable.get(pairing.sandboxId)?.since ?? now;
     unreachable.set(pairing.sandboxId, { since, lastTried: now });
+    const mirrored = (pairing.mirroredPorts ?? []).length;
+    if (shouldReleaseForwards(now - since, mirrored)) {
+        await retirePairingMirror(mutagen, pairing.sandboxId);
+        log(
+            `  ${pairing.sandboxId}: unreachable for ${RELEASE_FORWARDS_MS / 60_000} minutes; took its ${plural(mirrored, "port")} off localhost. They come back when it answers again.`,
+        );
+    }
     if (pairing.fileSyncAutoPaused === true || !shouldAutoPauseFileSync(now - since) || !pauseUnreachableSync(mutagen, pairing)) {
         return false;
     }
@@ -535,6 +548,39 @@ const retryPendingSessions = async (
     }
 };
 
+// File sync held still for every pairing whose sandbox ic is swapping on this machine (swap-pause.ts): paused as the
+// swap begins, resumed once it has held, and the pause kept on disk so an agent restarted mid-swap still lifts it.
+// Answers the pairings held this pass, whose git bridge and heal wait too: both would read a sandbox mid-swap.
+const holdSyncDuringSwaps = async (
+    mutagen: string,
+    pairings: readonly Pairing[],
+    unreachable: ReadonlyMap<string, Unreachable>,
+    say: Log,
+): Promise<ReadonlySet<string>> => {
+    const records = await readSwapRecords();
+    const now = Date.now();
+    const held = new Set<string>();
+    for (const pairing of pairings) {
+        const record = recordOf(pairing, records);
+        const holds = holdsSync(record, now, !unreachable.has(pairing.sandboxId));
+        if (holds) {
+            held.add(pairing.sandboxId);
+        }
+        const step = swapPauseStep(pairing, holds);
+        if (step === "pause" && pauseRunningSync(mutagen, pairing)) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
+            await setFileSyncSwapPaused(pairing.sandboxId, true);
+            say(`  ${pairing.sandboxId}: its sandbox is being swapped on this machine; file sync is paused until the new version has held.`);
+        } else if (step === "resume") {
+            resumeSwapPausedSync(mutagen, pairing);
+            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            await setFileSyncSwapPaused(pairing.sandboxId, false);
+            say(`  ${pairing.sandboxId}: its sandbox's swap is settled; file sync resumed.`);
+        }
+    }
+    return held;
+};
+
 /** Everything one pairing's pass needs that is the same for all of them, so the pass itself takes three arguments. */
 interface PassContext {
     readonly mutagen: string;
@@ -543,6 +589,8 @@ interface PassContext {
     readonly claimedBy: Map<number, string>;
     readonly tracking: PairingTracking;
     readonly bases: DaemonBases;
+    // Pairings whose sandbox is mid-swap on this machine, held still this pass.
+    readonly swapHeld: ReadonlySet<string>;
     readonly say: Log;
 }
 
@@ -550,15 +598,17 @@ interface PassContext {
 // so the agent stays a list of what a tick does, rather than one function in which every branch is one pairing's
 // business.
 const runPairingPass = async (context: PassContext, pairing: Pairing, base: string): Promise<void> => {
-    const { mutagen, tick, claimedBy, tracking, bases, say } = context;
+    const { mutagen, tick, claimedBy, tracking, bases, swapHeld, say } = context;
     const { rejectedPolls, unreachable, repos } = tracking;
+    const swapping = swapHeld.has(pairing.sandboxId);
     let pausedThisPass = false;
     try {
         const mirrored = await servePairing(mutagen, pairing, base, claimedBy, say);
         rejectedPolls.delete(pairing.sandboxId);
         unreachable.delete(pairing.sandboxId);
-        // Still pending if it was: a replacement put off while the sandbox slept is owed now that it answers.
-        if (resumeAutoPausedSync(mutagen, pairing)) {
+        // Still pending if it was: a replacement put off while the sandbox slept is owed now that it answers. Not while
+        // its sandbox is mid-swap, which holds that sync still whoever paused it.
+        if (!swapping && resumeAutoPausedSync(mutagen, pairing)) {
             await setFileSyncAutoPaused(pairing.sandboxId, false);
             say(`  ${pairing.sandboxId}: reachable again; resumed its automatically paused file sync`);
         }
@@ -582,8 +632,8 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
         // A transient tunnel blip must not kill the agent, log and try again next tick.
         say(`  ${pairing.sandboxId}: reconcile skipped: ${errorMessage(error)}`);
     }
-    // Auto-paused pairings still get the probe above but skip the SSH-heavy git bridge below.
-    if (pairing.fileSyncAutoPaused === true || pausedThisPass) {
+    // Auto-paused pairings still get the probe above but skip the SSH-heavy git bridge below, as do those mid-swap.
+    if (pairing.fileSyncAutoPaused === true || pausedThisPass || swapping) {
         return;
     }
     // Before the bridge, and guarded like it: a conflict standing here blocks the very deletions the bridge's
@@ -672,6 +722,10 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
         // failed to create was usually waiting on.
         await prepareSessions(mutagen, state.pairings, sessionsPrepared, sessionsPending, say);
         await retryPendingSessions(mutagen, state.pairings, sessionsPending, tick, say);
+        let swapHeld: ReadonlySet<string> = new Set();
+        await guard(say, "holding file sync still during swaps", async () => {
+            swapHeld = await holdSyncDuringSwaps(mutagen, state.pairings, unreachable, say);
+        });
         // Ports this tick's earlier pairings already own, so a later one is told who holds a port it wanted.
         const claimedBy = new Map<number, string>();
         for (const { pairing, base } of dialed) {
@@ -681,7 +735,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
                 continue;
             }
             // oxlint-disable-next-line eslint/no-await-in-loop -- One sandbox at a time keeps tunnel state ordered.
-            await runPairingPass({ mutagen, tick, claimedBy, tracking, bases, say }, pairing, base);
+            await runPairingPass({ mutagen, tick, claimedBy, tracking, bases, swapHeld, say }, pairing, base);
         }
         // Runs after the pairings: servePairing just persisted this tick's ports, and the report re-reads that state,
         // so

@@ -34,6 +34,7 @@ import { useSandboxAvailability } from "../overview/useSandboxAvailability";
 import { useSandbox } from "../client/useSandbox";
 import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
 import { manageDeviceSandbox, useHostRunning } from "../devices/useDevices";
+import HostedRollbackDialog from "../overview/version/HostedRollbackDialog.vue";
 import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
 import { useT } from "@intentic/ui/i18n";
 
@@ -240,6 +241,13 @@ const askRemove = (option: SandboxSummary): void => {
     pending.value = option;
 };
 
+// The hosted sandbox whose rollback is being asked about; the platform does it, so any row's can be, down or not.
+const rollingBack = ref<SandboxSummary | undefined>(undefined);
+const askRollBack = (option: SandboxSummary): void => {
+    open.value = false;
+    rollingBack.value = option;
+};
+
 const confirmRemove = async (): Promise<void> => {
     const target = pending.value;
     if (target === undefined) {
@@ -419,6 +427,15 @@ const confirmRemove = async (): Promise<void> => {
                     class="shrink-0 rounded border border-line px-1 font-mono text-2xs font-normal leading-4 text-subtle transition-opacity group-hover:opacity-0"
                     >{{ slotChord(at) }}</kbd
                 >
+                <!-- The platform's way back for a hosted machine, here as well as on the update card because this list
+                     answers while the sandbox itself doesn't. -->
+                <Icon
+                    v-if="option.role === 'owner' && option.hosted?.canRollBack === true"
+                    name="undo"
+                    @click.stop="askRollBack(option)"
+                    v-tooltip.top="t(`sandbox.sandboxSwitcher.rollBackHosted`)"
+                    class="shrink-0 text-xs opacity-0 transition-opacity hover:text-content group-hover:opacity-60"
+                />
                 <Icon
                     name="trash"
                     @click.stop="askRemove(option)"
@@ -538,6 +555,8 @@ const confirmRemove = async (): Promise<void> => {
             </template>
         </template>
     </ConfirmDialog>
+
+    <HostedRollbackDialog :sandbox="rollingBack" @close="rollingBack = undefined" />
 </template>
 
 <style scoped>

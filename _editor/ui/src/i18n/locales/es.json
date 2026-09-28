@@ -199,7 +199,7 @@
         "savingKeepsItRunning": "Guardar deja el sandbox funcionando tal como está. ic conserva la nueva asignación y la aplica en el próximo reinicio del sandbox a través de ic: Reiniciar aquí, Iniciar, una actualización, una reversión o una reconstrucción. Que Docker reinicie el contenedor por su cuenta, tras un fallo o un reinicio del equipo, no la aplica."
     },
     "sandboxSandboxVerbs": {
-        "deletesSandboxEverythingIn": "Esto elimina el sandbox y todo lo que contiene — sus archivos y su historial — de ese dispositivo. No se puede deshacer.",
+        "deletesSandboxEverythingIn": "Esto quita el sandbox y todo lo que contiene (sus archivos y su historial) de ese dispositivo. Durante una semana se puede recuperar allí: `ic sandbox restore` en esa máquina lo devuelve.",
         "sandboxRestartsOntoImage": "El sandbox se reinicia sobre la imagen que tenía antes de su última actualización. Sus archivos se conservan.",
         "sandboxRestartsOntoNewest": "El sandbox se reinicia sobre la imagen más reciente y no está disponible mientras eso ocurre: segundos si la actualización ya está descargada, unos minutos si no. Sus archivos se conservan."
     },

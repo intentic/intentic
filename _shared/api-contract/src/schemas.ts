@@ -618,6 +618,9 @@ export const SandboxHostedSchema = z.object({
     region: z.string(),
     // Whether the machine came warm from the pool (seconds) or was built to order (a cold image pull, minutes).
     warm: z.boolean(),
+    // The platform kept the image the machine ran before its last image change, so `hostedRollback` can go back to it.
+    // Absent from a platform older than the field, and false until a machine has changed image once.
+    canRollBack: z.boolean().optional(),
 });
 export type SandboxHosted = z.infer<typeof SandboxHostedSchema>;
 
@@ -686,6 +689,9 @@ export const SandboxSummarySchema = z.object({
     localHostname: z.string().nullable(),
     // The hosted lane's live machine record, null off-platform; unreachable with `state` != started means wake it.
     hosted: SandboxHostedSchema.nullable(),
+    // The version the sandbox's daemon named in its last check-in, which is what the platform knows it runs even
+    // while it is down. Null until a daemon that names its version checks in; absent from an older platform.
+    daemonVersion: z.string().nullable().optional(),
     // What the edge in front of `daemonUrl` DECLARES it serves beyond HTTPS over TCP (`quic`, `h3`, `webtransport`,
     // browser-wire.ts `EdgeTransport`), read off the edge's own /health. Absent from an older platform, off-platform and
     // wherever the edge declares nothing, and absent means not served: the editor opens WebTransport only where it is

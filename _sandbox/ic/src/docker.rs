@@ -494,6 +494,25 @@ pub fn exec_ok(container: &str, cmd: &[&str]) -> bool {
     ok(&args)
 }
 
+/// Run a command in the container with `input` on its stdin and every output discarded; true when it exited 0. For the
+/// small files ic leaves inside a sandbox, where a wedged container must not turn a finished flow into a failed one.
+pub fn exec_stdin_ok(container: &str, cmd: &[&str], input: &[u8]) -> bool {
+    let mut args = vec!["exec", "-i", container];
+    args.extend_from_slice(cmd);
+    let Ok(mut child) = docker(&args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+    else {
+        return false;
+    };
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(input);
+    }
+    child.wait().map(|status| status.success()).unwrap_or(false)
+}
+
 pub fn exec_capture(container: &str, cmd: &[&str]) -> Option<String> {
     let mut args = vec!["exec", container];
     args.extend_from_slice(cmd);

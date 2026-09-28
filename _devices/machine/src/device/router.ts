@@ -1,6 +1,7 @@
 import { narrate } from "@intentic/base/async";
-import { type DeviceScopes, type DeviceFlowLine, type DeviceSandboxFlow, type DeviceSandboxOp, deviceContract } from "@intentic/sandbox-contract";
+import type { DeviceScopes, DeviceFlowLine, DeviceSandboxFlow, DeviceSandboxOp } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
+import { readGrant, tolerantDeviceContract } from "./grant.js";
 import { calling } from "./indicator.js";
 import { handleMcpMessage } from "./mcp.js";
 import { hostFacts } from "./tools/describe.js";
@@ -58,12 +59,13 @@ const runnerFlowFor: FlowFor =
             onLine,
         );
 
-// The four that move a sandbox between images that already exist, all one `ic` flow; `hash` pins which overlay.
+// The four that move a sandbox between images that already exist, all one `ic` flow; `hash` pins which overlay, and a
+// rollback's `to` which of the versions kept on the machine it goes back to.
 const swapFlowFor =
     (swap: SandboxSwap): FlowFor =>
-    ({ slug, hash }, scopes) =>
+    ({ slug, hash, to }, scopes) =>
     (onLine) =>
-        swapSandbox(swap, slug, hash, scopes, onLine);
+        swapSandbox(swap, slug, hash, scopes, onLine, to);
 
 // Which function each op is, total over the op enum so a new op cannot be added without one: `logs` is a read, and every
 // other op runs `ic` and narrates itself (start and restart for minutes, when a shape is saved for the next restart).
@@ -124,8 +126,19 @@ const FLOWS: Record<DeviceSandboxOp, FlowFor> = {
     "runner-remove": runnerFlowFor,
 };
 
+// The flow an order asks for. `to` belongs to a rollback alone: an order carrying it for anything else is refused rather
+// than carried out without it, like every field this agent does not expect.
+const flowFor: FlowFor = (input, scopes) =>
+    input.to !== undefined && input.op !== "rollback"
+        ? () => {
+              throw new ORPCError("BAD_REQUEST", { message: `"to" names a version to go back to, which only a rollback takes, not ${input.op}.` });
+          }
+        : FLOWS[input.op](input, scopes);
+
 export const createHostRouter = (runtime: HostRuntime) => {
-    const os = implement(deviceContract);
+    const os = implement(tolerantDeviceContract);
+    // Switches a grant carried that this agent does not know, each said once per link rather than on every reconnect.
+    const unknownSaid = new Set<string>();
     return os.router({
         describe: os.describe.handler(async () => await hostFacts(runtime.scopes())),
         // Behind "Run commands" like `status`; FORBIDDEN is the one refusal the sandbox reads as that switch.
@@ -135,9 +148,21 @@ export const createHostRouter = (runtime: HostRuntime) => {
             }
             return await machineReport();
         }),
+        // Read tolerantly (grant.ts): a switch a newer sandbox added is left off rather than refused, since a refusal
+        // here drops the link and the sandbox redials it forever.
         setScopes: os.setScopes.handler(({ input }) => {
-            runtime.setScopes(input);
-            runtime.log(`permissions updated: commands ${input.shell}, writes ${input.write}, screen ${input.screen}`);
+            const { scopes, unknown } = readGrant(input);
+            runtime.setScopes(scopes);
+            runtime.log(`permissions updated: commands ${scopes.shell}, writes ${scopes.write}, screen ${scopes.screen}`);
+            const news = unknown.filter((name) => !unknownSaid.has(name));
+            if (news.length > 0) {
+                for (const name of news) {
+                    unknownSaid.add(name);
+                }
+                runtime.log(
+                    `${runtime.sandboxUrl}: the permissions it pushed include ${news.join(", ")}, which this agent does not know; they stay off here until the agent is updated.`,
+                );
+            }
             // Caching it on disk belongs to the connection (see connection.ts), not this router: a device answers to a
             // list of sandboxes now, and the connection owns this one's entry in it.
             return { ok: true };
@@ -148,7 +173,7 @@ export const createHostRouter = (runtime: HostRuntime) => {
         mcp: os.mcp.handler(async ({ input }) => await calling.run(runtime, async () => await handleMcpMessage(input, runtime.scopes()))),
         // Read here, per call, exactly as the MCP handler reads them: a stream opened before the owner flipped a
         // switch must not outlive the decision.
-        runSandboxFlow: os.runSandboxFlow.handler(({ input }) => streamFlow(FLOWS[input.op](input, runtime.scopes()))),
+        runSandboxFlow: os.runSandboxFlow.handler(({ input }) => streamFlow(flowFor(input, runtime.scopes()))),
         // The agent's own update/restart, through the same adapter, and the one stream whose ending is not its answer:
         // both ops kill the process serving this socket. The work is detached first (tools/agent.ts); the reader
         // confirms by the version.

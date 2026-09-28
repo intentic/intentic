@@ -3,6 +3,7 @@ import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { JOB_HOSTED_METER, JOB_HOSTED_MIGRATE, runExclusive } from "../../jobs-lock.js";
 import { getMachine, isFlyGone, LIVE_STATES, stopMachine } from "./fly/fly.js";
+import { withHostedAppLock } from "./hosted-app-lock.js";
 import { hostedEnabled } from "./hosted.js";
 import { hostedBudgetOf, settleHostedStretches } from "./hosted-usage.js";
 import { sweepHostedMigrations } from "./migrate/hosted-migrate.js";
@@ -38,13 +39,34 @@ const stopIfRunning = async (config: Config, logger: Logger, machine: OpenMachin
     return true;
 };
 
+/* THE TICK NEVER STOPS A MACHINE IN THE MIDDLE OF A CHANGE. An image change holds the app's lock from its probe to its
+ * new daemon's verdict (gate/state-gate.ts), and a stop in there would leave that version unjudged; a move or a cleanup
+ * holds it too. So the tick's stop takes the lock without waiting, and a machine mid-change is left to the next tick,
+ * which asks again, a suspended owner's included. */
+const stopUnlessChanging = async (config: Config, logger: Logger, machine: OpenMachine, why: string): Promise<boolean> => {
+    const stopped = await withHostedAppLock(config, machine.appName, false, () => stopIfRunning(config, logger, machine, why));
+    if (stopped === undefined) {
+        logger.info({ app: machine.appName, ownerId: machine.sandbox.ownerId }, `hosted meter: the machine is being changed; stopping it waits for the next tick`);
+        return false;
+    }
+    return stopped;
+};
+
 // One owner's machines, for one stated reason. Sequential and best-effort: one failure must not cost the rest. Also
-// the stop behind a suspension (hosted-standing.ts), which must not wait for this tick.
-export const stopOwnerMachines = async (config: Config, logger: Logger, machines: readonly OpenMachine[], why: string): Promise<number> => {
+// the stop behind a suspension (hosted-standing.ts), which waits neither for this tick nor for a change in flight: a
+// suspension holds at once, and a gate waiting on its new daemon reads a stop it was not asked for as the version
+// interrupted, left on trial, never as one to put back and start.
+export const stopOwnerMachines = async (
+    config: Config,
+    logger: Logger,
+    machines: readonly OpenMachine[],
+    why: string,
+    stop: typeof stopIfRunning = stopIfRunning,
+): Promise<number> => {
     let stopped = 0;
     for (const machine of machines) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- sequential sweep, gentle on the API
-        const did = await stopIfRunning(config, logger, machine, why).catch((error: unknown) => {
+        const did = await stop(config, logger, machine, why).catch((error: unknown) => {
             logger.error({ err: error, app: machine.appName }, `hosted meter: stopping failed; retried next tick`);
             return false;
         });
@@ -94,7 +116,7 @@ export const stopOverBudgetHosted = async (
         const why = await stopReason(prisma, config, { sandboxId: machine.sandboxId, tier: machine.tier, ownerId: machine.sandbox.ownerId }, now);
         if (why !== undefined) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- sequential sweep, gentle on the API
-            stopped += await stopOwnerMachines(config, logger, [machine], why);
+            stopped += await stopOwnerMachines(config, logger, [machine], why, stopUnlessChanging);
         }
     }
     return { stopped };

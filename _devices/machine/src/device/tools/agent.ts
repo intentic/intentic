@@ -6,6 +6,8 @@ import { agentLogPath } from "../../config.js";
 import { installedBuild } from "../../installed.js";
 import { machineLauncher } from "../../supervision.js";
 import { assertScope } from "../policy.js";
+import { CUTOVER_HOLDS_MS } from "../swap-records.js";
+import { icSwapsInFlight } from "./sandboxes.js";
 
 // Updates or restarts this device's own agent, asked for from the browser. Both operations stop the process
 // serving this socket, so the work is detached (spawnDetached) and tailed back rather than spawned inline,
@@ -55,8 +57,24 @@ const settled: Record<DeviceAgentOp, string> = {
     "forget-unreachable": `The drop ran on this device. What it removed is in the lines above; this device's link count catches up within a few seconds.`,
 };
 
+// The ops that end in this agent restarting.
+const RESTARTS: ReadonlySet<DeviceAgentOp> = new Set<DeviceAgentOp>(["upgrade", "restart"]);
+
+// A swap this process is running, which the detached command cannot see (it reads ic's records of a cutover, in
+// supervision.ts): the restart waits for it here, so this agent never stops under an ic it started.
+const waitOutOwnSwaps = async (onLine: (line: string) => void): Promise<void> => {
+    if (icSwapsInFlight.size === 0) {
+        return;
+    }
+    onLine(`Waiting for ${[...icSwapsInFlight].join(", ")} to finish first: restarting this agent in the middle of a swap could leave that sandbox down.`);
+    await pollUntil(() => icSwapsInFlight.size === 0, { intervalMs: 1_000, timeoutMs: CUTOVER_HOLDS_MS });
+};
+
 export const runAgentOp = async (op: DeviceAgentOp, scopes: DeviceScopes, onLine: (line: string) => void): Promise<string> => {
     assertScope(scopes, "shell");
+    if (RESTARTS.has(op)) {
+        await waitOutOwnSwaps(onLine);
+    }
     onLine(started(op, installedBuild()));
     // Taken before the spawn: the log is append-only and long-lived, and a reader sees only this run's lines.
     let at = (await readFrom(agentLogPath, 0)).at;

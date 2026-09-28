@@ -57,7 +57,9 @@ export type SyncMode = "sync" | "mirror";
 // the key. syncToken is the enrollment-minted credential for GET /ports, the self-revoke on uninstall, and the
 // SSH transport itself; a pairing without one can do nothing but exist. mirroredPorts/skippedPorts are the last
 // reconcile's baseline and its negative. fileSyncAutoPaused marks a pause the watcher itself applied after an
-// hour unreachable, distinct from a person's `pause`, which the watcher never undoes. autoHealOff stops this agent
+// hour unreachable, distinct from a person's `pause`, which the watcher never undoes. fileSyncSwapPaused marks the
+// pause it applies while the sandbox is swapped on this machine (swap-pause.ts), kept on disk so an agent restarted
+// mid-swap still lifts it. autoHealOff stops this agent
 // clearing the build output it left inside directories the sandbox deleted (residue.ts); it is off by default because
 // what that removes is content the session already ignores, which a build puts back. ignoredPorts is mirrorOff's
 // per-port form: numbers this device is never to take, which is a standing choice and not a reading, so nothing the
@@ -73,6 +75,7 @@ export interface Pairing {
     readonly ignoredPorts?: readonly number[];
     readonly mirrorOff?: boolean | undefined;
     readonly fileSyncAutoPaused?: boolean | undefined;
+    readonly fileSyncSwapPaused?: boolean | undefined;
     readonly autoHealOff?: boolean | undefined;
 }
 
@@ -154,4 +157,9 @@ export const setAutoHealOff = async (sandboxId: string, off: boolean): Promise<v
 export const setFileSyncAutoPaused = async (sandboxId: string, paused: boolean): Promise<void> =>
     await updateState((state) => ({
         pairings: state.pairings.map((held) => (held.sandboxId === sandboxId ? { ...held, fileSyncAutoPaused: paused ? true : undefined } : held)),
+    }));
+
+export const setFileSyncSwapPaused = async (sandboxId: string, paused: boolean): Promise<void> =>
+    await updateState((state) => ({
+        pairings: state.pairings.map((held) => (held.sandboxId === sandboxId ? { ...held, fileSyncSwapPaused: paused ? true : undefined } : held)),
     }));

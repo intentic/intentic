@@ -3,7 +3,11 @@ import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../config.js";
 import { FREE_TIER, hostedTier } from "@intentic/constants";
 import { installFakeFly } from "@intentic/testing/fly-fake";
+import { fakeHostedAppLock } from "../../testing.js";
 import { stopOverBudgetHosted } from "./hosted-meter.js";
+
+// The meter's stop takes the app's lock without waiting; the in-process one stands in for Postgres's.
+jest.mock(`./hosted-app-lock.js`, () => ({ withHostedAppLock: fakeHostedAppLock }));
 
 const STANDARD = hostedTier(`standard`);
 
@@ -161,6 +165,21 @@ describe(`the hour meter's stop`, () => {
             hostedPlan: { findUnique: jest.fn().mockResolvedValue({ status: `active` }) },
         });
         expect(await stopOverBudgetHosted(prisma, config({ monthlyHours: 0 }), logger, NOW)).toEqual({ stopped: 1 });
+        expect(stops(fly)).toHaveLength(1);
+    });
+
+    /* NEVER IN THE MIDDLE OF A CHANGE. An image change holds the app's lock from its probe to its new daemon's verdict,
+     * and a stop in there would read as the new version going down; the tick leaves that machine to the next one. */
+    it(`leaves a machine mid-change to the next tick, and stops it once the change is done`, async () => {
+        const fly = stubFly(`started`);
+        const prisma = prismaWith([machine()], { hostedUsage: { findUnique: jest.fn().mockResolvedValue({ minutes: 9_000 }) } });
+        const change = Promise.withResolvers<void>();
+        const held = fakeHostedAppLock(config(), `intentic-sbx-a`, true, () => change.promise);
+        expect(await stopOverBudgetHosted(prisma, config(), logger, NOW)).toEqual({ stopped: 0 });
+        expect(stops(fly)).toHaveLength(0);
+        change.resolve();
+        await held;
+        expect(await stopOverBudgetHosted(prisma, config(), logger, NOW)).toEqual({ stopped: 1 });
         expect(stops(fly)).toHaveLength(1);
     });
 

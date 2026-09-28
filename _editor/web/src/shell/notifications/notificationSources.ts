@@ -1,7 +1,9 @@
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { plural } from "@intentic/base/format";
 import { useNow } from "@intentic/ui/async";
 import PushQuestionBody from "./PushQuestionBody.vue";
+import SandboxRecovery from "../../features/sandbox/gates/SandboxRecovery.vue";
+import { useRecoveryDue } from "../../features/sandbox/gates/useRecovery";
 import UploadProgressBody from "../../features/workspace/files/upload/UploadProgressBody.vue";
 import { useAppUpdate, type AppUpdate } from "../../app/appUpdate";
 import { hold, type NotificationInput, type NotificationTone } from "./notifications";
@@ -129,12 +131,25 @@ export const restartCard = (restart: RestartWork | undefined, availability: Sand
         ? { kind: `condition`, tone: `info`, icon: `refresh`, spin: true, title: restart.quiet.title, detail: restart.quiet.detail }
         : undefined;
 
+// THE SILENCE THAT OUTLASTED ITS PATIENCE (gates/recovery.ts says how long that is), over a workspace that stays on
+// screen: what can still be done without the sandbox, in a body of its own. It outranks the busy and restart cards,
+// which by then are promising a wait that has not ended. Dismissed for this outage only; the next one raises it again.
+export const recoveryCard = (name: string | undefined, dismiss: () => void): NotificationInput => ({
+    kind: `condition`,
+    tone: `warning`,
+    title: t(`sandbox.sandboxRecovery.title`, { name: name ?? t(`sandbox.sandboxRecovery.yourSandbox`) }),
+    detail: t(`sandbox.sandboxRecovery.detail`),
+    body: SandboxRecovery,
+    wide: true,
+    dismiss,
+});
+
 // Call order is stack order, growing up from the corner: most transient first (upload, seconds) to most permanent
 // last (a new build), so frequent changes never shove a fixed one.
 export const startNotificationSources = (): void => {
     // useSandboxAvailability binds to the caller's Vue scope, so this must run from a component's setup.
     const { user } = useAuth();
-    const { activeSandboxId, reachable, connection } = useSandbox();
+    const { active, activeSandboxId, reachable, connection } = useSandbox();
     const { presentedEmail, invalidateSession, getSessionToken } = useSandboxSession();
     const { clearCredential } = useGoogleIdentity();
     const { hasSnapshot } = useWorkspaceTree();
@@ -217,9 +232,16 @@ export const startNotificationSources = (): void => {
     });
 
     // Floats over the live DOM rather than replacing it; a never-painted workspace gets a gate instead.
+    const recovering = useRecoveryDue();
+    // The outage the recovery card was put away for, by when it began.
+    const dismissedOutage = ref<number | undefined>(undefined);
     hold(`sandbox-busy`, () => {
         if (gated.value) {
             return undefined;
+        }
+        const outage = connection.value.unavailableSince;
+        if (recovering.value && outage !== dismissedOutage.value) {
+            return recoveryCard(active.value?.name, () => (dismissedOutage.value = outage));
         }
         // An expired session outranks a restart: it is the one cause here that waiting cannot repair, and it stays on
         // the threshold it has always had rather than borrowing the restart's earlier one.

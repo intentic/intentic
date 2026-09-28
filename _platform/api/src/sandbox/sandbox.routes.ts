@@ -14,11 +14,13 @@ import { edgeTransports } from "./edge-transports.js";
 import { getMachine, isFlyGone, stopMachine } from "./hosted/fly/fly.js";
 import {
     forgetHostedMachine,
+    HostedNothingKept,
     type HostedProvisionArgs,
     hostedEnabled,
     HostedSlotsExhausted,
     provisionHosted,
     refreshHosted,
+    rollbackHosted,
     slotsMessage,
     wakeHosted,
 } from "./hosted/hosted.js";
@@ -31,6 +33,7 @@ import {
 } from "./hosted/build/hosted-build.js";
 import { HostedAtCapacity, hostedCapacity } from "./hosted/hosted-capacity.js";
 import { HostedImageKept, HostedMachineBusy } from "./hosted/gate/state-gate.js";
+import { withHostedAppLock } from "./hosted/hosted-app-lock.js";
 import { kickHostedPool } from "./hosted/hosted-pool.js";
 import {
     assertHostedIdentity,
@@ -130,11 +133,11 @@ const keptVersion = async (
 const restartOrRebuild = async (
     context: OrpcContext,
     args: HostedProvisionArgs,
-    hosted: { id: string; appName: string; machineId: string; volumeId: string },
+    hosted: { id: string; appName: string; machineId: string; volumeId: string; image?: string | null; environmentHash?: string | null; skippedDigest?: string | null },
     ownerId: string,
 ): Promise<boolean> => {
     try {
-        await refreshHosted(context.config, args, hosted, context.logger, { prisma: context.prisma, hostedMachineId: hosted.id });
+        await refreshHosted(context.config, args, hosted, context.logger, { prisma: context.prisma, hostedMachineId: hosted.id, sandboxId: args.sandboxId });
         return false;
     } catch (error) {
         if (!isFlyGone(error)) {
@@ -148,6 +151,52 @@ const restartOrRebuild = async (
         await provisionHosted(context.prisma, context.config, context.logger, args);
         return true;
     }
+};
+
+// The caller's own sandbox and the machine we run for it: the owner-only changes (a restart, a rollback) start here.
+const ownedHostedMachine = async (context: OrpcContext, sandboxId: string) => {
+    const sandbox = await requireOwnedSandbox(context, sandboxId);
+    const hosted = await context.prisma.hostedMachine.findUnique({ where: { sandboxId: sandbox.id } });
+    if (hosted === null) {
+        throw new ORPCError(`NOT_FOUND`, { message: `this sandbox has no machine we run` });
+    }
+    return { sandbox, hosted, user: requireUser(context) };
+};
+
+/* WHAT A RESTART AND A ROLLBACK BOTH STAND ON: the owner in good standing, the machine stopped (so its stretch settles
+ * exactly), and hours left to start it again. Answers the identity its config is composed from: the owner's address,
+ * and the machine's own rung, since a change puts back the guest it had, never the one a new machine gets. */
+const stopForChange = async (
+    context: OrpcContext,
+    owned: Awaited<ReturnType<typeof ownedHostedMachine>>,
+    what: string,
+): Promise<HostedProvisionArgs> => {
+    const { sandbox, hosted, user } = owned;
+    await requireHostedStanding(context, sandbox.ownerId);
+    // Never under another change's feet: its gate may be waiting for its own new daemon, and a stop now would read as that
+    // version stopped from outside. This change waits its turn in its own gate, whose probe stops the machine.
+    const stopped = await withHostedAppLock(context.config, hosted.appName, false, () =>
+        stopMachine(context.config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch((error: unknown) =>
+            context.logger.warn({ err: error, app: hosted.appName }, `hosted ${what}: stop refused; starting anyway`),
+        ),
+    );
+    if (stopped === undefined) {
+        context.logger.info({ app: hosted.appName }, `hosted ${what}: another change holds the machine; this one waits its turn`);
+    }
+    // Settling now is exact, since the stop just ended the stretch; the change ends in a start, so the budget applies
+    // too.
+    await settleHostedStretch(context.prisma, context.config, context.logger, { ...hosted, ownerId: sandbox.ownerId });
+    const budget = await hostedBudgetOf(context.prisma, context.config, { sandboxId: sandbox.id, tier: hosted.tier, ownerId: sandbox.ownerId });
+    if (budget.metered && budget.remainingMinutes === 0) {
+        throw paymentRequired(`your ${budget.allowanceMinutes / 60} free hours are used up this month; upgrade or self-host`);
+    }
+    return {
+        sandboxId: sandbox.id,
+        connectToken: decryptSecret(context.config, sandbox.token),
+        ownerEmail: user.email.toLowerCase(),
+        region: hosted.region,
+        tier: hostedTier(hosted.tier).id,
+    };
 };
 
 // A row gone mid-start (trash, release, the idle sweep) leaves nothing to bill the run, so the machine is stopped again.
@@ -224,8 +273,10 @@ const toSummary = (
         announceRefusal: unknown;
         removedAt: Date | null;
         removedBy: string | null;
+        // Absent from a caller that selected columns without it; reads as unknown.
+        daemonVersion?: string | null;
         // Hosted machine relation; optional so a caller that skipped the include reads as not-hosted, never crashes.
-        hosted?: { region: string; warm: boolean } | null;
+        hosted?: { region: string; warm: boolean; previousImage?: string | null } | null;
         token: string;
     },
     role: MemberRole,
@@ -247,7 +298,12 @@ const toSummary = (
         // The removal's own word, and the only thing that lets the browser say "gone" instead of waiting forever.
         removedAt: isoOrNull(sandbox.removedAt),
         removedBy: sandbox.removedBy,
-        hosted: sandbox.hosted === null || sandbox.hosted === undefined ? null : { region: sandbox.hosted.region, warm: sandbox.hosted.warm },
+        daemonVersion: sandbox.daemonVersion ?? null,
+        // `canRollBack`: the platform kept the image the machine ran before its last image change (hostedRollback).
+        hosted:
+            sandbox.hosted === null || sandbox.hosted === undefined
+                ? null
+                : { region: sandbox.hosted.region, warm: sandbox.hosted.warm, canRollBack: (sandbox.hosted.previousImage ?? null) !== null },
         token: connectTokenFor(context.config, sandbox.token, role),
         role,
         providedAddress,
@@ -501,32 +557,9 @@ export const sandboxRoutes = {
     // Reboots via stop, refresh, start; nothing destroyed (volume, files, address survive). When the provider has lost
     // the machine entirely, builds a replacement with the same identity instead of 404ing forever.
     hostedRestart: os.sandbox.hostedRestart.handler(async ({ context, input }) => {
-        const sandbox = await requireOwnedSandbox(context, input.sandboxId);
-        const hosted = await context.prisma.hostedMachine.findUnique({ where: { sandboxId: sandbox.id } });
-        if (hosted === null) {
-            throw new ORPCError(`NOT_FOUND`, { message: `this sandbox has no machine we run` });
-        }
-        const user = requireUser(context);
-        await requireHostedStanding(context, sandbox.ownerId);
-        await stopMachine(context.config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch((error: unknown) =>
-            context.logger.warn({ err: error, app: hosted.appName }, `hosted restart: stop refused; starting anyway`),
-        );
-        // Settling now is exact, since the stop just ended the stretch; a restart is a start, so the budget applies
-        // too.
-        await settleHostedStretch(context.prisma, context.config, context.logger, { ...hosted, ownerId: sandbox.ownerId });
-        const budget = await hostedBudgetOf(context.prisma, context.config, { sandboxId: sandbox.id, tier: hosted.tier, ownerId: sandbox.ownerId });
-        if (budget.metered && budget.remainingMinutes === 0) {
-            throw paymentRequired(`your ${budget.allowanceMinutes / 60} free hours are used up this month; upgrade or self-host`);
-        }
+        const { sandbox, hosted, user } = await ownedHostedMachine(context, input.sandboxId);
+        const args = await stopForChange(context, { sandbox, hosted, user }, `restart`);
         try {
-            const args = {
-                sandboxId: sandbox.id,
-                connectToken: decryptSecret(context.config, sandbox.token),
-                ownerEmail: user.email.toLowerCase(),
-                region: hosted.region,
-                // The machine's own rung: a restart puts back the guest it had, never the one a new machine gets.
-                tier: hostedTier(hosted.tier).id,
-            };
             const rebuilt = await restartOrRebuild(context, args, hosted, sandbox.ownerId);
             // A rebuild stamps `wokeAt` at creation; opening a stretch here too would meter one boot twice.
             if (!rebuilt) {
@@ -553,6 +586,35 @@ export const sandboxRoutes = {
                 throw new ORPCError(`BAD_REQUEST`, { message: error.message });
             }
             throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `restarting the machine failed` });
+        }
+        return { ok: true };
+    }),
+    // Back onto the image the machine ran before its last image change, through the same state gate as any change
+    // (hosted.ts rollbackHosted); pressed again, it goes forward. Owner-only like a restart, and the platform's own act,
+    // so it works while the daemon is down. CONFLICT, before anything is stopped, when no earlier image is kept.
+    hostedRollback: os.sandbox.hostedRollback.handler(async ({ context, input }) => {
+        const { sandbox, hosted, user } = await ownedHostedMachine(context, input.sandboxId);
+        if ((hosted.previousImage ?? null) === null) {
+            throw new ORPCError(`CONFLICT`, { message: `this sandbox has no earlier version kept to go back to` });
+        }
+        const args = await stopForChange(context, { sandbox, hosted, user }, `rollback`);
+        try {
+            await rollbackHosted(context.config, args, hosted, context.logger, { prisma: context.prisma, hostedMachineId: hosted.id, sandboxId: sandbox.id });
+            await openStretchOrStop(context, hosted, sandbox.ownerId);
+        } catch (error) {
+            if (error instanceof ORPCError) {
+                throw error;
+            }
+            if (error instanceof HostedImageKept) {
+                throw await keptVersion(context, hosted, sandbox.ownerId, error);
+            }
+            if (error instanceof HostedNothingKept) {
+                throw new ORPCError(`CONFLICT`, { message: error.message });
+            }
+            if (isFlyGone(error)) {
+                throw new ORPCError(`NOT_FOUND`, { message: `the machine this sandbox ran on no longer exists; restart it to give it a new one` });
+            }
+            throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `going back to the earlier version failed` });
         }
         return { ok: true };
     }),
@@ -636,7 +698,7 @@ export const sandboxRoutes = {
                     tier: hostedTier(hosted.tier).id,
                 }),
                 context.logger,
-                { prisma: context.prisma, hostedMachineId: hosted.id },
+                { prisma: context.prisma, hostedMachineId: hosted.id, sandboxId: sandbox.id },
             );
             if (healed) {
                 context.logger.info(

@@ -8,7 +8,7 @@ import { computed, ref } from "vue";
 import type { IconName } from "../../icons/iconSets.js";
 import ContextMenu from "../overlays/ContextMenu.vue";
 import Icon from "../primitives/Icon.vue";
-import { DESTRUCTIVE_VERB, menuVerbs, primaryVerb, type SandboxVerb, VERB_LABEL } from "./sandboxVerbs.js";
+import { DESTRUCTIVE_VERB, menuVerbs, primaryVerb, type RollbackChoice, type SandboxVerb, VERB_LABEL } from "./sandboxVerbs.js";
 import { useT } from "../../i18n/index.js";
 
 const t = useT();
@@ -20,6 +20,7 @@ const {
     logsOpen = false,
     compact = false,
     container = true,
+    rollbackChoices = [],
 } = defineProps<{
     /** The container's own state: it decides whether the row's button says Start or Stop. */
     running: boolean;
@@ -34,9 +35,12 @@ const {
     disabled?: boolean | undefined;
     /** Whether this row's log pane is showing, the only thing the toggle's label depends on. */
     logsOpen?: boolean | undefined;
+    // The versions this machine kept, newest first, when it can go back to any of them: Roll back becomes one row per
+    // version. Fewer than two is the plain verb, since there is nothing to choose between.
+    rollbackChoices?: readonly RollbackChoice[] | undefined;
 }>();
 
-const emit = defineEmits<{ act: [verb: SandboxVerb] }>();
+const emit = defineEmits<{ act: [verb: SandboxVerb]; rollbackTo: [choice: RollbackChoice] }>();
 
 // A glyph per row, so the menu is read by shape rather than word-by-word; each icon matches the app's
 // vocabulary for the same idea elsewhere.
@@ -59,9 +63,33 @@ const labelOf = (verb: SandboxVerb): string => (verb === `logs` ? (logsOpen ? `H
 const menuBusy = computed(() => busy !== undefined && (compact || !container || busy !== power.value));
 const item = (verb: SandboxVerb): MenuItem => ({ label: labelOf(verb), icon: VERB_ICON[verb], command: () => emit(`act`, verb) });
 
+// Roll back as one row, or, with versions to choose between, one row per version this machine kept: the newest is the
+// plain rollback and the rest name their target. Rows of this list rather than a submenu, which the menu's own
+// scrolling box clips.
+const rollbackRows = (): MenuItem[] =>
+    rollbackChoices.length < 2
+        ? [item(`rollback`)]
+        : rollbackChoices.map((choice, at) => {
+              const row: MenuItem = {
+                  label: t(`ui.sandboxSandboxVerbs.rollBackTo`, { version: choice.version }),
+                  icon: VERB_ICON.rollback,
+                  command: () => (choice.to === undefined ? emit(`act`, `rollback`) : emit(`rollbackTo`, choice)),
+              };
+              if (at === 0) {
+                  row[`hint`] = t(`ui.sandboxSandboxVerbs.versionBefore`);
+              }
+              return row;
+          });
+
 const menu = ref<{ show: (event: Event) => void } | undefined>();
 const items = computed<MenuItem[]>(() => [
-    ...(container ? [...(compact ? [item(power.value)] : []), ...menuVerbs(running).map(item), { separator: true }] : []),
+    ...(container
+        ? [
+              ...(compact ? [item(power.value)] : []),
+              ...menuVerbs(running).flatMap((verb) => (verb === `rollback` ? rollbackRows() : [item(verb)])),
+              { separator: true },
+          ]
+        : []),
     // The caller still asks its own confirmation; this only stops the row presenting removal as the seventh
     // item beside harmless ones.
     { label: VERB_LABEL[DESTRUCTIVE_VERB], icon: VERB_ICON[DESTRUCTIVE_VERB], danger: true, command: () => emit(`act`, DESTRUCTIVE_VERB) },

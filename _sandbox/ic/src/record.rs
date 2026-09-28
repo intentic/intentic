@@ -1,5 +1,5 @@
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::logfile::intentic_home;
 use crate::shape::Shape;
@@ -7,7 +7,73 @@ use crate::util::{Fail, Result};
 
 /* The channel record: which tag this sandbox follows, what it was on before, and what is WAITING for it — an image built for it, a shape saved for it. */
 
-#[derive(Clone, Default)]
+/// How many rollback targets a sandbox keeps BEYOND `previous`: older builds `ic sandbox rollback --to` can reach
+/// without a download. Each is a whole image, so the swap drops them when the disk runs short (see recreate.rs).
+pub const MAX_KEPT: usize = 2;
+
+/// One image a rollback can return to: a pinned local tag and what the image said it was when it was pinned.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Pin {
+    pub image: String,
+    pub version: Option<String>,
+}
+
+/// Where a swap is. `Cutover` from the moment the old container is about to stop until the new one has passed its
+/// first health check; `Probation` after that, while the old container stays parked and ready and the probation
+/// watch (probation.rs) judges the new one. A record that names neither has no swap in flight.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Phase {
+    Cutover,
+    Probation,
+}
+
+impl Phase {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Phase::Cutover => "cutover",
+            Phase::Probation => "probation",
+        }
+    }
+
+    fn parse(value: &str) -> Option<Phase> {
+        match value {
+            "cutover" => Some(Phase::Cutover),
+            "probation" => Some(Phase::Probation),
+            _ => None,
+        }
+    }
+}
+
+/// A swap in flight or on probation. Written before the old container stops, so a swap that dies halfway leaves the
+/// facts the next `ic` run (or the machine agent's watch tick) needs to finish it or undo it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Swap {
+    pub phase: Phase,
+    /// When the cutover began, in epoch milliseconds.
+    pub at: u64,
+    /// What was asked for: update, rollback, rebuild, dev, reshape.
+    pub verb: String,
+    /// The version (or image) being left, and the one being moved onto: what the owner is told.
+    pub from: Option<String>,
+    pub to: Option<String>,
+    /// When the probation ends and the parked container is let go, in epoch milliseconds.
+    pub until: Option<u64>,
+    /// How the left container's own reach probe read before the swap (`reachable`, `unreachable`…): a new version
+    /// is only held to a tunnel the old one had.
+    pub reach: Option<String>,
+    /// Consecutive probation checks the new version failed; three in a row is a rollback.
+    pub strikes: u32,
+    /// When the new version's daemon last started (its boot marker's `startedAt`), and how many times the probation
+    /// watch has seen it start again since: a daemon that keeps restarting inside a running container is a crash
+    /// loop the container's own restart count never shows.
+    pub daemon_start: Option<u64>,
+    pub daemon_restarts: u32,
+    /// The last heartbeat of the ic run doing the cutover, in epoch milliseconds: a cutover whose heartbeat is fresh is
+    /// in progress somewhere (another terminal, the other side of a Windows/WSL machine) and is left alone.
+    pub alive: Option<u64>,
+}
+
+#[derive(Clone, Default, Debug, PartialEq)]
 pub struct ChannelRecord {
     pub channel: Option<String>,
     pub current: Option<String>,
@@ -36,21 +102,50 @@ pub struct ChannelRecord {
     /// recreate that applies it — that recreate writes the record without it, in the same write that names its new
     /// image, so a swap that fails and is rewound gets it back with the rest of the record.
     pub desired: Option<Shape>,
+    /// What the image `current` names said it was when the swap that recorded it asked.
+    pub current_version: Option<String>,
+    /// What `previous` said it was when it was pinned.
+    pub previous_version: Option<String>,
+    /// Older rollback targets kept beyond `previous`, newest first, at most MAX_KEPT.
+    pub kept: Vec<Pin>,
+    /// A swap in flight or on probation.
+    pub swap: Option<Swap>,
+    /// The version the probation watch last went back FROM. The background download never stages it again; a
+    /// person's own update still takes it.
+    pub rolled_back_from: Option<String>,
+    /// When this record was written, in epoch milliseconds: which of two copies (this machine's home and the one
+    /// on the sandbox's own /history, see mirror.rs) is newer.
+    pub written: Option<u64>,
 }
 
 impl ChannelRecord {
     /// The same record with nothing staged. What every flow that moves the container writes: it is taking an
     /// image now, so nothing is waiting for it any more.
     ///
-    /// The shape saved for the next restart stays: a prepare that is dropped has not restarted anything.
+    /// Everything else stays: the shape saved for the next restart (a prepare that is dropped has not restarted
+    /// anything), the rollback targets, and a swap on probation.
     pub fn without_staged(&self) -> ChannelRecord {
         ChannelRecord {
-            channel: self.channel.clone(),
-            current: self.current.clone(),
-            previous: self.previous.clone(),
-            desired: self.desired.clone(),
-            ..ChannelRecord::default()
+            staged: None,
+            staged_base: None,
+            staged_env: None,
+            staged_channel: None,
+            staged_version: None,
+            ..self.clone()
         }
+    }
+
+    /// Every rollback target, newest first: `previous`, then the older ones kept.
+    pub fn targets(&self) -> Vec<Pin> {
+        let mut targets: Vec<Pin> = Vec::new();
+        if let Some(image) = &self.previous {
+            targets.push(Pin {
+                image: image.clone(),
+                version: self.previous_version.clone(),
+            });
+        }
+        targets.extend(self.kept.iter().cloned());
+        targets
     }
 }
 
@@ -58,14 +153,36 @@ pub fn record_path(slug: &str) -> PathBuf {
     intentic_home().join(format!("sandbox-{slug}.channel"))
 }
 
+/// The record as it stood before the swap in flight: what the probation watch puts back when it undoes the swap.
+pub fn before_path(slug: &str) -> PathBuf {
+    intentic_home().join(format!("sandbox-{slug}.channel.before"))
+}
+
 pub fn read(slug: &str) -> Result<ChannelRecord> {
     read_file(&record_path(slug))
+}
+
+/// The pre-swap record, None when no swap left one.
+pub fn read_before(slug: &str) -> Result<Option<ChannelRecord>> {
+    let path = before_path(slug);
+    if !path.exists() {
+        return Ok(None);
+    }
+    read_file(&path).map(Some)
+}
+
+pub fn write_before(slug: &str, record: &ChannelRecord) -> Result<()> {
+    write_file(&before_path(slug), record)
+}
+
+pub fn remove_before(slug: &str) {
+    let _ = std::fs::remove_file(before_path(slug));
 }
 
 /// Parse a record file. Split from the path derivation so the format's rules — last occurrence wins, an
 /// absent file reads as "nothing recorded", an unknown key is ignored — are assertable without touching the
 /// process's environment. A file that is there but unreadable is an error: every flow writes the record back.
-fn read_file(path: &std::path::Path) -> Result<ChannelRecord> {
+fn read_file(path: &Path) -> Result<ChannelRecord> {
     let content = match std::fs::read_to_string(path) {
         Ok(content) => content,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(ChannelRecord::default()),
@@ -76,9 +193,18 @@ fn read_file(path: &std::path::Path) -> Result<ChannelRecord> {
             )))
         }
     };
+    Ok(parse(&content))
+}
+
+/// The record's text, read. Pure: the home file and the copy on the sandbox's volume are read the same way.
+pub fn parse(content: &str) -> ChannelRecord {
     let mut record = ChannelRecord::default();
     // The shape's four keys are read together at the end: all four, or no shape.
     let mut desired: [Option<String>; 4] = Default::default();
+    // So are a kept target's image and version, and a swap's keys: a half-written group is no group.
+    let mut kept: [(Option<String>, Option<String>); MAX_KEPT] = Default::default();
+    let mut swap: [Option<String>; 11] = Default::default();
+    let mut rest: [Option<String>; 4] = Default::default();
     for line in content.lines() {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -96,6 +222,25 @@ fn read_file(path: &std::path::Path) -> Result<ChannelRecord> {
             "staged_env" => &mut record.staged_env,
             "staged_channel" => &mut record.staged_channel,
             "staged_version" => &mut record.staged_version,
+            "current_version" => &mut rest[0],
+            "previous_version" => &mut rest[1],
+            "rolled_back_from" => &mut rest[2],
+            "written" => &mut rest[3],
+            "kept_1" => &mut kept[0].0,
+            "kept_1_version" => &mut kept[0].1,
+            "kept_2" => &mut kept[1].0,
+            "kept_2_version" => &mut kept[1].1,
+            "swap_phase" => &mut swap[0],
+            "swap_at" => &mut swap[1],
+            "swap_verb" => &mut swap[2],
+            "swap_from" => &mut swap[3],
+            "swap_to" => &mut swap[4],
+            "probation_until" => &mut swap[5],
+            "swap_reach" => &mut swap[6],
+            "probation_strikes" => &mut swap[7],
+            "probation_daemon_start" => &mut swap[8],
+            "probation_daemon_restarts" => &mut swap[9],
+            "swap_alive" => &mut swap[10],
             // A key written by a NEWER ic than this one. Ignored rather than refused: a user who downgrades
             // their host binary must still be able to update and roll back.
             _ => continue,
@@ -109,34 +254,113 @@ fn read_file(path: &std::path::Path) -> Result<ChannelRecord> {
         privileged.as_deref(),
         gpus.as_deref(),
     );
-    Ok(record)
+    let [current_version, previous_version, rolled_back_from, written] = rest;
+    record.current_version = current_version;
+    record.previous_version = previous_version;
+    record.rolled_back_from = rolled_back_from;
+    record.written = written.and_then(|value| value.parse().ok());
+    record.kept = kept
+        .into_iter()
+        .filter_map(|(image, version)| {
+            image
+                .filter(|image| !image.is_empty())
+                .map(|image| Pin { image, version })
+        })
+        .collect();
+    record.swap = swap_of(swap);
+    record
 }
 
-/// Temp-then-rename, like every other record this repo writes: a reader landing mid-write must see the whole
-/// previous file or the whole next one, never a seam. An absent value is an OMITTED key, never an empty one —
-/// `previous=` would read back as a rollback target named "".
-pub fn write(slug: &str, record: &ChannelRecord) -> Result<()> {
-    write_file(&record_path(slug), record)
+/// A swap's keys as one value: a phase this build knows and a start time, or no swap at all.
+fn swap_of(keys: [Option<String>; 11]) -> Option<Swap> {
+    let [phase, at, verb, from, to, until, reach, strikes, daemon_start, daemon_restarts, alive] =
+        keys;
+    Some(Swap {
+        phase: Phase::parse(phase.as_deref()?)?,
+        at: at?.parse().ok()?,
+        verb: verb.unwrap_or_default(),
+        from,
+        to,
+        until: until.and_then(|value| value.parse().ok()),
+        reach,
+        strikes: strikes.and_then(|value| value.parse().ok()).unwrap_or(0),
+        daemon_start: daemon_start.and_then(|value| value.parse().ok()),
+        daemon_restarts: daemon_restarts
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(0),
+        alive: alive.and_then(|value| value.parse().ok()),
+    })
 }
 
-fn write_file(path: &std::path::Path, record: &ChannelRecord) -> Result<()> {
-    let dir = path.parent().expect("record path has a parent");
-    std::fs::create_dir_all(dir)?;
-    let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
-    for (key, value) in [
-        ("channel", &record.channel),
-        ("current", &record.current),
-        ("previous", &record.previous),
-        ("staged", &record.staged),
-        ("staged_base", &record.staged_base),
-        ("staged_env", &record.staged_env),
-        ("staged_channel", &record.staged_channel),
-        ("staged_version", &record.staged_version),
-    ] {
+/// The record's text. An absent value is an OMITTED key, never an empty one — `previous=` would read back as a
+/// rollback target named "".
+pub fn serialize(record: &ChannelRecord) -> String {
+    let mut text = String::new();
+    let mut put = |key: &str, value: Option<&str>| {
         if let Some(value) = value {
-            writeln!(tmp, "{key}={value}")?;
+            text.push_str(key);
+            text.push('=');
+            text.push_str(value);
+            text.push('\n');
         }
+    };
+    put("channel", record.channel.as_deref());
+    put("current", record.current.as_deref());
+    put("previous", record.previous.as_deref());
+    put("staged", record.staged.as_deref());
+    put("staged_base", record.staged_base.as_deref());
+    put("staged_env", record.staged_env.as_deref());
+    put("staged_channel", record.staged_channel.as_deref());
+    put("staged_version", record.staged_version.as_deref());
+    put("current_version", record.current_version.as_deref());
+    put("previous_version", record.previous_version.as_deref());
+    for (slot, pin) in record.kept.iter().take(MAX_KEPT).enumerate() {
+        put(&format!("kept_{}", slot + 1), Some(&pin.image));
+        put(
+            &format!("kept_{}_version", slot + 1),
+            pin.version.as_deref(),
+        );
     }
+    if let Some(swap) = &record.swap {
+        put("swap_phase", Some(swap.phase.as_str()));
+        put("swap_at", Some(&swap.at.to_string()));
+        put(
+            "swap_verb",
+            (!swap.verb.is_empty()).then_some(swap.verb.as_str()),
+        );
+        put("swap_from", swap.from.as_deref());
+        put("swap_to", swap.to.as_deref());
+        put(
+            "probation_until",
+            swap.until.map(|until| until.to_string()).as_deref(),
+        );
+        put("swap_reach", swap.reach.as_deref());
+        put(
+            "probation_strikes",
+            (swap.strikes > 0)
+                .then(|| swap.strikes.to_string())
+                .as_deref(),
+        );
+        put(
+            "probation_daemon_start",
+            swap.daemon_start.map(|start| start.to_string()).as_deref(),
+        );
+        put(
+            "probation_daemon_restarts",
+            (swap.daemon_restarts > 0)
+                .then(|| swap.daemon_restarts.to_string())
+                .as_deref(),
+        );
+        put(
+            "swap_alive",
+            swap.alive.map(|alive| alive.to_string()).as_deref(),
+        );
+    }
+    put("rolled_back_from", record.rolled_back_from.as_deref());
+    put(
+        "written",
+        record.written.map(|written| written.to_string()).as_deref(),
+    );
     if let Some(desired) = &record.desired {
         let keys = [
             "desired_memory",
@@ -145,11 +369,50 @@ fn write_file(path: &std::path::Path, record: &ChannelRecord) -> Result<()> {
             "desired_gpus",
         ];
         for (key, value) in keys.iter().zip(desired.to_record()) {
-            writeln!(tmp, "{key}={value}")?;
+            put(key, Some(&value));
         }
     }
+    text
+}
+
+/// Temp-then-rename, like every other record this repo writes: a reader landing mid-write must see the whole
+/// previous file or the whole next one, never a seam. Stamped with the time it is written, which is how the copy on
+/// the sandbox's volume and this one are told apart (mirror.rs).
+pub fn write(slug: &str, record: &ChannelRecord) -> Result<()> {
+    write_file(&record_path(slug), &stamped(record))
+}
+
+/// The record with `written` set to now.
+pub fn stamped(record: &ChannelRecord) -> ChannelRecord {
+    ChannelRecord {
+        written: Some(crate::sandbox::now_ms()),
+        ..record.clone()
+    }
+}
+
+/// Written through to the disk before the rename that publishes it, and the rename itself flushed with its
+/// directory: this file names the only way back to the version before an update, and a machine that loses power
+/// right after a swap (a laptop lid, a WSL shutdown) must not wake to an empty record that reads as "nothing to roll
+/// back to".
+pub fn write_file(path: &Path, record: &ChannelRecord) -> Result<()> {
+    let dir = path.parent().expect("record path has a parent");
+    std::fs::create_dir_all(dir)?;
+    let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
+    tmp.write_all(serialize(record).as_bytes())?;
+    tmp.as_file().sync_all()?;
     tmp.persist(path).map_err(|err| err.error)?;
+    sync_dir(dir);
     Ok(())
+}
+
+/// Flush a directory's entries (the rename above). Only POSIX has, or needs, a directory to open for this.
+fn sync_dir(dir: &Path) {
+    #[cfg(unix)]
+    if let Ok(handle) = std::fs::File::open(dir) {
+        let _ = handle.sync_all();
+    }
+    #[cfg(not(unix))]
+    let _ = dir;
 }
 
 #[cfg(test)]
@@ -336,6 +599,83 @@ mod tests {
         let record = read_file(&path).expect("read");
         assert_eq!(record.channel.as_deref(), Some("stable"));
         assert_eq!(record.current.as_deref(), Some("x"));
+    }
+
+    #[test]
+    fn the_ways_back_and_a_swap_in_flight_round_trip() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("sandbox-abc.channel");
+        let record = ChannelRecord {
+            current_version: Some("1.316.0".to_string()),
+            previous_version: Some("1.315.0".to_string()),
+            kept: vec![
+                Pin {
+                    image: "intentic-sandbox-rollback-abc:111111111111".to_string(),
+                    version: Some("1.314.0".to_string()),
+                },
+                Pin {
+                    image: "intentic-sandbox-rollback-abc:222222222222".to_string(),
+                    version: None,
+                },
+            ],
+            swap: Some(Swap {
+                phase: Phase::Probation,
+                at: 1_000,
+                verb: "update".to_string(),
+                from: Some("1.315.0".to_string()),
+                to: Some("1.316.0".to_string()),
+                until: Some(2_000),
+                reach: Some("reachable".to_string()),
+                strikes: 2,
+                daemon_start: Some(1_500),
+                daemon_restarts: 1,
+                alive: Some(1_200),
+            }),
+            rolled_back_from: Some("1.313.0".to_string()),
+            written: Some(42),
+            ..swap(
+                "ghcr.io/intentic/sandbox:stable",
+                Some("intentic-sandbox-rollback-abc:000000000000"),
+            )
+        };
+        write_file(&path, &record).expect("write");
+        assert_eq!(read_file(&path).expect("read"), record);
+        // The targets, newest first, are what `ic sandbox rollback` and `--to` choose from.
+        let targets: Vec<String> = record.targets().into_iter().map(|pin| pin.image).collect();
+        assert_eq!(
+            targets,
+            vec![
+                "intentic-sandbox-rollback-abc:000000000000".to_string(),
+                "intentic-sandbox-rollback-abc:111111111111".to_string(),
+                "intentic-sandbox-rollback-abc:222222222222".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_half_written_swap_is_no_swap_and_a_settled_one_leaves_no_key_behind() {
+        // A phase with no start time (a hand edit, another tool) must not read as a swap to finish or undo.
+        assert_eq!(parse("current=x\nswap_phase=cutover\n").swap, None);
+        assert_eq!(
+            parse("current=x\nswap_phase=elsewhere\nswap_at=1\n").swap,
+            None
+        );
+        let settled = serialize(&ChannelRecord {
+            swap: None,
+            ..swap("x", None)
+        });
+        assert!(
+            !settled.contains("swap_") && !settled.contains("probation_"),
+            "{settled}"
+        );
+    }
+
+    #[test]
+    fn a_write_stamps_the_time_it_was_written() {
+        let record = stamped(&swap("x", None));
+        assert!(record
+            .written
+            .is_some_and(|written| written > 1_700_000_000_000));
     }
 
     #[test]

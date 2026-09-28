@@ -2293,7 +2293,7 @@ describe("one write per fact", () => {
         const { agents: registry, conversations } = createFleet(fleetStoreOver(db), standings(), presences());
         await registry.init();
         // Filed by the run before its turn begins, and written by nothing until the begin.
-        conversations.send("c1", { kind: "journalled", entry: IN_FLIGHT });
+        conversations.send("c1", { kind: "journalled", run: "run-1", entry: IN_FLIGHT });
         expect(db.rowsOf("c1")).toEqual({});
 
         expect(await beginTurn(conversations, turn(), 1_000)).toBe("begun");
@@ -2316,7 +2316,7 @@ describe("one write per fact", () => {
         };
         const { agents: registry, conversations } = createFleet(failing, standings(), presences());
         await registry.init();
-        conversations.send("c1", { kind: "journalled", entry: IN_FLIGHT });
+        conversations.send("c1", { kind: "journalled", run: "run-1", entry: IN_FLIGHT });
 
         await expect(beginTurn(conversations, turn(), 1_000)).rejects.toThrow("disk full");
 
@@ -2370,7 +2370,7 @@ describe("one write per fact", () => {
             presences(),
         );
         await registry.init();
-        conversations.send("c1", { kind: "journalled", entry: IN_FLIGHT });
+        conversations.send("c1", { kind: "journalled", run: "run-1", entry: IN_FLIGHT });
         await beginTurn(conversations, turn(), 1_000);
         await sqliteTurnCheckpoints(db).record("c1", 0, { kind: "tree", snapshot: "s-0" });
         await conversations.send("c1", { kind: "settle" }, 1_500).settled;

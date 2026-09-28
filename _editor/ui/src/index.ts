@@ -134,6 +134,9 @@ export {
     DESTRUCTIVE_VERB,
     menuVerbs,
     primaryVerb,
+    // One version a machine kept, as Roll back's own list offers it, and the question before going back to it.
+    type RollbackChoice,
+    rollbackToPrompt,
     type SandboxVerb,
     sandboxVerbPrompt,
     type SandboxVerbPrompt,

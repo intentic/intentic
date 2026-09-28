@@ -1,6 +1,8 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
 import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract";
+import { readSwapRecords, type SwapRecord, swapsUnderway } from "../device/swap-records.js";
+import { icSwapsInFlight } from "../device/tools/sandboxes.js";
 import { installedBuild } from "../installed.js";
 import { publishedVersion } from "../release.js";
 import { heldDistros, type MachineConfig, readMachineConfig } from "./machine.js";
@@ -17,6 +19,8 @@ const RELEASE_EVERY_MS = 6 * 60 * 60_000;
 const RELEASE_JITTER_MS = 30 * 60_000;
 // How soon a distro that just attached is compared, so it is not left on another release for the rest of the hour.
 const NUDGE_MS = 30_000;
+// How soon a pass put off by a swap in flight looks again: a cutover takes minutes, not the hour to the next pass.
+const DEFERRED_MS = 5 * 60_000;
 
 // A target that failed is tried again after 1, 2, 4… hours, a day at most, rather than downloaded every pass.
 export const retryAfterMs = (count: number): number => Math.min(2 ** Math.max(count - 1, 0), 24) * 60 * 60_000;
@@ -44,8 +48,18 @@ export const autoUpgradeDecision = (reading: AutoUpgradeReading): { readonly lev
     if (failure?.target === target && reading.now - failure.at < retryAfterMs(failure.count)) {
         return undefined;
     }
+    // A release this machine rolled back from (agent-trial.ts) is never gone back to; a newer one is a new target.
+    if (reading.config.skippedAgent?.version === target) {
+        return undefined;
+    }
     return { level: released === undefined || machineTarget(undefined, installed) === target, target };
 };
+
+// The sandboxes an upgrade now would restart this agent under: a swap this process is running, or one any process here
+// is mid-cutover on by ic's own record. The upgrade's restart can wait minutes; a parked container cannot.
+export const upgradeHeldBy = (swapping: ReadonlySet<string>, records: readonly SwapRecord[], now: number): string[] => [
+    ...new Set([...swapping, ...swapsUnderway(records, now)]),
+];
 
 export interface AutoUpgrade {
     readonly stop: () => void;
@@ -64,6 +78,14 @@ export const startAutoUpgrade = (log: Log): AutoUpgrade => {
         }
     };
     const tick = async (): Promise<void> => {
+        const swapping = upgradeHeldBy(icSwapsInFlight, await readSwapRecords(), Date.now());
+        if (swapping.length > 0) {
+            log(
+                `auto-upgrade: put off while ${swapping.join(", ")} ${swapping.length === 1 ? "is" : "are"} mid-swap; looking again in ${DEFERRED_MS / 60_000} minutes.`,
+            );
+            schedule(DEFERRED_MS);
+            return;
+        }
         try {
             const config = await readMachineConfig();
             const asksRelease = config.agentUpdates !== false && Date.now() >= releaseDueAt;

@@ -36,9 +36,11 @@ import {
 } from "../terminal/terminal-session.js";
 import { settleTerminalHelpFor, terminalHelpFor } from "../terminal/terminal-help.js";
 import { isNoTmuxServer } from "../terminal/tmux-server.js";
-import { isNewer, latestVersion } from "./boot/version-check.js";
-import { breakingNotes, MAX_UPDATE_NOTES, updateNotes } from "./boot/release-notes.js";
-import { stagedUpdate } from "./boot/staged-update.js";
+import { latestVersion } from "./boot/version-check.js";
+import { breakingNotes, MAX_UPDATE_NOTES, updateNotes, withdrawnRelease } from "./boot/release-notes.js";
+import { stagedUpdate, updateOutcome } from "./boot/staged-update.js";
+import { fileUpdateSkip, updateOffered } from "./boot/update-skip.js";
+import { opt } from "../opt.js";
 import { runtimeHealth } from "../agent/providers/adapter-health.js";
 import { buildId } from "../version.js";
 import { manifestProblems } from "../store/manifest/manifest-problems.js";
@@ -254,8 +256,14 @@ export const createSystemRoutes = (services: Services) => {
             // refetches.
             const latest = latestVersion();
             const runtimes = runtimeHealth();
-            // The host machine's own build status, unknowable to the daemon; read fresh from /history, never cached.
-            const staged = await stagedUpdate(services.config.historyRoot);
+            // The host machine's own build status and its last word on the version, unknowable to the daemon; read
+            // fresh from /history, never cached, like the owner's skip beside them.
+            const [staged, lastUpdate, skippedVersion] = await Promise.all([
+                stagedUpdate(services.config.historyRoot),
+                updateOutcome(services.config.historyRoot),
+                fileUpdateSkip(services.config.historyRoot).skipped(),
+            ]);
+            const withdrawn = withdrawnRelease(info.version);
             // Capped so a long-neglected sandbox gets a card, not a scroll; the remainder travels as a count.
             const notes = updateNotes(info.version);
             const shown = notes.slice(0, MAX_UPDATE_NOTES);
@@ -263,13 +271,22 @@ export const createSystemRoutes = (services: Services) => {
             const breaking = breakingNotes(info.version);
             return {
                 ...info,
-                ...(latest !== undefined ? { latest, updateAvailable: isNewer(latest, info.version) } : {}),
+                ...(latest !== undefined ? { latest, updateAvailable: updateOffered(latest, info.version, skippedVersion) } : {}),
                 ...(runtimes !== undefined ? { runtimes } : {}),
                 ...(shown.length > 0 ? { updateNotes: shown } : {}),
                 ...(notes.length > shown.length ? { moreUpdateNotes: notes.length - shown.length } : {}),
                 ...(breaking.length > 0 ? { breakingNotes: breaking } : {}),
                 ...(staged !== undefined ? { staged } : {}),
+                ...opt("lastUpdate", lastUpdate),
+                ...opt("withdrawn", withdrawn),
+                ...opt("skippedVersion", skippedVersion),
             };
+        }),
+        // The owner's "not this one" for the update card, kept until they ask for the newest release again; a release
+        // newer than the skipped one is offered as usual.
+        skipUpdate: i.skipUpdate.handler(async ({ input }) => {
+            await fileUpdateSkip(services.config.historyRoot).skip(input.version);
+            return { ok: true } as const;
         }),
         // What the daemon couldn't read in `.intentic/` manifests. The three hand-edited ones are re-read here before
         // answering, since a registry entry is only as fresh as its last read; daemon-written manifests skip this step.

@@ -5,8 +5,13 @@ use crate::contract::{self, RunRequest};
 use crate::docker;
 use crate::health;
 use crate::logfile::Log;
-use crate::record;
-use crate::sandbox::{desired, resolve_slug, staged, CONTAINER_PREFIX};
+use crate::record::{self, ChannelRecord, Phase, Pin, Swap};
+use crate::sandbox::lock::{self, Wait};
+use crate::sandbox::outcome::{self, Kind, Outcome};
+use crate::sandbox::{
+    desired, identity, mirror, now_ms, probation, resolve_slug, staged, storage, versions,
+    CONTAINER_PREFIX, PARKED_SUFFIX,
+};
 use crate::shape::{Ask, Shape, GPUS_TOKEN, PRIVILEGED_TOKEN};
 use crate::util::{bail, sha256_hex, Fail, Result};
 
@@ -27,7 +32,10 @@ pub enum Mode {
         channel: Option<String>,
         force: bool,
     },
-    Rollback,
+    /// `to` names an older kept build or a release version (`ic sandbox rollback --to`); None is `previous`.
+    Rollback {
+        to: Option<String>,
+    },
     Dev,
     Reshape(Ask),
 }
@@ -49,7 +57,7 @@ impl Mode {
         match self {
             Mode::Rebuild { .. } => "rebuild",
             Mode::Update { .. } => "update",
-            Mode::Rollback => "rollback",
+            Mode::Rollback { .. } => "rollback",
             Mode::Dev => "dev",
             Mode::Reshape(_) => "reshape",
         }
@@ -120,8 +128,13 @@ fn recreate(
         Reach::Checked | Reach::Applied => mode.name(),
     };
     let slug = resolve_slug(slug, &format!("ic sandbox {verb}"))?;
+    // One ic at a time on a sandbox; a background run comes back on its next tick rather than queueing behind a person.
+    let Some(_held) = lock::hold(&slug, if auto { Wait::Skip } else { Wait::Block })? else {
+        println!("intentic: another ic run is working on {slug} — skipping this background run.");
+        return Ok(());
+    };
     let container = format!("{CONTAINER_PREFIX}{slug}");
-    let parked = format!("{container}.previous");
+    let parked = format!("{container}{PARKED_SUFFIX}");
     if !docker::container_exists(&container) {
         // A recreate that died between parking the old container and starting its replacement leaves the
         // name empty and the sandbox parked — put it back rather than sending the owner to the wizard.
@@ -164,10 +177,24 @@ fn recreate(
         }
     }
 
+    // The copy on the sandbox's own volume wins when another ic home wrote it later (mirror.rs); an unreadable home
+    // record is still an error here, since writing over it would lose the rollback target it names.
+    record::read(&slug)?;
+    let mut saved = mirror::reconcile(&slug);
+    /* A SWAP STILL ON THE RECORD IS OVER THE MOMENT A PERSON STARTS ANOTHER: one on probation is superseded (its parked container is the one this cutover removes), and an interrupted one did not happen. */
+    if reach == Reach::Applied {
+        if let Some(swap) = saved.swap.clone() {
+            if probation::cutover_in_progress(&swap, now_ms()) {
+                bail!(
+                    "another ic run is swapping {slug} right now (from another terminal, or the other side of this machine's WSL). Nothing was changed; try again once it has finished."
+                );
+            }
+            saved = probation::settle(&slug, &saved, swap.phase == Phase::Cutover)?;
+        }
+    }
     // The tag this sandbox follows. An explicit --channel wins and is remembered; otherwise the remembered
     // one, and `stable` for a sandbox that predates the record. SANDBOX_IMAGE still overrides everything:
     // it is how a pinned or locally-built image is passed in, and a channel is a default, not a policy.
-    let saved = record::read(&slug)?;
     let channel = match &mode {
         Mode::Update {
             channel: Some(chosen),
@@ -213,11 +240,12 @@ fn recreate(
         );
     }
 
-    let old_base_id = if current_base.is_none() || current_base == sandbox_image {
-        docker::inspect(&container, "{{.Image}}")
-    } else {
-        current_base.as_deref().and_then(docker::image_id)
-    };
+    // By identity, never through the base TAG, which a prepare or another sandbox's update may have moved (identity.rs).
+    let old_base_id = identity::running_base(
+        &container,
+        current_base.as_deref(),
+        sandbox_image.as_deref(),
+    );
 
     let log = Log::create_named("recreate", &format!("recreate-{verb}"))?;
     let workdir = tempfile::tempdir()?;
@@ -262,6 +290,23 @@ fn recreate(
                 }
                 clear_staged(&slug, &container, &saved);
             }
+            /* A DOWNLOAD IS ONLY AS CURRENT AS ITS CHANNEL: a release pulled back after this was prepared must not be applied from the cache. One manifest round trip; offline, the download stands. */
+            if prepared && reach == Reach::Applied {
+                if let (Ok(()), Some(now)) = (
+                    docker::pull(&registry_image, &log),
+                    docker::image_id(&registry_image),
+                ) {
+                    if saved
+                        .staged_base
+                        .as_deref()
+                        .is_some_and(|staged| staged != now)
+                    {
+                        println!("intentic: {registry_image} has moved since the update was downloaded — updating the ordinary way.");
+                        clear_staged(&slug, &container, &saved);
+                        prepared = false;
+                    }
+                }
+            }
             if prepared {
                 println!("intentic: using the update prepared earlier — nothing to download.");
             } else {
@@ -278,7 +323,11 @@ fn recreate(
                 /* "Already current" means THIS CONTAINER runs the image the tag now names — not that the pull moved nothing. */
                 let already_current = match (&old_base_id, &pulled) {
                     (Some(old), Some(new)) => old == new,
-                    _ => cached.is_some() && cached == pulled,
+                    // An overlay whose base could not be named: built on what the tag names now, or not current.
+                    (None, Some(new)) => docker::inspect(&container, "{{.Image}}")
+                        .and_then(|running| identity::built_on(&running, new))
+                        .unwrap_or(cached.is_some() && cached == pulled),
+                    _ => false,
                 };
                 if already_current {
                     /* Nothing is waiting for this sandbox, whatever the record last said. */
@@ -289,11 +338,15 @@ fn recreate(
                 }
             }
         }
-        Mode::Rollback => {
-            let Some(previous) = saved.previous.clone() else {
-                bail!("nothing to roll back to — this sandbox has not been updated since the rollback record existed.\n       The record is written on every update from now on; {}", record::record_path(&slug).display());
+        Mode::Rollback { to } => {
+            let target = match to {
+                Some(to) => versions::resolve_to(&saved, to)?,
+                None => match saved.previous.clone() {
+                    Some(previous) => previous,
+                    None => bail!("nothing to roll back to — this sandbox has not been updated since the rollback record existed.\n       The record is written on every update from now on; {}", record::record_path(&slug).display()),
+                },
             };
-            registry_image = previous;
+            registry_image = target;
             // NO pull, and no "is there anything newer" check: the point of a rollback is to reach an image
             // already on this machine — one the registry moved the tag away from, pinned under the record's
             // protected tag. (A registry ref here is an older record; for those the pull attempt below is
@@ -350,7 +403,7 @@ fn recreate(
     // any OFFICIAL sandbox image, the exact base this container was created from (SANDBOX_BASE_IMAGE, set
     // at docker run by whichever runner made it — not a value the agent can write), or the rollback target
     // the host-side record names (the rollback pre-step just rewrote the FROM to it).
-    let rollback_target = matches!(mode, Mode::Rollback).then(|| registry_image.clone());
+    let rollback_target = matches!(mode, Mode::Rollback { .. }).then(|| registry_image.clone());
     let mut base_image = String::new();
     if !overlay.is_empty() {
         base_image = overlay_base(&overlay).unwrap_or_default();
@@ -377,10 +430,10 @@ fn recreate(
             let hash = env_hash.as_deref().expect("rebuild set the hash");
             target_image = format!("intentic-sandbox-env-{slug}:{}", &hash[..12]);
             println!("intentic: building {target_image} from the approved overlay…");
-            build_overlay(&target_image, &overlay_path, false, &log);
+            build_overlay(&target_image, &overlay_path, false, &base_image, &log)?;
         }
         /* One arm, because a rollback IS an update pointed at the pinned image — same overlay rebuild, same base pinning, same health gate — with one inversion. */
-        Mode::Update { .. } | Mode::Rollback => {
+        Mode::Update { .. } | Mode::Rollback { .. } => {
             let fresh = matches!(mode, Mode::Update { .. });
             target_image = registry_image.clone();
             if base_image.is_empty() {
@@ -403,7 +456,7 @@ fn recreate(
                     "intentic: rebuilding your environment overlay on the {} base…",
                     if fresh { "new" } else { "rollback" }
                 );
-                build_overlay(&target_image, &overlay_path, fresh, &log);
+                build_overlay(&target_image, &overlay_path, fresh, &base_image, &log)?;
             }
         }
         Mode::Dev => {
@@ -413,7 +466,7 @@ fn recreate(
                 let hash = env_hash.as_deref().expect("dev set the hash");
                 target_image = format!("intentic-sandbox-dev-env-{slug}:{}", &hash[..12]);
                 println!("intentic: building {target_image} — the overlay's tooling on top of {DEV_TAG}…");
-                build_overlay(&target_image, &overlay_path, false, &log);
+                build_overlay(&target_image, &overlay_path, false, DEV_TAG, &log)?;
             }
         }
         Mode::Reshape(_) => {
@@ -445,8 +498,19 @@ fn recreate(
             &dev_mounts(),
             &log,
         );
+        let version = staged::image_version(&target_image);
+        /* THE VERSION THIS SANDBOX WENT BACK FROM is never downloaded behind a person's back again; `ic sandbox prepare` by hand still takes it. */
+        if auto && version.is_some() && version == saved.rolled_back_from {
+            clear_staged(&slug, &container, &saved);
+            println!(
+                "intentic: skipping {} — this sandbox went back from it. `ic sandbox update {slug}` still takes it by hand.",
+                version.as_deref().unwrap_or_default()
+            );
+            return Ok(());
+        }
         return record_staged(
             plan.as_deref(),
+            version,
             Prepared {
                 slug: &slug,
                 container: &container,
@@ -552,17 +616,26 @@ fn recreate(
     let dns = docker::inspect(&container, "{{join .HostConfig.Dns \" \"}}")
         .filter(|servers| !servers.is_empty());
 
-    /* What the record's `previous` becomes — the rollback target — decided by identity above and pinned under a protected local tag. */
+    /* What the record's rollback targets become — `previous` first, older builds behind it — decided by identity above; the build being left is pinned under a protected local tag. */
     let new_base_id = docker::image_id(&base_image);
-    let next = next_previous(
-        &saved,
+    let left_version =
+        staged::container_version(&container).or_else(|| saved.current_version.clone());
+    let left = left_pin(
         old_base_id.as_deref(),
         new_base_id.as_deref(),
         &slug,
+        left_version.clone(),
     );
-    if next != saved.previous && reach == Reach::Applied {
-        if let (Some(pin), Some(old)) = (next.as_deref(), old_base_id.as_deref()) {
-            docker::quiet(&["tag", old, pin]);
+    // Every extra build kept is a whole image: on a machine already short of space only `previous` is.
+    let max_kept = match checks::check_disk() {
+        checks::Outcome::Warn { .. } | checks::Outcome::Fail { .. } => 0,
+        _ => record::MAX_KEPT,
+    };
+    let (previous, kept, _pushed_off) =
+        versions::next_targets(&saved, left.clone(), &base_image, max_kept);
+    if reach == Reach::Applied {
+        if let (Some(pin), Some(old)) = (left.as_ref(), old_base_id.as_deref()) {
+            docker::quiet(&["tag", old, &pin.image]);
         }
     }
 
@@ -574,7 +647,7 @@ fn recreate(
         channel: Some(&channel),
         // The daemon's Update card offers exactly what `ic sandbox rollback` will do — the record's own
         // target — never the base tag that was replaced, a name whose meaning the registry moves.
-        previous_image: next.as_deref(),
+        previous_image: previous.as_ref().map(|pin| pin.image.as_str()),
         environment_hash: env_hash.as_deref(),
         runtime: (!runtime_lines.is_empty()).then_some(runtime_lines.as_str()),
         mounts: mounts_joined.as_deref(),
@@ -588,39 +661,85 @@ fn recreate(
     if reach == Reach::Checked {
         return Ok(());
     }
+    // The run line comes from the image being moved onto; it must put the sandbox back on the storage it has (storage.rs).
+    storage::check(&container, &argv)?;
 
     // Before the cutover, where a failure still leaves the running container alone: a network pruned while
     // this sandbox was stopped would otherwise refuse the replacement after the old one is parked.
     crate::sandbox::ensure_network(&slug)?;
 
+    // What the owner is told was left and moved onto, and the tunnel the new version is held to (probation.rs).
+    let reshaping = matches!(mode, Mode::Reshape(_));
+    let target_version = if reshaping {
+        left_version.clone()
+    } else if prepared {
+        saved.staged_version.clone()
+    } else {
+        staged::image_version(&target_image)
+    };
+    let left_reach = health::reach_state(&container);
+
+    // A copy of the state an update converts, outside Docker, before anything is stopped (backup.rs).
+    if !matches!(mode, Mode::Dev) {
+        crate::sandbox::backup::before_swap(&slug);
+    }
+
     println!("intentic: recreating the sandbox from {target_image}…");
     log.section(&format!("previous container logs ({container})"));
     docker::logs_into(&container, "5000", &log);
 
-    /* The channel record — written BEFORE the swap and before the LAUNCH: a swap that starts and then crash-loops is exactly the case rollback is for. */
-    /* Reshape reuses the staged image because it does not build one. */
-    let reshaping = matches!(mode, Mode::Reshape(_));
-    record::write(
-        &slug,
-        &record::ChannelRecord {
-            channel: Some(channel.clone()),
-            current: Some(base_image.clone()),
-            previous: next.clone(),
-            // Applied by this very recreate, so no longer waiting; a failed swap rewinds the record and gets it back.
-            desired: None,
-            ..(if reshaping {
-                saved.clone()
-            } else {
-                record::ChannelRecord::default()
-            })
-        },
-    )?;
+    /* The channel record — written BEFORE the swap and before the LAUNCH: a swap that starts and then crash-loops is exactly the case rollback is for, and one that dies halfway is found by the next ic run (probation.rs) through the swap it names. The record as it stood is kept beside it until the swap is settled. */
+    let swap = Swap {
+        phase: Phase::Cutover,
+        at: now_ms(),
+        verb: mode.name().to_string(),
+        from: left_version
+            .clone()
+            .or_else(|| docker::inspect(&container, "{{.Config.Image}}")),
+        to: target_version
+            .clone()
+            .or_else(|| Some(target_image.clone())),
+        until: None,
+        reach: left_reach,
+        strikes: 0,
+        daemon_start: None,
+        daemon_restarts: 0,
+        alive: None,
+    };
+    let next_record = ChannelRecord {
+        channel: Some(channel.clone()),
+        current: Some(base_image.clone()),
+        current_version: target_version.clone(),
+        previous: previous.as_ref().map(|pin| pin.image.clone()),
+        previous_version: previous.as_ref().and_then(|pin| pin.version.clone()),
+        kept,
+        // Applied by this very recreate, so no longer waiting; a failed swap rewinds the record and gets it back.
+        desired: None,
+        swap: Some(swap.clone()),
+        // A person moving onto the version the watch once went back from has chosen it again.
+        rolled_back_from: saved
+            .rolled_back_from
+            .clone()
+            .filter(|given_up| Some(given_up) != target_version.as_ref()),
+        // Reshape reuses the staged image because it does not build one.
+        ..(if reshaping {
+            saved.clone()
+        } else {
+            ChannelRecord::default()
+        })
+    };
+    record::write_before(&slug, &saved)?;
+    record::write(&slug, &next_record)?;
+    mirror::push(&slug);
+    // Says "this cutover is alive" every few seconds until it is settled, so a watch from anywhere leaves it alone.
+    let mut heartbeat = probation::Heartbeat::start(&slug, swap.at);
 
-    /* The cutover PARKS the old container instead of destroying it: stop, rename aside, and only a replacement that answers health earns the rm. */
+    /* The cutover PARKS the old container instead of destroying it: stop, rename aside, and only a replacement that passes its probation earns the rm. */
     docker::quiet(&["rm", "-f", &parked]);
     docker::quiet(&["stop", &container]);
     // Unparked, the old container still holds the name, and the launch retry below removes whatever holds it.
     if let Err(refusal) = docker::capture(&["rename", &container, &parked]) {
+        heartbeat.stop();
         docker::quiet(&["start", &container]);
         rewind_record(&slug, &saved);
         bail!(
@@ -655,15 +774,20 @@ fn recreate(
         docker::quiet(&["rm", "-f", &container]);
         let all_optional: Vec<String> = probes.iter().map(|probe| probe.token.clone()).collect();
         let retry_argv =
-            match contract::run_command(&request, &env_nul, true, &all_optional, &seeds, &log) {
+            match contract::run_command(&request, &env_nul, true, &all_optional, &seeds, &log)
+                .and_then(|retry_argv| storage::check(&parked, &retry_argv).map(|()| retry_argv))
+            {
                 Ok(retry_argv) => retry_argv,
                 Err(err) => {
-                    restore_parked(&container, &parked, &slug, &saved);
+                    heartbeat.stop();
+                    restore_parked(&container, &parked, &slug, &saved, &swap, &err.0, &log);
                     return Err(err);
                 }
             };
         if let Err(refusal) = docker::run_argv(&retry_argv, &log) {
-            restore_parked(&container, &parked, &slug, &saved);
+            let reason = format!("starting the new version failed: {refusal}");
+            heartbeat.stop();
+            restore_parked(&container, &parked, &slug, &saved, &swap, &reason, &log);
             bail!(
                 "starting the recreated sandbox failed (a runtime flag the host rejects, e.g. --privileged or /dev/net/tun?).\n{refusal}\n       Your previous sandbox was restored. The old container's logs and this error are saved to {}.",
                 log.path.display()
@@ -680,7 +804,16 @@ fn recreate(
     ) {
         Ok(answered) => answered,
         Err(err) => {
-            restore_parked(&container, &parked, &slug, &saved);
+            heartbeat.stop();
+            restore_parked(
+                &container,
+                &parked,
+                &slug,
+                &saved,
+                &swap,
+                "the new version's daemon never answered",
+                &log,
+            );
             return Err(err);
         }
     };
@@ -688,28 +821,51 @@ fn recreate(
     if let Err(Fail(reason)) = health::wait_ready(&container, &answered) {
         log.section(&format!("container logs ({container})"));
         docker::logs_into(&container, "500", &log);
-        restore_parked(&container, &parked, &slug, &saved);
+        heartbeat.stop();
+        restore_parked(&container, &parked, &slug, &saved, &swap, &reason, &log);
         bail!(
             "{reason}\n       Your previous sandbox was put back; as it starts, it restores the files the new version had started converting. The new version's logs are saved to {}.",
             log.path.display()
         );
     }
-    docker::quiet(&["rm", "-f", &parked]);
 
     /* Take the "an update is ready for you" offer back, now that the swap is real. */
     if !reshaping {
         staged::withdraw(&container);
     }
 
-    /* The record keeps ONE way back, so a superseded pin is dropped — kept, every update would retain a whole extra image, forever. */
-    if let Some(old_pin) = saved.previous.as_deref() {
-        if old_pin.starts_with(&format!("intentic-sandbox-rollback-{slug}:"))
-            && Some(old_pin) != next.as_deref()
-            && old_pin != base_image
-        {
-            docker::quiet(&["rmi", old_pin]);
-        }
+    /* PROBATION: the previous version stays parked and ready, and `ic sandbox watch` (run every minute by the machine agent) goes back to it by itself if this one keeps failing. The dogfood loop swaps many times a day onto builds its developer is watching, so it keeps no probation. */
+    heartbeat.stop();
+    let probation = probation::probation_ms();
+    let keep_until = (probation > 0 && !matches!(mode, Mode::Dev)).then(|| now_ms() + probation);
+    let settled = ChannelRecord {
+        swap: keep_until.map(|until| Swap {
+            phase: Phase::Probation,
+            until: Some(until),
+            ..swap.clone()
+        }),
+        ..next_record.clone()
+    };
+    record::write(&slug, &settled)?;
+    if keep_until.is_none() {
+        docker::quiet(&["rm", "-f", &parked]);
+        record::remove_before(&slug);
+        // What this swap pushed off the end of the rollback list: nothing names it any more.
+        probation::drop_unnamed_pins(&slug, &saved, &settled);
     }
+    mirror::push(&slug);
+    outcome::write(
+        &container,
+        &Outcome {
+            result: Kind::Updated,
+            verb: mode.name(),
+            from: swap.from.as_deref(),
+            to: swap.to.as_deref(),
+            reason: None,
+            log: Some(&log.path),
+            keep_until,
+        },
+    );
 
     match &mode {
         Mode::Rebuild { .. } => println!("intentic: sandbox rebuilt — the Environment card will show Applied once it reconnects."),
@@ -717,11 +873,11 @@ fn recreate(
             println!("intentic: sandbox updated to {target_image} (channel {channel}).");
             // Named on success, not only in the failure paths: a bad build is usually one that STARTS, and
             // the moment to learn the way back is before anyone needs it.
-            if next.is_some() {
+            if previous.is_some() {
                 println!("          Roll back with: ic sandbox rollback {slug}");
             }
         }
-        Mode::Rollback => println!("intentic: sandbox rolled back to {target_image} — run rollback again to return."),
+        Mode::Rollback { .. } => println!("intentic: sandbox rolled back to {target_image} — run rollback again to return."),
         Mode::Dev => println!("intentic: sandbox is live on {target_image} — docker logs -f {container}"),
         // What is IN FORCE, read back off the container rather than echoed from the ask: the contract may have
         // bounded a cap to the machine, and a host without the runtime may have dropped the GPU.
@@ -729,6 +885,12 @@ fn recreate(
             "intentic: sandbox reshaped — {}. The values live on the sandbox and survive every later update.",
             describe_shape(&container)
         ),
+    }
+    if keep_until.is_some() {
+        println!(
+            "          The previous version stays parked and ready for {}: if this one keeps failing, `ic sandbox watch {slug}` (run every minute by the machine agent) puts it back by itself.",
+            probation::remaining(keep_until.unwrap_or_default())
+        );
     }
     println!(
         "Logs: docker logs -f {container} (recreate log: {})",
@@ -850,11 +1012,11 @@ struct Prepared<'a> {
 
 fn record_staged(
     plan: Option<&str>,
+    version: Option<String>,
     what: Prepared<'_>,
-    saved: &record::ChannelRecord,
+    saved: &ChannelRecord,
     log: &Log,
 ) -> Result<()> {
-    let version = staged::image_version(what.image);
     record::write(
         what.slug,
         &record::ChannelRecord {
@@ -975,18 +1137,41 @@ fn stage_overlay(container: &str, dest: &Path) -> Result<bool> {
     }
 }
 
-/// Stdin build (`docker build -t <tag> -`), progress live on the terminal and teed into the log. Failure is
-/// detected by the caller via `image_exists` — mirroring the script, where the pipeline's status was tee's.
+/// Stdin build (`docker build -t <tag> -`), progress live on the terminal and teed into the log, labelled with the
+/// id of the base it was built on (identity.rs) so a later update can tell which base this build is, whatever the
+/// base's tag names by then. A `pull` fetches the base first and builds from exactly what was fetched, so the label
+/// cannot name a different image than the one under it.
+///
+/// A failed build is an error. It used to be read off `image_exists` alone, and since the tag is keyed on the recipe,
+/// an unchanged recipe's tag still named the RUNNING build: a failed rebuild then swapped onto the old build and said
+/// "updated".
 /// pub(crate): `ic runner up` builds a parent-shipped overlay through this same door (runner.rs).
-pub(crate) fn build_overlay(tag: &str, overlay: &Path, pull: bool, log: &Log) {
+pub(crate) fn build_overlay(
+    tag: &str,
+    overlay: &Path,
+    pull: bool,
+    base: &str,
+    log: &Log,
+) -> Result<()> {
+    if pull {
+        docker::pull(base, log)?;
+    }
     log.section(&format!("docker build {tag}"));
     let content = std::fs::read(overlay).unwrap_or_default();
+    let label = docker::image_id(base).map(|id| format!("{}={id}", identity::BASE_ID_LABEL));
     let mut args = vec!["build"];
-    if pull {
-        args.push("--pull");
+    if let Some(label) = label.as_deref() {
+        args.extend_from_slice(&["--label", label]);
     }
     args.extend_from_slice(&["-t", tag, "-"]);
-    let _ = docker::stream(&args, Some(&content), docker::Shown::Raw, log);
+    let built = docker::stream(&args, Some(&content), docker::Shown::Raw, log)?;
+    if !built.ok {
+        bail!(
+            "building the environment overlay {tag} failed, so the sandbox is untouched. Log: {}",
+            log.path.display()
+        );
+    }
+    Ok(())
 }
 
 /// The overlay a re-basing recreate builds and the hash its container carries, derived together because they have
@@ -1054,6 +1239,26 @@ pub(crate) fn base_is_allowed(
         || rollback_target == Some(base_image)
 }
 
+/// The build a swap leaves, as the rollback target it becomes: by IDENTITY, not by name. A stock stable-channel update is
+/// :stable → :stable by name while the images differ — exactly the case rollback exists for, and the string comparison
+/// this replaced is how every such sandbox once ended up with nothing to roll back to. An unchanged base (a rebuild, a
+/// reshape, a re-run of the same update) leaves nothing new to go back to, and an unknowable identity invents nothing:
+/// on a first-ever swap the daemon then offers no rollback, honestly. Where it lands in the list is next_targets' call.
+fn left_pin(
+    old_base_id: Option<&str>,
+    new_base_id: Option<&str>,
+    slug: &str,
+    version: Option<String>,
+) -> Option<Pin> {
+    match (old_base_id, new_base_id) {
+        (Some(old), Some(new)) if old != new => Some(Pin {
+            image: rollback_tag(slug, old),
+            version,
+        }),
+        _ => None,
+    }
+}
+
 /// The protected local tag a rollback target is pinned under. The registry's tags MOVE — that is what an
 /// update is — and the moment one moves, the image it left becomes dangling: one routine
 /// `docker image prune` from deleting the only way back. A tag no other flow writes, per slug (two
@@ -1066,37 +1271,37 @@ fn rollback_tag(slug: &str, image_id: &str) -> String {
     )
 }
 
-/// What the record's `previous` becomes on a swap whose bases resolved to these identities. `previous` is
-/// what a rollback returns to, and two properties matter. IDENTITY, not names: a stock stable-channel
-/// update is :stable → :stable by name while the images differ — exactly the case rollback exists for, and
-/// the string comparison this replaces is how every such sandbox ended up with nothing to roll back to.
-/// And a rollback SWAPS rather than appends: the build being LEFT becomes the new target, so one button
-/// with no "how far back" control is its own undo — pressing it twice returns you forward. An unchanged
-/// base (a rebuild, a re-run of the same update) keeps the target — overwriting it with the image we are
-/// already on would quietly turn the button into a no-op — and an unknowable identity keeps it too, rather
-/// than inventing one: on a first-ever swap the daemon then offers no rollback, honestly.
-fn next_previous(
-    saved: &record::ChannelRecord,
-    old_base_id: Option<&str>,
-    new_base_id: Option<&str>,
-    slug: &str,
-) -> Option<String> {
-    match (old_base_id, new_base_id) {
-        (Some(old), Some(new)) if old != new => Some(rollback_tag(slug, old)),
-        _ => saved.previous.clone(),
-    }
-}
-
 /// Put the parked container back under its name: the failed replacement (if any) is removed, the old
 /// container returns and starts, and the channel record is rewound to what it said before the swap — the
 /// swap it described did not happen. Best-effort on every step: this runs on the failure path, where the
 /// one job is to leave the machine as close to "before" as it can reach.
-fn restore_parked(container: &str, parked: &str, slug: &str, saved: &record::ChannelRecord) {
+fn restore_parked(
+    container: &str,
+    parked: &str,
+    slug: &str,
+    saved: &ChannelRecord,
+    swap: &Swap,
+    reason: &str,
+    log: &Log,
+) {
     if !docker::container_exists(parked) {
         return;
     }
     docker::quiet(&["rm", "-f", container]);
     rewind_record(slug, saved);
+    // Told to the version that is running again, since it is the one the owner will be looking at.
+    outcome::write(
+        parked,
+        &Outcome {
+            result: Kind::Restored,
+            verb: &swap.verb,
+            from: swap.from.as_deref(),
+            to: swap.to.as_deref(),
+            reason: Some(reason),
+            log: Some(&log.path),
+            keep_until: None,
+        },
+    );
     // Still parked, it is what the next swap's first step removes, so the way back is said rather than assumed.
     if let Err(refusal) = docker::capture(&["rename", parked, container]) {
         println!(
@@ -1111,15 +1316,21 @@ fn restore_parked(container: &str, parked: &str, slug: &str, saved: &record::Cha
 
 /// Rewind the channel record to what it said before a swap that did not happen. Best-effort: this runs on the
 /// failure path, where the one job is to leave the machine as close to "before" as it can reach.
-fn rewind_record(slug: &str, saved: &record::ChannelRecord) {
+fn rewind_record(slug: &str, saved: &ChannelRecord) {
     // Byte for byte what was there, staged and desired keys included: the swap this record described did not
     // happen, and what was waiting for this sandbox before it is still waiting.
-    if saved.current.is_some() || saved.desired.is_some() {
+    let bare = ChannelRecord {
+        written: None,
+        ..saved.clone()
+    };
+    if bare != ChannelRecord::default() {
         let _ = record::write(slug, saved);
     } else {
         // No record existed before this swap — none must exist after its failure.
         let _ = std::fs::remove_file(record::record_path(slug));
     }
+    record::remove_before(slug);
+    mirror::push(slug);
 }
 
 /// Whether this container follows the official registry — the question an UNATTENDED prepare asks before
@@ -1453,16 +1664,32 @@ mod tests {
         assert!(matches!(overlay_outcome(true, true), Overlay::Copied));
     }
 
+    /// What `previous` becomes after a swap whose bases resolved to these identities.
+    fn previous_after(
+        saved: &record::ChannelRecord,
+        old: Option<&str>,
+        new: Option<&str>,
+        target: &str,
+    ) -> Option<String> {
+        let (previous, _, _) = versions::next_targets(
+            saved,
+            left_pin(old, new, "abc", None),
+            target,
+            record::MAX_KEPT,
+        );
+        previous.map(|pin| pin.image)
+    }
+
     #[test]
     fn a_stock_stable_update_pins_the_replaced_image_even_though_the_names_match() {
         // :stable → :stable is string-equal on every stock update; only the ids know the image moved. The
         // string comparison this replaced recorded nothing here — every stock sandbox had no way back.
         assert_eq!(
-            next_previous(
+            previous_after(
                 &saved(None, None),
                 Some("sha256:0123456789abcdef"),
                 Some("sha256:fedcba9876543210"),
-                "abc"
+                "ghcr.io/intentic/sandbox:stable"
             )
             .as_deref(),
             Some("intentic-sandbox-rollback-abc:0123456789ab")
@@ -1474,14 +1701,14 @@ mod tests {
         // Rolling back from bad build (id f…) onto the pinned good one (id 0…): `previous` becomes the
         // image being LEFT, so the next rollback goes forward again.
         assert_eq!(
-            next_previous(
+            previous_after(
                 &saved(
                     Some("ghcr.io/intentic/sandbox:stable"),
                     Some("intentic-sandbox-rollback-abc:0123456789ab")
                 ),
                 Some("sha256:fedcba9876543210"),
                 Some("sha256:0123456789abcdef"),
-                "abc"
+                "intentic-sandbox-rollback-abc:0123456789ab"
             )
             .as_deref(),
             Some("intentic-sandbox-rollback-abc:fedcba987654")
@@ -1492,14 +1719,14 @@ mod tests {
     fn a_swap_that_does_not_move_the_base_leaves_the_rollback_target_alone() {
         // A rebuild (same base, new overlay) must not overwrite `previous` with the image we are already on.
         assert_eq!(
-            next_previous(
+            previous_after(
                 &saved(
                     Some("img:2"),
                     Some("intentic-sandbox-rollback-abc:0123456789ab")
                 ),
                 Some("sha256:aaaa"),
                 Some("sha256:aaaa"),
-                "abc"
+                "img:2"
             )
             .as_deref(),
             Some("intentic-sandbox-rollback-abc:0123456789ab")
@@ -1510,12 +1737,12 @@ mod tests {
     fn an_unknowable_identity_keeps_the_target_rather_than_inventing_one() {
         // First-ever swap, nothing known: no target is recorded, and the daemon offers no rollback, honestly.
         assert_eq!(
-            next_previous(&saved(None, None), None, Some("sha256:bbbb"), "abc"),
+            previous_after(&saved(None, None), None, Some("sha256:bbbb"), "img:new"),
             None
         );
         // A target already on record survives a swap whose identities cannot be resolved.
         assert_eq!(
-            next_previous(&saved(Some("img:2"), Some("pin:1")), None, None, "abc").as_deref(),
+            previous_after(&saved(Some("img:2"), Some("pin:1")), None, None, "img:new").as_deref(),
             Some("pin:1")
         );
     }

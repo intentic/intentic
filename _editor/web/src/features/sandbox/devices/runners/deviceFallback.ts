@@ -55,11 +55,17 @@ const olderIcArgs = (slug: string, intent: ShapeIntent): string[] => {
  * `resources` is the form's answer: a whole shape with when it takes effect, or forgetting the one saved, spelled by
  * the contract's own `ic` argv so this line and the machine agent's run cannot differ. `takesSet` is whether the
  * machine's `ic` takes the contract's `--set` (its agent advertises `set-shape`); without it the line is ic's older flags.
+ * `to` is the older kept version a rollback goes to, which only an ic that takes `--to` is ever asked for.
  */
-export const sandboxFallback = (verb: SandboxVerb, slug: string, intent?: ShapeIntent, { takesSet = true }: { readonly takesSet?: boolean } = {}): string | undefined => {
+export const sandboxFallback = (
+    verb: SandboxVerb,
+    slug: string,
+    intent?: ShapeIntent,
+    { takesSet = true, to }: { readonly takesSet?: boolean; readonly to?: string | undefined } = {},
+): string | undefined => {
     const ic = IC_VERB[verb];
     if (ic !== undefined) {
-        return `ic sandbox ${ic} ${slug}`;
+        return verb === `rollback` && to !== undefined ? `ic sandbox rollback ${slug} --to ${to}` : `ic sandbox ${ic} ${slug}`;
     }
     if (POWER.has(verb)) {
         return `ic ${icPowerArgs(verb as `start` | `stop` | `restart`, slug).join(` `)}`;

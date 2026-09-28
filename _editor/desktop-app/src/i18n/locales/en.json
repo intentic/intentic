@@ -24,6 +24,7 @@
         "openFolder": "Open its folder",
         "openWorkspace": "Open workspace",
         "pickingUpWhereRestart": "Picking up where the restart left off. Nothing needs doing: this window carries on by itself.",
+        "removesSandboxKeepsFiles": "This removes the sandbox from this device. Its files and its history stay recoverable for a week: run ic sandbox restore {slug} on this computer to bring it back.",
         "runningOnDeviceKeeps": "Running on this device: it keeps going even if you close this window.",
         "sandbox": "your sandbox",
         "sandboxRunsInDocker": "Your sandbox runs in Docker, which isn't running yet. This checks what your PC needs first, and asks before changing anything.",

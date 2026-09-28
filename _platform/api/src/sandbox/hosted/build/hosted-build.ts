@@ -22,7 +22,8 @@ import {
 import { mintAppDeployToken, organizationIdOf, revokeDeployToken } from "../fly/fly-tokens.js";
 import { hostedCapacity, noteProviderAtCapacity, providerWords } from "../hosted-capacity.js";
 import { BUILD_ENV, BUILD_PATHS, buildScript, dockerConfigJson, LOG_TAIL_BYTES } from "./hosted-build-script.js";
-import { hostedInstanceId, hostedMachineConfig, type HostedProvisionArgs } from "../hosted.js";
+import { digestIn, resolveHostedImage } from "./hosted-image.js";
+import { composerFor, hostedInstanceId, hostedMachineConfig, type HostedProvisionArgs } from "../hosted.js";
 import { switchHostedImage } from "../gate/state-gate.js";
 import { chargeMinutes, hostedBudgetOf, usageMonth } from "../hosted-usage.js";
 
@@ -32,6 +33,13 @@ import { chargeMinutes, hostedBudgetOf, usageMonth } from "../hosted-usage.js";
 // - per-owner and platform-wide ceilings (config.hosted.builds*); builder minutes charge like awake time
 // - timeout enforced twice (the script's own `timeout`, and the reconcile below)
 // - the builder holds only a deploy token scoped to its app, revoked once it reports
+//
+// WHICH BASE AN OVERLAY IS ON is a digest, never the tag's string: `HOSTED_IMAGE` is the moving `:stable`, which names a
+// new release under the same string. A build pins its FROM to the digest the tag resolves to when it starts and keeps
+// that digest (`baseDigest`); "already built", "reusable" and "the base moved" all compare it with what the tag
+// resolves to now. A base whose digest was never kept (an overlay built before this, or while the registry would not
+// answer) reads as moved, so the next restart rebuilds it once; a registry that will not answer now leaves only the
+// tag to compare.
 
 const BUILD_STATES = { building: `building`, built: `built`, failed: `failed` } as const;
 
@@ -109,7 +117,7 @@ type BuildRow = HostedBuild & {
 
 // Checks before anything is spent, cheapest first: content still hashes to what was reviewed, the base is pinned to the
 // platform's image, and the grammar is RUN/ENV under one official FROM.
-const verifiedContent = (config: Config, hash: string, content: string): string => {
+const verifiedContent = (config: Config, hash: string, content: string): void => {
     if (sha256Hex(content) !== hash) {
         throw new HostedBuildRefused(`mismatch`, `the overlay changed since it was reviewed: re-read and approve it on the Environment card`);
     }
@@ -117,12 +125,39 @@ const verifiedContent = (config: Config, hash: string, content: string): string 
     if (base === undefined || !isOfficialSandboxImage(base)) {
         throw new HostedBuildRefused(`invalid`, `the overlay must start with FROM the official sandbox image`);
     }
-    const pinned = rewriteOverlayBase(content, config.hosted.image);
-    const offending = lintOverlay(pinned);
+    const offending = lintOverlay(rewriteOverlayBase(content, config.hosted.image));
     if (offending !== undefined) {
         throw new HostedBuildRefused(`invalid`, `the overlay may only carry RUN and ENV steps; refused at: ${offending.trim() || `(empty)`}`);
     }
-    return pinned;
+};
+
+// The overlay the builder builds: FROM the platform's image at the digest its tag names now (`tag@digest`, which the
+// official-image check accepts and a builder pulls by digest), else the tag, which the builder resolves itself.
+const overlayOnBase = (config: Config, content: string, baseDigest: string | undefined): string =>
+    rewriteOverlayBase(content, baseDigest === undefined || config.hosted.image.includes(`@`) ? config.hosted.image : `${config.hosted.image}@${baseDigest}`);
+
+// The digest the platform's image names now, asked at most once per call (resolveHostedImage memoizes across calls
+// too); undefined when the registry cannot say.
+const platformDigestOf = (config: Config, logger: Logger): (() => Promise<string | undefined>) => {
+    let asked: Promise<string | undefined> | undefined;
+    return () => {
+        asked ??= resolveHostedImage(config, logger).then(digestIn);
+        return asked;
+    };
+};
+
+// Whether the platform's image moved past the base an overlay was built on: the tag changed, or the digest it names now
+// differs from the one kept (never kept reads as moved). A registry that cannot say leaves the tag alone to decide.
+const baseMoved = async (
+    config: Config,
+    built: { baseImage: string | null; baseDigest?: string | null },
+    platformDigest: () => Promise<string | undefined>,
+): Promise<boolean> => {
+    if (built.baseImage !== config.hosted.image) {
+        return true;
+    }
+    const current = await platformDigest();
+    return current !== undefined && (built.baseDigest ?? null) !== current;
 };
 
 // Brakes read in one pass: per-owner limit first, then platform-wide ceilings, then the owner's hours. Running builds
@@ -167,8 +202,9 @@ const provisionArgsOf = (config: Config, row: BuildRow[`machine`]): HostedProvis
     tier: hostedTier(row.tier).id,
 });
 
-// The config replacement a restart is: a running machine takes it up in place, a stopped one boots it on next wake
-// through the normal budget gate. The row records what now runs, for later restarts and base-update comparisons.
+// The config replacement a restart is: a running machine takes it up in place, and its daemon is waited for; a stopped
+// one holds it ON TRIAL, and its next wake starts and judges it (gate/state-gate.ts). The gate writes what now runs on
+// the row, for later restarts and base-update comparisons, and keeps the image it replaced as the way back.
 const applyHostedBuild = async (prisma: PrismaClient, config: Config, logger: Logger, build: BuildRow, digest: string): Promise<void> => {
     const { machine } = build;
     const image = `${REGISTRY}/${machine.appName}@${digest}`;
@@ -177,17 +213,15 @@ const applyHostedBuild = async (prisma: PrismaClient, config: Config, logger: Lo
         return undefined;
     });
     const running = before !== undefined && RUNNING_STATES.has(before.state);
-    // Under the state gate (gate/state-gate.ts): an overlay on a new base is a new daemon over the same volume. A
-    // refusal or a start that fails leaves the machine on the image it had and throws, so the row below still names it.
-    await switchHostedImage(
-        config,
-        machine,
-        hostedMachineConfig(config, provisionArgsOf(config, machine), machine.appName, machine.volumeId, { image, environmentHash: build.hash }),
-        { start: running, stranding: { prisma, hostedMachineId: machine.id }, logger },
-    );
-    await prisma.hostedMachine.update({
-        where: { id: machine.id },
-        data: { image, baseImage: build.baseImage, environmentHash: build.hash },
+    const args = provisionArgsOf(config, machine);
+    // Under the state gate: an overlay on a new base is a new daemon over the same volume. A refusal, or a version that
+    // does not start or come up, leaves the machine on the image it had and throws, and the row still names that one.
+    await switchHostedImage(config, machine, hostedMachineConfig(config, args, machine.appName, machine.volumeId, { image, environmentHash: build.hash }), {
+        start: running,
+        record: { prisma, hostedMachineId: machine.id, sandboxId: machine.sandboxId },
+        compose: composerFor(config, args, machine),
+        facts: { environmentHash: build.hash, baseImage: build.baseImage, baseDigest: build.baseDigest ?? null },
+        logger,
     });
     logger.info({ app: machine.appName, build: build.id, running }, `hosted build: applied`);
 };
@@ -268,7 +302,7 @@ const startBuilder = async (
     logger: Logger,
     machine: { id: string; sandboxId: string; appName: string; region: string },
     request: HostedBuildRequest,
-    pinned: string,
+    base: { readonly content: string; readonly digest: string | undefined },
     id: string,
 ): Promise<HostedBuildState> => {
     const { flyApiToken, flyOrg, buildTimeoutMinutes } = config.hosted;
@@ -287,7 +321,7 @@ const startBuilder = async (
                 image: config.hosted.builderImage,
                 guest: { cpuKind: config.hosted.builderCpuKind, cpus: config.hosted.builderCpus, memoryMb: config.hosted.builderMemoryMb },
                 files: [
-                    { path: BUILD_PATHS.dockerfile, content: pinned },
+                    { path: BUILD_PATHS.dockerfile, content: base.content },
                     { path: BUILD_PATHS.script, content: buildScript() },
                     { path: BUILD_PATHS.dockerConfig, content: dockerConfigJson(REGISTRY, deploy.token) },
                 ],
@@ -314,6 +348,7 @@ const startBuilder = async (
                 hostedMachineId: machine.id,
                 hash: request.hash,
                 baseImage: config.hosted.image,
+                baseDigest: base.digest ?? null,
                 content: request.content,
                 state: BUILD_STATES.building,
                 image,
@@ -368,10 +403,12 @@ export const requestHostedBuild = async (
     if (hosted === null) {
         throw new HostedBuildRefused(`no-machine`, `this sandbox has no machine we run`);
     }
-    const pinned = verifiedContent(config, request.hash, request.content);
+    verifiedContent(config, request.hash, request.content);
     const now = new Date();
-    // Nothing to build: the machine already runs this overlay on the platform's current base.
-    if (hosted.environmentHash === request.hash && hosted.baseImage === config.hosted.image) {
+    // Asked of the registry only once a question needs it, so every refusal before one still costs nothing.
+    const platformDigest = platformDigestOf(config, logger);
+    // Nothing to build: the machine already runs this overlay on the base the platform's image names now.
+    if (hosted.environmentHash === request.hash && !(await baseMoved(config, hosted, platformDigest))) {
         const last = await prisma.hostedBuild.findFirst({
             where: { hostedMachineId: hosted.id, hash: request.hash },
             orderBy: { createdAt: `desc` },
@@ -389,7 +426,7 @@ export const requestHostedBuild = async (
         orderBy: { createdAt: `desc` },
         include: withMachine,
     });
-    if (reusable !== null && reusable.digest !== null) {
+    if (reusable !== null && reusable.digest !== null && !(await baseMoved(config, reusable, platformDigest))) {
         await applyHostedBuild(prisma, config, logger, reusable, reusable.digest);
         return buildStateOf(reusable);
     }
@@ -399,7 +436,8 @@ export const requestHostedBuild = async (
     if (won.count === 0) {
         throw new HostedBuildRefused(`busy`, `this sandbox's environment is already being built`);
     }
-    return startBuilder(prisma, config, logger, hosted, request, pinned, id);
+    const digest = await platformDigest();
+    return startBuilder(prisma, config, logger, hosted, request, { content: overlayOnBase(config, request.content, digest), digest }, id);
 };
 
 // The builder's own report, authenticated by the secret only it and the row (hashed) hold. Can only end a build, never
@@ -434,17 +472,36 @@ export const reportHostedBuild = async (
     return `done`;
 };
 
-// The platform's image moved past this machine's overlay base: rebuilds the same approved recipe on the new base, under
-// the owner's limits. A restart keeps the current overlay; a refusal here is logged, not surfaced as a restart failure.
+// The platform's image moved past this machine's overlay base (by digest: `:stable` moves under the same string):
+// rebuilds the same approved recipe on the new base, under the owner's limits, through the build flow (its swap goes
+// through the state gate). A restart keeps the current overlay; a refusal here is logged, not surfaced as a restart
+// failure. A base the owner rolled back from is not built on again while `:stable` still names it.
 export const rebuildOnMovedBase = async (
     prisma: PrismaClient,
     config: Config,
     logger: Logger,
-    hosted: { id: string; sandboxId: string; image: string | null; baseImage: string | null; environmentHash: string | null },
+    hosted: {
+        id: string;
+        sandboxId: string;
+        image: string | null;
+        baseImage: string | null;
+        baseDigest?: string | null;
+        environmentHash: string | null;
+        skippedDigest?: string | null;
+    },
     owner: { id: string; email: string },
 ): Promise<void> => {
     // Falsy, not `=== null`: a row missing these columns has no overlay to rebuild either.
-    if (!hosted.image || !hosted.environmentHash || hosted.baseImage === config.hosted.image) {
+    if (!hosted.image || !hosted.environmentHash) {
+        return;
+    }
+    const platformDigest = platformDigestOf(config, logger);
+    if (!(await baseMoved(config, hosted, platformDigest))) {
+        return;
+    }
+    const current = await platformDigest();
+    if (current !== undefined && current === hosted.skippedDigest) {
+        logger.info({ sandboxId: hosted.sandboxId, skipped: current }, `hosted build: the owner went back from this base; not rebuilding on it until :stable moves`);
         return;
     }
     const last = await prisma.hostedBuild.findFirst({

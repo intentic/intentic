@@ -20,19 +20,28 @@ export const canSetShape = (facts: Pick<DeviceFacts, "features"> | undefined): b
 export const TOO_OLD_TO_SAVE = `This machine's agent is too old to save a change for the next restart. Update its agent first.`;
 
 /**
+ * Why this machine can't save a shape for the next restart, in the truest words there are. An agent as new as the
+ * feature can still lack it when the `ic` it drives is older and fetching the current one failed; that agent says so
+ * itself (`icOutOfDate`), and telling its owner to update an agent that is already current sends them the wrong way.
+ */
+export const tooOldToSave = (facts: Pick<DeviceFacts, "icOutOfDate"> | undefined): string => facts?.icOutOfDate ?? TOO_OLD_TO_SAVE;
+
+/**
  * The op and payload for an intent. `running` is the shape the container runs with (the form's own reading of it),
- * used only to spell the old op's delta. Throws, with a sentence for the person, when the agent cannot do it.
+ * used only to spell the old op's delta. Throws, with a sentence for the person, when the agent cannot do it:
+ * `refusal` (see `tooOldToSave`) when what it lacks is saving for the next restart.
  */
 export const shapeFlow = (
     intent: ShapeIntent,
     canShape: boolean,
     running: ResourcesForm,
+    refusal: string = TOO_OLD_TO_SAVE,
 ): { readonly op: DeviceSandboxOp; readonly payload: Pick<DeviceSandboxPayload, `shape` | `when` | `resources`> } => {
     if (canShape) {
         return `forget` in intent ? { op: `forget-shape`, payload: {} } : { op: `set-shape`, payload: { shape: contractFields(intent.shape), when: intent.when } };
     }
     if (`forget` in intent || intent.when !== `now`) {
-        throw new Error(TOO_OLD_TO_SAVE);
+        throw new Error(refusal);
     }
     const resources = askFrom(running, intent.shape);
     if (resources === undefined) {

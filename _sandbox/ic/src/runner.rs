@@ -145,13 +145,13 @@ pub fn up(args: Up) -> Result<()> {
                 "intentic: building {} from the parent's approved overlay…",
                 verified.target
             );
-            recreate::build_overlay(&verified.target, &overlay_path, false, &log);
-            if !docker::image_exists(&verified.target) {
-                bail!(
+            recreate::build_overlay(&verified.target, &overlay_path, false, &verified.base, &log)
+                .map_err(|_| {
+                crate::util::Fail(format!(
                     "the overlay build failed — nothing was started. Log: {}",
                     log.path.display()
-                );
-            }
+                ))
+            })?;
             (
                 verified.target,
                 verified.base,

@@ -199,6 +199,7 @@ fn clear_trash_names(slug: &str) {
 /// supersedes the first, whose containers would otherwise collide with the renames below.
 pub fn stash(slug: &str) {
     clear_trash_names(slug);
+    settle_parked(slug);
     for (live, trashed) in container_pairs(slug) {
         if !docker::container_exists(&live) {
             continue;
@@ -207,6 +208,34 @@ pub fn stash(slug: &str) {
         docker::quiet(&["rename", &live, &trashed]);
     }
     docker::quiet(&["volume", "create", &marker_name(slug, now_secs())]);
+}
+
+/// A swap's parked container, before the sandbox goes to the trash. Beside a live container it is the previous version
+/// on probation, whose way back is also the pinned image, so it goes. Alone it IS the sandbox (a swap was interrupted
+/// with no replacement), so it takes its name back and is trashed as the sandbox.
+fn settle_parked(slug: &str) {
+    let parked = crate::sandbox::parked_of(slug);
+    if !docker::container_exists(&parked) {
+        return;
+    }
+    let live = crate::sandbox::container_of(slug);
+    if docker::container_exists(&live) {
+        docker::quiet(&["rm", "-f", &parked]);
+    } else {
+        docker::quiet(&["rename", &parked, &live]);
+    }
+    if let Ok(record) = crate::record::read(slug) {
+        if record.swap.is_some() {
+            let _ = crate::record::write(
+                slug,
+                &crate::record::ChannelRecord {
+                    swap: None,
+                    ..record
+                },
+            );
+        }
+    }
+    crate::record::remove_before(slug);
 }
 
 /// Brings one back under its live names and starts it. The volumes never moved, so nothing is copied here.
@@ -229,6 +258,8 @@ pub fn restore(slug: &str) {
 /// Deletes one sandbox for good — both namespaces, since a purge may be aimed at a slug that was never trashed.
 /// Idempotent: every step no-ops on what is already gone.
 pub fn purge(slug: &str) {
+    // A parked container holds the same volumes, and docker refuses to remove a volume any container still names.
+    docker::quiet(&["rm", "-f", &crate::sandbox::parked_of(slug)]);
     for (live, trashed) in container_pairs(slug) {
         docker::quiet(&["rm", "-f", &trashed]);
         docker::quiet(&["rm", "-f", &live]);

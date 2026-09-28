@@ -12,9 +12,11 @@ import {
     spawnDetached,
     stopProcess,
 } from "@intentic/local-agent";
+import { recordStopped } from "./agent-trial.js";
 import { MACHINE_AUTOSTART } from "./autostart.js";
 import { runLogPath, runPidPath } from "./config.js";
 import { linkStatePath } from "./device/config.js";
+import { CUTOVER_HOLDS_MS, readSwapRecords, swapsUnderway } from "./device/swap-records.js";
 import { attachToWindows, WINDOWS_SUPERVISOR } from "./environments/machine.js";
 import { mirrorHeartbeatPath } from "./sync/config.js";
 
@@ -59,6 +61,8 @@ export const stopResident = async (): Promise<number | undefined> => {
         return undefined;
     }
     await stopProcess(held.pid, STOP_TIMEOUT_MS);
+    // A stop asked for is no crash, whether or not the agent got to say so (agent-trial.ts).
+    await recordStopped(held.pid);
     if (await releasePidFile(runPidPath, held.pid)) {
         await rm(mirrorHeartbeatPath, { force: true });
         await rm(linkStatePath, { force: true });
@@ -106,7 +110,29 @@ export const startResident = async (log: Log): Promise<void> => {
     log(`machine agent running in the background (pid ${pid}). Details: ${runLogPath}`);
 };
 
+// How often a restart held by a swap looks again.
+const SWAP_POLL_MS = 5_000;
+
+// A restart of this agent waits out every sandbox mid-cutover here, by ic's own record, whichever process started the
+// swap: stopping the agent between parking a container and starting its replacement is what left sandboxes down. Bounded
+// by how long a cutover record counts at all; past that it is an interruption, and the probation watch settles it.
+export const waitOutSwaps = async (log: Log): Promise<void> => {
+    let said = "";
+    await pollUntil(
+        async () => {
+            const swapping = swapsUnderway(await readSwapRecords(), Date.now()).join(", ");
+            if (swapping !== "" && swapping !== said) {
+                log(`Waiting for ${swapping} to finish swapping before the agent restarts…`);
+            }
+            said = swapping;
+            return swapping === "";
+        },
+        { intervalMs: SWAP_POLL_MS, timeoutMs: CUTOVER_HOLDS_MS },
+    );
+};
+
 export const restartResident = async (log: Log): Promise<void> => {
+    await waitOutSwaps(log);
     await stopResident();
     await startResident(log);
 };

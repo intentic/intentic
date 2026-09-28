@@ -3,14 +3,15 @@ import { promisify } from "node:util";
 import { pollUntil } from "@intentic/base/async";
 import { claimPidFile, type Log, releasePidFile, spawnDetached } from "@intentic/local-agent";
 import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract";
+import { rollBackIfCrashLooping } from "../agent-trial.js";
 import { agentLogPath, binDir, upgradeLockPath } from "../config.js";
 import { installedBuild } from "../installed.js";
 import { publishedVersion } from "../release.js";
-import { machineLauncher, readResident, restartResident } from "../supervision.js";
+import { machineLauncher, readResident, restartResident, waitOutSwaps } from "../supervision.js";
 import { realUpgradeExec, runUpgrade, type UpgradeOutcome, upgradeLanded, upgradeMessage } from "../upgrade.js";
 import { MACHINE_VERSION } from "../version.js";
 import { agentInDistro, crossEnv, NO_AGENT_EXIT } from "./crossing.js";
-import { heldDistros, runOnWindows, updateMachineConfig, windowsRoot } from "./machine.js";
+import { heldDistros, type MachineConfig, readMachineConfig, runOnWindows, updateMachineConfig, windowsRoot } from "./machine.js";
 
 // A PC upgrades as one: whichever side is asked, every environment ends on the same exact release or says why it did not.
 
@@ -49,11 +50,29 @@ const withUpgradeLock = async (log: Log, run: () => Promise<UpgradeOutcome>): Pr
     }
 };
 
-// This environment alone, to `target`: what one leg of a machine-wide upgrade and setup's self-update both run.
+// Why this environment will not take `target`: a release its agent crash-looped on and was rolled back from, which only
+// a newer release (or `--force`) moves it past. Undefined when nothing stands in the way.
+export const skippedRefusal = (config: MachineConfig, target: string, force: boolean): string | undefined => {
+    const skipped = config.skippedAgent;
+    return force || skipped?.version !== target
+        ? undefined
+        : `the agent ${target} kept stopping on this machine and was rolled back on ${new Date(skipped.at).toISOString().slice(0, 10)}, so it is skipped until a newer release is published (\`intentic-machine upgrade --force\` installs it anyway).`;
+};
+
+// This environment alone, to `target`: what one leg of a machine-wide upgrade and setup's self-update both run. First
+// the trial's own check (an installed agent crash-looping now is put back before anything else is decided), and the
+// restart at the end waits out any sandbox mid-swap here.
 export const upgradeHere = async (target: string, force: boolean, log: Log): Promise<UpgradeOutcome> =>
     await withUpgradeLock(log, async () => {
+        await rollBackIfCrashLooping(log);
+        // allow(silent-catch): a config that does not read holds no skip; the upgrade itself does not depend on it
+        const refused = skippedRefusal(await readMachineConfig().catch((): MachineConfig => ({})), target, force);
+        if (refused !== undefined) {
+            return { kind: "failed", reason: refused };
+        }
         const running = async (): Promise<string | undefined> => (await readResident())?.build;
         const restart = async (): Promise<string | undefined> => {
+            await waitOutSwaps(log);
             await restartResident(() => undefined);
             return await running();
         };

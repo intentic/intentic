@@ -143,12 +143,9 @@ export const renameIfPresent = async (from: string, to: string): Promise<void> =
 };
 
 // What a finished swap or an extracted tarball leaves in bin/. Versioned part files stay: the next attempt resumes them.
-const LEFTOVER = [
-    /^intentic-machine(?:\.exe)?\.(?:old|previous)$/,
-    /^intentic-launch\.exe\.(?:old|tmp|previous)$/,
-    /^mutagen(?:\.exe)?\.old$/,
-    /^mutagen\.tar\.gz$/,
-];
+// So does `.previous`: it is what undoes an update whose agent keeps crashing, and only that agent's trial drops it
+// (agent-trial.ts), once it has run for ten minutes.
+const LEFTOVER = [/^intentic-machine(?:\.exe)?\.old$/, /^intentic-launch\.exe\.(?:old|tmp)$/, /^mutagen(?:\.exe)?\.old$/, /^mutagen\.tar\.gz$/];
 
 export const isLeftover = (name: string): boolean => LEFTOVER.some((pattern) => pattern.test(name));
 

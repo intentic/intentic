@@ -244,6 +244,8 @@ export interface AgentsStore {
     readonly remove: (ids: readonly string[]) => void;
     // Whether a row exists for the conversation, readable by this build or not.
     readonly has: (id: string) => boolean;
+    // Whether any conversation has a row, readable by this build or not.
+    readonly any: () => boolean;
 }
 
 interface RepoRow {
@@ -322,6 +324,7 @@ export const sqliteAgentsStore = ({ db, path, transaction }: ConversationsDb): A
     const selectConversations = db.prepare("SELECT id, record FROM conversation");
     const selectRepos = db.prepare("SELECT * FROM conversation_repo ORDER BY conversation_id, position");
     const selectOne = db.prepare("SELECT 1 FROM conversation WHERE id = ?");
+    const selectAny = db.prepare("SELECT 1 FROM conversation LIMIT 1");
     const selectRecord = db.prepare("SELECT record FROM conversation WHERE id = ?");
     // The row a save replaces, as its record: what this build's parse dropped from it (a newer build's keys) is carried
     // into the new one. A row this build cannot read at all has nothing it could carry, and is replaced as before.
@@ -382,5 +385,6 @@ export const sqliteAgentsStore = ({ db, path, transaction }: ConversationsDb): A
                 }
             }),
         has: (id) => selectOne.get(id) !== undefined,
+        any: () => selectAny.get() !== undefined,
     };
 };

@@ -6,7 +6,7 @@ import { z } from "zod";
 import { sqliteAgentsStore } from "../../conversations/registry/agents-store.js";
 import { conversationsDbPath, openConversationsDb } from "../conversations-db.js";
 import { jsonFile } from "../json-file.js";
-import { clearManifestProblems, manifestProblems, withSkewHint } from "./manifest-problems.js";
+import { clearManifestProblems, manifestProblems, recordManifestProblems, recordStandingProblem, withSkewHint } from "./manifest-problems.js";
 import { objectParse } from "./unknown-keys.js";
 
 // End-to-end: a manifest breaks on disk, the daemon reads it, the problem is queryable, then fixing the file clears it.
@@ -198,4 +198,19 @@ test("a conversation record this build cannot read is reported by the registry's
         },
     ]);
     db.db.close();
+});
+
+test("a problem with the whole registry is reported ahead of its rows', and no read of the rows clears it", async () => {
+    const root = await workspace();
+    const history = await workspace();
+    const path = conversationsDbPath(history);
+    const whole = { kind: "unreadable", reason: "io", detail: "It was damaged, so it was set aside.", fix: "The damaged file is kept beside it." } as const;
+    recordStandingProblem(path, whole);
+    const row = { kind: "invalidEntry", reason: "rejected", detail: "conversation c1: its record does not match what this build expects" } as const;
+    recordManifestProblems(path, [row]);
+    expect(manifestProblems(root, history)).toEqual([{ path: `${HISTORY_ROOT}/conversations.db`, problems: [whole, row] }]);
+
+    // The rows read clean again: the whole-file problem is about the file that was there before, and stays.
+    recordManifestProblems(path, []);
+    expect(manifestProblems(root, history)).toEqual([{ path: `${HISTORY_ROOT}/conversations.db`, problems: [whole] }]);
 });

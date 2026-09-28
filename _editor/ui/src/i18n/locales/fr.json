@@ -187,7 +187,7 @@
         "savingKeepsItRunning": "Enregistrer laisse le sandbox tourner tel quel. ic garde la nouvelle part et l'applique au prochain redémarrage du sandbox via ic : Redémarrer ici, Démarrer, une mise à jour, un retour arrière ou une reconstruction. Un redémarrage du conteneur par Docker lui-même, après un plantage ou un redémarrage de l'ordinateur, ne l'applique pas."
     },
     "sandboxSandboxVerbs": {
-        "deletesSandboxEverythingIn": "Cela supprime le sandbox et tout ce qu'il contient — ses fichiers et son historique — de cet appareil. C'est irréversible.",
+        "deletesSandboxEverythingIn": "Cela retire le sandbox et tout ce qu'il contient (ses fichiers et son historique) de cet appareil. Il reste récupérable sur cet appareil pendant une semaine : `ic sandbox restore` sur cette machine le rétablit.",
         "sandboxRestartsOntoImage": "Le sandbox redémarre sur l'image qu'il avait avant sa dernière mise à jour. Ses fichiers sont conservés.",
         "sandboxRestartsOntoNewest": "Le sandbox redémarre sur l'image la plus récente et reste indisponible pendant ce temps : quelques secondes si la mise à jour est déjà téléchargée, quelques minutes sinon. Ses fichiers sont conservés."
     },

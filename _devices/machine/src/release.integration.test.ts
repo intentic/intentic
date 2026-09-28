@@ -18,22 +18,14 @@ describe("release asset URLs", () => {
 
 describe("isLeftover", () => {
     it("names what a finished swap or an extracted tarball leaves behind", () => {
-        for (const name of [
-            "intentic-machine.exe.old",
-            "intentic-machine.exe.previous",
-            "intentic-machine.previous",
-            "intentic-launch.exe.old",
-            "intentic-launch.exe.tmp",
-            "intentic-launch.exe.previous",
-            "mutagen.exe.old",
-            "mutagen.tar.gz",
-        ]) {
+        for (const name of ["intentic-machine.exe.old", "intentic-machine.old", "intentic-launch.exe.old", "intentic-launch.exe.tmp", "mutagen.exe.old", "mutagen.tar.gz"]) {
             expect(isLeftover(name), name).toBe(true);
         }
     });
 
-    // A versioned part file is an interrupted download the next attempt resumes; Mutagen needs its agents bundle.
-    it("keeps the binaries, resumable downloads and Mutagen's agent bundle", () => {
+    // A versioned part file is an interrupted download the next attempt resumes; Mutagen needs its agents bundle; and
+    // `.previous` is what undoes an update whose agent keeps crashing, dropped only by that agent's own trial.
+    it("keeps the binaries, resumable downloads, Mutagen's agent bundle and the copies an update can go back to", () => {
         for (const name of [
             "intentic-machine.exe",
             "intentic-machine",
@@ -43,6 +35,9 @@ describe("isLeftover", () => {
             "intentic-machine.exe.new-1.305.0",
             "intentic-machine.exe.part-1.305.0.exe",
             "upgrade.lock",
+            "intentic-machine.exe.previous",
+            "intentic-machine.previous",
+            "intentic-launch.exe.previous",
         ]) {
             expect(isLeftover(name), name).toBe(false);
         }

@@ -72,24 +72,50 @@ const onOff = (value: string): "on" | "off" => {
 export interface UpdatesFlags {
     readonly agent?: "on" | "off";
     readonly sandboxes?: "on" | "off";
+    readonly backups?: "on" | "off";
+    readonly tidy?: "on" | "off";
 }
 
 // On is the resting state and is stored as the key's absence; only an explicit off is written down.
+const switchedTo = (flag: "on" | "off" | undefined, stored: boolean | undefined): boolean | undefined =>
+    flag === undefined ? stored : flag === "on" ? undefined : false;
+
+// The config with its switches set as asked, every other key as it was.
+type SwitchedConfig = { -readonly [K in keyof MachineConfig]: MachineConfig[K] };
+
 export const withSwitches = (config: MachineConfig, flags: UpdatesFlags): MachineConfig => {
-    const { agentUpdates, sandboxUpdates, ...rest } = config;
-    const agent = flags.agent === undefined ? agentUpdates : flags.agent === "on" ? undefined : false;
-    const sandboxes = flags.sandboxes === undefined ? sandboxUpdates : flags.sandboxes === "on" ? undefined : false;
-    return { ...rest, ...(agent === undefined ? {} : { agentUpdates: agent }), ...(sandboxes === undefined ? {} : { sandboxUpdates: sandboxes }) };
+    const { agentUpdates, sandboxUpdates, sandboxBackups, sandboxTidy, ...rest } = config;
+    const next: SwitchedConfig = rest;
+    const agent = switchedTo(flags.agent, agentUpdates);
+    const sandboxes = switchedTo(flags.sandboxes, sandboxUpdates);
+    const backups = switchedTo(flags.backups, sandboxBackups);
+    const tidy = switchedTo(flags.tidy, sandboxTidy);
+    if (agent !== undefined) {
+        next.agentUpdates = agent;
+    }
+    if (sandboxes !== undefined) {
+        next.sandboxUpdates = sandboxes;
+    }
+    if (backups !== undefined) {
+        next.sandboxBackups = backups;
+    }
+    if (tidy !== undefined) {
+        next.sandboxTidy = tidy;
+    }
+    return next;
 };
 
-const updatesArgs = (flags: UpdatesFlags): string[] => [
-    ...(flags.agent === undefined ? [] : ["--agent", flags.agent]),
-    ...(flags.sandboxes === undefined ? [] : ["--sandboxes", flags.sandboxes]),
-];
+const updatesArgs = (flags: UpdatesFlags): string[] =>
+    (["agent", "sandboxes", "backups", "tidy"] as const).flatMap((flag) => {
+        const value = flags[flag];
+        return value === undefined ? [] : [`--${flag}`, value];
+    });
 
-// Both switches are the PC's, kept on its root: a distro hands the command to its Windows side rather than keeping a copy.
+// Every switch is the PC's, kept on its root: a distro hands the command to its Windows side rather than keeping a copy.
 export const updates = buildCommand<UpdatesFlags>({
-    docs: { brief: "What this machine updates by itself: its agent (the whole PC at once) and the next image of each sandbox" },
+    docs: {
+        brief: "What this machine does by itself: update its agent (the whole PC at once), download each sandbox's next image, back each sandbox up daily and tidy what swaps leave behind",
+    },
     parameters: {
         flags: {
             agent: { kind: "parsed", parse: onOff, optional: true, brief: "Update the agent on this PC by itself when a release is published (on by default)" },
@@ -98,6 +124,18 @@ export const updates = buildCommand<UpdatesFlags>({
                 parse: onOff,
                 optional: true,
                 brief: "Download each sandbox's next update in the background, so applying it is a short restart (on by default)",
+            },
+            backups: {
+                kind: "parsed",
+                parse: onOff,
+                optional: true,
+                brief: "Back each sandbox up once a day, encrypted, on this machine (on by default)",
+            },
+            tidy: {
+                kind: "parsed",
+                parse: onOff,
+                optional: true,
+                brief: "Once a day, clear the images, records and trash that swaps and removals leave behind; volumes are never deleted (on by default)",
             },
         },
     },
@@ -110,7 +148,7 @@ export const updates = buildCommand<UpdatesFlags>({
             }
             return;
         }
-        if (flags.agent !== undefined || flags.sandboxes !== undefined) {
+        if (updatesArgs(flags).length > 0) {
             await updateMachineConfig((config) => withSwitches(config, flags));
         }
         const config = await readMachineConfig();
@@ -123,6 +161,16 @@ export const updates = buildCommand<UpdatesFlags>({
             config.sandboxUpdates === false
                 ? "Sandboxes: each update downloads when you take it, a wait of minutes. Turn background downloads back on with --sandboxes on."
                 : "Sandboxes: each one's next update is downloaded in the background, so applying it is a restart of about half a minute. Turn it off with --sandboxes off.",
+        );
+        out(
+            config.sandboxBackups === false
+                ? "Backups: none are taken by themselves. Turn the daily backup back on with --backups on."
+                : "Backups: each running sandbox is backed up once a day, encrypted, on this machine (`intentic-machine sandbox backups <slug>` lists them). Turn it off with --backups off.",
+        );
+        out(
+            config.sandboxTidy === false
+                ? "Tidy: what swaps and removals leave behind stays until you run `ic sandbox tidy`. Turn the daily tidy back on with --tidy on."
+                : "Tidy: once a day, images no sandbox can go back to, records of removed sandboxes and the trash past its week are cleared; volumes are only listed, never deleted. Turn it off with --tidy off.",
         );
     },
 });

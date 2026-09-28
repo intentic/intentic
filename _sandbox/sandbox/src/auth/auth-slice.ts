@@ -2,7 +2,24 @@ import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Config } from "../env.config.js";
-import { type AuthorizeOptions, createAuthorizer, createGoogleVerifier, fileMembersStore, fileOwnerStore, membersDocument, type MembersStore, ownerDocument, ownerTicketVerifier, type PasskeyPolicy, type Proof, type ProvenCaller } from "./auth.js";
+import type { Logger } from "pino";
+import {
+    type AuthorizeOptions,
+    createAuthorizer,
+    createGoogleVerifier,
+    fileMembersStore,
+    fileOwnerStore,
+    membersDocument,
+    type MembersStore,
+    ownerDocument,
+    ownerResetCommand,
+    type OwnerStore,
+    OwnerUnreadableError,
+    ownerTicketVerifier,
+    type PasskeyPolicy,
+    type Proof,
+    type ProvenCaller,
+} from "./auth.js";
 import { fileBrowserAccess } from "./browser-access.js";
 import { allowedOriginsOf, originAllowedBy } from "./browser-origins.js";
 import { type AuthConnections, createAuthConnections } from "./connections.js";
@@ -76,12 +93,40 @@ const passkeysOf = (
     };
 };
 
+// The owner store every authorizer and route reads, saying once per boot, on the first read that finds the file
+// unreadable, why every sign-in is refused and what a person on the host runs about it. Nothing inside the sandbox can
+// fix it, since fixing it takes a sign-in.
+const noticedOwnerStore = (store: OwnerStore, logger: Pick<Logger, "error">, connectToken: string): OwnerStore => {
+    let said = false;
+    return {
+        read: async () => {
+            try {
+                return await store.read();
+            } catch (error) {
+                if (error instanceof OwnerUnreadableError && !said) {
+                    said = true;
+                    const remedy = ownerResetCommand(connectToken);
+                    logger.error(
+                        { detail: error.detail, remedy },
+                        `auth: the owner file cannot be read, so every sign-in is refused; on the machine that runs this sandbox, \`${remedy}\` moves it aside so the owner's next sign-in binds the sandbox again`,
+                    );
+                }
+                throw error;
+            }
+        },
+        write: (email) => store.write(email),
+    };
+};
+
 // Builds the auth slice from config; loopback (no Google client id) leaves `auth` undefined, so every route is open.
-export const createAuthSlice = (config: Config, workspaceRoot: string): AuthSlice => {
+export const createAuthSlice = (config: Config, workspaceRoot: string, logger: Pick<Logger, "error">): AuthSlice => {
     const members = fileMembersStore(join(workspaceRoot, membersDocument.path));
     const { passkeys, passkeyCeremonies, passkeyPolicy } = passkeysOf(config, workspaceRoot);
     // Bound owner, hoisted since the Access roster and gate routes both need to read, never write, the email.
-    const ownerStore = fileOwnerStore(join(workspaceRoot, ownerDocument.path));
+    const ownerStore = noticedOwnerStore(fileOwnerStore(join(workspaceRoot, ownerDocument.path)), logger, config.connectToken);
+    // Read once now, so a file that cannot be read is said at boot rather than at the owner's first refused sign-in.
+    // allow(silent-catch): the read exists only for the notice above; every sign-in reads the file again.
+    void ownerStore.read().catch(() => undefined);
     // Session secret under historyRoot, daemon-private and persistent, so a restart doesn't sign every browser out.
     const sessions = createSessions(join(config.historyRoot, "session-secret"));
     const authConnections = createAuthConnections();

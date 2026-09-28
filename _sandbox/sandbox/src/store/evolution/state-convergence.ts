@@ -9,7 +9,7 @@ import { convertDocument } from "./conversions.js";
 import { conversionDigest, defineDocument, type DocumentRoot, type DocumentSpec, engineEpoch } from "./documents.js";
 import { openEntries } from "../open-document.js";
 import { isDowngrade, newestRunVersion, recordNewestRun } from "../newest-run.js";
-import { commitEpisodes, type Episode, GRACE_MS, type Journal, openEpisode, pruneEpisodes, readJournal, restoreEpisode, writeJournal } from "./state-journal.js";
+import { commitEpisode, type Episode, GRACE_MS, type Journal, openEpisode, pruneEpisodes, readJournal, restoreEpisode, writeJournal } from "./state-journal.js";
 import type { StructuralStep } from "./state-steps.js";
 import { version as buildVersion } from "../../version.js";
 import type { PlanFailure, PlanStep, StateStatus } from "@intentic/sandbox-contract";
@@ -334,12 +334,18 @@ const appendLedger = async (workspaceRoot: string, entry: z.infer<typeof LedgerE
     await ledger.update((entries) => [...entries, entry].slice(-LEDGER_KEPT));
 };
 
-// Module state the /health route reads: whether a conversion episode is open, and this build's conversion count.
+// Module state the /health route reads: whether a conversion episode is open, whether converging threw during this
+// boot, and this build's conversion count.
 let journalOpen = false;
+let convergeFailed = false;
 let runningEngine = 0;
+// What this boot converged and so may commit once it has booted all the way. Set only when converging finished, so a
+// build never commits an episode, or stamps itself the newest run, on a convergence it did not see through.
+let vouched: { readonly version: string; readonly engine: number; readonly digest: string } | undefined;
 
+// `failed` outlives everything after it in this boot: the files were put back, and nothing this boot does commits.
 export const stateStatus = (): StateStatus => ({
-    journal: journalOpen ? "open" : "none",
+    journal: convergeFailed ? "failed" : journalOpen ? "open" : "none",
     engine: runningEngine,
 });
 
@@ -349,6 +355,10 @@ export interface ConvergeOptions extends Omit<PlanOptions, "journal" | "now"> {
     // Only the daemon that owns these volumes converts them; a guest learns the stamp and converts on read like anyone.
     readonly mayWrite: boolean;
     readonly now?: () => number;
+    // The update drill's fault (INTENTIC_FAULT=fail-conversion, system/boot/fault.ts): an episode is opened even with
+    // nothing to convert, and converging throws once the plan is applied, so the put-back and the host's rollback run
+    // for real.
+    readonly failConversion?: boolean;
 }
 
 export interface ConvergeOutcome {
@@ -378,16 +388,50 @@ const recoverEpisodes = async (roots: StateRoots, journal: Journal, digest: stri
     return { journal: current, restored };
 };
 
-export const convergeState = async (options: ConvergeOptions): Promise<ConvergeOutcome> => {
-    const { roots, version, logger, mayWrite } = options;
-    const now = options.now ?? Date.now;
-    const { documents, steps } = options;
-    const digest = conversionDigest(documents, steps);
-    runningEngine = engineEpoch(documents, steps);
-    await recordNewestRun(roots.workspace, version, { engine: runningEngine, digest, write: mayWrite });
-    if (!mayWrite) {
-        return { plan: undefined, restored: 0 };
+const hasWork = (plan: StatePlan): boolean => plan.writes.size > 0 || plan.effects.length > 0 || plan.copies.size > 0 || plan.renames.size > 0;
+
+// The plan's copies, renames, writes and effects, in that order, under an episode already opened for them.
+const applyPlan = async (plan: StatePlan): Promise<void> => {
+    for (const [from, to] of plan.copies) {
+        await mkdir(dirname(to), { recursive: true });
+        await cp(from, to, { recursive: true, errorOnExist: true, force: false, preserveTimestamps: true });
     }
+    for (const [from, to] of plan.renames) {
+        await mkdir(dirname(to), { recursive: true });
+        await rename(from, to);
+    }
+    for (const [path, content] of plan.writes) {
+        await applyWrite(path, content);
+    }
+    await pruneEmptied([...plan.writes].filter(([, content]) => content === undefined).map(([path]) => path));
+    for (const effect of plan.effects) {
+        await effect();
+    }
+};
+
+// A conversion that failed partway is put back at once rather than left for a later boot: this build goes on reading
+// the files as they were, and the host's rollback lands on them unchanged. Read from disk, since the episode may be
+// one this build resumed or one it had only started to open. A put-back that fails too leaves the episode open, which
+// the next boot of any other build restores and one of this build resumes.
+const putBack = async (roots: StateRoots, digest: string, logger: Logger): Promise<void> => {
+    try {
+        const journal = await readJournal(roots.history, logger);
+        const episode = journal.episodes.find((candidate) => candidate.state === "open" && candidate.digest === digest);
+        if (episode !== undefined) {
+            await restoreEpisode(roots, journal, episode);
+            logger.warn({ episode: episode.id, files: episode.entries.length }, "state: put back the files this boot had started converting");
+        }
+    } catch (error) {
+        logger.error({ err: error }, "state: the files this boot had started converting could not all be put back; the journal keeps them for the next boot");
+    }
+};
+
+interface Converging extends ConvergeOptions {
+    readonly digest: string;
+    readonly now: () => number;
+}
+
+const converge = async ({ roots, documents, steps, version, logger, now, digest, failConversion }: Converging): Promise<ConvergeOutcome> => {
     const recovered = await recoverEpisodes(roots, await readJournal(roots.history, logger), digest, logger);
     let journal = await pruneEpisodes(roots, recovered.journal, now());
     journalOpen = journal.episodes.some((episode) => episode.state === "open");
@@ -398,48 +442,76 @@ export const convergeState = async (options: ConvergeOptions): Promise<ConvergeO
     if (plan.downgrade) {
         logger.warn({ version, newest: newestRunVersion() }, "state: a newer build converted these files; this one keeps its hands off what it cannot read");
     }
-    if (plan.writes.size > 0 || plan.effects.length > 0 || plan.copies.size > 0 || plan.renames.size > 0) {
-        journal = await openEpisode(
-            roots,
-            journal,
-            { writes: [...plan.writes.keys(), ...plan.touches], copies: [...plan.copies.values()], renames: plan.renames, sourceOf: plan.sourceOf },
-            { engine: plan.engine, digest, version, now: now() },
-        );
-        journalOpen = true;
-        for (const [from, to] of plan.copies) {
-            await mkdir(dirname(to), { recursive: true });
-            await cp(from, to, { recursive: true, errorOnExist: true, force: false, preserveTimestamps: true });
+    try {
+        if (hasWork(plan) || failConversion === true) {
+            journal = await openEpisode(
+                roots,
+                journal,
+                { writes: [...plan.writes.keys(), ...plan.touches], copies: [...plan.copies.values()], renames: plan.renames, sourceOf: plan.sourceOf },
+                { engine: plan.engine, digest, version, now: now() },
+            );
+            journalOpen = true;
+            await applyPlan(plan);
+            if (failConversion === true) {
+                throw new Error("INTENTIC_FAULT=fail-conversion: converging fails on purpose once the plan is applied");
+            }
+            await appendLedger(roots.workspace, { at: now(), version, engine: plan.engine, digest, steps: [...plan.steps] });
+            logger.info({ files: plan.writes.size, steps: plan.steps.length }, "state: converted this workspace's files; the journal stays open until boot finishes");
         }
-        for (const [from, to] of plan.renames) {
-            await mkdir(dirname(to), { recursive: true });
-            await rename(from, to);
+        const settled = withSeen(journal, plan.seen, now());
+        if (JSON.stringify(settled) !== JSON.stringify(recovered.journal)) {
+            await writeJournal(roots.history, settled);
         }
-        for (const [path, content] of plan.writes) {
-            await applyWrite(path, content);
-        }
-        await pruneEmptied([...plan.writes].filter(([, content]) => content === undefined).map(([path]) => path));
-        for (const effect of plan.effects) {
-            await effect();
-        }
-        await appendLedger(roots.workspace, { at: now(), version, engine: plan.engine, digest, steps: [...plan.steps] });
-        logger.info({ files: plan.writes.size, steps: plan.steps.length }, "state: converted this workspace's files; the journal stays open until boot finishes");
-    }
-    const settled = withSeen(journal, plan.seen, now());
-    if (JSON.stringify(settled) !== JSON.stringify(recovered.journal)) {
-        await writeJournal(roots.history, settled);
+    } catch (error) {
+        await putBack(roots, digest, logger);
+        throw error;
     }
     return { plan, restored: recovered.restored };
 };
 
-// Called once the build has booted all the way: nothing it converted needs undoing any more.
+// Throws when converging fails partway; what this boot had changed is put back first, and `stateStatus` reports the
+// journal failed for the rest of the boot. The caller logs it and boots on, its stores converting on read.
+export const convergeState = async (options: ConvergeOptions): Promise<ConvergeOutcome> => {
+    const { roots, version, mayWrite, documents, steps } = options;
+    const digest = conversionDigest(documents, steps);
+    runningEngine = engineEpoch(documents, steps);
+    journalOpen = false;
+    convergeFailed = false;
+    vouched = undefined;
+    // Read here, written only by commitState: the stamp moves forward once this build has booted all the way, so one
+    // whose boot fails never leaves the workspace looking downgraded to the version the host puts back.
+    await recordNewestRun(roots.workspace, version, { write: false });
+    if (!mayWrite) {
+        return { plan: undefined, restored: 0 };
+    }
+    try {
+        const outcome = await converge({ ...options, digest, now: options.now ?? Date.now });
+        vouched = { version, engine: runningEngine, digest };
+        return outcome;
+    } catch (error) {
+        journalOpen = false;
+        convergeFailed = true;
+        throw error;
+    }
+};
+
+// Called once the build has booted all the way: nothing it converted needs undoing any more, so its episode commits
+// and the newest-run stamp moves to it. Only what this boot's own convergence finished: an episode another build
+// opened, or one a failed convergence left behind, is never committed here.
 // The reported status flips first: a daemon this far along is healthy, and a journal write that fails leaves the episode
 // open on disk for the next boot of this same build to resume, never a reason to roll this one back.
 export const commitState = async (roots: StateRoots, now: number = Date.now()): Promise<Episode | undefined> => {
+    const converged = vouched;
+    if (converged === undefined) {
+        return undefined;
+    }
     journalOpen = false;
+    // Before the journal, which may fail to write: the build has run here all the same, and never throws for it.
+    await recordNewestRun(roots.workspace, converged.version, { engine: converged.engine, digest: converged.digest });
     const journal = await readJournal(roots.history);
-    const open = journal.episodes.find((episode) => episode.state === "open");
+    const open = journal.episodes.find((episode) => episode.state === "open" && episode.digest === converged.digest);
     if (open !== undefined) {
-        await writeJournal(roots.history, commitEpisodes(journal, now));
+        await writeJournal(roots.history, commitEpisode(journal, open.id, now));
     }
     return open;
 };
@@ -447,5 +519,7 @@ export const commitState = async (roots: StateRoots, now: number = Date.now()): 
 // Test seam: the module state the /health route and the stores read.
 export const resetStateStatus = (): void => {
     journalOpen = false;
+    convergeFailed = false;
     runningEngine = 0;
+    vouched = undefined;
 };

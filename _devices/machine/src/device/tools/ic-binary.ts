@@ -2,7 +2,14 @@ import { execFile } from "node:child_process";
 import { chmod, rename, rm } from "node:fs/promises";
 import { homeDir } from "@intentic/local-agent";
 import { promisify } from "node:util";
-import { DEV_VERSION, DEVICE_FEATURE_RESHAPE_LATER, DEVICE_FEATURE_SET_SHAPE, type DeviceFeature, isNewer } from "@intentic/sandbox-contract";
+import {
+    DEV_VERSION,
+    DEVICE_FEATURE_RESHAPE_LATER,
+    DEVICE_FEATURE_ROLLBACK_TO,
+    DEVICE_FEATURE_SET_SHAPE,
+    type DeviceFeature,
+    isNewer,
+} from "@intentic/sandbox-contract";
 import { archToken, download, exe, osToken } from "../../release.js";
 import { MACHINE_VERSION } from "../../version.js";
 import { errorMessage } from "@intentic/base/errors";
@@ -135,14 +142,20 @@ const helpOf = async (verb: readonly string[]): Promise<string | undefined> => {
     return undefined;
 };
 
-// Which optional ops this device implements, from what its `ic`'s own help says it has. Both ride `ic sandbox shape`
-// taking the contract's own shape (`--set`, the contract's `icShapeArgs`): `set-shape` directly, and the old `reshape`
-// op's `later` through the same verb (sandboxes.ts, olderResizePlan). `reshape-later` is redundant with `set-shape`'s
-// `when` for every current page, and is still advertised only for pages and daemons from before `set-shape` (v1.312.0
-// and older), which check it before sending a later-reshape: REMOVE IN v1.314.0, with the old `reshape` op. Pure over
+// A flag the help lists, spelled whole: `--to` must not be read off `--token` or `--to-x`.
+const helpLists = (help: string | undefined, flag: string): boolean => help !== undefined && new RegExp(`(?:^|[\\s,\\[])${flag}(?![\\w-])`, "m").test(help);
+
+// Which optional ops this device implements, from what its `ic`'s own help says it has. Both shape features ride
+// `ic sandbox shape` taking the contract's own shape (`--set`, the contract's `icShapeArgs`): `set-shape` directly, and
+// the old `reshape` op's `later` through the same verb (sandboxes.ts, olderResizePlan). `reshape-later` is redundant
+// with `set-shape`'s `when` for every current page, and is still advertised only for pages and daemons from before
+// `set-shape` (v1.312.0 and older), which check it before sending a later-reshape: REMOVE IN v1.314.0, with the old
+// `reshape` op. `rollback-to` is a rollback's `to`, carried as `ic sandbox rollback <slug> --to <version>`. Pure over
 // the help, so the derivation is asserted without an ic.
-export const featuresFrom = (shapeHelp: string | undefined): DeviceFeature[] =>
-    shapeHelp?.includes("--set") === true ? [DEVICE_FEATURE_RESHAPE_LATER, DEVICE_FEATURE_SET_SHAPE] : [];
+export const featuresFrom = (shapeHelp: string | undefined, rollbackHelp?: string): DeviceFeature[] => [
+    ...(helpLists(shapeHelp, "--set") ? [DEVICE_FEATURE_RESHAPE_LATER, DEVICE_FEATURE_SET_SHAPE] : []),
+    ...(helpLists(rollbackHelp, "--to") ? [DEVICE_FEATURE_ROLLBACK_TO] : []),
+];
 
 // Asked once per process when it answers: the agent keeps its ic current before asking (ensureCurrentIc), so the answer
 // holds until the agent itself is replaced.
@@ -150,7 +163,8 @@ let features: Promise<DeviceFeature[]> | undefined;
 export const deviceFeatures = async (): Promise<DeviceFeature[]> => {
     features ??= (async () => {
         await ensureCurrentIc();
-        return featuresFrom(await helpOf(["sandbox", "shape"]));
+        const [shapeHelp, rollbackHelp] = await Promise.all([helpOf(["sandbox", "shape"]), helpOf(["sandbox", "rollback"])]);
+        return featuresFrom(shapeHelp, rollbackHelp);
     })();
     const answered = await features;
     if (answered.length === 0) {

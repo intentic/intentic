@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { API_BASE_PATH, BootReportSchema, SetupReportSchema } from "@intentic/api-contract";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { ORPCError } from "@orpc/server";
-import { type Context, Hono, type HonoRequest } from "hono";
+import { type Context, Hono, type HonoRequest, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
@@ -27,12 +27,40 @@ import { fleetHttpRoutes } from "./fleet/fleet.routes.js";
 import { walletHttpRoutes } from "./wallet/wallet.routes.js";
 import { trialRoutes } from "./trial/trial.routes.js";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
+import { z } from "zod";
 
-type AppEnv = { Variables: { logger: Logger } };
+// `Bindings` is Bun's server as Bun.serve hands it to `fetch`, of which only the per-request idle timeout is used; it is
+// absent wherever the app is not served by Bun (the suites' app.request).
+type AppEnv = { Bindings: { readonly timeout?: (request: Request, seconds: number) => void } | undefined; Variables: { logger: Logger } };
 
 // The request-body ceilings (see the middleware in createApp): the platform's, and the trial's larger one.
 const BODY_LIMIT_BYTES = 1024 * 1024;
 const TRIAL_BODY_LIMIT_BYTES = 32 * 1024 * 1024;
+
+/* THE ROUTES THAT CHANGE A HOSTED MACHINE AND WAIT FOR IT. A restart, a rollback or a rebuild's swap waits for the new
+ * version's daemon to come up (minutes, sandbox/hosted/gate/daemon-health.ts), a wake for a heal or a judged start, a
+ * provision for a machine to start, a tier change for a move. Bun closes a request that has sent nothing for its idle
+ * timeout (10s by default) with no response at all, which cut the owner off from the answer, the reason a version was
+ * put back included, while the change went on without them; these lift it for themselves. */
+const MACHINE_CHANGE_PATHS = new Set(
+    [`/sandbox/hosted-restart`, `/sandbox/hosted-rollback`, `/sandbox/hosted-rebuild`, `/sandbox/wake`, `/sandbox/hosted-provision`, `/hosted-plan/tier`].map(
+        (path) => `${API_BASE_PATH}${path}`,
+    ),
+);
+
+const keepMachineChangesOpen: MiddlewareHandler<AppEnv> = async (c, next) => {
+    if (MACHINE_CHANGE_PATHS.has(c.req.path)) {
+        c.env?.timeout?.(c.req.raw, 0);
+    }
+    await next();
+};
+
+// What a daemon says it is on its announce: a release version, short. Anything else is not stored (the announce
+// itself still counts), since a stale or made-up version is worse than none.
+const DaemonVersionSchema = z
+    .string()
+    .max(64)
+    .regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u);
 
 // Accept only a valid https origin so a bogus value can't be stored as the sandbox's address.
 const isHttpsUrl = (value: string): boolean => {
@@ -190,10 +218,15 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         if (token === undefined || token === ``) {
             return c.text(`error: missing token`, 400);
         }
-        const body = (await c.req.json().catch(() => undefined)) as { daemonUrl?: unknown } | undefined;
+        const body = (await c.req.json().catch(() => undefined)) as { daemonUrl?: unknown; version?: unknown } | undefined;
         const daemonUrl = body?.daemonUrl;
         if (typeof daemonUrl !== `string` || !isHttpsUrl(daemonUrl)) {
             return c.text(`error: daemonUrl must be an https URL`, 400);
+        }
+        // Stored as the daemon names itself; null for a daemon too old to say, so the row never keeps a stale one.
+        const version = DaemonVersionSchema.safeParse(body?.version);
+        if (!version.success && body?.version !== undefined) {
+            c.get(`logger`).warn({ version: String(body.version).slice(0, 80) }, `announce: the version named is not one; not stored`);
         }
         // `hosted` rides along: a hosted machine's address is ours by construction, and its row is what says so.
         const sandbox = await prisma.sandbox.findUnique({
@@ -220,6 +253,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
             where: { id: sandbox.id, tokenDigest: sha256Hex(token) },
             data: {
                 daemonUrl,
+                daemonVersion: version.success ? version.data : null,
                 lastSeenAt: new Date(),
                 announceRefusal: Prisma.DbNull,
                 removedAt: null,
@@ -450,6 +484,9 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
     // A development lane: admin READS replayed against another deployment, so a local panel can show its figures; off
     // (404s) unless ADMIN_UPSTREAM_URL and ADMIN_UPSTREAM_COOKIE are both set.
     app.route(`/upstream`, adminUpstreamRoutes({ config, prisma, auth }));
+
+    // A request that waits on a machine keeps its connection however long the wait (MACHINE_CHANGE_PATHS above).
+    app.use(`${API_BASE_PATH}/*`, keepMachineChangesOpen);
 
     // Everything under /rpc flows through the oRPC OpenAPI handler, with the request logger on the context.
     app.all(`${API_BASE_PATH}/*`, async (c) => {

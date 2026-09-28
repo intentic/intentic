@@ -719,22 +719,12 @@ pub async fn sandbox_shape(
         .map_err(|error| error.to_string())?
 }
 
-/// Remove the sandbox, its volumes and its network — cleanup.sh, which is the only thing that also drops the
-/// NAMED /work volume a plain `docker rm -v` leaves behind.
+/// Remove the sandbox into `ic`'s trash: `recreate.sh <slug> --remove` / `recreate.ps1 -Slug … -Remove`, which is
+/// `ic sandbox remove <slug> -y`. Its containers go now; its /work and /history stay recoverable for a week
+/// (`ic sandbox restore <slug>`), as they do when it is removed from any other door. This used to be cleanup.sh,
+/// which deleted them on the spot. The shim passes `-y` itself: the confirmation is the dialog this app shows first.
 pub fn remove_script(slug: &str, host: Host, version: &str) -> ScriptRun {
-    ScriptRun {
-        file: host.script("cleanup.sh", "cleanup.ps1"),
-        args: match host {
-            Host::Windows => vec!["-Slug".into(), slug.to_string(), "-Yes".into()],
-            Host::Unix => vec![slug.to_string(), "-y".into()],
-        },
-        // No `ic` download in this one, but the same no-prompt contract: cleanup asks "which sandbox?" when
-        // it believes somebody is there, and the `-Yes` above is the only thing standing between this window
-        // and a question nobody can answer.
-        env: app_env(version),
-        elevate: false,
-        host,
-    }
+    ic_verb_script(slug, ("--remove", "-Remove"), Vec::new(), host, version)
 }
 
 #[tauri::command]
@@ -1041,6 +1031,9 @@ mod tests {
             power_script("work", "restart", Host::Unix, RELEASE).unwrap(),
             list_script(Host::Windows, RELEASE),
             list_script(Host::Unix, RELEASE),
+            // A removal downloads `ic` now too: it is the release's own `ic` that knows its trash.
+            remove_script("work", Host::Windows, RELEASE),
+            remove_script("work", Host::Unix, RELEASE),
         ] {
             assert_eq!(
                 env_of(&run, "IC_URL"),
@@ -1346,15 +1339,57 @@ mod tests {
         assert_eq!(engine_from("not numbers"), None);
     }
 
+    /* A REMOVAL GOES TO ic's TRASH, as it does from every other door: the shim's own switch, never cleanup, which deletes on the spot. */
     #[test]
-    fn remove_confirms_itself_per_host() {
+    fn remove_is_ics_trash_behind_the_shims_switch_per_host() {
         let unix = remove_script("work", Host::Unix, RELEASE);
-        assert_eq!(unix.file, "cleanup.sh");
-        assert_eq!(unix.args, vec!["work", "-y"]);
+        assert_eq!(unix.file, "recreate.sh");
+        assert_eq!(unix.args, vec!["work", "--remove"]);
 
         let windows = remove_script("work", Host::Windows, RELEASE);
-        assert_eq!(windows.file, "cleanup.ps1");
-        assert_eq!(windows.args, vec!["-Slug", "work", "-Yes"]);
+        assert_eq!(windows.file, "recreate.ps1");
+        assert_eq!(windows.args, vec!["-Slug", "work", "-Remove"]);
+    }
+
+    /* THE SHIM HAS TO TAKE EVERY SWITCH THIS APP HANDS IT: recreate.ps1 first runs on a user's machine, so a switch it does not declare is caught here or by them. */
+    #[test]
+    fn every_switch_the_app_hands_the_recreate_shim_is_one_it_takes() {
+        let scripts = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../_site/site/public/scripts");
+        let read = |name: &str| {
+            std::fs::read_to_string(scripts.join(name))
+                .unwrap_or_else(|error| panic!("{name} is readable: {error}"))
+        };
+        let (sh, ps1) = (read("recreate.sh"), read("recreate.ps1"));
+        let runs = |host: Host| {
+            vec![
+                recreate_script("work", None, true, host, RELEASE),
+                shape_script("work", None, "now", host, RELEASE).unwrap(),
+                power_script("work", "start", host, RELEASE).unwrap(),
+                power_script("work", "stop", host, RELEASE).unwrap(),
+                power_script("work", "restart", host, RELEASE).unwrap(),
+                remove_script("work", host, RELEASE),
+            ]
+        };
+        // sh: a case label, alone (`--remove)`) or among others (`--start | --stop | --restart)`).
+        for run in runs(Host::Unix) {
+            let switch = &run.args[1];
+            assert!(
+                sh.contains(&format!("{switch})")) || sh.contains(&format!("{switch} |")),
+                "recreate.sh has no case for {switch}, which this app passes it"
+            );
+        }
+        // PowerShell: a declared switch. An undeclared one lands in the remaining-arguments catch-all, where no mode
+        // reads it, and the button runs something other than what it says.
+        for run in runs(Host::Windows) {
+            let switch = run.args[2].trim_start_matches('-');
+            assert!(
+                ps1.contains(&format!("[switch]${switch},")),
+                "recreate.ps1 declares no -{switch}, which this app passes it"
+            );
+        }
+        assert!(sh.contains("--list)"));
+        assert!(ps1.contains("[switch]$List,"));
     }
 
     #[test]

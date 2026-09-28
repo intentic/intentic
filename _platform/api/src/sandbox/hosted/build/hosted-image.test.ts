@@ -1,6 +1,6 @@
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { Config } from "../../../config.js";
-import { forgetHostedImage, parseImageRef, resolveHostedImage } from "./hosted-image.js";
+import { digestIn, forgetHostedImage, parseImageRef, resolveHostedImage } from "./hosted-image.js";
 
 // The pool's whole value is that a warm machine already holds the image. A tag stops naming the same bytes the
 // moment it is re-pushed, so these pin the one property the pool depends on: what this returns is a name that
@@ -44,6 +44,16 @@ describe(`parseImageRef`, () => {
     // A bare name is docker hub's, whose host this must not invent.
     it(`declines a ref that names no registry host`, () => {
         expect(parseImageRef(`sandbox:stable`)).toBeUndefined();
+    });
+});
+
+describe(`digestIn`, () => {
+    // Whether a base moved is a digest question; a tag has none to compare.
+    it(`reads the digest a pinned reference names, with or without its tag, and none off a tag`, () => {
+        expect(digestIn(`ghcr.io/intentic/sandbox@${DIGEST}`)).toBe(DIGEST);
+        expect(digestIn(`ghcr.io/intentic/sandbox:stable@${DIGEST}`)).toBe(DIGEST);
+        expect(digestIn(`ghcr.io/intentic/sandbox:stable`)).toBeUndefined();
+        expect(digestIn(`registry:5000/sandbox@md5:abc`)).toBeUndefined();
     });
 });
 

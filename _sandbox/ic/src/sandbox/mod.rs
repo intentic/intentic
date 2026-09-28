@@ -1,15 +1,25 @@
+pub mod backup;
 pub mod connect;
 pub mod desired;
 pub mod doctor;
+pub mod identity;
 pub mod listing;
+pub mod lock;
 pub mod logs;
+pub mod mirror;
+pub mod outcome;
+pub mod owner;
 pub mod power;
 pub mod preflight;
+pub mod probation;
 pub mod recreate;
 pub mod remove;
 pub mod restore;
 pub mod staged;
+pub mod storage;
+pub mod tidy;
 pub mod trash;
+pub mod versions;
 
 use crate::docker;
 use crate::util::{bail, Result};
@@ -18,6 +28,25 @@ use crate::util::{bail, Result};
 pub const CONTAINER_PREFIX: &str = "intentic-sandbox-";
 pub const TUNNEL_PREFIX: &str = "intentic-sandbox-tunnel-";
 pub const DIND_PREFIX: &str = "intentic-dind-host-";
+/// What a swap renames the container it is replacing to, until the new one has proved itself (recreate.rs).
+pub const PARKED_SUFFIX: &str = ".previous";
+
+/// Epoch milliseconds, the unit every record and the sandbox's own files use.
+pub fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since| since.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// The container a sandbox runs as, and the one a swap parks it as.
+pub fn container_of(slug: &str) -> String {
+    format!("{CONTAINER_PREFIX}{slug}")
+}
+
+pub fn parked_of(slug: &str) -> String {
+    format!("{CONTAINER_PREFIX}{slug}{PARKED_SUFFIX}")
+}
 
 /// Every sandbox slug on this machine — the primary containers only (`-tunnel-` shares the prefix).
 /// `ps -a`, not `ps`: a daemon that broke badly enough left its container EXITED, and requiring it to run
@@ -29,13 +58,25 @@ pub fn list_slugs() -> Vec<String> {
 /// The same slugs, or None when docker could not list its containers: a flow that deletes must not read an
 /// unanswered question as "no sandbox is running".
 pub fn live_slugs() -> Option<Vec<String>> {
-    docker::ps_names(true, &format!("^{CONTAINER_PREFIX}")).map(|names| {
-        names
-            .into_iter()
-            .filter(|name| !name.starts_with(TUNNEL_PREFIX))
-            .filter_map(|name| name.strip_prefix(CONTAINER_PREFIX).map(str::to_string))
-            .collect()
-    })
+    docker::ps_names(true, &format!("^{CONTAINER_PREFIX}")).map(|names| slugs_of(&names))
+}
+
+/// The sandboxes a container listing names. A PARKED container is the sandbox it was parked from, never a sandbox of
+/// its own: beside the live container it is the previous version on probation and adds nothing, and alone it is a
+/// sandbox an interrupted swap left down, which every verb must still be able to find by its own name (a bare
+/// `ic sandbox update` that took `<slug>.previous` for the slug would boot it on new, empty volumes).
+fn slugs_of(names: &[String]) -> Vec<String> {
+    let mut slugs: Vec<String> = Vec::new();
+    for name in names.iter().filter(|name| !name.starts_with(TUNNEL_PREFIX)) {
+        let Some(slug) = name.strip_prefix(CONTAINER_PREFIX) else {
+            continue;
+        };
+        let slug = slug.strip_suffix(PARKED_SUFFIX).unwrap_or(slug);
+        if !slugs.iter().any(|seen| seen == slug) {
+            slugs.push(slug.to_string());
+        }
+    }
+    slugs
 }
 
 /// An explicit slug names the sandbox; only its absence falls back to detecting the single one — never
@@ -43,7 +84,7 @@ pub fn live_slugs() -> Option<Vec<String>> {
 /// update <slug>").
 pub fn resolve_slug(given: Option<String>, verb: &str) -> Result<String> {
     if let Some(slug) = given {
-        return Ok(slug);
+        return Ok(slug_named(slug));
     }
     let slugs = list_slugs();
     match slugs.len() {
@@ -54,6 +95,20 @@ pub fn resolve_slug(given: Option<String>, verb: &str) -> Result<String> {
             bail!("this machine runs more than one sandbox — name the one to touch, '{verb} <slug>':\n{listing}")
         }
     }
+}
+
+/// The slug a name given on the command line stands for. The sandbox's own messages (a daemon that cannot read its
+/// owner file, the platform's pages) name it by its 12-hex sandbox id, while a sandbox set up from the platform runs
+/// as `sandbox-<id>`: an id with no container of its own is taken for that one, when it exists.
+fn slug_named(given: String) -> String {
+    let exists = |slug: &str| {
+        docker::container_exists(&container_of(slug)) || docker::container_exists(&parked_of(slug))
+    };
+    let prefixed = format!("sandbox-{given}");
+    if !given.starts_with("sandbox-") && !exists(&given) && exists(&prefixed) {
+        return prefixed;
+    }
+    given
 }
 
 /// The sandbox's own network, before any container joins it: docker mints a missing named volume at run
@@ -103,6 +158,41 @@ pub fn print_recoverable() {
             "removed",
             entry.slug,
             entry.days_left(now)
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn names(list: &[&str]) -> Vec<String> {
+        list.iter().map(|name| name.to_string()).collect()
+    }
+
+    #[test]
+    fn a_parked_container_is_the_sandbox_it_was_parked_from_never_one_of_its_own() {
+        // On probation: the live container and the parked previous version are one sandbox.
+        assert_eq!(
+            slugs_of(&names(&[
+                "intentic-sandbox-abc",
+                "intentic-sandbox-abc.previous"
+            ])),
+            vec!["abc".to_string()]
+        );
+        // Interrupted: only the parked one is left, and it is still found by its own name.
+        assert_eq!(
+            slugs_of(&names(&["intentic-sandbox-abc.previous"])),
+            vec!["abc".to_string()]
+        );
+        // Tunnel sidecars are not sandboxes.
+        assert_eq!(
+            slugs_of(&names(&[
+                "intentic-sandbox-tunnel-abc",
+                "intentic-sandbox-abc",
+                "intentic-sandbox-def"
+            ])),
+            vec!["abc".to_string(), "def".to_string()]
         );
     }
 }

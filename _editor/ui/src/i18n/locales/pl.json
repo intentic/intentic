@@ -198,7 +198,7 @@
         "savingKeepsItRunning": "Zapisanie zostawia sandbox działający tak, jak jest. ic zachowuje nowy przydział i stosuje go przy następnym restarcie sandboxa przez ic: Uruchom ponownie tutaj, Uruchom, aktualizacja, cofnięcie lub przebudowa. Restart kontenera wykonany przez samego Dockera, po awarii lub ponownym uruchomieniu komputera, go nie stosuje."
     },
     "sandboxSandboxVerbs": {
-        "deletesSandboxEverythingIn": "To usuwa sandbox i wszystko, co w nim jest — jego pliki i jego historię — z tego urządzenia. Tego nie można cofnąć.",
+        "deletesSandboxEverythingIn": "To usuwa sandbox i wszystko, co w nim jest (jego pliki i jego historię), z tego urządzenia. Przez tydzień można go tam odzyskać: `ic sandbox restore` na tej maszynie go przywraca.",
         "sandboxRestartsOntoImage": "Sandbox restartuje na obrazie, na którym działał przed ostatnią aktualizacją. Jego pliki zostają.",
         "sandboxRestartsOntoNewest": "Sandbox restartuje na najnowszym obrazie i przez ten czas jest niedostępny — sekundy, jeśli aktualizacja jest już pobrana, kilka minut, jeśli nie. Jego pliki zostają."
     },

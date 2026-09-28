@@ -1,7 +1,11 @@
 import { computed } from "vue";
+import { rpcPrefix } from "../../../../lib/queryKeys";
+import { queryClient } from "../../../../lib/queryPersistence";
 import { rpcQuery } from "../../client/rpcQuery";
+import { sandboxRpc } from "../../client/sandboxRpc";
 import { useSandboxQuery } from "../../client/useSandboxQuery";
 import { useEnvironment } from "../../environment/useEnvironment";
+import { supportsRoute } from "../useDaemonRoutes";
 
 // Sandbox daemon's self-report (`system.info`): running `version`, and once checked, `latest` and `updateAvailable`. One shared
 // query feeds both the hub card and the chip's attention list. The update itself runs on the host (HostRecreate), never
@@ -45,6 +49,14 @@ export function useSandboxVersion() {
     // Container name a recreate would target, from /environment; HostRecreate turns it into a button or command.
     const slug = computed(() => envState.value?.container?.replace(/^intentic-sandbox-/, ``));
 
+    // The owner's "not this one" (`null` offers the newest release again). Read back through /info, which the daemon
+    // answers from the same record, so the card redraws from the daemon's word rather than a local guess.
+    const skipServed = computed(() => supportsRoute(`system.skipUpdate`));
+    const skipVersion = async (version: string | null): Promise<void> => {
+        await sandboxRpc.system.skipUpdate({ version });
+        await queryClient.invalidateQueries({ queryKey: rpcPrefix(`system.info`) });
+    };
+
     return {
         info,
         installed,
@@ -59,6 +71,8 @@ export function useSandboxVersion() {
         runtimeIssue,
         serverManaged,
         slug,
+        skipServed,
+        skipVersion,
         // A checkout-built base: the published release is not this sandbox's update, so the card offers the rebuild
         // that is.
         localImage,

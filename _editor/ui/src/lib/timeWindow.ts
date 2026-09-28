@@ -1,8 +1,9 @@
+import { formatClock, formatWhen } from "./format.js";
 import { t } from "../i18n/index.js";
 
 // Shared "how far back" vocabulary (1h/24h/7d/All): the millisecond cutoffs and the words to describe them. `all`
 // is the absence of a bound (-Infinity), not a very large one, so it still compares correctly against a
-// clock-skewed future timestamp.
+// clock-skewed future timestamp. At the end, its one "how far ahead" phrase.
 
 export type TimeWindow = `1h` | `24h` | `7d` | `all`;
 
@@ -29,3 +30,19 @@ export const timeWindowWords = (window: TimeWindow): string =>
 
 /** True when the entry is inside the window, the filter every feed applies, spelled once. */
 export const withinWindow = (at: number, window: TimeWindow, now: number): boolean => at >= sinceOf(window, now);
+
+// Midnight on the reader's own calendar: the day an instant falls on is the reader's, not UTC's.
+const dayStart = (at: number): number => new Date(at).setHours(0, 0, 0, 0);
+
+/**
+ * An instant a little way ahead, the way someone plans around it: "14:05 today", "14:05 tomorrow", and past tomorrow
+ * the kit's own weekday or date (`formatWhen`). Days are counted on the reader's calendar and rounded, so the hour a
+ * clock change adds or takes away never turns tomorrow into today.
+ */
+export const formatUntil = (at: number, now: number = Date.now()): string => {
+    const days = Math.round((dayStart(at) - dayStart(now)) / WINDOW_MS[`24h`]);
+    if (days === 0) {
+        return t(`ui.timeWindow.todayAt`, { time: formatClock(at) });
+    }
+    return days === 1 ? t(`ui.timeWindow.tomorrowAt`, { time: formatClock(at) }) : formatWhen(at, now);
+};

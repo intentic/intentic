@@ -1,8 +1,9 @@
 //
 // Needs jsdom: this file's import chain reaches the app's theme, which touches the document as it loads.
 import "@intentic/testing/dom";
+import SandboxRecovery from "../../features/sandbox/gates/SandboxRecovery.vue";
 import { RESTART_PATIENCE_MS, type RestartWork } from "../../features/sandbox/live/sandboxRestart";
-import { restartCard } from "./notificationSources";
+import { recoveryCard, restartCard } from "./notificationSources";
 
 // The lane's one rule about a sandbox going quiet: whether the silence was asked for decides both what is said and
 // how soon. Everything else in this file is wiring; this is the decision.
@@ -47,5 +48,24 @@ describe(`the card for a sandbox that has gone quiet`, () => {
     it(`claims nothing about a silence nobody here asked for`, () => {
         expect(restartCard(undefined, `stale`, 0)).toBeUndefined();
         expect(restartCard(undefined, `busy`, 45_000)).toBeUndefined();
+    });
+});
+
+// Past the silence's patience the lane stops describing a wait and hands over what can still be done without the
+// sandbox: a card wide enough for commands, carrying the panel the connecting gate draws too, and put away for this
+// outage alone when dismissed.
+describe(`the card for a sandbox that did not come back`, () => {
+    it(`names the sandbox, carries the recovery panel, and can be put away`, () => {
+        let dismissed = 0;
+        const card = recoveryCard(`acme-shop`, () => (dismissed += 1));
+        expect(card).toMatchObject({ kind: `condition`, tone: `warning`, title: `acme-shop hasn't come back`, wide: true });
+        expect(card.detail).toBe(`It has been out of reach for a few minutes.`);
+        expect(card.body).toBe(SandboxRecovery);
+        card.dismiss?.();
+        expect(dismissed).toBe(1);
+    });
+
+    it(`still says whose it is when the row has no name`, () => {
+        expect(recoveryCard(undefined, () => undefined).title).toBe(`Your sandbox hasn't come back`);
     });
 });

@@ -143,8 +143,40 @@ const sharedColumns = (db: DatabaseSync, table: string): string[] => {
     return inSchema("main").filter((name) => arrived.has(name));
 };
 
-export const openConversationsDb = (path: string): ConversationsDb => {
+export const openConversationsDb = (path: string): ConversationsDb => conversationsDbOver(openSqlite(path), path);
+
+// What SQLite's own quick check finds wrong with an open database, its first few findings on one line (without the
+// banner naming the schema, which is always `main` here); undefined when sound.
+export const damageIn = (db: DatabaseSync): string | undefined => {
+    const findings = (db.prepare("PRAGMA quick_check").all() as Record<string, unknown>[])
+        .flatMap((row) => String(Object.values(row)[0]).split("\n"))
+        .map((line) => line.trim())
+        .filter((line) => line !== "" && !line.startsWith("***"));
+    if (findings.length === 1 && findings[0] === "ok") {
+        return undefined;
+    }
+    return findings.length === 0 ? "the check did not say what" : findings.slice(0, 3).join("; ");
+};
+
+// Opens the file, runs the quick check over it first when `check` asks, and brings it to this build's schema; throws
+// when any of that fails, having closed what it opened, so the caller can set the file aside
+// (conversations-db-recovery.ts).
+export const openCheckedConversationsDb = (path: string, check: boolean): ConversationsDb => {
     const db = openSqlite(path);
+    try {
+        const damage = check ? damageIn(db) : undefined;
+        if (damage !== undefined) {
+            throw new Error(`the integrity check found damage: ${damage}`);
+        }
+        return conversationsDbOver(db, path);
+    } catch (error) {
+        db.close();
+        throw error;
+    }
+};
+
+// The database behind an open handle, brought to this build's schema first.
+const conversationsDbOver = (db: DatabaseSync, path: string): ConversationsDb => {
     migrateSqlite(db, SCHEMA, CONVERSATIONS_STEPS);
     const tx = <T>(work: () => T): T => immediateTransaction(db, work);
     const tables = db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name");

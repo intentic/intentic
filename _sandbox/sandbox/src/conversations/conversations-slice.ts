@@ -11,7 +11,9 @@ import type { Services } from "../composition.js";
 import { inLogContext } from "../logger.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { conversationUnits, type ConversationUnits } from "../store/conversation-units.js";
-import { type ConversationsDb, conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
+import type { ConversationsDb } from "../store/conversations-db.js";
+import { openConversationsDbAtBoot } from "../store/conversations-db-recovery.js";
+import { previousRunDied } from "../system/boot/boot-marker.js";
 import type { PerfTracker } from "../system/resources/perf.js";
 import type { WorkspaceScopeDeps } from "../workspace/layout/workspace-scope.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
@@ -80,9 +82,12 @@ export interface ConversationsParts {
 // Builds the conversations slice: one database for the registry and everything keyed by a conversation, so a fact
 // spanning its tables is one write.
 export const createConversationsSlice = ({ historyRoot, workspace, logger, perf, whole }: ConversationsDeps): ConversationsParts => {
-    const conversationsDb = openConversationsDb(conversationsDbPath(historyRoot));
+    // Opened so a missing or damaged file never keeps the daemon from coming up: set aside, salvaged or made again,
+    // logged and reported (store/conversations-db-recovery.ts). Checked up front only after a run that died unannounced.
+    const { db: conversationsDb, recovery } = openConversationsDbAtBoot({ historyRoot, check: previousRunDied(), logger });
     const agentsStore = sqliteAgentsStore(conversationsDb);
-    const units = conversationUnits(historyRoot, agentsStore.has);
+    // A database made again this boot does not name the directories on the volume, so the orphan sweep holds off.
+    const units = conversationUnits(historyRoot, { has: agentsStore.has, any: agentsStore.any, recreated: recovery !== undefined });
     // Shared by the turn path and worktree creation so both read one capability probe.
     const turnIsolation = createTurnIsolation({ root: workspace.root, historyRoot, logger });
     // Built before the registry, which derives a card's land standing through it rather than a stored verdict.

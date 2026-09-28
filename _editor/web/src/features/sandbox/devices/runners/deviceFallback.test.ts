@@ -12,6 +12,12 @@ describe(`the lifecycle verbs ic owns`, () => {
         expect(sandboxFallback(`remove`, `work`)).toBe(`ic sandbox remove work`);
     });
 
+    // Going back past the version before is ic's `--to`, naming the kept version the row's choice named.
+    test(`a rollback to an older kept version names it, and only a rollback does`, () => {
+        expect(sandboxFallback(`rollback`, `work`, undefined, { to: `1.314.0` })).toBe(`ic sandbox rollback work --to 1.314.0`);
+        expect(sandboxFallback(`update`, `work`, undefined, { to: `1.314.0` })).toBe(`ic sandbox update work`);
+    });
+
     // The agent passes `-y` because it has no terminal to answer with; a person has one, and removal is the verb
     // where that second question is the whole safety net.
     test(`removal keeps ic's own confirmation instead of skipping it`, () => {

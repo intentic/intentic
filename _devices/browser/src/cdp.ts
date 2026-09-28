@@ -1,4 +1,3 @@
-import { pollUntil } from "@intentic/base/async";
 import { BrowserError } from "./types.js";
 
 // Chrome DevTools Protocol subset for driving a page: HTTP handshake to find tabs, then one WebSocket per tab
@@ -24,19 +23,18 @@ export interface CdpSession {
 
 const endpoint = (port: number, path: string): string => `http://127.0.0.1:${port}${path}`;
 
-// Whether anything is listening as a DevTools endpoint; used both to check "already up" and to wait for start.
-export const probe = async (port: number): Promise<boolean> => {
+// The path of the browser-wide debugging target that answers on `port` (`/devtools/browser/<id>`, a new id every time a
+// browser starts), or undefined when nothing answers there as a DevTools endpoint.
+export const browserTargetPath = async (port: number): Promise<string | undefined> => {
     try {
         const response = await fetch(endpoint(port, "/json/version"), { signal: AbortSignal.timeout(1000) });
-        return response.ok;
+        // SAFETY: only read as a string below, and a body without the field reads as no endpoint.
+        const body = response.ok ? ((await response.json()) as { webSocketDebuggerUrl?: string }) : undefined;
+        const url = String(body?.webSocketDebuggerUrl);
+        return URL.canParse(url) ? new URL(url).pathname : undefined;
     } catch {
-        return false;
-    }
-};
-
-export const waitForPort = async (port: number, timeoutMs: number): Promise<void> => {
-    if (!(await pollUntil(() => probe(port), { intervalMs: 150, timeoutMs }))) {
-        throw new BrowserError(`The browser did not open its debugging port (${port}) in time.`);
+        // allow(silent-catch): a port that refuses, hangs or answers something else is simply not a debugging endpoint
+        return undefined;
     }
 };
 

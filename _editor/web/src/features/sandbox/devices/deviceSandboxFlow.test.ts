@@ -16,7 +16,7 @@ jest.mock(`../client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ system: 
 // exactly what this returns.
 jest.mock(`../client/sandboxClient`, () => ({ sandboxJson: jest.fn(), sandboxRequest: jest.fn(), sandboxError: jest.fn() }));
 
-const { DeviceFlowLostError, manageDeviceSandbox } = await import("./useDevices");
+const { DeviceFlowLostError, manageDeviceSandbox, swapServingSandbox } = await import("./useDevices");
 
 // The daemon's frames as the typed client hands them over, one per pull. `dies` plays a container deleted out from
 // under the connection carrying its own removal — Chromium's own words for a body that stops arriving — once the
@@ -130,4 +130,35 @@ it(`keeps the severing hint out of what the daemon is sent`, async () => {
 it(`fails outright when the daemon would not open the stream`, async () => {
     flow.mockRejectedValue(new SandboxHttpError(502, `Request failed (502).`));
     await expect(manageDeviceSandbox(`rog`, `work`, `remove`, { severing: true })).rejects.toThrow(`Request failed (502).`);
+});
+
+// Going back past the version before names the kept version; the machine's input is strict, so it rides only when set.
+it(`sends the kept version a rollback goes to, and nothing in its place when there is none`, async () => {
+    streams([{ kind: `result`, message: `Rolled "work" back to 1.314.0.` }]);
+    await manageDeviceSandbox(`rog`, `work`, `rollback`, { to: `1.314.0` });
+    expect(flow).toHaveBeenLastCalledWith({ id: `rog`, slug: `work`, op: `rollback`, to: `1.314.0` });
+    await manageDeviceSandbox(`rog`, `work`, `rollback`);
+    expect(flow).toHaveBeenLastCalledWith({ id: `rog`, slug: `work`, op: `rollback` });
+});
+
+// A swap aimed at the sandbox serving the page is relayed by the daemon it replaces, so the caller needs to know which
+// ending it got: the cutover (the stream dying, answered as undefined) or the device's own word (nothing was swapped
+// out from under the page), with a refusal still a failure.
+describe(`a swap of the sandbox serving this page`, () => {
+    it(`reads the stream dying at the cutover as the swap happening`, async () => {
+        streams([{ kind: `line`, text: `Starting intentic-sandbox-work on 1.316.0…` }], true);
+        await expect(swapServingSandbox(`rog`, `work`, `update`)).resolves.toBeUndefined();
+        streams([{ kind: `line`, text: `Starting intentic-sandbox-work on 1.316.0…` }]);
+        await expect(swapServingSandbox(`rog`, `work`, `update`)).resolves.toBeUndefined();
+    });
+
+    it(`quotes the device when it answered, since then nothing was swapped out from under the page`, async () => {
+        streams([{ kind: `result`, message: `"work" already runs 1.316.0.` }]);
+        await expect(swapServingSandbox(`rog`, `work`, `update`)).resolves.toBe(`"work" already runs 1.316.0.`);
+    });
+
+    it(`still throws the device's own refusal`, async () => {
+        streams([{ kind: `error`, message: `Refused: the update's pre-flight failed on automations.json.` }], true);
+        await expect(swapServingSandbox(`rog`, `work`, `update`)).rejects.toThrow(`Refused: the update's pre-flight failed on automations.json.`);
+    });
 });

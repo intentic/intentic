@@ -1,5 +1,6 @@
 import type { Logger } from "pino";
 import type { Config } from "../../env.config.js";
+import { version } from "../../version.js";
 import { reportToPlatform } from "../platform-client.js";
 
 // One-time boot registration: tells the platform this sandbox's public URL, then goes silent once acked (liveness after
@@ -52,7 +53,8 @@ export const createAnnouncer = (config: Config, logger: Logger): Announcer => {
     };
 
     const attempt = async (): Promise<void> => {
-        const answer = await reportToPlatform(config, "/sandbox/announce", { daemonUrl: config.sandbox.publicUrl });
+        // The version rides along so the platform knows what each sandbox runs without asking it.
+        const answer = await reportToPlatform(config, "/sandbox/announce", { daemonUrl: config.sandbox.publicUrl, version });
         if ("error" in answer) {
             logger.warn({ err: answer.error }, "platform registration failed");
             status = {

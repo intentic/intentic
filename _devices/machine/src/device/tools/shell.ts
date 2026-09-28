@@ -7,6 +7,7 @@ import { COMMAND_CLASS_LABELS, type CommandClass, type DeviceScopes, matchComman
 import { assertPath, assertScope, rootsOf, ScopeError } from "../policy.js";
 import { crossInterpreter, type Interpreter, POWERSHELL_FLAGS, targetOf } from "../../environments/crossing.js";
 import { thisSide } from "../../wsl.js";
+import { forgetCommand, recordCommand } from "./command-ledger.js";
 
 // Running a command on somebody's device. The shell isn't negotiable per call: Windows gets PowerShell,
 // everything else gets the login shell (so PATH, nvm/asdf/mise shims and aliases work), and `describe` reports
@@ -119,6 +120,15 @@ const stopTree = async (child: ChildProcess): Promise<void> => {
     signalGroup(pid, "SIGKILL");
 };
 
+// Every command running right now. The agent's supervisor no longer takes them down with it (KillMode=process, so an
+// ic mid-swap outlives a restart), so a stopping agent ends them itself: nobody is left to read their answer, and their
+// deadline dies with it. One the agent dies under is ended by the next agent instead (command-ledger.ts).
+const inFlight = new Set<ChildProcess>();
+
+export const stopRunningCommands = async (): Promise<void> => {
+    await Promise.all([...inFlight].map(stopTree));
+};
+
 // Resolves once the command has exited and its output is in, not when the last process holding its pipes lets go:
 // a server it started in the background would otherwise hold the call until the device call's own deadline.
 const execute = async (interpreter: Interpreter, timeout: number): Promise<CommandResult> => {
@@ -133,6 +143,10 @@ const execute = async (interpreter: Interpreter, timeout: number): Promise<Comma
         // two layers of quoting rules.
         windowsHide: true,
     });
+    inFlight.add(child);
+    const pid = child.pid;
+    // Written down before it can be crossed off: a command that ends at once must not leave its entry behind.
+    const recorded = pid === undefined || process.platform === "win32" ? Promise.resolve() : recordCommand(pid);
     const stdout = collector();
     const stderr = collector();
     child.stdout.on("data", stdout.write);
@@ -146,7 +160,13 @@ const execute = async (interpreter: Interpreter, timeout: number): Promise<Comma
     const exitCode = await new Promise<number | null>((resolve, reject) => {
         child.once("exit", (code) => resolve(code));
         child.once("error", reject);
-    }).finally(() => clearTimeout(deadline));
+    }).finally(() => {
+        clearTimeout(deadline);
+        inFlight.delete(child);
+        if (pid !== undefined) {
+            void recorded.then(async () => await forgetCommand(pid));
+        }
+    });
     await stopping;
     const drained = await Promise.race([closed, sleep(PIPE_GRACE_MS, { unref: true }).then(() => false)]);
     if (!drained) {

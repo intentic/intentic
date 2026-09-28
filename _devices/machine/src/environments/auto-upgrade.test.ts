@@ -1,4 +1,4 @@
-import { autoUpgradeDecision, type AutoUpgradeReading, retryAfterMs } from "./auto-upgrade.js";
+import { autoUpgradeDecision, type AutoUpgradeReading, retryAfterMs, upgradeHeldBy } from "./auto-upgrade.js";
 
 const HOUR = 60 * 60_000;
 const NOW = 1_800_000_000_000;
@@ -50,6 +50,30 @@ describe("autoUpgradeDecision", () => {
         expect(autoUpgradeDecision(reading({ published: "1.305.0", config: failed, now: NOW + 2 * HOUR }))).toEqual({ level: false, target: "1.305.0" });
         // A newer release is a new target: the old one's failures say nothing about it.
         expect(autoUpgradeDecision(reading({ published: "1.306.0", config: failed }))).toEqual({ level: false, target: "1.306.0" });
+    });
+});
+
+describe("a release this machine rolled back from", () => {
+    // The agent that crash-looped here was put back to the one before (agent-trial.ts); going onto it again would loop.
+    it("is never the target again, and a newer release is", () => {
+        const skipped = { skippedAgent: { version: "1.305.0", at: NOW - HOUR } };
+        expect(autoUpgradeDecision(reading({ published: "1.305.0", config: skipped }))).toBeUndefined();
+        expect(autoUpgradeDecision(reading({ children: ["1.305.0"], config: skipped }))).toBeUndefined();
+        expect(autoUpgradeDecision(reading({ published: "1.306.0", config: skipped }))).toEqual({ level: false, target: "1.306.0" });
+    });
+});
+
+describe("upgradeHeldBy", () => {
+    // Restarting the agent between parking a container and starting its replacement is what left sandboxes down.
+    it("names every sandbox mid-swap, from this process's own flows and from ic's records alike, once each", () => {
+        const records = [
+            { slug: "work", phase: "cutover", at: NOW - 60_000 },
+            { slug: "old", phase: "cutover", at: NOW - 2 * HOUR },
+            { slug: "proving", phase: "probation", at: NOW - 60_000 },
+        ];
+        expect(upgradeHeldBy(new Set(["work", "mine"]), records, NOW)).toEqual(["work", "mine"]);
+        expect(upgradeHeldBy(new Set(), records, NOW)).toEqual(["work"]);
+        expect(upgradeHeldBy(new Set(), [], NOW)).toEqual([]);
     });
 });
 

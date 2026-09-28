@@ -1,16 +1,18 @@
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { CLEAR_STATE_PLAN, type FakeFly, type FakeFlyCall, type FakeFlyExecAnswer, type FakeFlyMachine, installFakeFly } from "@intentic/testing/fly-fake";
 import type { FlyMachineConfig } from "@intentic/sandbox-run/fly";
-import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../../config.js";
-import { fakeHostedAppLock } from "../../../testing.js";
+import { fakeGateRecord, fakeHostedAppLock, healthAnswer, machineAnswers, NO_HEALTH } from "../../../testing.js";
+import { DAEMON_HEALTH_COMMAND, HEALTH_POLL_MS, JOURNAL_BUDGET_MS, READY_BUDGET_MS } from "./daemon-health.js";
 import {
     HostedImageKept,
     HostedMachineBusy,
     pinnedImage,
     probeConfig,
     readPlanAnswer,
+    ROLLBACK_WORDS,
     runningImageOf,
+    startOnTrial,
     STATE_PLANNER,
     STATE_PROBE_ENV,
     switchHostedImage,
@@ -96,20 +98,28 @@ describe(`reading the planner's answer`, () => {
         });
     });
 
-    // Only an explicit `ok: false` refuses: every other way to fail is "no plan", which the caller's fail-safe decides.
+    // No plan to be had is not the planner's fault: an image from before it, or a plan newer than this platform reads.
     it.each([
         [`an image from before the engine`, { exitCode: 1, stdout: ``, stderr: `Error: Cannot find module '${STATE_PLANNER}'` }, `the image predates the state-conversion engine`],
-        [`a planner that threw`, { exitCode: 1, stdout: ``, stderr: `    at x\nTypeError: boom\n` }, `the planner exited with status 1: TypeError: boom`],
-        [`an empty answer`, { exitCode: 0, stdout: `\n`, stderr: `` }, `the planner answered nothing`],
-        [`an answer that is not JSON`, { exitCode: 0, stdout: `hello`, stderr: `` }, `the planner's answer is not a plan: hello`],
         [
             `a format this does not read`,
             { exitCode: 0, stdout: JSON.stringify({ ...CLEAR_STATE_PLAN, plan: 2 }), stderr: `` },
             `the planner answered plan format 2, which this platform does not read`,
         ],
-        [`a plan that does not say`, { exitCode: 0, stdout: JSON.stringify({ plan: 1 }), stderr: `` }, `the planner's plan does not say whether it would succeed`],
     ])(`reads %s as no plan`, (_, answer, reason) => {
         expect(readPlanAnswer(answer)).toEqual({ kind: `unknown`, reason });
+    });
+
+    // A planner that ran and could not say the conversions would work has not said they would: broken, which refuses.
+    it.each([
+        [`a planner that threw`, { exitCode: 1, stdout: ``, stderr: `    at x\nTypeError: boom\n` }, `the planner exited with status 1: TypeError: boom`],
+        [`an empty answer`, { exitCode: 0, stdout: `\n`, stderr: `` }, `the planner answered nothing`],
+        [`an answer that is not JSON`, { exitCode: 0, stdout: `hello`, stderr: `` }, `the planner's answer is not a plan: hello`],
+        [`a plan that names no format`, { exitCode: 0, stdout: JSON.stringify({ ok: true }), stderr: `` }, `the planner's answer names no plan format`],
+        [`a plan that does not say`, { exitCode: 0, stdout: JSON.stringify({ plan: 1 }), stderr: `` }, `the planner's plan does not say whether it would succeed`],
+        [`a plan whose ok is not a boolean`, { exitCode: 0, stdout: JSON.stringify({ plan: 1, ok: `false` }), stderr: `` }, `the planner's plan does not say whether it would succeed`],
+    ])(`reads %s as a broken planner`, (_, answer, reason) => {
+        expect(readPlanAnswer(answer)).toEqual({ kind: `broken`, reason });
     });
 });
 
@@ -197,10 +207,10 @@ describe(`switching a machine's image under the state gate`, () => {
     // THE FAIL-SAFE: no plan is the update as it ran before the gate, never a machine left without one.
     it.each([
         [`an image from before the engine`, () => ({ exit_code: 1, stdout: ``, stderr: `Error: Cannot find module '${STATE_PLANNER}'` })],
-        [`an answer that is not a plan`, () => ({ exit_code: 0, stdout: `garbage`, stderr: `` })],
+        [`a plan in a format newer than this platform reads`, () => planLine({ plan: 2 })],
     ])(`switches as before the gate on %s`, async (_, answer) => {
         const fly = seeded(`stopped`);
-        fly.commands.answer = answer;
+        fly.commands.answer = machineAnswers({ plan: answer });
         await switchHostedImage(config, MACHINE, target(), { start: true, logger });
         expect(configOf(fly)).toEqual(target());
         expect(stateOf(fly)).toBe(`started`);
@@ -208,11 +218,36 @@ describe(`switching a machine's image under the state gate`, () => {
 
     it(`switches as before the gate when the probe itself cannot be asked`, async () => {
         const fly = seeded(`stopped`);
-        fly.commands.answer = () => {
-            throw new Error(`exec is down`);
-        };
+        fly.commands.answer = machineAnswers({
+            plan: () => {
+                throw new Error(`exec is down`);
+            },
+        });
         await switchHostedImage(config, MACHINE, target(), { start: true, logger });
         expect(configOf(fly)).toEqual(target());
+    });
+
+    /* A PLANNER THAT RAN AND BROKE REFUSES. It crashed, or answered what is not a plan: nothing has said the conversions
+     * would work, and an image whose planner is broken is not one to boot over this sandbox's files. */
+    it.each([
+        [
+            `crashed`,
+            () => ({ exit_code: 1, stdout: ``, stderr: `TypeError: boom\n` }),
+            `the new version could not check this sandbox's stored state (the planner exited with status 1: TypeError: boom), so the update was stopped before it began and the sandbox stays on the version it had`,
+        ],
+        [
+            `answered what is not a plan`,
+            () => ({ exit_code: 0, stdout: `garbage`, stderr: `` }),
+            `the new version could not check this sandbox's stored state (the planner's answer is not a plan: garbage), so the update was stopped before it began and the sandbox stays on the version it had`,
+        ],
+    ])(`keeps the machine's version when the planner %s, and says so`, async (_, answer, message) => {
+        const fly = seeded(`started`);
+        fly.commands.answer = machineAnswers({ plan: answer });
+        const kept = await switchHostedImage(config, MACHINE, target(), { start: true, logger }).catch((error: unknown) => error);
+        expect(kept).toBeInstanceOf(HostedImageKept);
+        expect(kept).toMatchObject({ reason: `refused`, running: true, message });
+        expect(configOf(fly)).toEqual(OLD_CONFIG);
+        expect(stateOf(fly)).toBe(`started`);
     });
 
     /* A NEW VERSION THAT WILL NOT BOOT IS PUT BACK. Its probe cannot start either (no plan, so the switch goes ahead as
@@ -292,18 +327,24 @@ describe(`the probe's own start`, () => {
         expect(configOf(fly)).toEqual(OLD_CONFIG);
     });
 
-    // A probe that never comes up has nothing to say: no plan, the fail-safe, never a refusal.
-    it(`counts a probe that never reads started as no plan, and switches as before the gate`, async () => {
+    /* A probe that never comes up has nothing to say: no plan, the fail-safe, never a refusal, so the switch goes ahead.
+     * Here the machine never reads started for the new version either, so its daemon never answers, and that is what
+     * puts it back: the fail-safe no longer ends at Fly's word that a start was accepted. */
+    it(`counts a probe that never reads started as no plan and switches, and the daemon's silence puts it back`, async () => {
         const fly = seeded(`stopped`);
         fly.fail({ startingReads: Number.POSITIVE_INFINITY });
         fly.commands.answer = () => REFUSED;
-        await switchHostedImage(config, MACHINE, target(), { start: true, logger });
+        const kept = await switchHostedImage(config, MACHINE, target(), { start: true, logger }).catch((error: unknown) => error);
         expect(fly.called(`POST`, `/machines/m1/exec`)).toEqual([]);
-        expect(configOf(fly)).toEqual(target());
         expect(warned).toHaveBeenCalledWith(
             expect.objectContaining({ reason: expect.stringMatching(/^the probe never came up/u) }),
             expect.stringContaining(`no state plan`),
         );
+        expect(kept).toMatchObject({
+            reason: `rolled-back`,
+            message: `the new version did not come up, so the sandbox was put back on the version it had: its daemon did not answer within 3 minutes of starting`,
+        });
+        expect(configOf(fly)).toEqual(OLD_CONFIG);
     });
 });
 
@@ -335,21 +376,286 @@ describe(`a rollback that fails`, () => {
     it(`logs the machine and both versions at error, and records it on the machine's row`, async () => {
         const fly = seeded(`started`);
         fly.fail({ machineWontStart: true });
-        const update = jest.fn().mockResolvedValue({});
-        // SAFETY: the gate writes only this one method of the client, and only here.
-        const prisma: PrismaClient = { hostedMachine: { update } } as never;
-        const kept = await switchHostedImage(config, MACHINE, target(), { start: true, logger, stranding: { prisma, hostedMachineId: `h1` } }).catch(
-            (error: unknown) => error,
-        );
+        const { record, prisma } = fakeGateRecord();
+        const kept = await switchHostedImage(config, MACHINE, target(), { start: true, logger, record }).catch((error: unknown) => error);
         expect(kept).toMatchObject({ reason: `rolled-back`, running: false });
         expect(errored).toHaveBeenCalledWith(
             expect.objectContaining({ app: MACHINE.appName, machineId: `m1`, previousImage: OLD, targetImage: NEW }),
             expect.stringContaining(`putting the previous version back failed`),
         );
-        expect(update).toHaveBeenCalledWith({
+        expect(prisma.hostedMachine.update).toHaveBeenCalledWith({
             where: { id: `h1` },
             data: { strandedAt: expect.any(Date), strandedDetail: expect.stringContaining(`moving ${OLD} to ${NEW}`) },
         });
+        // Stranded, not moved: the row keeps no way back to a version the machine is not on either.
+        expect(prisma.hostedMachine.update).toHaveBeenCalledTimes(1);
         expect(fly.machines.size).toBe(1);
+    });
+});
+
+/* THE NEW VERSION IS JUDGED BY ITS DAEMON, not by Fly's word that the machine started: its /health, asked inside the
+ * machine, has to read ready with the state journal committed. */
+describe(`waiting for the new version's daemon`, () => {
+    // Fly's own machine object, for a health answer that plays something happening to it.
+    const healthAsks = (fly: FakeFly): number => fly.called(`POST`, `/machines/m1/exec`).filter((call) => JSON.stringify(call.body).includes(DAEMON_HEALTH_COMMAND[0])).length;
+
+    it(`keeps the new version once its daemon reads ready with its journal committed, waiting through the conversion`, async () => {
+        const fly = seeded(`stopped`);
+        const answers = [
+            healthAnswer({ boot: { ready: false }, state: { journal: `none` } }),
+            healthAnswer({ boot: { ready: true }, state: { journal: `open` } }),
+            healthAnswer({ boot: { ready: true }, state: { journal: `none` } }),
+        ];
+        fly.commands.answer = machineAnswers({ health: (asked) => answers[asked] ?? NO_HEALTH });
+        await switchHostedImage(config, MACHINE, target(), { start: true, logger });
+        expect(healthAsks(fly)).toBe(3);
+        expect(configOf(fly)).toEqual(target());
+        expect(stateOf(fly)).toBe(`started`);
+        // The planner, then the daemon: the health ask comes after the start of the real config.
+        const lastStart = fly.calls.findLastIndex((call) => call.method === `POST` && call.path.endsWith(`/machines/m1/start`));
+        expect(fly.calls.findIndex((call, index) => index > lastStart && call.path.endsWith(`/exec`))).toBeGreaterThan(lastStart);
+    });
+
+    it.each([
+        [
+            `reports its journal failed`,
+            () => healthAnswer({ boot: { ready: true }, state: { journal: `failed` } }),
+            `it could not convert this sandbox's stored files, and put them back as they were`,
+        ],
+        [`never answers`, () => NO_HEALTH, `its daemon did not answer within 3 minutes of starting`],
+        [
+            `never commits its journal`,
+            () => healthAnswer({ boot: { ready: false }, state: { journal: `open` } }),
+            `it was still converting this sandbox's stored files after 10 minutes`,
+        ],
+    ])(`puts the previous version back, running, when the new daemon %s`, async (_, health, reason) => {
+        const fly = seeded(`started`);
+        fly.commands.answer = machineAnswers({ health });
+        const kept = await switchHostedImage(config, MACHINE, target(), { start: true, logger }).catch((error: unknown) => error);
+        expect(kept).toBeInstanceOf(HostedImageKept);
+        expect(kept).toMatchObject({
+            reason: `rolled-back`,
+            running: true,
+            message: `the new version did not come up, so the sandbox was put back on the version it had: ${reason}`,
+        });
+        expect(configOf(fly)).toEqual(OLD_CONFIG);
+        expect(stateOf(fly)).toBe(`started`);
+    });
+
+    // The budget is a clock and a count of looks both; which one is what an open journal changes.
+    it(`waits the journal's longer budget once the journal was seen open, and the ready budget otherwise`, async () => {
+        const converting = seeded(`stopped`);
+        converting.commands.answer = machineAnswers({ health: () => healthAnswer({ boot: { ready: false }, state: { journal: `open` } }) });
+        await expect(switchHostedImage(config, MACHINE, target(), { start: true, logger })).rejects.toBeInstanceOf(HostedImageKept);
+        expect(healthAsks(converting)).toBe(JOURNAL_BUDGET_MS / HEALTH_POLL_MS);
+        unstubAllGlobals();
+        const silent = seeded(`stopped`);
+        silent.commands.answer = machineAnswers({ health: () => NO_HEALTH });
+        await expect(switchHostedImage(config, MACHINE, target(), { start: true, logger })).rejects.toBeInstanceOf(HostedImageKept);
+        expect(healthAsks(silent)).toBe(READY_BUDGET_MS / HEALTH_POLL_MS);
+    });
+
+    /* A CRASH LOOP IS A CRASH. Fly restarts a machine whose process exits (on-failure, three times), so the machine can
+     * read started while its version keeps falling over: an exit after the start is the verdict. */
+    it.each([
+        [`exits`, { exitCode: 1 }, `it exited with status 1 as it started`],
+        [`runs out of memory`, { exitCode: 137, oomKilled: true }, `it ran out of memory as it started`],
+    ])(`puts the previous version back when the new version %s after starting, even while Fly restarts it`, async (_, exit, reason) => {
+        const fly = seeded(`stopped`);
+        fly.commands.answer = machineAnswers({
+            health: (asked, machine) => {
+                machine.exit = exit;
+                return asked === 0 ? NO_HEALTH : healthAnswer({ boot: { ready: true } });
+            },
+        });
+        await expect(switchHostedImage(config, MACHINE, target(), { start: true, logger })).rejects.toMatchObject({
+            reason: `rolled-back`,
+            message: `the new version did not come up, so the sandbox was put back on the version it had: ${reason}`,
+        });
+        expect(configOf(fly)).toEqual(OLD_CONFIG);
+    });
+
+    it(`puts the previous version back when the new version's machine stops with nothing to say why`, async () => {
+        const fly = seeded(`stopped`);
+        fly.commands.answer = machineAnswers({
+            health: (_asked, machine) => {
+                machine.state = `stopped`;
+                return NO_HEALTH;
+            },
+        });
+        await expect(switchHostedImage(config, MACHINE, target(), { start: true, logger })).rejects.toMatchObject({
+            reason: `rolled-back`,
+            message: `the new version did not come up, so the sandbox was put back on the version it had: its machine reads stopped before the new version was ready`,
+        });
+        expect(stateOf(fly)).toBe(`started`);
+    });
+
+    // The announce the new daemon makes as it boots is the platform's own proof it is reachable at all.
+    it(`puts the previous version back when the sandbox never checks in with the platform`, async () => {
+        const fly = seeded(`stopped`);
+        fly.commands.answer = machineAnswers({});
+        const { record } = fakeGateRecord({}, false);
+        await expect(switchHostedImage(config, MACHINE, target(), { start: true, logger, record })).rejects.toMatchObject({
+            reason: `rolled-back`,
+            message: `the new version did not come up, so the sandbox was put back on the version it had: it did not check in with the platform within 3 minutes of starting`,
+        });
+        expect(configOf(fly)).toEqual(OLD_CONFIG);
+    });
+});
+
+/* WHAT THE ROW KEEPS. A change that took leaves the version it replaced as the way back; one the gate could not judge is
+ * on trial, and its next start is judged; a version put back is what the row names again. */
+describe(`what the machine's row keeps`, () => {
+    it(`keeps the version a change replaced as the way back, and clears the digest a rollback skipped`, async () => {
+        const fly = seeded(`stopped`);
+        fly.commands.answer = machineAnswers({});
+        const { record, updates } = fakeGateRecord({ skippedDigest: `sha256:${`e`.repeat(64)}` });
+        await switchHostedImage(config, MACHINE, target(), { start: true, logger, record });
+        expect(updates).toEqual([{ previousImage: OLD, previousEnvironmentHash: null, unprovenImage: null, skippedDigest: null }]);
+    });
+
+    it(`writes the target's overlay facts beside the image, and keeps the recipe the replaced overlay carried`, async () => {
+        const overlay = `registry.fly.io/intentic-sbx-a@sha256:${`c`.repeat(64)}`;
+        const fly = seeded(`stopped`);
+        machineOf(fly).config = { ...OLD_CONFIG, image: overlay };
+        fly.commands.answer = machineAnswers({});
+        const { record, row } = fakeGateRecord({ image: overlay, environmentHash: `h-old`, baseImage: `ghcr.io/intentic/sandbox:stable` });
+        await switchHostedImage(config, MACHINE, target(), {
+            start: true,
+            logger,
+            record,
+            facts: { environmentHash: `h-new`, baseImage: `ghcr.io/intentic/sandbox:stable`, baseDigest: `sha256:${`d`.repeat(64)}` },
+        });
+        expect(row).toMatchObject({
+            image: NEW,
+            environmentHash: `h-new`,
+            baseDigest: `sha256:${`d`.repeat(64)}`,
+            previousImage: overlay,
+            previousEnvironmentHash: `h-old`,
+            unprovenImage: null,
+        });
+    });
+
+    it(`puts a change applied to a stopped machine on trial`, async () => {
+        const fly = seeded(`stopped`);
+        const { record, updates } = fakeGateRecord();
+        await switchHostedImage(config, MACHINE, target(), { start: false, logger, record });
+        expect(updates).toEqual([{ previousImage: OLD, previousEnvironmentHash: null, unprovenImage: NEW, skippedDigest: null }]);
+        expect(stateOf(fly)).toBe(`stopped`);
+        // Nothing was started, so nothing was asked of a daemon.
+        expect(fly.called(`POST`, `/machines/m1/exec`)).toHaveLength(1);
+    });
+
+    /* A STOP FROM OUTSIDE IS NOT A VERDICT. The daemon's own idle-stop, or an operator's stop, mid-wait: the version is
+     * neither kept as proven nor rolled back and restarted, but left on trial for whatever starts it next. */
+    it(`leaves the version on trial, stopped, when the machine is stopped while its daemon is waited for`, async () => {
+        const fly = seeded(`stopped`);
+        fly.commands.answer = machineAnswers({
+            health: (_asked, machine) => {
+                machine.state = `stopped`;
+                machine.exit = { exitCode: 0 };
+                return NO_HEALTH;
+            },
+        });
+        const { record, row } = fakeGateRecord();
+        await switchHostedImage(config, MACHINE, target(), { start: true, logger, record });
+        expect(configOf(fly)).toEqual(target());
+        expect(stateOf(fly)).toBe(`stopped`);
+        expect(row).toMatchObject({ previousImage: OLD, unprovenImage: NEW });
+        expect(warned).toHaveBeenCalledWith(expect.objectContaining({ image: NEW }), expect.stringContaining(`stays on trial`));
+    });
+});
+
+/* AN IMAGE ON TRIAL IS JUDGED BY ITS NEXT START: the wake after a rebuild applied while the machine slept, or a restart
+ * that keeps its digest. It goes back to the kept version when its daemon does not come up. */
+describe(`an image on trial`, () => {
+    const onTrial = (state: `started` | `stopped`) => {
+        const fly = seeded(state);
+        machineOf(fly).config = { ...target() };
+        return fly;
+    };
+
+    it(`is kept once a start sees its daemon come up, and the way back stays the version before it`, async () => {
+        const fly = onTrial(`stopped`);
+        fly.commands.answer = machineAnswers({});
+        const { record, updates } = fakeGateRecord({ unprovenImage: NEW, previousImage: OLD });
+        await startOnTrial(config, MACHINE, { record, logger });
+        expect(stateOf(fly)).toBe(`started`);
+        expect(updates).toEqual([{ previousImage: OLD, previousEnvironmentHash: null, unprovenImage: null }]);
+    });
+
+    it(`goes back to the kept version, composed around this machine's config, when its daemon does not come up`, async () => {
+        const fly = onTrial(`stopped`);
+        fly.commands.answer = machineAnswers({ health: () => healthAnswer({ state: { journal: `failed` } }) });
+        const { record, row } = fakeGateRecord({ image: NEW, environmentHash: `h-new`, unprovenImage: NEW, previousImage: OLD });
+        const compose = (image: string, environmentHash: string | null): FlyMachineConfig => ({ ...target(image), env: { COMPOSED: environmentHash ?? `stock` } });
+        const kept = await startOnTrial(config, MACHINE, { record, compose, logger }).catch((error: unknown) => error);
+        expect(kept).toMatchObject({ reason: `rolled-back`, running: true });
+        expect(configOf(fly)).toEqual(compose(OLD, null));
+        expect(stateOf(fly)).toBe(`started`);
+        // The row names the version it runs again, and keeps nothing before it.
+        expect(row).toMatchObject({ image: null, environmentHash: null, previousImage: null, unprovenImage: null });
+    });
+
+    it(`is judged when a change keeps its digest, and put back like any other`, async () => {
+        const fly = onTrial(`started`);
+        fly.commands.answer = machineAnswers({ health: () => NO_HEALTH });
+        const { record } = fakeGateRecord({ unprovenImage: NEW, previousImage: OLD });
+        await expect(switchHostedImage(config, MACHINE, target(), { start: true, logger, record })).rejects.toMatchObject({ reason: `rolled-back` });
+        // Its own digest converts nothing: no planner was asked.
+        expect(fly.called(`POST`, `/machines/m1/exec`).filter((call) => JSON.stringify(call.body).includes(STATE_PLANNER))).toEqual([]);
+        expect(machineOf(fly).config).toMatchObject({ image: OLD });
+    });
+
+    it(`is simply started once no longer on trial`, async () => {
+        const fly = onTrial(`stopped`);
+        const { record, updates } = fakeGateRecord({ previousImage: OLD });
+        await startOnTrial(config, MACHINE, { record, logger });
+        expect(stateOf(fly)).toBe(`started`);
+        expect(fly.called(`POST`, `/machines/m1/exec`)).toEqual([]);
+        expect(updates).toEqual([]);
+    });
+
+    it(`answers busy while another change holds the machine`, async () => {
+        const fly = seeded(`started`);
+        let trial: Promise<unknown> | undefined;
+        fly.commands.answer = () => {
+            trial ??= startOnTrial(config, MACHINE, { record: fakeGateRecord({ unprovenImage: NEW, previousImage: OLD }).record, logger }).catch(
+                (error: unknown) => error,
+            );
+            return REFUSED;
+        };
+        await expect(switchHostedImage(config, MACHINE, target(), { start: true, logger })).rejects.toBeInstanceOf(HostedImageKept);
+        expect(await trial).toBeInstanceOf(HostedMachineBusy);
+    });
+});
+
+/* THE OWNER'S ROLLBACK is a change like any other, told in its own words, and pressing it twice goes forward again. */
+describe(`going back`, () => {
+    it(`names a refused rollback as a rollback`, async () => {
+        seeded(`started`).commands.answer = () => REFUSED;
+        await expect(switchHostedImage(config, MACHINE, target(), { start: true, logger, words: ROLLBACK_WORDS })).rejects.toMatchObject({
+            reason: `refused`,
+            message: expect.stringMatching(/^intentic 9\.9\.9 cannot convert this sandbox's stored state, so the rollback was stopped before it began/u),
+        });
+    });
+
+    it(`keeps the version it left as the way back, and the digest to skip it was asked to`, async () => {
+        const fly = seeded(`stopped`);
+        machineOf(fly).config = { ...target() };
+        fly.commands.answer = machineAnswers({});
+        const { record, row } = fakeGateRecord({ previousImage: OLD });
+        await switchHostedImage(config, MACHINE, { ...target(), image: OLD }, { start: true, logger, record, skip: `sha256:${`b`.repeat(64)}`, words: ROLLBACK_WORDS });
+        expect(row).toMatchObject({ previousImage: NEW, skippedDigest: `sha256:${`b`.repeat(64)}`, unprovenImage: null });
+    });
+
+    // The image held was never seen healthy; going back to the one before it keeps the one on trial as the way forward.
+    it(`keeps the image on trial as the way forward when going back to the version before it`, async () => {
+        const fly = seeded(`stopped`);
+        machineOf(fly).config = { ...target() };
+        fly.commands.answer = machineAnswers({});
+        const { record, row } = fakeGateRecord({ unprovenImage: NEW, previousImage: OLD });
+        await switchHostedImage(config, MACHINE, { ...target(), image: OLD }, { start: true, logger, record, words: ROLLBACK_WORDS });
+        expect(row).toMatchObject({ previousImage: NEW, unprovenImage: null });
     });
 });

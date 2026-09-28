@@ -1,7 +1,8 @@
-import type { DeviceScopes } from "@intentic/sandbox-contract";
+import type { DeviceSandbox, DeviceScopes } from "@intentic/sandbox-contract";
 import { ScopeError } from "../policy.js";
 import {
     createSandbox,
+    findIn,
     fleetFrom,
     forgetShape,
     icConnectArgs,
@@ -62,10 +63,43 @@ test("the fleet is ic's own listing, read as the contract's rows with nothing ad
     expect(fleetFrom("[]")).toEqual([]);
 });
 
+// A newer ic says more about each sandbox (its version, a swap it left parked, its probation, what it can go back to),
+// and all of it arrives as the contract's own fields.
+test("a newer ic's row, parked mid-swap with its probation and rollback targets, is read whole", () => {
+    const parked: DeviceSandbox = {
+        slug: "work",
+        container: "intentic-sandbox-work",
+        running: false,
+        image: "ghcr.io/intentic/sandbox:stable",
+        version: "1.4.2",
+        parked: true,
+        probationUntil: 1_800_000_000_000,
+        lastUpdate: { result: "restored", verb: "update", at: 1_799_999_000_000, from: "1.4.1", to: "1.4.2", reason: "it never became ready" },
+        rollbackTargets: [{ image: "intentic-sandbox-rollback:work-1", version: "1.4.1" }],
+    };
+    expect(fleetFrom(JSON.stringify([parked]))).toEqual([parked]);
+});
+
+// What an ic newer than this agent may say in a way it cannot read yet costs that one field, not the whole listing: a
+// Devices view that went blank over a new outcome word would hide every sandbox on the machine.
+test("an optional field this agent cannot read is dropped from its row, and the row is kept", () => {
+    const row = { ...listed, lastUpdate: { result: "exploded", at: 1 }, rollbackTargets: "soon" };
+    expect(fleetFrom(JSON.stringify([row]))).toEqual([listed]);
+});
+
 // An ic from before `--json` prints a usage error or the text listing; either way it is not a fleet of nothing.
 test("an ic that does not answer the listing is named, never read as a machine with no sandboxes", () => {
     expect(() => fleetFrom("running   work\n")).toThrow(/did not answer `ic sandbox list --json`/);
     expect(() => fleetFrom(JSON.stringify([{ slug: "work" }]))).toThrow(/update ic/);
+});
+
+// A sandbox an interrupted swap left parked is down, and start, rollback and update are exactly what bring it back: it is
+// found by its own slug like any other, and a wrong slug's refusal says which ones are parked.
+test("a parked sandbox is found by its slug, and a miss names what is parked", () => {
+    const parked: DeviceSandbox = { slug: "work", container: "intentic-sandbox-work", running: false, image: "img:1", parked: true };
+    expect(findIn([parked], "work")).toEqual(parked);
+    expect(() => findIn([parked, listed], "other")).toThrow('No sandbox "other" on this device. It has: work (parked mid-swap), work.');
+    expect(() => findIn([], "other")).toThrow('No sandbox "other" on this device. It runs none.');
 });
 
 test("listing is refused only when NEITHER grant covers it, naming the manage switch", async () => {
@@ -91,6 +125,15 @@ test("each swap builds the argv ic actually takes", () => {
     // A hash tagging along changes nothing: prepare re-applies whatever the owner has approved, and taking a
     // digest here would silently turn it into a rebuild.
     expect(icSwapArgs("prepare", "work", "deadbeef")).toEqual(["sandbox", "prepare", "work"]);
+});
+
+// A rollback may name which of the versions kept on the machine it goes back to; nothing else takes a `to`, and one that
+// arrived on another swap is refused rather than dropped, since the swap without it is a different swap.
+test("a rollback carries its `to` to ic, and no other swap takes one", () => {
+    expect(icSwapArgs("rollback", "work", undefined, "1.4.1")).toEqual(["sandbox", "rollback", "work", "--to", "1.4.1"]);
+    expect(icSwapArgs("rollback", "work", undefined, undefined)).toEqual(["sandbox", "rollback", "work"]);
+    expect(() => icSwapArgs("update", "work", undefined, "1.4.1")).toThrow('"to" names a version to go back to, which only a rollback takes, not update.');
+    expect(() => icSwapArgs("rebuild", "work", "deadbeef", "1.4.1")).toThrow(/only a rollback takes, not rebuild/);
 });
 
 // ic sandbox connect derives the sandbox from the claim; a slug alongside it would pick a second one.
@@ -267,6 +310,17 @@ test("advertises an optional op only when the ic under the agent takes the contr
     // An ic from before `--set` has the verb but not the shape as the contract spells it.
     expect(featuresFrom("Usage: ic sandbox shape [OPTIONS] <SLUG>\n      --when <WHEN>")).toEqual([]);
     expect(featuresFrom(undefined)).toEqual([]);
+});
+
+// `rollback-to` is advertised only when the ic under the agent can go back to a chosen version: the daemon sends a
+// rollback's `to` to no other agent, since an older one refuses the field.
+test("advertises rollback-to only when ic's rollback takes --to, spelled whole", () => {
+    const rollback = "Usage: ic sandbox rollback [OPTIONS] [SLUG]\n      --to <VERSION>\n      --skip-preflight";
+    expect(featuresFrom(undefined, rollback)).toEqual(["rollback-to"]);
+    expect(featuresFrom("      --set <FIELD=JSON>", rollback)).toEqual(["reshape-later", "set-shape", "rollback-to"]);
+    // An ic from before `--to`, and flags that merely begin with the same letters.
+    expect(featuresFrom(undefined, "Usage: ic sandbox rollback [OPTIONS] [SLUG]\n      --skip-preflight")).toEqual([]);
+    expect(featuresFrom(undefined, "      --token <TOKEN>\n      --to-image <IMAGE>")).toEqual([]);
 });
 
 // A log is a stream of chunks whose boundaries fall anywhere: a line split across two chunks is one line, and a blank

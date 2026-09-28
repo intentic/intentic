@@ -16,7 +16,7 @@ flowchart LR
 - **Trust follows the window label.** Only `launcher` and `confirm-close` hold capabilities (`capabilities/`). The
   workspace and floating windows show remote content, get no IPC, and reach the app only by navigating to an
   `intentic://` link. `parse_link` believes a link fully only when its `Source` is one of the app's own windows.
-- **The machine work is shell scripts.** `scripts.rs` runs the same `connect`, `sync`, `recreate` and `cleanup`
+- **The machine work is shell scripts.** `scripts.rs` runs the same `connect`, `sync` and `recreate`
   scripts users can paste, resolved by basename from the bundle's `scripts/` resource directory, and streams each
   line to the launcher as a `desktop://run` event while writing a transcript. Docker is reached through its CLI,
   with no Docker library in the crate.

@@ -5,7 +5,7 @@ import pino from "pino";
 import { z } from "zod";
 import { rename, retype } from "./conversions.js";
 import { conversionDigest, defineDocument } from "./documents.js";
-import { clearNewestRun } from "../newest-run.js";
+import { clearNewestRun, newestRunDocument } from "../newest-run.js";
 import { commitState, convergeState, planState, resetStateStatus, type StateRoots, stateStatus } from "./state-convergence.js";
 import { GRACE_MS, readJournal, writeJournal } from "./state-journal.js";
 import type { StructuralStep } from "./state-steps.js";
@@ -110,14 +110,105 @@ test("a rolled-back build puts back what a newer one changed and never committed
     await convergeState({ roots, version: "1.401.0", logger, mayWrite: true, documents: [], steps: [renameIn("colour", "evolution/settings.json", "colour", "theme")] });
     expect(await json(path)).toEqual({ theme: "dark" });
     clearNewestRun();
+    resetStateStatus();
 
     // The older build knows no such step.
     const outcome = await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents: [], steps: [] });
     expect(outcome.restored).toBe(1);
     expect(await json(path)).toEqual({ colour: "dark" });
-    expect(outcome.plan?.downgrade).toBe(true);
+    // The newer build never booted all the way, so it never stamped itself the newest run: this is no downgrade.
+    expect(outcome.plan?.downgrade).toBe(false);
     expect((await readJournal(roots.history)).episodes).toEqual([]);
     expect(await readdir(join(roots.workspace, ".intentic/secrets/converting"))).toEqual([]);
+});
+
+test("a build stamps itself the newest run when it commits, not when it converges, so only one that booted makes a downgrade", async () => {
+    const roots = await volumes();
+    const stamp = join(roots.workspace, newestRunDocument.path);
+    await put(join(roots.workspace, "evolution/settings.json"), { colour: "dark" });
+    const steps = [renameIn("colour", "evolution/settings.json", "colour", "theme")];
+    await convergeState({ roots, version: "1.401.0", logger, mayWrite: true, documents: [], steps });
+    await expect(readFile(stamp, "utf8")).rejects.toThrow("ENOENT");
+
+    await commitState(roots);
+    expect(await json(stamp)).toEqual({ version: "1.401.0", engine: 1, digest: conversionDigest([], steps) });
+    clearNewestRun();
+    resetStateStatus();
+
+    const rolledBack = await convergeState({ roots, version: "1.400.0", logger, mayWrite: true, documents: [], steps: [] });
+    expect(rolledBack.plan?.downgrade).toBe(true);
+});
+
+// A structural step whose effect throws after its writes landed: the shape of a conversion that fails partway.
+const failingAfterWrite = (relative: string): StructuralStep => ({
+    id: "evolution-failing",
+    describe: "rewrites a file, then fails",
+    plan: async ({ roots, read }) => {
+        const path = join(roots.workspace, relative);
+        if ((await read(path)) === undefined) {
+            return undefined;
+        }
+        return {
+            changes: ["rewrites it"],
+            writes: new Map([[path, `${JSON.stringify({ rewritten: true })}\n`]]),
+            effect: () => Promise.reject(new Error("the effect broke")),
+        };
+    },
+});
+
+test("a step that fails partway is put back at once: no open episode stays, the journal reads failed, and nothing commits", async () => {
+    const roots = await volumes();
+    const path = join(roots.workspace, "evolution/settings.json");
+    await put(path, { colour: "dark" });
+
+    await expect(convergeState({ roots, version: "1.401.0", logger, mayWrite: true, documents: [], steps: [failingAfterWrite("evolution/settings.json")] })).rejects.toThrow(
+        "the effect broke",
+    );
+
+    expect(await json(path)).toEqual({ colour: "dark" });
+    expect((await readJournal(roots.history)).episodes).toEqual([]);
+    expect(await readdir(join(roots.workspace, ".intentic/secrets/converting"))).toEqual([]);
+    expect(stateStatus()).toEqual({ journal: "failed", engine: 1 });
+    // The rest of the boot changes nothing of that: the status stays failed, and no stamp names the build newest.
+    expect(await commitState(roots)).toBeUndefined();
+    expect(stateStatus().journal).toBe("failed");
+    await expect(readFile(join(roots.workspace, newestRunDocument.path), "utf8")).rejects.toThrow("ENOENT");
+});
+
+test("the drill's fail-conversion fault opens an episode even with nothing to convert, then puts it back", async () => {
+    const roots = await volumes();
+    const path = join(roots.workspace, "evolution/settings.json");
+    await put(path, { colour: "dark" });
+    const steps = [renameIn("colour", "evolution/settings.json", "colour", "theme")];
+
+    await expect(convergeState({ roots, version: "1.401.0", logger, mayWrite: true, documents: [], steps, failConversion: true })).rejects.toThrow(
+        "INTENTIC_FAULT=fail-conversion",
+    );
+    expect(await json(path)).toEqual({ colour: "dark" });
+    expect((await readJournal(roots.history)).episodes).toEqual([]);
+    expect(stateStatus().journal).toBe("failed");
+
+    // With nothing to convert the episode is empty, and it is still opened and put back.
+    resetStateStatus();
+    await put(path, { theme: "dark" });
+    await expect(convergeState({ roots, version: "1.401.0", logger, mayWrite: true, documents: [], steps, failConversion: true })).rejects.toThrow(
+        "INTENTIC_FAULT=fail-conversion",
+    );
+    expect((await readJournal(roots.history)).episodes).toEqual([]);
+    expect(stateStatus().journal).toBe("failed");
+});
+
+test("a daemon that did not converge the files commits nothing, whatever episode it finds open", async () => {
+    const roots = await volumes();
+    await put(join(roots.workspace, "evolution/settings.json"), { colour: "dark" });
+    // The claim holder converts and has not booted all the way yet.
+    await convergeState({ roots, version: "1.401.0", logger, mayWrite: true, documents: [], steps: [renameIn("colour", "evolution/settings.json", "colour", "theme")] });
+    resetStateStatus();
+
+    // A guest sharing the volumes reaches the end of its own boot first.
+    await convergeState({ roots, version: "1.401.0", logger, mayWrite: false, documents: [], steps: [] });
+    expect(await commitState(roots)).toBeUndefined();
+    expect((await readJournal(roots.history)).episodes.map(({ state }) => state)).toEqual(["open"]);
 });
 
 test("a newer release that retired a conversion's document is an update, not a downgrade", async () => {

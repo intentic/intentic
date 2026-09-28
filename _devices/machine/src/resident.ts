@@ -5,15 +5,21 @@ import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import { autostart, claimPidFile, holdPidFile, type Log, type PidRecord, releasePidFile, stopProcess } from "@intentic/local-agent";
 import type { PeerLink } from "@intentic/sandbox-contract/peer-dial";
+import { beginTrial, type Trial } from "./agent-trial.js";
 import { MACHINE_AUTOSTART } from "./autostart.js";
 import { baseDir, runPidPath } from "./config.js";
+import { startAutoBackup } from "./device/auto-backup.js";
 import { startAutoPrepare } from "./device/auto-prepare.js";
 import { type HostLink, LINK_STAMP_MS, type LinkReading, linkStatePath, readLinks, stampLinkStates } from "./device/config.js";
 import { connect } from "./device/connection.js";
+import { startProbationWatch } from "./device/probation-watch.js";
+import { takeOverCommandLedger } from "./device/tools/command-ledger.js";
+import { stopRunningCommands } from "./device/tools/shell.js";
 import { type Children, superviseChildren } from "./environments/children.js";
 import { type AutoUpgrade, startAutoUpgrade } from "./environments/auto-upgrade.js";
 import { heldDistros, SUPERVISOR_ENV, supervisedByWindows, updateMachineConfig, withoutChild } from "./environments/machine.js";
 import { UPGRADE_ENV } from "./environments/machine-upgrade.js";
+import { retireLegacyAutostart } from "./legacy-autostart.js";
 import { sweepBin } from "./release.js";
 import { assertSupervisor, machineLauncher, readResident, retireResident, startResident } from "./supervision.js";
 import { mirrorHeartbeatPath, readState } from "./sync/config.js";
@@ -33,6 +39,10 @@ export const signalExitCode = (signal: NodeJS.Signals): number => 128 + (constan
 
 // Another agent took over this environment's pidfile; non-zero so a supervisor may try again and find it holding.
 export const EXIT_REPLACED = 75;
+
+// This release kept crashing and the agent before it was put back (agent-trial.ts); non-zero so the supervisor starts
+// the binary now in its place.
+export const EXIT_ROLLED_BACK = 76;
 
 // How often config, links, the lease and the distros held from here are re-read.
 const TICK_MS = LINK_STAMP_MS;
@@ -166,21 +176,33 @@ interface Runtime {
     readonly finish: (code: number) => Promise<never>;
 }
 
-// The machine-wide duties (the one Docker engine's next images, the PC's own upgrades) are the root's alone.
-const runtimeOf = (supervised: boolean, log: Log): Runtime => {
+// The machine-wide duties (the one Docker engine's next images, its daily backups and tidy, the sweep over every
+// sandbox, the PC's own upgrades) are the root's alone: a WSL distro shares the Windows side's engine. The probation
+// watch of the swaps this environment's own records name runs everywhere, since only this environment's ic holds them.
+const runtimeOf = (supervised: boolean, trial: Trial, log: Log): Runtime => {
     const connections = new Map<string, Connection>();
     const children = WINDOWS_SIDE
         ? superviseChildren(log, async (distro) => void (await updateMachineConfig((config) => withoutChild(config, distro))))
         : undefined;
-    const autoPrepare = supervised ? undefined : startAutoPrepare(log);
+    const rounds = [
+        startProbationWatch(log, { sweeps: !supervised }),
+        ...(supervised ? [] : [startAutoPrepare(log), startAutoBackup(log)]),
+    ];
     const autoUpgrade = supervised ? undefined : startAutoUpgrade(log);
+    const unproven = trial.prove(log);
     const finish = async (code: number): Promise<never> => {
-        autoPrepare?.stop();
+        for (const round of rounds) {
+            round.stop();
+        }
         autoUpgrade?.stop();
+        unproven();
         children?.stopAll();
         for (const held of connections.values()) {
             held.peer.stop();
         }
+        // Its supervisor no longer takes them down with it (KillMode=process): this agent's own commands end here.
+        await stopRunningCommands();
+        await trial.clean();
         await release();
         process.exit(code);
     };
@@ -237,6 +259,8 @@ const begin = async (supervised: boolean, log: Log): Promise<{ readonly served: 
     const lease: PidRecord = { ...record, supervisor: await assertSupervisor(supervised, log) };
     await holdPidFile(runPidPath, baseDir, lease);
     await sweepBin();
+    await takeOverCommandLedger(log);
+    await retireLegacyAutostart(log);
     return { served, lease };
 };
 
@@ -253,11 +277,19 @@ export const runForeground = async (log: Log): Promise<void> => {
     const supervised = supervisedByWindows();
     delete process.env[SUPERVISOR_ENV];
     delete process.env[UPGRADE_ENV];
-    const started = await begin(supervised, log);
-    if (started === undefined) {
+    // First, before anything is claimed: this start counts toward the new release's trial, and a third crash in a row
+    // puts the previous agent back instead of running this one.
+    const trial = await beginTrial(log);
+    if (trial === "restored") {
+        process.exitCode = EXIT_ROLLED_BACK;
         return;
     }
-    const runtime = runtimeOf(supervised, log);
+    const started = await begin(supervised, log);
+    if (started === undefined) {
+        await trial.clean();
+        return;
+    }
+    const runtime = runtimeOf(supervised, trial, log);
     log(`serving ${serving(started.served)}`);
     for (;;) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- the tick loop itself, serial by definition

@@ -11,9 +11,12 @@ flowchart LR
     page --> webext["webext<br/>same vocabulary"]
 ```
 
-- Runs on the user's device inside [`intentic-machine`](../machine). It never touches the user's own profile:
-  `ensureBrowser` reuses whatever answers on `DEFAULT_PORT`, otherwise it starts the OS default Chromium-family
-  browser with `--remote-debugging-port` and a profile of its own under `~/.intentic/browser/<browser>`. Edge
+- Runs on the user's device inside [`intentic-machine`](../machine). It never touches the user's own profile, and
+  never drives a browser it did not start: `ensureBrowser` starts the OS default Chromium-family browser with a
+  profile of its own under `~/.intentic/browser/<browser>` and `--remote-debugging-port=0`, so the browser picks a free
+  port and writes it into that profile's `DevToolsActivePort` with the path of its own debugging target, new every
+  start. A browser is reused only when the endpoint on that port answers with that very target (`ownEndpoint`);
+  whatever else answers on a debugging port, 9222 included, may be somebody's own Chrome and is never adopted. Edge
   ranks below any Chromium browser someone installed by choice (`pickBrowser`).
 - A snapshot (`SNAPSHOT_SCRIPT`) lists visible interactive elements as refs `e0`, `e1`, … A ref lives until the next
   snapshot, and a stale one fails with a message instead of clicking whatever sits there now.
@@ -25,7 +28,7 @@ flowchart LR
 ## Key files
 
 - [src/index.ts](src/index.ts) — `browser()`: one CDP session per object, and every page action.
-- [src/launch.ts](src/launch.ts) — which binary to start, its flags and its profile directory.
+- [src/launch.ts](src/launch.ts) — which binary to start, its flags, its profile directory and how its endpoint is recognised.
 - [src/snapshot.ts](src/snapshot.ts) — the in-page script that numbers the elements.
 - [src/page.ts](src/page.ts) — `PageState`, `renderPage` and ref parsing, shared with the extension.
 - [src/cdp.ts](src/cdp.ts) — the DevTools protocol subset: find tabs, attach, send.

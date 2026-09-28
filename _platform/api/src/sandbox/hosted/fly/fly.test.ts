@@ -12,6 +12,7 @@ import {
     listVolumeSnapshots,
     FlyError,
     getMachine,
+    getMachineDetail,
     isFlyCapacity,
     isFlyGone,
     listAppNames,
@@ -170,6 +171,34 @@ describe(`fly`, () => {
             // A timeout carries no status text and must never be read as a capacity refusal.
             expect(isFlyCapacity(new FlyError(`Fly did not answer POST /machines within 30s`))).toBe(false);
         });
+    });
+});
+
+/* HOW A MACHINE LAST ENDED, off its newest exit event: when (Fly's own stamp, compared only with an earlier reading), how,
+ * and whether someone asked for it. The state gate tells a crash from a stop it did not make by these. */
+describe(`a machine's detail`, () => {
+    it(`reads the newest exit: its stamp, its code, and whether the stop was asked for`, async () => {
+        stubFetch([
+            {
+                match: (method, url) => method === `GET` && url.endsWith(`/machines/m1`),
+                respond: () =>
+                    json({
+                        id: `m1`,
+                        state: `stopped`,
+                        events: [
+                            { type: `exit`, timestamp: 5, request: { exit_event: { exit_code: 143, requested_stop: true } } },
+                            { type: `start`, timestamp: 9 },
+                            { type: `exit`, timestamp: 7, request: { exit_event: { exit_code: 1, oom_killed: false } } },
+                        ],
+                    }),
+            },
+        ]);
+        expect(await getMachineDetail(`tok`, `app`, `m1`)).toMatchObject({ state: `stopped`, exitedAt: 7, exitCode: 1, requestedStop: false, oomKilled: false });
+    });
+
+    it(`reads a machine that never exited as having no exit`, async () => {
+        stubFetch([{ match: (method, url) => method === `GET` && url.endsWith(`/machines/m1`), respond: () => json({ id: `m1`, state: `started` }) }]);
+        expect(await getMachineDetail(`tok`, `app`, `m1`)).toMatchObject({ exitedAt: undefined, exitCode: undefined, requestedStop: false });
     });
 });
 

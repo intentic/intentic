@@ -285,3 +285,15 @@ test(`names the published release once for the machine, with what it holds when 
         `Agent 1.2.0 has been published.`,
     ]);
 });
+
+// ── an agent current in itself, driving an ic that is not ─────────────────────
+
+// The agent reports why the `ic` under it is older than it (a fetch that failed), which is what leaves it without the
+// verbs its release has. That is said in the agent's own sentence, as the errand it is, rather than as "update the
+// agent": the agent is current, and updating it again fixes nothing.
+test(`says the agent's own sentence about a stale ic as a warning, and nothing when ic is current`, () => {
+    const stale = `ic is out of date: the installed ic is 1.310.0, this agent is 1.316.0, and fetching ic 1.316.0 failed (HTTP 503). Sandbox logs and saving a shape for the next restart need the newer ic; it is fetched again on the next sandbox action.`;
+    const notes = panelOf({ facts: { ...facts(undefined), icOutOfDate: stale } }, {}, `1.2.0`)?.notes ?? [];
+    expect(notes).toEqual([{ text: stale, tone: `warning` }]);
+    expect(panelOf({ facts: facts(undefined) }, {}, `1.2.0`)?.notes).toEqual([]);
+});

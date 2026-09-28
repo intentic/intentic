@@ -1,6 +1,7 @@
 // What one of the user's own machines is running.
 import { z } from "zod";
 import { parseHostConnection, type DeviceFacts, DeviceFactsSchema, MachineIdSchema, userDistrosOf, WslEnvironmentSchema } from "./hosts.js";
+import { RollbackTargetSchema, UpdateOutcomeSchema } from "./updates.js";
 import { DEV_VERSION } from "../state/versions.js";
 // Desktop-sync report shape shared by the agent, daemon and browser, produced only by the agent's own `deviceReport`.
 // The agent never reports `sandboxes`; the docker half is filled in by whoever reads the report, scoped to the reader's
@@ -76,6 +77,19 @@ export const DeviceSandboxSchema = z.object({
     resources: SandboxResourcesSchema.optional(),
     // The update `ic sandbox prepare` built and left waiting for this sandbox; absent when nothing is staged.
     staged: z.object({ image: z.string(), version: z.string().optional(), channel: z.string().optional() }).optional(),
+    // Everything below is read off an `ic` new enough to know it; an older ic's listing simply lacks it.
+    // What the running image says it is.
+    version: z.string().optional(),
+    // An interrupted swap left the old container set aside with no replacement: the sandbox is down, and `start` (or
+    // any swap) puts it back. `running` is false while this is true.
+    parked: z.boolean().optional(),
+    // A swap has just happened and the previous version is still parked and ready: until this moment the host watches
+    // the new one and goes back by itself if it keeps crashing, never becomes ready, or loses its tunnel.
+    probationUntil: z.number().optional(),
+    // What the host last did about this sandbox's version (the same record the sandbox reads as `lastUpdate`).
+    lastUpdate: UpdateOutcomeSchema.optional(),
+    // Newest first: what `rollback` would return to, then the older versions kept on this machine for `rollback --to`.
+    rollbackTargets: z.array(RollbackTargetSchema).optional(),
 });
 export type DeviceSandbox = z.infer<typeof DeviceSandboxSchema>;
 // One operation on one sandbox, streamed as lines ending in a `result` or `error` frame. `prepare` builds the pending
@@ -118,6 +132,9 @@ export const DeviceSandboxFlowSchema = z.strictObject({
     slug: z.string().min(1),
     // Approved overlay's sha256, required only by `rebuild`; only content matching it is ever built.
     hash: z.string().optional(),
+    // `rollback` only: a version or pinned image from the sandbox's `rollbackTargets` to go back to instead of the
+    // previous one. Sent only to an agent that advertises `rollback-to`: an older one refuses the field.
+    to: z.string().min(1).optional(),
     // `set-shape` only, both required by it: the whole shape, and when it takes effect.
     // Strict too, unlike the same shape read off a report (where a newer ic's extra field must not fail an older
     // reader): an order carrying a field this agent does not know is refused rather than carried out without it.

@@ -12,17 +12,23 @@
 #   1. the GitHub Release's make_latest flag  (releases/latest/download/* and the update check)
 #   2. ghcr.io/intentic/sandbox:stable + :core-stable + dind-host:stable  (what `ic sandbox update` pulls)
 #   3. the git `stable` tag                   (the browsable stable source pointer)
+# and then tells the sandboxes still running the release it left:
+#   4. that release is WITHDRAWN on GitHub: a pre-release, so nothing offers it again, whose notes open with the
+#      line `Withdrawn: <reason>`. The sandbox daemon reads that line off the release body to tell a sandbox
+#      running the version, and to offer it the way back.
 #
 # The bad release is left published — its tag, its notes and its assets stay reachable by version, and a
 # sandbox pinned to that exact version keeps working. Rolling back only changes what UNPINNED users are
-# served. Mark it a pre-release on GitHub too if it should never be offered again.
+# served, and what the sandboxes running the bad version are told.
 #
 # The version must be one this repo actually released (its images are looked up by tag and the run fails loudly
-# if they are not there). Rolling FORWARD is not this script's job — cut a release.
-#   GITHUB_TOKEN=… bash _tools/scripts/release/rollback-stable.sh 1.200.0
+# if they are not there). Rolling FORWARD is not this script's job — cut a release. The reason is the second
+# argument, or ROLLBACK_REASON (the Rollback workflow's field); without either it is "rolled back to <version>".
+#   GITHUB_TOKEN=… bash _tools/scripts/release/rollback-stable.sh 1.200.0 ["the update loses the tunnel on arm64"]
 set -euo pipefail
-VERSION="${1:?usage: rollback-stable.sh <version>   (e.g. 1.200.0 — the version to put stable back onto)}"
+VERSION="${1:?usage: rollback-stable.sh <version> [reason]   (e.g. 1.200.0 — the version to put stable back onto)}"
 VERSION="${VERSION#v}"
+REASON="${2:-${ROLLBACK_REASON:-}}"
 . "$(dirname "$0")/../lib/repo-root.sh"
 . "$(dirname "$0")/../lib/github.sh"
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -41,10 +47,21 @@ if [ -z "$release_id" ]; then
   exit 1
 fi
 
+# The release being LEFT, read before anything moves: step 1 takes the flag off it, and step 4 withdraws it.
 current="$(gh_latest_tag "$REPO")"
 if [ "$TAG" = "$current" ]; then
   echo "stable is already ${TAG} — nothing to roll back"
   exit 0
+fi
+
+# NOT ONTO A WITHDRAWN RELEASE. Step 4 leaves every release a rollback moves off as a pre-release, and GitHub will not
+# flag a pre-release latest, so step 1 would be refused or ignored with the images and the tag still to move. Asked
+# before any pointer moves; an answer that cannot be read is no answer, and the rollback goes ahead as it always did.
+target="$(gh_api "https://api.github.com/repos/$REPO/releases/$release_id" 2>/dev/null || true)"
+if [ "$(printf '%s' "$target" | gh_field prerelease)" = "true" ]; then
+  echo "${TAG} is a pre-release on GitHub (an earlier rollback withdrew it, or it never went to stable), and GitHub will not flag a pre-release latest." >&2
+  echo "If ${TAG} is good after all, clear its pre-release box and the Withdrawn: line its notes open with, then re-run." >&2
+  exit 1
 fi
 
 # NOT ONTO A FRONT THE LIVE EDGE CANNOT SERVE. The version rolled back onto dials the tunnel door ITS contract names,
@@ -82,4 +99,44 @@ bash "$DIR/../image/promote-image-tag.sh" dind-host "$VERSION" stable
 # 3. The git pointer, back onto the released commit.
 gh_move_stable_tag "$TAG"
 
-echo "==> stable is now ${TAG} — the rolled-back release is still published; mark it a pre-release on GitHub if it should never be offered again"
+# 4. The release it left, WITHDRAWN. Last, because it is the one step that asks something of the sandboxes running
+# that release, and by now everything they could be sent to (the flag, the images, the tag) already names ${TAG}.
+#
+# Idempotent, since a hand edit may have got there first: notes that already open with a Withdrawn: line keep it (the
+# first reason stands, and it is never prepended twice), and a release that is already both is left alone. The notes
+# are free text, so they travel as data through node and never through the shell. A failure here is loud, and says
+# what is left to do by hand, because a re-run cannot do it: stable already names ${TAG}, so it stops at the top.
+if [ -z "$current" ]; then
+  echo "==> stable is now ${TAG}; no release was flagged latest before it, so none is withdrawn"
+  exit 0
+fi
+unfinished() {
+  echo "stable IS back on ${TAG}, but ${current} could not be marked withdrawn. Finish it on GitHub: tick its pre-release box, and open its notes with the line" >&2
+  echo "  Withdrawn: ${REASON:-rolled back to ${VERSION}}" >&2
+  exit 1
+}
+if ! withdrawal="$(gh_api "https://api.github.com/repos/$REPO/releases/tags/$current" |
+  node -e 'let b = ""; process.stdin.on("data", (c) => (b += c)).on("end", () => {
+    const release = JSON.parse(b);
+    // One line, whatever was typed: the daemon reads the line the notes open with, and a newline would end it early.
+    const reason = process.argv[1].replace(/\s+/g, " ").trim() || process.argv[2];
+    const notes = release.body ?? "";
+    const marked = /^\s*Withdrawn:/.test(notes);
+    if (marked && release.prerelease === true) return;
+    const body = marked ? notes : notes.trim() === "" ? `Withdrawn: ${reason}` : `Withdrawn: ${reason}\n\n${notes}`;
+    // make_latest "false" said out loud: this write must never be the one that flags the bad release again.
+    console.log(`${release.id} ${JSON.stringify({ prerelease: true, make_latest: "false", body })}`);
+  })' "$REASON" "rolled back to ${VERSION}")"; then
+  unfinished
+fi
+if [ -z "$withdrawal" ]; then
+  echo "==> stable is now ${TAG}; ${current} was already marked withdrawn"
+  exit 0
+fi
+if ! printf '%s' "${withdrawal#* }" |
+  gh_api --request PATCH --header "Content-Type: application/json" --data-binary @- \
+    --output /dev/null "https://api.github.com/repos/$REPO/releases/${withdrawal%% *}"; then
+  unfinished
+fi
+
+echo "==> stable is now ${TAG}, and ${current} is withdrawn — still published under its version for anything pinned to it"

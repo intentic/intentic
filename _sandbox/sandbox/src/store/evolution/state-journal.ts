@@ -131,7 +131,8 @@ export const writeJournal = async (historyRoot: string, journal: Journal): Promi
         await rename(path, await asideOf(path)).catch(undefinedIfMissing);
     }
     const { episodes, moved, kept } = journal;
-    await writeJsonFile(path, { ...kept.keys, episodes: [...episodes, ...kept.episodes], moved });
+    // Durable: this file is the only way back to the files an update converted.
+    await writeJsonFile(path, { ...kept.keys, episodes: [...episodes, ...kept.episodes], moved }, undefined, true);
 };
 
 // Where each volume keeps pre-images: in its own secret class, so a copy of a vault never lands anywhere backed up.
@@ -257,10 +258,11 @@ const dropPreImages = async (roots: Readonly<Record<DocumentRoot, string>>, epis
     }
 };
 
-// Marks the open episode committed; the version that converted the files has booted, so there is nothing to undo.
-export const commitEpisodes = (journal: Journal, now: number): Journal => ({
+// Marks one open episode committed; the version that converted its files has booted, so there is nothing to undo.
+// Named by id: a build commits only the episode it opened, never another one it finds open.
+export const commitEpisode = (journal: Journal, id: string, now: number): Journal => ({
     ...journal,
-    episodes: journal.episodes.map((episode) => (episode.state === "open" ? { ...episode, state: "committed", committedAt: now } : episode)),
+    episodes: journal.episodes.map((episode) => (episode.id === id && episode.state === "open" ? { ...episode, state: "committed", committedAt: now } : episode)),
 });
 
 // Drops committed episodes past the grace window, pre-images and all.

@@ -677,9 +677,10 @@ jobs:
       - run: pnpm e2e:providers
 
   # THE UPDATE PROMISES, DRILLED ON A REAL SANDBOX — verify-update-survival.sh connects a sandbox on the
-  # published stable image, plants sentinels in /work and /history, then updates, rolls back, and forces a
-  # FAILED update, asserting after each that the daemon is healthy, the files survived, and (for the failure)
-  # that the parked-container restore returned exactly the sandbox it found. A red run here means the product's
+  # published stable image, plants sentinels in /work and /history, then updates, rolls back, forces a FAILED
+  # update (a build whose daemon cannot boot) and an update that fails its PROBATION (a build that crashes once up,
+  # which `ic sandbox watch` must undo by itself), asserting after each that the daemon is healthy, the files
+  # survived, and that the parked container came back exactly as it was found. A red run here means the product's
   # central promise — "your files are never touched; the worst outcome of an update is the sandbox you already
   # had" — broke, before any user felt it. Nightly because it pulls two full sandbox images into a clean dind
   # host; ci-desktop for the same reason ic-check uses it: ic builds with the baked cargo.

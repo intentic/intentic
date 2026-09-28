@@ -6,7 +6,7 @@ import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { compressResponses } from "./http/compress-responses.js";
-import { bearerFrom, ForbiddenError, PasskeyRequiredError } from "./auth/auth.js";
+import { bearerFrom, ForbiddenError, OWNER_UNREADABLE, OwnerUnreadableError, PasskeyRequiredError } from "./auth/auth.js";
 import { allowedOriginsOf, originAllowedBy } from "./auth/browser-origins.js";
 import { createPasskeyRoutes } from "./auth/passkeys/passkeys.routes.js";
 import { createAccessRoutes } from "./auth/access.routes.js";
@@ -228,6 +228,11 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 // must first be added (the contract's PasskeyRequired).
                 if (error instanceof PasskeyRequiredError) {
                     return c.json({ error: error.message, requires: "passkey", enrolled: error.enrolled }, 428);
+                }
+                // Still a 401, fail-closed, naming only why: no sign-in can succeed until the host moves the owner file
+                // aside, which the auth slice logged with the command that does it.
+                if (error instanceof OwnerUnreadableError) {
+                    return c.json({ error: "unauthorized", reason: OWNER_UNREADABLE }, 401);
                 }
                 return c.json({ error: "unauthorized" }, 401);
             }

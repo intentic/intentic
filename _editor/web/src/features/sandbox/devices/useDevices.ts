@@ -55,9 +55,11 @@ const frameText = (line: Record<string, unknown>, key: string): string | undefin
 
 // Payload shared by every device-sandbox op, all issued through one streaming call. `onLine` gets progress
 // as it prints; `hash` is rebuild's digest, `shape`/`when` are set-shape's whole shape and its timing, `resources`
-// the old reshape op's delta (sent only to an agent older than set-shape, see shapeFlow).
+// the old reshape op's delta (sent only to an agent older than set-shape, see shapeFlow), `to` the older version a
+// rollback goes back to (sent only to an agent advertising `rollback-to`, see rollbackChoices).
 export interface DeviceSandboxPayload {
     hash?: string | undefined;
+    to?: string | undefined;
     shape?: SandboxShape | undefined;
     when?: SandboxShapeWhen | undefined;
     resources?: SandboxResourcesAsk | undefined;
@@ -69,22 +71,34 @@ export interface DeviceSandboxPayload {
     severing?: boolean | undefined;
 }
 
-// hash/resources/setupCode are included only when present; the schema rejects an explicit undefined.
+// hash/to/shape/when/resources/setupCode are set only when present; the schema rejects an explicit undefined.
 const flowInput = (
     hostId: string,
     slug: string,
     op: DeviceSandboxOp,
-    { hash, shape, when, resources, setupCode }: DeviceSandboxPayload,
-): DeviceSandboxFlowInput => ({
-    id: hostId,
-    slug,
-    op,
-    ...(hash === undefined ? {} : { hash }),
-    ...(shape === undefined ? {} : { shape }),
-    ...(when === undefined ? {} : { when }),
-    ...(resources === undefined ? {} : { resources }),
-    ...(setupCode === undefined ? {} : { setupCode }),
-});
+    { hash, to, shape, when, resources, setupCode }: DeviceSandboxPayload,
+): DeviceSandboxFlowInput => {
+    const input: DeviceSandboxFlowInput = { id: hostId, slug, op };
+    if (hash !== undefined) {
+        input.hash = hash;
+    }
+    if (to !== undefined) {
+        input.to = to;
+    }
+    if (shape !== undefined) {
+        input.shape = shape;
+    }
+    if (when !== undefined) {
+        input.when = when;
+    }
+    if (resources !== undefined) {
+        input.resources = resources;
+    }
+    if (setupCode !== undefined) {
+        input.setupCode = setupCode;
+    }
+    return input;
+};
 
 // Stands in for the device's own sentence when the op that succeeded took the connection carrying it down: the
 // daemon relaying the call lived in the container the call acted on, so no result frame can ever arrive.
@@ -130,35 +144,44 @@ export class DeviceFlowLostError extends Error {
 }
 
 // A stream ending without a terminal frame means the connection dropped, not that the operation stopped;
-// the next fleet read reflects the real outcome. `severed` is that drop's answer for an op that causes it.
+// the next fleet read reflects the real outcome. For an op that `severs` that drop IS its ending, answered as
+// undefined; any other op's drop is lost contact.
 const outcomeOf = async (
     frames: AsyncIterable<DeviceFlowLine>,
     onLine: ((line: string) => void) | undefined,
-    severed: string | undefined,
-): Promise<string> => {
+    severs: boolean,
+): Promise<string | undefined> => {
     const said = await flowSaid(frames, onLine).catch((error: unknown) => {
-        if (severed === undefined) {
+        if (!severs) {
             // Read by shape: the browser's own abort is a DOMException, which not every DOM makes an Error.
             const browser = errorMessage(error, ``);
             throw new DeviceFlowLostError(browser === `` ? undefined : browser);
         }
-        return { outcome: severed, refusal: undefined };
+        return { outcome: undefined, refusal: undefined };
     });
     if (said.refusal !== undefined) {
         throw new Error(said.refusal);
     }
-    if (said.outcome !== undefined) {
+    if (said.outcome !== undefined || severs) {
         return said.outcome;
-    }
-    if (severed !== undefined) {
-        return severed;
     }
     throw new DeviceFlowLostError(undefined);
 };
 
 export async function manageDeviceSandbox(hostId: string, slug: string, op: DeviceSandboxOp, payload: DeviceSandboxPayload = {}): Promise<string> {
     const frames = await sandboxRpc.system.manageDeviceSandbox(flowInput(hostId, slug, op, payload));
-    return outcomeOf(frames, payload.onLine, payload.severing === true ? severedOutcome(op, slug) : undefined);
+    return (await outcomeOf(frames, payload.onLine, payload.severing === true)) ?? severedOutcome(op, slug);
+}
+
+/**
+ * A swap aimed at the sandbox serving this page (an update, a rollback, a rebuild), which is relayed by the daemon it
+ * replaces. The device's own sentence when it got to send one, which means nothing was swapped out from under this page
+ * (an update already in place, say); `undefined` when the stream died at the cutover, which is the swap happening. A
+ * refusal the device sent still throws.
+ */
+export async function swapServingSandbox(hostId: string, slug: string, op: DeviceSandboxOp, payload: DeviceSandboxPayload = {}): Promise<string | undefined> {
+    const frames = await sandboxRpc.system.manageDeviceSandbox(flowInput(hostId, slug, op, payload));
+    return outcomeOf(frames, payload.onLine, true);
 }
 
 // Update/restart kills the process serving the request, so an untimely stream end here is success, not

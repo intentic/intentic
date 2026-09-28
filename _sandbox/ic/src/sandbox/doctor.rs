@@ -196,6 +196,14 @@ fn skip_both(settled: &mut [Option<Outcome>; 5], why: &str) {
 
 fn probe_container(container: &str) -> Verdict {
     let status = docker::inspect(container, "{{.State.Status}} {{.RestartCount}}");
+    // An interrupted swap leaves the sandbox set aside under its parked name: that is not a sandbox to set up again.
+    if status.is_none() && docker::container_exists(&format!("{container}{}", super::PARKED_SUFFIX))
+    {
+        return Verdict::Settled(Outcome::Fail {
+            problem: "an interrupted update left this sandbox set aside, with nothing started in its place.".to_string(),
+            remedy: "put it back: ic sandbox start".to_string(),
+        });
+    }
     classify_container(status.as_deref(), container)
 }
 
@@ -236,7 +244,19 @@ fn classify_daemon(health: Option<&serde_json::Value>, container: &str) -> Verdi
             remedy: format!("read its log: docker logs --tail 100 {container}"),
         });
     };
-    if health.get("ready").and_then(serde_json::Value::as_bool) == Some(false) {
+    if health::journal_failed(health) {
+        return Verdict::Settled(Outcome::Fail {
+            problem: "the daemon could not convert this sandbox's stored files to its version, and put them back.".to_string(),
+            remedy: "go back to the version before it: ic sandbox rollback".to_string(),
+        });
+    }
+    // `boot.ready` where the daemon reports it (every daemon since the boot chain), a top-level `ready` for older ones.
+    let ready = health
+        .get("boot")
+        .and_then(|boot| boot.get("ready"))
+        .or_else(|| health.get("ready"))
+        .and_then(serde_json::Value::as_bool);
+    if ready == Some(false) {
         let step = health::running_step(health).unwrap_or_else(|| "converging".to_string());
         return Verdict::Pending(Outcome::Warn {
             problem: format!("the daemon answers but is still warming up ({step}) — it keeps going in the background."),
@@ -400,7 +420,22 @@ pub fn run(slug: Option<String>) -> Result<()> {
     println!("intentic: doctor — checking sandbox {slug}…");
     let public_url = container_public_url(&container);
     let findings = verify_chain(&slug, public_url.as_deref(), Duration::ZERO);
+    let record = super::mirror::reconcile(&slug);
+    if let Some(swap) = &record.swap {
+        match (swap.phase, swap.until) {
+            (crate::record::Phase::Probation, Some(until)) => println!(
+                "intentic: {slug} moved onto {} and is on probation for {} more; the version before it is parked and ready.",
+                swap.to.as_deref().unwrap_or("a new version"),
+                super::probation::remaining(until)
+            ),
+            _ => println!("intentic: a swap of {slug} was interrupted; `ic sandbox watch {slug}` finishes or undoes it."),
+        }
+    }
     match checks::failure_summary(&findings) {
+        // A sandbox that broke with a way back on record is told where the way back is.
+        Some(summary) if record.previous.is_some() => bail!(
+            "{summary}\n       If this began with an update, go back to the version before it: ic sandbox rollback {slug}"
+        ),
         Some(summary) => bail!("{summary}"),
         None => {
             match public_url {
@@ -469,6 +504,24 @@ mod tests {
                 assert!(remedy.contains("docker start c"))
             }
             _ => panic!("an exited container must fail with the start command"),
+        }
+    }
+
+    #[test]
+    fn readiness_is_read_where_the_daemon_reports_it_and_a_failed_conversion_is_a_failure() {
+        // Every daemon since the boot chain reports `boot.ready`; the top-level `ready` was an older daemon's.
+        let warming = serde_json::json!({ "boot": { "ready": false, "steps": [] } });
+        assert!(matches!(
+            classify_daemon(Some(&warming), "c"),
+            Verdict::Pending(Outcome::Warn { .. })
+        ));
+        let failed =
+            serde_json::json!({ "boot": { "ready": true }, "state": { "journal": "failed" } });
+        match classify_daemon(Some(&failed), "c") {
+            Verdict::Settled(Outcome::Fail { remedy, .. }) => {
+                assert!(remedy.contains("ic sandbox rollback"))
+            }
+            _ => panic!("a failed conversion is a failure with the way back"),
         }
     }
 

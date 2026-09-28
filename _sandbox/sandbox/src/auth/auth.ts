@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { GrantedRole, MemberRole, ProofMethod } from "@intentic/sandbox-contract";
 import { GrantedRoleSchema, roleAtLeast } from "@intentic/sandbox-contract";
 import { isOwnerTicket, verifyOwnerTicket } from "@intentic/sandbox-contract/owner-ticket";
+import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
@@ -58,6 +59,26 @@ const OwnerFileSchema = z.object({ email: z.string() });
 
 export const ownerDocument = defineDocument({ path: stateRelPath(".intentic/identity/owner.json"), schema: OwnerFileSchema });
 
+// The reason a refused request gives when the owner file is what stands in the way: nobody can sign in until a person
+// on the host moves it aside. Machine-readable, so a client can say so instead of asking for another sign-in; nothing
+// else about the file is told to a caller who has not signed in.
+export const OWNER_UNREADABLE = "owner-unreadable";
+
+// The owner file exists and this build cannot read it. Fail-closed: reading it as absent would let the next identity to
+// arrive bind the sandbox.
+export class OwnerUnreadableError extends Error {
+    readonly detail: string;
+    constructor(detail: string) {
+        super(`the sandbox owner file could not be read (${detail}), so nobody is recognized as owner until it is fixed`);
+        this.name = "OwnerUnreadableError";
+        this.detail = detail;
+    }
+}
+
+// What a person on the machine that runs the sandbox types to get back in: `ic` names a sandbox by the slug its connect
+// token hashes to, the same id this daemon derives from it.
+export const ownerResetCommand = (connectToken: string): string => `ic sandbox reset-owner ${sandboxIdFromToken(connectToken) ?? "<slug>"}`;
+
 // On the daemon's JSON substrate like every other manifest: this file decides who may drive the sandbox.
 // An atomic rename prevents a read landing mid-write from seeing an empty owner and treating the next identity as
 // first; an owner file that exists but cannot be read throws, since "no owner" would let the next identity bind.
@@ -67,7 +88,7 @@ export const fileOwnerStore = (path: string): OwnerStore => {
         read: async () => {
             const state = await file.state();
             if (state.unreadable) {
-                throw new Error(`the sandbox owner file could not be read (${state.detail}), so nobody is recognized as owner until it is fixed`);
+                throw new OwnerUnreadableError(state.detail);
             }
             return state.value.email;
         },

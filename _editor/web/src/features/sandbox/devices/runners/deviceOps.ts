@@ -1,12 +1,12 @@
 import type { DeviceAgentOp, DeviceSandboxOp, DeviceSyncSwitch } from "@intentic/sandbox-contract";
-import type { DeviceSandboxGroup, NoticeModel, ResourcesForm, SandboxVerb } from "@intentic/ui";
+import type { DeviceSandboxGroup, NoticeModel, ResourcesForm, RollbackChoice, SandboxVerb } from "@intentic/ui";
 import { runningShape } from "@intentic/ui/sandbox-resources";
-import { sandboxVerbPrompt, VERB_LABEL } from "@intentic/ui";
+import { rollbackToPrompt, sandboxVerbPrompt, VERB_LABEL } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, type ComputedRef, type Ref, ref, watch } from "vue";
 import { agentFallback, sandboxFallback, syncFallback } from "./deviceFallback";
 import { agentRefusal, type AgentRun, type LinksAsked } from "./agentRun";
-import { canSetShape, type ShapeIntent, shapeFlow, shapeSevers, TOO_OLD_TO_SAVE } from "../shapeFlow";
+import { canSetShape, type ShapeIntent, shapeFlow, shapeSevers, tooOldToSave } from "../shapeFlow";
 import {
     type BatchAction,
     type BatchVerb,
@@ -18,7 +18,7 @@ import {
     removableHere,
     rowRemoval,
 } from "../deviceRows";
-import { manageDeviceSandbox, revokeSyncDevice, runDeviceAgentFlow, runDeviceCommand } from "../useDevices";
+import { type DeviceSandboxPayload, manageDeviceSandbox, revokeSyncDevice, runDeviceAgentFlow, runDeviceCommand } from "../useDevices";
 import { useSandbox } from "../../client/useSandbox";
 import { type HubWork, useHubWork } from "../../../../shell/hub/hubWork";
 import { t } from "@intentic/ui/i18n";
@@ -171,6 +171,20 @@ const removalSettled = (containers: number, pairings: number): string[] => [
     ...(pairings === 0 ? [] : [`${counted(pairings, `pairing`, `pairings`)} ended`]),
 ];
 
+/** One container verb's payload: what its shape flow carries, the kept version a rollback goes to, and its log's sink. */
+const actPayload = (
+    flow: { readonly payload: DeviceSandboxPayload } | undefined,
+    to: string | undefined,
+    onLine: (line: string) => void,
+    severing: boolean,
+): DeviceSandboxPayload => {
+    const payload: DeviceSandboxPayload = { ...flow?.payload, onLine, severing };
+    if (to !== undefined) {
+        payload.to = to;
+    }
+    return payload;
+};
+
 /** The row's mark for a verb that does something, and an inert end for one that only reads. */
 const markVerb = (hubWork: HubWork, group: DeviceSandboxGroup, verb: SandboxVerb): (() => void) => {
     const says = VERB_WORKING[verb];
@@ -200,6 +214,13 @@ export interface BatchProgress {
     readonly verb: BatchVerb;
     readonly done: number;
     readonly total: number;
+}
+
+/** A verb waiting on its question; `choice` names the kept version a rollback goes to, when it is not the one before. */
+export interface PendingAct {
+    readonly group: DeviceSandboxGroup;
+    readonly verb: SandboxVerb;
+    readonly choice?: RollbackChoice;
 }
 
 export interface ActPrompt {
@@ -233,13 +254,14 @@ export interface DeviceOps {
     readonly failure: Ref<OpFailure | undefined>;
     readonly outcome: Ref<{ key: string; message: string } | undefined>;
 
-    // Container verbs, through whichever door is open.
-    readonly act: (group: DeviceSandboxGroup, verb: SandboxVerb) => void;
+    // Container verbs, through whichever door is open. `choice` names one of the older versions the machine kept for a
+    // rollback to go to, rather than the one before (rollbackChoices.ts).
+    readonly act: (group: DeviceSandboxGroup, verb: SandboxVerb, choice?: RollbackChoice) => void;
     readonly runningVerb: (group: DeviceSandboxGroup) => SandboxVerb | undefined;
     readonly verbRunning: (group: DeviceSandboxGroup) => boolean;
     readonly lines: (group: DeviceSandboxGroup) => readonly string[];
     readonly logShown: (group: DeviceSandboxGroup) => boolean;
-    readonly confirmingAct: Ref<{ group: DeviceSandboxGroup; verb: SandboxVerb } | undefined>;
+    readonly confirmingAct: Ref<PendingAct | undefined>;
     readonly actPrompt: ComputedRef<ActPrompt | undefined>;
     readonly confirmAct: () => void;
     readonly reshaping: Ref<{ group: DeviceSandboxGroup } | undefined>;
@@ -357,7 +379,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         return busy.value?.startsWith(prefix) === true ? (busy.value.slice(prefix.length) as SandboxVerb) : undefined;
     };
 
-    const confirmingAct = ref<{ group: DeviceSandboxGroup; verb: SandboxVerb } | undefined>();
+    const confirmingAct = ref<PendingAct | undefined>();
     // The rows one press asked to let go of, and the one key their answer lands under: a run over four rows has one
     // reason it went wrong, said once, rather than four notices under four rows nobody pressed.
     const confirmingRemoval = ref<readonly DeviceSandboxGroup[] | undefined>();
@@ -372,7 +394,8 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         if (pending === undefined) {
             return undefined;
         }
-        const asked = sandboxVerbPrompt(pending.verb, pending.group.title);
+        const asked =
+            pending.choice === undefined ? sandboxVerbPrompt(pending.verb, pending.group.title) : rollbackToPrompt(pending.group.title, pending.choice.version);
         // `logs` never confirms, so indexing the label past it is safe.
         const label = VERB_LABEL[pending.verb as Exclude<SandboxVerb, `logs`>];
         return {
@@ -390,8 +413,8 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
 
     // `resources` is the one verb with something to say beyond its name: the form's whole shape and when it takes
     // effect (shapeFlow says which op carries it). A save or a forget touches no container, so nothing is severed even
-    // on the sandbox serving this page.
-    const runAct = async (group: DeviceSandboxGroup, verb: SandboxVerb, intent?: ShapeIntent): Promise<void> => {
+    // on the sandbox serving this page. `to` is the older version a rollback goes to, when it is not the one before.
+    const runAct = async (group: DeviceSandboxGroup, verb: SandboxVerb, intent?: ShapeIntent, to?: string): Promise<void> => {
         const hostId = door();
         const slug = group.sandbox?.slug;
         if (hostId === undefined || slug === undefined || working.value) {
@@ -399,12 +422,15 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         }
         const share = group.sandbox?.resources;
         // Whether the machine's ic takes the contract's shape: which op carries it, and how the typed fallback spells it.
-        const takesSet = canSetShape(managerOf(machine())?.device.facts);
+        const facts = managerOf(machine())?.device.facts;
+        const takesSet = canSetShape(facts);
+        // When it can't save for the next restart, the agent's own sentence about its stale ic outranks "update the agent".
+        const tooOld = tooOldToSave(facts);
         let flow: ReturnType<typeof shapeFlow> | undefined;
         try {
-            flow = intent === undefined || share === undefined ? undefined : shapeFlow(intent, takesSet, runningShape(share));
+            flow = intent === undefined || share === undefined ? undefined : shapeFlow(intent, takesSet, runningShape(share), tooOld);
         } catch (error) {
-            failure.value = { key: rowKey(group), notice: noticeFrom(error, TOO_OLD_TO_SAVE) };
+            failure.value = { key: rowKey(group), notice: noticeFrom(error, tooOld) };
             return;
         }
         const key = rowKey(group);
@@ -415,17 +441,19 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         // Opened before lines arrive, so an empty pane reads as "reading" rather than an ignored click.
         openLog.value = verb === `logs` ? key : undefined;
         const endMark = markVerb(hubWork, group, verb);
+        const payload = actPayload(
+            flow,
+            to,
+            (line) => (runLines.value = { ...runLines.value, [key]: [...(runLines.value[key] ?? []), line] }),
+            // The same severing the dialog warned about: losing the stream is the answer, not a failure to report.
+            (intent === undefined || shapeSevers(intent)) && severs(group, verb),
+        );
         try {
-            const message = await manageDeviceSandbox(hostId, slug, flow?.op ?? OP[verb], {
-                ...flow?.payload,
-                onLine: (line) => (runLines.value = { ...runLines.value, [key]: [...(runLines.value[key] ?? []), line] }),
-                // The same severing the dialog warned about: losing the stream is the answer, not a failure to report.
-                severing: (intent === undefined || shapeSevers(intent)) && severs(group, verb),
-            });
+            const message = await manageDeviceSandbox(hostId, slug, flow?.op ?? OP[verb], payload);
             // A log tail's result line would only restate the pane above it, so it's left to be the answer.
             outcome.value = verb === `logs` ? undefined : { key, message };
         } catch (error) {
-            failure.value = { key, notice: noticeFrom(error, `That didn't work on this device.`), command: sandboxFallback(verb, slug, intent, { takesSet }) };
+            failure.value = { key, notice: noticeFrom(error, `That didn't work on this device.`), command: sandboxFallback(verb, slug, intent, { takesSet, to }) };
             if (verb === `logs`) {
                 openLog.value = undefined;
             }
@@ -457,7 +485,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         reshaping.value = { group };
     };
 
-    const act = (group: DeviceSandboxGroup, verb: SandboxVerb): void => {
+    const act = (group: DeviceSandboxGroup, verb: SandboxVerb, choice?: RollbackChoice): void => {
         if (working.value) {
             return;
         }
@@ -484,8 +512,9 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             outcome.value = undefined;
             return;
         }
+        // A rollback always asks, and a chosen version is named in the question.
         if (sandboxVerbPrompt(verb, group.title) !== undefined || severs(group, verb)) {
-            confirmingAct.value = { group, verb };
+            confirmingAct.value = choice === undefined ? { group, verb } : { group, verb, choice };
             return;
         }
         void runAct(group, verb);
@@ -495,7 +524,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         const pending = confirmingAct.value;
         confirmingAct.value = undefined;
         if (pending !== undefined) {
-            void runAct(pending.group, pending.verb);
+            void runAct(pending.group, pending.verb, undefined, pending.choice?.to);
         }
     };
 

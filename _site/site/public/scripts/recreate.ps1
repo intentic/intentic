@@ -9,7 +9,11 @@
   the same image with a different share of this machine (--memory/--cpus/--privileged/--gpus are ic's own
   flags, forwarded verbatim after -Reshape). -Slug + -Shape <ic flags> sets a shape now or for the next restart
   (`ic sandbox shape`), -Slug + -Start/-Stop/-Restart powers it through ic (a saved shape is applied), and -List
-  alone prints every sandbox here as JSON.
+  alone prints every sandbox here as JSON. -Slug + -RollbackTo <version|image> goes back to an older version this
+  machine kept, and -Slug + -Versions lists those. -Slug + -Watch finishes or undoes a swap that was cut off and
+  judges a new version on probation, -Slug + -Backup backs the sandbox's data up now, and -Slug + -Doctor names
+  what stands between you and the sandbox, with the fix. -Slug + -Remove moves it to ic's trash: its /work and
+  /history stay recoverable for a week (`ic sandbox restore`).
 
 .EXAMPLE
   & ([scriptblock]::Create((irm https://intentic.dev/update))) -Slug abc123        # update
@@ -21,6 +25,8 @@
   & ([scriptblock]::Create((irm https://intentic.dev/update))) -Slug abc123 -Prepare    # download it now
 .EXAMPLE
   & ([scriptblock]::Create((irm https://intentic.dev/update))) -Slug abc123 -Reshape --memory 12g --cpus 4
+.EXAMPLE
+  & ([scriptblock]::Create((irm https://intentic.dev/update))) -Slug abc123 -RollbackTo 1.200.0   # an older version
 #>
 param(
     # Required by every mode but -List. Not Mandatory: PowerShell would PROMPT for a missing one, and the desktop app
@@ -31,6 +37,12 @@ param(
     # The third way through the same shim, matching recreate.sh's --rollback: the image before the last update.
     # A switch rather than a value, so it can never be confused with the digest above.
     [switch]$Rollback,
+    # Matching recreate.sh's --rollback-to: an older version than that, among those this machine kept (-Versions
+    # lists them). A value, named, so it binds nowhere else. -Rollback still means exactly -Rollback: an exact
+    # parameter name always wins over one it is the prefix of.
+    [string]$RollbackTo,
+    # The versions this sandbox can go back to, matching recreate.sh's --versions. Read-only.
+    [switch]$Versions,
     # The fourth, matching recreate.sh's --prepare: download and build the next update and stop there. The
     # container is never touched, so this is safe to run while the sandbox is being used.
     [switch]$Prepare,
@@ -44,6 +56,17 @@ param(
     [switch]$Start,
     [switch]$Stop,
     [switch]$Restart,
+    # Matching recreate.sh's --watch: finish or undo a swap that was cut off, and judge a new version on probation
+    # (ic rolls it back by itself if it keeps crashing, never becomes ready, or loses its tunnel).
+    [switch]$Watch,
+    # Matching recreate.sh's --backup and --doctor: back the sandbox's data up now; name what stands between you
+    # and the sandbox, with the fix (read-only).
+    [switch]$Backup,
+    [switch]$Doctor,
+    # Matching recreate.sh's --remove: into ic's trash, never deleted on the spot - /work and /history stay
+    # recoverable for a week (`ic sandbox restore`). Unasked (-y), because whoever runs this has already been asked:
+    # the desktop app's Remove confirms first.
+    [switch]$Remove,
     # Every sandbox on this machine as JSON (`ic sandbox list --json`): the desktop app's listing when the installed
     # ic is older than the app, since this fetch brings it level.
     [switch]$List,
@@ -134,8 +157,19 @@ if (-not $Ic) {
     }
 }
 
+# recreate.sh reads only the first switch after the slug; here every switch binds, so the order below decides a
+# caller that passed two by mistake: read-only verbs first, and -Remove after every other named mode.
+# -Versions and -Watch forward what follows them verbatim (ic's --json), as recreate.sh does.
 if ($List) {
     & $Ic sandbox list --json
+} elseif ($Versions) {
+    & $Ic sandbox versions $Slug @ReshapeArgs
+} elseif ($Doctor) {
+    & $Ic sandbox doctor $Slug
+} elseif ($Watch) {
+    & $Ic sandbox watch $Slug @ReshapeArgs
+} elseif ($Backup) {
+    & $Ic sandbox backup $Slug
 } elseif ($Start) {
     & $Ic sandbox start $Slug
 } elseif ($Stop) {
@@ -144,6 +178,8 @@ if ($List) {
     & $Ic sandbox restart $Slug
 } elseif ($Shape) {
     & $Ic sandbox shape $Slug @ReshapeArgs
+} elseif ($RollbackTo) {
+    & $Ic sandbox rollback $Slug --to $RollbackTo
 } elseif ($Rollback) {
     & $Ic sandbox rollback $Slug
 } elseif ($Prepare) {
@@ -152,6 +188,8 @@ if ($List) {
     & $Ic sandbox reshape $Slug @ReshapeArgs
 } elseif ($Hash) {
     & $Ic sandbox rebuild $Slug $Hash
+} elseif ($Remove) {
+    & $Ic sandbox remove $Slug -y
 } else {
     & $Ic sandbox update $Slug
 }
