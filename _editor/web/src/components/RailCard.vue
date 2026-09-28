@@ -21,7 +21,7 @@ const props = defineProps<{
     matchCase?: boolean;
     provider?: AgentProvider;
     // The session's stored work word (AgentSummary.titleAction), which tints the identity tile; rows without one
-    // (subagents, personas) let the tile read the title.
+    // (personas) let the tile read the title.
     titleAction?: string;
     // Icon for a row that isn't a session and so has no identity tile.
     icon?: IconName;

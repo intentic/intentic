@@ -92,10 +92,10 @@ describe(`a link pressed in a popped-out panel`, () => {
         const dock = popOut();
         appWindow(`w-1`);
 
-        handOffToMainWindow({ kind: `route`, path: `/subagents/t-1` });
+        handOffToMainWindow({ kind: `route`, path: `/browsers/t-1` });
 
         expect(open).not.toHaveBeenCalled();
-        expect(posted.at(-1)).toEqual({ kind: `errand`, to: `w-1`, errand: { kind: `route`, path: `/subagents/t-1` } });
+        expect(posted.at(-1)).toEqual({ kind: `errand`, to: `w-1`, errand: { kind: `route`, path: `/browsers/t-1` } });
         dock();
     });
 });

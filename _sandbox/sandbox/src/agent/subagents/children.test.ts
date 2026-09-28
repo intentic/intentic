@@ -8,7 +8,7 @@ import {
     withRuntimeDefaults,
 } from "@intentic/sandbox-contract";
 import type { MemoryReading } from "@intentic/constants/memory-room";
-import { listSubagentSessions, resetSubagents, type SubagentWaitOutcome, waitForSubagent } from "./subagents.js";
+import { listSubagentSessions, noteSubagentTask, resetSubagents, type SubagentWaitOutcome, waitForSubagent } from "./subagents.js";
 import type { Services } from "../../composition.js";
 import { spawnServices } from "../../harness/spawn-services.testing.js";
 import { startTurnRun } from "../run/turn/turn-runs.js";
@@ -501,6 +501,25 @@ describe("the escalation ladder", () => {
 
         gate.resolve();
         await settled(result.id);
+    });
+
+    // `list` shows both kinds alike, so an id naming a subagent this conversation's own runtime ran in-process is told
+    // what it is, rather than that it names nothing: it lives in the turn that started it, which no service call reaches.
+    it("tells an id naming an in-process subagent of this conversation apart from one naming nothing", async () => {
+        noteSubagentTask(
+            { conversationId: parent.conversationId, conversations: actors, subagentsDir: undefined },
+            { subtype: "task_started", task_id: "task-in", tool_use_id: "call-in", subagent_type: "Explore" },
+        );
+        const services = spawnServices({}, [], actors);
+        const inProcess = { ok: false, message: expect.stringContaining("ran in-process, inside this conversation's own turn") };
+        await expect(sendToChild(services, parent, "call-in", "more")).resolves.toEqual(inProcess);
+        await expect(answerChild(services, parent, "call-in", { anything: ["yes"] })).resolves.toEqual(inProcess);
+        await expect(cancelChild(services, parent, "call-in")).resolves.toEqual(inProcess);
+        // Another conversation's in-process subagent is nothing of this one's.
+        await expect(sendToChild(services, { conversationId: "conv-other", cwd: "/work" }, "call-in", "more")).resolves.toEqual({
+            ok: false,
+            message: "No such child of this conversation. `list` shows yours.",
+        });
     });
 
     it("send to a settled child runs a follow-up turn on its own conversation, continuing its session", async () => {

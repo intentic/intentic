@@ -50,24 +50,6 @@ const ready = (status: FleetAgent[`status`] = `ready`): FleetAgent => ({
     unsent: false,
 });
 
-// Agent on its first turn, delegating: no cost/tokens/turns/diff yet, since those exist only once a turn ends; still
-// running eight children.
-const delegating = (): FleetAgent => ({
-    id: `a2`,
-    status: `running`,
-    provider: `claude`,
-    harness: `native`,
-    title: `analyse the gap`,
-    updatedAt: 1,
-    startedAt: 1,
-    attention: NO_ATTENTION,
-    open: false,
-    unread: false,
-    unsent: false,
-    activity: { tool: `Agent` },
-    subagents: { running: 8, total: 8 },
-});
-
 let app: App | undefined;
 // Icon and v-tooltip are registered app-wide by installUi; stand-ins here avoid pulling in the whole UI plugin.
 // IconStub prints the glyph it's given, since which glyph is what shows a button is in flight.
@@ -202,16 +184,6 @@ it(`presses out the archive while an archive is already running`, () => {
 // Once the daemon re-derives status after a land, the button is simply gone, not locally hidden.
 it(`drops the button once the work is in the workspace`, () => {
     expect(landButton(mount(ready(`landed`)))).toBeUndefined();
-});
-
-// Stat chips (tokens, cost, diff, turns) only exist once a turn ends; an agent whose first turn delegates shows none,
-// though it's running eight children.
-// The row is the only surface that outlives the turn once the live line with the spinner goes.
-// A link, not a button, since the count names an addressable list (Subagents narrowed to this agent's children) you can
-// hover, copy, or Ctrl/Cmd-click into its own tab.
-it(`counts the agents it started while its first turn is still running`, () => {
-    const chip = [...mount(delegating()).querySelectorAll(`a`)].find((link) => link.textContent?.trim() === `8 / 8`);
-    expect(chip).toEqual(expect.any(Object));
 });
 
 // A refused send has no daemon entry, so every id-based exit (archive, discard, land) is unavailable, correctly.

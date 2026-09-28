@@ -1,4 +1,3 @@
-import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { withRuntimeSubagents } from "./runtime-subagents.js";
 import { listSubagentSessions, resetSubagents, type SubagentTurn } from "./subagents.js";
@@ -10,7 +9,7 @@ import { memoryFleet } from "../../testing.js";
 
 const actors = memoryFleet().conversations;
 
-const turn = (): SubagentTurn => ({ conversationId: "conv-r", conversations: actors, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined });
+const turn = (): SubagentTurn => ({ conversationId: "conv-r", conversations: actors, subagentsDir: undefined });
 
 // A runtime's frames, as its adapter yields them.
 async function* reported(frames: readonly AgentEvent[]): AsyncGenerator<AgentEvent> {

@@ -423,7 +423,8 @@ const baseOptions = (
                       request.spec.conversationId,
                   )
                 : {},
-            // Names the ids a child's transcript is read by, opening the Subagents area for this turn's children.
+            // Pairs this turn's in-process children with their meta files (type, ask, model, report) and appends what
+            // checked their work to each delegation's result.
             subagents !== undefined ? subagentHooks(subagents) : {},
             // Placed by the turn's isolation, since an anchored turn's dependencies exist only inside its own
             // namespace.
@@ -791,7 +792,7 @@ export async function* runAgent(
     const subagents: SubagentTurn | undefined =
         request.spec.conversationId === undefined
             ? undefined
-            : { conversationId: request.spec.conversationId, conversations, cwd: request.spec.cwd, sessionId: undefined, subagentsDir: undefined };
+            : { conversationId: request.spec.conversationId, conversations, subagentsDir: undefined };
     // Seeded from the resumed session id, not empty, since an earlier turn's background job may still run in it.
     const shell: { sessionId: string | undefined } = { sessionId: request.spec.sessionId };
     // Per turn, deliberately: a question in a later turn shouldn't inherit a document written in an earlier one.

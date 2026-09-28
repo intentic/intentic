@@ -1,12 +1,26 @@
+import type { SubagentSession } from "@intentic/sandbox-contract";
 import { computed, type Ref, shallowRef } from "vue";
+import type { SubagentRoster } from "../../fleet/subagentRoster";
 import { familyChip, type StandingChip } from "../../fleet/agentStatus";
 import { canArchive, type FleetAgent, withKeptWords } from "../../fleet/useAgents-fleet";
 import { insideRun } from "../../fleet/useWorkflowRuns";
-import { ARCHIVE_RULES, cardKey, type ChildFold, FINISHED_FOLD, foldChildren, steadyFold, type Tray, trayOf, type TrayState } from "./childFold";
+import {
+    ARCHIVE_RULES,
+    cardKey,
+    type ChildFold,
+    FINISHED_FOLD,
+    foldChildren,
+    steadyFold,
+    subagentTitle,
+    type Tray,
+    trayOf,
+    type TrayState,
+} from "./childFold";
 
 // The children riding under the board's cards (childFold), as the lanes read them: whose tray a child is in, what a tray
 // draws against the board's filter, ring and folds, what a card says for the children calling the reader through it,
 // and the archive's own fold, whose filed children ride under their filed parent exactly as live ones do on the board.
+// A tray holds the subagents a card's runtime ran in-process too, from the roster, beside the conversations it spawned.
 
 export interface TraysHost {
     // What the scope folded (boardScope): the children under each card, the card each child is under, and the children
@@ -21,13 +35,19 @@ export interface TraysHost {
     readonly archived: Readonly<Ref<readonly FleetAgent[]>>;
     readonly filter: {
         readonly active: Readonly<Ref<boolean>>;
+        // The query as the filter reads it, folded to lower case unless `matchCase` is on.
+        readonly needle: Readonly<Ref<string>>;
+        readonly matchCase: Readonly<Ref<boolean>>;
         readonly matches: (agent: FleetAgent) => boolean;
     };
+    // The sandbox's subagent roster: the ones a conversation's runtime ran in-process, by conversation.
+    readonly roster: Pick<SubagentRoster, "inProcessOf">;
     // The card wearing the ring.
     readonly selected: Readonly<Ref<string | undefined>>;
 }
 
 const NONE_OPEN: ReadonlySet<string> = new Set<string>();
+const NO_SUBAGENTS: readonly SubagentSession[] = [];
 
 export const useBoardTrays = (host: TraysHost) => {
     const { scope, filter } = host;
@@ -58,9 +78,22 @@ export const useBoardTrays = (host: TraysHost) => {
     });
     const callOf = (card: FleetAgent): (StandingChip & { readonly hint: string }) | undefined =>
         card.archivedAt === undefined ? callChips.value.get(cardKey(card)) : undefined;
+    // What a card's runtime ran in-process, which the roster holds for this sandbox's cards alone: another box's card has
+    // its own daemon's roster, which this board does not read.
+    const subagentsOf = (card: FleetAgent): readonly SubagentSession[] =>
+        card.sandboxId === undefined ? host.roster.inProcessOf(card.id) : NO_SUBAGENTS;
+    // Only its title can answer a query, having no transcript the filter's index reads, under the filter's own case rule.
+    const subagentMatches = (session: SubagentSession): boolean => {
+        if (!filter.active.value) {
+            return true;
+        }
+        const title = subagentTitle(session) ?? ``;
+        return (filter.matchCase.value ? title : title.toLowerCase()).includes(filter.needle.value);
+    };
     // A card stays under a query when it or anything riding under it matched, as a run answers for its steps: a child
     // has no card of its own to answer with, and its parent's is where the reader goes looking for it.
-    const answers = (card: FleetAgent): boolean => filter.matches(card) || childrenOf(card).some(filter.matches);
+    const answers = (card: FleetAgent): boolean =>
+        filter.matches(card) || childrenOf(card).some(filter.matches) || subagentsOf(card).some(subagentMatches);
     // The ring on a child keeps the card it rides under in Finished's window, or the ring would be on nothing drawn.
     const selectedCard = computed(() => {
         const id = host.selected.value;
@@ -90,10 +123,11 @@ export const useBoardTrays = (host: TraysHost) => {
         asking: card.archivedAt === undefined,
         filtering: filter.active.value,
         matches: filter.matches,
+        matchesSubagent: subagentMatches,
         selected: host.selected.value,
     });
     // What a card's tray draws (childFold.trayOf).
-    const trayFor = (card: FleetAgent): Tray | undefined => trayOf(childrenOf(card), trayState(card));
+    const trayFor = (card: FleetAgent): Tray | undefined => trayOf(childrenOf(card), trayState(card), subagentsOf(card));
     // What files away or comes back with a card: the settled children riding under it, as a run's archive takes its
     // steps. Filing the parent alone would spill every helper it ever started back onto the board as cards of their
     // own; restoring it brings back the ones filed under it. A child still working is never taken, and stands as its
@@ -110,5 +144,19 @@ export const useBoardTrays = (host: TraysHost) => {
             }),
         ),
     ];
-    return { archivedCards, childrenOf, cardOf, callOf, answers, selectedCard, toggleTray, trayState, trayFor, familyOf, familyIds, withFamilies };
+    return {
+        archivedCards,
+        childrenOf,
+        subagentsOf,
+        cardOf,
+        callOf,
+        answers,
+        selectedCard,
+        toggleTray,
+        trayState,
+        trayFor,
+        familyOf,
+        familyIds,
+        withFamilies,
+    };
 };

@@ -1,3 +1,4 @@
+import type { SubagentSession } from "@intentic/sandbox-contract";
 import { NO_ATTENTION } from "../../fleet/agentStatus";
 import { type FleetAgent, laneGroups } from "../../fleet/useAgents-fleet";
 import { ARCHIVE_RULES, cardKey, FINISHED_FOLD, foldChildren, standsAlone, steadyFold, stopOf, type TrayState, trayOf, trayRows } from "./childFold";
@@ -6,7 +7,7 @@ import { ARCHIVE_RULES, cardKey, FINISHED_FOLD, foldChildren, standsAlone, stead
 // parent is on the board, save one owing a press a row cannot carry; a child calling the reader moves its family's card
 // to Attention instead of standing there itself; a grandchild rides with its parent. Then what a tray draws: asks and
 // working children always, stopped ones one row per thing they stopped on, settled ones behind the fold, a filter's
-// matches unfolded.
+// matches unfolded; and the subagents its runtime ran in-process dealt into those same rows.
 
 const card = (id: string, over: Partial<FleetAgent> = {}): FleetAgent => ({
     id,
@@ -26,7 +27,7 @@ const working = (id: string, over: Partial<FleetAgent> = {}): FleetAgent => card
 const limited = (id: string, parent: string, over: Partial<FleetAgent> = {}): FleetAgent =>
     child(id, parent, { status: `error`, failureCode: `rate_limit`, provider: `codex`, ...over });
 const permission = { ...NO_ATTENTION, permission: true };
-const ids = (agents: readonly FleetAgent[] | undefined): string[] => (agents ?? []).map((agent) => agent.id);
+const ids = (agents: readonly { readonly id: string }[] | undefined): string[] => (agents ?? []).map((agent) => agent.id);
 const folded = (...fleet: FleetAgent[]) => foldChildren(laneGroups(fleet));
 
 describe(`which children ride under their parent`, () => {
@@ -214,6 +215,7 @@ describe(`what a tray draws`, () => {
         asking: true,
         filtering: false,
         matches: () => true,
+        matchesSubagent: () => true,
         selected: undefined,
         ...over,
     });
@@ -272,5 +274,50 @@ describe(`what a tray draws`, () => {
         expect(trayOf(undefined, at())).toBeUndefined();
         expect(trayOf(brood, at({ filtering: true, matches: () => false }))).toBeUndefined();
         expect(trayRows(undefined)).toEqual([]);
+    });
+
+    // A subagent the card's runtime ran in-process has no conversation, so the roster hands it to the tray, which deals it
+    // into the same rows by the same clocks: the working ones among the working as Active orders its cards, the settled
+    // ones among the settled as Finished does. It never asks, and a range never walks it, having no chat of its own.
+    describe(`with the subagents its runtime ran in-process`, () => {
+        const session = (id: string, over: Partial<SubagentSession> = {}): SubagentSession => ({
+            id,
+            kind: `subagent`,
+            conversationId: `p`,
+            status: `running`,
+            startedAt: 1_000,
+            activityAt: 1_000,
+            ...over,
+        });
+        const early = session(`early`, { startedAt: 500 });
+        const late = session(`late`, { startedAt: 2_000 });
+        const newest = session(`newest`, { status: `completed`, endedAt: 9_500, activityAt: 9_500 });
+        const oldest = session(`oldest`, { status: `failed`, endedAt: 7_000, activityAt: 7_000 });
+
+        it(`weaves the working ones among the working by when each started, and counts the settled ones in the one fold`, () => {
+            const tray = trayOf(brood, at(), [late, newest, early, oldest]);
+            expect(ids(tray?.lead)).toEqual([`early`, `w1`, `w2`, `late`]);
+            expect([tray?.asks, tray?.groups, tray?.folded]).toEqual([[], [], 4]);
+        });
+
+        it(`unfolds the settled ones among the settled, newest first`, () => {
+            expect(ids(trayOf(brood, at({ opened: new Set([FINISHED_FOLD]) }), [oldest, newest])?.tail)).toEqual([`newest`, `s1`, `s2`, `oldest`]);
+        });
+
+        it(`leaves them out of a range's walk, having no chat to open`, () => {
+            const tray = trayOf(brood, at({ opened: new Set([FINISHED_FOLD]) }), [early, newest]);
+            expect(ids(trayRows(tray))).toEqual([`w1`, `w2`, `s1`, `s2`]);
+        });
+
+        it(`draws a tray for a card whose only children ran in-process`, () => {
+            expect(trayOf([], at(), [early])).toEqual({ asks: [], lead: [early], groups: [], folded: 0, open: false, tail: [] });
+            expect(trayOf(undefined, at(), [newest])).toEqual({ asks: [], lead: [], groups: [], folded: 1, open: false, tail: [] });
+        });
+
+        it(`lists the ones a filter matched beside the conversations it matched`, () => {
+            const filtered = at({ filtering: true, matches: (agent) => agent.id === `w1`, matchesSubagent: (found) => found.id === `late` });
+            expect(ids(trayOf(brood, filtered, [early, late])?.lead)).toEqual([`w1`, `late`]);
+            expect(trayOf([], { ...filtered, matchesSubagent: () => false }, [early, late])).toBeUndefined();
+        });
     });
 });

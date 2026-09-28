@@ -1,5 +1,5 @@
 import "@intentic/testing/dom";
-import type { AutomationApproval, WorkflowRun } from "@intentic/sandbox-contract";
+import type { AutomationApproval, SubagentSession, WorkflowRun } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 import { type EffectScope, effectScope, ref, shallowRef } from "vue";
 import { NO_ATTENTION } from "../../fleet/agentStatus";
@@ -37,7 +37,7 @@ const run = (runId: string, over: Partial<WorkflowRun> = {}): WorkflowRun =>
         steps: [],
         ...over,
     }) as WorkflowRun;
-const ids = (agents: readonly FleetAgent[]): string[] => agents.map((agent) => agent.id);
+const ids = (agents: readonly { readonly id: string }[]): string[] => agents.map((agent) => agent.id);
 const runIds = (runs: readonly WorkflowRun[]): string[] => runs.map((entry) => entry.runId);
 
 const running: EffectScope[] = [];
@@ -73,6 +73,7 @@ const boardOf = (
     const filter = {
         active,
         needle,
+        matchCase: ref(false),
         matches: (agent: FleetAgent): boolean => !active.value || (agent.title ?? ``).includes(needle.value) || agent.id === needle.value,
         exact: (agent: FleetAgent): boolean => active.value && agent.id === needle.value,
         archivedMatches: shallowRef<readonly FleetAgent[]>([]),
@@ -86,9 +87,11 @@ const boardOf = (
     };
     const agents = { fleet: shallowRef(fleet), lanes: shallowRef(laneGroups(fleet)), archived: shallowRef(over.archived ?? []) };
     const selected = ref<string | undefined>(undefined);
+    // Nothing ran in-process here: the trays those join are childFold.test.ts's.
+    const roster = { inProcessOf: (): readonly SubagentSession[] => [] };
     const effects = effectScope();
     running.push(effects);
-    const lanes = effects.run(() => useBoardLanes({ view, scope, filter, drag, agents, selected }))!;
+    const lanes = effects.run(() => useBoardLanes({ view, scope, filter, drag, agents, roster, selected }))!;
     const filterBy = (text: string): void => {
         needle.value = text;
         active.value = true;

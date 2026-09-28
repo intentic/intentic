@@ -302,17 +302,6 @@ describe(`turn runs`, () => {
         ]);
     });
 
-    it(`keeps one transcript per helper, out of the same frames`, async () => {
-        const { turnFn, push, close } = crankedTurn();
-        const run = started(startTurnRun(deps, turnFn, turn(`c-child`), { opening }));
-        push({ kind: `tool_call`, id: `task-1`, name: `Agent`, category: `other`, status: `in_progress` });
-        push({ kind: `delta`, text: `child prose`, parentToolUseId: `task-1` });
-        close();
-        await waitFor(() => expect(run.done).toBe(true));
-        expect(run.rowsOf(`task-1`)).toEqual([{ role: `assistant`, text: `child prose` }]);
-        expect(run.rowsOf(`nobody`)).toEqual([]);
-    });
-
     it(`drops a finished run after retention: attach then finds nothing`, async () => {
         jest.useFakeTimers();
         try {

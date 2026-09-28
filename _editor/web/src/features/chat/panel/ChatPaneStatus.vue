@@ -129,7 +129,7 @@ const usageChip = computed(() => {
         <div class="ml-auto flex items-center gap-3">
             <!-- What this chat left running past its turns; first, since it is the one readout here that ends on its own. -->
             <ChatJobsReadout />
-            <!-- Whether this transcript shows its tool calls (ChatToolCallsToggle, also drawn in the Subagents pane); joins the other readouts under the composer. -->
+            <!-- Whether this transcript shows its tool calls (ChatToolCallsToggle); joins the other readouts under the composer. -->
             <ChatToolCallsToggle />
             <!-- How long answering stays cheap, and the one press that keeps it so while the chat sits idle. -->
             <template v-if="cacheChip !== undefined && card !== undefined">

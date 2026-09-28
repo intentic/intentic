@@ -1,15 +1,16 @@
 // The children an agent started, through the real board: they hang under its card as rows instead of standing as
 // cards, working ones in sight and settled ones behind a count, and a child asking what only the reader can give moves
-// its parent's card to Attention, wearing the ask there and on its own row. The fold's rules are
-// view/childFold.test.ts; this pins the board's wiring of them.
+// its parent's card to Attention, wearing the ask there and on its own row. The subagents its runtime ran in-process
+// ride in the same tray, from the roster. The fold's rules are view/childFold.test.ts; this pins the board's wiring.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { type AgentSummary, providerLabel } from "@intentic/sandbox-contract";
+import { type AgentSummary, providerLabel, type SubagentSession } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import PrimeVue from "primevue/config";
 import { type App, createApp, h, nextTick } from "vue";
 import { useChat } from "../../chat/run/useChat";
+import { rpcKey } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
 import { setAgents } from "../fleet/useAgents-registry";
 import { router } from "../../../router";
@@ -50,6 +51,7 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.replaceChildren();
+    queryClient.removeQueries({ queryKey: rpcKey(`system.subagents`) });
 });
 
 const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
@@ -132,6 +134,59 @@ it(`unfolds the settled children on the count, and points the chat at a child fr
     [...(tray(board)?.querySelectorAll<HTMLButtonElement>(`button:not([aria-expanded])`) ?? [])].find((row) => row.textContent?.includes(`audit the deps`))?.click();
     await settle();
     expect(useChat().activeId.value).toBe(`audit`);
+});
+
+// The roster as the daemon answers it: what each conversation's runtime ran in-process, and the spawned ones filed too.
+const roster = (sessions: SubagentSession[]): void => {
+    queryClient.setQueryData(rpcKey(`system.subagents`), { sessions });
+};
+const inProcess = (id: string, over: Partial<SubagentSession> = {}): SubagentSession => ({
+    id,
+    kind: `subagent`,
+    conversationId: `lead`,
+    agentType: `Explore`,
+    status: `running`,
+    startedAt: 1,
+    activityAt: 1,
+    ...over,
+});
+
+it(`carries the subagents its runtime ran in-process in the same tray, and a spawned one the roster files too only once`, async () => {
+    setAgents(family, 100);
+    roster([
+        inProcess(`call-map`, { description: `map the UI` }),
+        inProcess(`call-scan`, { description: `scan the logs`, status: `completed`, endedAt: 950, activityAt: 950 }),
+        { id: `port`, kind: `spawned`, conversationId: `lead`, agentType: `Codex`, status: `running`, startedAt: 2, activityAt: 2 },
+    ]);
+    const board = await mountBoard();
+
+    expect(cards(board)).toEqual([`Focus agent: ship the release`]);
+    expect(rows(board)).toEqual([
+        expect.stringMatching(/^rotate the keys/),
+        expect.stringMatching(/^map the UIExplore/),
+        expect.stringMatching(/^port the parser/),
+    ]);
+    expect(fold(board)?.textContent?.trim()).toBe(t(`agents.childRows.finished`, { count: 3 }));
+
+    fold(board)?.click();
+    await settle();
+    expect(rows(board).slice(3)).toEqual([
+        expect.stringMatching(/^scan the logsExplore/),
+        expect.stringMatching(/^write the notes/),
+        expect.stringMatching(/^audit the deps/),
+    ]);
+});
+
+// Its work is in its parent's chat, on the card of the call that started it: the row's press opens that chat.
+it(`points the chat at the parent from an in-process subagent's row`, async () => {
+    setAgents([lead], 100);
+    roster([inProcess(`call-map`, { description: `map the UI` })]);
+    const board = await mountBoard();
+
+    expect(rows(board)).toEqual([expect.stringMatching(/^map the UIExplore/)]);
+    tray(board)?.querySelector<HTMLButtonElement>(`button`)?.click();
+    await settle();
+    expect(useChat().activeId.value).toBe(`lead`);
 });
 
 it(`draws no tray for a card that started nothing`, async () => {

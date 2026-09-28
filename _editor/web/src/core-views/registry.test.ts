@@ -543,7 +543,7 @@ describe(`a guest's rail`, () => {
             expect(sectionReachable(`/chat`)).toBe(true);
             expect(sectionReachable(`/agents`)).toBe(true);
             expect(sectionReachable(`/sandbox/access`)).toBe(true);
-            for (const closed of [`/workspace`, `/preview`, `/browsers`, `/subagents`, `/sandbox`, `/ext/intentic.approvals`]) {
+            for (const closed of [`/workspace`, `/preview`, `/browsers`, `/sandbox`, `/ext/intentic.approvals`]) {
                 expect(sectionReachable(closed), closed).toBe(false);
             }
         } finally {

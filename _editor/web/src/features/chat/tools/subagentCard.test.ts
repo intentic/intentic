@@ -61,7 +61,6 @@ describe(`subagentView`, () => {
                 verification: { state: `unproven` },
             },
             working: false,
-            rostered: true,
         });
     });
 
@@ -72,7 +71,7 @@ describe(`subagentView`, () => {
 
     // The turn ended and the roster let it go: what the record last said is a snapshot, not news.
     it(`never calls a record frozen at its turn's end working`, () => {
-        expect(subagentView(`call-9`, spawned, rosterOf(), false)).toMatchObject({ working: false, rostered: false, subagent: { status: `running` } });
+        expect(subagentView(`call-9`, spawned, rosterOf(), false)).toMatchObject({ working: false, subagent: { status: `running` } });
         expect(subagentView(`call-9`, spawned, undefined, false)?.working).toBe(false);
     });
 });

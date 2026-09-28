@@ -12,7 +12,6 @@ import { forkedExec } from "@intentic/scaffold";
 import type { Caller } from "../auth/auth.js";
 import { listSubagentSessions, pairLiveSubagents } from "../agent/subagents/subagents.js";
 import { closeBrowserSession, listBrowserSessions } from "../browser/sessions/browser-sessions.js";
-import { readSubagentTranscript } from "../agent/subagents/subagent-transcript.js";
 import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.handler.js";
 import { LOCAL_MODEL_PREFIX } from "../capabilities/handlers/localmodel.handler.js";
 import type { Services } from "../composition.js";
@@ -46,7 +45,7 @@ import { buildId } from "../version.js";
 import { manifestProblems } from "../store/manifest/manifest-problems.js";
 import { repairManifest } from "../store/manifest/manifest-repair.js";
 import { workspaceIdentity } from "./workspace-identity.js";
-import { framedEvent, framedMetrics } from "../auth/fleet-scope.js";
+import { framedEvent, framedMetrics, framedSubagents } from "../auth/fleet-scope.js";
 import { frameBacklog } from "../seams/frame-backlog.js";
 import { callerFence } from "../areas/area-scope.js";
 
@@ -455,23 +454,13 @@ export const createSystemRoutes = (services: Services) => {
             await closeBrowserSession(input.name);
             return { ok: true };
         }),
-        // Subagents this sandbox started, and one's transcript; both records from the registry and the child's store.
-        // Paired against meta files first: the only model source for a child the daemon never watched spawn.
-        subagents: i.subagents.handler(async () => {
+        // Subagents this sandbox's conversations started, from the roster, each caller told only of the ones started by
+        // conversations it may see. Paired against meta files first: the only model source for a child the daemon never
+        // watched spawn.
+        subagents: i.subagents.handler(async ({ context }) => {
             await pairLiveSubagents(services.conversations);
-            return { sessions: listSubagentSessions(services.conversations) };
+            return { sessions: framedSubagents(context.identity, listSubagentSessions(services.conversations), services.agents.get) };
         }),
-        subagentTranscript: i.subagentTranscript.handler(async ({ input }) => ({
-            messages: await readSubagentTranscript(
-                {
-                    root: services.workspace.root,
-                    conversations: services.conversations,
-                    conversation: (agent) => services.transcripts.read(agent),
-                    toolChildren: (agent, toolId) => services.transcripts.toolChildren(agent, toolId),
-                },
-                input.id,
-            ),
-        })),
         // The three `system.*Device*` procedures are implemented in hosts/devices.routes.ts, beside the devices they
         // act on, and merged into this object by router.ts; the wire shape is the same either way.
         // Destroys one session. The name is validated before it reaches the `kill-session` argv, guarding against

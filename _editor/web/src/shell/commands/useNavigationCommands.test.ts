@@ -75,8 +75,9 @@ it(`names each destination by its family, so the palette groups them`, () => {
 it(`offers the areas whose rail tiles come and go with what is running`, () => {
     const app = mountShell();
 
-    // Browsers and Subagents leave the rail when nothing is running; the palette is the way back to a finished one.
-    expect(ids()).toEqual(expect.arrayContaining([`view.browsers`, `view.subagents`, `view.chat`, `view.preview`, `view.capabilities`]));
+    // Browsers leaves the rail when nothing is running; the palette is the way back to a finished one.
+    expect(ids()).toEqual(expect.arrayContaining([`view.browsers`, `view.chat`, `view.preview`, `view.capabilities`]));
+    expect(ids()).not.toContain(`view.subagents`);
     app.unmount();
 });
 

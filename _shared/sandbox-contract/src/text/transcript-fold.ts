@@ -19,8 +19,8 @@ import { unspokenPromptRow } from "../events/agent-words.js";
 import { needRowText } from "../events/need-wake.js";
 
 // Folds a turn's frames into rows once, live and for the settled record alike, so a reopened chat matches what was on
-// screen. `tag` selects the stream read: undefined is the main turn, a tool-call id is the subagent it spawned; other
-// frames nest under the card that spawned them. Rows mutate in place; every patch carries a copy of what it names.
+// screen. The main turn's frames are its rows; a frame a subagent produced (tagged with the call that spawned it) nests
+// under that call's card. Rows mutate in place; every patch carries a copy of what it names.
 //
 // Every subagent lands on the card of the call that started it, whichever mechanism started it. An in-process one (the
 // runtime's own Agent/Task tool) is named by that call's id, so its card is found at once. A spawned one is named by its
@@ -237,10 +237,7 @@ export class TranscriptFold {
     // Set by `retract`: this turn was refused before it ran, and its message went back to the conversation's queue.
     private unrun = false;
 
-    constructor(
-        opening: readonly TranscriptRow[],
-        private readonly tag?: string,
-    ) {
+    constructor(opening: readonly TranscriptRow[]) {
         for (const row of opening) {
             this.rows.push(row);
         }
@@ -251,7 +248,7 @@ export class TranscriptFold {
     /** Folds one frame in; returns the patches it produced, in order. */
     apply(event: AgentEvent): TranscriptPatch[] {
         const parent = "parentToolUseId" in event ? event.parentToolUseId : undefined;
-        if (parent !== this.tag) {
+        if (parent !== undefined) {
             return this.applyChild(event, parent);
         }
         switch (event.kind) {
@@ -552,12 +549,12 @@ export class TranscriptFold {
         return patches;
     }
 
-    // Routes a frame from a child stream onto the card that spawned it; its prose surfaces only when that child's own
-    // stream is read directly. A spawning call absent from this stream means there is nothing to nest under, so the
-    // frame is dropped.
-    private applyChild(event: AgentEvent, parent: string | undefined): TranscriptPatch[] {
-        const place = parent === undefined ? undefined : this.cards.get(parent);
-        if (place === undefined || parent === undefined) {
+    // Routes a frame from a child stream onto the card that spawned it: its calls and its thinking, never its prose,
+    // which is the child's own and reaches the parent as the call's result. A spawning call absent from this stream means
+    // there is nothing to nest under, so the frame is dropped.
+    private applyChild(event: AgentEvent, parent: string): TranscriptPatch[] {
+        const place = this.cards.get(parent);
+        if (place === undefined) {
             return [];
         }
         // Only the new words travel: the card whole, children and all, would go out again for every token.
@@ -732,13 +729,8 @@ export class TranscriptFold {
 }
 
 /** Folds a whole turn at once: opening rows, every frame, and how it ended; what a settled turn reads back as. */
-export const foldTurn = (
-    opening: readonly TranscriptRow[],
-    events: readonly AgentEvent[],
-    ending: TurnEnding = "settled",
-    tag?: string,
-): TranscriptRow[] => {
-    const fold = new TranscriptFold(opening, tag);
+export const foldTurn = (opening: readonly TranscriptRow[], events: readonly AgentEvent[], ending: TurnEnding = "settled"): TranscriptRow[] => {
+    const fold = new TranscriptFold(opening);
     for (const event of events) {
         fold.apply(event);
     }

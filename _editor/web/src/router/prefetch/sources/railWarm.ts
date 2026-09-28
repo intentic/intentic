@@ -1,7 +1,6 @@
 import { fetchBrowsers, browsersKey } from "../../../features/browsers/browsersQuery";
 import { capabilitiesKey, fetchCapabilities } from "../../../features/capabilities/connect/useCapabilities";
 import { rpcQuery } from "../../../features/sandbox/client/rpcQuery";
-import { fetchSubagents, subagentsKey } from "../../../features/chat/subagents/subagentsQuery";
 import { fetchModules, modulesKey } from "../../../features/workspace/health/useModules";
 import { fetchWorkspaceTree } from "../../../features/workspace/explorer/useWorkspaceTree";
 import { workspaceTreeKey } from "../../../features/workspace/health/workspaceTreeKey";
@@ -20,5 +19,4 @@ export const railWarmSource = (): readonly WarmTask[] => [
     warmQuery(`rail:panels`, `rail`, rpcQuery(`panels.list`)),
     warmQuery(`rail:capabilities`, `rail`, { queryKey: capabilitiesKey, queryFn: fetchCapabilities }),
     warmQuery(`rail:browsers`, `rail`, { queryKey: browsersKey, queryFn: fetchBrowsers }),
-    warmQuery(`rail:subagents`, `rail`, { queryKey: subagentsKey, queryFn: fetchSubagents }),
 ];

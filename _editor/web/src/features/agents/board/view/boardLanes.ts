@@ -2,6 +2,7 @@ import type { AutomationApproval, WorkflowRun } from "@intentic/sandbox-contract
 import { t } from "@intentic/ui/i18n";
 import { computed, type Ref } from "vue";
 import type { FleetLane } from "../../fleet/agentStatus";
+import type { SubagentRoster } from "../../fleet/subagentRoster";
 import { clearableOf, FINISHED_WINDOW, type FleetAgent, windowFinished } from "../../fleet/useAgents-fleet";
 import { insideRun, runMatches, runsInLane, runsNeedingYou } from "../../fleet/useWorkflowRuns";
 import type { DropTarget } from "../laneDrop";
@@ -72,6 +73,7 @@ export interface LanesHost {
     readonly filter: {
         readonly active: Readonly<Ref<boolean>>;
         readonly needle: Readonly<Ref<string>>;
+        readonly matchCase: Readonly<Ref<boolean>>;
         readonly matches: (agent: FleetAgent) => boolean;
         // The query is this agent's id whole (idMatch.ts).
         readonly exact: (agent: FleetAgent) => boolean;
@@ -90,6 +92,8 @@ export interface LanesHost {
         readonly lanes: Readonly<Ref<Record<FleetLane, FleetAgent[]>>>;
         readonly archived: Readonly<Ref<readonly FleetAgent[]>>;
     };
+    // The subagents each conversation's runtime ran in-process, which ride in its card's tray too.
+    readonly roster: Pick<SubagentRoster, "inProcessOf">;
     // The card wearing the ring, which the Finished window keeps wherever it sits.
     readonly selected: Readonly<Ref<string | undefined>>;
 }
@@ -112,7 +116,7 @@ export const useBoardLanes = (host: LanesHost) => {
         return runsInLane(liveRuns.value, lane, windowed.value ? FINISHED_WINDOW : Number.POSITIVE_INFINITY, needingYou.value);
     };
     // The children riding under the cards, and the archive with its own filed children under their filed parents.
-    const trays = useBoardTrays({ scope, archived: agents.archived, filter, selected: host.selected });
+    const trays = useBoardTrays({ scope, archived: agents.archived, filter, roster: host.roster, selected: host.selected });
     const { archivedCards, answers } = trays;
     // How many rows the archive would draw: a run with four steps counts as one row there, not five.
     const archiveSize = computed(() => archivedCards.value.length + scope.archivedRunRows.value.length);
@@ -198,6 +202,7 @@ export const useBoardLanes = (host: LanesHost) => {
     return {
         cardsFor,
         childrenOf: trays.childrenOf,
+        subagentsOf: trays.subagentsOf,
         cardOf: trays.cardOf,
         callOf: trays.callOf,
         trayFor: trays.trayFor,

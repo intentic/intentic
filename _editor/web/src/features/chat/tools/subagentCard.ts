@@ -7,14 +7,12 @@ import type { SubagentSession, TranscriptSubagent } from "@intentic/sandbox-cont
 const LIVE: ReadonlySet<TranscriptSubagent["status"]> = new Set([`pending`, `running`, `blocked`, `paused`]);
 
 export interface SubagentView {
-    // Its own id: what the roster, `wait` and its page call it.
+    // Its own id: what the roster and `wait` call it, and a spawned one's conversation id.
     readonly id: string;
     readonly subagent: TranscriptSubagent;
     // Working, on the word of something that can still vouch for it: the turn streaming it, or the roster. A record
     // frozen when its turn ended is not working, whatever it last said.
     readonly working: boolean;
-    // Whether the roster still holds it; one it has let go is read from its turn's record alone.
-    readonly rostered: boolean;
 }
 
 // The roster's newer word on everything a card draws; its id and kind are the card's own and never move.
@@ -49,5 +47,5 @@ export const subagentView = (
     const id = recorded.id ?? cardId;
     const now = roster?.(id);
     const subagent = now === undefined ? recorded : { ...recorded, ...latest(now) };
-    return { id, subagent, working: LIVE.has(subagent.status) && (turnLive || now !== undefined), rostered: now !== undefined };
+    return { id, subagent, working: LIVE.has(subagent.status) && (turnLive || now !== undefined) };
 };

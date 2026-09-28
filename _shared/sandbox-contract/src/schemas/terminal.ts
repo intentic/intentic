@@ -139,8 +139,9 @@ export const BrowserNameParamSchema = z.object({ name: z.string().describe("Whic
 // only where its record is read from and what else can be done with it, never how it looks.
 export const SubagentKindSchema = z.enum(["subagent", "spawned"]);
 export type SubagentKind = z.infer<typeof SubagentKindSchema>;
-// running/pending/blocked are live, the rest terminal. Uses the SDK's own task vocabulary rather than AgentStatus.
-// `blocked` is the one addition: a spawned child's question/permission/plan card raises it.
+// pending/running/blocked/paused are live, the rest terminal. Uses the SDK's own task vocabulary rather than AgentStatus.
+// `blocked` is one addition: a spawned child's question/permission/plan card raises it. `paused` the other: a spawned
+// child whose turn stopped at a wall the sandbox re-runs it past by itself, its report still to come.
 export const SubagentStatusSchema = z.enum(["pending", "running", "blocked", "completed", "failed", "killed", "paused"]);
 export type SubagentStatus = z.infer<typeof SubagentStatusSchema>;
 // Whether anything checked what the subagent did, computed from its edits against the checks that ran after them; works
@@ -192,7 +193,7 @@ export const SubagentSessionSchema = z.object({
         .boolean()
         .optional()
         .describe(
-            "The parent carried on working instead of waiting for it. This is the whole reason the list exists: such a subagent used to be invisible until its result landed, sometimes minutes later.",
+            "The parent carried on working instead of waiting for it. Such a subagent is otherwise invisible until its result lands, sometimes minutes later.",
         ),
     status: SubagentStatusSchema.describe(
         "How it is going. Blocked means it needs an answer, which a parent and an operator act on differently from it simply working.",
@@ -218,7 +219,10 @@ export const SubagentSessionSchema = z.object({
 });
 export type SubagentSession = z.infer<typeof SubagentSessionSchema>;
 export const SubagentsListSchema = z.object({
-    sessions: z.array(SubagentSessionSchema).describe("Every subagent this sandbox's conversations have started, in-process and spawned alike."),
+    sessions: z
+        .array(SubagentSessionSchema)
+        .describe(
+            "The subagents conversations the caller can see have started, in-process and spawned alike: every one still working, and the most recent that have settled. Working ones first, then the most recently active.",
+        ),
 });
 export type SubagentsList = z.infer<typeof SubagentsListSchema>;
-export const SubagentIdParamSchema = z.object({ id: z.string() });

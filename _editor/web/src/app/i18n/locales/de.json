@@ -7,7 +7,6 @@
             "nothingLanded": "Nichts zu landen: Der Branch dieser Unterhaltung enthält keine Arbeit, die Ihr Workspace nicht schon hat."
         },
         "agentCard": {
-            "subagentsStarted": "Subagenten, die er gestartet hat",
             "archiveAgent": "Agent archivieren",
             "archiveBranchDiffConversation": "Archivieren — Branch, Diff und Unterhaltung bleiben erhalten",
             "archiveConversationKept": "Archivieren — die Unterhaltung bleibt erhalten",
@@ -28,7 +27,6 @@
             "restoreWithChildren": "Diesen Agenten zurück aufs Board legen, samt {count} Agenten, den er gestartet hat | Diesen Agenten zurück aufs Board legen, samt den {count} Agenten, die er gestartet hat",
             "runsOn": "Läuft auf {runner}",
             "sendTurnAgainSame": "Diesen Zug erneut senden. Es ist dieselbe Anfrage wie zuvor, keine neue Nachricht.",
-            "stillWorking": "{running} von {total} arbeiten noch",
             "stopWatchingConversationStays": "Nicht mehr beobachten — diese Unterhaltung bleibt, wo sie ist",
             "temporary": ", vorübergehend",
             "waitingMaintainer": "{landAsk}: wartet auf einen Maintainer"
@@ -290,7 +288,12 @@
             "questionGroup": "{count} warten auf seine Antwort",
             "conflictGroup": "{count} mit Landekonflikt",
             "otherGroup": "{count}: {reason}",
-            "groupHint": "„{title}“ wurde informiert. Diese erreichen Sie nur, wenn er aufhört zu arbeiten."
+            "groupHint": "„{title}“ wurde informiert. Diese erreichen Sie nur, wenn er aufhört zu arbeiten.",
+            "queued": "In der Warteschlange",
+            "needsInput": "Braucht eine Eingabe",
+            "paused": "Pausiert",
+            "completed": "Abgeschlossen",
+            "inProcessHint": "Lief im eigenen Zug dieses Agenten, daher steht seine Arbeit im Chat dieses Agenten"
         },
         "liveMetrics": {
             "coresValue": "{cores} Kern | {cores} Kerne",
@@ -1280,10 +1283,8 @@
             "interrupted": "unterbrochen",
             "more": "… {hidden} weitere",
             "needsInput": "braucht Eingabe",
-            "openAgentsTranscript": "Das Transkript dieses Agenten öffnen",
             "openItsConversation": "Seine Unterhaltung öffnen",
             "viewLarger": "Größer anzeigen",
-            "watchAgent": "Diesen Agenten beobachten",
             "watchBrowser": "Dem Browser zusehen"
         },
         "chatToolDiff": {
@@ -1433,23 +1434,6 @@
         },
         "usageStatus": {
             "percentLeft": "{percent} übrig"
-        },
-        "subagents": {
-            "agentsStartedFinishedAged": "Die Agenten, die {focusTitle} gestartet hat, sind fertig und aus dieser Liste gealtert. Sein eigenes Transkript ist das Protokoll dessen, was sie zurückgemeldet haben.",
-            "itsConversation": "Seine Unterhaltung",
-            "noAgentsStarted": "Keine Agenten gestartet",
-            "noTranscriptRecordedAgent": "Für diesen Agenten wurde kein Transkript aufgezeichnet.",
-            "nothingRunningAgent": "Nichts läuft für diesen Agenten",
-            "openConversationStartedAgent": "Die Unterhaltung öffnen, die diesen Agenten gestartet hat",
-            "parent": "Eltern",
-            "parentsModelNothingNamed": "Das Modell seines Elternteils: für diesen Agenten wurde keines benannt",
-            "report": "Bericht",
-            "showAll": "Alle anzeigen",
-            "showEveryAgent": "Jeden Agenten zeigen",
-            "showFullReport": "Den vollständigen Bericht zeigen",
-            "subagentsAppearHere": "Wenn ein Agent einen Subagenten startet — prozessintern mit seinem eigenen Agent-Werkzeug oder auf einem beliebigen verbundenen Anbieter —, erscheint dieser hier, mit eigenem Transkript.",
-            "watchingLiveWhatAgent": "Live zusehen: was dieser Agent schreibt, landet hier, während er arbeitet.",
-            "work": "Arbeit"
         },
         "words": {
             "showToolCalls": "Werkzeugaufrufe zeigen",
@@ -3785,8 +3769,7 @@
             "nextRailSection": "Nächster Leistenbereich",
             "open": "{live} offen",
             "previousRailSection": "Vorheriger Leistenbereich",
-            "running": "{healthy} laufen",
-            "stillWorking": "{live} arbeiten noch"
+            "running": "{healthy} laufen"
         },
         "useNavigationCommands": {
             "add": "Hinzufügen…"

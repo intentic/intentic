@@ -209,8 +209,6 @@ describe("what the pair does", () => {
         const turn: SubagentTurn = {
             conversationId: "conv-cursor",
             conversations: actors,
-            cwd: "/work",
-            sessionId: undefined,
             subagentsDir: undefined,
         };
         openSpawnedChild(turn, { id: "sub-child-1", description: "port it", provider: "claude" });

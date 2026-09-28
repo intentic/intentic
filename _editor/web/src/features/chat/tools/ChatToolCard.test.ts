@@ -187,7 +187,6 @@ describe(`ChatToolCard`, () => {
         // The roster's word on each, as the pane's surface hands it over.
         const surfaceWith = (...roster: SubagentSession[]): ChatSurface => ({
             imageUrl: () => undefined,
-            subagentRoute: (id) => `/subagents/${id}`,
             conversationRoute: (id) => `/agents/${id}`,
             subagent: (id) => roster.find((session) => session.id === id),
         });
@@ -206,14 +205,16 @@ describe(`ChatToolCard`, () => {
             return drawn;
         };
 
-        it(`draws a spawned subagent's call exactly as an in-process one's`, () => {
+        // The one difference is the door: a spawned subagent has a conversation of its own to open, and an in-process one's
+        // work is this very card's, drawn under it.
+        it(`draws a spawned subagent's call as an in-process one's, with the door to its own conversation`, () => {
             expect(header(inProcess, true, surfaceWith())).toEqual({
                 name: `Subagent`,
                 title: `Explore · Map the UI`,
-                icons: [`chevron-right`, `users`, `users`],
+                icons: [`chevron-right`, `users`],
                 pills: [`background`],
                 facts: [`Grep`, `4 tools`],
-                door: [`/subagents/call-1`, `Watch this agent`],
+                door: [undefined, undefined],
             });
             expect(header(spawned, true, surfaceWith())).toEqual({
                 name: `Subagent`,
@@ -221,7 +222,7 @@ describe(`ChatToolCard`, () => {
                 icons: [`chevron-right`, `users`, `users`],
                 pills: [`background`],
                 facts: [`Edit`, `4 tools`],
-                door: [`/subagents/sub-x`, `Watch this agent`],
+                door: [`/agents/sub-x`, `Open its conversation`],
             });
         });
 
@@ -236,11 +237,11 @@ describe(`ChatToolCard`, () => {
                 startedAt: 1,
                 activityAt: 2,
             };
-            expect(header(spawned, false, surfaceWith(blocked))).toMatchObject({ pills: [`background`, `needs input`], door: [`/subagents/sub-x`, `Watch this agent`] });
+            expect(header(spawned, false, surfaceWith(blocked))).toMatchObject({ pills: [`background`, `needs input`], door: [`/agents/sub-x`, `Open its conversation`] });
         });
 
         // Its turn ended and the roster let it go: the record's last word is a snapshot, and its conversation keeps it.
-        it(`leads to a spawned subagent's own conversation once the roster lets it go, claiming nothing in flight`, () => {
+        it(`still leads to a spawned subagent's own conversation once the roster lets it go, claiming nothing in flight`, () => {
             expect(header(spawned, false, surfaceWith())).toMatchObject({ pills: [], door: [`/agents/sub-x`, `Open its conversation`] });
         });
     });

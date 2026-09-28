@@ -342,11 +342,6 @@ class TurnFold {
             yield { kind: "session", sessionId };
             this.adoptChecklist(sessionId);
         }
-        // The session id a child's transcript files under, onto the handle the hooks close over (SubagentTurn).
-        const subagents = this.args.subagents;
-        if (subagents !== undefined && subagents.sessionId === undefined && typeof sessionId === "string" && sessionId !== "") {
-            subagents.sessionId = sessionId;
-        }
         // Frames produced inside a subagent (Task tool) carry its id so the UI can group them.
         const parent = (message as { parent_tool_use_id?: string | null }).parent_tool_use_id ?? undefined;
         switch (message.type) {

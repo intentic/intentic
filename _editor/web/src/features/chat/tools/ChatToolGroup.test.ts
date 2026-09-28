@@ -1,4 +1,4 @@
-// A collapsed run renders outside a ChatPane (the Subagents page) and opens its file through the injected surface.
+// A collapsed run renders wherever a surface is provided, not only in a ChatPane, and opens its file through it.
 import "@intentic/testing/dom";
 import { type App, createApp, h } from "vue";
 import type { TranscriptTool } from "@intentic/sandbox-contract";

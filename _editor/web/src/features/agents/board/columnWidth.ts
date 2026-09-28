@@ -1,7 +1,7 @@
 import { ref, type Ref } from "vue";
 
-// Rail width, shared by every column of session cards (ChatTabs, Subagents.vue) so a drag on one is the width the other
-// opens at, in app pixels. Floor (288) matches ChatTabList's own docked-sheet floor; default (320) fits two lines of
+// Rail width, the chat rail's column of session cards (ChatTabs, RailColumn), and the width the chat panel sets aside for
+// it (ChatPanel), in app pixels. Floor (288) matches ChatTabList's own docked-sheet floor; default (320) fits two lines of
 // title plus the meta row; drag reaches 480.
 
 const RAIL_WIDTH_KEY = `ui-chat-rail-width`;

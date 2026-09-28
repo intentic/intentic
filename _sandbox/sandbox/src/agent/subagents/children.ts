@@ -29,6 +29,7 @@ import {
     markSubagentEndingReported,
     noteSpawnedChild,
     openSpawnedChild,
+    ranInProcess,
     settleSpawnedChild,
     type SpawnedChildBirth,
     subagentEndingReported,
@@ -580,20 +581,18 @@ const runChildTurn = (services: Services, childId: string, parent: string, turn:
     })();
 };
 
-// The roster handle a child's records are filed through: under its parent, in the parent's tree.
-const rosterHandle = (services: Services, parent: string, cwd: string): SubagentTurn => ({
+// The roster handle a child's records are filed through: under its parent.
+const rosterHandle = (services: Services, parent: string): SubagentTurn => ({
     conversationId: parent,
     conversations: services.conversations,
-    cwd,
-    sessionId: undefined,
     subagentsDir: undefined,
 });
 
 // A child's roster row as it opens: named by its task, wearing its provider's label and its model. Every turn of the
 // child reopens it the same way, so a follow-up never retitles it with its own words.
 const childBirth = (id: string, spec: ChildSpawnSpec, depth: number): SpawnedChildBirth => {
-    const { provider, harness, model } = childRouting(spec);
-    return { id, description: taskLine(spec), agentType: labelOf(provider), provider, harness, spawnDepth: depth, model };
+    const { provider, model } = childRouting(spec);
+    return { id, description: taskLine(spec), agentType: labelOf(provider), provider, spawnDepth: depth, model };
 };
 
 // Why the sandbox sent a child's turn again by itself, in its parent's words.
@@ -643,7 +642,7 @@ export const adoptChildTurn = (services: Services, started: DomainEventMap["run.
     const seats = services.conversations.holdings(SEATS);
     const ledger = seats.get(kid.parent) ?? { live: 0, total: 0 };
     seats.hold(kid.parent, kid.parent, { live: ledger.live + 1, total: ledger.total });
-    openSpawnedChild(rosterHandle(services, kid.parent, kid.cwd), { ...childBirth(childId, kid.spec, kid.depth), again: true });
+    openSpawnedChild(rosterHandle(services, kid.parent), { ...childBirth(childId, kid.spec, kid.depth), again: true });
     void followChildRun(services, childId, kid.parent, kid, run, freshTally());
     void sayToParent(
         services,
@@ -1011,7 +1010,7 @@ const startChild = async (
         };
         services.conversations.holdings(CHILDREN).hold(parent.conversationId, id, record, id);
         // Files under the parent's conversation, what `wait` matches; a held start's waiting row gives way to this one.
-        openSpawnedChild(rosterHandle(services, parent.conversationId, parent.cwd), childBirth(id, spec, depth), true);
+        openSpawnedChild(rosterHandle(services, parent.conversationId), childBirth(id, spec, depth), true);
         runChildTurn(services, id, parent.conversationId, turn, placement === undefined ? "local" : { runner: placement });
         handedOff = true;
         return repointed === undefined ? { ok: true, id } : { ok: true, id, note: repointedNote(childRunOf(asked), repointed) };
@@ -1025,7 +1024,7 @@ const startChild = async (
 // A start waiting on the owner, filed as a child already, so `wait` parks on it and `send` refuses it with the reason.
 const holdChildStart = (services: Services, parent: ChildParent, start: ChildStart): void => {
     services.conversations.holdings(CHILDREN).hold(parent.conversationId, start.id, childRecordOf(parent, start.asked, start.depth, "start"), start.id);
-    openSpawnedChild(rosterHandle(services, parent.conversationId, parent.cwd), childBirth(start.id, start.asked, start.depth));
+    openSpawnedChild(rosterHandle(services, parent.conversationId), childBirth(start.id, start.asked, start.depth));
     noteSpawnedChild(services.conversations, start.id, { status: "pending", summary: START_SUMMARY });
 };
 
@@ -1134,7 +1133,7 @@ const followUp = async (services: Services, parent: ChildParent, kid: ChildRecor
         endPause(kid);
         // Reopens the roster record under the same id with fresh state, so `wait` sees it running again. It keeps the
         // spawn's own description; what this turn was asked rides as the row's summary until its report replaces it.
-        openSpawnedChild(rosterHandle(services, parent.conversationId, kid.cwd), { ...childBirth(childId, kid.spec, kid.depth), again: true });
+        openSpawnedChild(rosterHandle(services, parent.conversationId), { ...childBirth(childId, kid.spec, kid.depth), again: true });
         noteSpawnedChild(services.conversations, childId, { summary: `Follow-up: ${taskLine({ prompt: message })}` });
         // A turn somebody else started (a person in its chat, a land conflict) is not the parent's to steer: the
         // follow-up waits for it to end instead, which is worth saying now.
@@ -1189,6 +1188,18 @@ const sendAllowed = async (services: Services, parent: ChildParent, kid: ChildRe
     }
 };
 
+// Why an id reaches no child of this parent. Both kinds are listed alike (`list`), so an id naming a subagent its own
+// runtime ran in-process is told apart from one naming nothing: it is this conversation's, and a service call cannot
+// reach it.
+const noSuchChild = (services: Services, parent: ChildParent, childId: string): ChildActionResult =>
+    ranInProcess(services.conversations, parent.conversationId, childId)
+        ? {
+              ok: false,
+              message:
+                  "That subagent ran in-process, inside this conversation's own turn: it has no conversation of its own to message, answer or cancel. Only the turn that started it reaches it, through its runtime's own tools.",
+          }
+        : { ok: false, message: "No such child of this conversation. `list` shows yours." };
+
 /**
  * Steers a working child, or sends a settled one a follow-up turn resuming its last reported session. Only the parent
  * that started it may reach it. A message the owner must allow comes back at once, and goes when they do.
@@ -1196,7 +1207,7 @@ const sendAllowed = async (services: Services, parent: ChildParent, kid: ChildRe
 export const sendToChild = async (services: Services, parent: ChildParent, childId: string, message: string): Promise<ChildActionResult> => {
     const kid = services.conversations.holdings(CHILDREN).get(childId);
     if (kid === undefined || kid.parent !== parent.conversationId) {
-        return { ok: false, message: "No such child of this conversation. `list` shows yours." };
+        return noSuchChild(services, parent, childId);
     }
     const verdict = await judgeMove(services, parent.conversationId, kid.spec.provider);
     if (verdict.effect === "deny") {
@@ -1258,7 +1269,7 @@ export const answerChild = async (
 ): Promise<ChildActionResult> => {
     const kid = services.conversations.holdings(CHILDREN).get(childId);
     if (kid === undefined || kid.parent !== parent.conversationId) {
-        return { ok: false, message: "No such child of this conversation. `list` shows yours." };
+        return noSuchChild(services, parent, childId);
     }
     const unanswerable = unanswerableWhy(kid.pending);
     if (unanswerable !== undefined) {
@@ -1309,7 +1320,7 @@ const CANCEL_NOTES = {
 export const cancelChild = async (services: Services, parent: ChildParent, childId: string): Promise<ChildActionResult> => {
     const kid = services.conversations.holdings(CHILDREN).get(childId);
     if (kid === undefined || kid.parent !== parent.conversationId) {
-        return { ok: false, message: "No such child of this conversation. `list` shows yours." };
+        return noSuchChild(services, parent, childId);
     }
     if (kid.held !== undefined) {
         return { ok: false, message: "It waits on the owner's card, which is theirs to answer: it does not go unless they allow it." };

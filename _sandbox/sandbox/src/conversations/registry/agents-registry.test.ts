@@ -625,8 +625,6 @@ describe("agents registry", () => {
         const child = (held: SubagentTurn["conversations"]): SubagentTurn => ({
             conversationId: "c1",
             conversations: held,
-            cwd: WORKSPACE_ROOT,
-            sessionId: "sess-1",
             subagentsDir: undefined,
         });
         const frame = (message: SubagentTaskMessage, held: SubagentTurn["conversations"] = conversations): AgentEvent => {

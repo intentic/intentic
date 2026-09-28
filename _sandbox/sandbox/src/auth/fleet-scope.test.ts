@@ -1,6 +1,6 @@
 import type { ProvenCaller } from "./auth.js";
-import type { SandboxMetrics } from "@intentic/sandbox-contract";
-import { framedEvent, framedMetrics, type Provenance, refuseUnlessVisible, visibleTo } from "./fleet-scope.js";
+import type { SandboxMetrics, SubagentSession } from "@intentic/sandbox-contract";
+import { framedEvent, framedMetrics, framedSubagents, type Provenance, refuseUnlessVisible, visibleTo } from "./fleet-scope.js";
 
 // The two fences over the fleet, as pure rules: whose conversation counts as a guest's, what a fenced member may see
 // of work that is not theirs, and which frames of the event stream reach either. The routes apply these; this pins
@@ -212,5 +212,32 @@ describe("framedMetrics", () => {
     test("a conversation the registry does not know is left out even for a caller who sees the fleet whole", () => {
         expect(Object.keys(framedMetrics(viewer, metrics, agentOf).sessions)).toEqual(["mine", "theirs", "support"]);
         expect(Object.keys(framedMetrics(undefined, metrics, agentOf).sessions)).toEqual(["mine", "theirs", "support"]);
+    });
+});
+
+describe("framedSubagents", () => {
+    const registry = new Map<string, Provenance>([
+        ["mine", { owner: { email: "dee@example.com" } }],
+        ["theirs", { owner: { email: "ada@example.com" } }],
+        ["support", { owner: { email: "ada@example.com" }, areas: ["support"] }],
+    ]);
+    const agentOf = (id: string): Provenance | undefined => registry.get(id);
+    // One subagent under each parent, the in-process and spawned kinds alike, and one whose parent nobody holds.
+    const sessions: SubagentSession[] = [
+        { id: "call-1", kind: "subagent", conversationId: "mine", status: "running", startedAt: 1, activityAt: 1 },
+        { id: "sub-2", kind: "spawned", conversationId: "theirs", status: "running", startedAt: 1, activityAt: 1 },
+        { id: "call-3", kind: "subagent", conversationId: "support", status: "completed", startedAt: 1, activityAt: 2, endedAt: 2 },
+        { id: "call-4", kind: "subagent", conversationId: "stray", status: "running", startedAt: 1, activityAt: 1 },
+    ];
+    const ids = (framed: readonly SubagentSession[]): string[] => framed.map((session) => session.id);
+
+    test("tells a caller only of the subagents conversations it may see started", () => {
+        expect(ids(framedSubagents(guest, sessions, agentOf))).toEqual(["call-1"]);
+        expect(ids(framedSubagents(fenced, sessions, agentOf))).toEqual(["call-3"]);
+    });
+
+    test("leaves out one whose parent the registry does not know, even for a caller who sees the fleet whole", () => {
+        expect(ids(framedSubagents(viewer, sessions, agentOf))).toEqual(["call-1", "sub-2", "call-3"]);
+        expect(ids(framedSubagents(undefined, sessions, agentOf))).toEqual(["call-1", "sub-2", "call-3"]);
     });
 });

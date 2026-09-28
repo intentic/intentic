@@ -34,7 +34,7 @@ import { demoRuns, demoWorkflows } from "./fixture/workflows";
 import { choresReport, writeLedger } from "./fixture/chores";
 import { ciJobs, ciRunsResponse } from "./fixture/ci";
 import { DESK_AWAITING_ID, DESK_FEATURED_ID, DESK_SANDBOX_NAME, deskRoster, SUPPLIER_LETTER_DOCX, SUPPLIER_LETTER_PATH } from "./fixture/desk";
-import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, fleetRoster } from "./fixture/fleet";
+import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, fleetRoster, inProcessSubagents } from "./fixture/fleet";
 import {
     deleteKnowledgeNote,
     knowledgeGraph,
@@ -533,7 +533,7 @@ export const procedures = {
             return { ok: true, refused: false, message: `Ran ${command}${sandboxId === undefined ? `` : ` for ${sandboxId}`}.` };
         },
         closeBrowser: () => refuse(`This is the demo workspace: the browser you are watching is a recording, so there is nothing to close.`),
-        subagents: () => ({ sessions: [] }),
+        subagents: () => ({ sessions: deskEdition ? [] : inProcessSubagents(STARTED_AT) }),
     },
     agents: {
         // `held` mirrors /automations/pending's approval queue, projected onto the board.

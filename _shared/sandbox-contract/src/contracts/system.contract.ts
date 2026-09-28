@@ -1,7 +1,6 @@
 import { procedure } from "../protocol/route-meta.js";
 import { streamOf } from "../protocol/routes.js";
 import { z } from "zod";
-import { SessionTranscriptSchema } from "../events/transcript.js";
 import { SystemEventSchema } from "../events/system-events.js";
 import {
     DeviceAgentFlowInputSchema,
@@ -19,7 +18,6 @@ import { SkipUpdateInputSchema } from "../schemas/updates.js";
 import {
     BrowserNameParamSchema,
     BrowsersListSchema,
-    SubagentIdParamSchema,
     SubagentsListSchema,
     TerminalNameParamSchema,
     TerminalScrollbackQuerySchema,
@@ -228,26 +226,19 @@ export const systemContract = {
         })
         .input(BrowserNameParamSchema)
         .output(OkSchema),
-    // SDK subagents and delegated runs alike; watched via transcript, not a socket, live then from stored history.
+    // In-process and spawned alike: the board draws each under the card of the conversation that started it, and a chat
+    // draws it on the card of the call that started it. Pushed through the `subagents` runtime domain, never polled. A
+    // subagent's work is read where it lives: an in-process one's on its delegation's card in its parent's record, a
+    // spawned one's in its own conversation (agents.transcript), so there is no second transcript door here.
     subagents: systemRoute
         .route({
             method: "GET",
             path: "/system/subagents",
             summary: "Subagents the agents have started",
             description:
-                "Every subagent this sandbox's conversations have delegated work to, whichever tool started it, with what each one is doing.",
+                "Every subagent that conversations the caller can see have delegated work to, whichever tool started it, with what each one is doing: all that are still working, and the most recent that have settled.",
         })
         .output(SubagentsListSchema),
-    subagentTranscript: systemRoute
-        .route({
-            method: "GET",
-            path: "/system/subagents/{id}/transcript",
-            summary: "A subagent's record",
-            description:
-                "The full record of one delegated subagent, in the same shape as any other conversation. It comes live from the parent turn while it works, and from stored history once it has finished.",
-        })
-        .input(SubagentIdParamSchema)
-        .output(SessionTranscriptSchema),
     // On the contract, not a hand-written route beside it: this payload is what every "do it out there" button is
     // gated on, so its shape has to be fingerprinted like any other, or a daemon older than the app disagrees about
     // it silently and the buttons just stop being drawn.

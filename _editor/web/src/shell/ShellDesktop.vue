@@ -7,7 +7,6 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import { agentsBadge, agentsScopeNote } from "../features/agents/board/agentsTile";
 import { useBrowsersQuery } from "../features/browsers/browsersQuery";
-import { useSubagentsQuery } from "../features/chat/subagents/subagentsQuery";
 import { useCapabilities } from "../features/capabilities/connect/useCapabilities";
 import { useRole } from "../features/sandbox/secrets/useRole";
 import { useTerminalPanel } from "../features/terminal/useTerminalPanel";
@@ -93,8 +92,6 @@ const { panels, settled: panelsSettled } = usePanels();
 const { capabilities, settled: capabilitiesSettled } = useCapabilities();
 // Always-on, loosely polled, so the tile appears mid-turn; the view polls tighter once it's open.
 const { sessions: browsers } = useBrowsersQuery();
-// Same loose always-on poll, for the same reason: the tile must appear the moment a turn delegates.
-const { sessions: subagents, running: runningSubagents } = useSubagentsQuery();
 const { reachable } = useSandbox();
 // Uncommitted changes badge the Workspace tile, so the count is visible from any section.
 const changes = useChanges();
@@ -245,22 +242,6 @@ const browserTile = computed<SectionTile | undefined>(() => {
               : {}),
     };
 });
-// Same shape as browserTile: appears once a turn starts a subagent, badging only the ones still
-// working — the third of three things a turn can spawn (shell, browser, agent).
-const subagentTile = computed<SectionTile | undefined>(() => {
-    if (subagents.value.length === 0) {
-        return undefined;
-    }
-    const live = runningSubagents.value.length;
-    return {
-        id: `subagents`,
-        to: `/subagents`,
-        label: t(`shared.subagents`),
-        icon: `users`,
-        // Neutral, as with browsers: a subagent still working is the turn's own doing, not an errand.
-        ...(live > 0 ? { badge: { count: live, tone: `neutral` as const, tooltip: t(`shell.shellDesktop.stillWorking`, { live }) } } : {}),
-    };
-});
 // What agents wait on people for (docs/architecture/needs.md): on the rail only while something is, badged in the
 // warning tone, since every one of them is a person's to answer.
 const { open: openNeeds } = useNeeds();
@@ -277,7 +258,7 @@ const needsTile = computed<SectionTile | undefined>(() =>
 );
 // Same SectionTile shape as the nav tiles, so badges render through one path instead of per hand-rolled link.
 const runtimeTiles = computed<readonly SectionTile[]>(() =>
-    [needsTile.value, browserTile.value, subagentTile.value].filter((tile) => tile !== undefined).filter((tile) => sectionReachable(tile.to)),
+    [needsTile.value, browserTile.value].filter((tile) => tile !== undefined).filter((tile) => sectionReachable(tile.to)),
 );
 // RailIcon selects bespoke glyphs by view id and validates extension fallbacks before drawing them.
 const extensionTile = (active: ActiveExtension): SectionTile => {

@@ -7,7 +7,6 @@
             "nothingLanded": "Nie ma czego scalać: gałąź tej rozmowy nie zawiera pracy, której Twoja przestrzeń robocza jeszcze nie ma."
         },
         "agentCard": {
-            "subagentsStarted": "Podagenty, które uruchomił",
             "archiveAgent": "Zarchiwizuj agenta",
             "archiveBranchDiffConversation": "Zarchiwizuj — gałąź, diff i rozmowa zostają",
             "archiveConversationKept": "Zarchiwizuj — rozmowa zostaje",
@@ -28,7 +27,6 @@
             "restoreWithChildren": "Odłóż tego agenta z powrotem na tablicę razem z {count} agentem, którego uruchomił | Odłóż tego agenta z powrotem na tablicę razem z {count} agentami, które uruchomił | Odłóż tego agenta z powrotem na tablicę razem z {count} agentami, które uruchomił",
             "runsOn": "Działa na {runner}",
             "sendTurnAgainSame": "Wyślij tę turę jeszcze raz. To ta sama prośba co wcześniej, nie nowa wiadomość.",
-            "stillWorking": "{running} z {total} wciąż pracuje",
             "stopWatchingConversationStays": "Przestań obserwować — ta rozmowa zostaje na miejscu",
             "temporary": ", tymczasowo",
             "waitingMaintainer": "{landAsk}: czeka na opiekuna"
@@ -294,7 +292,12 @@
             "questionGroup": "Czekają na jego odpowiedź: {count}",
             "conflictGroup": "Z konfliktem przy scalaniu: {count}",
             "otherGroup": "{reason}: {count}",
-            "groupHint": "„{title}” dostał informację. Trafią do Ciebie tylko wtedy, gdy przestanie pracować."
+            "groupHint": "„{title}” dostał informację. Trafią do Ciebie tylko wtedy, gdy przestanie pracować.",
+            "queued": "W kolejce",
+            "needsInput": "Potrzebuje odpowiedzi",
+            "paused": "Wstrzymany",
+            "completed": "Ukończony",
+            "inProcessHint": "Działał w ramach tury tego agenta, więc jego praca jest w czacie tego agenta"
         },
         "liveMetrics": {
             "coresValue": "{cores} rdzeń | {cores} rdzenie | {cores} rdzeni",
@@ -1293,10 +1296,8 @@
             "interrupted": "przerwane",
             "more": "… {hidden} więcej",
             "needsInput": "czeka na wejście",
-            "openAgentsTranscript": "Otwórz zapis rozmowy tego agenta",
             "openItsConversation": "Otwórz jego rozmowę",
             "viewLarger": "Powiększ",
-            "watchAgent": "Obserwuj tego agenta",
             "watchBrowser": "Obserwuj przeglądarkę"
         },
         "chatToolDiff": {
@@ -1442,23 +1443,6 @@
         },
         "usageStatus": {
             "percentLeft": "zostało {percent}"
-        },
-        "subagents": {
-            "agentsStartedFinishedAged": "Agenty uruchomione przez {focusTitle} skończyły i wypadły z tej listy. Jego własny zapis rozmowy jest świadectwem tego, co zameldowały.",
-            "itsConversation": "Jego rozmowa",
-            "noAgentsStarted": "Nie uruchomiono żadnych agentów",
-            "noTranscriptRecordedAgent": "Dla tego agenta nie zapisano żadnej rozmowy.",
-            "nothingRunningAgent": "Dla tego agenta nic nie działa",
-            "openConversationStartedAgent": "Otwórz rozmowę, która uruchomiła tego agenta",
-            "parent": "Rodzic",
-            "parentsModelNothingNamed": "Model jego rodzica: nikt nie wskazał żadnego dla tego agenta",
-            "report": "Raport",
-            "showAll": "Pokaż wszystkie",
-            "showEveryAgent": "Pokaż każdego agenta",
-            "showFullReport": "Pokaż pełny raport",
-            "subagentsAppearHere": "Kiedy agent uruchamia podagenta — w swoim procesie, własnym narzędziem Agent, albo na dowolnym podłączonym dostawcy — pojawia się on tutaj, z własnym zapisem rozmowy.",
-            "watchingLiveWhatAgent": "Podgląd na żywo: to, co pisze ten agent, ląduje tutaj w trakcie pracy.",
-            "work": "Praca"
         },
         "words": {
             "showToolCalls": "Pokaż wywołania narzędzi",
@@ -3811,8 +3795,7 @@
             "nextRailSection": "Następny obszar paska",
             "open": "{live} otwartych",
             "previousRailSection": "Poprzedni obszar paska",
-            "running": "{healthy} działa",
-            "stillWorking": "{live} wciąż pracuje"
+            "running": "{healthy} działa"
         },
         "useNavigationCommands": {
             "add": "Dodaj…"

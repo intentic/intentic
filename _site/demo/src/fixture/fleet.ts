@@ -1,4 +1,4 @@
-import { type AgentSummary, ciFixConversationId, nextDayStartIn, UTC } from "@intentic/sandbox-contract";
+import { type AgentSummary, ciFixConversationId, nextDayStartIn, type SubagentSession, UTC } from "@intentic/sandbox-contract";
 import { SUPPORT_SWEEP_PATH } from "./browserShots";
 
 // One afternoon across two repos, with a card in every lane `laneOf` distinguishes: attention (awaiting a parked
@@ -145,6 +145,38 @@ const spawnedChildren = (now: number): AgentSummary[] => [
         startedAt: now - minutes(5),
         updatedAt: now - 2_100,
     }),
+];
+
+// What the checkout agent's own runtime ran in-process (its Agent tool) beside the conversations it spawned: no
+// conversation of their own, so the roster names them, and the board deals them into the same tray as its spawned
+// helpers, one still exploring and one whose plan came back.
+export const inProcessSubagents = (now: number): SubagentSession[] => [
+    {
+        id: `toolu_01explore8k2m`,
+        kind: `subagent`,
+        conversationId: FEATURED_AGENT_ID,
+        agentType: `Explore`,
+        description: `Find every caller of createCheckoutSession`,
+        status: `running`,
+        startedAt: now - minutes(1),
+        activityAt: now - 3_000,
+        lastTool: `Grep`,
+        toolUses: 9,
+    },
+    {
+        id: `toolu_01plan4x7c`,
+        kind: `subagent`,
+        conversationId: FEATURED_AGENT_ID,
+        agentType: `Plan`,
+        description: `Plan the webhook retry policy`,
+        status: `completed`,
+        startedAt: now - minutes(9),
+        endedAt: now - minutes(4),
+        activityAt: now - minutes(4),
+        toolUses: 14,
+        summary: `Retry 5xx and timeouts with exponential backoff, cap at five attempts, and dead-letter the rest.`,
+        verification: { state: `no-code` },
+    },
 ];
 
 // Epoch seconds, the unit a limit's reset travels in.

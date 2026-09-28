@@ -576,7 +576,6 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             <component :is="noticeAction" v-if="noticeAction" :message="message" />
         </div>
         <template v-else>
-            <!-- Shared with the Subagents area: a delegated agent's reasoning and run read as this turn's own do. -->
             <!-- Live marks the bubble currently receiving streamed text. -->
             <ChatTurnAsides :thinking="message.thinking" :tools="message.tools" :live="live" />
 

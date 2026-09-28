@@ -180,8 +180,11 @@ rebuild, a daemon restart from the host). Say plainly that nothing was changed.
 - **Chat** (`/`): one conversation. Question cards (`AskUserQuestion`), plan approval, capability asks and
   payment approvals render here. Each session card shows a badge for what its last turn showed of its own
   work.
-- **Agents** (`/agents`): the fleet board, every conversation as an agent with its branch and status.
-  **Land** applies a conversation's delta to the main tree; a conflict card names the paths. With geek metrics
+- **Agents** (`/agents`): the fleet board, every conversation as an agent with its branch and status. Every agent
+  a conversation started hangs under its card as a row, whichever way it was started: a conversation it spawned
+  (its row opens its own chat) and a subagent its runtime ran in-process (its row opens the parent's chat, where
+  its work is on the card of the call that started it). **Land** applies a conversation's delta to the main
+  tree; a conflict card names the paths. With geek metrics
   on (Settings ▸ Appearance), the board's status bar carries the sandbox's CPU, memory and disk, and opens a
   panel with every figure, memory by kind of process, and memory and CPU by session; each card shows its own
   conversation's.
@@ -195,8 +198,7 @@ rebuild, a daemon restart from the host). Say plainly that nothing was changed.
 - **Sandbox** (`/sandbox/<tab>`): Overview, Status (running turns), Usage, Environment, Secrets, Agent (the
   settings above), Extensions, Discover, Access, Personas, Devices.
 - **Workspace** (`/workspace/<path>`): the file tree. **Browsers** (`/browsers`): watch a live browser
-  session. **Subagents** (`/subagents`): every subagent a turn started, in-process or spawned, shown alike.
-  **Settings** (`/settings`): the owner's own preferences, not the sandbox's.
+  session. **Settings** (`/settings`): the owner's own preferences, not the sandbox's.
 
 ## Hard invariants
 

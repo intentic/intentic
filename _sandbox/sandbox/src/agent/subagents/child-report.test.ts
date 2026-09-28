@@ -1,4 +1,3 @@
-import { WORKSPACE_ROOT } from "@intentic/constants";
 import { agentWordsOf } from "@intentic/sandbox-contract";
 import { pino } from "pino";
 import { childActor } from "../../auth/principal.js";
@@ -123,7 +122,7 @@ describe("a spawned child's report", () => {
 
     it("stays quiet when a parked wait of the parent's already took the ending", async () => {
         openSpawnedChild(
-            { conversationId: "parent-1", conversations: actors, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
+            { conversationId: "parent-1", conversations: actors, subagentsDir: undefined },
             { id: "sub-1", description: "port" },
         );
         const parked = waitForSubagent(actors, "parent-1", { target: "sub-1", until: ["finished"], timeoutMs: 5_000 });
@@ -137,7 +136,7 @@ describe("a spawned child's report", () => {
     // The other direction of the rule above: a report the parent already read is not handed over again by its next wait.
     it("a report said into the parent's turn is not returned again by the parent's next wait", async () => {
         openSpawnedChild(
-            { conversationId: "parent-1", conversations: actors, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
+            { conversationId: "parent-1", conversations: actors, subagentsDir: undefined },
             { id: "sub-1", description: "port" },
         );
         settleSpawnedChild(actors, "sub-1", { status: "completed", report: "done" });
@@ -152,7 +151,7 @@ describe("a spawned child's report", () => {
 
     it("a report still queued behind a turn that takes no words is left to the parent's wait, which has not read it", async () => {
         openSpawnedChild(
-            { conversationId: "parent-1", conversations: actors, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
+            { conversationId: "parent-1", conversations: actors, subagentsDir: undefined },
             { id: "sub-1", description: "port" },
         );
         settleSpawnedChild(actors, "sub-1", { status: "completed", report: "done" });

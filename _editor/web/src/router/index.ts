@@ -268,14 +268,6 @@ const routes: RouteRecordRaw[] = [
                 meta: { title: () => t(`shared.browsers`) },
                 component: asyncView(() => import(`../features/browsers/Browsers.vue`)),
             },
-            // The id is in the URL so a reload or a chat card's link reopens the same agent; the bare path shows
-            // whichever is most recently active.
-            {
-                path: `subagents/:id?`,
-                name: `subagents`,
-                meta: { title: () => t(`shared.subagents`) },
-                component: asyncView(() => import(`../features/chat/subagents/Subagents.vue`)),
-            },
             { path: `ext/:ext/:key?`, name: `extension`, component: asyncView(() => import(`../features/extensions/ExtensionHost.vue`)) },
             {
                 path: `settings/:tab?`,

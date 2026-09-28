@@ -204,7 +204,6 @@ export const UNSERVED = {
     "skills.list": UNFILLED_VIEW,
     "skills.read": UNFILLED_VIEW,
     "system.manifestProblems": UNFILLED_VIEW,
-    "system.subagentTranscript": UNFILLED_VIEW,
     "system.terminalScrollback": UNFILLED_VIEW,
     "usage.limitReset": UNFILLED_VIEW,
     "workspace.appsList": UNFILLED_VIEW,

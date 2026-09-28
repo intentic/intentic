@@ -140,18 +140,12 @@ const subagentFacts = computed<string[]>(() => {
     ];
 });
 
-// Where the card's door leads: the subagent's own page, or, for a spawned one the roster has let go since its turn
-// stopped streaming, its own conversation, which keeps it for good.
+// Where the card's door leads: a spawned subagent's own conversation, where its work lands and a person can speak to it,
+// and which keeps it for good. An in-process one has no place of its own: its work is this card's, drawn under it.
 const subagentDoor = computed<{ readonly href: string; readonly label: string } | undefined>(() => {
     const seen = started.value;
-    if (seen === undefined) {
-        return undefined;
-    }
-    if (seen.subagent.kind === `spawned` && !seen.rostered && !props.live && surface.conversationRoute !== undefined) {
-        return { href: surface.conversationRoute(seen.id), label: t(`chat.chatToolCard.openItsConversation`) };
-    }
-    const href = surface.subagentRoute?.(seen.id);
-    return href === undefined ? undefined : { href, label: seen.working ? t(`chat.chatToolCard.watchAgent`) : t(`chat.chatToolCard.openAgentsTranscript`) };
+    const href = seen?.subagent.kind === `spawned` ? surface.conversationRoute?.(seen.id) : undefined;
+    return href === undefined ? undefined : { href, label: t(`chat.chatToolCard.openItsConversation`) };
 });
 
 // Behaves like any in-app link: a plain click is routed, a modified one (new tab/window) is left to the
@@ -250,7 +244,7 @@ const openSubagent = (event: MouseEvent): void => {
             >
                 <Icon name="globe" class="text-2xs" />
             </button>
-            <!-- The third door: the subagent itself, on its own page or in its own conversation. -->
+            <!-- The third door: a spawned subagent's own conversation. -->
             <a
                 v-if="subagentDoor"
                 :href="subagentDoor.href"

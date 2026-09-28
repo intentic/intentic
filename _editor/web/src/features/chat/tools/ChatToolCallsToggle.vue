@@ -2,9 +2,9 @@
 import { useToolCalls } from "./useToolCalls";
 import { useT } from "@intentic/ui/i18n";
 
-// One control for whether a transcript shows its tool calls, drawn identically in the chat pane and the
-// Subagents strip. A hammer alone, struck through when hidden; state is the slash, not brightness, so it
-// doesn't out-glow the numbers beside it. Inherits its host's ink rather than naming its own color.
+// One control for whether a transcript shows its tool calls, under the chat pane's composer (ChatPaneStatus). A hammer
+// alone, struck through when hidden; state is the slash, not brightness, so it doesn't out-glow the numbers beside it.
+// Inherits its host's ink rather than naming its own color.
 
 const t = useT();
 

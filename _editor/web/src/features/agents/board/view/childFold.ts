@@ -1,4 +1,6 @@
+import type { SubagentSession } from "@intentic/sandbox-contract";
 import { callsOwner, type FleetLane, laneOf, limited, onlyOwnerCanAnswer, unregistered } from "../../fleet/agentStatus";
+import { subagentLive } from "../../fleet/subagentRoster";
 import { activeLaneOrder, attentionLaneOrder, type FleetAgent, finishedNeedsReland } from "../../fleet/useAgents-fleet";
 import { parentOf } from "../ownership";
 
@@ -10,6 +12,11 @@ import { parentOf } from "../ownership";
 // is theirs to answer (callsOwner), and then the parent's card carries it: the card moves to the lane that asks, as a
 // workflow run's card does for its steps (useWorkflowRuns.laneOfRun). Pure over the lanes, as withoutSteps is, so every
 // count, window and range the board reads is taken from the cards it actually draws.
+//
+// A CARD'S TRAY HOLDS EVERY AGENT IT STARTED, whichever mechanism started it. A conversation it spawned rides here from
+// the fold; a subagent its own runtime ran in-process (the roster's `subagent` kind: the runtime's Agent/Task tool) has no
+// conversation, so it never reaches the fold as a card, and joins the tray from the roster, dealt by the same rules into
+// the same rows. What it asks of the reader it asks through its parent's own turn, whose card already carries it.
 
 // Most urgent first: a family stands in the most urgent lane any of it asks for.
 const URGENCY = { attention: 0, active: 1, finished: 2 } as const satisfies Record<FleetLane, number>;
@@ -234,6 +241,36 @@ export const stopOf = (child: FleetAgent): string => {
 const STOP_RANK: Readonly<Record<string, number>> = { error: 1, interrupted: 2, stopping: 3, stopped: 3, question: 4, conflict: 5 };
 const stopRank = (key: string): number => (key.startsWith(`limit:`) ? 0 : (STOP_RANK[key] ?? 6));
 
+// A row in a card's tray: a conversation the card spawned, or a subagent its runtime ran in-process.
+export type TrayChild = FleetAgent | SubagentSession;
+
+// The roster's record, not a conversation: no card, chat, branch or menu of its own. Only the roster's shape carries the
+// conversation that started it.
+export const inProcess = (child: TrayChild): child is SubagentSession => `conversationId` in child;
+
+// What an in-process subagent is called on its row: the one-line ask, else the kind of subagent it ran as.
+export const subagentTitle = (session: Pick<SubagentSession, "description" | "agentType">): string | undefined =>
+    [session.description, session.agentType].find((part) => part !== undefined && part.trim() !== ``);
+
+// The clocks both kinds are dealt by: when it started, as Active orders its cards, and when it settled, as Finished does.
+const startOf = (child: TrayChild): number => (inProcess(child) ? child.startedAt : (child.startedAt ?? child.updatedAt));
+const settledAt = (child: TrayChild): number => (inProcess(child) ? (child.endedAt ?? child.activityAt) : child.updatedAt);
+
+// Two lists, each already in its own order, woven into one by a clock, so neither kind's order is disturbed and neither
+// is drawn after the other as an afterthought. `first` says whether the left one's head goes before the right one's.
+const weave = (left: readonly TrayChild[], right: readonly TrayChild[], first: (a: TrayChild, b: TrayChild) => boolean): TrayChild[] => {
+    const woven: TrayChild[] = [];
+    let at = 0;
+    for (const child of right) {
+        while (at < left.length && first(left[at]!, child)) {
+            woven.push(left[at]!);
+            at += 1;
+        }
+        woven.push(child);
+    }
+    return [...woven, ...left.slice(at)];
+};
+
 // Children stopped on one thing, drawn as one row that unfolds into theirs.
 export interface TrayGroup {
     // What they stopped on (stopOf), which is also the fold's name in the card's open folds.
@@ -247,19 +284,22 @@ export interface TrayGroup {
 
 // What a card's tray draws, top to bottom.
 export interface Tray {
-    // Children asking what only the reader can give (onlyOwnerCanAnswer), each wearing its ask: always in sight.
+    // Children asking what only the reader can give (onlyOwnerCanAnswer), each wearing its ask: always in sight. Only a
+    // conversation asks: an in-process subagent asks through its parent's turn, on the card itself.
     readonly asks: readonly FleetAgent[];
-    // Every working child, or while a filter is on, every child it matched.
-    readonly lead: readonly FleetAgent[];
+    // Every working child of either kind, the earliest started first as Active orders its cards; or while a filter is on,
+    // every child it matched.
+    readonly lead: readonly TrayChild[];
     // Children stopped on something that is their parent's news first, a row per thing they stopped on.
     readonly groups: readonly TrayGroup[];
-    // Settled children behind the toggle; nothing is folded while a filter is on, since a result set must not hide its
-    // own matches.
+    // Settled children of either kind behind the toggle; nothing is folded while a filter is on, since a result set must
+    // not hide its own matches.
     readonly folded: number;
     readonly open: boolean;
-    // Drawn under the toggle: all of the settled children while it is open, else only the one wearing the ring, which
-    // stays in sight wherever it is, as the Finished window keeps its selection (windowFinished).
-    readonly tail: readonly FleetAgent[];
+    // Drawn under the toggle: all of the settled children while it is open, newest first as Finished orders its cards,
+    // else only the one wearing the ring, which stays in sight wherever it is, as the Finished window keeps its selection
+    // (windowFinished).
+    readonly tail: readonly TrayChild[];
 }
 
 export interface TrayState {
@@ -269,23 +309,48 @@ export interface TrayState {
     readonly asking: boolean;
     readonly filtering: boolean;
     readonly matches: (agent: FleetAgent) => boolean;
+    // The same question of an in-process subagent, which only its title can answer.
+    readonly matchesSubagent: (session: SubagentSession) => boolean;
     readonly selected: string | undefined;
 }
 
-// A tray is only drawn with something in it: a card whose children the filter all passed over has none.
-export const trayOf = (children: readonly FleetAgent[] | undefined, state: TrayState): Tray | undefined => {
-    if (children === undefined || children.length === 0) {
+const NO_SUBAGENTS: readonly SubagentSession[] = [];
+
+// A tray's working and settled rows, the conversations' and the in-process subagents' dealt together by the same clocks.
+interface Dealt {
+    readonly lead: readonly TrayChild[];
+    readonly settled: readonly TrayChild[];
+}
+
+const withSubagents = (lead: readonly FleetAgent[], settled: readonly FleetAgent[], subagents: readonly SubagentSession[]): Dealt => {
+    const working = subagents.filter(subagentLive).toSorted((a, b) => a.startedAt - b.startedAt);
+    const done = subagents.filter((session) => !subagentLive(session)).toSorted((a, b) => settledAt(b) - settledAt(a));
+    return {
+        lead: weave(lead, working, (a, b) => startOf(a) <= startOf(b)),
+        settled: weave(settled, done, (a, b) => settledAt(a) >= settledAt(b)),
+    };
+};
+
+// A tray is only drawn with something in it: a card whose children the filter all passed over has none. `children` are
+// the conversations riding under the card (the fold's), `subagents` the ones its runtime ran in-process (the roster's).
+export const trayOf = (
+    children: readonly FleetAgent[] | undefined,
+    state: TrayState,
+    subagents: readonly SubagentSession[] = NO_SUBAGENTS,
+): Tray | undefined => {
+    const riders = children ?? [];
+    if (riders.length === 0 && subagents.length === 0) {
         return undefined;
     }
     if (state.filtering) {
-        const lead = children.filter(state.matches);
+        const lead = [...riders.filter(state.matches), ...subagents.filter(state.matchesSubagent)];
         return lead.length === 0 ? undefined : { asks: [], lead, groups: [], folded: 0, open: false, tail: [] };
     }
     const asks: FleetAgent[] = [];
     const lead: FleetAgent[] = [];
     const settled: FleetAgent[] = [];
     const stops = new Map<string, FleetAgent[]>();
-    for (const child of children) {
+    for (const child of riders) {
         const lane = laneOf(child);
         if (state.asking && onlyOwnerCanAnswer(child)) {
             asks.push(child);
@@ -303,11 +368,17 @@ export const trayOf = (children: readonly FleetAgent[] | undefined, state: TrayS
             const open = state.opened.has(key);
             return { key, members, open, shown: open || members.length === 1 ? members : members.filter((child) => child.id === state.selected) };
         });
+    const dealt = withSubagents(lead, settled, subagents);
     const open = state.opened.has(FINISHED_FOLD);
-    const tail = open ? settled : settled.filter((child) => child.id === state.selected);
-    return { asks, lead, groups, folded: settled.length, open, tail };
+    const tail = open ? dealt.settled : dealt.settled.filter((child) => child.id === state.selected);
+    return { asks, lead: dealt.lead, groups, folded: dealt.settled.length, open, tail };
 };
 
-// The rows a tray draws, top to bottom, for anything that walks the board in drawing order (a Shift+click range).
+// The conversations a tray draws, top to bottom, for anything that walks the board in drawing order (a Shift+click
+// range): an in-process subagent has no chat of its own to open in a pane.
 export const trayRows = (tray: Tray | undefined): readonly FleetAgent[] =>
-    tray === undefined ? [] : [...tray.asks, ...tray.lead, ...tray.groups.flatMap((group) => group.shown), ...tray.tail];
+    tray === undefined
+        ? []
+        : [...tray.asks, ...tray.lead, ...tray.groups.flatMap((group) => group.shown), ...tray.tail].filter(
+              (child): child is FleetAgent => !inProcess(child),
+          );

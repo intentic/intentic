@@ -1,7 +1,6 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { noteChildWork } from "./child-verification.js";
@@ -18,8 +17,8 @@ import {
     subagentCountsOf,
     subagentHooks,
     subagentInParentTree,
-    subagentSource,
     subagentEndingReported,
+    KEEP_SETTLED,
     waitForSubagent,
     type SubagentTaskMessage,
     type SubagentTurn,
@@ -36,8 +35,6 @@ const actors = memoryFleet().conversations;
 const turn = (): SubagentTurn => ({
     conversationId: "conv-1",
     conversations: actors,
-    cwd: WORKSPACE_ROOT,
-    sessionId: "sess-1",
     subagentsDir: undefined,
 });
 
@@ -124,7 +121,7 @@ describe("the SDK's own subagents", () => {
     // pairLiveSubagents is the only source of a model for a child the daemon never saw spawned.
     it("pairs a child that is still working when the roster is read", async () => {
         const dir = await mkdtemp(join(tmpdir(), "subagents-live-"));
-        noteSubagentTask({ conversationId: "conv-1", conversations: actors, cwd: WORKSPACE_ROOT, sessionId: "sess-1", subagentsDir: dir }, started());
+        noteSubagentTask({ conversationId: "conv-1", conversations: actors, subagentsDir: dir }, started());
         await writeFile(join(dir, "agent-live.meta.json"), JSON.stringify({ toolUseId: "call-1", model: "sonnet", spawnDepth: 2 }));
         await pairLiveSubagents(actors);
         expect(listSubagentSessions(actors)[0]).toMatchObject({ id: "call-1", status: "running", model: "sonnet", spawnDepth: 2 });
@@ -200,24 +197,6 @@ describe("the SDK's own subagents", () => {
         expect(listSubagentSessions(actors).find((session) => session.id === "call-2")?.status).toBe("running");
     });
 
-    it("hands the reader the ids a transcript is read with", () => {
-        noteSubagentTask(turn(), started());
-        expect(subagentSource(actors, "call-1")).toMatchObject({ kind: "subagent", conversationId: "conv-1", sessionId: "sess-1", running: true });
-        expect(subagentSource(actors, "nobody")).toBeUndefined();
-    });
-
-    it("reads the turn's session id as it stands, not as it was when the child was born", () => {
-        const handle: SubagentTurn = {
-            conversationId: "conv-1",
-            conversations: actors,
-            cwd: WORKSPACE_ROOT,
-            sessionId: undefined,
-            subagentsDir: undefined,
-        };
-        noteSubagentTask(handle, started());
-        handle.sessionId = "sess-late";
-        expect(subagentSource(actors, "call-1")).toMatchObject({ sessionId: "sess-late" });
-    });
 });
 
 describe("the roster", () => {
@@ -259,17 +238,22 @@ describe("the roster", () => {
         expect(closeSubagents(actors, "conv-1")).toEqual([]);
     });
 
-    // Retain window asserted from both sides (still listed at 4 min, gone by 6): the boundary is pinned, not
-    // incidental.
-    it("ages a finished child out of the list after five minutes, and keeps a live one", () => {
+    // Kept by count, not by age, asserted from both sides: an hour-old ending is still listed while it is among the
+    // newest, and it is the first to go once the bound is full; a live child never counts against the bound.
+    it("keeps settled children by count rather than age, dropping the oldest ending past the bound, and every live one", () => {
         jest.useFakeTimers();
         noteSubagentTask(turn(), started());
         noteSubagentTask(turn(), started({ tool_use_id: "live-1", task_id: "task-b" }));
         noteSubagentTask(turn(), { subtype: "task_updated", task_id: "task-a", patch: { status: "completed" } });
-        jest.advanceTimersByTime(4 * 60_000);
+        jest.advanceTimersByTime(60 * 60_000);
         expect(listSubagentSessions(actors).map((session) => session.id)).toEqual(["live-1", "call-1"]);
-        jest.advanceTimersByTime(2 * 60_000);
-        expect(listSubagentSessions(actors).map((session) => session.id)).toEqual(["live-1"]);
+        for (let at = 0; at < KEEP_SETTLED; at += 1) {
+            jest.advanceTimersByTime(1_000);
+            noteSubagentTask(turn(), started({ tool_use_id: `done-${at}`, task_id: `task-${at}` }));
+            noteSubagentTask(turn(), { subtype: "task_updated", task_id: `task-${at}`, patch: { status: "completed" } });
+        }
+        const listed = listSubagentSessions(actors).map((session) => session.id);
+        expect([listed.length, listed[0], listed.includes("call-1"), listed.at(-1)]).toEqual([KEEP_SETTLED + 1, "live-1", false, "done-0"]);
     });
 });
 
@@ -279,7 +263,7 @@ describe("spawned children", () => {
     const birth = { id: "sub-brave-otter-a1b2", description: "Port the parser", agentType: "Cursor", provider: "cursor", model: "composer-2.5" };
 
     it("lists a spawned child under its parent, backgrounded, wearing its provider", () => {
-        openSpawnedChild(turn(), { ...birth, harness: "native", spawnDepth: 1 });
+        openSpawnedChild(turn(), { ...birth, spawnDepth: 1 });
         const [session] = listSubagentSessions(actors);
         expect(session).toMatchObject({
             id: "sub-brave-otter-a1b2",
@@ -328,11 +312,6 @@ describe("spawned children", () => {
             summary: "Got as far as the lexer.",
             error: "provider refused the model",
         });
-    });
-
-    it("hands the transcript reader the child's conversation key", () => {
-        openSpawnedChild(turn(), { ...birth, harness: "native" });
-        expect(subagentSource(actors, birth.id)).toMatchObject({ kind: "spawned", conversationId: "conv-1", provider: "cursor", harness: "native" });
     });
 
     it("reopens a settled child for a follow-up turn, and never replaces a live one", () => {
@@ -485,7 +464,7 @@ describe("waitForSubagent", () => {
     it("with no target, the first of the conversation's children to move settles the wait: other conversations' don't", async () => {
         spawn("bash-1");
         openSpawnedChild(
-            { conversationId: "conv-2", conversations: actors, cwd: WORKSPACE_ROOT, sessionId: "sess-2", subagentsDir: undefined },
+            { conversationId: "conv-2", conversations: actors, subagentsDir: undefined },
             { id: "bash-other", description: "elsewhere" },
         );
         const wait = waitForSubagent(actors, "conv-1", { until: ["blocked"], timeoutMs: 5_000 });

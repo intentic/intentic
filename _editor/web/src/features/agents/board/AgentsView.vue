@@ -19,6 +19,7 @@ import type { FleetAgent } from "../fleet/useAgents-fleet";
 import { pendingOn } from "../fleet/useAgents-provisional";
 import { fleetScope, scopeOffered } from "../fleet/fleetScope";
 import { useWorkflowRuns } from "../fleet/useWorkflowRuns";
+import { useSubagentRoster } from "../fleet/subagentRoster";
 import { relativeTime } from "../../chat/models/catalog";
 import { chatWide } from "../../chat/panel/chatPanelLayout";
 import { openRunInChat } from "../../chat/run/openRun";
@@ -78,9 +79,11 @@ const { scopeOptions, ownerOptions, ownerScope, projectHidden, scopedHeld } = sc
 followAcross();
 const ring = useCardRing({ mobile, strip: chatStrip, wide: chatWide, runs: workflows.runs });
 const { highlightId, inPane, peeked } = ring;
-const lanes = useBoardLanes({ view, scope, filter, drag, agents, selected: highlightId });
+// The subagents each card's runtime ran in-process, which ride in its tray beside the conversations it spawned.
+const roster = useSubagentRoster();
+const lanes = useBoardLanes({ view, scope, filter, drag, agents, roster, selected: highlightId });
 const { cardsFor, runsFor, needingYou, archivedCards, archiveSize, archiveHidden, hiddenFinished, archivedHits, laneDropClass } = lanes;
-const { childrenOf, callOf, familyOf, familyIds } = lanes;
+const { childrenOf, subagentsOf, callOf, familyOf, familyIds } = lanes;
 const { beyondVisible, beyondLabel, matchTally, noMatches, clearable, screen } = lanes;
 const { setCardEl, isMovingLane, revealCard } = useLaneMotion({ lanes: scope.boardLanes, filtering, drag });
 const focus = useCardFocus({
@@ -130,6 +133,7 @@ const { cardMenu, cardMenuItems, openCardMenu } = useCardMenu({
 // The trays under the cards (ChildRows), which follow their children, fold and ring on their own clock (childRows.ts).
 provide(CHILD_ROWS, {
     childrenOf,
+    subagentsOf,
     stateOf: lanes.trayState,
     toggle: lanes.toggleTray,
     selected: (id) => id === highlightId.value || inPane(id),

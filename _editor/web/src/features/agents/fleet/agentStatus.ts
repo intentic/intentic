@@ -1,7 +1,17 @@
 import type { IconName } from "@intentic/ui";
 import { briefDuration } from "@intentic/base/format";
 import { formatWeekdayTime } from "@intentic/ui/format";
-import { type AgentAttention, type AgentOrigin, type AgentStatus, type AgentSummary, type AgentWatch, awaitsWake, type LandConflictReason, type LoopState } from "@intentic/sandbox-contract";
+import {
+    type AgentAttention,
+    type AgentOrigin,
+    type AgentStatus,
+    type AgentSummary,
+    type AgentWatch,
+    awaitsWake,
+    type LandConflictReason,
+    type LoopState,
+    type SubagentStatus,
+} from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 import { parentOf } from "../board/ownership";
 
@@ -130,6 +140,26 @@ const statusMeta = () =>
 // send a status this build has never heard of.
 export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon: IconName; spin?: boolean; label: string; class: string } =>
     statusMeta()[status] ?? statusMeta().idle;
+
+// The same glyphs for a subagent a runtime ran in-process, which has no conversation and so no AgentStatus, only the
+// roster's word (SubagentStatus). Where the two vocabularies name the same standing they wear the same glyph, so a tray
+// holding both kinds reads as one list: working spins as `running` does, a failure is `error`'s, a stop `stopped`'s.
+const subagentMeta = () =>
+    ({
+        // Waiting for a slot under the sandbox's concurrency ceiling; nothing has started.
+        pending: { icon: `clock`, label: t(`agents.childRows.queued`), class: `text-subtle` },
+        running: statusMeta().running,
+        // Its question goes to its parent's own turn, whose card carries the ask; the row only says it is waiting.
+        blocked: { icon: `question-circle`, label: t(`agents.childRows.needsInput`), class: `text-warning` },
+        paused: { icon: `clock`, label: t(`agents.childRows.paused`), class: `text-warning` },
+        completed: { icon: `check-circle`, label: t(`agents.childRows.completed`), class: `text-success` },
+        failed: statusMeta().error,
+        killed: statusMeta().stopped,
+    }) as const satisfies Record<SubagentStatus, { icon: IconName; spin?: boolean; label: string; class: string }>;
+
+// The `??` for the same reason as agentStatusMeta's: a newer daemon's status this build has never heard of.
+export const subagentStatusMeta = (status: SubagentStatus): { icon: IconName; spin?: boolean; label: string; class: string } =>
+    subagentMeta()[status] ?? statusMeta().idle;
 
 // What to call a conversation whose title the first turn has not minted yet (a new tab, an untitled history entry).
 // The composer's own unsent words beat any placeholder: they are what the reader wrote, and what they will recognise.

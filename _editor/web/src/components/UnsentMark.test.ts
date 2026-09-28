@@ -1,5 +1,5 @@
 // Tests what the hover says, not the markup: the mark itself can only say a message exists, so the hover carries
-// which one and how long. Mounted with plain Vue, glyph and tooltip stubbed as in MatchLine.test / Subagents.test.
+// which one and how long. Mounted with plain Vue, glyph and tooltip stubbed as in MatchLine.test.
 import "@intentic/testing/dom";
 import { mocked } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";

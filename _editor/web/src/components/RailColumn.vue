@@ -1,4 +1,4 @@
-<!-- Column frame for a list of agents (wraps RailLane and RailCard), used by the chat rail and Subagents. -->
+<!-- Column frame for the chat rail's list of agents (wraps RailLane and RailCard), at the one stored rail width. -->
 <script setup lang="ts">
 import { computed } from "vue";
 import { ResizeSeam } from "@intentic/ui";

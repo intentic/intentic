@@ -10,9 +10,8 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-// What an assistant turn thought and did, on one lane: shared by the conversation (ChatMessageView) and a delegated
-// agent's record (Subagents.vue) so both read the same. Both marks belong to one row, which is why they are decided
-// here rather than by two components that would each claim a bar. Tool calls the reader asked to SEE are rows, never a
+// What an assistant turn thought and did, on one lane (ChatMessageView). Both marks belong to one row, which is why they
+// are decided here rather than by two components that would each claim a bar. Tool calls the reader asked to SEE are rows, never a
 // mark — that setting is the whole of the question the mark otherwise asks.
 
 const props = defineProps<{

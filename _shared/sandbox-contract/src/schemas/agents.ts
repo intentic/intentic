@@ -452,8 +452,8 @@ export const AgentSummarySchema = z.object({
     // Completed turns and lifetime tool calls, the card's msgs/tools counters.
     turns: z.number().optional().describe("Turns it has finished."),
     toolUses: z.number().optional().describe("Tools it has used, over its whole life."),
-    // `running` reads the live subagent registry (swept after five minutes), `total` counts on the agent's own entry; a
-    // child's spend is its own, never folded into the parent's cost.
+    // `running` reads the live subagent roster, `total` counts on the agent's own entry; a child's spend is its own,
+    // never folded into the parent's cost.
     subagents: z
         .object({
             running: z.number().describe("Subagents working right now."),

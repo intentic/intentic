@@ -113,8 +113,6 @@ export class TurnRun implements LiveRun {
     journalled = true;
     private finishedAt: number | undefined;
     private readonly fold: TranscriptFold;
-    // One transcript fold per subagent, tagged by the call that spawned it; keeps only frames carrying its tag.
-    private readonly children = new Map<string, TranscriptFold>();
     // Facts so far, replayed to every attach so a late window learns which session and branch the turn is on.
     private readonly facts: AttachEntry[] = [];
     private seq = 0;
@@ -162,24 +160,12 @@ export class TurnRun implements LiveRun {
         return this.fold.turnedAway(event);
     }
 
-    // One helper's transcript, by the id of the call that spawned it; empty if this run heard nothing from it.
-    rowsOf(tag: string): readonly TranscriptRow[] {
-        return this.children.get(tag)?.rows ?? [];
-    }
-
     metrics(): { readonly rows: number; readonly followers: number } {
         return { rows: this.fold.rows.length, followers: this.followers.size };
     }
 
     push(event: AgentEvent): void {
         const patches = this.fold.apply(event);
-        const parent = "parentToolUseId" in event ? event.parentToolUseId : undefined;
-        if (parent !== undefined && !this.children.has(parent)) {
-            this.children.set(parent, new TranscriptFold([], parent));
-        }
-        for (const child of this.children.values()) {
-            child.apply(event);
-        }
         this.publish(patches, isTurnFact(event) ? event : undefined);
         for (const listener of this.listeners) {
             listener.push(event);

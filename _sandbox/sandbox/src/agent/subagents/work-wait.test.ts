@@ -1,6 +1,5 @@
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { WORKSPACE_ROOT } from "@intentic/constants";
 import { SteeringQueue } from "../checkpoints/agent-steering.js";
 import { type BackgroundJob, noteJobShell, openBackgroundJob } from "../tools/jobs/background-jobs.js";
 import { noteSpawnedChild, openSpawnedChild, resetSubagents, settleSpawnedChild, subagentEndingReporter } from "./subagents.js";
@@ -66,7 +65,7 @@ describe("waitForWork", () => {
     it("with no target, a child moving first ends the wait, not the command still running", async () => {
         job("conv-w4", "tu-w4", "bsh-w4");
         openSpawnedChild(
-            { conversationId: "conv-w4", conversations: actors, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
+            { conversationId: "conv-w4", conversations: actors, subagentsDir: undefined },
             { id: "sub-w4", description: "port it" },
         );
         const wait = waitForWork(actors, "conv-w4", { until: ["finished"], timeoutMs: 5_000 });
@@ -86,7 +85,7 @@ describe("waitForWork", () => {
     it("words said into the waiting turn hand it back with outcome `message`, leaving the child it waited on unreported", async () => {
         const unregister = actors.registerTurn("conv-w7", { abort: () => {}, steering: new SteeringQueue() });
         openSpawnedChild(
-            { conversationId: "conv-w7", conversations: actors, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
+            { conversationId: "conv-w7", conversations: actors, subagentsDir: undefined },
             { id: "sub-w7", description: "port it" },
         );
         try {
@@ -103,7 +102,7 @@ describe("waitForWork", () => {
     it("words said into another conversation's turn leave the wait parked", async () => {
         const unregister = actors.registerTurn("conv-w8-other", { abort: () => {}, steering: new SteeringQueue() });
         openSpawnedChild(
-            { conversationId: "conv-w8", conversations: actors, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
+            { conversationId: "conv-w8", conversations: actors, subagentsDir: undefined },
             { id: "sub-w8", description: "port it" },
         );
         try {
@@ -127,7 +126,7 @@ describe("waitForWork", () => {
 describe("a child's ending reaches its parent once", () => {
     const opened = (conversationId: string, id: string): void =>
         openSpawnedChild(
-            { conversationId, conversations: actors, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
+            { conversationId, conversations: actors, subagentsDir: undefined },
             { id, description: "port it" },
         );
 
@@ -160,7 +159,7 @@ describe("a child's ending reaches its parent once", () => {
         settleSpawnedChild(actors, "sub-q3", { status: "completed", report: "first" });
         // The follow-up reopens the row before the first turn's report finished its delivery.
         openSpawnedChild(
-            { conversationId: "conv-q3", conversations: actors, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
+            { conversationId: "conv-q3", conversations: actors, subagentsDir: undefined },
             { id: "sub-q3", description: "port it", again: true },
         );
         reported();

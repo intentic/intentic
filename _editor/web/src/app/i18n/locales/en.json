@@ -7,7 +7,6 @@
             "nothingLanded": "Nothing to land: this conversation's branch holds no work your workspace doesn't already have."
         },
         "agentCard": {
-            "subagentsStarted": "Subagents it started",
             "archiveAgent": "Archive agent",
             "archiveBranchDiffConversation": "Archive, the branch, diff and conversation are kept",
             "archiveConversationKept": "Archive, the conversation is kept",
@@ -28,7 +27,6 @@
             "restoreWithChildren": "Put this agent back on the board, with the {count} agent it started | Put this agent back on the board, with the {count} agents it started",
             "runsOn": "Runs on {runner}",
             "sendTurnAgainSame": "Send this turn again. It is the same request as before, not a new message.",
-            "stillWorking": "{running} of {total} still working",
             "stopWatchingConversationStays": "Stop watching, this conversation stays put",
             "temporary": ", temporary",
             "waitingMaintainer": "{landAsk}: waiting for a maintainer"
@@ -358,7 +356,12 @@
             "questionGroup": "{count} waiting on its answer",
             "conflictGroup": "{count} with a land conflict",
             "otherGroup": "{count}: {reason}",
-            "groupHint": "“{title}” was told. These reach you only if it stops working."
+            "groupHint": "“{title}” was told. These reach you only if it stops working.",
+            "queued": "Queued",
+            "needsInput": "Needs input",
+            "paused": "Paused",
+            "completed": "Completed",
+            "inProcessHint": "Ran inside this agent's own turn, so its work is in this agent's chat"
         },
         "ownerMark": {
             "ownedBy": "Owned by {name}",
@@ -1358,10 +1361,8 @@
             "interrupted": "interrupted",
             "more": "… {hidden} more",
             "needsInput": "needs input",
-            "openAgentsTranscript": "Open this agent's transcript",
             "openItsConversation": "Open its conversation",
             "viewLarger": "View larger",
-            "watchAgent": "Watch this agent",
             "watchBrowser": "Watch the browser"
         },
         "chatToolDiff": {
@@ -1515,23 +1516,6 @@
         },
         "usageStatus": {
             "percentLeft": "{percent} left"
-        },
-        "subagents": {
-            "agentsStartedFinishedAged": "The agents {focusTitle} started have finished and aged out of this list. Its own transcript is the record of what they reported back.",
-            "itsConversation": "Its conversation",
-            "noAgentsStarted": "No agents started",
-            "noTranscriptRecordedAgent": "No transcript was recorded for this agent.",
-            "nothingRunningAgent": "Nothing running for this agent",
-            "openConversationStartedAgent": "Open the conversation that started this agent",
-            "parent": "Parent",
-            "parentsModelNothingNamed": "Its parent's model: nothing named one for this agent",
-            "report": "Report",
-            "showAll": "Show all",
-            "showEveryAgent": "Show every agent",
-            "showFullReport": "Show the full report",
-            "subagentsAppearHere": "When an agent starts a subagent, in-process with its own Agent tool or spawned on any connected provider, it appears here with its own transcript.",
-            "watchingLiveWhatAgent": "Watching live: what this agent writes lands here as it works.",
-            "work": "Work"
         },
         "turnBreak": {
             "anotherAccount": "another account",
@@ -4270,8 +4254,7 @@
             "nextRailSection": "Next section",
             "open": "{live} open",
             "previousRailSection": "Previous section",
-            "running": "{healthy} running",
-            "stillWorking": "{live} still working"
+            "running": "{healthy} running"
         },
         "useNavigationCommands": {
             "add": "Add…"

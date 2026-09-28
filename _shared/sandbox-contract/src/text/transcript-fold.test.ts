@@ -223,20 +223,6 @@ describe("foldTurn", () => {
         expect(foldOf("delegate", events).slice(1)).toEqual([{ role: "assistant", text: "delegating" }]);
     });
 
-    it("reads one subagent's stream as a transcript of its own", () => {
-        const questions = [{ question: "Which?", header: "Pick", multiSelect: false, options: [{ label: "A", description: "a" }] }];
-        const events: AgentEvent[] = [
-            { kind: "delta", text: "parent prose" },
-            { kind: "tool_call", id: "t1", name: "Grep", category: "search", status: "completed" },
-            { kind: "delta", text: "found it", parentToolUseId: "task-1" },
-            { kind: "tool_call", id: "t2", name: "Read", category: "read", status: "completed", parentToolUseId: "task-1" },
-            { kind: "question", requestId: "q1", questions },
-        ];
-        expect(foldTurn([], events, "settled", "task-1")).toEqual([
-            { role: "assistant", text: "found it", tools: [{ id: "t2", name: "Read", category: "read", status: "completed" }] },
-        ]);
-    });
-
     it("records the thinking a turn showed", () => {
         const events: AgentEvent[] = [
             { kind: "thinking", text: "hm, " },

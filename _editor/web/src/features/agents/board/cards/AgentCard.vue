@@ -3,7 +3,6 @@ import { Button, ProgressRing, ResponsiveOverlay, SegmentRing, ui, useDevice } f
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref, useTemplateRef } from "vue";
-import { RouterLink } from "vue-router";
 import { requestLandAgent } from "../../fleet/agentActions";
 import { refreshAcross } from "../../../sandbox/live/fleetAcross";
 import { useRole } from "../../../sandbox/secrets/useRole";
@@ -233,7 +232,7 @@ const landing = computed(() => props.pending === `land` || props.agent.status ==
 // Maintainers get Land now; collaborators get Request land instead, since the daemon floors landing at maintainer;
 // viewers get neither.
 // The request is sent here rather than emitted, since the board is only one of this card's several hosts.
-const { canReview, canShip, isGuest } = useRole();
+const { canReview, canShip } = useRole();
 // The audience's words for the verbs on this card; a maker also loses the branch and runner chips, which name nothing
 // they chose.
 const words = useVocabulary();
@@ -262,16 +261,15 @@ const landAsk = computed(() => {
 // Its own flag, not a wider `landing`, so each button names only its own press; on an `away` card the daemon's
 // `landing` is that press, whichever window made it.
 const relanding = computed(() => props.pending === `reland` || (away.value !== undefined && props.agent.status === `landing`));
-// Gated on exactly what it renders, no more and no less: gating on a subset hides what should show (subagents
-// mid-turn), a superset opens an empty strip.
+// Gated on exactly what it renders, no more and no less: gating on a subset hides what should show, a superset opens an
+// empty strip.
 // The diff chip's own condition, not merely `diff exists`, since renames alone render nothing.
 // Context is deliberately absent: it moved to the identity tile's rim (see `rim`), so a card whose only stat was
 // its context now opens no summary row at all.
 const stats = computed(
     () =>
         props.agent.costUsd !== undefined ||
-        (props.agent.diff !== undefined && (props.agent.diff.insertions > 0 || props.agent.diff.deletions > 0)) ||
-        props.agent.subagents !== undefined,
+        (props.agent.diff !== undefined && (props.agent.diff.insertions > 0 || props.agent.diff.deletions > 0)),
 );
 // THE IDENTITY TILE IS ALSO THE PROGRESS GAUGE. The kind-of-work glyph was doing one job, telling cards apart, and it
 // did it in the strongest position a card has — leading, where the eye lands first — while the readings that say where
@@ -809,31 +807,6 @@ const grab = (event: PointerEvent): void => {
                 <span v-if="agent.costUsd !== undefined">{{ formatCost(agent.costUsd) }}</span>
                 <!-- Opt-in geek metrics, beside what it cost: what its processes hold now. Draws only when the board provides a reading naming this conversation, so never for another box's card. -->
                 <SessionMetrics v-if="localOnly" :conversation-id="agent.id" />
-                <!-- Counts this agent's own children, live-of-total while any are running and settling to the lifetime total once none are. -->
-                <!-- A real link (underlines on hover, tints live), so Ctrl/Cmd-click opens the list in its own tab. -->
-                <!-- Plain text for a guest, whose subagent list the daemon refuses: the count is still its own run's. -->
-                <span v-if="agent.subagents !== undefined && isGuest" class="inline-flex items-center">
-                    <Icon name="users" class="mr-0.5 text-2xs" />{{
-                        agent.subagents.running > 0 ? `${agent.subagents.running} / ${agent.subagents.total}` : agent.subagents.total
-                    }}
-                </span>
-                <RouterLink
-                    v-else-if="agent.subagents !== undefined"
-                    :to="{ name: `subagents`, query: { agent: agent.id } }"
-                    class="touch-target cursor-pointer transition-colors hover:text-content hover:underline"
-                    :class="{ 'text-link': agent.subagents.running > 0 }"
-                    v-tooltip.top="
-                        agent.subagents.running > 0
-                            ? t(`agents.agentCard.stillWorking`, { running: agent.subagents.running, total: agent.subagents.total })
-                            : t(`agents.agentCard.subagentsStarted`)
-                    "
-                    @click.stop
-                >
-                    <Icon name="users" class="mr-0.5 text-2xs" />{{
-                        agent.subagents.running > 0 ? `${agent.subagents.running} / ${agent.subagents.total}` : agent.subagents.total
-                    }}
-                </RouterLink>
-
                 <!-- Marks people left, at the end of the counted stats rather than in a row of their own, and drawn only when there are some: a strip that came and went with the pointer would resize every card it is on and flicker the lane around it. The press that adds one is in the header, with the card's other actions. -->
                 <AgentReactions
                     v-if="reactable"

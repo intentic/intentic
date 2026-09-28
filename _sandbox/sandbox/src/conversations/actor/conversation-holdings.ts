@@ -194,8 +194,6 @@ export interface LiveRun {
     readonly rows: readonly TranscriptRow[];
     // Finished, and past RUN_RETAINED_MS.
     readonly expired: (now: number) => boolean;
-    // One helper's transcript, by the id of the call that spawned it.
-    readonly rowsOf: (tag: string) => readonly TranscriptRow[];
     readonly metrics: () => { readonly rows: number; readonly followers: number };
     readonly push: (event: AgentEvent) => void;
     // A row the daemon writes on the turn's behalf.

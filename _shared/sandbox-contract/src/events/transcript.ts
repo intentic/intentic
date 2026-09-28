@@ -105,7 +105,7 @@ export const TranscriptSubagentSchema = z.object({
         .string()
         .optional()
         .describe(
-            "Its own id, where that is not the card's: a spawned subagent is named by its own conversation, which is what the roster, `wait` and its page call it. Absent, the card's id is its id, as it is for one the runtime started in-process.",
+            "Its own id, where that is not the card's: a spawned subagent is named by its own conversation, which is what the roster, `wait` and its own chat call it. Absent, the card's id is its id, as it is for one the runtime started in-process.",
         ),
     kind: SubagentKindSchema,
     agentType: z.string().optional(),

@@ -4,6 +4,7 @@ import {
     fenceReaches,
     type PresenceUser,
     type SandboxMetrics,
+    type SubagentSession,
     type SystemEvent,
     type TreeChanged,
 } from "@intentic/sandbox-contract";
@@ -89,6 +90,18 @@ export const framedMetrics = (caller: Caller | undefined, metrics: SandboxMetric
         }),
     ),
 });
+
+// The subagents conversations the caller may see started, as agents.list tells it only of those conversations: a
+// subagent's ask and report are its parent's work in prose. One whose parent the registry does not know is nobody's.
+export const framedSubagents = (
+    caller: Caller | undefined,
+    sessions: readonly SubagentSession[],
+    agentOf: (id: string) => Provenance | undefined,
+): SubagentSession[] =>
+    sessions.filter((session) => {
+        const parent = agentOf(session.conversationId);
+        return parent !== undefined && visibleTo(caller, parent);
+    });
 
 // A path batch cut to the caller's own folders. An empty list already means "refetch the whole tree", and that
 // refetch is itself fenced, so it rides on unchanged rather than being mistaken for a batch with nothing left in it.

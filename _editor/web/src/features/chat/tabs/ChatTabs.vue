@@ -425,7 +425,7 @@ const openHistory = (event: Event): void => {
 
 <template>
     <!-- Docked: one line across the column top, with the list on a sheet below it. -->
-    <!-- The rail form isn't drawn here: RailColumn is the shared column shell every agent list stands in, keeping this rail and /subagents' in step. -->
+    <!-- The rail form isn't drawn here: RailColumn is the column shell the rail stands in, at the one stored rail width. -->
     <component
         :is="vertical ? RailColumn : 'header'"
         :ref="setBar"

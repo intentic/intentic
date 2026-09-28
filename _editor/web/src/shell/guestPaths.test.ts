@@ -27,7 +27,6 @@ describe(`guestAllowedPath`, () => {
             `/preview`,
             `/capabilities`,
             `/browsers`,
-            `/subagents`,
             `/terminal`,
             `/sandbox`,
             `/sandbox/secrets`,

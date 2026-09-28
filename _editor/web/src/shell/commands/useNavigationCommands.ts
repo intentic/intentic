@@ -51,9 +51,8 @@ export function useNavigationCommands(): void {
         { command: `view.workspace`, title: words.value.workspace, category: GO_TO, icon: `file-tree`, to: `/workspace` },
         // Marks the preview as opened on the way, which a bare push would not.
         { command: `view.preview`, title: words.value.preview, category: GO_TO, icon: `eye`, to: `/preview`, run: () => openPreview(router) },
-        // Both tiles leave the rail when nothing is running; the palette is how you get back to a finished session.
+        // Its tile leaves the rail when nothing is running; the palette is how you get back to a finished session.
         { command: `view.browsers`, title: t(`shared.browsers`), category: GO_TO, icon: `desktop`, to: `/browsers` },
-        { command: `view.subagents`, title: t(`shared.subagents`), category: GO_TO, icon: `users`, to: `/subagents` },
         { command: `view.capabilities`, title: t(`shared.capabilities`), category: GO_TO, icon: `plus`, to: `/capabilities` },
     ]);
 

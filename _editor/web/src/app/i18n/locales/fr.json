@@ -7,7 +7,6 @@
             "nothingLanded": "Rien à intégrer : la branche de cette conversation ne contient aucun travail que votre espace de travail n'a pas déjà."
         },
         "agentCard": {
-            "subagentsStarted": "Sous-agents qu'il a lancés",
             "archiveAgent": "Archiver l'agent",
             "archiveBranchDiffConversation": "Archiver ; la branche, le diff et la conversation sont conservés",
             "archiveConversationKept": "Archiver ; la conversation est conservée",
@@ -28,7 +27,6 @@
             "restoreWithChildren": "Remettre cet agent sur le tableau, avec {count} agent qu’il a lancé | Remettre cet agent sur le tableau, avec les {count} agents qu’il a lancés",
             "runsOn": "Tourne sur {runner}",
             "sendTurnAgainSame": "Renvoyer ce tour. C'est la même demande qu'avant, pas un nouveau message.",
-            "stillWorking": "{running} sur {total} travaillent encore",
             "stopWatchingConversationStays": "Ne plus suivre ; cette conversation reste en place",
             "temporary": ", temporaire",
             "waitingMaintainer": "{landAsk} : en attente d'un mainteneur"
@@ -289,7 +287,12 @@
             "questionGroup": "Attendent sa réponse : {count}",
             "conflictGroup": "En conflit d'intégration : {count}",
             "otherGroup": "{reason} : {count}",
-            "groupHint": "« {title} » a été prévenu. Ils ne vous parviennent que s’il arrête de travailler."
+            "groupHint": "« {title} » a été prévenu. Ils ne vous parviennent que s’il arrête de travailler.",
+            "queued": "En file d'attente",
+            "needsInput": "Attend une réponse",
+            "paused": "En pause",
+            "completed": "Terminé",
+            "inProcessHint": "Exécuté dans le tour de cet agent : son travail se trouve dans le chat de cet agent"
         },
         "liveMetrics": {
             "coresValue": "{cores} cœur | {cores} cœurs",
@@ -1282,10 +1285,8 @@
             "interrupted": "interrompu",
             "more": "… {hidden} de plus",
             "needsInput": "attend une saisie",
-            "openAgentsTranscript": "Ouvrir la transcription de cet agent",
             "openItsConversation": "Ouvrir sa conversation",
             "viewLarger": "Agrandir",
-            "watchAgent": "Suivre cet agent",
             "watchBrowser": "Suivre le navigateur"
         },
         "chatToolDiff": {
@@ -1434,22 +1435,6 @@
         },
         "usageStatus": {
             "percentLeft": "{percent} restant"
-        },
-        "subagents": {
-            "agentsStartedFinishedAged": "Les agents lancés par {focusTitle} ont terminé et ont quitté cette liste avec le temps. Sa propre transcription est le compte rendu de ce qu'ils ont rapporté.",
-            "itsConversation": "Sa conversation",
-            "noAgentsStarted": "Aucun agent lancé",
-            "noTranscriptRecordedAgent": "Aucune transcription n'a été enregistrée pour cet agent.",
-            "nothingRunningAgent": "Rien ne tourne pour cet agent",
-            "openConversationStartedAgent": "Ouvrir la conversation qui a lancé cet agent",
-            "parentsModelNothingNamed": "Le modèle de son parent : personne n'en a nommé un pour cet agent",
-            "report": "Rapport",
-            "showAll": "Tout afficher",
-            "showEveryAgent": "Afficher tous les agents",
-            "showFullReport": "Afficher le rapport complet",
-            "subagentsAppearHere": "Quand un agent démarre un sous-agent — dans son propre processus avec son outil Agent, ou lancé sur n'importe quel fournisseur connecté — il apparaît ici, avec sa propre transcription.",
-            "watchingLiveWhatAgent": "Suivi en direct : ce que cet agent écrit arrive ici pendant qu'il travaille.",
-            "work": "Travail"
         },
         "words": {
             "showToolCalls": "Afficher les appels d'outils",
@@ -3778,8 +3763,7 @@
             "nextRailSection": "Zone suivante du rail",
             "open": "{live} ouverts",
             "previousRailSection": "Zone précédente du rail",
-            "running": "{healthy} en marche",
-            "stillWorking": "{live} travaillent encore"
+            "running": "{healthy} en marche"
         },
         "useNavigationCommands": {
             "add": "Ajouter…"

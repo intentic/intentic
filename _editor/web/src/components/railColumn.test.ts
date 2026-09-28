@@ -1,5 +1,5 @@
-// Asserts the invariant, not RailColumn's internals: the chat's rail (ChatTabs) and any other host's
-// RailColumn are the same element at the same width, and dragging one drags both.
+// Asserts the invariant, not RailColumn's internals: the chat's rail (ChatTabs) is a RailColumn, drawn at the one
+// stored width the chat panel also reads to decide whether the rail fits (ChatPanel), and dragging it moves that width.
 import "@intentic/testing/dom";
 import { createApp, h, nextTick } from "vue";
 import { installUi } from "@intentic/ui";
@@ -27,8 +27,7 @@ const mount = (component: Parameters<typeof h>[0]): HTMLElement => {
     return host;
 };
 
-// The chat's rail (ChatTabs) and the bare column another host mounts (RailColumn, as Subagents.vue does),
-// side by side. Setting chatFullSlot puts the chat panel on a wide surface, the one way a test can force ChatTabs into
+// The chat's rail (ChatTabs) and a bare RailColumn, side by side, so the rail is read against the column itself. Setting chatFullSlot puts the chat panel on a wide surface, the one way a test can force ChatTabs into
 // its rail form.
 let chatRail: HTMLElement;
 let hostRail: HTMLElement;

@@ -95,7 +95,9 @@ SPAWN AND SUPERVISE
   agents cancel <id>                   stop a subagent: its running turn, a start still waiting, or a re-run the
                                        sandbox booked for it by itself (\`wait\` shows that as paused). Use it
                                        before handing its task to another agent, so the original never resumes
-  agents list                          the subagents THIS conversation started, live first. Not \`ls\`, which
+  agents list                          the subagents THIS conversation started, live first, spawned and
+                                       in-process alike, each marked which (an in-process one lives in the turn
+                                       that started it, so send/answer/cancel cannot reach it). Not \`ls\`, which
                                        is every conversation in the workspace
 
 A spawned subagent runs as its own conversation in an isolated copy of the repos, on the named provider's connected
@@ -593,8 +595,10 @@ const list = async () => {
         process.stdout.write("No children of this conversation. Start one with `agents spawn '<task>'`, or see every conversation with `agents ls`.\n");
         return;
     }
+    // Both kinds alike, each saying which it is: a spawned one is a conversation `send`, `answer` and `cancel` reach, and
+    // one this conversation's own runtime ran in-process lives inside the turn that started it, where only that turn does.
     for (const session of sessions) {
-        const what = [session.agentType, session.model].filter(Boolean).join(" · ");
+        const what = [session.kind === "subagent" ? "in-process" : "spawned", session.agentType, session.model].filter(Boolean).join(" · ");
         const label = session.description !== undefined ? ` — ${session.description}` : "";
         process.stdout.write(`${session.id}  [${session.status}]  ${what}${label}\n`);
     }

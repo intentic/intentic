@@ -828,7 +828,7 @@ test("a subagent still running holds the rebase off", async () => {
     const conversationId = "c-parked";
     let calls = 0;
     noteSubagentTask(
-        { conversationId, conversations: actors, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
+        { conversationId, conversations: actors, subagentsDir: undefined },
         { subtype: "task_started", task_id: "task-park", tool_use_id: "agent-1", description: "port the tests", subagent_type: "general-purpose" },
     );
 
@@ -852,7 +852,7 @@ test("a subagent still running holds the rebase off", async () => {
     expect(calls).toBe(0);
     // Once the subagent settles, the same approval takes the rebase it skipped before.
     noteSubagentTask(
-        { conversationId, conversations: actors, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
+        { conversationId, conversations: actors, subagentsDir: undefined },
         { subtype: "task_updated", task_id: "task-park", patch: { status: "completed" } },
     );
     await decide(
