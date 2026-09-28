@@ -27,11 +27,11 @@
     },
     "engines": {
         "claude": {
-            "blessed": "0.3.282",
+            "blessed": "0.3.283",
             "notes": "npm @anthropic-ai/claude-agent-sdk; ships as Claude Code 2.1.x sharing this version's last component, which is the number the API states its floors in."
         },
         "codex": {
-            "blessed": "0.157.0",
+            "blessed": "0.158.0",
             "notes": "npm @openai/codex, pinned to @openai/codex-sdk's own dependency."
         },
         "cursor": {
@@ -39,11 +39,11 @@
             "notes": "npm @cursor/sdk. Never baked into a published image: its licence grants no redistribution."
         },
         "opencode": {
-            "blessed": "1.18.32",
+            "blessed": "1.18.33",
             "notes": "npm opencode-ai, the runtime behind Grok turns."
         },
         "translator": {
-            "blessed": "7.3.17",
+            "blessed": "8.0.3",
             "notes": "CLIProxyAPI GitHub release, the subscription translator behind Gemini, Kimi and ChatGPT turns."
         }
     }
