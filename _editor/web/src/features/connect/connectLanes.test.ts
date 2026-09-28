@@ -1,5 +1,5 @@
 import { FREE_PROVIDERS, PROVIDER_SPECS } from "@intentic/sandbox-contract";
-import { CONNECT_LANES, firstUnmetLane, laneOfProvider, laneProviders } from "./connectLanes";
+import { arrivalLane, CONNECT_LANES, laneOfProvider, laneProviders } from "./connectLanes";
 
 /* The order a reader meets the ways in, and the rule that decides it: cost, not vendor. */
 
@@ -21,13 +21,14 @@ test("cost leads: free first, this machine second, subscriptions last", () => {
 
 const connectLaneProviders = (key: `free` | `local` | `subscription`) => CONNECT_LANES.find((lane) => lane.key === key)!.providers;
 
-test("the lane that opens is the first with nothing in it", () => {
-    expect(firstUnmetLane(() => false)).toBe(`free`);
-    // Google already signed in: the next unanswered question is the machine, not another Google account.
-    expect(firstUnmetLane((key) => key === `free`)).toBe(`local`);
-    expect(firstUnmetLane((key) => key !== `subscription`)).toBe(`subscription`);
-    // Nothing left to decide opens nothing rather than falling back to the first lane.
-    expect(firstUnmetLane(() => true)).toBeUndefined();
+test("the free lane opens only for a reader who has connected nothing", () => {
+    expect(arrivalLane(() => false)).toBe(`free`);
+    // A subscription already connected: the reader chose a way in, so the free sign-in is not opened at them again.
+    expect(arrivalLane((key) => key === `subscription`)).toBeUndefined();
+    // Nor is the next lane after a Google sign-in: one connected model ends the offering, whichever lane it was.
+    expect(arrivalLane((key) => key === `free`)).toBeUndefined();
+    expect(arrivalLane((key) => key === `local`)).toBeUndefined();
+    expect(arrivalLane(() => true)).toBeUndefined();
 });
 
 test("a connected provider keeps its row but loses its place at the top", () => {

@@ -16,6 +16,7 @@ import {
     pickerBlocks,
     pickerEntries,
     pickerSections,
+    promotesFreeAccess,
 } from "./modelPickerState";
 import { loadAllProviderModels, loadProviderModels } from "./useChat-catalog";
 import { refreshConnections } from "../accounts/useChat-accounts";
@@ -65,6 +66,10 @@ const railLanes = computed<readonly PickerLane[]>(() =>
         ...acpProviders.value.map((agent) => agent.id),
     ]),
 );
+
+// The free sign-in's chip is lit only for a reader who has connected nothing; after that it states its price in the
+// same quiet chip as every other locked row.
+const promoteFree = computed(() => promotesFreeAccess(railLanes.value.flatMap((lane) => lane.providers), providerReady));
 
 // Custom-model row appended last to results; targets the railed lane's first provider, else the current one.
 const railLane = computed<PickerLane | undefined>(() => railLanes.value.find((lane) => lane.key === rail.value));
@@ -409,7 +414,7 @@ onMounted(() => {
                                 <span
                                     class="rounded px-1 py-px text-[0.6rem] font-medium normal-case tracking-normal"
                                     :class="
-                                        accessStateFor(section.provider).access?.kind === `free`
+                                        promoteFree && accessStateFor(section.provider).access?.kind === `free`
                                             ? `bg-primary-500/15 text-primary-500`
                                             : `bg-content/5 text-subtle`
                                     "

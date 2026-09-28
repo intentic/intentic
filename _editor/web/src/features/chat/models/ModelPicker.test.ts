@@ -43,6 +43,10 @@ const mount = (): HTMLElement => {
 const headings = (element: HTMLElement): string[] =>
     [...element.querySelectorAll(`[role="presentation"] > span:first-child`)].map((node) => node.textContent?.trim() ?? ``);
 
+// The free sign-in's price chip, found by its words rather than its place, since where it sits is under test too.
+const freeChip = (element: HTMLElement): Element | undefined =>
+    [...element.querySelectorAll(`[role="presentation"] span`)].find((node) => node.textContent?.trim() === `Free · Google sign-in`);
+
 const oneModel = (label: string) => [{ value: label.toLowerCase().replaceAll(` `, `-`), label }];
 
 beforeEach(() => {
@@ -88,8 +92,23 @@ it(`leads the locked rows with the way in that costs nothing, and prices the res
     // And the price is on the row, so "free" is readable without connecting anything to find out.
     expect(element.textContent).toContain(`Free · Google sign-in`);
     expect(element.textContent).toContain(`Needs ChatGPT subscription`);
+    // And lit, since for a reader who has connected nothing it is the one row that changes a decision.
+    expect(freeChip(element)?.className).toContain(`text-primary-500`);
     // The pitch this panel replaced, in the words a new user actually read.
     expect(element.textContent).not.toContain(`Try free with Google`);
+});
+
+// Promotion is for the first-run reader only. Somebody who just connected Claude was told "connect Google for free"
+// on every open; once any model is connected the free sign-in is one more locked row, in its usual place and quiet.
+it(`stops pitching the free sign-in once a model is connected`, async () => {
+    providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acct-1`, label: `Claude`, connectedAt: 0 }] };
+    const element = mount();
+    await nextTick();
+
+    expect(headings(element).slice(0, 5)).toEqual([`Claude Code`, `Codex`, `Grok`, `Kimi Code`, `Google`]);
+    // The price still reads, since a reader comparing options wants it, but in the same chip as every other row.
+    expect(freeChip(element)?.className).toContain(`text-subtle`);
+    expect(freeChip(element)?.className).not.toContain(`text-primary-500`);
 });
 
 // The trial is a working row (a count, not a price): connected providers lead, cost only separates the locked ones.

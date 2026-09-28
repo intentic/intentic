@@ -32,9 +32,11 @@ export const connectLane = (key: ConnectLaneKey): ConnectLane => CONNECT_LANES.f
 export const laneOfProvider = (provider: AgentProvider): ConnectLaneKey | undefined =>
     CONNECT_LANES.find((lane) => (lane.providers as readonly string[]).includes(provider))?.key;
 
-// The lane to open on arrival with nothing asked for: the first holding nothing yet, so a reader already signed in to
-// Google is offered the next thing; every lane held opens none, since there is nothing left to decide.
-export const firstUnmetLane = (held: (key: ConnectLaneKey) => boolean): ConnectLaneKey | undefined => CONNECT_LANES.find((lane) => !held(lane.key))?.key;
+// The lane to open on arrival with nothing asked for: the free one, but only while no lane holds anything. A reader
+// who has connected a model has already chosen a way in, and opening the free sign-in on every later visit would be a
+// pitch; they get every lane shut and pick for themselves.
+export const arrivalLane = (held: (key: ConnectLaneKey) => boolean): ConnectLaneKey | undefined =>
+    CONNECT_LANES.some((lane) => held(lane.key)) ? undefined : CONNECT_LANES[0]!.key;
 
 // Providers offered inside a lane, connected ones last: a row that is already done is still worth showing (a second
 // account, a reconnect) but must not sit above the thing the reader came here to do.

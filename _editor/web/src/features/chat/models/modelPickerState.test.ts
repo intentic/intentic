@@ -1,4 +1,4 @@
-import { type AgentProvider, providerLabel } from "@intentic/sandbox-contract";
+import { type AgentProvider, providerLabel, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import {
     AUTO_KEY,
     autoEntry,
@@ -10,6 +10,7 @@ import {
     type PickerEntry,
     pickerBlocks,
     pickerSections,
+    promotesFreeAccess,
 } from "./modelPickerState";
 import { endpointProviders, LOCAL_MODELS_GROUP } from "../accounts/providerCatalog";
 
@@ -227,14 +228,51 @@ test("keeps the ACTIVE provider first even when it is the locked one", () => {
     expect(pickerSections(MIXED, `kimi`, undefined, readyOnly(`claude`))[0]?.key).toBe(`kimi`);
 });
 
-// The cheapest way in leads the locked band (free Google ahead of paid subscriptions), not sorted last by PROVIDERS
-// order. Cost separates only locked rows; a connected provider stays ranked by readiness alone, never re-sorted by
-// price.
-test("leads the locked band with the provider that costs nothing", () => {
+// For a reader who has connected nothing, the cheapest way in leads the locked band (free Google ahead of paid
+// subscriptions), not sorted last by PROVIDERS order.
+test("leads the locked band with the provider that costs nothing while nothing is connected", () => {
+    const sections = pickerSections(MIXED, `codex`, undefined, readyOnly());
+
+    // Active first, then free ahead of paid; ties keep PROVIDERS order.
+    expect(sections.map((section) => section.key)).toEqual([`codex`, `gemini`, `claude`, `grok`, `kimi`, `cursor`, `meta`, `zai`]);
+});
+
+// The trial is the platform's allowance, not a model the reader connected: running on it alone is still the first-run
+// state, so the free sign-in keeps its place at the head of the locked band.
+test("still leads with the free sign-in when only the free trial can run", () => {
+    endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial`, kind: `endpoint` }];
+    const sections = pickerSections(MIXED, `codex`, undefined, readyOnly(TRIAL_PROVIDER));
+
+    expect(sections.map((section) => section.key)).toEqual([`codex`, TRIAL_PROVIDER, `gemini`, `claude`, `grok`, `kimi`, `cursor`, `meta`, `zai`]);
+});
+
+// One connected model ends the promotion: the reader chose a way in, so the locked band falls back to PROVIDERS order
+// and the free sign-in is one more locked row. Cost never re-sorts a connected provider either way.
+test("stops leading with the free sign-in once any model is connected", () => {
     const sections = pickerSections(MIXED, `codex`, undefined, readyOnly(`claude`));
 
-    // Active first, then connected, then free ahead of paid; ties keep PROVIDERS order.
-    expect(sections.map((section) => section.key)).toEqual([`codex`, `claude`, `gemini`, `grok`, `kimi`, `cursor`, `meta`, `zai`]);
+    expect(sections.map((section) => section.key)).toEqual([`codex`, `claude`, `grok`, `kimi`, `gemini`, `cursor`, `meta`, `zai`]);
+    // A local model counts as much as an account does.
+    endpointProviders.value = [{ id: `endpoint/ollama-a`, label: `Ollama A`, kind: `localmodel` }];
+    expect(pickerSections(MIXED, `codex`, undefined, readyOnly(`endpoint/ollama-a`)).map((section) => section.key)).toEqual([
+        `codex`,
+        LOCAL_MODELS_GROUP,
+        `claude`,
+        `grok`,
+        `kimi`,
+        `gemini`,
+        `cursor`,
+        `meta`,
+        `zai`,
+    ]);
+});
+
+test("promotes free access only while nothing but the free trial is ready", () => {
+    expect(promotesFreeAccess([`claude`, `gemini`, TRIAL_PROVIDER], readyOnly())).toBe(true);
+    expect(promotesFreeAccess([`claude`, `gemini`, TRIAL_PROVIDER], readyOnly(TRIAL_PROVIDER))).toBe(true);
+    expect(promotesFreeAccess([`claude`, `gemini`, TRIAL_PROVIDER], readyOnly(`claude`))).toBe(false);
+    // Google itself connected: nothing left to promote.
+    expect(promotesFreeAccess([`claude`, `gemini`, TRIAL_PROVIDER], readyOnly(`gemini`))).toBe(false);
 });
 
 test("ranks a runnable match above a locked one, however well the locked id matched", () => {

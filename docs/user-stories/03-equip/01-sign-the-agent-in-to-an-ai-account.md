@@ -11,6 +11,7 @@ Afterwards, the sandbox's Agent tab is where the accounts I have live: who each 
 ## Acceptance criteria
 
 - [ ] One screen offers the ways in — a free sign-in, a model that runs on this machine, and the subscriptions I might already pay for — with what each costs readable before I connect anything
+- [ ] The free sign-in leads only until my first model is connected; after that the model list keeps it in its usual place with a plain price chip, and the connect screen opens with every lane shut
 - [ ] Every surface that offers to connect a model (the composer's line, the model list, the spent-trial notice) leads to that one screen rather than starting a sign-in of its own
 - [ ] Picking a way opens it in place and leaves the others reachable; nothing connects because I looked at it
 - [ ] Starting a sign-in unfolds its instructions in that lane, with room for the whole instruction, and one way to cancel it

@@ -6,6 +6,7 @@ import {
     accessFor,
     compareModelIds,
     familyOf,
+    isTrialProvider,
     providerLabel,
 } from "@intentic/sandbox-contract";
 import { computed } from "vue";
@@ -212,13 +213,20 @@ const accessRank = (provider: AgentProvider): number => {
     return access === undefined ? Object.keys(ACCESS_COST).length : ACCESS_COST[access.kind];
 };
 
+// Whether the free way in is still worth pointing at: only while nothing but the free trial can run here. Once the
+// owner has connected any model (an account, a local model, an endpoint, an ACP agent) they have chosen a way in, and
+// leading every later visit with the free sign-in reads as a pitch rather than a price.
+export const promotesFreeAccess = (providers: readonly AgentProvider[], isReady: (provider: AgentProvider) => boolean): boolean =>
+    !providers.some((provider) => !isTrialProvider(provider) && isReady(provider));
+
 export interface PickerSection extends PickerLane {
     readonly groups: readonly FamilyGroup[];
     readonly total: number;
 }
 
 // One section per lane (respecting `rail`): active provider's lane first, then connected providers, then locked
-// ones cheapest first. Empty sections are kept for the component's loading/error/empty row.
+// ones, cheapest first until something is connected (promotesFreeAccess), in PROVIDERS order after. Empty sections are
+// kept for the component's loading/error/empty row.
 export const pickerSections = (
     entries: readonly PickerEntry[],
     activeProvider: AgentProvider,
@@ -230,12 +238,14 @@ export const pickerSections = (
         ...endpointProviders.value.map((endpoint) => endpoint.id),
         ...acpProviders.value.map((agent) => agent.id),
     ];
-    // Active provider leads regardless of connection; then connected first; cost only ranks within the locked band.
+    // Active provider leads regardless of connection; then connected first; cost only ranks within the locked band,
+    // and only for a reader who has connected nothing yet.
+    const byCost = promotesFreeAccess(providers, isReady);
     const rest = providers
         .filter((provider) => provider !== activeProvider)
         .toSorted((a, b) => {
             const ready = Number(isReady(b)) - Number(isReady(a));
-            return ready !== 0 || isReady(a) ? ready : accessRank(a) - accessRank(b);
+            return ready !== 0 || isReady(a) || !byCost ? ready : accessRank(a) - accessRank(b);
         });
     const order = providers.includes(activeProvider) ? [activeProvider, ...rest] : rest;
     // Folds after ordering, so the local lane is seated by its best-placed card.

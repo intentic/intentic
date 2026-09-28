@@ -17,7 +17,7 @@ import { useChat } from "../chat/run/useChat";
 import ConnectFlow from "../sandbox/secrets/ConnectFlow.vue";
 import EstatePicker from "../sandbox/secrets/EstatePicker.vue";
 import { localPrefetchStopped } from "./localPrefetch";
-import { connectLane, type ConnectLaneKey, firstUnmetLane, laneOfProvider, laneProviders } from "./connectLanes";
+import { arrivalLane, connectLane, type ConnectLaneKey, laneOfProvider, laneProviders } from "./connectLanes";
 import ConnectLane from "./ConnectLane.vue";
 import LocalModelLane from "./LocalModelLane.vue";
 import ProviderTile from "./ProviderTile.vue";
@@ -91,7 +91,7 @@ const toggleLane = (key: ConnectLaneKey): void => {
 };
 
 // `?provider=` continues a press made elsewhere (a picker row, a trial strip): open its lane and start its handshake.
-// Anything else opens the first lane with nothing in it.
+// Anything else opens the free lane, and only for a reader who has connected nothing (arrivalLane).
 const settleLane = (): void => {
     if (!accessKnown.value || openLane.value !== undefined) {
         return;
@@ -108,7 +108,7 @@ const settleLane = (): void => {
         }
         return;
     }
-    openLane.value = firstUnmetLane((key) => laneHolds(key) !== undefined);
+    openLane.value = arrivalLane((key) => laneHolds(key) !== undefined);
 };
 
 // The live handshake, wherever it was started: read from the store so a sign-in begun here and finished after a reload
