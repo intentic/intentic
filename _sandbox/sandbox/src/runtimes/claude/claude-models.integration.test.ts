@@ -2,6 +2,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CLAUDE_SEED_MODELS, type Model } from "@intentic/sandbox-contract";
+import { unstubbed } from "@intentic/testing";
 import type { Config } from "../../env.config.js";
 import type { ClaudeStore } from "./claude-credentials.js";
 import { createClaudeCatalog } from "./claude-models.js";
@@ -40,7 +41,8 @@ test("a successful discovery is written through, so the next offline read still 
     const dir = await mkdtemp(join(tmpdir(), "claude-models-"));
     const persistPath = join(dir, "models.json");
 
-    const online = await createClaudeCatalog(emptyStore, noContainerToken, dir, persistPath, async () => live, apiFails).models();
+    // REST answers with nothing new, so the tier only the CLI names is the discovery under test.
+    const online = await createClaudeCatalog(emptyStore, containerToken, dir, persistPath, async () => live, apiReturns([])).models();
     expect(online.models).toEqual(live);
 
     // A separate catalog instance avoids the in-memory cache; this reads the file the first one wrote.
@@ -245,6 +247,53 @@ test("with nothing persisted, a refused REST read pads the CLI's versioned rows 
     const catalog = await createClaudeCatalog(emptyStore, containerToken, dir, join(dir, "models.json"), async () => [fable], apiFails).models();
 
     expect(catalog.models).toEqual([fable, ...CLAUDE_SEED_MODELS]);
+});
+
+// A new sandbox opens its picker before any sign-in. With no token REST cannot be asked, and the CLI names a version
+// for Fable alone: filed as the whole catalog, that one row was cached for the hour and persisted as last-known-good.
+test("with no credential to ask REST with, the CLI's versioned rows are padded rather than filed as the catalog", async () => {
+    const fable: Model = { id: "claude-fable-5-1", label: "Fable", efforts: ["low", "max"], badges: ["reasoning"] };
+    const dir = await mkdtemp(join(tmpdir(), "claude-models-"));
+    const persistPath = join(dir, "models.json");
+    // Every REST read that fails is logged (see below), so an empty log is REST never having been asked.
+    const warned: unknown[] = [];
+
+    const catalog = await createClaudeCatalog(emptyStore, noContainerToken, dir, persistPath, async () => [fable], apiFails, {
+        warn: (payload: unknown) => {
+            warned.push(payload);
+        },
+    }).models();
+
+    expect(catalog.models).toEqual([fable, ...CLAUDE_SEED_MODELS]);
+    expect(warned).toEqual([]);
+    // And the file a restart opens on holds the padded list, not the one row.
+    const reread = await createClaudeCatalog(emptyStore, noContainerToken, dir, persistPath, discoveryFails, apiFails).models();
+    expect(reread.models).toEqual([fable, ...CLAUDE_SEED_MODELS]);
+});
+
+// The cache is not keyed by the credential that answered, so the account door forgets it on connect: the next read
+// asks REST with the new token instead of serving the token-less answer for the rest of the hour.
+test("a forgotten catalog rediscovers with the account connected since, instead of serving the token-less answer", async () => {
+    const fable: Model = { id: "claude-fable-5-1", label: "Fable" };
+    // Everything the seed floor names, plus a tier only REST knows: what the new token can see and no token could.
+    const rest = [{ id: "claude-fictional-9", display_name: "Claude Fictional 9" }, ...CLAUDE_SEED_MODELS.map((model) => ({ id: model.id, display_name: model.label }))];
+    const connected: string[] = [];
+    const store = unstubbed<ClaudeStore>("claudeStore", {
+        list: async () => connected.map((id, index) => ({ id, label: id, connectedAt: index })),
+        read: async (id) => ({ id, connectedAt: 0, accessToken: `token-${id}`, refreshToken: `refresh-${id}`, expiresAt: Date.now() + 3_600_000 }),
+    });
+    const dir = await mkdtemp(join(tmpdir(), "claude-models-"));
+    const catalog = createClaudeCatalog(store, noContainerToken, dir, join(dir, "models.json"), async () => [fable], apiServing("token-a", rest));
+
+    const before = await catalog.models();
+    expect(before.models).toEqual([fable, ...CLAUDE_SEED_MODELS]);
+
+    connected.push("a");
+    // Still the cached answer: nothing has told the catalog a credential arrived.
+    expect((await catalog.models()).models).toEqual(before.models);
+    catalog.forget();
+
+    expect((await catalog.models()).models).toEqual([fable, { id: "claude-fictional-9", label: "Claude Fictional 9" }, ...CLAUDE_SEED_MODELS]);
 });
 
 test("the REST catalog is read on the first account that answers, not only the first connected", async () => {

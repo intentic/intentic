@@ -131,12 +131,10 @@ const fetchApiModels = async (oauthToken: string, fetchImpl: typeof fetch, logge
 
 // The first credential the REST catalog answers for, tried in order. One account's org can forbid OAuth REST
 // (oauth_not_allowed_for_organization) or be rate-limited while another answers; the catalog is the same for every
-// subscription, so any 200 is the catalog. undefined only when every token was refused; with no token there was
-// nothing to refuse, and the CLI's own list stands.
+// subscription, so any 200 is the catalog. undefined when no token answered, including when there was none to ask
+// with: a sandbox before its first sign-in has no REST catalog either, and the CLI's own list is not one (it names a
+// version for Fable alone), so taking it as the whole answer showed a new sandbox one Claude model.
 const discoverApiModels = async (tokens: readonly string[], fetchImpl: typeof fetch, logger: Pick<Logger, "warn">): Promise<Model[] | undefined> => {
-    if (tokens.length === 0) {
-        return [];
-    }
     for (const token of tokens) {
         const models = await fetchApiModels(token, fetchImpl, logger);
         if (models !== undefined) {
@@ -157,6 +155,10 @@ const mergeCatalogs = (aliases: readonly Model[], versioned: readonly Model[]): 
 export interface ClaudeCatalog {
     // Never empty; accountId picks the credential, else the first connected account or the container token.
     readonly models: (accountId?: string) => Promise<{ models: Model[]; default: string }>;
+    // Drops the cached answer, so the next read discovers with whatever credentials are stored now. The account door
+    // calls it on connect and disconnect: the answer depends on which tokens it was asked with, and the cache is not
+    // keyed by them.
+    readonly forget: () => void;
 }
 
 // Discovery spawns the CLI and models change rarely, so this caches for the daemon's life; a restart re-probes.
@@ -211,9 +213,9 @@ export const createClaudeCatalog = (
             if (versioned !== undefined) {
                 return mergeCatalogs(aliases, versioned);
             }
-            // Every REST token refused: the CLI alone names at most the tiers it ships with ids (claude-fable-5-1),
-            // and serving that as live would file it as last-known-good and shrink the picker to one row. The
-            // persisted list (else the seed floor) stands in for the missing REST rows.
+            // Every REST token refused, or none to ask with: the CLI alone names at most the tiers it ships with ids
+            // (claude-fable-5-1), and serving that as live would file it as last-known-good and shrink the picker to
+            // one row. The persisted list (else the seed floor) stands in for the missing REST rows.
             const stored = await store.read();
             return mergeCatalogs(aliases, stored.length > 0 ? stored : CLAUDE_SEED_MODELS);
         },
@@ -224,5 +226,5 @@ export const createClaudeCatalog = (
         fromLive: withDefault,
         fromStored: withDefault,
     });
-    return { models: catalog.models };
+    return { models: catalog.models, forget: catalog.forget };
 };

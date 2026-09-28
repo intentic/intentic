@@ -19,7 +19,7 @@ const withSeat = (account: OauthAccount, seat: SeatRefusal | undefined): OauthAc
 
 export type ClaudeAccountDeps = Pick<
     Services,
-    "accountUsage" | "claudeSeatCheck" | "claudeSeats" | "claudeStore" | "headroom" | "observedLimits" | "providerRefusals"
+    "accountUsage" | "claudeModels" | "claudeSeatCheck" | "claudeSeats" | "claudeStore" | "headroom" | "observedLimits" | "providerRefusals"
 >;
 
 // How long list waits for a fresh plan-limit reading before falling back to what's on file.
@@ -42,6 +42,7 @@ export const claudeAccountDoor = (services: ClaudeAccountDeps): AccountDoor => {
     const pending = new Map<string, { readonly verifier: string; readonly expiresAt: number }>();
     const forget = async (id: string): Promise<void> => {
         await Promise.all([services.claudeStore.clear(id), services.claudeSeats.clear(id), forgetAccountState(services, "claude", id)]);
+        services.claudeModels.forget();
     };
     return {
         start: async () => {
@@ -73,6 +74,9 @@ export const claudeAccountDoor = (services: ClaudeAccountDeps): AccountDoor => {
             const stored = match === undefined ? undefined : await services.claudeStore.read(match.id);
             const account = stored === undefined ? newAccount(tokens, label ?? "") : reconnectAccount(stored, tokens, label ?? "");
             await services.claudeStore.write(account);
+            // The model list cached before this sign-in was asked with no token (or another one), and holds for an
+            // hour: a sandbox whose picker opened first went on showing the CLI's one versioned model after connecting.
+            services.claudeModels.forget();
             return toAccount(account);
         },
         cancel: (handshake) => {

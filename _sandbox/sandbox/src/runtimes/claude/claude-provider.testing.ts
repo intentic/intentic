@@ -28,5 +28,5 @@ export const claudeSliceFake = ({ claudeStore }: ClaudeFakeOverrides) =>
         claudeSeatCheck: { recheck: async () => false },
         // Per-provider catalog the provider module reads directly; mirrors testProviderCatalogs row for row, so
         // overriding one without the other misses the seam.
-        claudeModels: { models: async () => ({ models: [{ id: "opus", label: "Opus" }], default: "opus" }) },
+        claudeModels: { models: async () => ({ models: [{ id: "opus", label: "Opus" }], default: "opus" }), forget: () => {} },
     }) satisfies ClaudeSlice;

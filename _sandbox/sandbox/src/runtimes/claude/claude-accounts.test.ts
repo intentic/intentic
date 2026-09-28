@@ -21,10 +21,17 @@ const door = (
     seats = new Map<string, SeatRefusal>(),
     // Every re-test of a marked account the door asked for; the provider is never re-asked here (claude-seat-check.test.ts).
     rechecks: [string, { readonly force?: boolean } | undefined][] = [],
+    // How many times the door dropped the cached model list; the catalog itself is claude-models' suite.
+    catalog = { forgets: 0 },
 ) =>
     claudeAccountDoor(
         unstubbed<ClaudeAccountDeps>("claude deps", {
             claudeStore,
+            claudeModels: unstubbed<ClaudeAccountDeps["claudeModels"]>("claudeModels", {
+                forget: () => {
+                    catalog.forgets += 1;
+                },
+            }),
             claudeSeatCheck: {
                 recheck: async (id, options) => {
                     rechecks.push([id, options]);
@@ -100,6 +107,32 @@ test("Claude: the list reflects the store, a start keeps its proof here, disconn
     await claude.forget("a");
     expect(accounts.has("a")).toBe(false);
     expect(accounts.has("b")).toBe(true);
+});
+
+// The model list is cached for an hour and does not know which credential it was asked with. A sandbox whose picker
+// opened before its first sign-in was served the token-less answer (the CLI's one versioned model, Fable) for the rest
+// of that hour after connecting, so both ends of an account's life drop it.
+test("Claude: connecting an account, and disconnecting one, drops the cached model list", async () => {
+    const accounts = new Map<string, StoredAccount>();
+    const catalog = { forgets: 0 };
+    const claude = door(memoryStore(accounts), [], new Map(), [], catalog);
+    // The exchange is Anthropic's token endpoint; answered here so the sign-in lands in the store.
+    const exchange = jest
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(new Response(JSON.stringify({ access_token: "tok-new", refresh_token: "refresh-new", expires_in: 3600 })));
+    try {
+        const started = await claude.start(undefined);
+        await claude.complete!({ handshake: started.handshake, code: "abc#def" });
+    } finally {
+        exchange.mockRestore();
+    }
+
+    expect(accounts.size).toBe(1);
+    expect(catalog.forgets).toBe(1);
+
+    await claude.forget([...accounts.keys()][0]!);
+    expect(accounts.size).toBe(0);
+    expect(catalog.forgets).toBe(2);
 });
 
 // An org-disabled account shows the provider's refusal instead of a reconnect prompt, since the credential itself is
