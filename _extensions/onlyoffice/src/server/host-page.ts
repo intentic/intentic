@@ -53,11 +53,11 @@ export const editorConfig = (input: EditorConfigInput): Record<string, unknown> 
     return { ...config, token: signJwt(config, input.secret) };
 };
 
-const escapeHtml = (text: string): string =>
+export const escapeHtml = (text: string): string =>
     text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
 // JSON inside a <script>: `<` escaped so no document title can close the tag.
-const scriptJson = (value: unknown): string => JSON.stringify(value).replaceAll("<", "\\u003c");
+export const scriptJson = (value: unknown): string => JSON.stringify(value).replaceAll("<", "\\u003c");
 
 export const hostPage = (config: Record<string, unknown>, title: string, theme: "light" | "dark"): string => `<!doctype html>
 <html lang="en">

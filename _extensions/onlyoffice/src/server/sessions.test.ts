@@ -106,6 +106,17 @@ describe(`an editor kept alive`, () => {
         expect(sessions.current(`never-issued`, input())).toBe(false);
     });
 
+    it(`is current only for the engine it runs on: an editor from one engine never stands in for the other`, () => {
+        const sessions = new Sessions();
+        const server = sessions.open(input());
+        const browser = sessions.open({ ...input(), engine: `browser` });
+        expect(server.engine).toBe(`server`);
+        expect(browser.engine).toBe(`browser`);
+        expect(sessions.current(browser.token, { ...input(), engine: `browser` })).toBe(true);
+        expect(sessions.current(browser.token, input())).toBe(false);
+        expect(sessions.current(server.token, { ...input(), engine: `browser` })).toBe(false);
+    });
+
     it(`is not current once the server closed its session`, () => {
         const sessions = new Sessions();
         const kept = sessions.open(input());

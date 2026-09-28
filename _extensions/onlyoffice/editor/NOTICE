@@ -1,0 +1,111 @@
+NOTICE
+======
+
+This directory, the browser engine's editor page of the onlyoffice extension,
+is licensed under the GNU Affero General Public License version 3 only (see
+LICENSE). The rest of the Intentic repository is MIT-licensed; this directory
+is not. It is kept apart on purpose: the extension's MIT code frames the page on
+a separate origin and talks to it only over postMessage and HTTP, the same arm's
+length it keeps from the ONLYOFFICE Docs container of its other engine.
+
+The page drives the ONLYOFFICE document editors, which the sandbox downloads
+once as a separate bundle (src/server/bundle-pin.ts). Both are covered below.
+
+
+1. ONLYOFFICE editors (sdkjs, web-apps)
+---------------------------------------
+
+Copyright (C) Ascensio System SIA. All rights reserved.
+https://www.onlyoffice.com/
+
+Upstream sources:
+  https://github.com/ONLYOFFICE/sdkjs
+  https://github.com/ONLYOFFICE/web-apps
+
+The ONLYOFFICE editors are distributed under the GNU AGPL version 3 with the
+additional terms permitted by its Section 7. The notice carried by the upstream
+source files, reproduced in full:
+
+    (c) Copyright Ascensio System SIA 2010-2024
+
+    This program is a free software product. You can redistribute it and/or
+    modify it under the terms of the GNU Affero General Public License (AGPL)
+    version 3 as published by the Free Software Foundation. In accordance with
+    Section 7(a) of the GNU AGPL its Section 15 shall be amended to the effect
+    that Ascensio System SIA expressly excludes the warranty of non-infringement
+    of any third-party rights.
+
+    This program is distributed WITHOUT ANY WARRANTY; without even the implied
+    warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR  PURPOSE. For
+    details, see the GNU AGPL at: http://www.gnu.org/licenses/agpl-3.0.html
+
+    You can contact Ascensio System SIA at 20A-6 Ernesta Birznieka-Upish
+    street, Riga, Latvia, EU, LV-1050.
+
+    The  interactive user interfaces in modified source and object code versions
+    of the Program must display Appropriate Legal Notices, as required under
+    Section 5 of the GNU AGPL version 3.
+
+    Pursuant to Section 7(b) of the License you must retain the original Product
+    logo when distributing the program. Pursuant to Section 7(e) we decline to
+    grant you any rights under trademark law for use of our trademarks.
+
+    All the Product's GUI elements, including illustrations and icon sets, as
+    well as technical writing content are licensed under the terms of the
+    Creative Commons Attribution-ShareAlike 4.0 International. See the License
+    terms at http://creativecommons.org/licenses/by-sa/4.0/legalcode
+
+ONLYOFFICE and the ONLYOFFICE logo are trademarks of Ascensio System SIA. No
+rights under trademark law are granted by the licence and none are claimed
+here. This is not an official ONLYOFFICE product and is not affiliated with,
+sponsored by or endorsed by Ascensio System SIA.
+
+
+2. The editor bundle
+--------------------
+
+The bundle is the vendor tree of ranuts/document (AGPL-3.0,
+https://github.com/ranuts/document), taken at commit
+1301bb8bdac9092c4eb88a6f2f4ff5080cec68bd: public/sdkjs, public/web-apps,
+public/fonts, public/plugins.json, public/themes.json,
+public/document_editor_service_worker.js, and that project's LICENSE, NOTICE and
+docs/font-licenses.md, which ship inside the bundle. It holds a third-party
+compiled offline build of ONLYOFFICE 9.3.0.133, the x2t converter compiled to
+WebAssembly (ONLYOFFICE core, AGPL-3.0, through
+https://github.com/cryptpad/onlyoffice-x2t-wasm), and a font catalog whose
+proprietary files that project replaced with redistributable ones. Its NOTICE,
+inside the bundle, lists the modifications it made to the vendor tree.
+
+The corresponding source of the bundle is that commit of ranuts/document and the
+upstream repositories it names. The sandbox verifies every file it keeps against
+a digest pinned in src/server/bundle-pin.ts before serving any of it.
+
+Intentic's modifications to the bundle, applied after verification
+(the `patches` of src/server/bundle-pin.ts):
+
+  * sdkjs/common/wasm/x2t/x2t_helper.js -- an exported document is posted to
+    the editor page that asked for it, addressed to that page's own origin,
+    instead of to the page and the top window with any origin.
+
+
+3. The editor page (this directory)
+-----------------------------------
+
+src/main.ts, src/save.ts, src/frame.ts and src/workspace.ts are Intentic's. src/guards/ holds runtime
+corrections to the offline build ported from ranuts/document's
+lib/onlyoffice/ at the same commit (AGPL-3.0); each file names the file it came
+from and says what was changed. They patch the editor at run time and leave the
+bundle's files as they were verified.
+
+
+How the terms are honoured
+--------------------------
+
+Section 7(b), product logo: the ONLYOFFICE logo stays in the editor header and
+the About pane stays reachable. Neither is hidden.
+
+Section 5 and Section 13, notices and source: the page adds to the editor's own
+About pane that this is a modified version, not an official ONLYOFFICE product,
+and links the source of the page and of the bundle (src/guards/about-source.ts).
+
+Section 7(e), trademarks: stated above and in that same About notice.

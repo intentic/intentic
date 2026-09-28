@@ -5,9 +5,12 @@ import { basename, join, posix } from "node:path";
 import { Readable } from "node:stream";
 import type { ExtensionServerApi, ExtensionServerContext } from "@intentic/extension-api";
 import { STATE_DIR } from "@intentic/sandbox-contract";
-import type { DocsState, OpenRequest, OpenResult } from "../contract.js";
+import { ENGINES, type DocsState, type Engine, type OpenRequest, type OpenResult } from "../contract.js";
 import { documentTypeOf, extensionOf } from "../formats.js";
-import { autoStartOf } from "../settings.js";
+import { autoStartOf, engineOf } from "../settings.js";
+import { createBrowserEngine } from "./browser-engine.js";
+import { BUNDLE_PIN } from "./bundle-pin.js";
+import { BundleStore } from "./bundle.js";
 import { forceSave } from "./command.js";
 import { createDockerEngine } from "./docker.js";
 import { DocumentServer, IMAGE } from "./document-server.js";
@@ -15,9 +18,9 @@ import { editorConfig, hostPage } from "./host-page.js";
 import { createListener, type Document } from "./listener.js";
 import { Sessions, type FileStat, type OpenInput, type Session } from "./sessions.js";
 
-// The backend: four routes for the viewer (/status, /start, /open, /forcesave), a listener of its own for the document
-// server and the framed editor page, and the container's lifecycle. Runs inside the daemon's extension host with node
-// builtins only.
+// The backend: four routes for the viewer (/status, /start, /open, /forcesave), a listener of its own for the framed
+// editor page, and the two engines behind it: the browser engine's bundle (downloaded once, served as files) and the
+// document server's container. Runs inside the daemon's extension host with node builtins only.
 
 // Under the workspace state dir: shared across turns and sessions, never tracked, kept across sandbox rebuilds by the volume.
 const SECRET_PATH = `${STATE_DIR}/local/onlyoffice/jwt-secret`;
@@ -25,6 +28,8 @@ const SECRET_PATH = `${STATE_DIR}/local/onlyoffice/jwt-secret`;
 // browser already knows: the same forwarded origin keeps the editor's service worker cache, and the document server
 // keeps reaching the callback address a session it is still holding was opened with.
 const PORT_PATH = `${STATE_DIR}/local/onlyoffice/listener-port`;
+// The browser engine's bundle, in the workspace's rebuildable cache: the watcher ignores it and no backup carries it.
+const BUNDLE_CACHE = `${STATE_DIR}/local/cache/onlyoffice/bundle`;
 
 // How the document server reaches this listener from inside its container (the engine's host gateway).
 const CONTAINER_TO_SANDBOX = "host.docker.internal";
@@ -96,27 +101,41 @@ export const workspacePath = (raw: unknown): string | undefined => {
     return normalized;
 };
 
+// The engine a request names, the browser one for anything else.
+export const engineFrom = (engine: unknown): Engine => (ENGINES as readonly unknown[]).includes(engine) ? (engine as Engine) : "browser";
+
+// The request's optional text fields, each kept only when it is a string.
+const OPTIONAL_TEXT = ["agent", "resume", "lang", "origin"] as const;
+
+// An open request while it is being assembled.
+type OpenRequestDraft = { -readonly [Key in keyof OpenRequest]: OpenRequest[Key] };
+
 export const parseOpen = (body: unknown): OpenRequest | undefined => {
     if (typeof body !== "object" || body === null) {
         return undefined;
     }
-    const { path, agent, mode, theme, resume } = body as Record<string, unknown>;
-    const safe = workspacePath(path);
-    if (
-        safe === undefined ||
-        (agent !== undefined && typeof agent !== "string") ||
-        (mode !== "edit" && mode !== "view") ||
-        (resume !== undefined && typeof resume !== "string")
-    ) {
+    // SAFETY: a JSON body that is an object; each field is checked below before it is used.
+    const fields = body as Record<string, unknown>;
+    const path = workspacePath(fields["path"]);
+    const mode = fields["mode"];
+    // A scope or a kept editor that is not a string is a malformed request, not one without them.
+    const malformed = ["agent", "resume"].some((key) => fields[key] !== undefined && typeof fields[key] !== "string");
+    if (path === undefined || (mode !== "edit" && mode !== "view") || malformed) {
         return undefined;
     }
-    return {
-        path: safe,
-        ...(agent === undefined ? {} : { agent }),
+    const request: OpenRequestDraft = {
+        path,
         mode,
-        theme: theme === "dark" ? "dark" : "light",
-        ...(resume === undefined ? {} : { resume }),
+        theme: fields["theme"] === "dark" ? "dark" : "light",
+        engine: engineFrom(fields["engine"]),
     };
+    for (const key of OPTIONAL_TEXT) {
+        const value = fields[key];
+        if (typeof value === "string") {
+            request[key] = value;
+        }
+    }
+    return request;
 };
 
 // Write beside then rename: the watcher and any reader see the old bytes or the new, never a half-written file.
@@ -124,6 +143,23 @@ const writeAtomically = async (file: string, bytes: Buffer): Promise<void> => {
     const temporary = `${file}.onlyoffice-${randomBytes(4).toString("hex")}.tmp`;
     await writeFile(temporary, bytes);
     await rename(temporary, file);
+};
+
+// The owner's standing choice at boot: with auto-start on, the chosen engine is made ready now (the browser engine's
+// download, or the document server's container) instead of on the first document. A container the engine already runs
+// is adopted either way, so an open on the server engine does not wait on the readiness check.
+const prepareAtBoot = (settings: Record<string, unknown> | undefined, deps: { docs: DocumentServer; bundle: BundleStore; log: (line: string) => void }): void => {
+    const engine = engineOf(settings);
+    if (autoStartOf(settings) && engine === "server") {
+        deps.log(`starting the document server with the sandbox (auto-start is on)`);
+        void deps.docs.start();
+        return;
+    }
+    void deps.docs.adopt();
+    if (autoStartOf(settings)) {
+        deps.log(`preparing the browser editor with the sandbox (auto-start is on)`);
+        void deps.bundle.ensure();
+    }
 };
 
 export const activateServer = async (api: ExtensionServerApi, context: ExtensionServerContext): Promise<void> => {
@@ -139,12 +175,10 @@ export const activateServer = async (api: ExtensionServerApi, context: Extension
         api.log(`settings unreadable, treating auto-start as off: ${error instanceof Error ? error.message : String(error)}`);
         return undefined;
     });
-    if (autoStartOf(settings?.settings)) {
-        api.log(`starting the document server with the sandbox (auto-start is on)`);
-        void docs.start();
-    } else {
-        void docs.adopt();
-    }
+    const bundle = new BundleStore({ root: join(api.workspaceRoot, BUNDLE_CACHE), pin: BUNDLE_PIN, log: api.log });
+    // Reads what is on disk at once, so the first open knows whether the bundle is there.
+    void bundle.load().catch((error: unknown) => api.log(`the editor bundle cache is unreadable: ${error instanceof Error ? error.message : String(error)}`));
+    prepareAtBoot(settings?.settings, { docs, bundle, log: api.log });
 
     // Where the browser reaches the listener: the daemon's forwarded-port hostname, asked for again on every open
     // since the forward table is in-memory and a busy sandbox can evict a slot.
@@ -253,14 +287,26 @@ export const activateServer = async (api: ExtensionServerApi, context: Extension
         return renewed === undefined ? undefined : configFor(renewed);
     };
 
+    const browser = createBrowserEngine({
+        workspaceRoot: api.workspaceRoot,
+        pageDir: join(api.extensionDir, "dist", "editor"),
+        sessions,
+        bundle,
+        scopedRaw,
+        identify,
+        exposure,
+        log: api.log,
+    });
+
     const listener = createListener({
         secret,
         sessions,
         documentServerPort: () => docs.running()?.port,
-        pageFor: (session) => hostPage(configFor(session), basename(session.path), session.theme),
+        pageFor: (session) => (session.engine === "browser" ? browser.page(session) : hostPage(configFor(session), basename(session.path), session.theme)),
         refresh,
         readDocument,
         saveDocument,
+        browser: browser.routes,
         log: api.log,
     });
     const portFile = join(api.workspaceRoot, PORT_PATH);
@@ -285,6 +331,10 @@ export const activateServer = async (api: ExtensionServerApi, context: Extension
     const open = async (request: OpenRequest): Promise<Response> => {
         if (documentTypeOf(extensionOf(request.path)) === undefined) {
             return json(400, { error: `not an office document: ${request.path}` });
+        }
+        if (request.engine !== "server") {
+            const opened = await browser.open(request);
+            return json(opened.status, opened.body);
         }
         const state = await docs.ensureRunning();
         if (state.state !== "ready") {
@@ -312,7 +362,7 @@ export const activateServer = async (api: ExtensionServerApi, context: Extension
             return json(409, { state: "no-address" } satisfies DocsState);
         }
         const session = sessions.open(input);
-        return json(200, { url: `${origin}/editor?s=${encodeURIComponent(session.token)}`, session: session.token } satisfies OpenResult);
+        return json(200, { url: `${origin}/editor?s=${encodeURIComponent(session.token)}`, session: session.token, engine: "server" } satisfies OpenResult);
     };
 
     // Best effort by design: the viewer fires it as it leaves a document and never waits on the answer.
@@ -331,18 +381,22 @@ export const activateServer = async (api: ExtensionServerApi, context: Extension
     api.routes.mount(async (request) => {
         const url = new URL(request.url);
         if (request.method === "GET" && url.pathname === "/status") {
-            return json(200, await docs.status());
+            return json(200, engineFrom(url.searchParams.get("engine")) === "server" ? await docs.status() : await browser.status());
         }
         if (request.method === "POST" && url.pathname === "/start") {
-            return json(200, await docs.start());
+            // SAFETY: a JSON body or undefined; its one field is read through engineFrom, which takes anything.
+            const body = (await bodyOf(request)) as { engine?: unknown } | null | undefined;
+            const chosen = engineFrom(body?.engine);
+            return json(200, chosen === "server" ? await docs.start() : await browser.prepare());
         }
         if (request.method === "POST" && url.pathname === "/open") {
             const parsed = parseOpen(await bodyOf(request));
             return parsed === undefined ? json(400, { error: "expected { path, mode, theme, agent?, resume? }" }) : open(parsed);
         }
         if (request.method === "POST" && url.pathname === "/forcesave") {
-            const body = await bodyOf(request);
-            return forceSaveSession(typeof body === "object" && body !== null ? (body as { session?: unknown }).session : undefined);
+            // SAFETY: a JSON body or undefined; its one field is read through forceSaveSession, which takes anything.
+            const body = (await bodyOf(request)) as { session?: unknown } | null | undefined;
+            return forceSaveSession(body?.session);
         }
         return undefined;
     });

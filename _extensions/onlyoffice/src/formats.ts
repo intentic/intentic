@@ -8,6 +8,10 @@ export const OFFICE_FORMATS = {
 
 export type DocumentType = keyof typeof OFFICE_FORMATS;
 
+// The legacy binary formats x2t reads but cannot write: the browser engine opens them view-only rather than save an
+// edit in some other format under their name.
+export const READ_ONLY_IN_BROWSER: readonly string[] = ["doc", "xls", "ppt"];
+
 // The lowercased extension of a path, or "" for a dotfile or an extensionless name.
 export const extensionOf = (path: string): string => {
     const name = path.slice(path.lastIndexOf("/") + 1).toLowerCase();

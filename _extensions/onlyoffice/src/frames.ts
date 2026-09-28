@@ -1,4 +1,5 @@
 import { sandboxValue } from "@intentic/extension-api";
+import type { Engine } from "./contract.js";
 
 // Editors kept alive after their viewer goes: a tab switched away from, a tab closed. The frame is moved, not copied,
 // into a hidden lot with `Element.moveBefore`, which keeps an iframe's document running where `appendChild` would
@@ -10,6 +11,10 @@ export interface KeptFrame {
     readonly frame: HTMLIFrameElement;
     // The session the frame's editor runs under: what the backend is asked about before the frame is trusted again.
     readonly session: string;
+    // Which engine runs it, and the origin its page is on: a browser-engine page is told to save by message, from the
+    // app, and only a message from that origin is taken as its answer.
+    readonly engine: Engine;
+    readonly origin: string;
 }
 
 interface Parked extends KeptFrame {
@@ -42,8 +47,8 @@ const LOT_ID = `intentic-onlyoffice-kept`;
 export const canKeep = (): boolean => typeof (Element.prototype as Partial<Movable>).moveBefore === `function`;
 
 // What makes two opens the same editor: the document, the copy it is read from, and what the editor was built with.
-export const frameId = (path: string, agent: string | undefined, mode: `edit` | `view`, theme: `light` | `dark`): string =>
-    JSON.stringify([path, agent ?? null, mode, theme]);
+export const frameId = (path: string, agent: string | undefined, mode: `edit` | `view`, theme: `light` | `dark`, engine: Engine): string =>
+    JSON.stringify([path, agent ?? null, mode, theme, engine]);
 
 // Off screen rather than display:none, and pinned at the size it had: an editor laid out for a zero-size box would lay
 // itself out again, and throttle, on the way back.
@@ -128,5 +133,5 @@ export const take = (id: string, slot: Element): KeptFrame | undefined => {
         return undefined;
     }
     unpin(found.frame);
-    return { frame: found.frame, session: found.session };
+    return { frame: found.frame, session: found.session, engine: found.engine, origin: found.origin };
 };

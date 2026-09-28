@@ -9,6 +9,7 @@ const session = (mode: `edit` | `view`): Session => ({
     agent: undefined,
     mode,
     theme: `dark`,
+    engine: `server`,
     expiresAt: 0,
     run: 0,
 });

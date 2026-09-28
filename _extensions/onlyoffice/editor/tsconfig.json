@@ -1,0 +1,11 @@
+/* The browser engine's editor page (AGPL-3.0, see LICENSE), type-checked on its own: the package's tsconfig roots at src/. It reads the MIT protocol module, never the other way round. */
+{
+    "compilerOptions": {
+        "noEmit": true,
+        "resolveJsonModule": true,
+        "tsBuildInfoFile": "../.cache/tsbuildinfo-editor",
+        "types": ["bun", "@intentic/testing/globals", "node"]
+    },
+    "include": ["./src/**/*.ts", "../src/protocol.ts"],
+    "extends": "@intentic/tsconfig/tsconfig.vue.json"
+}

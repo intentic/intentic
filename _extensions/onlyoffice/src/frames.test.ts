@@ -1,6 +1,6 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
-import { canKeep, drop, frameId, KEEP_MS, keep, MAX_KEPT, take } from "./frames.js";
+import { canKeep, drop, frameId, KEEP_MS, keep, MAX_KEPT, take, type KeptFrame } from "./frames.js";
 
 // The lot of kept editors against jsdom, which has no `moveBefore`: a stand-in that moves with insertBefore is installed
 // where a test means a browser that has it. jsdom loads no frame documents, so this is the bookkeeping, not the promise
@@ -29,7 +29,9 @@ const slot = (): HTMLElement => {
     return element;
 };
 
-const ids = [`a.docx`, `b.docx`, `c.docx`, `d.docx`].map((path) => frameId(path, undefined, `edit`, `light`));
+const ids = [`a.docx`, `b.docx`, `c.docx`, `d.docx`].map((path) => frameId(path, undefined, `edit`, `light`, `server`));
+// A frame as the slot keeps it: the engine and page origin ride along untouched.
+const kept = (frame: HTMLIFrameElement, session: string): KeptFrame => ({ frame, session, engine: `server`, origin: `http://port-1.localhost` });
 
 afterEach(() => {
     for (const id of ids) {
@@ -43,7 +45,7 @@ describe(`a browser without moveBefore`, () => {
     it(`keeps nothing, so the frame goes with its viewer as before`, () => {
         const frame = frameIn(slot());
         expect(canKeep()).toBe(false);
-        expect(keep(ids[0]!, { frame, session: `s` })).toBe(false);
+        expect(keep(ids[0]!, kept(frame, `s`))).toBe(false);
         expect(take(ids[0]!, slot())).toBeUndefined();
     });
 });
@@ -53,14 +55,14 @@ describe(`a browser with moveBefore`, () => {
         withMoveBefore();
         const home = slot();
         const frame = frameIn(home);
-        expect(keep(ids[0]!, { frame, session: `s1` })).toBe(true);
+        expect(keep(ids[0]!, kept(frame, `s1`))).toBe(true);
         expect(home.contains(frame)).toBe(false);
         expect(frame.isConnected).toBe(true);
         expect(frame.parentElement?.getAttribute(`aria-hidden`)).toBe(`true`);
         expect(frame.style.width).toBe(`1px`);
 
         const next = slot();
-        expect(take(ids[0]!, next)).toEqual({ frame, session: `s1` });
+        expect(take(ids[0]!, next)).toEqual(kept(frame, `s1`));
         expect(next.firstElementChild).toBe(frame);
         expect(frame.style.width).toBe(`100%`);
         expect(frame.style.height).toBe(`100%`);
@@ -72,17 +74,17 @@ describe(`a browser with moveBefore`, () => {
         withMoveBefore();
         const older = frameIn(slot());
         const newer = frameIn(slot());
-        keep(ids[0]!, { frame: older, session: `old` });
-        keep(ids[0]!, { frame: newer, session: `new` });
+        keep(ids[0]!, kept(older, `old`));
+        keep(ids[0]!, kept(newer, `new`));
         expect(older.isConnected).toBe(false);
-        expect(take(ids[0]!, slot())).toEqual({ frame: newer, session: `new` });
+        expect(take(ids[0]!, slot())).toEqual(kept(newer, `new`));
     });
 
     it(`holds at most a few, ending the one left longest ago`, () => {
         withMoveBefore();
         expect(MAX_KEPT).toBe(3);
         const frames = ids.map(() => frameIn(slot()));
-        ids.forEach((id, index) => keep(id, { frame: frames[index]!, session: id }));
+        ids.forEach((id, index) => keep(id, kept(frames[index]!, id)));
         expect(frames.map((frame) => frame.isConnected)).toEqual([false, true, true, true]);
         expect(take(ids[0]!, slot())).toBeUndefined();
         expect(take(ids[3]!, slot())?.frame).toBe(frames[3]);
@@ -93,7 +95,7 @@ describe(`a browser with moveBefore`, () => {
         try {
             withMoveBefore();
             const frame = frameIn(slot());
-            keep(ids[0]!, { frame, session: `s` });
+            keep(ids[0]!, kept(frame, `s`));
             jest.advanceTimersByTime(KEEP_MS - 1);
             expect(frame.isConnected).toBe(true);
             jest.advanceTimersByTime(1);
@@ -107,25 +109,27 @@ describe(`a browser with moveBefore`, () => {
     it(`ends every kept editor when the shell switches to another sandbox`, () => {
         withMoveBefore();
         const frames = ids.slice(0, 2).map(() => frameIn(slot()));
-        frames.forEach((frame, index) => keep(ids[index]!, { frame, session: `s${index}` }));
+        frames.forEach((frame, index) => keep(ids[index]!, kept(frame, `s${index}`)));
         resetSandboxScope();
         expect(frames.map((frame) => frame.isConnected)).toEqual([false, false]);
         expect(take(ids[0]!, slot())).toBeUndefined();
         // The next sandbox keeps its own.
         const next = frameIn(slot());
-        expect(keep(ids[0]!, { frame: next, session: `n` })).toBe(true);
+        expect(keep(ids[0]!, kept(next, `n`))).toBe(true);
         expect(take(ids[0]!, slot())?.frame).toBe(next);
     });
 
     it(`keeps nothing for a frame already off the page`, () => {
         withMoveBefore();
         const frame = document.createElement(`iframe`);
-        expect(keep(ids[0]!, { frame, session: `s` })).toBe(false);
+        expect(keep(ids[0]!, kept(frame, `s`))).toBe(false);
     });
 
     it(`tells apart the same file opened another way`, () => {
-        expect(frameId(`a.docx`, undefined, `edit`, `light`)).not.toBe(frameId(`a.docx`, `conv-1`, `edit`, `light`));
-        expect(frameId(`a.docx`, undefined, `edit`, `light`)).not.toBe(frameId(`a.docx`, undefined, `view`, `light`));
-        expect(frameId(`a.docx`, undefined, `edit`, `light`)).not.toBe(frameId(`a.docx`, undefined, `edit`, `dark`));
+        const base = frameId(`a.docx`, undefined, `edit`, `light`, `server`);
+        expect(base).not.toBe(frameId(`a.docx`, `conv-1`, `edit`, `light`, `server`));
+        expect(base).not.toBe(frameId(`a.docx`, undefined, `view`, `light`, `server`));
+        expect(base).not.toBe(frameId(`a.docx`, undefined, `edit`, `dark`, `server`));
+        expect(base).not.toBe(frameId(`a.docx`, undefined, `edit`, `light`, `browser`));
     });
 });

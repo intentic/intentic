@@ -1,5 +1,6 @@
 import http from "node:http";
 import type { Readable } from "node:stream";
+import type { BrowserRoutes } from "./browser-routes.js";
 import { relayUpgrade } from "./upgrade-relay.js";
 import { endedPage } from "./host-page.js";
 import { bearerOf, verifyJwt } from "./jwt.js";
@@ -8,7 +9,8 @@ import type { FileStat, Session, Sessions } from "./sessions.js";
 // The listener the document server and the browser reach, outside the daemon's auth: the daemon's /x/ namespace is
 // bearer-gated and a separate process can't hold a bearer. Every route here has its own credential: the editor page
 // takes a session token, the document server signs what it fetches and posts with the shared JWT secret, and the rest
-// is the server's own UI proxied through so it shares this origin.
+// is the server's own UI proxied through so it shares this origin. The browser engine's routes (its static files and
+// the document its page reads and writes) are answered first, by `browser`.
 
 export interface Document {
     readonly path: string;
@@ -20,7 +22,8 @@ export interface ListenerDeps {
     readonly sessions: Sessions;
     // The document server's loopback port while it answers; undefined answers 503 to what would be proxied.
     readonly documentServerPort: () => number | undefined;
-    readonly pageFor: (session: Session) => string;
+    // The page a session's frame loads: the document server's editor, or the browser engine's.
+    readonly pageFor: (session: Session) => string | Promise<string>;
     // The signed editor config for `session` moved onto a fresh key, for an editor the server told to reload its
     // document; undefined when the document is gone.
     readonly refresh: (session: Session) => Promise<Record<string, unknown> | undefined>;
@@ -28,6 +31,8 @@ export interface ListenerDeps {
     readonly readDocument: (document: Document) => Promise<Readable | undefined>;
     // Fetches the edited document the server offers at `url`, writes it to the workspace, and answers what it left.
     readonly saveDocument: (document: Document, url: string) => Promise<FileStat>;
+    // The browser engine's routes; false for a request that is not one of them.
+    readonly browser: BrowserRoutes;
     readonly log: (line: string) => void;
 }
 
@@ -130,13 +135,13 @@ export const createListener = (deps: ListenerDeps): Listener => {
     const inFlight = new Map<string, Promise<unknown>>();
     let editorSockets = 0;
 
-    const editor = (url: URL, res: http.ServerResponse): void => {
+    const editor = async (url: URL, res: http.ServerResponse): Promise<void> => {
         const session = deps.sessions.session(url.searchParams.get("s") ?? "");
         if (session === undefined) {
             html(res, 404, endedPage());
             return;
         }
-        html(res, 200, deps.pageFor(session));
+        html(res, 200, await deps.pageFor(session));
     };
 
     // The editor page asks here when the server answers its key with "the version changed": the page is told the new
@@ -255,9 +260,12 @@ export const createListener = (deps: ListenerDeps): Listener => {
         const url = new URL(req.url ?? "/", "http://listener");
         const route = routeOf(url, req.method ?? "GET");
         void (async () => {
+            if (await deps.browser(req, res, url)) {
+                return;
+            }
             switch (route.kind) {
                 case "editor":
-                    editor(url, res);
+                    await editor(url, res);
                     break;
                 case "refresh":
                     await refresh(url, res);

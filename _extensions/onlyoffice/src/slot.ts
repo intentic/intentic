@@ -1,18 +1,22 @@
-import type { DocsState, OpenRequest, OpenResult } from "./contract.js";
+import type { DocsState, Engine, OpenRequest, OpenResult } from "./contract.js";
 import { frameId, keep, take, type KeptFrame } from "./frames.js";
+import { CHANNEL, pageMessage, type ConflictChoice, type PageMessage, type ViewerMessage } from "./protocol.js";
 
 // The viewer's editor frame, kept out of the component so the one rule that matters can be tested: an editor kept from
 // an earlier visit is shown at once but stays inert until the backend vouches that it still holds the file, and one
-// the backend does not vouch for is thrown away for a new one.
+// the backend does not vouch for is thrown away for a new one. A browser-engine editor is told things (save, how a
+// conflict was settled) by message, and what it says back reaches the viewer only from the frame it came from.
 
 export interface SlotDeps {
     readonly open: (request: OpenRequest) => Promise<OpenResult>;
     // The address to frame for the public one the backend built (the host's `previewAddress`).
     readonly address: (url: string) => Promise<string>;
-    // Writes what a session's editor holds to the workspace now.
+    // Asks the document server to write what a session's editor holds, now.
     readonly forceSave: (session: string) => Promise<void>;
     // Told whenever a frame enters or leaves the slot, so the viewer shows the frame or its card.
     readonly framed: (framed: boolean) => void;
+    // What the browser engine's page in the slot says.
+    readonly message: (message: PageMessage) => void;
 }
 
 export interface Opening {
@@ -20,6 +24,10 @@ export interface Opening {
     readonly agent: string | undefined;
     readonly mode: `edit` | `view`;
     readonly theme: `light` | `dark`;
+    readonly engine: Engine;
+    // The app's language and origin, for the browser engine's page.
+    readonly lang: string;
+    readonly origin: string;
 }
 
 // What a load came to: the editor is in the slot, the state that stands in the way, or nothing because a later load
@@ -40,20 +48,37 @@ const frameFor = (url: string, title: string): HTMLIFrameElement => {
     return frame;
 };
 
+// Tells a browser-engine page something, addressed to its own origin so nothing else can read it.
+const tell = (kept: KeptFrame, message: ViewerMessage): void => {
+    kept.frame.contentWindow?.postMessage(message, kept.origin);
+};
+
 export class EditorSlot {
     private current: Current | undefined;
     private generation = 0;
+    private readonly listen = (event: MessageEvent): void => {
+        const current = this.current;
+        if (current === undefined || event.source !== current.frame.contentWindow || event.origin !== current.origin) {
+            return;
+        }
+        const message = pageMessage(event.data);
+        if (message !== undefined) {
+            this.deps.message(message);
+        }
+    };
 
     constructor(
         private readonly element: HTMLElement,
         private readonly deps: SlotDeps,
-    ) {}
+    ) {
+        window.addEventListener(`message`, this.listen);
+    }
 
     // Puts the editor for `opening` in the slot: the one kept from before at once, inert until the backend answers,
     // else a new one once the backend has a session for it. Throws what the backend threw, unless superseded.
     async load(opening: Opening): Promise<Loaded> {
         const mine = ++this.generation;
-        const id = frameId(opening.path, opening.agent, opening.mode, opening.theme);
+        const id = frameId(opening.path, opening.agent, opening.mode, opening.theme, opening.engine);
         if (this.current === undefined) {
             const kept = take(id, this.element);
             if (kept !== undefined) {
@@ -69,6 +94,9 @@ export class EditorSlot {
                 ...(opening.agent === undefined ? {} : { agent: opening.agent }),
                 mode: opening.mode,
                 theme: opening.theme,
+                engine: opening.engine,
+                lang: opening.lang,
+                origin: opening.origin,
                 ...(resume === undefined ? {} : { resume }),
             });
         } catch (error) {
@@ -83,6 +111,10 @@ export class EditorSlot {
         }
         if (`resumed` in result && this.current !== undefined) {
             this.current.frame.toggleAttribute(`inert`, false);
+            // It may have saved, failed or met a conflict while nobody was listening.
+            if (this.current.engine === `browser`) {
+                tell(this.current, { channel: CHANNEL, type: `sync` });
+            }
             return { framed: true };
         }
         // The kept editor holds something else now (the file changed, the server restarted): it goes.
@@ -99,7 +131,7 @@ export class EditorSlot {
         }
         const frame = frameFor(address, opening.path);
         this.element.append(frame);
-        this.show({ frame, session: result.session, id, mode: opening.mode });
+        this.show({ frame, session: result.session, engine: result.engine, origin: new URL(address).origin, id, mode: opening.mode });
         return { framed: true };
     }
 
@@ -115,14 +147,41 @@ export class EditorSlot {
             return;
         }
         leaving.frame.toggleAttribute(`inert`, false);
+        if (leaving.mode === `edit` && leaving.engine === `browser`) {
+            // Told before it moves: a page that cannot be kept goes with its viewer, and is still told to save first.
+            tell(leaving, { channel: CHANNEL, type: `save` });
+        }
         if (!keep(leaving.id, leaving)) {
             leaving.frame.remove();
             return;
         }
-        if (leaving.mode === `edit`) {
+        if (leaving.mode === `edit` && leaving.engine === `server`) {
             // allow(silent-catch): a forced save that did not happen is the one the server makes when the editor closes.
             this.deps.forceSave(leaving.session).catch(() => undefined);
         }
+    }
+
+    // Asks the page in the slot to write what it holds (after a failed save, say).
+    save(): void {
+        if (this.current?.engine === `browser`) {
+            tell(this.current, { channel: CHANNEL, type: `save` });
+        }
+    }
+
+    // Tells the page in the slot how the owner settled a conflict.
+    resolve(choice: ConflictChoice): void {
+        if (this.current?.engine === `browser`) {
+            tell(this.current, { channel: CHANNEL, type: `resolve`, choice });
+        }
+    }
+
+    // Throws the editor in the slot away, for a fresh one on the next load: its document failed to open.
+    reset(): void {
+        this.discard();
+    }
+
+    dispose(): void {
+        window.removeEventListener(`message`, this.listen);
     }
 
     private show(current: Current): void {

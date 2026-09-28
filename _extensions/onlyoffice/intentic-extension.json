@@ -2,7 +2,7 @@
     "$schema": "https://intentic.dev/intentic-extension.schema.json",
     "publisher": "intentic",
     "name": "onlyoffice",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "category": "workspace",
     "logo": "onlyoffice",
     "icon": "file-edit",
@@ -14,10 +14,18 @@
     "contributes": {
         "settings": [
             {
+                "key": "engine",
+                "type": "enum",
+                "enum": ["browser", "server"],
+                "title": "Editor engine",
+                "description": "browser: ONLYOFFICE runs in your browser from a one-time download of about 200 MB, with no Docker; two tabs on one file don't co-edit, and a save that would overwrite someone else's change asks first. server: ONLYOFFICE Docs runs as a container in this sandbox's Docker engine (a 2 GB image and a two-minute cold start), and two tabs co-edit live.",
+                "default": "browser"
+            },
+            {
                 "key": "autoStart",
                 "type": "boolean",
-                "title": "Start the document server with the sandbox",
-                "description": "Brings ONLYOFFICE Docs up when the sandbox starts, in the background, so the first document opens without the two-minute cold start. Pulls the 2 GB image on the first boot if it isn't there yet. Off: the first document you open starts it.",
+                "title": "Prepare the editor with the sandbox",
+                "description": "Gets the chosen engine ready when the sandbox starts, in the background, so the first document opens without the wait: the browser engine's one-time download, or the document server's container (a 2 GB pull on the first boot, then a two-minute cold start). Off: the first document you open does it.",
                 "default": false
             }
         ],

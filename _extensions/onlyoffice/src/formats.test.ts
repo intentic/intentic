@@ -1,4 +1,4 @@
-import { documentTypeOf, extensionOf, OFFICE_FORMATS } from "./formats.js";
+import { documentTypeOf, extensionOf, OFFICE_FORMATS, READ_ONLY_IN_BROWSER } from "./formats.js";
 import { manifest } from "./manifest.js";
 
 describe(`office formats`, () => {
@@ -18,6 +18,11 @@ describe(`office formats`, () => {
         expect(documentTypeOf(`ppt`)).toBe(`slide`);
         expect(documentTypeOf(`pdf`)).toBeUndefined();
         expect(documentTypeOf(``)).toBeUndefined();
+    });
+
+    it(`opens view-only in the browser only formats the table claims, and only the legacy binary ones`, () => {
+        expect(READ_ONLY_IN_BROWSER).toEqual([`doc`, `xls`, `ppt`]);
+        expect(READ_ONLY_IN_BROWSER.every((extension) => documentTypeOf(extension) !== undefined)).toBe(true);
     });
 
     it(`reads the extension the way the host's resolver does: lowercased, none for a dotfile`, () => {

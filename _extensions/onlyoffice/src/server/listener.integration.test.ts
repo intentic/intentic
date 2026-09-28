@@ -72,6 +72,14 @@ beforeAll(async () => {
             saved.push({ path: document.path, url });
             return written;
         },
+        // The browser engine's routes stand in as one path of their own, to show they are asked first.
+        browser: async (_req, res, url) => {
+            if (url.pathname !== `/bundle/probe`) {
+                return false;
+            }
+            res.end(`browser engine`);
+            return true;
+        },
         log: (line) => logged.push(line),
     });
     port = await listener.listen();
@@ -85,6 +93,14 @@ afterAll(async () => {
 const call = (path: string, init?: RequestInit): Promise<Response> => fetch(`http://127.0.0.1:${port}${path}`, init);
 const open = (path: string, stat: FileStat = { size: 1, mtimeMs: 1 }): ReturnType<Sessions[`open`]> =>
     sessions.open({ path, agent: undefined, mode: `edit`, theme: `light`, stat });
+
+describe(`the browser engine's routes`, () => {
+    it(`are answered before anything is proxied to the document server`, async () => {
+        const probe = await call(`/bundle/probe`);
+        expect(await probe.text()).toBe(`browser engine`);
+        expect((await call(`/bundle/elsewhere`)).headers.get(`x-upstream-path`)).toBe(`/bundle/elsewhere`);
+    });
+});
 
 describe(`the editor page`, () => {
     it(`answers a live session token and ends politely for an unknown one`, async () => {

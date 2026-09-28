@@ -31,7 +31,7 @@ flowchart LR
 | [git-history](git-history) | Per-repository commit graph with branch, stash and undo actions. |
 | [google-workspace](google-workspace) | `gw` CLI for Gmail, Calendar, Drive, Docs and Sheets, plus a watcher. |
 | [imap](imap) | IMAP inbox card and a mailbox watcher that wakes automations. |
-| [onlyoffice](onlyoffice) | Office documents in an ONLYOFFICE editor, with a daemon-run backend. |
+| [onlyoffice](onlyoffice) | Office documents in an ONLYOFFICE editor, run in the browser or as a Docker document server. |
 | [pi-agent](pi-agent) | The Pi coding agent as a chat provider. |
 | [pipelines](pipelines) | Rail view of CI runs on the workspace repositories' remotes. |
 | [preview](preview) | Sandbox tabs for exposed ports and the served `public/` directory. |

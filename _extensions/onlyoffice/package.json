@@ -14,8 +14,8 @@
         }
     },
     "scripts": {
-        "build": "vite build --config vite.server.config.ts",
-        "typecheck": "vue-tsc --noEmit",
+        "build": "vite build --config vite.server.config.ts && vite build --config editor/vite.config.ts",
+        "typecheck": "vue-tsc --noEmit && vue-tsc --noEmit -p editor/tsconfig.json",
         "test": "suites"
     },
     "dependencies": {

@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import type { Engine } from "../contract.js";
 
 // Editor sessions: a token the editor page is opened with, and the document key ONLYOFFICE Docs files the document
 // under. The key rule is what makes co-editing and saving right: one key per file content, so two tabs on one file share
@@ -7,6 +8,9 @@ import { createHash, randomBytes } from "node:crypto";
 // A key also has an end. Once the document server has handed back the final save of a session (every editor closed),
 // it holds that key as outdated: an open under it within five minutes gets "Version changed", and after that the
 // conversion it cached at the session's START, without the edits. So a closed key is retired and never handed out again.
+//
+// The browser engine has no server holding the document, so for it the key only names the content an editor was opened
+// on: whether an editor kept alive still shows what is on disk.
 
 export interface FileStat {
     readonly size: number;
@@ -25,6 +29,10 @@ export interface Session {
     // Which run of the document server the session was opened against. A server that restarted since holds none of
     // the session's state, so an editor kept alive from before it is not one to show again.
     readonly run: number;
+    readonly engine: Engine;
+    // For the browser engine's page: the app's language and origin, as the viewer gave them.
+    readonly lang?: string | undefined;
+    readonly origin?: string | undefined;
 }
 
 export interface OpenInput {
@@ -38,6 +46,10 @@ export interface OpenInput {
     // conversion the server already made. Without one, the copy is keyed fresh every open.
     readonly digest?: string | undefined;
     readonly run?: number;
+    // The document server's, unless said otherwise: every session was, before the browser engine.
+    readonly engine?: Engine;
+    readonly lang?: string | undefined;
+    readonly origin?: string | undefined;
 }
 
 // What a key names: where the document is read from and, for the shared tree, the content the key stands for.
@@ -78,6 +90,9 @@ export class Sessions {
             theme: input.theme,
             expiresAt: this.now() + SESSION_TTL_MS,
             run: input.run ?? 0,
+            engine: input.engine ?? "server",
+            lang: input.lang,
+            origin: input.origin,
         };
         this.byToken.set(session.token, session);
         return session;
@@ -99,7 +114,13 @@ export class Sessions {
     // alive since can be shown again instead of loading a new one. Registers nothing.
     current(token: string, input: OpenInput): boolean {
         const found = this.session(token);
-        if (found === undefined || found.path !== input.path || found.agent !== input.agent || found.mode !== input.mode) {
+        if (
+            found === undefined ||
+            found.path !== input.path ||
+            found.agent !== input.agent ||
+            found.mode !== input.mode ||
+            found.engine !== (input.engine ?? "server")
+        ) {
             return false;
         }
         return found.run === (input.run ?? 0) && found.key === this.candidate(input);

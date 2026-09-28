@@ -462,10 +462,11 @@ COPY _extensions/pipelines/intentic-extension.json /opt/extensions/pipelines/
 COPY _extensions/preview/intentic-extension.json /opt/extensions/preview/
 COPY _extensions/repo-apps/intentic-extension.json /opt/extensions/repo-apps/
 COPY _extensions/viewers/intentic-extension.json /opt/extensions/viewers/
-# onlyoffice is both: its viewer is compiled into the web bundle like the rows above, and its backend (the document
-# server's lifecycle, the editor page, the save callback) is a `server` bundle the daemon's extension host runs, so
-# its dist rides the `trees` context (prepare-image-trees.sh BUNDLES) — a COPY from the repo tree would find nothing,
-# .dockerignore excludes every dist. A manifest here without the dist shows as `absent` on the Extensions tab.
+# onlyoffice is both: its viewer is compiled into the web bundle like the rows above, and its dist is what the daemon's
+# extension host runs and serves: the backend (`server.js`: the browser engine's bundle download, the document server's
+# lifecycle, the editor pages, the saves) and the browser engine's editor page (`editor/editor.js`). The dist rides the
+# `trees` context (prepare-image-trees.sh BUNDLES) — a COPY from the repo tree would find nothing, .dockerignore
+# excludes every dist. A manifest here without the dist shows as `absent` on the Extensions tab.
 COPY _extensions/onlyoffice/intentic-extension.json /opt/extensions/onlyoffice/
 COPY --from=trees extensions/onlyoffice/dist /opt/extensions/onlyoffice/dist
 COPY _extensions/workflows/intentic-extension.json /opt/extensions/workflows/
