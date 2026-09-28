@@ -551,7 +551,7 @@ interface PassContext {
 // business.
 const runPairingPass = async (context: PassContext, pairing: Pairing, base: string): Promise<void> => {
     const { mutagen, tick, claimedBy, tracking, bases, say } = context;
-    const { rejectedPolls, unreachable, repos, sessionsPending } = tracking;
+    const { rejectedPolls, unreachable, repos } = tracking;
     let pausedThisPass = false;
     try {
         const mirrored = await servePairing(mutagen, pairing, base, claimedBy, say);

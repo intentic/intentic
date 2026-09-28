@@ -230,6 +230,14 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
             "A capability is a system the agent can reach: a forge account, a chat server, a database, one of your own machines. These routes connect and disconnect them, carry the credential each needs, report whether a connection is live, and drive the interactive parts of a sign-in, including a one-time code.",
     },
     {
+        name: "needs",
+        shelf: "connections",
+        label: "Needs",
+        summary: "What an agent asked you to connect or provide before it can go on",
+        description:
+            "An agent raises a need when a task stops on something only you can give: a capability, a credential, a change to its environment. These routes raise one and list an agent's own, list what is open for you, answer one or hand over its secret, withdraw one, and read or revoke the standing grants an answer left behind.",
+    },
+    {
         name: "secrets",
         shelf: "connections",
         label: "Secrets",

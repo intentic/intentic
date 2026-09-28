@@ -58,6 +58,7 @@ const AREAS: Readonly<Record<string, { label: string; where: string }>> = {
     issues: { label: `Issues`, where: `reported problems and their reports` },
     logs: { label: `Logs`, where: `the sandbox's own log files` },
     loops: { label: `Loops`, where: `running and saved agent loops` },
+    needs: { label: `Requests`, where: `what the agent asked you to connect or provide` },
     netdisk: { label: `Network disks`, where: `mounted network storage` },
     offload: { label: `Offloaded work`, where: `heavy commands sent to a runner on one of your machines` },
     panels: { label: `Panels`, where: `the operator panels in the sidebar` },

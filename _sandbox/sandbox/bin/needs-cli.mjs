@@ -72,9 +72,15 @@ export const call = (command, method, path, body) =>
 export const refusalOf = (text) => {
     try {
         const parsed = JSON.parse(text);
-        if (typeof parsed?.message === "string") return parsed.message;
-        if (typeof parsed?.error === "string") return parsed.error;
-        if (typeof parsed?.error?.message === "string") return parsed.error.message;
+        if (typeof parsed?.message === "string") {
+            return parsed.message;
+        }
+        if (typeof parsed?.error === "string") {
+            return parsed.error;
+        }
+        if (typeof parsed?.error?.message === "string") {
+            return parsed.error.message;
+        }
     } catch {
         // Not JSON: the raw text is all there is.
     }

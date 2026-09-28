@@ -16,7 +16,7 @@ import { turnStandingOf } from "../conversations/actor/turn-standing.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
 import { appliedEnvironmentHash, approveDraft, proposeDraft, rejectDraft } from "../environment/environment.js";
 import { deliverWake } from "../agent/run/turn/wake-delivery.js";
-import { deliverToListenerChannel } from "../extensions/listener-deliver.js";
+import { deliverToListenerChannel } from "../extensions/listener/listener-deliver.js";
 import { needRaised } from "../push/notifications.js";
 import { upsertEnv } from "../secrets/secrets.routes.js";
 import { textFile } from "../store/text-file.js";
@@ -122,7 +122,7 @@ export const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDep
                 grants: () => whole().credentialGrants,
                 exists: async (subject) =>
                     (await capabilities()).some((capability) => capability.id === subject) ||
-                    (await whole().secretRegistry()).some((secret) => secret.name === subject),
+                    (await whole().secretRegistry()).some((stored) => stored.name === subject),
             }),
             environment: environmentNeed({
                 propose: (tool, steps) => proposeDraft(whole(), tool, steps),

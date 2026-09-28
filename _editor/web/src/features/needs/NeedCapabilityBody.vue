@@ -54,7 +54,7 @@ const consequences = computed<string[]>(() => {
     if (entry.value === undefined) {
         return [];
     }
-    const config = props.subject.mode === `change` ? { ...(instance.value?.config ?? {}), ...(props.subject.changes ?? {}) } : values;
+    const config = props.subject.mode === `change` ? { ...instance.value?.config, ...props.subject.changes } : values;
     return capabilityEffects({ kind: entry.value.kind, config }).flatMap((effect: CapabilityEffect) => {
         switch (effect.kind) {
             case `image`:

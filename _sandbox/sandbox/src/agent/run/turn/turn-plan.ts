@@ -1,4 +1,4 @@
-import { type UsageTurn, withRuntimeDefaults } from "@intentic/sandbox-contract";
+import { capabilitiesOf, PersonaPowersSchema, type UsageTurn, withRuntimeDefaults } from "@intentic/sandbox-contract";
 import type { Services } from "../../../composition.js";
 import type { TurnArmPlan, TurnContext, TurnRefusal } from "../../providers/adapter.js";
 import type { TurnBriefing } from "../../prompt/turn-briefing.js";
@@ -8,7 +8,6 @@ import { dependencyDirForCommand } from "../../tools/agent-deps.js";
 import type { TurnBase } from "../../providers/agent-request.js";
 import { decideTurn, type TurnDecision } from "../decide/turn-decision.js";
 import { recordTurnStanding, type TurnStanding } from "../../../conversations/actor/turn-standing.js";
-import { capabilitiesOf, PersonaPowersSchema } from "@intentic/sandbox-contract";
 import { gatherTurnFacts } from "../decide/turn-facts.js";
 import { opt } from "../../../opt.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
