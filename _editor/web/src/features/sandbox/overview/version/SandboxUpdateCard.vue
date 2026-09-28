@@ -208,6 +208,11 @@ const updateHeading = computed(() => {
     }
     return `Sandbox image`;
 });
+
+// "Having trouble?" joins the checkout rebuild's row when nothing would sit between them at the card's foot.
+const troubleBesideRebuild = computed(
+    () => canRollBack.value && !plan.value.rollbackWhy && localImage.value !== undefined && !serverManaged.value && !updateAvailable.value && !offering.value,
+);
 </script>
 
 <template>
@@ -331,7 +336,19 @@ const updateHeading = computed(() => {
                 <template v-else-if="slug">
                     <!-- A sandbox on a checkout-built base is not updated from the registry: a pull would REPLACE its image with a published build, not refresh it. -->
                     <template v-if="localImage">
-                        <DevRebuild :slug="slug" :base="localImage.base" :root="localImage.root" />
+                        <!-- One row with "Having trouble?" rather than two: nothing sits between them on this sandbox. -->
+                        <div class="flex flex-wrap items-start justify-between gap-2">
+                            <DevRebuild class="min-w-0 flex-1" :slug="slug" :base="localImage.base" :root="localImage.root" />
+                            <button
+                                v-if="troubleBesideRebuild"
+                                type="button"
+                                :class="ui.textAction(`text-2xs text-subtle`)"
+                                :aria-expanded="rollbackOpen"
+                                @click="toggleRollback"
+                            >
+                                {{ t(`sandbox.sandboxUpdateCard.havingTrouble`) }}
+                            </button>
+                        </div>
                         <!-- A command, not a button: taking the published image throws away what a checkout built, which is a thing to mean rather than to click. -->
                         <template v-if="updateAvailable">
                             <p class="text-2xs text-subtle">{{ t(`sandbox.sandboxUpdateCard.publishedNewerThanWhat`, { latest }) }}</p>
@@ -398,7 +415,7 @@ const updateHeading = computed(() => {
                      same panel from its notice instead. -->
                 <div v-if="canRollBack" class="flex flex-col gap-2">
                     <button
-                        v-if="!plan.rollbackWhy"
+                        v-if="!plan.rollbackWhy && !troubleBesideRebuild"
                         type="button"
                         :class="ui.textAction(`self-end text-2xs text-subtle`)"
                         :aria-expanded="rollbackOpen"
