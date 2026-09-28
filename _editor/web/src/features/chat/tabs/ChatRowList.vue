@@ -17,13 +17,20 @@ import { injectChatRowActions } from "./useChatRowActions";
 
 const t = useT();
 
-const props = defineProps<{
-    entries: readonly OpenChat[];
-    needle?: string;
-    matchCase?: boolean;
-    // Why a filtered row matched, for the lanes' filter; absent where nothing filters.
-    snippetOf?: (agent: FleetAgent) => MatchSnippet | undefined;
-}>();
+const props = withDefaults(
+    defineProps<{
+        entries: readonly OpenChat[];
+        needle?: string;
+        matchCase?: boolean;
+        // Why a filtered row matched, for the lanes' filter; absent where nothing filters.
+        snippetOf?: (agent: FleetAgent) => MatchSnippet | undefined;
+        // False where the reader is looking at who a chat speaks as rather than what it set going (the Personas cut):
+        // each card is drawn alone, without the tray of agents it started, which the Agents cut and the board still hang
+        // under it. Defaulted here, not read as `!== false`: Vue hands an absent boolean prop over as `false`.
+        trays?: boolean;
+    }>(),
+    { trays: true },
+);
 
 const actions = injectChatRowActions();
 const { edit } = actions;
@@ -90,7 +97,7 @@ onBeforeUnmount(actions.registerDrawn(() => drawnIds.value));
                 @keep="actions.keep(c.conversationId)"
                 @middle-close="actions.middleClose(c.conversationId)"
             />
-            <ChildRows v-if="agent !== undefined" :agent="agent" rail />
+            <ChildRows v-if="agent !== undefined && props.trays" :agent="agent" rail />
         </div>
     </div>
 </template>

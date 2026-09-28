@@ -1187,8 +1187,6 @@
             "newChatAs": "New chat as {label}",
             "notOpen": "{count} not open | {count} not open",
             "outdatedMissing": "Until it updates, chats can't be sorted under the persona they speak as, so they all sit under Anyone.",
-            "showSChats": "Show {label}'s chats",
-            "startAs": "Start a chat as {label}",
             "working": "{count} working | {count} working"
         },
         "chatPlacementMenu": {

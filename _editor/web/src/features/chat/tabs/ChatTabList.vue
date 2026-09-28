@@ -6,7 +6,7 @@ import ChatPersonaRail from "../personas/ChatPersonaRail.vue";
 import { agentDisplayTitle, type FleetLane } from "../../agents/fleet/agentStatus";
 import { useAgentFilter } from "../../agents/board/useAgentFilter";
 import { useAgents } from "../../agents/fleet/useAgents";
-import { FINISHED_WINDOW, type FleetAgent, finishedLaneOrder, windowFinished } from "../../agents/fleet/useAgents-fleet";
+import { FINISHED_WINDOW, type FleetAgent, windowFinished } from "../../agents/fleet/useAgents-fleet";
 import HoverCard from "../../../components/HoverCard.vue";
 import RailCard from "../../../components/RailCard.vue";
 import RailLane from "../../../components/RailLane.vue";
@@ -16,7 +16,8 @@ import { useChatTrays } from "./chatTrays";
 import { CHILD_ROWS } from "../../agents/board/cards/childRows";
 import { closeSubagent } from "../panel/subagent/subagentView";
 import ChatRowList from "./ChatRowList.vue";
-import { laneOfTab, tabsInLane } from "./tabs";
+import { laneOrdered } from "./laneOrder";
+import { tabsInLane } from "./tabs";
 import { createChatRowActions, provideChatRowActions } from "./useChatRowActions";
 import ChatShareDialog from "../panel/ChatShareDialog.vue";
 import { useChat } from "../run/useChat";
@@ -87,8 +88,6 @@ watch(grouping, (next, previous) => {
     parked = undefined;
 });
 
-const lastActive = (entry: OpenChat): number => entry.agent?.updatedAt ?? 0;
-
 // Same match rule as the board's filter (useAgentFilter); state is per-window, not shared.
 const {
     query: filterQuery,
@@ -154,36 +153,17 @@ const tabMatches = (entry: OpenChat): boolean => {
 // A run's steps live inside its row, not listed separately, though they're still open in the panes. Excluded
 // here only while the run is on the ledger (insideRun); once it rolls off, its chats reappear as normal rows.
 const lanes = computed<Record<FleetLane, OpenChat[]>>(() => {
-    const grouped: Record<FleetLane, OpenChat[]> = { attention: [], active: [], finished: [] };
     const ledger = runIdsInLedger(workflowRuns.value);
+    const listed: OpenChat[] = [];
     for (const conversation of conversations.value) {
         const agent = agentById(conversation.conversationId);
         // A run's step rides in the run's row, and a child's own chat in its parent's tray while the parent is listed.
         if ((agent !== undefined && insideRun(agent, ledger)) || trays.ridesUnder(agent)) {
             continue;
         }
-        grouped[laneOfTab(conversation, agent)].push({ conversation, agent });
+        listed.push({ conversation, agent });
     }
-    // Same order as the board (useAgents.lanes): drafts lead Active, then turn start, fixed for the turn.
-    grouped.active.sort(
-        (a, b) =>
-            Number(b.agent?.status === `draft`) - Number(a.agent?.status === `draft`) ||
-            (a.agent?.startedAt ?? lastActive(a)) - (b.agent?.startedAt ?? lastActive(b)),
-    );
-    grouped.attention.sort((a, b) => lastActive(b) - lastActive(a));
-    // Same order as the board (finishedLaneOrder); agent-less chats fall back to the same two keys read off the
-    // conversation.
-    grouped.finished.sort((a, b) => {
-        if (a.agent !== undefined && b.agent !== undefined) {
-            return finishedLaneOrder(a.agent, b.agent);
-        }
-        return Number(b.conversation.unsent.value) - Number(a.conversation.unsent.value) || lastActive(b) - lastActive(a);
-    });
-    // Pinned chats lead their lane; the sort is stable, so each side keeps the lane's own order.
-    for (const lane of [grouped.attention, grouped.active, grouped.finished]) {
-        lane.sort((a, b) => Number(b.conversation.pinned.value) - Number(a.conversation.pinned.value));
-    }
-    return grouped;
+    return laneOrdered(listed);
 });
 // The lane's heading, and what becomes of its chats once Clear takes them out of this window.
 const LANES = computed((): readonly { key: FleetLane; label: string; dot: string; keeps: string }[] => [
@@ -304,12 +284,6 @@ watch([() => edit.editing, actions.renamingDrawn], ([editing, drawn]) => {
 });
 // F2 in a floating window has no header, so the host forwards it here; docked, the header renames itself.
 defineExpose({ beginRename: actions.beginRename });
-
-// ChatPersonaRail raises the same selection, told the same way so the board stays in step regardless of which
-// list was used.
-const onPersonaSelect = (id: string): void => {
-    actions.focus(id);
-};
 </script>
 
 <template>
@@ -339,7 +313,7 @@ const onPersonaSelect = (id: string): void => {
             class="shrink-0"
         />
         <!-- A different list, not this one regrouped — its own component (see ChatPersonaRail). -->
-        <ChatPersonaRail v-if="grouping === `persona`" @select="onPersonaSelect" />
+        <ChatPersonaRail v-if="grouping === `persona`" />
         <!-- LANE BREAKS OUTRANK CARD BREAKS, and at 12px against 10px they barely did: the eye groups by proximity. -->
         <div v-else ref="scroller" class="flex min-h-0 flex-1 flex-col items-stretch gap-4 overflow-y-auto">
             <!-- An empty lane isn't drawn at all (see occupiedLanes); one emptied only by the filter keeps its header. -->

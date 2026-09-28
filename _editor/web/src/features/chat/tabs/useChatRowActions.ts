@@ -88,12 +88,6 @@ export const createChatRowActions = (host: ChatRowHost) => {
         // `show` bundles select + collapse into the one verb other windows apply.
         relayRows(`show`, [id], id);
     };
-    // A select raised from outside the row gesture (a persona tile starting a chat) tells the other windows the same way.
-    const focus = (id: string): void => {
-        host.select(id);
-        relayRows(`focus`, [id], id);
-    };
-
     // Which rows are drawn right now, registered by every list that draws some: a rename cannot outlive the row it sits
     // on, and only the lists know which of theirs made it past a fold, a filter or a collapsed group.
     const drawn = shallowReactive(new Set<() => ReadonlySet<string>>());
@@ -212,6 +206,11 @@ export const createChatRowActions = (host: ChatRowHost) => {
             },
         ];
     });
+    // The row goes out from under the pointer, so it never gets the leave that would take its hover preview with it.
+    const closeRow = (id: string): void => {
+        hidePreview();
+        host.close(new Set([id]));
+    };
     const openMenu = (id: string, event: Event): void => {
         // Pointer stays on the card, so the hover preview would otherwise never leave on its own.
         hidePreview();
@@ -223,7 +222,7 @@ export const createChatRowActions = (host: ChatRowHost) => {
     // the ×: the last open chat keeps no close affordance, so the press has nothing to act on either.
     const middleClose = (id: string): void => {
         if (conversations.value.length > 1) {
-            host.close(new Set([id]));
+            closeRow(id);
         }
     };
     const closable = computed(() => conversations.value.length > 1);
@@ -231,7 +230,6 @@ export const createChatRowActions = (host: ChatRowHost) => {
     return {
         isSelected,
         click,
-        focus,
         registerDrawn,
         renamingId,
         renamingDrawn,
@@ -247,7 +245,7 @@ export const createChatRowActions = (host: ChatRowHost) => {
         openMenu,
         middleClose,
         closable,
-        close: (id: string): void => host.close(new Set([id])),
+        close: closeRow,
         closeSet: (ids: ReadonlySet<string>): void => host.close(ids),
         keep: (id: string): void => keepChat(id),
     };

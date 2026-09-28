@@ -1112,8 +1112,6 @@
             "newChatAs": "Neuer Chat als {label}",
             "notOpen": "{count} nicht offen | {count} nicht offen",
             "outdatedMissing": "Bis zum Update können Chats nicht der Persona zugeordnet werden, als die sie sprechen, daher stehen alle unter „Jeder“.",
-            "showSChats": "Die Chats von {label} zeigen",
-            "startAs": "Chat als {label} beginnen",
             "working": "{count} arbeitet | {count} arbeiten"
         },
         "chatPlacementMenu": {

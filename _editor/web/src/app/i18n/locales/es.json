@@ -1121,8 +1121,6 @@
             "newChatAs": "Chat nuevo como {label}",
             "notOpen": "{count} sin abrir | {count} sin abrir",
             "outdatedMissing": "Hasta que se actualice, los chats no se pueden agrupar bajo la persona con la que hablan, así que todos quedan en «Cualquiera».",
-            "showSChats": "Mostrar los chats de {label}",
-            "startAs": "Empezar un chat como {label}",
             "working": "{count} en curso | {count} en curso"
         },
         "chatPlacementMenu": {

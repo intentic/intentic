@@ -1115,8 +1115,6 @@
             "newChatAs": "Nouveau chat en tant que {label}",
             "notOpen": "{count} non ouvert | {count} non ouverts",
             "outdatedMissing": "Tant qu'elle n'est pas à jour, les chats ne peuvent pas être rangés sous la persona au nom de laquelle ils parlent : ils sont tous sous « N'importe qui ».",
-            "showSChats": "Afficher les chats de {label}",
-            "startAs": "Commencer un chat en tant que {label}",
             "working": "{count} en cours | {count} en cours"
         },
         "chatPlacementMenu": {

@@ -1123,8 +1123,6 @@
             "newChatAs": "Nowy czat jako {label}",
             "notOpen": "{count} nieotwarty | {count} nieotwarte | {count} nieotwartych",
             "outdatedMissing": "Do czasu aktualizacji czaty nie mogą być pogrupowane według persony, w której imieniu mówią, więc wszystkie trafiają do „Ktokolwiek”.",
-            "showSChats": "Pokaż czaty: {label}",
-            "startAs": "Zacznij czat jako {label}",
             "working": "{count} pracuje | {count} pracują | {count} pracuje"
         },
         "chatPlacementMenu": {
