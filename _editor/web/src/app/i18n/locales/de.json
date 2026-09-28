@@ -2767,10 +2767,9 @@
         },
         "sandboxBehindCard": {
             "copyRestartCommand": "Neustart-Befehl kopieren",
-            "environmentTab": "Umgebung ›",
             "rebuildsYourCodeOn": "Baut Ihren Code auf {hostId} neu und startet die Sandbox neu — etwa eine Minute.",
             "rebuiltOnReloadPage": "Auf {hostId} neu gebaut — laden Sie diese Seite neu, um es zu übernehmen.",
-            "restartIsQuicker": "This takes about a minute and keeps your files and running work. The full rebuild takes several minutes, and you don't need it for this:",
+            "restartIsQuicker": "This takes about a minute and keeps your files and running work. The full rebuild takes several minutes, and you don't need it for this.",
             "restartSandbox": "Sandbox neu starten",
             "restartingOn": "Wird auf {hostId} neu gebaut und neu gestartet. Diese Seite wird kurz still und kommt von selbst zurück.",
             "run": "Ausführen",

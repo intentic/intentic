@@ -250,16 +250,10 @@ const kindsOf = (area: (typeof areas.value)[number]) =>
                             <template v-else>{{ t(`sandbox.sandboxBehindCard.rebuildsYourCodeOn`, { hostId }) }}</template>
                         </span>
                     </div>
-                    <!-- THE OTHER BUTTON, NAMED BEFORE IT IS FOUND. Environment carries "Rebuild from checkout", which
-                         builds a whole new image and takes minutes; this one restarts the sandbox that is already
-                         running. Two near-identical offers on two tabs read as one action duplicated until something
-                         says which is which, and the quick one is the right answer to a version gap. -->
-                    <p v-if="!restarted" class="text-2xs text-subtle">
-                        {{ t(`sandbox.sandboxBehindCard.restartIsQuicker`) }}
-                        <RouterLink to="/sandbox/environment" class="text-link hover:underline">{{
-                            t(`sandbox.sandboxBehindCard.environmentTab`)
-                        }}</RouterLink>
-                    </p>
+                    <!-- THE OTHER BUTTON, NAMED BEFORE IT IS FOUND. The Update card on this tab carries "Rebuild from
+                         checkout", which builds a whole new image and takes minutes; this one restarts the sandbox that
+                         is already running, and the quick one is the right answer to a version gap. -->
+                    <p v-if="!restarted" class="text-2xs text-subtle">{{ t(`sandbox.sandboxBehindCard.restartIsQuicker`) }}</p>
                     <Notice v-if="failed" tone="warning" class="text-2xs">{{ failed }}</Notice>
                     <div v-if="showCommand" class="flex flex-wrap items-center gap-2">
                         <span class="text-2xs text-subtle">{{

@@ -97,8 +97,11 @@ const reject = (): Promise<void> => decide(`step`, `/environment/reject`);
 // A base compiled from a checkout rebuilds from that checkout, and that rebuild applies the approved recipe as well
 // (ic rebases the overlay onto the image it builds), so on this sandbox it is the card's ONE rebuild. The quicker
 // recipe-only rebuild beside it was the same step offered twice, and the paragraphs it took to tell them apart were
-// most of what the card said.
-const fromCheckout = computed(() => localImage.value !== undefined && slug.value !== undefined && canOperate.value);
+// most of what the card said. Only while a recipe waits: with nothing pending, rebuilding from the checkout is picking up
+// new code, which is the Sandbox tab's Update card's job, and offering it here too was the same button on two tabs.
+const fromCheckout = computed(
+    () => pending.value !== undefined && localImage.value !== undefined && slug.value !== undefined && canOperate.value,
+);
 
 // Whether the first row has anything to hold: a proposal to decide, an approved recipe with a way to build it, or a
 // checkout to rebuild from.
@@ -169,15 +172,15 @@ const step = computed(
                 <span class="font-mono">intentic deploy apply</span>
                 {{ t(`sandbox.environmentCard.againstSandboxsHost`) }}
             </p>
-            <!-- Offered with nothing pending too, a tier down: there it picks up code, and the card isn't asking for it.
-                 A tier down as well while a proposal waits, since deciding is the step before it. -->
+            <!-- Only while a recipe waits: picking up code lives on the Sandbox tab's Update card. A tier down while a
+                 proposal waits, since deciding is the step before it. -->
             <DevRebuild
-                v-else-if="localImage && slug && canOperate"
+                v-else-if="fromCheckout && localImage && slug"
                 :slug="slug"
                 :base="localImage.base"
                 :root="localImage.root"
-                :recipe-pending="pending !== undefined"
-                :secondary="pending === undefined || proposal !== undefined"
+                :recipe-pending="true"
+                :secondary="proposal !== undefined"
             />
             <!-- `bare`: no paragraph under the button, since its confirmation says what the rebuild costs; the class
                  puts back the column `bare` drops, so a running log keeps its gap. -->

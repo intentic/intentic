@@ -141,9 +141,10 @@ it(`hands a pending overlay to the platform's builder on a hosted sandbox`, () =
     expect(el.querySelector(`[data-executor="host"]`)).toBeNull();
 });
 
-// A checkout-built sandbox is the one shape where the image itself can be behind the code, so the offer that rebuilds
-// it from source belongs here — and nowhere else, since every other sandbox has no checkout to rebuild from.
+// A checkout-built sandbox is the one shape whose recipe is built by rebuilding from source, so that offer is here
+// while a recipe waits — and nowhere else, since every other sandbox has no checkout to rebuild from.
 it(`offers a rebuild from the checkout only on a sandbox whose base was built from one`, () => {
+    pending.value = { content: OVERLAY, hash: `pending` };
     expect(mount().querySelector(`[data-executor="checkout"]`)).toBeNull();
     app?.unmount();
     document.body.innerHTML = ``;
@@ -165,15 +166,13 @@ it(`offers only the checkout's rebuild on a checkout-built sandbox, as the step 
     expect(el.querySelector(`[data-executor="checkout"]`)?.getAttribute(`data-secondary`)).toBe(`false`);
 });
 
-// Nothing pending is the dev loop's ordinary state, and there the checkout rebuild is the card's only action: it has
-// no recipe to speak for, and claiming one would be the same misdirection pointed the other way. Nor is the card
-// asking for it, so it is drawn a tier down.
-it(`leaves the checkout's rebuild speaking only for itself when nothing is pending`, () => {
+// Nothing pending: rebuilding from the checkout is only picking up code, which the Sandbox tab's Update card offers.
+// The same button on two tabs read as two different actions, so this card leaves it there.
+it(`leaves the checkout's rebuild to the Sandbox tab when nothing is pending`, () => {
     localImage.value = { base: `intentic-sandbox:dev`, root: `/home/ada/intentic` };
     const el = mount();
+    expect(el.querySelector(`[data-executor="checkout"]`)).toBeNull();
     expect(el.querySelector(`[data-executor="host"]`)).toBeNull();
-    expect(el.querySelector(`[data-executor="checkout"]`)?.getAttribute(`data-recipe-pending`)).toBe(`false`);
-    expect(el.querySelector(`[data-executor="checkout"]`)?.getAttribute(`data-secondary`)).toBe(`true`);
 });
 
 // THE STEP LEADS. Trailing the card, the rebuild sat right under "Installed at runtime" and read as an action on
