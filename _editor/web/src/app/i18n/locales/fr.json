@@ -426,12 +426,16 @@
             "close": "Fermer {title}"
         },
         "cardSeal": {
-            "unviewed": "{count} fichier d'interface modifié sans le regarder | {count} fichiers d'interface modifiés sans les regarder",
-            "verified": "Sa propre vérification : {check} réussie",
-            "verifiedBare": "Sa propre vérification : réussie après la dernière modification",
-            "failed": "Sa propre vérification : {check} en échec",
-            "failedBare": "Sa propre vérification : en échec",
-            "unproven": "Sa propre vérification : aucune depuis la dernière modification"
+            "verified": "Testé après sa dernière modification",
+            "verifiedDetail": "L’agent a lancé une vérification après sa dernière modification du code, et elle a réussi.",
+            "failed": "Sa dernière vérification a échoué",
+            "failedDetail": "L’agent a lancé une vérification après sa dernière modification du code, et elle a échoué.",
+            "unproven": "Non testé après sa dernière modification",
+            "unprovenDetail": "L’agent a modifié du code sans lancer ensuite de tests, typecheck, lint ni build.",
+            "unviewedHead": "Interface modifiée sans regarder",
+            "unviewed": "A modifié {count} fichier d’interface sans regarder le résultat | A modifié {count} fichiers d’interface sans regarder le résultat",
+            "ran": "Lancé",
+            "note": "Lu à partir de ce que l’agent a lui-même lancé à son dernier tour. La CI vérifie tout après le push."
         },
         "words": {
             "new": "Nouveau",

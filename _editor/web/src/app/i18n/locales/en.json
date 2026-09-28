@@ -447,12 +447,16 @@
             "close": "Close {title}"
         },
         "cardSeal": {
-            "unviewed": "Changed {count} interface file without looking | Changed {count} interface files without looking",
-            "verified": "Its own check: {check} passed",
-            "verifiedBare": "Its own check: passed after the last edit",
-            "failed": "Its own check: {check} failed",
-            "failedBare": "Its own check: failed",
-            "unproven": "Its own check: none since the last edit"
+            "verified": "Tested after its last edit",
+            "verifiedDetail": "The agent ran a check after its last code change, and it passed.",
+            "failed": "Its last check failed",
+            "failedDetail": "The agent ran a check after its last code change, and it failed.",
+            "unproven": "Not tested after its last edit",
+            "unprovenDetail": "The agent changed code and ran no test, typecheck, lint or build after it.",
+            "unviewedHead": "Interface changed unseen",
+            "unviewed": "Changed {count} interface file without looking at the result | Changed {count} interface files without looking at the result",
+            "ran": "Ran",
+            "note": "Read from what the agent itself ran in its last turn. CI checks everything once you push."
         },
         "words": {
             "new": "New",

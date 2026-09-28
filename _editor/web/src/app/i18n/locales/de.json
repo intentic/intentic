@@ -425,12 +425,16 @@
             "close": "{title} schließen"
         },
         "cardSeal": {
-            "unviewed": "{count} Oberflächendatei geändert, ohne hinzusehen | {count} Oberflächendateien geändert, ohne hinzusehen",
-            "verified": "Eigene Prüfung: {check} bestanden",
-            "verifiedBare": "Eigene Prüfung: nach der letzten Änderung bestanden",
-            "failed": "Eigene Prüfung: {check} fehlgeschlagen",
-            "failedBare": "Eigene Prüfung: fehlgeschlagen",
-            "unproven": "Eigene Prüfung: keine seit der letzten Änderung"
+            "verified": "Nach der letzten Änderung getestet",
+            "verifiedDetail": "Der Agent hat nach seiner letzten Codeänderung eine Prüfung ausgeführt, und sie war erfolgreich.",
+            "failed": "Letzte Prüfung fehlgeschlagen",
+            "failedDetail": "Der Agent hat nach seiner letzten Codeänderung eine Prüfung ausgeführt, und sie ist fehlgeschlagen.",
+            "unproven": "Nach der letzten Änderung nicht getestet",
+            "unprovenDetail": "Der Agent hat Code geändert und danach weder Tests, Typecheck, Lint noch Build ausgeführt.",
+            "unviewedHead": "Oberfläche ungesehen geändert",
+            "unviewed": "{count} Oberflächendatei geändert, ohne das Ergebnis anzusehen | {count} Oberflächendateien geändert, ohne das Ergebnis anzusehen",
+            "ran": "Ausgeführt",
+            "note": "Gelesen aus dem, was der Agent in seinem letzten Zug selbst ausgeführt hat. CI prüft alles nach dem Push."
         },
         "words": {
             "new": "Neu",

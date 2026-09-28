@@ -105,7 +105,7 @@ afterEach(() => {
 const rowOf = (el: HTMLElement, key: Seed): HTMLElement => el.querySelector<HTMLElement>(`[data-chat-tab="${SEEDS[key].id}"]`)!;
 const sealOf = (root: HTMLElement): HTMLElement | null => root.querySelector<HTMLElement>(`[data-seal]`);
 // The seal's hover, one reading per line; its accessible name is the same words.
-const readings = (seal: HTMLElement | null): string[] => seal?.querySelector(`svg`)?.getAttribute(`aria-label`)?.split(`\n`) ?? [];
+const readings = (seal: HTMLElement | null): string[] => seal?.getAttribute(`aria-label`)?.split(`\n`) ?? [];
 
 it(`leaves the seal's ring open on a row whose last turn proved nothing, its words in the hover alone`, async () => {
     const row = rowOf(await mountRail(), `unproven`);
@@ -114,7 +114,7 @@ it(`leaves the seal's ring open on a row whose last turn proved nothing, its wor
     expect(seal.textContent?.trim()).toBe(``);
     // The row is a button of its own, and the seal is never a press.
     expect(seal.tagName).toBe(`SPAN`);
-    expect(readings(seal)).toEqual([`Its own check: none since the last edit`, `Changed 2 interface files without looking`]);
+    expect(readings(seal)).toEqual([`Not tested after its last edit`, `Changed 2 interface files without looking at the result`]);
     // Not the corner: that stays the standing's, and a read, settled card has none to say.
     expect(row.querySelector(`span.ui-status-pill`)).toBeNull();
 });
@@ -123,11 +123,11 @@ it(`draws what the last turn showed of its own work as the seal alone, its words
     const el = await mountRail();
     const failing = sealOf(rowOf(el, `failing`))!;
     expect(failing.dataset[`sealKind`]).toBe(`broke`);
-    expect(readings(failing)).toEqual([`Its own check: pnpm -C web e2e signup.spec.ts failed`]);
+    expect(readings(failing)).toEqual([`Its last check failed`, `pnpm -C web e2e signup.spec.ts`]);
 
     const proven = sealOf(rowOf(el, `proven`))!;
     expect(proven.dataset[`sealKind`]).toBe(`closed`);
-    expect(readings(proven)).toEqual([`Its own check: pnpm -C api test passed`]);
+    expect(readings(proven)).toEqual([`Tested after its last edit`, `pnpm -C api test`]);
     // One glyph per row, whatever it has to say.
     expect(rowOf(el, `unproven`).querySelectorAll(`[data-seal]`)).toHaveLength(1);
     expect(el.querySelector(`[data-check]`)).toBeNull();
@@ -152,7 +152,7 @@ it(`breaks the seal on a board card whose last check failed, with no words line`
     const el = await mountCard(cardOf(`failing`));
     const seal = sealOf(el)!;
     expect([seal.tagName, seal.dataset[`sealKind`]]).toEqual([`SPAN`, `broke`]);
-    expect(readings(seal)).toEqual([`Idle`, `Its own check: pnpm -C web e2e signup.spec.ts failed`]);
+    expect(readings(seal)).toEqual([`Idle`, `Its last check failed`, `pnpm -C web e2e signup.spec.ts`]);
     expect(el.textContent).not.toContain(`signup.spec.ts`);
 });
 
@@ -162,7 +162,7 @@ it(`stands the seal in for a landed card's glyph`, async () => {
     const el = await mountCard(cardOf(`proven`));
     const seal = sealOf(el)!;
     expect(seal.dataset[`sealKind`]).toBe(`closed`);
-    expect(readings(seal)).toEqual([`Landed`, `Its own check: pnpm -C api test passed`]);
+    expect(readings(seal)).toEqual([`Landed`, `Tested after its last edit`, `pnpm -C api test`]);
     expect(el.querySelector(`[data-icon="check-circle"]`)).toBeNull();
     expect(el.querySelector(`[data-check]`)).toBeNull();
 });
@@ -170,7 +170,7 @@ it(`stands the seal in for a landed card's glyph`, async () => {
 it(`leaves the seal's ring open on a card that landed without proving anything`, async () => {
     const el = await mountCard({ ...cardOf(`proven`), proof: { at: 1_900, verification: `unproven` } });
     expect(sealOf(el)?.dataset[`sealKind`]).toBe(`open`);
-    expect(readings(sealOf(el))).toEqual([`Landed`, `Its own check: none since the last edit`]);
+    expect(readings(sealOf(el))).toEqual([`Landed`, `Not tested after its last edit`]);
 });
 
 // "Updated" is the corner's word for a card whose turn just ended, which is exactly when its proof is news.
@@ -184,5 +184,5 @@ it(`keeps the seal beside an unread card's chip rather than under it`, async () 
 it(`sets the seal beside a glyph that has something of its own to say`, async () => {
     const el = await mountCard({ ...cardOf(`proven`), status: `ready` });
     expect(el.querySelector(`[data-icon="download"]`)).not.toBeNull();
-    expect(readings(sealOf(el))).toEqual([`Its own check: pnpm -C api test passed`]);
+    expect(readings(sealOf(el))).toEqual([`Tested after its last edit`, `pnpm -C api test`]);
 });

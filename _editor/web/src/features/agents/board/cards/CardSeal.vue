@@ -1,17 +1,15 @@
 <script setup lang="ts">
+import { AnchoredOverlay, Icon, useHoverIntent } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { type ProofMark, sealOf } from "./proofSeal";
+import SealGlyph from "./SealGlyph.vue";
 
-// THE CARD'S SEAL: one glyph for what its last turn showed of its own work, drawn on the icon pack's own octagon. Closed,
-// it is exactly the pack's `check-circle`, the mark a landed card always wore, so a finished card keeps its glyph and
-// only the ring around the tick changes:
-//   closed    every check the turn ran after its last edit passed
-//   open      the ring's corners break: the work is done and nothing proved it (no check after the last edit, or an
-//             interface changed unseen)
-//   broke     the pack's red `!`: its own last check failed
-// Its words are the hover's, one reading per line, a failure's included: the card spends no line on any of them. A mark,
-// never a press, so a click on it is the card's, which opens the card; on the rail the row is a button of its own.
+// THE CARD'S SEAL: one glyph for what its last turn showed of its own work (SealGlyph), and, under a pointer that stays,
+// a small card that says it in full: what the agent ran, whether it passed, what it changed without looking. Not a
+// tooltip: a reading is a sentence and a command, which a one-line tooltip clips. A mark, never a press, so a click on
+// it is the card's, which opens the card; on the rail the row is a button of its own. Nothing here is a gate: it is
+// read off the checks the agent chose to run, and CI checks everything once the work is pushed.
 
 const t = useT();
 
@@ -19,19 +17,10 @@ const props = defineProps<{
     proof: ProofMark;
     // A receipt card (AgentCard): a closed seal is history there, so it takes the row's ink instead of green.
     quiet?: boolean;
-    // The status this glyph stands in for in the card's corner (Landed, Idle), said first in the hover so the corner
+    // The status this glyph stands in for in the card's corner (Landed, Idle), said first in the card so the corner
     // still says what it said before the seal took it.
     status?: string;
 }>();
-
-// The pack's octagon (statusGlyphs `check-circle`), from a corner, so the dashed ring's gaps are centred on the corners.
-const OCTAGON = `M8 3h8l5 5v8l-5 5H8l-5-5V8Z`;
-const TICK = `M7 12l3 3 7-7`;
-// A gap of 2.4 units at each corner: the octagon's straight sides are 8 long and its diagonals 5√2 (7.07), so each side
-// keeps a dash of its length less one gap, and the offset starts the pattern halfway through the gap that ends at the
-// corner the path begins from.
-const OPEN_DASHES = `5.6 2.4 4.67 2.4`;
-const OPEN_OFFSET = `13.87`;
 
 const kind = computed(() => sealOf(props.proof));
 
@@ -41,54 +30,89 @@ const tone = computed(() => {
     }
     return kind.value === `closed` && props.quiet !== true ? `text-success` : `text-muted`;
 });
+// The overlay's own glyph always wears the verdict's colour: it is read, not scanned past.
+const headTone = computed(() => (kind.value === `broke` ? `text-danger` : kind.value === `closed` ? `text-success` : `text-warning`));
 
-// A tooltip is 17rem wide and five lines tall, and a targeted test command can fill both on its own.
-const CHECK_CHARS = 44;
-const clipped = (check: string): string => (check.length > CHECK_CHARS ? `${check.slice(0, CHECK_CHARS - 1)}…` : check);
+const unviewed = computed(() =>
+    props.proof.unviewed === undefined ? undefined : t(`agents.cardSeal.unviewed`, { count: props.proof.unviewed }, props.proof.unviewed),
+);
 
-const proofLines = (proof: ProofMark): string[] => {
-    const lines: string[] = [];
-    const check = proof.check === undefined ? undefined : clipped(proof.check);
-    if (proof.verification === `verified`) {
-        lines.push(check === undefined ? t(`agents.cardSeal.verifiedBare`) : t(`agents.cardSeal.verified`, { check }));
-    } else if (proof.verification === `failing`) {
-        lines.push(check === undefined ? t(`agents.cardSeal.failedBare`) : t(`agents.cardSeal.failed`, { check }));
-    } else if (proof.verification === `unproven`) {
-        lines.push(t(`agents.cardSeal.unproven`));
+// The one sentence the card leads with, and the line under it.
+const reading = computed((): { head: string; detail: string } => {
+    const verification = props.proof.verification;
+    if (verification === `verified`) {
+        return { head: t(`agents.cardSeal.verified`), detail: t(`agents.cardSeal.verifiedDetail`) };
     }
-    if (proof.unviewed !== undefined) {
-        lines.push(t(`agents.cardSeal.unviewed`, { count: proof.unviewed }, proof.unviewed));
+    if (verification === `failing`) {
+        return { head: t(`agents.cardSeal.failed`), detail: t(`agents.cardSeal.failedDetail`) };
     }
-    return lines;
+    if (verification === `unproven`) {
+        return { head: t(`agents.cardSeal.unproven`), detail: t(`agents.cardSeal.unprovenDetail`) };
+    }
+    // Only an interface changed unseen: the count is the whole story.
+    return { head: t(`agents.cardSeal.unviewedHead`), detail: unviewed.value ?? `` };
+});
+
+// The glyph's accessible name: the same readings as the card, one a line.
+const label = computed(() =>
+    [
+        ...(props.status === undefined ? [] : [props.status]),
+        reading.value.head,
+        ...(props.proof.check === undefined ? [] : [props.proof.check]),
+        ...(props.proof.verification !== undefined && unviewed.value !== undefined ? [unviewed.value] : []),
+    ].join(`\n`),
+);
+
+// Opens for a pointer that stays and waits for one that overshoots onto the card, as DevRebuild's card does.
+const anchor = ref<HTMLElement>();
+const hover = useHoverIntent({ open: 200, close: 150, warm: 300 });
+const open = computed({
+    get: () => hover.shown.value,
+    set: (value: boolean) => (value ? hover.show() : hover.hide()),
+});
+const onEnter = (event: PointerEvent): void => {
+    if (event.pointerType === `mouse`) {
+        hover.enter();
+    }
 };
-
-const hover = computed(() => [...(props.status === undefined ? [] : [props.status]), ...proofLines(props.proof)].join(`\n`));
+const onLeave = (): void => hover.leave();
+const onCardEnter = (): void => hover.cancel();
 </script>
 
 <template>
-    <span class="inline-flex shrink-0 items-center" :class="tone" data-seal :data-seal-kind="kind">
-        <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            width="1em"
-            height="1em"
-            role="img"
-            focusable="false"
-            :aria-label="hover"
-            v-tooltip.top.lines="hover"
-            class="inline-block flex-none align-[-0.125em]"
-        >
-            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter" stroke-miterlimit="2">
-                <template v-if="kind === `broke`">
-                    <path :d="`${OCTAGON} M12 7v6`" />
-                    <path d="M11 16h2v2h-2Z" fill="currentColor" stroke="none" />
-                </template>
-                <template v-else>
-                    <path v-if="kind === `closed`" :d="OCTAGON" />
-                    <path v-else :d="OCTAGON" stroke-linecap="butt" :stroke-dasharray="OPEN_DASHES" :stroke-dashoffset="OPEN_OFFSET" />
-                    <path :d="TICK" />
-                </template>
-            </g>
-        </svg>
+    <span
+        ref="anchor"
+        class="inline-flex shrink-0 items-center"
+        :class="tone"
+        data-seal
+        :data-seal-kind="kind"
+        role="img"
+        :aria-label="label"
+        @pointerenter="onEnter"
+        @pointerleave="onLeave"
+    >
+        <SealGlyph :kind="kind" aria-hidden="true" />
+        <AnchoredOverlay v-model="open" :anchor="anchor" side="top" cross="end">
+            <div class="flex w-72 max-w-[calc(100vw-2rem)] flex-col gap-2.5 p-3 text-left" data-seal-card @pointerenter="onCardEnter" @pointerleave="onLeave">
+                <p v-if="status" class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ status }}</p>
+                <div class="flex items-start gap-2">
+                    <SealGlyph :kind="kind" class="mt-px text-base" :class="headTone" />
+                    <div class="flex min-w-0 flex-col gap-0.5">
+                        <p class="text-xs font-medium text-content">{{ reading.head }}</p>
+                        <p class="text-2xs leading-relaxed text-muted">{{ reading.detail }}</p>
+                    </div>
+                </div>
+                <div v-if="proof.check" class="flex flex-col gap-1">
+                    <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`agents.cardSeal.ran`) }}</span>
+                    <code class="break-all rounded-md border border-line bg-canvas px-2 py-1.5 font-mono text-2xs leading-relaxed text-content">{{
+                        proof.check
+                    }}</code>
+                </div>
+                <p v-if="proof.verification !== undefined && unviewed" class="flex items-start gap-1.5 text-2xs leading-relaxed text-muted">
+                    <Icon name="eye-slash" class="mt-0.5 shrink-0 text-warning" />{{ unviewed }}
+                </p>
+                <p class="border-t border-line pt-2 text-2xs leading-relaxed text-subtle">{{ t(`agents.cardSeal.note`) }}</p>
+            </div>
+        </AnchoredOverlay>
     </span>
 </template>

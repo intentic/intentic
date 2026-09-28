@@ -430,12 +430,16 @@
             "close": "Zamknij {title}"
         },
         "cardSeal": {
-            "unviewed": "Zmienił {count} plik interfejsu bez patrzenia | Zmienił {count} pliki interfejsu bez patrzenia | Zmienił {count} plików interfejsu bez patrzenia",
-            "verified": "Własne sprawdzenie: {check} przeszło",
-            "verifiedBare": "Własne sprawdzenie: przeszło po ostatniej zmianie",
-            "failed": "Własne sprawdzenie: {check} nie przeszło",
-            "failedBare": "Własne sprawdzenie: nie przeszło",
-            "unproven": "Własne sprawdzenie: brak od ostatniej zmiany"
+            "verified": "Przetestowane po ostatniej zmianie",
+            "verifiedDetail": "Agent uruchomił sprawdzenie po ostatniej zmianie kodu i przeszło.",
+            "failed": "Ostatnie sprawdzenie nie przeszło",
+            "failedDetail": "Agent uruchomił sprawdzenie po ostatniej zmianie kodu i nie przeszło.",
+            "unproven": "Nieprzetestowane po ostatniej zmianie",
+            "unprovenDetail": "Agent zmienił kod i nie uruchomił potem testów, typecheck, lint ani builda.",
+            "unviewedHead": "Interfejs zmieniony bez podglądu",
+            "unviewed": "Zmienił {count} plik interfejsu bez obejrzenia wyniku | Zmienił {count} pliki interfejsu bez obejrzenia wyniku | Zmienił {count} plików interfejsu bez obejrzenia wyniku",
+            "ran": "Uruchomił",
+            "note": "Odczytane z tego, co agent sam uruchomił w ostatniej turze. CI sprawdza wszystko po wypchnięciu."
         },
         "words": {
             "new": "Nowy",
