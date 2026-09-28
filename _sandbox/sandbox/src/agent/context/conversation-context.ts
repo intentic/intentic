@@ -1,9 +1,11 @@
-import type { AgentTurn, TurnNote } from "@intentic/sandbox-contract";
-import { compactedSinceLastTurn, type Composition, worktreeOf } from "../../conversations/registry/agents-store.js";
+import type { AgentTurn, RepoBase, TurnNote } from "@intentic/sandbox-contract";
+import { landTargetOf } from "../../conversations/land/land-target.js";
+import { compactedSinceLastTurn, type Composition, isIsolated, type PersistedAgent, worktreeOf } from "../../conversations/registry/agents-store.js";
 import type { ConversationWorktree } from "../../conversations/worktrees/worktrees.js";
 import type { Services } from "../../composition.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import { conversationFence } from "../../areas/area-scope.js";
+import { checkpointWorktree } from "../checkpoints/checkpoint-worktree.js";
 import { contextNote } from "./context-note.js";
 
 // Composition is decided once, by the route, on the turn that creates the conversation's worktrees — the one moment it
@@ -29,25 +31,49 @@ export const decideComposition = async (services: Services, input: AgentTurn): P
 export const sameRepos = (before: readonly { readonly repo: string }[], after: readonly { readonly repo: string }[]): boolean =>
     before.length === after.length && before.every(({ repo }, index) => after[index]?.repo === repo);
 
+// A spawned child's first checkout, cut from its parent's current work: the parent's remainder committed first, as a
+// checkpoint is, and each of the child's repos pinned to the parent's commit, so the child reads what the parent reads,
+// as the parent's in-process subagents do, and its work goes back onto the tree it was cut from (land-target.ts).
+// Undefined for a conversation of its own, and for a child whose parent's checkout cannot take its work.
+const parentCut = async (services: Services, entry: PersistedAgent | undefined, childId: string): Promise<{ parent: string; base: RepoBase[] } | undefined> => {
+    if (entry === undefined || !isIsolated(entry)) {
+        return undefined;
+    }
+    const target = await landTargetOf(services, entry);
+    if (target.kind !== "parent") {
+        return undefined;
+    }
+    const repos = worktreeOf(services.agents.entry(target.parent))?.repos ?? [];
+    const base = await services.conversations.withLandLease(target.parent, () =>
+        checkpointWorktree(services, target.parent, repos, `Agent: before starting ${childId}`),
+    );
+    // A repo the parent's checkout could not be read in is one the child could not land back into.
+    return repos.length > 0 && base.length === repos.length ? { parent: target.parent, base } : undefined;
+};
+
 // Brings the checkout to what the conversation carries, for both the local turn and the runner's mirror. The opening
-// turn decides and records the composition; later turns reconcile the checkout to it.
+// turn decides and records the composition; later turns reconcile the checkout to it. A local spawned child with no base
+// of its own opens on its parent's current work (`fromParent`); a runner's child opens on the main line, since the runner
+// rebases the branch onto its own copy of it.
 export const ensureComposedWorktree = async (
     services: Services,
     input: AgentTurn,
     conversationId: string,
     base: readonly { repo: string; base: string }[] | undefined,
     namespaced: boolean,
+    fromParent = false,
 ): Promise<ConversationWorktree> => {
     const entry = services.agents.entry(conversationId);
     const recorded = worktreeOf(entry)?.repos ?? [];
     const opening = recorded.length === 0;
     const composition = opening ? await decideComposition(services, input) : worktreeOf(entry)?.composition;
+    const cut = opening && fromParent && base === undefined ? await parentCut(services, entry, conversationId) : undefined;
     // The conversation's own fence, from the areas its starter held. Resolved here rather than latched as folders,
     // so editing an area narrows an existing conversation's checkout on its next turn.
     const fence = conversationFence(await services.areas.list(), entry?.identity);
-    const worktree = await services.agentWorktrees.ensure(conversationId, recorded, base, namespaced, composition?.repos, fence);
+    const worktree = await services.agentWorktrees.ensure(conversationId, recorded, cut?.base ?? base, namespaced, composition?.repos, fence);
     if (opening || !sameRepos(recorded, worktree.repos)) {
-        await services.agents.recordWorktree(conversationId, worktree.repos, composition);
+        await services.agents.recordWorktree(conversationId, worktree.repos, composition, cut?.parent);
     }
     return worktree;
 };

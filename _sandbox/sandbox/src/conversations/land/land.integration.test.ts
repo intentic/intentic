@@ -479,7 +479,7 @@ test("a discard fired during an in-flight land queues behind the repo lock: land
         return defaultGit(dir, args);
     };
 
-    const landing = landAgent(worktrees, isolatedAgent(conversation.repos), "check", "outstanding", pausingGit);
+    const landing = landAgent(worktrees, isolatedAgent(conversation.repos), "check", "outstanding", undefined, pausingGit);
     await pausedAt;
     let removed = false;
     const removing = worktrees.remove("c1", conversation.repos).then(() => {
@@ -863,7 +863,7 @@ test("a delta with many refusing paths classifies in fewer git runs than it has 
         return defaultGit(dir, args, env);
     };
 
-    const result = await landAgent(worktrees, isolatedAgent(conversation.repos, { id: "c2" }), "check", "outstanding", counting);
+    const result = await landAgent(worktrees, isolatedAgent(conversation.repos, { id: "c2" }), "check", "outstanding", undefined, counting);
 
     expect(result.landed).toBe(false);
     expect(result.conflicts?.[0]?.paths).toHaveLength(count / 2);

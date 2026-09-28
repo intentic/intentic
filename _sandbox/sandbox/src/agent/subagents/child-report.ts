@@ -24,6 +24,8 @@ export interface ChildReportDeps {
     readonly profileOf: (conversationId: string) => TurnProfile | undefined;
     // The ending a parent reads for a child whose runtime was killed under it; undefined for a failure of its own.
     readonly killNote: (childId: string, failure: string) => Promise<string | undefined>;
+    // Where the child's work went, in the parent's words (child-lands.ts childLandingWords).
+    readonly landingOf: (childId: string) => string | undefined;
 }
 
 // Characters of the child's answer a report carries, from the head where the answer is; the rest stays in its chat.
@@ -74,6 +76,7 @@ export const reportChildTurn = async (deps: ChildReportDeps, settled: DomainEven
             failed: settled.failure !== undefined,
             report: reportText(settled, settled.failure === undefined ? undefined : await deps.killNote(settled.conversationId, settled.failure)),
             verification: childVerification(deps.conversations, settled.conversationId),
+            landing: deps.landingOf(settled.conversationId),
         });
         // Asked again after the awaits above: a wait of the parent's may have taken this ending meanwhile.
         if (subagentEndingReported(deps.conversations, settled.conversationId)) {

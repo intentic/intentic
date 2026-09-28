@@ -104,9 +104,24 @@ const syncLine = (sync: { commits: number; blocked: readonly string[] }): string
     return [moved, blocked].filter((line) => line !== undefined).join(` `);
 };
 
+// Row for a spawned child's work gone into its parent's checkout, or held off it by a clash with the parent's edits.
+const intoParentRow = (event: Extract<AgentEvent, { kind: "landed" }>): TranscriptRow => {
+    if (event.landed) {
+        return { role: "notice", text: `Changes went into the parent agent's checkout, as its in-process subagents' edits do: they reach your workspace with its land.` };
+    }
+    const files = (event.conflicts ?? []).flatMap((conflict) => conflict.paths).length;
+    return {
+        role: "notice",
+        text: `${files} file(s) clash with the parent agent's own edits, so nothing was written into its checkout. The parent was told, and can bring the changes in to resolve.`,
+    };
+};
+
 // Row for a finished turn: held on its branch, landed automatically, or conflicted. A landed turn that changed
 // dependencies appends dependencyLine, since the Changes diff can't show that.
 const landedRow = (event: Extract<AgentEvent, { kind: "landed" }>): TranscriptRow => {
+    if (event.into !== undefined) {
+        return intoParentRow(event);
+    }
     if (event.held === true) {
         return { role: "notice", text: `Finished: the work is on this agent's branch, ready to land from its review.` };
     }

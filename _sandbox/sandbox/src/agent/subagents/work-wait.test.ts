@@ -183,13 +183,27 @@ describe("a child's ending reaches its parent once", () => {
 
 describe("what a wait answers with", () => {
     const agent = { id: "sub-a", kind: "spawned", conversationId: "conv-a", startedAt: 1, activityAt: 2, summary: "Head of it" } as const;
-    const lookups = (report: string | undefined) => ({ pendingQuestion: () => undefined, report: () => report });
+    const lookups = (report: string | undefined, landing?: string) => ({ pendingQuestion: () => undefined, report: () => report, landing: () => landing });
 
     it("hands an ended child's whole report over where its row's summary cut it", () => {
         expect(workWaitAnswer({ outcome: "finished", agent: { ...agent, status: "completed" } }, lookups("Head of it, and the whole rest of it."))).toEqual({
             outcome: "finished",
             agent: { ...agent, status: "completed" },
             report: "Head of it, and the whole rest of it.",
+        });
+    });
+
+    // Where its work went rides beside the report, once the child has ended: in the waiter's checkout, or held off it.
+    it("hands an ended child's landing over, and none for one still working", () => {
+        const landing = "Its changes (1 file) are in your checkout now.";
+        expect(workWaitAnswer({ outcome: "finished", agent: { ...agent, status: "completed" } }, lookups("Head of it", landing))).toEqual({
+            outcome: "finished",
+            agent: { ...agent, status: "completed" },
+            landing,
+        });
+        expect(workWaitAnswer({ outcome: "timeout", agent: { ...agent, status: "running" } }, lookups("Head of it", landing))).toEqual({
+            outcome: "timeout",
+            agent: { ...agent, status: "running" },
         });
     });
 

@@ -72,8 +72,10 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                           "spawn",
                           "Spawn a subagent: a full agent on any connected provider (claude, codex, grok, kimi, gemini, cursor — e.g. " +
                               "Cursor's Composer models) to work on a task of its own. It runs as a separate conversation in its own isolated " +
-                              "worktree, visible on the board, and keeps working after your turn ends; its finished work lands the way " +
-                              "any agent's does. Returns the subagent's id immediately: supervise it with the wait tool (target: that id), " +
+                              "worktree cut from your own current work, visible on the board, and keeps working after your turn ends. " +
+                              "Its finished work comes back into your checkout, as an in-process subagent's edits do, and reaches the " +
+                              "workspace with your land; where it clashes with your edits it is held, and merge brings it in. " +
+                              "Returns the subagent's id immediately: supervise it with the wait tool (target: that id), " +
                               "which returns when it is blocked on input or finished, with its report. On a sandbox short of memory it " +
                               "holds as pending until there is room, and wait covers that too. A start the owner must allow also returns " +
                               "at once, held, and waits on their card the same way; you carry on meanwhile. If your turn ends first, its " +
@@ -191,6 +193,22 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                           },
                           { annotations: toolAnnotations("write") },
                       ),
+                      sdk().tool(
+                          "merge",
+                          "Bring a subagent's finished work into your own checkout when its changes clashed with your edits, " +
+                              "so they were held on its branch (its report or wait's `landing` says so). Writes them with " +
+                              "conflict markers where they clash, for you to resolve, as you would merge a branch yourself. " +
+                              "Its work reaches your checkout by itself when nothing clashes.",
+                          { child: z.string().min(1).describe("The subagent's id, from spawn.") },
+                          async (args) => {
+                              const children = deps.children;
+                              if (children === undefined) {
+                                  return answer({ ok: false, message: "This turn cannot supervise agents." });
+                              }
+                              return answer(await children.merge(args.child));
+                          },
+                          { annotations: toolAnnotations("write") },
+                      ),
                   ]),
             sdk().tool(
                 "wait",
@@ -200,7 +218,9 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                     "`report`, where the row's `summary` is only its head), and " +
                     "`verification` — whether anything actually checked the work that report describes (`verified` / " +
                     "`unproven` / `failing` / `no-code`, with the check that spoke). Read it before you build on what it " +
-                    "says: an agent's own account of its work is a claim, not a result. For a command it returns the " +
+                    "says: an agent's own account of its work is a claim, not a result. A spawned one's `landing` says where " +
+                    "its work went: into your checkout already, or held on its branch where it clashed with your edits " +
+                    "(merge brings it in). For a command it returns the " +
                     "exit code, the tail of its output and the file holding all of it. Target a subagent your runtime's own " +
                     "tool started by that call's id, one you spawned by the id spawn returned, a background command by " +
                     'the ID its Bash call returned, or "any" for whichever of these moves first (each is reported once). ' +
@@ -232,6 +252,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                         ...workWaitAnswer(result, {
                             pendingQuestion: (childId) => deps.children?.pendingQuestion(childId),
                             report: (childId) => deps.children?.report(childId),
+                            landing: (childId) => deps.children?.landing(childId),
                         }),
                         ...(result.outcome === "unknown-target" ? { note: NOTHING_TO_WAIT_FOR } : {}),
                     });

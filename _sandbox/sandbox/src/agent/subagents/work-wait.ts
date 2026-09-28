@@ -191,6 +191,8 @@ export interface ChildLookups {
     readonly pendingQuestion: (childId: string) => PendingChildCard | undefined;
     // Its last turn's whole closing message, where the row's summary had to cut it.
     readonly report: (childId: string) => string | undefined;
+    // Where its work went: into the waiter's own checkout, or held off it by a clash (child-lands.ts childLandingWords).
+    readonly landing: (childId: string) => string | undefined;
 }
 
 // A child whose turn has ended (or paused for the sandbox's re-run) has a report to hand over whole.
@@ -203,12 +205,14 @@ export const workWaitAnswer = (result: WorkWaitOutcome, lookups: ChildLookups): 
     const whole = agent !== undefined && ENDED.has(agent.status) ? lookups.report(agent.id) : undefined;
     // Only where it says more than the row's summary, which is its head.
     const report = whole !== undefined && whole.trim().length > (agent?.summary?.length ?? 0) ? whole : undefined;
+    const landing = agent !== undefined && ENDED.has(agent.status) ? lookups.landing(agent.id) : undefined;
     return {
         outcome: result.outcome,
         ...(agent === undefined ? {} : { agent }),
         ...(result.job === undefined ? {} : { job: result.job }),
         ...(question === undefined ? {} : { question }),
         ...opt("report", report),
+        ...opt("landing", landing),
         ...opt("note", result.outcome === "message" ? WORDS_SAID : undefined),
     };
 };

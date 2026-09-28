@@ -50,6 +50,10 @@ const tallyLanding = (
     return { count, here };
 };
 
+// Whose last land reached the main tree: a spawned child's that went into its parent's checkout did not, and the
+// parent's own land is what brings it there (land-target.ts).
+const landedInMainTree = (entry: IsolatedAgent): boolean => entry.placement.landedInto === undefined;
+
 export const createLandedPresences = (
     worktrees: AgentWorktrees,
     logger: Logger,
@@ -122,7 +126,7 @@ export const createLandedPresences = (
                 return head;
             };
             let moved = false;
-            for (const entry of entries) {
+            for (const entry of entries.filter(landedInMainTree)) {
                 let landed = 0;
                 let present = 0;
                 for (const composed of entry.placement.repos) {

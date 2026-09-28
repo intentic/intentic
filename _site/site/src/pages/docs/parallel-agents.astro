@@ -79,7 +79,7 @@ const lanes = [
     <h2>When an agent delegates</h2>
     <p>
         Parallel agents do not have to be opened by a person. A turn may split its own work into children, and intentic follows two different
-        mechanisms on one <strong>Subagents</strong> roster:
+        mechanisms on one roster of subagents:
     </p>
     <table>
         <thead>
@@ -103,8 +103,12 @@ const lanes = [
     <p>
         The mechanism is the only difference. Either way the child is a subagent, and the editor shows it one way: the call that started it
         becomes its card in the parent's chat, with what it was asked, how it is going, what it has spent and what it reported, kept current
-        after the parent's turn ends. It is listed on the <strong>Subagents</strong> page and counted on the parent's board card. A full
-        child agent also offers what only a conversation of its own has: its own chat, a branch you review and land, and a place on the board.
+        after the parent's turn ends. On the board it hangs under the parent's card as a row, whichever way it was started. A full child
+        agent also offers what only a conversation of its own has: its own chat, a branch you can review, and a place on the board. Its
+        code lands the way a runtime subagent's does: a runtime subagent edits the parent's checkout directly, and a full child agent's
+        worktree is cut from the parent's current work and its finished changes go back into the parent's checkout, so the whole family
+        reaches your workspace with the parent's one land. Where a child's changes clash with the parent's own edits, nothing is written;
+        the parent is told which files clash and can bring them in with conflict markers to resolve.
     </p>
 
     <h3>Runtime subagents</h3>
@@ -137,8 +141,9 @@ const lanes = [
         writing in its chat, a land conflict) runs once that turn ends.
     </p>
     <p>
-        While its turn is live, a parent also hears what becomes of its children's work: a land, and a land that hit a conflict. It sequences
-        its next step on that instead of polling.
+        A child's report, and the answer wait gives when it finishes, say where its work went: into the parent's checkout already, or held on
+        the child's branch because it clashed with the parent's own edits, which <code>merge</code> brings in with conflict markers. The parent
+        sequences its next step on that instead of polling.
     </p>
     <p>
         <strong>A spawn names its provider and its model.</strong> Neither is optional and nothing is chosen for you: a child is a whole agent
@@ -234,7 +239,7 @@ const lanes = [
     <h3>Landing automatically</h3>
     <p>
         <strong>Sandbox → Agent</strong> has an auto-land switch that lands every clean turn at completion. It is <strong>off by
-        default</strong>, because the two mistakes are not the same size: work held on its branch costs one press to release, while work that landed unread has to be noticed first. Individual agents can override the sandbox setting, and one that never expressed an opinion follows the sandbox.
+        default</strong>, because the two mistakes are not the same size: work held on its branch costs one press to release, while work that landed unread has to be noticed first. Individual agents can override the sandbox setting, and one that never expressed an opinion follows the sandbox. A full child agent's work is not judged by it: it goes into its parent's checkout, and the switch judges the parent's land.
     </p>
     <p>
         It is a sandbox setting rather than a browser preference for a reason: agents opened by an automation, a webhook or a chat message finish their turns with nobody in the room, and a browser preference could not govern them.

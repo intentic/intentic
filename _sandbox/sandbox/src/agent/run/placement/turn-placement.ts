@@ -1,5 +1,6 @@
 import { type AgentEvent, profileOf, type SnapshotTurn } from "@intentic/sandbox-contract";
 import { landAgent, reportLockfileFailures } from "../../../conversations/land/land.js";
+import { intoOf, landTargetOf, underLeases } from "../../../conversations/land/land-target.js";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
 import type { BeginRefusal, BeginTurn } from "../../../conversations/actor/conversation-decide.js";
 import { isIsolated } from "../../../conversations/registry/agents-store.js";
@@ -9,6 +10,7 @@ import { checkpointWorktree } from "../../checkpoints/checkpoint-worktree.js";
 import { opt } from "../../../opt.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
 import type { TurnCloser, TurnEnding } from "./turn-close.js";
+import { landedFrame, settleLandBooks, settleParentBooks } from "./turn-landing.js";
 
 // Where a conversation's turn runs, as the one value its lifecycle is parameterized by: the runner, the main tree, or a
 // worktree. Each announces itself, hands over the turn's body, and has its own after-turn and its own books; the
@@ -143,29 +145,6 @@ export async function* anchorIsolatedTurn(
     yield { kind: "checkpoint", id: `worktree:${turn.index}`, index: turn.index };
 }
 
-// Everything the end-of-turn pass does except land on the main tree, for a turn that skipped that pass: in `measure`
-// mode, and never fatal, since this runs after the turn has already ended.
-export const settleLandBooks = async (
-    deps: Pick<Services, "agents" | "conversations" | "perf" | "agentWorktrees" | "logger">,
-    conversationId: string,
-): Promise<void> => {
-    const entry = deps.agents.entry(conversationId);
-    if (entry === undefined || !isIsolated(entry)) {
-        return;
-    }
-    try {
-        const measured = await deps.conversations.withLandLease(conversationId, () =>
-            deps.perf.track("agent.land", { id: conversationId, mode: "measure", span: "outstanding" }, () => landAgent(deps.agentWorktrees, entry, "measure")),
-        );
-        reportLockfileFailures(deps.logger, conversationId, measured);
-        if (measured.changed) {
-            await deps.agents.recordLanded(conversationId, measured);
-        }
-    } catch (error) {
-        deps.logger.warn({ err: error, id: conversationId }, "agents: settling an ended turn's land books failed");
-    }
-};
-
 // The main tree: the body announces its own checkpoint, and there is no branch to land or books to settle.
 export const mainTreePlacement = (body: () => AsyncIterable<AgentEvent>): Placement => ({
     // oxlint-disable-next-line require-yield -- A placement with nothing to announce hands its body over at once.
@@ -177,6 +156,35 @@ export const mainTreePlacement = (body: () => AsyncIterable<AgentEvent>): Placem
     settled: () => {},
     thrown: "agent turn failed",
 });
+
+// A runner child's work, once the runner delivered it to the mirror, goes into its parent's checkout as a local child's
+// does (land-target.ts). Any other runner turn's work waits on its branch for a person's land, as it always has.
+async function* landIntoParent(
+    deps: Pick<Services, "agents" | "conversations" | "perf" | "agentWorktrees" | "logger">,
+    conversationId: string,
+    failed: boolean,
+    awaiting: boolean,
+): AsyncGenerator<AgentEvent> {
+    const entry = deps.agents.entry(conversationId);
+    if (failed || awaiting || entry === undefined || !isIsolated(entry)) {
+        return;
+    }
+    const into = intoOf(await landTargetOf(deps, entry));
+    if (into === undefined) {
+        return;
+    }
+    const landed = await underLeases(deps.conversations, conversationId, into, () =>
+        deps.perf.track("agent.land", { id: conversationId, mode: "check", span: "outstanding" }, () =>
+            landAgent(deps.agentWorktrees, entry, "check", "outstanding", into),
+        ),
+    );
+    reportLockfileFailures(deps.logger, conversationId, landed);
+    if (landed.changed) {
+        await deps.agents.recordLanded(conversationId, landed);
+        yield landedFrame(landed, undefined);
+        await settleParentBooks(deps, landed);
+    }
+}
 
 // A runner: this sandbox's worktree is a mirror for diff, standing and land, anchored here for a rewind, and settled
 // whatever the remote turn said, since the mirror is what the runner delivered.
@@ -196,7 +204,7 @@ export const runnerPlacement = (
         yield* anchorIsolatedTurn(deps, turn.conversationId, worktree.repos, turn.snapshot);
         return steps.dispatch(worktree);
     },
-    async *land () {},
+    land: (failed, awaiting) => landIntoParent(deps, turn.conversationId, failed, awaiting),
     close: () => settleLandBooks(deps, turn.conversationId),
     settled: () => {},
     thrown: "the remote turn failed",

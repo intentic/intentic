@@ -1,18 +1,20 @@
 import type { AgentEvent, RepoBase, SnapshotTurn } from "@intentic/sandbox-contract";
 import { settleIndex } from "@intentic/scaffold";
 import { type RepoSync, syncConversation } from "../../../conversations/land/sync.js";
-import { agentRepoReview, checkpointOf } from "../../../conversations/land/agent-changes.js";
+import { agentRepoReview, anchorOf } from "../../../conversations/land/agent-changes.js";
 import { headSha } from "../../../git/changes/changes.js";
+import { followedParent, landTargetOf, type Upstream, upstreamOf, underLeases } from "../../../conversations/land/land-target.js";
 import { isIsolated, worktreeOf } from "../../../conversations/registry/agents-store.js";
 import type { ConversationWorktree } from "../../../conversations/worktrees/worktrees.js";
 import type { Services } from "../../../composition.js";
 import { forkWorktreeBase } from "../../checkpoints/checkpoint-worktree.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
-import { type LandBooks, type LandingDeps, type LandingHooks, landTurn } from "./turn-landing.js";
-import { anchorIsolatedTurn, type Placement, settleLandBooks } from "./turn-placement.js";
+import { type LandBooks, type LandingDeps, type LandingHooks, landTurn, settleLandBooks } from "./turn-landing.js";
+import { anchorIsolatedTurn, type Placement } from "./turn-placement.js";
 
 // An isolated conversation's own worktree: composed and rebased onto today's main line before the model reads it,
-// rebased again whenever a parked card settles and once more before the land, and announced each time it moves.
+// rebased again whenever a parked card settles and once more before the land, and announced each time it moves. A
+// spawned child cut from its parent's checkout is rebased onto that checkout instead (land-target.ts).
 
 // The worktree a turn runs in, as the turn's body is handed it.
 export interface WorktreeRun {
@@ -47,9 +49,18 @@ export const worktreeFrame = (worktree: ConversationWorktree, onto: ReadonlyMap<
     };
 };
 
-// Rebases the conversation's repos onto the main line, remembering where each moved repo now sits (`onto`) and
+const MAIN_LINE: Upstream = { kind: "main" };
+
+// What the conversation's branch follows right now: read fresh, since a parent can be archived between two syncs.
+const upstreamNow = async (deps: Pick<Services, "agents" | "agentWorktrees">, conversationId: string): Promise<Upstream> => {
+    const current = deps.agents.entry(conversationId);
+    return current === undefined || !isIsolated(current) ? MAIN_LINE : upstreamOf(current, await landTargetOf(deps, current));
+};
+
+// Rebases the conversation's repos onto their upstream, remembering where each moved repo now sits (`onto`) and
 // restarting its span there, since a mid-turn rebase orphans the span's sha. Timed, since a rebase and a merge-base
-// check differ by orders of magnitude and an unmeasured one would misattribute a slow start.
+// check differ by orders of magnitude and an unmeasured one would misattribute a slow start. Takes no lease itself: a
+// land already holds them, and every other caller runs it under `underLeases`.
 const rebaser =
     (
         deps: Pick<Services, "agents" | "perf" | "agentWorktrees">,
@@ -58,16 +69,17 @@ const rebaser =
         onto: Map<string, string>,
         books: LandBooks,
     ) =>
-    async (): Promise<RepoSync[]> => {
-        // Read fresh every call, since a land in between moves `landedTip`.
+    async (upstream: Upstream): Promise<RepoSync[]> => {
+        // Read fresh every call, since a land in between moves `landedTip`, and a sync onto a parent moves `base`.
         const current = deps.agents.entry(conversationId);
-        const landed = new Map((worktreeOf(current)?.repos ?? []).map((composed) => [composed.repo, composed.landedTip]));
+        const recorded = new Map((worktreeOf(current)?.repos ?? []).map((composed) => [composed.repo, composed]));
         const synced = await deps.perf.track("agent.sync", { id: conversationId }, () =>
             syncConversation(
                 deps.agentWorktrees,
                 conversationId,
-                worktree.repos.map(({ repo }) => ({ repo, landedTip: landed.get(repo) })),
+                worktree.repos.map(({ repo, base }) => ({ repo, base: recorded.get(repo)?.base ?? base, landedTip: recorded.get(repo)?.landedTip })),
                 current?.social.title?.text,
+                upstream,
             ),
         );
         const moved = synced.filter((repo) => repo.blocked !== true);
@@ -77,7 +89,7 @@ const rebaser =
         for (const repo of moved) {
             onto.set(repo.repo, repo.onto);
         }
-        // `base` is where the branch sits on main; stale, it reads a fast-forward as real work.
+        // `base` is where the branch sits on its upstream; stale, it reads a fast-forward as real work.
         await deps.agents.recordWorktree(
             conversationId,
             // oxlint-disable-next-line oxc/no-map-spread -- Each route returns a fresh immutable record.
@@ -94,7 +106,7 @@ const rebaser =
 const spanFrom = async (
     deps: Pick<Services, "agentWorktrees">,
     conversationId: string,
-    recorded: { readonly repo: string; readonly base: string; readonly landedTip: string | undefined },
+    recorded: { readonly repo: string; readonly base: string; readonly landedTip: string | undefined; readonly parent: string | undefined },
     onto: ReadonlyMap<string, string>,
 ): Promise<string> => {
     const moved = onto.get(recorded.repo);
@@ -105,7 +117,9 @@ const spanFrom = async (
     const dir = deps.agentWorktrees.worktreeDir(conversationId, recorded.repo);
     try {
         const tip = await headSha(dir);
-        return tip === undefined ? fallback : await checkpointOf(dir, deps.agentWorktrees.mainDir(recorded.repo), tip, recorded.landedTip, recorded.base);
+        return tip === undefined
+            ? fallback
+            : await anchorOf({ parent: recorded.parent }, dir, deps.agentWorktrees.mainDir(recorded.repo), tip, recorded.landedTip, recorded.base);
     } catch {
         // allow(silent-catch): a checkout git cannot read keeps the recorded anchor, as every turn before this did.
         return fallback;
@@ -146,7 +160,12 @@ export const worktreePlacement = (
     // Workflow steps stay on the run's snapshot; rebasing would reintroduce the removed race.
     const pinned = input.worktreeBase !== undefined;
     // Nothing to rebase until the worktree is composed, and never for a pinned step.
-    let rebase = async (): Promise<RepoSync[]> => [];
+    let rebase = async (_upstream: Upstream): Promise<RepoSync[]> => [];
+    // A rebase outside the land, under the leases of every checkout it reads and writes (land-target.ts).
+    const rebaseLeased = async (): Promise<RepoSync[]> => {
+        const upstream = await upstreamNow(deps, conversationId);
+        return underLeases(deps.conversations, conversationId, followedParent(upstream), () => rebase(upstream));
+    };
     return {
         async *open () {
             const entry = deps.agents.entry(conversationId);
@@ -159,12 +178,22 @@ export const worktreePlacement = (
             // Reported per turn, not once at boot: it depends on how the container launched.
             const enforced = await deps.turnIsolation.available();
             await steps.versionMain(worktree.repos.map(({ repo }) => repo));
-            const synced = await rebase();
+            const synced = await rebaseLeased();
             books.branch = worktree.branch;
             books.span = await Promise.all(
                 worktree.repos.map(async ({ repo, base }) => ({
                     repo,
-                    from: await spanFrom(deps, conversationId, { repo, base, landedTip: worktreeOf(entry)?.repos.find((recorded) => recorded.repo === repo)?.landedTip }, onto),
+                    from: await spanFrom(
+                        deps,
+                        conversationId,
+                        {
+                            repo,
+                            base,
+                            landedTip: worktreeOf(entry)?.repos.find((recorded) => recorded.repo === repo)?.landedTip,
+                            parent: worktreeOf(deps.agents.entry(conversationId))?.parent,
+                        },
+                        onto,
+                    ),
                     dir: deps.agentWorktrees.worktreeDir(conversationId, repo),
                 })),
             );
@@ -181,7 +210,7 @@ export const worktreePlacement = (
             // computed against the old tree. Must never cost the user their answer: best-effort and logged.
             const resync = async (): Promise<AgentEvent | undefined> => {
                 try {
-                    const moved = await rebase();
+                    const moved = await rebaseLeased();
                     return moved.length === 0 ? undefined : worktreeFrame(worktree, onto, enforced, moved);
                 } catch (error) {
                     deps.logger.warn({ err: error, id: conversationId }, "agents: sync on a settled card failed");
@@ -201,7 +230,7 @@ export const worktreePlacement = (
                     failed,
                     aborted: turn.signal?.aborted === true,
                     awaitingWake: awaiting,
-                    sync: () => rebase(),
+                    sync: (upstream) => rebase(upstream),
                 },
                 books,
             ),

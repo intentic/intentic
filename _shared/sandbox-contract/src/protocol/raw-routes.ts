@@ -92,13 +92,14 @@ export const RAW_ROUTES = {
     "GET /wallet/status": { agent: true, control: "never" },
     "POST /wallet/fetch": { agent: true, control: "never" },
     "GET /wallet/history": { agent: true, control: "never" },
-    // The `agents` CLI's children: start, follow up, answer (never a consent card), cancel, list.
+    // The `agents` CLI's children: start, follow up, answer (never a consent card), cancel, merge held work, list.
     "POST /children/spawn": { agent: true, control: "never" },
     "GET /children/providers": { agent: true, control: "never" },
     "POST /children/wait": { agent: true, control: "never" },
     "POST /children/send": { agent: true, control: "never" },
     "POST /children/answer": { agent: true, control: "never" },
     "POST /children/cancel": { agent: true, control: "never" },
+    "POST /children/merge": { agent: true, control: "never" },
     "GET /children": { agent: true, control: "never" },
     // The fleet reads, and the one write: words in front of another conversation, which a person can do by typing.
     "GET /fleet": { agent: true },

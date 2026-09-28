@@ -87,8 +87,10 @@ export const TOOLS_WITHHELD: readonly ToolName[] = ["askQuestion"];
 const spawnTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool => ({
     description:
         "Spawn a subagent: a full agent on any connected provider (claude, codex, grok, kimi, gemini, cursor) to " +
-        "work on a task of its own. It runs as a separate conversation in its own isolated worktree and keeps working " +
-        "after your turn ends; its finished work lands the way any agent's does. Returns the subagent's id " +
+        "work on a task of its own. It runs as a separate conversation in its own isolated worktree, cut from your own " +
+        "current work, and keeps working after your turn ends. Its finished work comes back into your checkout, as an " +
+        "in-process subagent's edits do; where it clashes with your edits it is held, and merge brings it in. " +
+        "Returns the subagent's id " +
         "immediately: supervise it with the wait tool (target: that id); if your turn ends first, its report wakes " +
         "this conversation when it finishes. Give it a self-contained prompt with " +
         "every path, requirement, and constraint — it sees none of this conversation. You must name the provider " +
@@ -180,6 +182,25 @@ const sendTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool =
 
 const CancelArgsSchema = z.object({ child: z.string().min(1) });
 
+const mergeTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool => ({
+    description:
+        "Bring a subagent's finished work into your own checkout when its changes clashed with your edits, so they were " +
+        "held on its branch (its report or the wait tool's `landing` says so). Writes them with conflict markers where " +
+        "they clash, for you to resolve. Its work reaches your checkout by itself when nothing clashes.",
+    inputSchema: {
+        type: "object",
+        properties: { child: { type: "string", description: "The subagent's id, from spawn." } },
+        required: ["child"],
+    },
+    execute: async (args) => {
+        const parsed = CancelArgsSchema.safeParse(args);
+        if (!parsed.success) {
+            return JSON.stringify({ ok: false, message: "Pass the subagent's id." });
+        }
+        return JSON.stringify(await children.merge(parsed.data.child));
+    },
+});
+
 const cancelTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool => ({
     description:
         "Stop a subagent you spawned: its running turn, a start still waiting for memory, or a re-run the sandbox booked " +
@@ -264,7 +285,11 @@ const waitTool = (request: AgentRequest, children: NonNullable<TurnHooks["childr
             signal: request.signal,
         });
         return JSON.stringify(
-            workWaitAnswer(result, { pendingQuestion: (childId) => children.pendingQuestion(childId), report: (childId) => children.report(childId) }),
+            workWaitAnswer(result, {
+                pendingQuestion: (childId) => children.pendingQuestion(childId),
+                report: (childId) => children.report(childId),
+                landing: (childId) => children.landing(childId),
+            }),
         );
     },
 });
@@ -341,6 +366,7 @@ export const cursorCustomTools = (request: AgentRequest, guard: CursorGuard, pus
               send: sendTool(request.hooks.children),
               answer: answerTool(request.hooks.children),
               cancel: cancelTool(request.hooks.children),
+              merge: mergeTool(request.hooks.children),
           }
         : {}),
 });

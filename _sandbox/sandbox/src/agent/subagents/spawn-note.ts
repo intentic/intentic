@@ -20,8 +20,9 @@ export const spawnNote = (): string =>
     "a real allowance and nothing is chosen for you. Run `agents providers` first for what is connected, which " +
     "models it serves and how much allowance each has left — it leaves out the models whose every account is at " +
     "its cap, so what it lists is what can actually run. The subagent runs as its own conversation in an isolated " +
-    "copy of the repos, on the named provider's account (claude, codex, grok, kimi, gemini, cursor — e.g. " +
-    "`--provider cursor --model composer-2.5`), and its finished work lands the workspace's ordinary way. " +
+    "copy of the repos cut from your current work, on the named provider's account (claude, codex, grok, kimi, gemini, " +
+    "cursor — e.g. `--provider cursor --model composer-2.5`). Its finished work comes back into your checkout, as an " +
+    "in-process subagent's edits do; where it clashes with your edits it is held, and `agents merge <id>` brings it in. " +
     "It sees nothing of this conversation: give it a self-contained task with every path, requirement and " +
     "constraint. Supervise it with `agents wait <id>` (blocks until it needs input or finishes; a blocked " +
     "subagent's question is printed whole), `agents answer <id> '<text>'` (settle its question — its permission " +

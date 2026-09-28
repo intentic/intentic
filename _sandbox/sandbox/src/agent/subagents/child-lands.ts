@@ -1,7 +1,8 @@
-import type { WorkspaceEvent } from "@intentic/sandbox-contract";
+import type { LandConflict, WorkspaceEvent } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { parentOfActor } from "../../auth/principal.js";
-import { conversationProfile } from "../../conversations/registry/agents-store.js";
+import { recordedTargetOf } from "../../conversations/land/land-target.js";
+import { conversationProfile, isIsolated, type PersistedAgent } from "../../conversations/registry/agents-store.js";
 import { deliverWake } from "../run/turn/wake-delivery.js";
 
 // What becomes of a child's work after its turn ends is its parent's news while the parent still supervises: the work
@@ -79,6 +80,38 @@ export const bookedRerunWords = (rerun: { readonly at?: number | undefined }, ch
     `The sandbox runs this same turn again by itself${rerun.at === undefined ? " shortly" : ` at ${new Date(rerun.at * 1000).toISOString().slice(11, 16)} UTC`}, and its report reaches you when that ends: do not send it the task again or give the task to another agent meanwhile.${
         child === undefined ? "" : ` To have it not run again, cancel it (the cancel tool, or \`agents cancel ${child}\`), then decide yourself.`
     }`;
+
+// A conflict report's paths as a parent names them: workspace-relative, a nested repo's under its folder.
+const conflictPaths = (conflicts: readonly LandConflict[]): string[] =>
+    conflicts.flatMap(({ repo, paths }) => paths.map(({ path }) => (repo === "root" ? path : `${repo}/${path}`)));
+
+/**
+ * Where a settled child's work went, as its parent reads it beside the report: in the parent's own checkout, as an
+ * in-process subagent's edits are, or held off it by a clash with the parent's edits, with the door that brings it in.
+ * Undefined for a child that lands as any conversation does (its parent cannot take its work), and for one whose
+ * turn left nothing to bring.
+ */
+export const childLandingWords = (agents: { readonly entry: (id: string) => PersistedAgent | undefined }, childId: string): string | undefined => {
+    const child = agents.entry(childId);
+    if (child === undefined || !isIsolated(child)) {
+        return undefined;
+    }
+    const target = recordedTargetOf(agents, child);
+    if (target.kind === "main" && target.ruled) {
+        return undefined;
+    }
+    const where = target.kind === "parent" ? "your checkout" : "the main tree you work in";
+    const clashing = conflictPaths(child.landing.conflicts ?? []);
+    if (clashing.length > 0) {
+        return `Its changes clash with the edits in ${where} on ${listed(clashing, PATHS_NAMED)}, so nothing of them was written there: they wait on its branch. Bring them in with conflict markers to resolve yourself (the merge tool, or \`agents merge ${childId}\` from a shell), or leave them.`;
+    }
+    const landedHere = target.kind === "parent" ? child.placement.landedInto === target.parent : child.placement.repos.some(({ landedTip }) => landedTip !== undefined);
+    if (!landedHere || (child.landing.diff?.files ?? 0) === 0) {
+        return undefined;
+    }
+    const files = child.landing.diff?.files ?? 0;
+    return `Its changes (${files} file${files === 1 ? "" : "s"}) are in ${where} now, uncommitted, as an in-process subagent's edits would be: read them there before you build on them.`;
+};
 
 /** A child's work reached the main tree: its parent hears so. */
 export const reportChildLanded = async (deps: ChildNewsDeps, event: WorkspaceEvent): Promise<void> => {

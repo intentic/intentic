@@ -61,6 +61,13 @@ const WorktreePlacementSchema = z.object({
     // What the checkout should carry, copied from the opening turn's persona card; absent means everything. A later
     // persona edit never moves an existing conversation.
     composition: CompositionSchema.optional(),
+    // The conversation whose checkout the branch was cut from and is rebased onto: a spawned child branched from its
+    // parent's work (land-target.ts), whose `base` rows then name commits of the parent's, not of the main line. Absent
+    // for every conversation of its own, which stands on the main line.
+    parent: z.string().optional(),
+    // Whose checkout took the last land instead of the main tree: its parent's. The repos' landed provenance then names
+    // that checkout, and nothing that reads main-tree landings (origins, presence, the version commit) counts it.
+    landedInto: z.string().optional(),
 });
 export type WorktreePlacement = z.infer<typeof WorktreePlacementSchema>;
 const PlacementSchema = z.discriminatedUnion("kind", [z.object({ kind: z.literal("main") }), WorktreePlacementSchema]);

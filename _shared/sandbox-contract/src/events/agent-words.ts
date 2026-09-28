@@ -44,6 +44,9 @@ export interface ChildReportFields {
     readonly report: string;
     // Undefined when nothing of the child's work was seen, which is not a verdict.
     readonly verification: SubagentVerification | undefined;
+    // Where its work went, in the daemon's words: into the parent's own checkout, or held off it by a clash. Undefined
+    // for a child whose work lands as any conversation's does.
+    readonly landing?: string | undefined;
 }
 
 // The wait tool's `verification` field, in words.
@@ -73,7 +76,7 @@ export const childReportPrompt = (fields: ChildReportFields): string => {
         "",
         fields.report.trim() === "" ? "(It ended without a closing report.)" : fields.report.trim(),
         "",
-        "Its changes are in its own worktree and land the way any agent's do. Its account of its own work is a claim, not " +
+        `${fields.landing ?? "Its changes are in its own worktree and land the way any agent's do."} Its account of its own work is a claim, not ` +
             "a result: check what matters before you build on it, and follow up with the subagents tools as you would mid-turn.",
     ].join("\n");
 };

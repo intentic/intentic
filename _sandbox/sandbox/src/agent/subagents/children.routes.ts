@@ -5,6 +5,7 @@ import { waitForWork, workWaitAnswer } from "./work-wait.js";
 import { soleLiveConversation } from "../../conversations/actor/conversation-holdings.js";
 import type { AppEnv } from "../../app-env.js";
 import type { Services } from "../../composition.js";
+import { childLandingWords } from "./child-lands.js";
 import { childReportOf, pendingQuestionOf, supervisorFor } from "./children.js";
 import { spawnCatalogText, spawnableProviders } from "./spawn-catalog.js";
 
@@ -133,6 +134,7 @@ export const createChildrenRoutes = (services: Services) => ({
             workWaitAnswer(result, {
                 pendingQuestion: (childId) => pendingQuestionOf(services.conversations, childId),
                 report: (childId) => childReportOf(services.conversations, childId),
+                landing: (childId) => childLandingWords(services.agents, childId),
             }),
         );
     },
@@ -169,6 +171,24 @@ export const createChildrenRoutes = (services: Services) => ({
             return c.json({ ok: false, message: 'Pass JSON like {"child": "sub-…"}.' }, 400);
         }
         const result = await supervisor.cancel(parsed.data.child);
+        return c.json(result, result.ok ? 200 : 409);
+    },
+    /** POST /children/merge — bring a child's work held off this conversation's checkout into it, with conflict markers. */
+    merge: async (c: Context<AppEnv>): Promise<Response> => {
+        const conversationId = conversationOf(services, c);
+        if (conversationId === undefined) {
+            return c.json({ ok: false, message: "No conversation: this shell carries no turn stamp and nothing is live." }, 400);
+        }
+        const supervisor = supervisorFor(services.conversations, conversationId);
+        if (supervisor === undefined) {
+            return c.json({ ok: false, message: "This conversation may not supervise agents: no turn with full agency has run on it." }, 403);
+        }
+        // allow(silent-catch): a body that is not JSON is answered as a malformed one, just below.
+        const parsed = CancelBodySchema.safeParse(await c.req.json().catch(() => undefined));
+        if (!parsed.success) {
+            return c.json({ ok: false, message: 'Pass JSON like {"child": "sub-…"}.' }, 400);
+        }
+        const result = await supervisor.merge(parsed.data.child);
         return c.json(result, result.ok ? 200 : 409);
     },
     /** POST /children/answer — settle a child's question; consent cards refuse, they are the owner's. */

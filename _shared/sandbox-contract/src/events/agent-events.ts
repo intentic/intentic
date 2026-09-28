@@ -38,13 +38,16 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         remote: z.string().optional(),
     }),
     // After a clean isolated turn's delta lands or not: `landed` puts it uncommitted in the main tree, `conflicts`
-    // names paths that failed, `held` means nothing happened. `deps` covers undeclared dependencies.
+    // names paths that failed, `held` means nothing happened. `deps` covers undeclared dependencies. `into` names the
+    // parent conversation a spawned child's work went into instead of the main tree, as an in-process subagent's edits
+    // go into its parent's checkout.
     z.object({
         kind: z.literal("landed"),
         landed: z.boolean(),
         conflicts: z.array(LandConflictSchema).optional(),
         held: z.boolean().optional(),
         deps: z.object({ missing: z.number(), started: z.array(z.string()), deferred: z.boolean() }).optional(),
+        into: z.string().optional(),
     }),
     // Notes the daemon prepends to the user's message before the model reads it, verbatim, one per note. Serialized
     // from the same typed notes the wire prompt uses, so disclosure cannot drift from what the model got.

@@ -493,7 +493,8 @@ export interface AgentsRegistry {
     readonly entry: (id: string) => PersistedAgent | undefined;
     // Writes what a worktree conversation's checkout is (its repos, each with the main-line base) and, only when given,
     // what it should carry (`composition`); callers that merely rewrite repos keep the opening turn's decision.
-    readonly recordWorktree: (id: string, repos: readonly RepoRecord[], composition?: Composition) => Promise<void>;
+    // `parent`, once, on the opening compose of a spawned child cut from its parent's checkout (placement.parent).
+    readonly recordWorktree: (id: string, repos: readonly RepoRecord[], composition?: Composition, parent?: string) => Promise<void>;
     // Strips a deleted repo out of every checkout, live and archived. Only the registry's half; conversations/vanished-repos.ts
     // decides the rest.
     readonly dropRepos: (repos: readonly string[]) => Promise<string[]>;
@@ -1003,12 +1004,12 @@ export const createFleet = (
             return entry === undefined ? undefined : summaryOf(entry);
         },
         entry: entryOf,
-        recordWorktree: async (id, repos, composition) => {
+        recordWorktree: async (id, repos, composition, parent) => {
             const entry = entryOf(id);
             if (entry === undefined || !isIsolated(entry)) {
                 return;
             }
-            replace({ ...entry, placement: { ...entry.placement, repos: [...repos], ...opt("composition", composition) } });
+            replace({ ...entry, placement: { ...entry.placement, repos: [...repos], ...opt("composition", composition), ...opt("parent", parent) } });
             await persist();
         },
         dropRepos: async (repos) => {
@@ -1161,9 +1162,12 @@ export const createFleet = (
             }
             // A land answers any pending ask too; letting it outlive the land would read as a second, phantom ask.
             const { landRequested: _answered, ...social } = entry.social;
+            // Whose tree the tips now name: the land that moved them says, and one that moved nothing leaves it standing.
+            const { landedInto: before, ...checkout } = placement;
+            const landedInto = moved ? outcome.into : before;
             replace({
                 ...entry,
-                placement: { ...placement, repos: [...outcome.repos] },
+                placement: { ...checkout, repos: [...outcome.repos], ...opt("landedInto", landedInto) },
                 landing: {
                     ...opt("message", moved ? undefined : landing.message),
                     ...opt("conflicts", verdict === undefined ? undefined : [...verdict]),

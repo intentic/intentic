@@ -4,24 +4,29 @@ import { reportChildConflict } from "../../agent/subagents/child-lands.js";
 import { opt } from "../../opt.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import { landAgent, reportLockfileFailures } from "./land.js";
+import { intoOf, type LandTarget, landTargetOf, upstreamOf, underLeases } from "./land-target.js";
+import { settleParentBooks } from "../../agent/run/placement/turn-landing.js";
 import { syncBeforeLand } from "./sync.js";
 import { settleLandingInBackground, versionCommitsSettled } from "./version-landed.js";
 
 // A land a person pressed: the same pre-land rebase an automatic land takes, then the installed tree reconciled behind
-// it, as an automatic land does. Runs inside the conversation's land lease, which the route holds.
+// it, as an automatic land does. Runs inside the conversation's land lease (landByHandLeased takes it). A spawned
+// child's press goes where its turn's own land goes (land-target.ts): into its parent's checkout, under the parent's
+// lease too, with none of the main tree's after-land. The same door is its parent's `merge`, in `merge` mode.
 
 export type LandByHandDeps = Pick<Services, "agentWorktrees" | "agents" | "conversations" | "dependencies" | "events" | "history" | "logger" | "perf" | "turns"> &
     Parameters<typeof settleLandingInBackground>[0];
 
 // The composition a manual land applies: the same pre-land rebase as auto-land, with `base` moved onto what each
 // repo now sits on. A git fault here lands on the old base instead of failing the land.
-const syncedComposition = async (services: LandByHandDeps, entry: IsolatedAgent): Promise<RepoRecord[]> => {
+const syncedComposition = async (services: LandByHandDeps, entry: IsolatedAgent, target: LandTarget): Promise<RepoRecord[]> => {
     try {
         return [
             ...(await syncBeforeLand(
                 services.agentWorktrees,
                 { id: entry.id, title: entry.social.title?.text, repos: entry.placement.repos },
                 services.agents.recordWorktree,
+                upstreamOf(entry, target),
             )),
         ];
     } catch (error) {
@@ -45,13 +50,16 @@ const announceLanded = (services: LandByHandDeps, entry: IsolatedAgent, span: re
     });
 };
 
-export const landByHand = async (services: LandByHandDeps, entry: IsolatedAgent, mode: LandMode, rung: AgentSpan): Promise<LandResult> => {
+export const landByHand = async (services: LandByHandDeps, entry: IsolatedAgent, mode: LandMode, rung: AgentSpan, target: LandTarget): Promise<LandResult> => {
+    const into = intoOf(target);
     // As an automatic land does (turn-landing.ts): another land's version commit first, so its work is history here.
-    await versionCommitsSettled(
-        services,
-        entry.placement.repos.map(({ repo }) => repo),
-    );
-    const composition = await syncedComposition(services, entry);
+    if (into === undefined) {
+        await versionCommitsSettled(
+            services,
+            entry.placement.repos.map(({ repo }) => repo),
+        );
+    }
+    const composition = await syncedComposition(services, entry, target);
     // Snapshotted after the sync: a rebase orphans the sha a stale span would name.
     const span = composition.map(({ repo, base, landedTip }) => ({
         repo,
@@ -59,13 +67,14 @@ export const landByHand = async (services: LandByHandDeps, entry: IsolatedAgent,
         dir: services.agentWorktrees.worktreeDir(entry.id, repo),
     }));
     const result = await services.perf.track("agent.land", { id: entry.id, mode, span: rung }, () =>
-        landAgent(services.agentWorktrees, { ...entry, placement: { ...entry.placement, repos: composition } }, mode, rung),
+        landAgent(services.agentWorktrees, { ...entry, placement: { ...entry.placement, repos: composition } }, mode, rung, into),
     );
     reportLockfileFailures(services.logger, entry.id, result);
     // Stores the tips and conflict report, re-derives standing, and clears the prior ending without a turn.
     await services.agents.recordLanded(entry.id, result);
-    // A spawned child's parent, still supervising, is told its press met a conflict and nothing reached the tree.
-    if (!result.landed && result.held !== true && (result.conflicts?.length ?? 0) > 0) {
+    // A spawned child's parent, still supervising, is told its press met a conflict and nothing reached the tree. A
+    // press into the parent's own checkout is the parent's to answer, and its door (`merge`) answers it in the reply.
+    if (into === undefined && !result.landed && result.held !== true && (result.conflicts?.length ?? 0) > 0) {
         void reportChildConflict(
             services,
             entry.id,
@@ -76,7 +85,8 @@ export const landByHand = async (services: LandByHandDeps, entry: IsolatedAgent,
     if (!services.conversations.running(entry.id)) {
         await services.conversations.send(entry.id, { kind: "settle" }).settled;
     }
-    if (result.landed && result.changed) {
+
+    if (into === undefined && result.landed && result.changed) {
         announceLanded(services, entry, span);
         // The install a moved manifest owes, the same one an auto-land reconciles.
         void services.dependencies
@@ -99,4 +109,14 @@ export const landByHand = async (services: LandByHandDeps, entry: IsolatedAgent,
         ...(result.resolving !== undefined ? { resolving: result.resolving } : {}),
         ...(result.held === true ? { held: true } : {}),
     };
+};
+
+// The press whole: where the work goes decided first, then the land under the lease of every checkout it writes, and a
+// parent that took it brought up to date once those leases are free (its own measure takes its lease again).
+export const landByHandLeased = async (services: LandByHandDeps, entry: IsolatedAgent, mode: LandMode, rung: AgentSpan): Promise<LandResult> => {
+    const target = await landTargetOf(services, entry);
+    const into = intoOf(target);
+    const result = await underLeases(services.conversations, entry.id, into, () => landByHand(services, entry, mode, rung, target));
+    await settleParentBooks(services, { into, landed: result.landed });
+    return result;
 };

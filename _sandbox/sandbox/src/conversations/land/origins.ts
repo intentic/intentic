@@ -104,7 +104,12 @@ export const createAgentOrigins = (
             .ids()
             .flatMap((id) => {
                 const entry = agents.entry(id);
-                const composed = entry === undefined ? undefined : reposOf(entry).find((candidate) => candidate.repo === repo);
+                // A child whose last land went into its parent's checkout put nothing in the main tree: its work
+                // reaches it with the parent's own land, and is the parent's claim there.
+                if (entry === undefined || (entry.placement.kind === "worktree" && entry.placement.landedInto !== undefined)) {
+                    return [];
+                }
+                const composed = reposOf(entry).find((candidate) => candidate.repo === repo);
                 if (composed?.landedTip === undefined || composed.landedHead === undefined) {
                     return [];
                 }

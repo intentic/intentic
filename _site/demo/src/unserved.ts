@@ -70,6 +70,7 @@ export const UNSERVED = {
     "POST /children/send": NOT_THE_EDITORS,
     "POST /children/answer": NOT_THE_EDITORS,
     "POST /children/cancel": NOT_THE_EDITORS,
+    "POST /children/merge": NOT_THE_EDITORS,
     "GET /children": NOT_THE_EDITORS,
     "GET /fleet": NOT_THE_EDITORS,
     "POST /fleet/message": NOT_THE_EDITORS,

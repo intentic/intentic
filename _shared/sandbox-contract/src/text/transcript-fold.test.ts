@@ -357,6 +357,20 @@ describe("foldTurn", () => {
         );
     });
 
+    // A spawned child's work goes into its parent's checkout, as the parent's in-process subagents' edits do: the row
+    // says so, never that it reached the owner's workspace, and says who is to bring in a clash.
+    it("says a child's work went into its parent's checkout, or was held off it by a clash", () => {
+        expect(foldOf("go", [{ kind: "landed", landed: true, into: "p1" }]).at(-1)).toEqual({
+            role: "notice",
+            text: "Changes went into the parent agent's checkout, as its in-process subagents' edits do: they reach your workspace with its land.",
+        });
+        const clash: AgentEvent = { kind: "landed", landed: false, into: "p1", conflicts: [{ repo: "root", paths: [{ path: "app.ts", reason: "diverged" }], clean: 0 }] };
+        expect(foldOf("go", [clash]).at(-1)).toEqual({
+            role: "notice",
+            text: "1 file(s) clash with the parent agent's own edits, so nothing was written into its checkout. The parent was told, and can bring the changes in to resolve.",
+        });
+    });
+
     // A resolve turn exists because the branch couldn't rebase; its own opening rebase failing the same way is that
     // errand said twice, one row under itself. Any other turn still hears it, and a resolve turn still hears what moved.
     it("leaves the blocked rebase out of a land-conflict turn's notice, and only that", () => {

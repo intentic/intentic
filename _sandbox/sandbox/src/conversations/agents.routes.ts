@@ -15,13 +15,13 @@ import { conversationLines, matchLines } from "../sessions/transcript-search.js"
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import { pruneEmptiedDirs } from "../git/changes/changes-index.js";
 import { scratchScopeOf } from "../git/changes/scratch.js";
-import { checkpointOf } from "./land/agent-changes.js";
+import { anchorOf } from "./land/agent-changes.js";
 import { historyOf, liveConflicts, reviewOf } from "./land/review.js";
 import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./registry/agents-store.js";
 import { MAX_REACTION_KINDS } from "./registry/agents-registry.js";
 import { endingOf } from "./registry/turn-ending.js";
 import { archiveAgents, forgetConversations, purgeArchived } from "./registry/archive.js";
-import { landByHand } from "./land/land-by-hand.js";
+import { landByHandLeased } from "./land/land-by-hand.js";
 import { assignVerdict, fenceVerdict, isMemberAddress } from "./ownership.js";
 import { provenanceOf, refuseUnlessVisible, visibleTo } from "../auth/fleet-scope.js";
 import { armKeepWarm, dropKeepWarm } from "../agent/run/turn/cache-keepwarm.js";
@@ -435,14 +435,14 @@ export const createAgentsRoutes = (services: Services) => {
                 if (resolveWithin(main, input.path) === undefined) {
                     throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
                 }
-                const anchor = await checkpointOf(main, main, entry.placement.branch, undefined, composed.base);
+                const anchor = await anchorOf(entry.placement, main, main, entry.placement.branch, undefined, composed.base);
                 return services.git.refFileDiff(main, input.path, anchor, entry.placement.branch);
             }
             const dir = services.agentWorktrees.worktreeDir(entry.id, input.repo);
             if (resolveWithin(dir, input.path) === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
             }
-            return services.git.fileDiff(dir, input.path, await checkpointOf(dir, main, entry.placement.branch, undefined, composed.base));
+            return services.git.fileDiff(dir, input.path, await anchorOf(entry.placement, dir, main, entry.placement.branch, undefined, composed.base));
         }),
         includeScratch: i.includeScratch.handler(async ({ input }) => {
             const { dir, named } = await scratchNamed(input);
@@ -476,7 +476,7 @@ export const createAgentsRoutes = (services: Services) => {
             if (services.conversations.landing(input.id)) {
                 throw new ORPCError("CONFLICT", { message: "this agent is already landing, wait for it to finish" });
             }
-            return services.conversations.withLandLease(input.id, () => landByHand(services, entry, input.mode ?? "check", input.span ?? "outstanding"));
+            return landByHandLeased(services, entry, input.mode ?? "check", input.span ?? "outstanding");
         }),
         discard: i.discard.handler(async ({ input }) => {
             const entry = isolatedEntryOf(input.id);

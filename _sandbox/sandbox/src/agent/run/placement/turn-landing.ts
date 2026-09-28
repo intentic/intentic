@@ -1,5 +1,6 @@
 import type { AgentEvent, Rule, WorkspaceEvent } from "@intentic/sandbox-contract";
 import { landAgent, type LandOutcome, reportLockfileFailures } from "../../../conversations/land/land.js";
+import { intoOf, type LandTarget, landTargetOf, type Upstream, upstreamOf, underLeases } from "../../../conversations/land/land-target.js";
 import { landingPaths } from "../../../conversations/land/landing-paths.js";
 import { versionCommitsSettled } from "../../../conversations/land/version-landed.js";
 import { type IsolatedAgent, isIsolated } from "../../../conversations/registry/agents-store.js";
@@ -13,7 +14,9 @@ import type { FixersRepo } from "../../../conversations/land/worktree-fixers.js"
 // A finished isolated turn's land, step 4 of the turn's close (turn-close.ts). Whether its work reaches the main tree or
 // waits on its branch is decided purely, from the rules and the paths it touched; no check holds it, and none runs after
 // it either: CI checks what the owner pushes. The land runs as the sequence below: the repository's fixers in the
-// worktree, decide, land under the lease, record, reconcile the installed tree, announce.
+// worktree, decide, land under the lease, record, reconcile the installed tree, announce. A spawned child's work goes
+// into its parent's checkout instead (land-target.ts), as the parent's in-process subagents' edits do: no rule decides
+// that, and nothing of the main tree's after-land (its version commit, its installed tree, its announcements) follows.
 
 // What the land did, for the turn's `turn.settled` event; the card's standing is derived elsewhere.
 export type LandedOutcome = "landed" | "conflict" | "ready";
@@ -55,6 +58,7 @@ export const landedFrame = (landed: LandOutcome, deps: ReconcileOutcome | undefi
     ...opt("conflicts", landed.conflicts),
     ...(landed.held === true ? { held: true } : {}),
     ...opt("deps", deps),
+    ...opt("into", landed.into),
 });
 
 // The turn's books its land shares with its placement: the span a rebase moves, and what the land did.
@@ -90,8 +94,9 @@ export interface LandingTurn {
     readonly aborted: boolean;
     // The conversation runs again by itself (turn-close.ts): its wake is the turn that finishes the work, so nothing lands.
     readonly awaitingWake: boolean;
-    // The rebase onto today's main line, run once more under the lease since the top-of-turn one is stale by now.
-    readonly sync: () => Promise<unknown>;
+    // The rebase onto the branch's upstream (today's main line, or a child's parent's checkout), run once more under the
+    // lease since the top-of-turn one is stale by now.
+    readonly sync: (upstream: Upstream) => Promise<unknown>;
 }
 
 const performLandingWrites = (deps: Pick<Services, "activity" | "ruleFirings" | "logger">, conversationId: string, writes: readonly LandingWrite[]): void => {
@@ -108,22 +113,32 @@ const performLandingWrites = (deps: Pick<Services, "activity" | "ruleFirings" | 
 
 // Best-effort: a failed rebase lands on the old base. Re-read after it, since the frozen composition would hand the
 // checkpoint an orphaned base.
-const landUnderLease = async (deps: LandingDeps, turn: LandingTurn, finished: IsolatedAgent, mode: LandingDecision["mode"]): Promise<LandOutcome> => {
+const landUnderLease = async (
+    deps: LandingDeps,
+    turn: LandingTurn,
+    finished: IsolatedAgent,
+    mode: LandingDecision["mode"],
+    target: LandTarget,
+): Promise<LandOutcome> => {
     const id = turn.conversationId;
     // Another agent's land still waiting on its version commit reads as the owner's uncommitted edits; rebased and
-    // judged after that commit instead, it is history this branch can merge with.
-    await versionCommitsSettled(
-        deps,
-        finished.placement.repos.map(({ repo }) => repo),
-    );
+    // judged after that commit instead, it is history this branch can merge with. A parent's checkout has no such commit.
+    if (target.kind === "main") {
+        await versionCommitsSettled(
+            deps,
+            finished.placement.repos.map(({ repo }) => repo),
+        );
+    }
     try {
-        await turn.sync();
+        await turn.sync(upstreamOf(finished, target));
     } catch (error) {
         deps.logger.warn({ err: error, id }, "agents: pre-land sync failed, landing on the old base");
     }
     const resynced = deps.agents.entry(id);
     const landing = resynced !== undefined && isIsolated(resynced) ? resynced : finished;
-    const outcome = await deps.perf.track("agent.land", { id, mode, span: "outstanding" }, () => landAgent(deps.agentWorktrees, landing, mode));
+    const outcome = await deps.perf.track("agent.land", { id, mode, span: "outstanding" }, () =>
+        landAgent(deps.agentWorktrees, landing, mode, "outstanding", intoOf(target)),
+    );
     reportLockfileFailures(deps.logger, id, outcome);
     return outcome;
 };
@@ -142,7 +157,8 @@ const landingFacts = async (
 };
 
 // A land that changed something: recorded, verified against the whole repository off the turn's clock where it reached
-// the tree, reported, and announced.
+// the tree, reported, and announced. One into a parent's checkout is recorded and framed only: the main tree did not
+// move, and the parent's own land is what reaches it.
 async function* recordLand(
     deps: LandingDeps,
     hooks: LandingHooks,
@@ -154,6 +170,11 @@ async function* recordLand(
     const id = turn.conversationId;
     await deps.agents.recordLanded(id, landed);
     books.outcome = landedOutcomeOf(landed);
+    if (landed.into !== undefined) {
+        yield landedFrame(landed, undefined);
+        await settleParentBooks(deps, landed);
+        return;
+    }
     if (landed.landed) {
         hooks.settleLanding(id);
     }
@@ -176,6 +197,27 @@ async function* recordLand(
     });
 }
 
+// A parent's card reads its branch: what a child just put into its checkout is committed there and measured, as an ended
+// turn's own work is, so a parent at rest reads what it now holds. A parent whose own turn is live does that at its land.
+export const settleParentBooks = async (
+    deps: Pick<Services, "agents" | "conversations" | "perf" | "agentWorktrees" | "logger">,
+    landed: { readonly into?: string | undefined; readonly landed: boolean },
+): Promise<void> => {
+    if (landed.into !== undefined && landed.landed && !deps.conversations.running(landed.into)) {
+        await settleLandBooks(deps, landed.into);
+    }
+};
+
+// What lands with no rule to ask: a child's work into its parent, as the parent's in-process subagents' edits go there.
+const UNRULED: LandingDecision = { mode: "check", writes: [] };
+
+// What the sandbox's landing rules say of work reaching the owner's tree by its own land.
+const ruledDecision = async (deps: LandingDeps, turn: LandingTurn, finished: IsolatedAgent, books: LandBooks): Promise<LandingDecision> => {
+    const { rules } = await deps.sandboxSettings.get();
+    const facts = await landingFacts(deps, rules, finished, books.span);
+    return landingDecision(rules, facts, turn.autoLand ?? finished.postures.autoLand);
+};
+
 // Lands a clean turn, or runs the same pass in `measure` where it is held; nothing at all for a failed or stopped one,
 // nor for one that ended to wait on something it armed, whose wake is the turn that finishes the work.
 export async function* landTurn(deps: LandingDeps, hooks: LandingHooks, turn: LandingTurn, books: LandBooks): AsyncGenerator<AgentEvent> {
@@ -186,11 +228,11 @@ export async function* landTurn(deps: LandingDeps, hooks: LandingHooks, turn: La
     }
     // Before the decision, so a path a fixer wrote is one the rules read, and before the lease, so the land commits it.
     await hooks.fix(books.span);
-    const { rules } = await deps.sandboxSettings.get();
-    const facts = await landingFacts(deps, rules, finished, books.span);
-    const decision = landingDecision(rules, facts, turn.autoLand ?? finished.postures.autoLand);
-    // Under the land lease, so a manual land pressed meanwhile queues rather than rebasing under this one.
-    const landed = await deps.conversations.withLandLease(id, () => landUnderLease(deps, turn, finished, decision.mode));
+    const target = await landTargetOf(deps, finished);
+    const decision = target.kind === "main" && target.ruled ? await ruledDecision(deps, turn, finished, books) : UNRULED;
+    // Under the land lease, so a manual land pressed meanwhile queues rather than rebasing under this one; and under the
+    // parent's too where the work goes into its checkout.
+    const landed = await underLeases(deps.conversations, id, intoOf(target), () => landUnderLease(deps, turn, finished, decision.mode, target));
     books.reconciled = true;
     performLandingWrites(deps, id, decision.writes);
     if (landed.changed) {
@@ -200,3 +242,30 @@ export async function* landTurn(deps: LandingDeps, hooks: LandingHooks, turn: La
     // Nothing new to land, but earlier output already counts: it stays landed rather than dropping to idle.
     books.outcome = landed.diff.files > 0 ? "landed" : books.outcome;
 }
+
+// Everything the end-of-turn pass does except land on the main tree, for a turn that skipped that pass: in `measure`
+// mode, and never fatal, since this runs after the turn has already ended.
+export const settleLandBooks = async (
+    deps: Pick<Services, "agents" | "conversations" | "perf" | "agentWorktrees" | "logger">,
+    conversationId: string,
+): Promise<void> => {
+    const entry = deps.agents.entry(conversationId);
+    if (entry === undefined || !isIsolated(entry)) {
+        return;
+    }
+    try {
+        // Measured against where its work goes: a child's parent's checkout already holding it is a land, not a hold.
+        const into = intoOf(await landTargetOf(deps, entry));
+        const measured = await deps.conversations.withLandLease(conversationId, () =>
+            deps.perf.track("agent.land", { id: conversationId, mode: "measure", span: "outstanding" }, () =>
+                landAgent(deps.agentWorktrees, entry, "measure", "outstanding", into),
+            ),
+        );
+        reportLockfileFailures(deps.logger, conversationId, measured);
+        if (measured.changed) {
+            await deps.agents.recordLanded(conversationId, measured);
+        }
+    } catch (error) {
+        deps.logger.warn({ err: error, id: conversationId }, "agents: settling an ended turn's land books failed");
+    }
+};

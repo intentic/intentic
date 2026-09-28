@@ -10,7 +10,7 @@ import { headSha } from "../../git/changes/changes.js";
 import { pruneEmptiedDirs } from "../../git/changes/changes-index.js";
 import { parseNameStatusZ, parseNumstatZ, parseStatusV2 } from "../../git/changes/changes-porcelain.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
-import { agentRepoChanges, checkpointOf } from "./agent-changes.js";
+import { agentRepoChanges, anchorOf } from "./agent-changes.js";
 import { branchSha, mainBranchOf } from "./agent-refs.js";
 import { reconcileLockfile } from "./lockfile-reconcile.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
@@ -18,12 +18,16 @@ import type { AgentWorktrees } from "../worktrees/worktrees.js";
 
 // Lands a conversation's work into the main tree as uncommitted changes: preserves worktree state as a commit on
 // agent/<id>, then applies each repo's anchor..tip patch working-tree-only once every repo in the composition
-// preflights clean. Content that already reached main another way is never a conflict.
+// preflights clean. Content that already reached main another way is never a conflict. A spawned child's work lands
+// the same way into its parent's own checkout instead (`into`, land-target.ts): the tree written into is the parent's,
+// and what the delta is measured against stays the child's own anchor.
 
 // Wire LandResult plus registry state: `repos` carries advanced landedTips, `diff` is the cumulative anchor->tip stat
 // the review itself reads.
 export interface LandOutcome extends LandResult {
     readonly repos: RepoRecord[];
+    // The parent conversation whose checkout the work was written into instead of the main tree (land-target.ts).
+    readonly into?: string;
     readonly diff: { files: number; insertions: number; deletions: number };
     // False unless a `measure` re-judged a stored refusal; true lets a fresh verdict replace a stale one.
     readonly adjudicated: boolean;
@@ -282,13 +286,19 @@ const applyChanges = async (
 
 // Re-derives the stored conflict report live against today's tree, read-only: the stored report rots once the user
 // commits or the main line moves past it. The stored event itself (what keeps the card on `conflict`) is untouched.
-export const outstandingConflicts = async (worktrees: AgentWorktrees, entry: IsolatedAgent, git: GitRunner = defaultGit): Promise<LandConflict[]> => {
+export const outstandingConflicts = async (
+    worktrees: AgentWorktrees,
+    entry: IsolatedAgent,
+    // The parent whose checkout the work goes into, as the land itself would write it; undefined for the main tree.
+    into: string | undefined = undefined,
+    git: GitRunner = defaultGit,
+): Promise<LandConflict[]> => {
     const conflicts: LandConflict[] = [];
     const patchDir = await mkdtemp(join(tmpdir(), "intentic-classify-"));
     try {
         for (const { repo, base, landedTip } of entry.placement.repos) {
             await worktrees.withRepoLock(repo, async () => {
-                const main = worktrees.mainDir(repo);
+                const main = into === undefined ? worktrees.mainDir(repo) : worktrees.worktreeDir(into, repo);
                 if (!(await pathExists(join(main, ".git")))) {
                     // Vanished main checkout: reported the same way land itself reports it.
                     conflicts.push({ repo, paths: [], clean: 0 });
@@ -301,7 +311,7 @@ export const outstandingConflicts = async (worktrees: AgentWorktrees, entry: Iso
                     return;
                 }
                 const refDir = attached ? worktree : main;
-                const from = await checkpointOf(refDir, main, tip, landedTip, base, git);
+                const from = await anchorOf(entry.placement, refDir, worktrees.mainDir(repo), tip, landedTip, base, git);
                 if (tip === from) {
                     return;
                 }
@@ -333,6 +343,7 @@ export const outstandingConflicts = async (worktrees: AgentWorktrees, entry: Iso
 };
 
 interface RepoLandTarget {
+    // The checkout written into: the main tree's, or the parent's for a child landing into its parent.
     readonly main: string;
     readonly repo: string;
     readonly base: string;
@@ -422,6 +433,8 @@ const refusedWrite = async (write: RepoLandWrite, error: unknown, git: GitRunner
 interface LandRun {
     readonly worktrees: AgentWorktrees;
     readonly entry: IsolatedAgent;
+    // The parent whose checkout takes the work instead of the main tree (land-target.ts).
+    readonly into: string | undefined;
     readonly mode: LandMode;
     readonly span: AgentSpan;
     // Even a `measure` re-judges a stored refusal, or 'resolve' loops forever; only a verdict may replace a verdict.
@@ -537,19 +550,22 @@ const judgeRepo = async (
 const planRepo = async (run: LandRun, composed: RepoRecord): Promise<RepoPlanning> => {
     const { worktrees, git } = run;
     const { repo, base } = composed;
-    const main = worktrees.mainDir(repo);
+    // Where the main line is read, and the tree the patch is written into: the same checkout unless a child lands into
+    // its parent's.
+    const mainLine = worktrees.mainDir(repo);
+    const main = run.into === undefined ? mainLine : worktrees.worktreeDir(run.into, repo);
     const none = { files: 0, insertions: 0, deletions: 0 };
     if (!(await pathExists(join(main, ".git")))) {
         // Vanished main checkout: surfaced as a conflict, not silently skipped.
         return { plan: { next: composed }, conflict: { repo, paths: [], clean: 0 }, changed: true, diff: none };
     }
-    const found = await tipOf(run, repo, main);
+    const found = await tipOf(run, repo, mainLine);
     if (found === undefined) {
         return { plan: { next: composed }, changed: false, diff: none };
     }
     const { tip, refDir } = found;
     const diff = await cumulativeDiff(run, composed);
-    const from = await checkpointOf(refDir, main, tip, run.span === "cumulative" ? undefined : composed.landedTip, base, git);
+    const from = await anchorOf(run.entry.placement, refDir, mainLine, tip, run.span === "cumulative" ? undefined : composed.landedTip, base, git);
     if (tip === from) {
         // Ancestry alone can mean landed; still persisted, or the review re-offers this delta forever.
         const landed = (composed.landedTip ?? base) !== tip;
@@ -597,11 +613,14 @@ export const landAgent = async (
     mode: LandMode = "check",
     // 'outstanding' for automatic lands; 'cumulative' re-measures from base, the only rung that still sees a discard.
     span: AgentSpan = "outstanding",
+    // The parent whose checkout takes the work instead of the main tree (land-target.ts); undefined for the main tree.
+    into: string | undefined = undefined,
     git: GitRunner = defaultGit,
 ): Promise<LandOutcome> => {
     const run: LandRun = {
         worktrees,
         entry,
+        into,
         mode,
         span,
         rejudging: mode === "measure" && (entry.landing.conflicts?.length ?? 0) > 0,
@@ -631,8 +650,9 @@ export const landAgent = async (
                 const held = plannings.some((planning) => planning.held === true);
                 const conflicts = plannings.flatMap((planning) => (planning.conflict === undefined ? [] : [planning.conflict]));
                 // A refusal returns the original repo records, so a later land still applies the whole composed change.
+                const target = into === undefined ? {} : { into };
                 if (conflicts.length > 0) {
-                    return { landed: false, changed, repos: [...entry.placement.repos], diff, adjudicated, conflicts };
+                    return { landed: false, changed, repos: [...entry.placement.repos], diff, adjudicated, conflicts, ...target };
                 }
                 const written = await writePlans(
                     plannings.map(({ plan }) => plan),
@@ -641,9 +661,9 @@ export const landAgent = async (
                 );
                 const resolving = written.resolving.length > 0 ? { resolving: written.resolving } : {};
                 if (written.conflicts.length > 0) {
-                    return { landed: false, changed, repos: written.repos, diff, adjudicated: true, conflicts: written.conflicts, ...resolving };
+                    return { landed: false, changed, repos: written.repos, diff, adjudicated: true, conflicts: written.conflicts, ...resolving, ...target };
                 }
-                return { landed: !held, changed, repos: written.repos, diff, adjudicated, ...resolving, ...(held ? { held: true } : {}) };
+                return { landed: !held, changed, repos: written.repos, diff, adjudicated, ...resolving, ...(held ? { held: true } : {}), ...target };
             },
         );
         return lockfileFailures.length === 0 ? outcome : { ...outcome, lockfileFailures };

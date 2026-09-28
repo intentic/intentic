@@ -42,6 +42,25 @@ export const checkpointOf = async (
     return merged === "" ? base : merged;
 };
 
+// The anchor for a conversation's own delta, whichever line its branch stands on. A spawned child cut from its parent's
+// checkout (placement.parent) measures from its last land's tip while the branch still descends from it, else from the
+// parent commit it sits on (`base`, moved by each sync onto the parent), never from the main line: the parent's own
+// commits under it are the parent's work, not the child's. Every other branch measures as checkpointOf says.
+export const anchorOf = async (
+    placement: { readonly parent?: string | undefined },
+    dir: string,
+    main: string,
+    tip: string,
+    landedTip: string | undefined,
+    base: string,
+    git: GitRunner = defaultGit,
+): Promise<string> => {
+    if (placement.parent === undefined) {
+        return checkpointOf(dir, main, tip, landedTip, base, git);
+    }
+    return landedTip !== undefined && (await isAncestor(dir, landedTip, tip, git)) ? landedTip : base;
+};
+
 // Compares trees, not shas: a rebase can leave two commits that cancel out with nothing changed, and this reads the
 // same answer `git diff` would give.
 export const carriesContent = async (dir: string, from: string, tip: string, git: GitRunner = defaultGit): Promise<boolean> => {
@@ -85,7 +104,7 @@ const agentRepoScope = async (
     return {
         dir,
         attached,
-        from: await checkpointOf(dir, main, entry.placement.branch, span === "outstanding" ? composed.landedTip : undefined, composed.base, git),
+        from: await anchorOf(entry.placement, dir, main, entry.placement.branch, span === "outstanding" ? composed.landedTip : undefined, composed.base, git),
         scratch: attached ? await scratchOf(dir, await scratchScopeOf(composed.repo, worktrees.mainDir("root")), git) : [],
     };
 };

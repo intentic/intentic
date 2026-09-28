@@ -410,6 +410,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     serve("POST /children/send", childrenRoutes.send);
     serve("POST /children/answer", childrenRoutes.answer);
     serve("POST /children/cancel", childrenRoutes.cancel);
+    serve("POST /children/merge", childrenRoutes.merge);
     serve("GET /children", childrenRoutes.list);
 
     // The fleet surface: which conversations exist, what one is, which said a phrase — joined from the registry, the

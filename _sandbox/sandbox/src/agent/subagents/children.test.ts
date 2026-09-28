@@ -18,6 +18,7 @@ import { breakPolicyFor } from "../run/turn/turn-resume.js";
 import { clearTurnTaint, conversationTaintSource, createTurnTaint, publishTurnTaint } from "../../guard/turn-taint.js";
 import { unstubbed } from "@intentic/testing";
 import { reportChildTurn } from "./child-report.js";
+import { childLandingWords } from "./child-lands.js";
 import {
     adoptChildTurn,
     answerChild,
@@ -25,6 +26,7 @@ import {
     cancelChild,
     childReportOf,
     type ChildSpawnSpec,
+    mergeChild,
     pendingQuestionOf,
     resetChildrenForTest,
     sendToChild,
@@ -495,6 +497,7 @@ describe("the escalation ladder", () => {
             ok: false,
             message: expect.stringContaining("No such child"),
         });
+        await expect(mergeChild(services, stranger, result.id)).resolves.toEqual({ ok: false, message: "No such child of this conversation. `list` shows yours." });
         // The stranger's send started no turn; the child is still parked, unanswered.
         expect(turns).toHaveLength(1);
         expect(pendingQuestionOf(actors, result.id)).toMatchObject({ kind: "question", requestId });
@@ -515,6 +518,8 @@ describe("the escalation ladder", () => {
         await expect(sendToChild(services, parent, "call-in", "more")).resolves.toEqual(inProcess);
         await expect(answerChild(services, parent, "call-in", { anything: ["yes"] })).resolves.toEqual(inProcess);
         await expect(cancelChild(services, parent, "call-in")).resolves.toEqual(inProcess);
+        // Its edits are already in this conversation's tree: there is nothing of it to merge.
+        await expect(mergeChild(services, parent, "call-in")).resolves.toEqual(inProcess);
         // Another conversation's in-process subagent is nothing of this one's.
         await expect(sendToChild(services, { conversationId: "conv-other", cwd: "/work" }, "call-in", "more")).resolves.toEqual({
             ok: false,
@@ -698,6 +703,8 @@ describe("the shell door's arming", () => {
         answer: async () => ({ ok: true }),
         pendingQuestion: () => undefined,
         report: () => undefined,
+        landing: () => undefined,
+        merge: async () => ({ ok: true }),
         cancel: async () => ({ ok: true }),
         wait: async () => ({ outcome: "unknown-target" }),
     });
@@ -1613,6 +1620,7 @@ describe("a child whose allowance runs out", () => {
                     return entry === undefined ? undefined : conversationProfile(entry);
                 },
                 killNote: async () => undefined,
+                landingOf: (childId) => childLandingWords(fleet.agents, childId),
             },
             settledRun,
         );

@@ -1,6 +1,9 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { WorkPlace } from "../../workload/resource-budget.js";
-import { worktreeOf } from "../../conversations/registry/agents-store.js";
+import { isIsolated, worktreeOf } from "../../conversations/registry/agents-store.js";
+import { landByHandLeased } from "../../conversations/land/land-by-hand.js";
+import { landTargetOf } from "../../conversations/land/land-target.js";
+import { parentOfActor } from "../../auth/principal.js";
 import type {
     AgentEvent,
     AgentHarness,
@@ -36,7 +39,7 @@ import {
     type SubagentTurn,
     type SubagentWaitOptions,
 } from "./subagents.js";
-import { bookedRerunWords, sayToParent } from "./child-lands.js";
+import { bookedRerunWords, childLandingWords, sayToParent } from "./child-lands.js";
 import { waitForWork, type WorkWaitOutcome } from "./work-wait.js";
 import { spokenBy } from "../../seams/turn-speaker.js";
 import type { TurnInput } from "../../seams/turn-starter.js";
@@ -1312,6 +1315,47 @@ const CANCEL_NOTES = {
     paused: "Cancelled: the sandbox will not run it again by itself, and it ends as killed. Send it a message to carry on from where it stopped.",
 } as const satisfies Record<string, string>;
 
+// A path list as a parent reads it: the first few named, the rest counted.
+const namedPaths = (paths: readonly string[]): string =>
+    [paths.slice(0, 5).map((path) => `\`${path}\``).join(", "), ...(paths.length > 5 ? [`and ${paths.length - 5} more`] : [])].join(" ");
+
+/**
+ * Brings a child's work into its parent's own checkout, leaving conflict markers where it clashes with the parent's
+ * edits for the parent to resolve: the door a report or `wait` names when a child's land was held off the parent's tree,
+ * as a runtime's worktree subagent hands its branch back for the parent to merge. Only the parent that started it may,
+ * read off the registry so it outlives a restart, and only for a child whose work goes where the parent works.
+ */
+export const mergeChild = async (services: Services, parent: ChildParent, childId: string): Promise<ChildActionResult> => {
+    const entry = services.agents.entry(childId);
+    if (entry === undefined || !isIsolated(entry) || parentOfActor(entry.identity.startedBy) !== parent.conversationId) {
+        return noSuchChild(services, parent, childId);
+    }
+    if (services.conversations.running(childId)) {
+        return { ok: false, message: "It is still working: wait for it to finish, then merge what it did." };
+    }
+    const target = await landTargetOf(services, entry);
+    if (target.kind === "main" && target.ruled) {
+        return { ok: false, message: "Your checkout cannot take its work (you run on another machine, or it carries a repo you do not), so it lands the way any agent's does." };
+    }
+    const result = await landByHandLeased(services, entry, "merge", "outstanding");
+    const where = target.kind === "parent" ? "your checkout" : "the main tree";
+    if (result.landed) {
+        const open = (result.resolving ?? []).flatMap(({ repo, paths }) => paths.map((path) => (repo === "root" ? path : `${repo}/${path}`)));
+        return {
+            ok: true,
+            note: open.length === 0 ? `Its changes are in ${where} now.` : `Its changes are in ${where} now, with conflict markers to resolve in ${namedPaths(open)}.`,
+        };
+    }
+    if (!result.changed) {
+        return { ok: true, note: `Nothing of it is outstanding: ${where} already holds its work.` };
+    }
+    const blocked = (result.conflicts ?? []).flatMap(({ repo, paths }) => paths.map(({ path }) => (repo === "root" ? path : `${repo}/${path}`)));
+    return {
+        ok: false,
+        message: `Nothing was written: ${blocked.length === 0 ? "the merge could not run" : `${namedPaths(blocked)} could not take conflict markers (a binary, or uncommitted edits that keep changing)`}. Its work stays on its branch \`agent/${childId}\`.`,
+    };
+};
+
 /**
  * Stops what a child of this parent is doing or is booked to do: its running turn, the start it waits on memory or
  * another turn for, or the re-run the sandbox booked for it after a spent allowance or a turn that stopped short. A start
@@ -1358,6 +1402,10 @@ export interface ChildSupervisor {
     readonly pendingQuestion: (childId: string) => PendingChildCard | undefined;
     // Its last turn's whole closing message, where the roster row cut it.
     readonly report: (childId: string) => string | undefined;
+    // Where its work went: into the parent's own checkout, or held off it by a clash (child-lands.ts).
+    readonly landing: (childId: string) => string | undefined;
+    // Brings a child's work held off the parent's checkout by a clash into it with conflict markers to resolve.
+    readonly merge: (childId: string) => Promise<ChildActionResult>;
     // Stops a child's running turn, its pending start, or the re-run the sandbox booked for it.
     readonly cancel: (childId: string) => Promise<ChildActionResult>;
     // Parks until one of the parent's children or background commands moves, or the named one does.
@@ -1375,6 +1423,8 @@ export const childSupervisor = (services: Services, parent: ChildParent): ChildS
             : undefined,
     report: (childId) =>
         services.conversations.holdings(CHILDREN).get(childId)?.parent === parent.conversationId ? childReportOf(services.conversations, childId) : undefined,
+    landing: (childId) => (services.conversations.holdings(CHILDREN).get(childId)?.parent === parent.conversationId ? childLandingWords(services.agents, childId) : undefined),
+    merge: (childId) => mergeChild(services, parent, childId),
     cancel: (childId) => cancelChild(services, parent, childId),
     wait: (options) => waitForWork(services.conversations, parent.conversationId, options),
 });

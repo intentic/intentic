@@ -95,15 +95,19 @@ SPAWN AND SUPERVISE
   agents cancel <id>                   stop a subagent: its running turn, a start still waiting, or a re-run the
                                        sandbox booked for it by itself (\`wait\` shows that as paused). Use it
                                        before handing its task to another agent, so the original never resumes
+  agents merge <id>                    bring a subagent's finished work into your checkout when it clashed with
+                                       your edits and was held on its branch, with conflict markers to resolve
   agents list                          the subagents THIS conversation started, live first, spawned and
                                        in-process alike, each marked which (an in-process one lives in the turn
                                        that started it, so send/answer/cancel cannot reach it). Not \`ls\`, which
                                        is every conversation in the workspace
 
-A spawned subagent runs as its own conversation in an isolated copy of the repos, on the named provider's connected
-account (claude, codex, grok, kimi, gemini, cursor — e.g. --provider cursor --model composer-2.5), and its
-finished work lands the workspace's ordinary way. It sees nothing of this shell or its conversation: give it
-a self-contained task with every path, requirement and constraint. A provider nobody has connected fails
+A spawned subagent runs as its own conversation in an isolated copy of the repos cut from your conversation's current
+work, on the named provider's connected account (claude, codex, grok, kimi, gemini, cursor — e.g. --provider cursor
+--model composer-2.5). Its finished work comes back into your conversation's checkout, as an in-process subagent's
+edits do, and reaches the workspace with your land; where it clashes with your edits it is held, and \`agents merge\`
+brings it in. It sees nothing of this shell or its conversation: give it a self-contained task with every path,
+requirement and constraint. A provider nobody has connected fails
 with the words to say so.`;
 
 const die = (message) => {
@@ -526,6 +530,20 @@ const cancelChild = async (argv) => {
     process.stdout.write(`${note ?? "cancelled"}\n`);
 };
 
+const mergeChild = async (argv) => {
+    const { positional } = parseFlags(argv, []);
+    const [id] = positional;
+    if (id === undefined) {
+        return die(`agents: merge needs a subagent's id\n\n${USAGE}`);
+    }
+    const { status, text } = await call("POST", "/children/merge", JSON.stringify({ child: id }));
+    if (status !== 200) {
+        return die(`agents: ${refusalOf(text)}`);
+    }
+    const { note } = JSON.parse(text);
+    process.stdout.write(`${note ?? "merged"}\n`);
+};
+
 const answerChild = async (argv) => {
     const { flags, positional } = parseFlags(argv, ["json"]);
     const [id, ...rest] = positional;
@@ -616,6 +634,7 @@ const main = async () => {
     if (command === "message") return message(rest);
     if (command === "answer") return answerChild(rest);
     if (command === "cancel") return cancelChild(rest);
+    if (command === "merge") return mergeChild(rest);
     if (command === "list") return list();
     process.stdout.write(`${USAGE}\n`);
     if (command !== undefined && command !== "--help" && command !== "help") {

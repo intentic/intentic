@@ -25,6 +25,7 @@ const doorsOf = (
         parentArchived?: boolean;
         entries?: Record<string, { startedBy?: string; title?: string }>;
         killNote?: ChildReportDeps["killNote"];
+        landingOf?: ChildReportDeps["landingOf"];
     } = {},
 ): Doors => {
     const entries: Record<string, { startedBy?: string; title?: string }> = {
@@ -42,6 +43,7 @@ const doorsOf = (
             entryOf: (conversationId: string) => entries[conversationId],
             profileOf: (conversationId: string) => (entries[conversationId] === undefined ? undefined : { agent: "claude", model: "opus" }),
             killNote: over.killNote ?? (async () => undefined),
+            landingOf: over.landingOf ?? (() => undefined),
         },
     });
 };

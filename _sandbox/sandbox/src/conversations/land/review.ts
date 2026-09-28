@@ -10,14 +10,15 @@ import type {
 import type { Services } from "../../composition.js";
 import { headSha } from "../../git/changes/changes.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
-import { agentRepoModules, agentRepoReview, checkpointOf, presentInMain } from "./agent-changes.js";
+import { agentRepoModules, agentRepoReview, anchorOf, presentInMain } from "./agent-changes.js";
+import { intoOf, landTargetOf } from "./land-target.js";
 import { outstandingConflicts } from "./land.js";
 import { commitsCarrying, historySpanStart } from "./landed-history.js";
 
 // What a conversation's review reads, against main as it stands: the rows still its own, what main absorbed, the scratch
 // its live copy keeps, the conflicts a land would meet, and the commits that carried what already landed.
 
-export type ReviewDeps = Pick<Services, "agentWorktrees" | "logger">;
+export type ReviewDeps = Pick<Services, "agentWorktrees" | "agents" | "logger">;
 
 // The review's `scratch`: repos with none left out, and the field absent when no repo has any.
 const scratchField = (scratch: NonNullable<AgentChanges["scratch"]>): Pick<AgentChanges, "scratch"> => {
@@ -68,7 +69,7 @@ export const liveConflicts = async (deps: ReviewDeps, entry: IsolatedAgent): Pro
         ? []
         : entry.placement.repos.some(({ repo }) => deps.agentWorktrees.repoBusy(repo))
           ? entry.landing.conflicts
-          : await outstandingConflicts(deps.agentWorktrees, entry);
+          : await outstandingConflicts(deps.agentWorktrees, entry, intoOf(await landTargetOf(deps, entry)));
 // What a conversation's review shows right now, its repos read side by side and kept in composition order.
 export const reviewOf = async (deps: ReviewDeps, entry: IsolatedAgent): Promise<AgentChanges> => {
     const parts = await Promise.all(entry.placement.repos.map((composed) => repoReviewOf(deps, entry, composed)));
@@ -119,7 +120,7 @@ export const historyOf = async (deps: ReviewDeps, entry: IsolatedAgent): Promise
             }
             // Anchor read only when the recorded head can't serve: rare, saves a merge-base spawn.
             const landed = composed.landedHead === undefined ? undefined : await historySpanStart(main, composed.landedHead, head);
-            const from = landed ?? (await checkpointOf(main, main, entry.placement.branch, undefined, composed.base));
+            const from = landed ?? (await anchorOf(entry.placement, main, main, entry.placement.branch, undefined, composed.base));
             const byPath = new Map(absorbed.map((change) => [change.path, change]));
             const commits: AgentHistoryCommit[] = [];
             let placed = 0;

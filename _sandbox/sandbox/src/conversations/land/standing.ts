@@ -3,7 +3,7 @@ import { mapPool } from "@intentic/base/async";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { headSha } from "../../git/changes/changes.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
-import { checkpointOf, carriesContent } from "./agent-changes.js";
+import { anchorOf, carriesContent } from "./agent-changes.js";
 import { agentBranchTips } from "./agent-refs.js";
 import { dirtyPaths } from "./land.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
@@ -117,7 +117,12 @@ const passReaders = (worktrees: AgentWorktrees, git: GitRunner) => {
 
 // Whether the branch still carries content the main line has not absorbed, and whether it ever carried any: the two
 // halves of "outstanding" that the stored refusal is only ever an explanation of.
-const deltaOf = async (worktrees: AgentWorktrees, repos: readonly RepoShas[], git: GitRunner): Promise<{ outstanding: boolean; produced: boolean }> => {
+const deltaOf = async (
+    worktrees: AgentWorktrees,
+    placement: { readonly parent?: string | undefined },
+    repos: readonly RepoShas[],
+    git: GitRunner,
+): Promise<{ outstanding: boolean; produced: boolean }> => {
     let outstanding = false;
     let produced = false;
     for (const { composed, head, tip } of repos) {
@@ -128,7 +133,7 @@ const deltaOf = async (worktrees: AgentWorktrees, repos: readonly RepoShas[], gi
         produced ||= tip !== composed.base;
         const main = worktrees.mainDir(composed.repo);
         // Both halves matter: a rebase can leave a branch ahead of an anchor that already holds all of it.
-        const anchor = await checkpointOf(main, main, tip, composed.landedTip, composed.base, git);
+        const anchor = await anchorOf(placement, main, main, tip, composed.landedTip, composed.base, git);
         if (anchor === tip || !(await carriesContent(main, anchor, tip, git))) {
             continue;
         }
@@ -174,7 +179,7 @@ export const createLandStandings = (worktrees: AgentWorktrees, git: GitRunner = 
                 if (cached?.key === key) {
                     return;
                 }
-                const { outstanding, produced } = await deltaOf(worktrees, shas, git);
+                const { outstanding, produced } = await deltaOf(worktrees, entry.placement, shas, git);
                 // The report explains a refusal, it does not create one: nothing outstanding, nothing to be about.
                 const standing: LandStanding = outstanding ? (refusal.stands ? "conflict" : "ready") : produced ? "landed" : "idle";
                 // Causes ride only their own verdict: a report that outlived its delta says nothing about the card.
