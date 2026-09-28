@@ -48,7 +48,8 @@ const deps = (): CursorAgentDeps => ({
         item: async () => undefined,
     },
     hooks: unstubbed<CursorHookService>(`hooks`, { register: () => () => {} }),
-    logger: unstubbed<Logger>(`logger`, { warn: () => {} }),
+    // debug: closing a runtime that already exited is refused, and the host logs that refusal at debug.
+    logger: unstubbed<Logger>(`logger`, { warn: () => {}, debug: () => {} }),
 });
 
 const request = (): AgentRequest<CursorCredential> => ({
