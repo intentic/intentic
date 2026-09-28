@@ -113,14 +113,21 @@ export class ComposerSelection {
     // The account the next turn runs on (servingAccount), judged for this selection's model, for a surface that names it
     // without drawing the list (the pane's reconnect notice). The picker ticks the same row by the same rule over the same
     // rows, fed `account` and `accountNamed`, so neither can name an account the turn then does not run on.
-    readonly servingAccount = computed(() => {
+    readonly servingAccount = computed(() =>
+        servingAccount(this.provider.value, this.accountRows.value, { account: this.account.value, named: this.accountNamed.value }),
+    );
+
+    // That account's verdict for this selection's model, off the same rows: what the composer reads to know a press would
+    // only meet a spent allowance (composerIntent's `scheduled`).
+    readonly servingState = computed(() => this.accountRows.value.find((row) => row.id === this.servingAccount.value?.id)?.state);
+
+    private readonly accountRows = computed(() => {
         const provider = this.provider.value;
         const model = this.model.value === `` ? undefined : { id: this.model.value };
-        const rows = (providerAccounts.value[provider] ?? []).map((entry) => ({
+        return (providerAccounts.value[provider] ?? []).map((entry) => ({
             id: entry.id,
             state: accountState(provider, accountFacts(entry), model),
         }));
-        return servingAccount(provider, rows, { account: this.account.value, named: this.accountNamed.value });
     });
 
     // The one unsent "switched" divider notice, upserted/removed as settings toggle, frozen by the next send.

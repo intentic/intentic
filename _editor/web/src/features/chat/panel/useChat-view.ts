@@ -135,6 +135,13 @@ export const conversationView = (conversation: ComputedRef<Conversation>, cardOf
     // Account facades: this conversation's pick, plus its provider's connected accounts, for the switcher.
     account: computed<string | undefined>(() => conversation.value.selection.account.value),
     accounts: computed<readonly OauthAccount[]>(() => accountsOf(conversation.value.selection.provider.value)),
+    // The account the next turn runs on, and when it reopens (epoch s) while it reads spent with a named reset: what turns
+    // Send into a scheduled send (composerIntent). Undefined whenever a plain send is the honest press.
+    servingAccount: computed(() => conversation.value.selection.servingAccount.value?.id),
+    spentReopensAt: computed(() => {
+        const state = conversation.value.selection.servingState.value;
+        return state?.kind === `spent` ? state.reopensAt : undefined;
+    }),
     // The persona this chat acts as; undefined means anyone, keeping every connected account reachable. Resolved per
     // turn by the daemon, so a switch lands on the next message without a fresh chat.
     actsAs: computed<string | undefined>({

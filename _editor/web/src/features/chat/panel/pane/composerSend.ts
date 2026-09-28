@@ -19,7 +19,8 @@ import {
 import type { InputHistory } from "../../drafts/inputHistory";
 import type { RunThrough } from "../../models/run-settings/useRunThrough";
 import type { ChatRouting } from "../../routing/chatRoute";
-import { pickUpReady } from "../../run/pickUp";
+import { pickUpReady, pickUpShort } from "../../run/pickUp";
+import { formatReset } from "../../session/usageStatus";
 import { planFeedback } from "../../session/cardReplies";
 import { invalidateAgentTranscript } from "../../transcript/agentTranscript";
 import type { ChatAttachment } from "../../transcript/transcript";
@@ -52,6 +53,10 @@ export interface SendHost {
     readonly refocus: () => void;
     // What a press with nothing to send with does instead: opens the model list.
     readonly openModels: () => void;
+    // Sets this conversation's limit answer to resend, unless something already arms it: what makes a scheduled send
+    // fire by itself when the allowance reopens. Runs beside the send, never ahead of it (a chat's first message is what
+    // registers it), which is safe because the daemon asks the answer afresh when the window opens.
+    readonly armLimitResend: () => Promise<void>;
 }
 
 // The turn as the composer treats it: a turn a person already ended is over here from the press, whatever is still
@@ -68,8 +73,23 @@ export const useComposerSend = (host: SendHost) => {
     const { draft, attachments, editing, awaitingDecision, pickUp, queued, connected, staged } = view;
     const { live, parked, planMessage } = composerTurn(view);
     const t = useT();
-    // Running only while a pick-up counts down to a named instant (an allowance reset); nothing else here is timed.
-    const paneNow = useNow(() => pickUp.value?.readyAt !== undefined);
+    // Running only while something counts down to a named instant (an allowance reset); nothing else here is timed.
+    const paneNow = useNow(() => pickUp.value?.readyAt !== undefined || view.spentReopensAt.value !== undefined);
+    // When the account this send would run on reopens (ms), while that is still ahead; a reset the clock has passed is a
+    // stale reading, and a plain send is the honest press for it.
+    const spentUntil = computed(() => {
+        const at = view.spentReopensAt.value;
+        return at === undefined || at * 1_000 <= paneNow.value ? undefined : at * 1_000;
+    });
+    // The pane's words, plus what only a scheduled send says: when, and whether it replaces a turn already waiting.
+    const words = computed<ComposerWords>(() => {
+        const until = spentUntil.value;
+        if (until === undefined) {
+            return host.words.value;
+        }
+        const waiting = pickUp.value?.reason === `limit` && pickUp.value.held !== undefined;
+        return { ...host.words.value, reopens: formatReset(Math.round(until / 1_000), paneNow.value), replacesWaiting: waiting };
+    });
     // One snapshot of the composer for the ladder; the pane supplies only what a mounted chat alone has.
     const situation = computed<ComposerSituation>(() => ({
         staged: staged.value,
@@ -86,6 +106,7 @@ export const useComposerSend = (host: SendHost) => {
         pickUp: pickUp.value === undefined ? undefined : { ready: pickUpReady(pickUp.value, paneNow.value) },
         queued: queued.value.length,
         connected: connected.value,
+        spentUntil: spentUntil.value,
     }));
     const intent = computed(() => sendIntentOf(situation.value));
     // Why Send is refusing, in the user's words; undefined when the press will land.
@@ -176,8 +197,50 @@ export const useComposerSend = (host: SendHost) => {
         settleComposer();
     };
 
+    // Place and edit intercept and always return, since falling through with an empty box would misfire as Continue or an
+    // appended send; then the run-through badge, then `canSend` for what's left. `now` skips the scheduling, for a caller
+    // that just made room itself (a reset claimed, an account switched).
+    const submit = (options: { readonly now?: boolean } = {}): void => {
+        host.runThrough.clearFailures();
+        if (!host.reachable.value) {
+            return;
+        }
+        if (intent.value === `place` || intent.value === `edit`) {
+            if (readyToSend.value) {
+                void (intent.value === `place` ? placeDraft() : sendEdit());
+            }
+            return;
+        }
+        if (host.runThrough.claimSend()) {
+            return;
+        }
+        // Nothing to send WITH: the draft stays, so the sentence already written is what the chosen model answers.
+        if (!connected.value) {
+            host.openModels();
+            return;
+        }
+        if (!canSend.value) {
+            return;
+        }
+        // A scheduled send is an ordinary send with the limit answer set: the daemon tries it, turns it away at the door
+        // for free, and fires it when the window opens. A failed write leaves the card's own control saying `wait`.
+        if (intent.value === `scheduled` && options.now !== true) {
+            void host.armLimitResend().catch(() => undefined);
+        }
+        // Nothing typed and a turn left hanging means Continue: every gate below reads a draft that isn't there.
+        if (continueOffer.value) {
+            continueTurn();
+            return;
+        }
+        sendDraft();
+    };
+
     return {
         intent,
+        // The scheduled send's button label ("40m", "14:20", "Sun 08:20"), undefined for every other press.
+        scheduledLabel: computed(() =>
+            intent.value === `scheduled` && spentUntil.value !== undefined ? pickUpShort(spentUntil.value, paneNow.value) : undefined,
+        ),
         refusal,
         continueOffer,
         canSend,
@@ -192,7 +255,7 @@ export const useComposerSend = (host: SendHost) => {
                 return viewerPlaceholder();
             }
             // Nothing to send with: the box still takes the task, without naming a vendor nobody chose.
-            return connected.value ? placeholderFor(intent.value, host.words.value) : unconnectedPlaceholder();
+            return connected.value ? placeholderFor(intent.value, words.value) : unconnectedPlaceholder();
         }),
         sendHint: computed(() => {
             if (!host.reachable.value) {
@@ -202,7 +265,7 @@ export const useComposerSend = (host: SendHost) => {
             if (!connected.value) {
                 return unconnectedHint();
             }
-            return refusal.value ?? sendHintFor(intent.value, host.words.value);
+            return refusal.value ?? sendHintFor(intent.value, words.value);
         }),
         // Offered for every live turn, a parked one included, naming what goes with it there.
         stopLabel: computed(() => (awaitingDecision.value ? `Stop the turn` : `Stop generating`)),
@@ -212,36 +275,6 @@ export const useComposerSend = (host: SendHost) => {
             }
             return host.mobile.value ? `Stop generating` : `Stop generating (Esc)`;
         }),
-        // Place and edit intercept and always return, since falling through with an empty box would misfire as Continue
-        // or an appended send; then the run-through badge, then `canSend` for what's left.
-        submit: (): void => {
-            host.runThrough.clearFailures();
-            if (!host.reachable.value) {
-                return;
-            }
-            if (intent.value === `place` || intent.value === `edit`) {
-                if (readyToSend.value) {
-                    void (intent.value === `place` ? placeDraft() : sendEdit());
-                }
-                return;
-            }
-            if (host.runThrough.claimSend()) {
-                return;
-            }
-            // Nothing to send WITH: the draft stays, so the sentence already written is what the chosen model answers.
-            if (!connected.value) {
-                host.openModels();
-                return;
-            }
-            if (!canSend.value) {
-                return;
-            }
-            // Nothing typed and a turn left hanging means Continue: every gate below reads a draft that isn't there.
-            if (continueOffer.value) {
-                continueTurn();
-                return;
-            }
-            sendDraft();
-        },
+        submit,
     };
 };

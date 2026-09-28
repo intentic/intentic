@@ -29,6 +29,7 @@ const SETTLED: ComposerSituation = {
     pickUp: undefined,
     queued: 0,
     connected: true,
+    spentUntil: undefined,
 };
 const chat = (state: Partial<ComposerSituation>): ComposerSituation => ({ ...SETTLED, ...state });
 
@@ -48,8 +49,30 @@ it(`names the press by the most specific thing armed, in one order`, () => {
     expect(sendIntentOf(chat({ streaming: true, pendingPlan: true, editing: true, voiceAgent: true }))).toBe(`place`);
 });
 
+it(`schedules only a send that would start a turn on a spent account`, () => {
+    const spent = { spentUntil: 5_000 };
+    expect(sendIntentOf(chat(spent))).toBe(`scheduled`);
+    expect(sendIntentOf(chat({ ...spent, staged: true }))).toBe(`scheduled`);
+    // A live turn takes the words or queues them: the allowance is the running turn's business, not this press's.
+    expect(sendIntentOf(chat({ ...spent, streaming: true }))).toBe(`queue`);
+    expect(sendIntentOf(chat({ ...spent, streaming: true, steerable: true }))).toBe(`steer`);
+    // A plan's revision and an armed edit still read as what they are.
+    expect(sendIntentOf(chat({ ...spent, pendingPlan: true }))).toBe(`plan`);
+    expect(sendIntentOf(chat({ ...spent, editing: true }))).toBe(`edit`);
+    // Scheduling changes when, never whether: a staged message stays sendable.
+    expect(sendable(chat({ ...spent, staged: true }), `scheduled`, undefined)).toBe(true);
+    expect(sendable(chat(spent), `scheduled`, undefined)).toBe(false);
+});
+
+it(`says when a scheduled send goes, and that it replaces a turn already waiting`, () => {
+    const words = { ...WORDS, reopens: `Sun 08:20` };
+    expect(placeholderFor(`scheduled`, words)).toContain(`Sun 08:20`);
+    expect(sendHintFor(`scheduled`, words)).toContain(`Sun 08:20`);
+    expect(sendHintFor(`scheduled`, { ...words, replacesWaiting: true })).not.toBe(sendHintFor(`scheduled`, words));
+});
+
 it(`gives every intent its own sentence in both slots`, () => {
-    const intents: readonly SendIntent[] = [`place`, `edit`, `plan`, `idle`, `parked`, `steer`, `queue`];
+    const intents: readonly SendIntent[] = [`place`, `edit`, `plan`, `scheduled`, `idle`, `parked`, `steer`, `queue`];
     const placeholders = intents.map((intent) => placeholderFor(intent, WORDS));
     const hints = intents.map((intent) => sendHintFor(intent, WORDS));
 

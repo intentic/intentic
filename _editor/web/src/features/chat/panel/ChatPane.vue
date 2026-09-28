@@ -29,6 +29,7 @@ import { useComposerSize } from "./pane/composerSize";
 import { useComposerControls } from "./pane/composerControls";
 import { usePanePersona } from "./pane/panePersona";
 import { useComposerSend } from "./pane/composerSend";
+import { useLimitResend, useScheduledWays } from "./pane/scheduledSend";
 import { useComposerPopovers } from "./pane/composerPopovers";
 import { useComposerKeys, useRecallRing } from "./pane/composerKeys";
 import ChatCommandPopover from "../composer/ChatCommandPopover.vue";
@@ -211,8 +212,21 @@ const { personas, pickedPersona, personaName, personaNotice, pickPersona } = use
 });
 
 const history = useRecallRing(() => props.conversation);
-const { continueStrip, continueOffer, canSend, refusal, sendShown, composerPlaceholder, sendHint, stopLabel, stopHint, submit, continueTurn } =
-    useComposerSend({
+const {
+    intent,
+    scheduledLabel,
+    continueStrip,
+    continueOffer,
+    canSend,
+    refusal,
+    sendShown,
+    composerPlaceholder,
+    sendHint,
+    stopLabel,
+    stopHint,
+    submit,
+    continueTurn,
+} = useComposerSend({
         view: paneView,
         voiceAgent,
         staging,
@@ -236,7 +250,19 @@ const { continueStrip, continueOffer, canSend, refusal, sendShown, composerPlace
         openModels: () => {
             modelOpen.value = true;
         },
+        armLimitResend: useLimitResend(() => props.conversation),
     });
+
+// A spent account turns Send into a schedule; the caret beside it offers the ways that skip the wait.
+const scheduledWays = useScheduledWays({
+    conversation: () => props.conversation,
+    intent,
+    serving: paneView.servingAccount,
+    accounts: paneView.accounts,
+    submit,
+});
+const { open: waysOpen, ways: hasWays, fallbackName, canReset, resetting, note: waysNote, sendOnFallback, resetAndSend } = scheduledWays;
+const waysAnchor = ref<HTMLElement>();
 
 // Hands-free voice: the mic, and what the pause does; below the send, since the pause is the send.
 const voice = useComposerVoice({ draft, reachable, grew: grow, send: submit });
@@ -347,7 +373,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                         <form
                             class="ui-field-shell composer-frame relative flex flex-col rounded-2xl border-line-strong bg-overlay shadow-lg"
                             :class="{ 'composer-voice': voiceAgent }"
-                            @submit.prevent="submit"
+                            @submit.prevent="submit()"
                         >
                             <ChatMentionPopover
                                 v-if="mentionOpen"
@@ -599,9 +625,36 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                     >
                                         <Icon name="stop" class="text-sm" />
                                     </button>
+                                    <!-- A spent account: the press is a schedule, labelled with when it goes; the caret holds only the ways that skip the wait. -->
+                                    <div v-if="sendShown && scheduledLabel" class="flex shrink-0 items-center">
+                                        <button
+                                            type="submit"
+                                            class="composer-send composer-scheduled"
+                                            :class="{ 'composer-split-main': hasWays }"
+                                            :disabled="!canSend || !reachable"
+                                            v-tooltip.top="sendHint"
+                                            :aria-label="t(`chat.composerIntent.scheduleAria`, { when: scheduledLabel })"
+                                        >
+                                            <Icon name="clock" class="text-xs" />
+                                            <span class="text-xs tabular-nums">{{ scheduledLabel }}</span>
+                                        </button>
+                                        <button
+                                            v-if="hasWays"
+                                            ref="waysAnchor"
+                                            type="button"
+                                            class="composer-send composer-scheduled composer-split-caret"
+                                            :disabled="!canSend || !reachable"
+                                            @click="waysOpen = !waysOpen"
+                                            v-tooltip.top="t(`chat.composerIntent.otherWays`)"
+                                            :aria-expanded="waysOpen"
+                                            :aria-label="t(`chat.composerIntent.otherWays`)"
+                                        >
+                                            <Icon name="chevron-down" class="text-2xs" />
+                                        </button>
+                                    </div>
                                     <!-- Send remains available while a message can be sent. -->
                                     <button
-                                        v-if="sendShown"
+                                        v-else-if="sendShown"
                                         type="submit"
                                         class="composer-send shrink-0 max-md:h-11 max-md:w-11"
                                         :disabled="!canSend || !reachable"
@@ -668,6 +721,38 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                 @workflow="pickWorkflow($event)"
                 @manage="manageRunThrough()"
             />
+        </ResponsiveOverlay>
+        <!-- The scheduled send's other ways: each makes room now and sends at once, rather than waiting for the reopen. -->
+        <ResponsiveOverlay v-model="waysOpen" :anchor="waysAnchor" cross="end" :header="t(`chat.composerIntent.otherWays`)" panel-class="w-72 p-1">
+            <div class="flex flex-col p-1">
+                <button
+                    v-if="fallbackName"
+                    type="button"
+                    class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+                    :disabled="!canSend"
+                    @click="sendOnFallback()"
+                >
+                    <Icon name="user" class="mt-0.5 shrink-0 text-xs text-subtle" />
+                    <span class="flex min-w-0 flex-col">
+                        <span class="truncate text-sm text-content md:text-xs">{{ t(`chat.composerIntent.sendNowOn`, { account: fallbackName }) }}</span>
+                        <span class="text-2xs text-subtle">{{ t(`chat.composerIntent.sendNowOnNote`) }}</span>
+                    </span>
+                </button>
+                <button
+                    v-if="canReset"
+                    type="button"
+                    class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+                    :disabled="!canSend || resetting"
+                    @click="resetAndSend()"
+                >
+                    <Icon name="refresh" class="mt-0.5 shrink-0 text-xs text-subtle" />
+                    <span class="flex min-w-0 flex-col">
+                        <span class="truncate text-sm text-content md:text-xs">{{ t(`chat.composerIntent.resetAndSend`) }}</span>
+                        <span class="text-2xs text-subtle">{{ t(`chat.composerIntent.resetAndSendNote`) }}</span>
+                    </span>
+                </button>
+                <p v-if="waysNote" class="px-2.5 py-1 text-2xs text-warning">{{ waysNote }}</p>
+            </div>
         </ResponsiveOverlay>
         <!-- The overflow itself; its rows hand off to the three panels above. -->
         <ResponsiveOverlay v-model="moreOpen" :anchor="morePill" cross="end" :header="t(`chat.chatPane.message`)" panel-class="w-80 p-1">

@@ -848,6 +848,26 @@
         width: 2.75rem;
     }
 }
+/* A spent account's schedule: the same send, widened to carry the time it goes, and split when a caret offers ways that
+   skip the wait. Declared after the coarse-pointer size so its width wins there too. */
+.composer-send.composer-scheduled {
+    width: auto;
+    gap: 0.375rem;
+    padding-inline: 0.75rem;
+}
+.composer-send.composer-scheduled svg {
+    translate: none;
+}
+.composer-split-main {
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
+}
+.composer-send.composer-split-caret {
+    margin-inline-start: 1px;
+    padding-inline: 0.375rem 0.5rem;
+    border-start-start-radius: 0;
+    border-end-start-radius: 0;
+}
 .composer-stop {
     background: var(--color-overlay);
     color: var(--color-content);

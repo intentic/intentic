@@ -21,10 +21,11 @@ const t = useT();
 
 let unmount: (() => void) | undefined;
 // A pane's composer over a real conversation whose sends are caught at the turn; Claude connected, so it can send.
-const composerOf = () => {
+const composerOf = (spentReopensAt?: number) => {
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `a1`, label: `Claude`, connectedAt: 1 }] };
     const chat = new Conversation(`c1`);
-    const view = conversationView(computed(() => chat));
+    // The account's verdict is the selection's to read (servingState); a test states the answer rather than a usage feed.
+    const view = { ...conversationView(computed(() => chat)), spentReopensAt: computed(() => spentReopensAt) };
     const say = jest.spyOn(chat.turn, `say`).mockResolvedValue(undefined);
     const host = {
         view,
@@ -41,6 +42,7 @@ const composerOf = () => {
         pin: jest.fn(),
         refocus: jest.fn(),
         openModels: jest.fn(),
+        armLimitResend: jest.fn(() => Promise.resolve()),
     };
     let send: ReturnType<typeof useComposerSend> | undefined;
     const app = createApp({
@@ -59,6 +61,43 @@ afterEach(() => {
     unmount = undefined;
     inputHistoryFor(`sb-send`).reset();
     resetSandboxScope();
+});
+
+describe(`a scheduled send`, () => {
+    // Half a minute short of the half hour, so the label's round-up lands on 30 whichever way the seconds fell.
+    const inHalfAnHour = (): number => Math.round(Date.now() / 1_000) + 1_770;
+
+    it(`goes now and sets the limit answer, so the daemon fires it when the allowance reopens`, () => {
+        const { chat, host, say, send } = composerOf(inHalfAnHour());
+        chat.draft.value = `ship it`;
+
+        expect(send.intent.value).toBe(`scheduled`);
+        expect(send.scheduledLabel.value).toBe(`30m`);
+        send.submit();
+
+        expect(host.armLimitResend).toHaveBeenCalledTimes(1);
+        expect(say.mock.calls).toEqual([[`ship it`, [], undefined]]);
+    });
+
+    it(`sends without arming anything when the caller has just made room itself`, () => {
+        const { chat, host, say, send } = composerOf(inHalfAnHour());
+        chat.draft.value = `ship it`;
+
+        send.submit({ now: true });
+
+        expect(host.armLimitResend).not.toHaveBeenCalled();
+        expect(say).toHaveBeenCalledTimes(1);
+    });
+
+    it(`is a plain send once the named reset has passed: the reading is stale, not the account`, () => {
+        const { chat, host, send } = composerOf(Math.round(Date.now() / 1_000) - 60);
+        chat.draft.value = `ship it`;
+
+        expect(send.intent.value).toBe(`idle`);
+        expect(send.scheduledLabel.value).toBeUndefined();
+        send.submit();
+        expect(host.armLimitResend).not.toHaveBeenCalled();
+    });
 });
 
 describe(`a message`, () => {

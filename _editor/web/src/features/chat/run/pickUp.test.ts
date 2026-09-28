@@ -1,4 +1,5 @@
-import { pickUpNext, pickUpOf, pickUpStatus, pickUpWhen, pressCost } from "./pickUp";
+import { formatClock, formatWeekdayTime } from "@intentic/ui/format";
+import { pickUpNext, pickUpOf, pickUpShort, pickUpStatus, pickUpWhen, pressCost } from "./pickUp";
 
 const NOW = 1_800_000_000_000;
 
@@ -55,6 +56,24 @@ describe(`pickUpWhen`, () => {
 
     it(`counts a near instant down without a clock time nobody needs`, () => {
         expect(pickUpWhen(NOW + 4 * 60_000, NOW)).toBe(`about 4 min`);
+    });
+});
+
+// A button has room for a few characters: minutes while close, the clock today, the weekday once it is another day.
+describe(`pickUpShort`, () => {
+    it(`counts minutes while close, never down to zero`, () => {
+        expect(pickUpShort(NOW + 40 * 60_000, NOW)).toBe(`40m`);
+        expect(pickUpShort(NOW + 5_000, NOW)).toBe(`1m`);
+    });
+
+    it(`names the clock later today and the weekday past it`, () => {
+        const midnight = new Date(NOW);
+        midnight.setHours(0, 0, 0, 0);
+        const morning = midnight.getTime() + 6 * 3_600_000;
+        const evening = midnight.getTime() + 22 * 3_600_000;
+        expect(pickUpShort(evening, morning)).toBe(formatClock(evening));
+        const tomorrow = evening + 12 * 3_600_000;
+        expect(pickUpShort(tomorrow, morning)).toBe(formatWeekdayTime(tomorrow));
     });
 });
 

@@ -1,4 +1,5 @@
 import type { RetryLadder, TurnBreak, TurnBreakPolicy, TurnEnding } from "@intentic/sandbox-contract";
+import { formatClock, formatWeekdayTime } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 import { formatReset, formatWait } from "../session/usageStatus";
 
@@ -79,6 +80,16 @@ export const pickUpWhen = (at: number, now: number = Date.now()): string =>
     at - now >= CLOCK_FROM_MS
         ? t(`chat.turnBreak.whenFar`, { clock: formatReset(Math.round(at / 1_000), now), wait: formatWait(Math.round(at / 1_000), now) })
         : t(`chat.turnBreak.whenNear`, { wait: formatWait(Math.round(at / 1_000), now) });
+
+// The narrowest honest label for an instant, for a button with room for a few characters: minutes while close, the
+// clock later today, the weekday past that. The longer sentence (pickUpWhen) belongs in the tooltip beside it.
+export const pickUpShort = (at: number, now: number = Date.now()): string => {
+    const minutes = Math.ceil((at - now) / 60_000);
+    if (minutes < 90) {
+        return t(`chat.composerIntent.inMinutes`, { minutes: Math.max(1, minutes) });
+    }
+    return new Date(at).toDateString() === new Date(now).toDateString() ? formatClock(at) : formatWeekdayTime(at);
+};
 
 // The strip's one status line: what happened, and what survived. Built here rather than in the template so the wording
 // is tested directly and the several endings can't drift apart. What happens NEXT is deliberately not in it — that is

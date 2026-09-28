@@ -8,11 +8,14 @@ import { t } from "@intentic/ui/i18n";
 //  - `place`, the agent's voice is armed: words go into the transcript as the agent's own, no turn.
 //  - `edit`, a message is being replaced: the send rewinds to it and asks again.
 //  - `plan`, a plan is waiting on an answer: typing revises it rather than starting anything.
+//  - `scheduled`, nothing is running but the account the turn would run on is spent: the send still goes (the daemon
+//    turns it away before any request, for free) with this conversation's limit answer set to resend, so it fires by
+//    itself when the allowance reopens. Never wrong: a reading that went stale just lets it run now.
 //  - `idle`, nothing is running: the ordinary send.
 //  - `parked`, a turn is live but stopped on a card: the message waits for the card to be answered.
 //  - `steer`, a live turn takes mid-turn input: the message reaches the turn already running.
 //  - `queue`, a live turn that doesn't: the message waits for it to end.
-export type SendIntent = `place` | `edit` | `plan` | `idle` | `parked` | `steer` | `queue`;
+export type SendIntent = `place` | `edit` | `plan` | `scheduled` | `idle` | `parked` | `steer` | `queue`;
 
 // A stopped turn's instants, already resolved to booleans by the pane (which owns the clock), since a
 // pure predicate can't read time itself. `ready` is the only thing separating an offer from a countdown.
@@ -48,6 +51,12 @@ export interface ComposerSituation {
     readonly queued: number;
     /** There is an account to send with. */
     readonly connected: boolean;
+    /**
+     * When the account the next turn runs on reopens (ms), set only while it reads spent with a reopen still ahead, as
+     * the pane resolves it against the clock. Undefined covers every case a plain send is right: room, no reading, a
+     * spent pool with no named reset (nothing to book against), or a reset already passed.
+     */
+    readonly spentUntil: number | undefined;
 }
 
 /** The words a sentence needs filling in, whose model answers, and what an armed edit would cost. */
@@ -58,6 +67,10 @@ export interface ComposerWords {
     readonly onTrial: boolean;
     /** How many bubbles the armed edit would take with it, the edited prompt included. */
     readonly editDropped: number;
+    /** When the spent allowance reopens, as the button and the limit card both say it (pickUpWhen); `scheduled` only. */
+    readonly reopens?: string;
+    /** A turn already waits on the limit here, which the next send replaces rather than joins (the daemon supersedes it). */
+    readonly replacesWaiting?: boolean;
 }
 
 export const sendIntentOf = (situation: ComposerSituation): SendIntent => {
@@ -71,7 +84,7 @@ export const sendIntentOf = (situation: ComposerSituation): SendIntent => {
         return `plan`;
     }
     if (!situation.streaming) {
-        return `idle`;
+        return situation.spentUntil === undefined ? `idle` : `scheduled`;
     }
     if (situation.awaitingDecision) {
         return `parked`;
@@ -87,6 +100,7 @@ const PLACEHOLDER: Record<SendIntent, (words: ComposerWords) => string> = {
     // Read only once the box is cleared, exactly when "what was I doing?" needs answering.
     edit: () => t(`chat.composerIntent.placeholderEdit`),
     plan: () => t(`chat.composerIntent.placeholderPlan`),
+    scheduled: (words) => t(`chat.composerIntent.placeholderScheduled`, { when: words.reopens ?? `` }),
     idle: (words) => (words.onTrial ? t(`chat.words.askAnything`) : t(`chat.composerIntent.placeholderIdle`, { provider: words.provider })),
     parked: () => t(`chat.composerIntent.placeholderParked`),
     steer: (words) => t(`chat.composerIntent.placeholderSteer`, { provider: words.provider }),
@@ -101,6 +115,11 @@ const SEND_HINT: Record<SendIntent, (words: ComposerWords) => string> = {
             ? t(`chat.composerIntent.hintEditOne`)
             : t(`chat.composerIntent.hintEditMany`, { count: words.editDropped - 1 }, words.editDropped - 1),
     plan: () => t(`chat.composerIntent.hintPlan`),
+    // Promises the one thing the daemon guarantees: it tries now, and books the reopen only if that is refused.
+    scheduled: (words) =>
+        words.replacesWaiting === true
+            ? t(`chat.composerIntent.hintScheduledReplaces`, { when: words.reopens ?? `` })
+            : t(`chat.composerIntent.hintScheduled`, { when: words.reopens ?? `` }),
     idle: () => t(`chat.composerIntent.hintIdle`),
     // Says whether Send reaches the running turn or waits, so identical buttons don't mean different things.
     parked: () => t(`chat.composerIntent.hintParked`),
