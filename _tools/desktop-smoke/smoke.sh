@@ -129,13 +129,23 @@ CONFIRM_TITLE="Set up a sandbox on this device"
 # Say yes to it. GTK focuses the first button in the action area and rfd adds the affirmative one first, so
 # Return is "Set up" — which this never assumes: the setup-screen assertion after it is what proves it landed.
 answer_confirm() {
-    local id
-    id=$(window_titled "$CONFIRM_TITLE" | head -1)
-    [ -n "$id" ] || return 1
-    # Xvfb has no window manager to answer windowactivate's EWMH request. Focus the dialog directly
-    # before the real XTEST keypress; otherwise Return can land on the workspace behind it.
-    xdotool windowfocus --sync "$id"
-    xdotool key --clearmodifiers Return
+    local attempt id
+    # A cold start is still creating and destroying windows when the dialog appears, and xdotool exits on the
+    # X error it gets when a window vanishes mid-search or mid-focus (BadWindow on X_GetProperty). Under
+    # errexit that ended the whole tier on a bare `X Error` line, so look again instead: the setup-screen
+    # assertion after this is still what proves the answer landed.
+    for attempt in 1 2 3 4 5 6 7 8 9 10; do
+        id=$(window_titled "$CONFIRM_TITLE" 2>/dev/null | head -1 || true)
+        # Xvfb has no window manager to answer windowactivate's EWMH request. Focus the dialog directly
+        # before the real XTEST keypress; otherwise Return can land on the workspace behind it.
+        if [ -n "$id" ] && xdotool windowfocus --sync "$id" 2>/dev/null; then
+            xdotool key --clearmodifiers Return
+            return 0
+        fi
+        sleep 0.5
+    done
+    fail "the confirmation could not be focused to answer it (${attempt} attempts)"
+    return 1
 }
 
 # A deep link fired at a machine where the app is NOT running — a different mechanism from the one a running
