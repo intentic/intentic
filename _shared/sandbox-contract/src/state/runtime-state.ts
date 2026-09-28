@@ -58,9 +58,6 @@ const RUNTIME_DOMAINS = [
 
     // The audit log grew or a gateway's status moved or aged out; the log lives outside /work, so no file push carries it.
     { domain: "activity", invalidates: [["activity"], ["activity-status"]] },
-
-    // What the pre-push hook left behind: a push filed, a finding measured gone, dismissed or handed to an agent.
-    { domain: "pushes", invalidates: [["push-checks"]] },
 ] as const satisfies readonly RuntimeDomainBinding[];
 
 export const RUNTIME_DOMAIN_BINDINGS: readonly RuntimeDomainBinding[] = RUNTIME_DOMAINS;

@@ -65,8 +65,8 @@ export const messageAnswer = (wantsNote: boolean, recent: readonly string[] = []
     unusable: ({ subject }) => sentenceReason(`a commit subject`, subject, SUBJECT_MAX_WORDS) ?? commitSubjectFlaw(subject, recent),
 });
 
-// Sentence rides the changelog gate only when nothing was detected; a detected shrink always keeps one (the push gate
-// reads it), falling back to a generated sentence if the model wrote none.
+// Sentence rides the changelog gate only when nothing was detected; a detected shrink always keeps one (CI's
+// contract-shrink check reads it), falling back to a generated sentence if the model wrote none.
 const breakingNote = (removed: readonly string[], written: string, wantsNote: boolean): string => {
     if (removed.length > 0) {
         return written === `` ? fallbackBreakingNote(removed) : written;
@@ -76,7 +76,8 @@ const breakingNote = (removed: readonly string[], written: string, wantsNote: bo
 
 // The trailers the conversation's last word ended with, each a declaration it made on purpose: a `Test-Note:` for a test
 // it weakened (the assertion ratchet reads it), and `Allow: <check> — <reason>` lines for exceptions a check should
-// grant its change (verify-push.mjs reads them). Copied into the landed commit, where those readers look.
+// grant its change (CI's push check reads them: _tools/scripts/verify/verify-push.mjs, which CI's quick job runs on
+// every push). Copied into the landed commit, where those readers look.
 export const conversationTrailers = async (
     services: Services,
     entry: PersistedAgent,

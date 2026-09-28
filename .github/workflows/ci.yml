@@ -279,8 +279,8 @@ jobs:
       # lockfile against the manifests, every test file in a type-check program and under a budget, the workflow
       # policy (fork boundary, permission ceilings, provenance runners, tag triggers), the byte scan, the
       # daemon's structural gates, the publish set, the UI tiers and the rest. One list, read by this job, by the
-      # pre-push hook and by the sandbox after each file an agent writes, so a check cannot again be right and
-      # unrun: five of these were red for weeks inside a `pnpm check` chain that no job and no hook ran. Checkout
+      # `quick` job's push check and by the sandbox after each file an agent writes, so a check cannot again be right
+      # and unrun: five of these were red for weeks inside a `pnpm check` chain that no job and no hook ran. Checkout
       # only, no node_modules, no network, under two seconds.
       #
       # `--tidy=warn` BECAUSE THIS JOB IS A DAG ROOT. Every verify group and e2e-hermetic hangs off it, so a
@@ -298,19 +298,23 @@ jobs:
       - shell: bash
         run: bash _tools/scripts/verify/lint-workflows.sh
 
-  # THE FIRST ANSWER A PUSH GETS, a few minutes after it: the packages it changed type-checked and the files it
-  # changed linted. The sandbox gives main's CI one fix agent, started on the first job that fails rather than on
-  # the finished run (_sandbox/sandbox/src/ci/main-fixer.ts), so a type error this finds starts the repair while
-  # the verify groups are still building. It gates nothing and no job needs it: the verify groups still type-check
-  # and test each whole closure, dependents included.
+  # THE FIRST ANSWER A PUSH GETS, a few minutes after it: the packages it changed type-checked, then the push check.
+  # Nothing checks a land, a commit or a push on the way out, so this is where what a push broke is first said. The
+  # sandbox gives main's CI one fix agent, started on the first job that fails rather than on the finished run
+  # (_sandbox/sandbox/src/ci/main-fixer.ts), so what this finds starts the repair while the verify groups are still
+  # building. It gates nothing and no job needs it: the verify groups still type-check and test each whole closure,
+  # dependents included.
   #
   # The range is the one `changes` reads, from the same event fields. `[<base>...HEAD]` selects the packages with a
   # file changed between the two commits and reads nothing of the working tree, and `--only` leaves their
   # dependencies' typecheck out: the declarations those read come from the emit, the same one verify.yml's prepass
-  # runs. The lint is `pnpm lint`, the rules the push reports, over the changed files and without autofix.
+  # runs. The push check (_tools/scripts/verify/verify-push.mjs, `pnpm verify:push` by hand) asks the same range what
+  # only a range can answer: every check the manifest lists with a `tidy` finding counted only when the range added
+  # it (preflight merely warns about tidiness, and the nightly tidy job reads it a day later with no author attached),
+  # the assertion ratchet over the range's test files, and `pnpm lint` over the files it changed.
   #
-  # The typecheck runs before the lint so that a failure stays in the log's tail, which is what the fix agent is
-  # handed: a lint that passes prints a few lines, and turbo's output is cut to the tasks that failed.
+  # The typecheck runs before the push check so that a failure stays in the log's tail, which is what the fix agent
+  # is handed: a push check that passes prints a few lines, and turbo's output is cut to the tasks that failed.
   quick:
     needs: [changes, preflight]
     if: ${{ !cancelled() && needs.preflight.result == 'success' }}
@@ -379,20 +383,13 @@ jobs:
         run: >-
           pnpm turbo run typecheck "--filter=[$BASE...HEAD]" --only --continue=dependencies-successful
           --output-logs=errors-only --concurrency="$(node _tools/scripts/verify/test-workers.mjs --typecheck-concurrency)"
-      # Every file oxlint reads that the push added or changed, deletions left out. `--no-error-on-unmatched-pattern`
-      # passes a push whose every file the config ignores, which oxlint would otherwise fail for having nothing to read.
-      - name: Lint the files the push changed
+      # After the install: the linter and the checks that read templates need it, and so does the tidy checks' run at
+      # the base, in a throwaway worktree lent this one's node_modules (check-snapshot.mjs).
+      - name: Check what the push changed
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
-        shell: bash
         env:
           BASE: ${{ steps.base.outputs.sha }}
-        run: |
-          set -euo pipefail
-          list="$RUNNER_TEMP/quick-lint-files"
-          git diff -z --name-only --diff-filter=d "$BASE" HEAD -- \
-            '*.js' '*.jsx' '*.mjs' '*.cjs' '*.ts' '*.tsx' '*.mts' '*.cts' '*.vue' '*.astro' > "$list"
-          echo "$(tr -cd '\0' < "$list" | wc -c) changed file(s) for oxlint"
-          xargs -0 -r pnpm lint --no-error-on-unmatched-pattern < "$list"
+        run: node _tools/scripts/verify/verify-push.mjs --base "$BASE"
 
   # THE THINGS ABOUT THE DATABASE NO OTHER JOB CAN SEE — that the migration history is append-only, that every
   # new entry on it can apply to a database which already holds rows, and that replaying the lot produces

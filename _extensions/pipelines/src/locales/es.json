@@ -1,43 +1,4 @@
 {
-    "leftAtPush": {
-        "attempt": "Intento {count}",
-        "clean": "limpio",
-        "close": "Cerrar",
-        "commits": "{count} commit | {count} commits",
-        "continue": "Continuar",
-        "dismissAll": "Descartar todo",
-        "dismissFailed": "No se pudo descartar",
-        "dismissHint": "Descartar: no se arreglará",
-        "dismissOne": "Descartar {source}",
-        "dismissed": "{count} hallazgo descartado | {count} hallazgos descartados",
-        "earlier": "+{count} push anterior | +{count} pushes anteriores",
-        "earlierPushes": "Mostrar {count} push anterior | Mostrar {count} pushes anteriores",
-        "endsWhenDismissed": "Ninguna medición posterior puede ver que ha desaparecido: termina cuando lo descartas.",
-        "explain": "El push se hizo; su comprobación dejó pasar esto. Cada hallazgo espera aquí hasta que una medición posterior ya no lo encuentre o lo descartes. Nadie se pone con ellos a menos que los entregues.",
-        "fewer": "Mostrar menos",
-        "from": "de {sha} {subject}",
-        "handFailed": "No se pudieron entregar a un agente",
-        "handHint": "Abre una conversación aislada con cada hallazgo abierto de aquí, el comando que lo vuelve a mostrar y los commits que lo trajeron.",
-        "handOver": "Entregar a un agente",
-        "handled": "atendido",
-        "hint": "Lo que encontró la comprobación previa al push en tus pushes. Nunca detiene un push.",
-        "lastPush": "Último push",
-        "left": "{count} pendiente | {count} pendientes",
-        "more": "+{count} más | +{count} más",
-        "nothingLeft": "Nada pendiente del push",
-        "openAttempt": "{label}: abrir la conversación",
-        "recent": "Pushes recientes",
-        "recheck": "Medir de nuevo",
-        "rechecked": "{project} medido de nuevo: {resolved} resueltos, {open} aún abiertos",
-        "refused": "rechazado",
-        "refusedHint": "El propio hook previo al push del repositorio rechazó este push, así que nada llegó al remoto. Lo que dijo queda pendiente como cualquier otro hallazgo.",
-        "restoreFailed": "No se pudieron volver a abrir",
-        "stillOpen": "{count} hallazgo aún abierto | {count} hallazgos aún abiertos",
-        "title": "Pendiente del push",
-        "undo": "Deshacer",
-        "unmeasured": "No se pudo medir {project}; no ha cambiado nada",
-        "workspace": "espacio de trabajo"
-    },
     "mainRed": {
         "failing": "Fallando",
         "fixAgent": "Agente de arreglo",
@@ -101,8 +62,5 @@
         "repository": "Repositorio",
         "runs": "{runs} ejecuciones",
         "thisRepo": "este repo"
-    },
-    "rail": {
-        "leftAtPush": "{count} hallazgo pendiente del push | {count} hallazgos pendientes del push"
     }
 }

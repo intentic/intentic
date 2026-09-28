@@ -4,7 +4,7 @@ import type { TurnInput } from "../../seams/turn-starter.js";
 import { archiveAgents } from "../registry/archive.js";
 
 /* ONE FAILURE, MANY ATTEMPTS, ONE LIVE ANSWER — the daemon's side of it, for a fix the daemon itself starts: a red CI
-   run (ci/ci-fix.ts: POST /ci/fix, and main's one fix agent in ci/main-fixer.ts) or what a push left (push-fix.ts). */
+   run (ci/ci-fix.ts: POST /ci/fix, and main's one fix agent in ci/main-fixer.ts). */
 
 export interface FixAttemptDeps {
     // The live roster and the archive as the registry holds them now; both count toward the next attempt's number.
@@ -92,8 +92,7 @@ const reopened = async (services: Services, pressed: boolean, conversationId: st
 // The earlier attempt would not be filed away, so no new one was started; carries the registry's reason.
 export class AttemptRefused extends Error {}
 
-// How the daemon's own fix attempts reach the fleet, for every failure it starts one on: a failed CI run, or what a push
-// left behind.
+// How the daemon's own fix attempts reach the fleet, for every failure it starts one on: a failed CI run.
 // `pressed`: somebody pressed for this attempt, the door a person's words come through, so an archived conversation it
 // continues reopens first (clearArchived) exactly as a person's message would reopen it.
 export const daemonFixAttemptDeps = (services: Services, request: { readonly pressed: boolean; readonly picked: boolean }): FixAttemptDeps => ({

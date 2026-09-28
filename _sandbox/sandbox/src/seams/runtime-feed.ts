@@ -28,8 +28,6 @@ const THROTTLE_MS: Record<RuntimeDomain, number> = {
     engines: 250,
     // A turn's start and end log in bursts; each read re-scans the whole log.
     activity: 1000,
-    // A push files its report once it reaches the remote; this folds a recheck's burst of resolutions into one frame.
-    pushes: 500,
 };
 
 const subscribers = new Set<(domains: RuntimeDomain[]) => void>();

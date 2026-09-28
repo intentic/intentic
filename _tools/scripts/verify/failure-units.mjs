@@ -6,9 +6,6 @@ import { SUITE_KINDS } from "../../constants/src/test-suites.mjs";
 // Where turbo writes `--summarize` output, relative to the directory it ran in.
 const RUNS_DIR = ".turbo/runs";
 
-// Units a verdict keeps; past this a verdict says it was truncated and its failed tasks stand in for the rest.
-export const UNITS_KEPT = 400;
-
 // The JUnit report one `bun test` run of one package writes (suites.mjs) and this module reads back.
 export const junitFile = (dir, packageName, kind) => join(dir, `${packageName.replace(/[^a-zA-Z0-9_-]+/g, "_")}.${kind}.xml`);
 
@@ -178,37 +175,3 @@ export const rerunCommand = (tasks) => {
     const more = names.length > COMMAND_PACKAGES ? ` (+${names.length - COMMAND_PACKAGES} more)` : "";
     return `pnpm turbo run ${kinds.join(" ")} --only ${filters.join(" ")}${more}`;
 };
-
-// Counted per unit, so one more copy of a standing failure is still `mine`; a whole-task unit matches only itself.
-export const judgeUnits = (current, known) => {
-    const left = new Map();
-    for (const unit of known) {
-        left.set(unit, (left.get(unit) ?? 0) + 1);
-    }
-    const mine = [];
-    const standing = [];
-    for (const unit of current) {
-        const remaining = left.get(unit) ?? 0;
-        if (remaining > 0) {
-            left.set(unit, remaining - 1);
-            standing.push(unit);
-        } else {
-            mine.push(unit);
-        }
-    }
-    return { mine, standing };
-};
-
-// Units measured now against a recorded verdict for their base: `held` are new, `unsure` fall in a task a truncated verdict cut.
-export const againstBaseline = (current, verdict) => {
-    const { mine, standing } = judgeUnits(current, verdict?.status === "failed" ? (verdict.failures ?? []) : []);
-    const cut = new Set(verdict?.truncated === true ? (verdict.failedTasks ?? []) : []);
-    return { held: mine.filter((unit) => !cut.has(taskOf(unit))), standing, unsure: mine.filter((unit) => cut.has(taskOf(unit))) };
-};
-
-// A red run's units as a verdict keeps them: capped, with its failed tasks naming what a truncated list left out.
-export const verdictUnits = (units, tasks) => ({
-    failures: units.slice(0, UNITS_KEPT),
-    failedTasks: [...new Set(tasks.map(({ taskId }) => taskId))],
-    truncated: units.length > UNITS_KEPT,
-});

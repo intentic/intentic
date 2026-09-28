@@ -1,30 +1,21 @@
-// ONE READING OF WHAT A CHANGE BROUGHT IN, as typed findings: the push asks it of the pushed range (verify-push.mjs,
-// against the merge-base with the remote), and the push recheck measures the tree's linter with the same reading
-// (push-report.mjs), so the measurement that clears a finding names it the way the push that left it did.
-//
-// A finding is the push report's shape (push-report.mjs): `source` (what measured it, this repository's word), `text` as
-// printed, `key` (position-free, what a later measurement names it by), `recheckable`, and the `kind`/`check` an older
-// daemon reads.
+// ONE READING OF WHAT A RANGE BROUGHT IN, for the push check (verify-push.mjs): the linter's findings, one per line it
+// printed, and the tidy checks the tree fails judged against the commit the range is built on.
 import { spawnSync } from "node:child_process";
 import { allowedInRange } from "../../checks/lib/allow.mjs";
 import { reportsAt } from "./check-snapshot.mjs";
-import { judgeAgainstBase, problemLines } from "./turn-findings.mjs";
+import { judgeAgainstBase } from "./turn-findings.mjs";
 
 // `[Error/rule]` for a rule's finding, bare `[Error]` for a file oxlint could not parse at all.
 const LINT_LINE = /^(.+?):\d+:\d+: (.*) \[\w+(?:\/(.+))?\]$/;
 
 export const LINT_COMMAND = "pnpm lint";
 
-// The one reading of oxlint's `unix` lines: a finding per line, keyed without the position, so an edit above a finding
-// does not make it a new one.
+// The one reading of oxlint's `unix` lines: a finding per line, as printed, with the file it names. Its summary line
+// ("2 problems") is none.
 export const lintFindings = (output) =>
     output.split("\n").flatMap((line) => {
         const found = LINT_LINE.exec(line.trim());
-        if (found === null) {
-            return [];
-        }
-        const key = `lint ${found[1]}: ${found[3] ?? "parse"} ${found[2]}`;
-        return [{ kind: "lint", source: "lint", recheckable: true, text: line.trim(), key, path: found[1], command: LINT_COMMAND }];
+        return found === null ? [] : [{ text: line.trim(), path: found[1] }];
     });
 
 /**
@@ -77,26 +68,3 @@ export const judgeTidy = (root, base, untidy) => {
         theirs: judged.filter(({ added, unsure }) => added.length === 0 && unsure.length === 0),
     };
 };
-
-// The key a later measurement names a check's line by: whitespace collapsed and every run of digits one `#`, so the same
-// finding is recognised days and several edits later (push-report.mjs measures with it too).
-export const findingKey = (line) => line.trim().replace(/\s+/g, " ").replace(/\d+/g, "#");
-
-export const checkCommand = (id) => `node _tools/checks/run.mjs --only ${id}`;
-
-// The tidy lines a change added, as findings. A line that is the whole-check message (a check that passed at the base
-// and fails in a shape with no finding lines) is no line the check printed, so it gets no key.
-export const tidyFindings = (mine) =>
-    mine.flatMap(({ verdict, added }) => {
-        const printed = new Set(problemLines(verdict).values());
-        return added.map((line) => ({
-            kind: "check",
-            check: verdict.id,
-            source: verdict.id,
-            recheckable: true,
-            gate: "tidy",
-            text: line.trim(),
-            key: printed.has(line) ? findingKey(line) : "",
-            command: checkCommand(verdict.id),
-        }));
-    });

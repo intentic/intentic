@@ -56,6 +56,7 @@ import { sharesDocument } from "../share/share-store.js";
 import { conversationsSchemaStep } from "../store/conversations-db.js";
 import { conversionsDocument } from "../store/evolution/state-convergence.js";
 import { landCheckLeftoversStep } from "../store/evolution/steps/land-check-leftovers.js";
+import { pushChecksLeftoversStep } from "../store/evolution/steps/push-checks-leftovers.js";
 import { stateRegroupStep } from "../store/evolution/steps/state-regroup.js";
 import { issueInstallsDocument, webchatInstallsDocument } from "../store/installs.js";
 import { newestRunDocument } from "../store/newest-run.js";
@@ -73,7 +74,6 @@ import { usageParksDocument } from "../usage/usage-parks.js";
 import { walletLedgerDocument } from "../wallet/wallet-ledger.js";
 import { webchatOutboxDocument } from "../webchat/webchat-outbox.js";
 import { workflowGateTokensStep, workflowRunsDocument, workflowsDocument } from "../workflows/workflows-store.js";
-import { pushChecksDocument } from "../workspace/deps/push-checks-store.js";
 import { dependencyRequestsDocument } from "../workspace/deps/reconcile-deps.js";
 
 export const stateDocuments = (): readonly DocumentSpec[] => [
@@ -157,10 +157,9 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     webchatOutboxDocument,
     workflowRunsDocument,
     workflowsDocument,
-    pushChecksDocument,
     dependencyRequestsDocument,
 ];
 
 // By id, not by the order modules happened to load in: the plan must not depend on an import graph.
 export const stateSteps = (): readonly StructuralStep[] =>
-    [automationsRelocationStep, pre1308ImportStep, conversationsSchemaStep, landCheckLeftoversStep, stateRegroupStep, workflowGateTokensStep].toSorted((a, b) => a.id.localeCompare(b.id));
+    [automationsRelocationStep, pre1308ImportStep, conversationsSchemaStep, landCheckLeftoversStep, pushChecksLeftoversStep, stateRegroupStep, workflowGateTokensStep].toSorted((a, b) => a.id.localeCompare(b.id));

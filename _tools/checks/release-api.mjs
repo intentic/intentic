@@ -82,7 +82,7 @@ for (const path of trackedFiles()) {
     }
 }
 
-// Vouches for less where bash is absent (a Windows pre-push hook).
+// Vouches for less where bash is absent (a Windows checkout).
 const drill = spawnSync("bash", ["-c", DRILL], { encoding: "utf8", env: { ...process.env, SCRIPT: join(root, SCRIPT) } });
 if (drill.error !== undefined) {
     vouched.push(`release-api: call sites checked; the helpers were not exercised (no usable bash here)`);

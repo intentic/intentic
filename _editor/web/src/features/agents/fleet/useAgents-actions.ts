@@ -152,9 +152,9 @@ export const open = (agent: Parameters<typeof agentSeed>[0], mode: "peek" | "kee
     markSeen(agent.id);
 };
 
-// A conversation named by id rather than pressed on its card (the fix agent a push was handed to, a session the metrics
-// panel lists), opened the way its card would. One the roster no longer carries (archived) opens by its session, the
-// same door the board and the rail use for a conversation no card stands for.
+// A conversation named by id rather than pressed on its card (a session the metrics panel lists), opened the way its
+// card would. One the roster no longer carries (archived) opens by its session, the same door the board and the rail
+// use for a conversation no card stands for.
 export const openById = (conversationId: string, title?: string): void => {
     const agent = agentById(conversationId);
     if (agent !== undefined) {

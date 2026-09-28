@@ -109,14 +109,6 @@ export const MODEL_ROLES = [
         icon: "list-check",
     },
     {
-        id: "pre-push-fix",
-        label: "Pre-push fixes",
-        blurb: "The fix proposed when a check fails on the way to a push.",
-        kind: "run",
-        trigger: "pressed",
-        icon: "cloud-upload",
-    },
-    {
         // Pressed trigger: the owner's approval click starts this turn; the queue between is just machinery.
         id: "approval-queue",
         label: "Approvals queue",

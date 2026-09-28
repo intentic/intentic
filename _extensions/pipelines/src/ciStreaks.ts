@@ -1,4 +1,4 @@
-import { headStreak, isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract";
+import { isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract";
 
 // Whether a branch is red right now, judged on its last commit rather than its last run: near-simultaneous workflows
 // mean a green one can hide a red one. A state, not a one-time edge: it clears only when a later commit passes, never
@@ -70,9 +70,9 @@ export const failureStreaks = (runs: readonly PipelineRun[]): FailureStreak[] =>
         if (head === undefined || head.failed.length === 0) {
             continue;
         }
-        // Runs back to the last passing commit, or the window's oldest run; never looks newer than it is. The one streak
-        // rule every red shares (contract, headStreak).
-        const red = headStreak(commits, (commit) => commit.failed.length > 0);
+        // Runs back to the last passing commit, or the window's oldest run; never looks newer than it is.
+        const clean = commits.findIndex((commit) => commit.failed.length === 0);
+        const red = clean === -1 ? commits : commits.slice(0, clean);
         const failed = red.flatMap((commit) => [...commit.failed]);
         streaks.push({
             repo: head.newest.repo,

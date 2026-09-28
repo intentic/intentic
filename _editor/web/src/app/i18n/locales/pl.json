@@ -3786,8 +3786,6 @@
             "reAllowInBrowsers": "Zezwól na nie ponownie w ustawieniach witryn swojej przeglądarki"
         },
         "pushQuestionBody": {
-            "fixAgentOpenConversation": "Napraw agenta: {toLowerCase} — otwórz rozmowę",
-            "setAttemptAsideStart": "Odłóż tę próbę i zacznij nową — najpierw otwiera wybór",
             "showTerminal": "Pokaż terminal"
         },
         "quickOpen": {
@@ -4522,9 +4520,7 @@
             "unstaged": "Poza indeksem",
             "untrackedLeave": "{count} nieśledzony plik znika z dysku: nigdy nie był zacommitowany, więc git nie ma kopii: | {count} nieśledzone pliki znikają z dysku: nigdy nie były zacommitowane, więc git nie ma kopii: | {count} nieśledzonych plików znika z dysku: nigdy nie były zacommitowane, więc git nie ma kopii:",
             "watchRun": "Obejrzyj, jak działa",
-            "leftAtPush": "{count} zostało po pushu | {count} zostały po pushu | {count} zostało po pushu",
-            "you": "Ty",
-            "pushOutdated": "zaktualizuj sandbox, by zobaczyć, co zostawił"
+            "you": "Ty"
         },
         "rowActions": {
             "openManagementPanel": "Otwórz panel zarządzania"
@@ -4590,8 +4586,7 @@
         },
         "usePushFlow": {
             "failed": "{verb} nie powiodło się",
-            "reposRefusedEachRow": "{count} repozytoriów to odrzuciło, każdy wiersz mówi dlaczego.",
-            "handFailed": "Nie udało się przekazać tego agentowi"
+            "reposRefusedEachRow": "{count} repozytoriów to odrzuciło, każdy wiersz mówi dlaczego."
         },
         "usePushRun": {
             "pushing": "Push: {repo}"

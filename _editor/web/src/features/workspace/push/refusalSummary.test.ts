@@ -1,5 +1,5 @@
 import type { CommandRun, PushRun } from "@intentic/sandbox-contract";
-import { outcomeSummary, refusalSummary } from "./fixProposal";
+import { outcomeSummary, refusalSummary } from "./refusalSummary";
 
 const check: CommandRun = { status: `failed`, command: `pnpm check`, exitCode: 1, output: `FAIL src/a.test.ts\n  ✗ adds` };
 const push: PushRun = {

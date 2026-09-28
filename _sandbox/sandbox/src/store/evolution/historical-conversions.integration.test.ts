@@ -13,6 +13,7 @@ import { clearNewestRun } from "../newest-run.js";
 import { commitState, convergeState, resetStateStatus, type StateRoots } from "./state-convergence.js";
 import type { StructuralStep } from "./state-steps.js";
 import { landCheckLeftoversStep } from "./steps/land-check-leftovers.js";
+import { pushChecksLeftoversStep } from "./steps/push-checks-leftovers.js";
 import { stateRegroupStep } from "./steps/state-regroup.js";
 
 // The conversions each document declares for the breaks its history holds, run over workspaces laid out the way the
@@ -178,22 +179,41 @@ test("what the retired check after landing kept is deleted, its folder with it, 
     const roots = await volumes();
     const verdicts = join(roots.workspace, STATE_DIR, "records", "verify.json");
     const runs = join(roots.workspace, STATE_DIR, "local", "verify");
-    const kept = join(roots.workspace, STATE_DIR, "records", "push-checks.json");
+    const kept = join(roots.workspace, stateRelPath(".intentic/records/automation-runs.json"));
     await put(verdicts, { projects: {}, runs: [] });
     await put(join(runs, "root.log"), "pnpm verify\n");
     await put(join(runs, "root.status"), 0);
-    await put(kept, { pushes: [] });
+    await put(kept, { nightly: [] });
 
     const outcome = await converge(roots, [], [landCheckLeftoversStep]);
 
     expect(outcome.plan?.steps).toEqual([{ document: "land-check-leftovers", change: "deletes 3 file(s) the retired check after landing left behind" }]);
-    // The conversion ledger records what the boot did; the push record is untouched.
-    expect((await readdir(join(roots.workspace, STATE_DIR, "records"))).toSorted()).toEqual(["conversions.json", "push-checks.json"]);
+    // The conversion ledger records what the boot did; the automations' run ledger beside it is untouched.
+    expect((await readdir(join(roots.workspace, STATE_DIR, "records"))).toSorted()).toEqual(["automation-runs.json", "conversions.json"]);
     // The runs' folder went with its last file.
     expect(await readdir(join(roots.workspace, STATE_DIR, "local"))).not.toContain("verify");
-    expect(await json(kept)).toEqual({ pushes: [] });
+    expect(await json(kept)).toEqual({ nightly: [] });
     // Its own output is nothing to do, for the next boot as for this one.
     await commitState(roots);
     clearNewestRun();
     expect((await converge(roots, [], [landCheckLeftoversStep])).plan?.steps ?? []).toEqual([]);
+});
+
+test("what the retired push checks kept is deleted, and nothing else is touched", async () => {
+    const roots = await volumes();
+    const record = join(roots.workspace, STATE_DIR, "records", "push-checks.json");
+    const kept = join(roots.workspace, stateRelPath(".intentic/records/automation-runs.json"));
+    await put(record, { pushes: [{ project: "app", id: "r1", at: 1, head: "a".repeat(40), commits: 1, findings: [] }], reds: {}, ended: {}, seen: ["r1"] });
+    await put(kept, { nightly: [] });
+
+    const outcome = await converge(roots, [], [pushChecksLeftoversStep]);
+
+    expect(outcome.plan?.steps).toEqual([{ document: "push-checks-leftovers", change: "deletes the record the retired push checks left behind" }]);
+    // The conversion ledger records what the boot did; the automations' run ledger beside it is untouched.
+    expect((await readdir(join(roots.workspace, STATE_DIR, "records"))).toSorted()).toEqual(["automation-runs.json", "conversions.json"]);
+    expect(await json(kept)).toEqual({ nightly: [] });
+    // Its own output is nothing to do, for the next boot as for this one.
+    await commitState(roots);
+    clearNewestRun();
+    expect((await converge(roots, [], [pushChecksLeftoversStep])).plan?.steps ?? []).toEqual([]);
 });

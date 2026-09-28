@@ -45,7 +45,6 @@ const PUSHED_READS: Readonly<Record<string, readonly ProcedureName[]>> = {
     needs: [`needs.list`, `needs.grants`],
     panels: [`panels.list`],
     personas: [`personas.list`, `personas.kit`],
-    "push-checks": [`workspace.pushChecks`],
     "rule-firings": [`settings.firings`],
     "safety-log": [`safety.log`],
     "safety-policy": [`safety.policy`],

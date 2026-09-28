@@ -144,6 +144,20 @@ describe("sqliteAgentsStore", () => {
         expect(saved).toEqual({ ...newer, archivedAt: 20 });
     });
 
+    // The pre-push fix's model role went with the push checks (2026-09-28); a turn a record kept queued on it still runs.
+    it("a turn queued on the retired pre-push fix's model role reads back on the pipeline fix's", () => {
+        const { db, store } = fresh();
+        const queued = <Role extends string>(runRole: Role) => ({
+            items: [{ id: "m1", voice: "person" as const, queuedAt: 3, revision: 1, turn: { conversationId: "q", prompt: "fix what the push left", runRole } }],
+            revision: 1,
+        });
+        // A shared-tree conversation's record is the entry less its id, which is the row's key.
+        const { id, ...record } = conversationEntry({ id: "q" });
+        db.db.prepare("INSERT INTO conversation(id, record) VALUES (?, ?)").run(id, JSON.stringify({ ...record, queue: queued("pre-push-fix") }));
+
+        expect(store.load()).toEqual([conversationEntry({ id: "q", queue: queued("pipeline-fix") })]);
+    });
+
     it("removing a conversation takes every row keyed by it in every table, and nobody else's", () => {
         const { db, store } = fresh();
         store.save([isolatedAgent([{ repo: "root", base: "a" }], { id: "gone" }), isolatedAgent([{ repo: "root", base: "a" }], { id: "kept" })]);

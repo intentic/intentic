@@ -1,12 +1,5 @@
 import type { PipelineRun } from "@intentic/sandbox-contract";
-import { extensionIdOf } from "@intentic/extension-manifest";
-import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { attentionBadge, inFlightNote } from "./ciAttention";
-import { messages } from "./i18n";
-import { manifest } from "./manifest";
-
-// The host mounts the catalog before it calls `activate`; a suite reading the tile's words has to mount it itself.
-await registerExtensionMessages(extensionIdOf(manifest), messages);
 
 // The rail's other sentence: not "is this branch red" (ciStreaks) but "is CI doing anything right now". It must count
 // the way the board's own tally counts, or the tile and the header it opens would disagree about the same runs.
@@ -44,39 +37,29 @@ test("a broken branch does not silence it: the fix's own re-run is what the read
     expect(inFlightNote([run(1, "failed"), run(2, "running")])).toBe("1 running");
 });
 
-// THE TILE AS A WHOLE: a broken branch is the loud count; what pushes left is a quieter one, drawn only while nothing
-// is broken, and otherwise said in the tooltip so it never hides a red nor outranks one.
+// THE TILE AS A WHOLE: a broken branch is the count, in the rail's only danger tone, and what is in flight rides beside
+// it rather than being hidden by it.
 describe(`attentionBadge`, () => {
-    it(`stands down while nothing is broken, owed or moving`, () => {
-        expect(attentionBadge([run(1, "success")], 0)).toBeUndefined();
-        expect(attentionBadge([], 0)).toBeUndefined();
+    it(`stands down while nothing is broken or moving`, () => {
+        expect(attentionBadge([run(1, "success")])).toBeUndefined();
+        expect(attentionBadge([])).toBeUndefined();
     });
 
-    it(`counts what pushes left in the warning tone while CI is not red`, () => {
-        expect(attentionBadge([run(1, "success")], 3)).toEqual({ count: 3, tone: "warning", tooltip: "3 findings left at push" });
-        expect(attentionBadge([], 1)).toEqual({ count: 1, tone: "warning", tooltip: "1 finding left at push" });
-    });
-
-    it(`counts broken branches over what pushes left, and names both`, () => {
-        expect(attentionBadge([run(2, "failed")], 4)).toEqual({
-            count: 1,
-            tone: "danger",
-            tooltip: "intentic main is failing: 1 failed run on sha2 · 4 findings left at push",
-        });
-        expect(attentionBadge([run(2, "failed")], 0)).toEqual({
+    it(`counts broken branches in the danger tone, and names the one there is`, () => {
+        expect(attentionBadge([run(2, "failed")])).toEqual({
             count: 1,
             tone: "danger",
             tooltip: "intentic main is failing: 1 failed run on sha2",
         });
     });
 
-    it(`keeps the running mark beside either count`, () => {
-        expect(attentionBadge([run(1, "success"), run(2, "running")], 2)).toEqual({
-            count: 2,
-            tone: "warning",
-            tooltip: "2 findings left at push",
+    it(`keeps the running mark beside the count, and alone once nothing is broken`, () => {
+        expect(attentionBadge([run(1, "failed"), run(2, "running")])).toEqual({
+            count: 1,
+            tone: "danger",
+            tooltip: "intentic main is failing: 1 failed run on sha1",
             running: "1 running",
         });
-        expect(attentionBadge([run(1, "running")], 0)).toEqual({ running: "1 running" });
+        expect(attentionBadge([run(1, "running")])).toEqual({ running: "1 running" });
     });
 });

@@ -56,13 +56,13 @@ memory. CI runs all of it on what the owner pushes.
 
 **After the land**: the dependency reconciler installs when the land moved a manifest or the lockfile
 (`_sandbox/sandbox/src/workspace/deps/reconcile-deps.ts`), and nothing else runs. The owner commits and pushes, and CI
-checks the commit (`.github/workflows/ci.yml`: its `quick` job type-checks the packages a push changed and lints the
-files it changed within minutes, and the verify groups build and test the rest). When main goes red, one fix agent
-takes it (below). The "Checks after landing" note every conversation gets says so too, and that a failure in code you
+checks the commit (`.github/workflows/ci.yml`: its `quick` job type-checks the packages a push changed and runs the
+push check within minutes, and the verify groups build and test the rest). When main goes red, one fix agent takes it
+(below). The "Checks after landing" note every conversation gets says so too, and that a failure in code you
 did not touch may be main's own: not yours to chase unless your task is about it.
 
 If you weakened a test file on purpose, end your final message with a `Test-Note: <why>` line. The land writes it
-into the landed commit, and the push reads it there. If you changed the wire contract (`_shared/sandbox-contract/src`),
+into the landed commit, and CI's push check reads it there. If you changed the wire contract (`_shared/sandbox-contract/src`),
 its lock changes with it. Before work lands from a worktree, the repository's fixers run there
 (`_tools/scripts/verify/fixers.mjs`, from `_sandbox/sandbox/src/conversations/land/worktree-fixers.ts`): they emit the
 contract and rewrite `contract.lock.json` when the change reached the contract, and freeze `state-shapes.json` and
@@ -74,20 +74,14 @@ test in CI.
 
 ## Before it leaves the machine
 
-The push runs `_tools/scripts/verify/verify-push.mjs --hook --advisory` once, from `.githooks/pre-push`, for any
-branch push from the checkout, the app's Push button included; a tag push stands down. It reports what it finds and
-never refuses the push. Cheapest first: every check the manifest lists, with a `tidy` finding counted only when the
-pushed range added it; the assertion ratchet over the range's test files (weaker only with a `test!:` subject or a
-`Test-Note:` trailer); the manifest/lockfile lockstep; the linter; `cargo fmt --check` on crates the push touches.
-It never runs typecheck, build or test on the pusher's clock, and names the verdict `pnpm verify` recorded for the
-tree when there is one. The push goes either way, so what it found is not left in a terminal: it writes a report into the
-git dir (`_tools/scripts/verify/push-report.mjs`), and the sandbox files it once the push has reached the remote
-(`_sandbox/sandbox/src/workspace/deps/push-checks.ts`). The Pipelines view then shows it as "Left at push" until a
-later push or a recheck the owner presses stops finding it, or the owner dismisses it. Only the findings the pushed
-range brought in are recorded. Nothing is sent to an agent unless the owner presses "Hand to an agent". By hand,
-`pnpm verify:push` exits non-zero on a finding, replays a suite verdict recorded for the same tree, and runs the suite
-itself only with `--suite`. The `commit-msg` hook prints what commitlint finds and lets the commit through. The push
-measures the working tree, and CI still runs everything on the commit.
+Nothing runs on the way out. The `commit-msg` hook prints what commitlint finds and lets the commit through, and there
+is no pre-push hook: CI measures what the owner pushes. Its `quick` job runs the push check on every push
+(`_tools/scripts/verify/verify-push.mjs --base <sha>`, the commit the push is measured against), cheapest first: every
+check the manifest lists, with a `tidy` finding counted only when the pushed range added it; the assertion ratchet
+over the range's test files (weaker only with a `test!:` subject or a `Test-Note:` trailer); and the linter over the
+files the range changed. `pnpm verify:push` runs the same check by hand, the branch against its upstream, and adds
+the manifest/lockfile lockstep and `cargo fmt --check` on the crates the range touched. It exits non-zero on a finding
+and never runs typecheck, build or test (`pnpm verify` does, by hand).
 
 When main's CI goes red, one fix agent takes it (`_sandbox/sandbox/src/ci/main-fixer.ts`). The sandbox watches `main`
 and `master` of every workspace repository mapped to a connected GitHub or GitLab account, and acts on the first job
@@ -180,7 +174,7 @@ rules are about what a test stands the code up with, not about how it asserts.
   change touched against its earlier self (`@intentic/constants/assertion-measure`: exact matchers, loose matchers,
   the literal text the assertions pin) and flags a downgrade (`toEqual` → `toMatchObject`) or a narrowing (the
   asserted text cut past a quarter with no test removed) unless a commit in the range carries a `test!:` subject
-  or a `Test-Note:` trailer saying why. The push reports an undeclared one in its range. On 2026-08-31 about 180
+  or a `Test-Note:` trailer saying why. CI's push check fails an undeclared one in its range. On 2026-08-31 about 180
   test files were widened in an afternoon with every suite green, which is what this reads for.
 - Mock a workspace package with every name the code under test imports from it – the `test-programs` check reads
   every `jest.mock("@intentic/…", () => ({…}))` factory against the names the test and the modules it stands up

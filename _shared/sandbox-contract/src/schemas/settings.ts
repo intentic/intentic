@@ -15,8 +15,8 @@ export type SystemPromptMode = z.infer<typeof SystemPromptModeSchema>;
 export const BuiltinPromptSchema = z.object({ base: z.enum(["intentic", "claude"]) });
 // Rules: "at this moment, if this is true, do this". The owner's rules decide (land, hold, version); every command a
 // moment runs is a repository's own check (`<repo>/.intentic/checks.json`), compiled into this same table by the daemon,
-// so no command lives in settings. Nothing verifies inside a turn or after a land: CI checks what the owner pushes, and
-// nothing here holds anything (schemas/workspace/push-checks.ts).
+// so no command lives in settings. Nothing verifies inside a turn, after a land or on the way to a push: CI checks what
+// the owner pushes, and nothing here holds anything (schemas/ci.ts).
 export const RuleMomentSchema = z.enum([
     // A command here runs on the just-written file (`{file}` is its path); the cheapest moment to catch a defect.
     "file.edited",

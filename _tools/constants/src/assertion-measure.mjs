@@ -1,6 +1,6 @@
 // Three numbers per test file (exact matchers, loose matchers, asserted-text characters) that flag a weaker second
-// version, which the push check reads through assertion-ratchet.mjs. Regex over source, not an AST, since the push
-// check runs before install.
+// version, which the push check (CI's and `pnpm verify:push`) reads through assertion-ratchet.mjs. Regex over source,
+// not an AST, since the ratchet needs no install.
 
 // Asserted text that shrinks past this fraction of what it was, with no test removed, is a narrowing.
 export const NARROWING = 0.75;

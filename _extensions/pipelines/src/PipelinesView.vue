@@ -5,7 +5,6 @@ import type { CiFix } from "./fixes/ciFixes";
 import {
     Icon,
     Notice,
-    type NoticeModel,
     noticeOf,
     PageAction,
     Picker,
@@ -23,24 +22,20 @@ import { branchFixes, branchKey, fixesByRun } from "./fixes/ciFixes";
 import { arrivesOpen, openFailures, supersededBy } from "./ciStreaks";
 import { useCiFixes } from "./fixes/useCiFixes";
 import { useFailureHistory } from "./useFailureHistory";
-import LeftAtPush from "./push/LeftAtPush.vue";
 import MainRedCallout from "./fixes/MainRedCallout.vue";
 import { mainRedsOf } from "./fixes/mainReds";
 import PipelineRunRow from "./PipelineRunRow.vue";
 import PipelinesSkeleton from "./PipelinesSkeleton.vue";
 import PipelinesTally from "./PipelinesTally.vue";
-import { pushDebtOf, pushProjectOf, pushRecordOf } from "./push/pushChecks";
 import { type RepoStanding, repoStandings, standingNote } from "./repoStandings";
 import { host } from "./host";
 import { usePipelines } from "./usePipelines";
-import { usePushChecks } from "./push/usePushChecks";
 import { t } from "./i18n.js";
 
 // A DevOps-grade CI dashboard: a top-bar picker scopes the board to one repository or all of them, counts ride the
 // title row, runs group by repo, and each row auto-fetches its jobs and renders an inline connected-circles graph. A
 // stage circle pops job details; the chevron expands the full job flow. A main-line branch that is red says so once at
-// the head of its repository's runs, with the one fix agent the daemon put on it; what the pre-push check let through
-// waits above all of it (Left at push), read on its own and never behind the runs' load.
+// the head of its repository's runs, with the one fix agent the daemon put on it.
 
 const api = host();
 const { repos: allRepos, runs: allRuns, reds: allReds, error, isPending, rerun, cancel, fix } = usePipelines();
@@ -64,16 +59,6 @@ const scopeRepo = computed<string | undefined>({
 // warning stays, to explain the silence. Scoping to one repository always shows it, empty state included.
 const sections = computed(() => (scope.value === undefined ? standings.value.filter((standing) => !standing.silent) : [scope.value]));
 const scopedRuns = computed<readonly PipelineRun[]>(() => (scope.value === undefined ? runs.value : scope.value.runs));
-
-// WHAT PUSHES LEFT, narrowed the way the runs are: to the open project, then to the scoped repository's own pushes. A
-// push names the workspace repository by its empty folder where CI calls it `root` (pushProjectOf).
-const pushes = usePushChecks();
-const pushScope = computed(() => (scope.value === undefined ? undefined : pushProjectOf(scope.value.repo.repo)));
-const inPushScope = (project: string): boolean => api.workspace.inProject(project) && (pushScope.value === undefined || project === pushScope.value);
-const debts = computed(() => pushDebtOf(pushes.checks.value).filter((debt) => inPushScope(debt.project)));
-const pushRecord = computed(() => pushRecordOf(pushes.checks.value).filter((entry) => inPushScope(entry.push.project)));
-// The receipt of the owner's last press on what a push left, with its Undo when it has one.
-const pushNotice = ref<NoticeModel | undefined>();
 
 // Repository choice lives in the top bar, not a rail column, so the wide job-graph body isn't squeezed by permanent
 // chrome. The failing-branch count survives as the picker row's own annotation.
@@ -122,9 +107,8 @@ const open = computed(() => openFailures(runs.value));
 const superseded = computed(() => supersededBy(runs.value));
 
 // Which red rows already have an agent, and its fate; read off every run for the same cross-run reason as above. Joined
-// by the derived conversation id (ciFixes.ts); only fetched when a run has failed, a branch is red or a push left
-// something a hand-over could be on.
-const fixesWanted = computed(() => runs.value.some((run) => run.status === `failed`) || reds.value.length > 0 || debts.value.length > 0);
+// by the derived conversation id (ciFixes.ts); only fetched when a run has failed or a branch is red.
+const fixesWanted = computed(() => runs.value.some((run) => run.status === `failed`) || reds.value.length > 0);
 const { agents, invalidate: refreshFixes } = useCiFixes(fixesWanted);
 const fixByRun = computed(() => fixesByRun(runs.value, agents.value));
 
@@ -264,7 +248,6 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
         <template #strips>
             <Notice v-if="error" :of="noticeOf(error)" />
             <Notice v-if="actionError" :of="noticeOf(actionError)" />
-            <Notice v-if="pushNotice" :of="pushNotice" :dismiss-label="t(`leftAtPush.close`)" @dismiss="pushNotice = undefined" />
         </template>
 
         <template #detail>
@@ -272,17 +255,6 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
             <div ref="body" class="flex flex-col">
                 <!-- Narrow headers move orientation text above the list. -->
                 <PipelinesTally v-if="showTally && narrowBoard" :items="counts" :rate="successRate" :skeleton="isPending" class="mb-5" />
-
-                <!-- Outside the skeleton on purpose: what a push left is its own read, and must not wait on the forges'. -->
-                <LeftAtPush
-                    v-if="debts.length > 0 || pushRecord.length > 0"
-                    :debts="debts"
-                    :record="pushRecord"
-                    :agents="agents"
-                    :hands="pushes"
-                    class="mb-6"
-                    @notice="(notice) => (pushNotice = notice)"
-                />
 
                 <!-- Also covers the window before the sandbox handshake unblocks the fetch. -->
                 <PipelinesSkeleton v-if="isPending" />

@@ -1,12 +1,12 @@
-// The one list of checks that read the checkout. CI, the pre-push hook, `pnpm verify`, the per-edit run and `pnpm checks`
-// all read it, so a check exists once and runs everywhere. Each check is its own process
+// The one list of checks that read the checkout. CI (its preflight and its push check), `pnpm verify`, the per-edit run
+// and `pnpm checks` all read it, so a check exists once and runs everywhere. Each check is its own process
 // (lib/report.mjs): problems to stderr and exit 1, else what it vouched for to stdout and exit 0.
 // `needs`:
 // checkout tracked files only, no install, no network
 // git checkout plus history (a merge-base, a range), still no install
 // node_modules optional: the check attempts what needs an install, vouches for less without it
 // `gate`:
-// code the tree is broken or unbuildable; a failure wherever this list is read (the pre-push hook only reports it)
+// code the tree is broken or unbuildable; a failure wherever this list is read
 // tidy a cost to readers, not a break; a failure only for the lines a pushed range adds, a warning otherwise, and a
 // failure in the nightly tidy job
 // A new check enters as tidy and is promoted to code once a run record shows only true failures.

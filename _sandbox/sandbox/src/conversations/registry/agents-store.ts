@@ -16,7 +16,7 @@ import {
 import { z } from "zod";
 import type { ConversationsDb } from "../../store/conversations-db.js";
 import { readDocument } from "@intentic/sandbox-contract/documents";
-import { CHECK_SETTLES } from "../../store/evolution/conversions.js";
+import { at, CHECK_SETTLES, mapValue } from "../../store/evolution/conversions.js";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { type ManifestProblem, recordManifestProblems } from "../../store/manifest/manifest-problems.js";
 import { TurnQueueSchema } from "../actor/conversation-queue.js";
@@ -198,6 +198,11 @@ export const conversationRecordDocument = defineDocument({
     path: "conversations.db#conversation.record",
     boot: false,
     schema: PersistedAgentSchema,
+    history: [
+        // The pre-push fix's model role, retired with the push checks on 2026-09-28: a turn queued on it runs on the
+        // nearest role that remains, the pipeline fix, which likewise starts only when somebody presses for it.
+        at("queue.items.*.turn", mapValue("runRole", { "pre-push-fix": "pipeline-fix" })),
+    ],
 });
 
 // A conversation that owns a worktree, as a type rather than a runtime re-check.

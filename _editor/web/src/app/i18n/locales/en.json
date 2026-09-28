@@ -4236,8 +4236,6 @@
             "reAllowInBrowsers": "Re-allow them in your browser's site settings"
         },
         "pushQuestionBody": {
-            "fixAgentOpenConversation": "Fix agent: {toLowerCase} — open the conversation",
-            "setAttemptAsideStart": "Set this attempt aside and start a fresh one — opens the picker first",
             "showTerminal": "Show terminal"
         },
         "quickOpen": {
@@ -5013,9 +5011,7 @@
             "unstaged": "Unstaged",
             "untrackedLeave": "{count} untracked file leaves the disk: it was never committed, so git has no copy: | {count} untracked files leave the disk: they were never committed, so git has no copy:",
             "watchRun": "Watch it run",
-            "leftAtPush": "{count} left at push | {count} left at push",
-            "you": "you",
-            "pushOutdated": "update the sandbox to see what it left"
+            "you": "you"
         },
         "rowActions": {
             "openManagementPanel": "Open management panel"
@@ -5081,8 +5077,7 @@
         },
         "usePushFlow": {
             "failed": "{verb} failed",
-            "reposRefusedEachRow": "{count} repos refused it, each row says why.",
-            "handFailed": "Couldn't hand this to an agent"
+            "reposRefusedEachRow": "{count} repos refused it, each row says why."
         },
         "usePushRun": {
             "pushing": "Pushing {repo}"

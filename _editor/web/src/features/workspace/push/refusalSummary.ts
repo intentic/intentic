@@ -1,10 +1,10 @@
 import type { CommandRun, PushRun } from "@intentic/sandbox-contract";
 
-// What a refused push says. The fix it proposes is the daemon's (conversations/fix/push-fix.ts, from the refusal it filed with
-// what pushes left), so nothing here writes a prompt or names an attempt.
+// What a refused push says: the line under its command, naming who refused it in the words that decide what the owner
+// can do about it. Everything the push printed stays in the terminal it ran in.
 
-// A predicate following the command (drawn in the same monospace). Empty for a plain failure; the terminal and proposal
-// already say the rest.
+// A predicate following the command (drawn in the same monospace). Empty for a plain failure; the terminal already says
+// the rest.
 export const outcomeSummary = (run: CommandRun): string => {
     if (run.timedOut === true) {
         return `never finished: it hit its time limit and was killed.`;
@@ -18,8 +18,8 @@ export const outcomeSummary = (run: CommandRun): string => {
     return ``;
 };
 
-// A hook's refusal just names the hook (the proposal covers the rest); remote and transport failures carry git's own
-// reason as the advice.
+// A hook's refusal just names the hook (what it printed is in the terminal); remote and transport failures carry git's
+// own reason as the advice.
 // git's own lines end how they end; the sentence around one must not add a second full stop.
 const sentence = (text: string): string => (/[.!?]$/.test(text) ? text : `${text}.`);
 

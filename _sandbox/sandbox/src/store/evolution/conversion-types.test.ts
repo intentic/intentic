@@ -1,10 +1,11 @@
 import { z } from "zod";
-import { drop, rename } from "./conversions.js";
-import type { VanishedKeys } from "./conversion-types.js";
+import { at, drop, mapValue, rename } from "./conversions.js";
+import type { Converted, VanishedKeys } from "./conversion-types.js";
 import { defineDocument } from "./documents.js";
 
-// The vanished-key check the generated shape checks (`write-state-shapes.ts --checks`) apply to every frozen shape,
-// pinned on shapes small enough to read: what it names, and what it must not.
+// The conversions replayed on types, and the vanished-key check, that the generated shape checks
+// (`write-state-shapes.ts --checks`) apply to every frozen shape, pinned on shapes small enough to read: what they name,
+// and what they must not.
 
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 const holds = <T extends true>(): T | undefined => undefined;
@@ -34,6 +35,19 @@ test("a key renamed or removed without its conversion is named, at any depth, by
 test("a rename or a drop in the history, or a step that moves the key, answers for it", () => {
     expect(holds<Same<VanishedKeys<Old, typeof converted>, "agent.token" | "agent.temperature" | "pins.[].pinnedAt" | "labels.{}.hue">>()).toBeUndefined();
     expect(holds<Same<VanishedKeys<Old, typeof stepped>, "personaRouting" | "legacy" | "agent.temperature" | "pins.[].pinnedAt" | "labels.{}.hue">>()).toBeUndefined();
+});
+
+// A value mapped under a key the old shape may lack altogether, as a conversation record's queue is.
+const queueSchema = z.object({
+    queue: z.object({ items: z.array(z.object({ turn: z.object({ role: z.enum(["new", "kept"]).optional() }) })) }).optional(),
+});
+const queued = defineDocument({ path: "evolution/queued.json", schema: queueSchema, history: [at("queue.items.*.turn", mapValue("role", { old: "new" }))] });
+
+test("a conversion at a dotted path reaches through an optional object, and leaves its absence alone", () => {
+    type OldQueue = { queue?: { items: { turn: { role?: "old" | "kept" } }[] } };
+    type Queue = Converted<OldQueue, typeof queued>["queue"];
+    expect(holds<Same<NonNullable<Queue>["items"][number]["turn"]["role"], "new" | "kept" | undefined>>()).toBeUndefined();
+    expect(holds<Same<Extract<Queue, undefined>, undefined>>()).toBeUndefined();
 });
 
 test("today's own shape, a shape with nothing in it, and an old field of any shape vanish nothing", () => {

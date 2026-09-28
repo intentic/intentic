@@ -70,14 +70,18 @@ type ApplyToEach<S, C> =
 type AtEach<S, Rest extends string, C> =
     S extends ReadonlyArray<infer E> ? ApplyAt<E, Rest, C>[] : S extends Readonly<Record<string, infer V>> ? Record<string, ApplyAt<V, Rest, C>> : S;
 
-// A dotted path into the shape, `*` meaning every element or value, as the runtime `at` walks it.
-export type ApplyAt<S, Path extends string, C> = Path extends `${infer Head}.${infer Rest}`
-    ? Head extends "*"
-        ? AtEach<S, Rest, C>
-        : Field<S, Head, ApplyAt<S[Head & keyof S], Rest, C>>
-    : Path extends "*"
-      ? ApplyToEach<S, C>
-      : Field<S, Path, ApplyConversion<S[Path & keyof S], C>>;
+// A dotted path into the shape, `*` meaning every element or value, as the runtime `at` walks it: a union one arm at a
+// time, so an arm without the key (an optional object's `undefined`, another variant) stays as it was, as the runtime
+// passes over a value it cannot step into. Taken whole, a union's keys are only those every arm shares.
+export type ApplyAt<S, Path extends string, C> = S extends unknown
+    ? Path extends `${infer Head}.${infer Rest}`
+        ? Head extends "*"
+            ? AtEach<S, Rest, C>
+            : Field<S, Head, ApplyAt<S[Head & keyof S], Rest, C>>
+        : Path extends "*"
+          ? ApplyToEach<S, C>
+          : Field<S, Path, ApplyConversion<S[Path & keyof S], C>>
+    : never;
 
 // A whole history, left to right.
 export type ApplyChain<S, History> = History extends readonly [infer Head, ...infer Rest] ? ApplyChain<ApplyConversion<S, Head>, Rest> : S;

@@ -91,7 +91,7 @@ describe(`settling a landing`, () => {
         expect(commitOnly).toHaveBeenCalledWith(WORKSPACE_ROOT, [`a.ts`], `Agent: Recent commits`);
     });
 
-    // The push gate reads a weakened test's declaration off the commit; a land must not drop the conversation's.
+    // CI's push check reads a weakened test's declaration off the commit; a land must not drop the conversation's.
     test(`a drafted landing commits with its Test-Note trailer, and an undrafted one keeps the conversation's`, async () => {
         await settleLanding(servicesWith([version(`auto-version`)], `refactor: rows`, { testNote: `rows became a table` }), `c1`);
         expect(commitOnly).toHaveBeenLastCalledWith(WORKSPACE_ROOT, [`a.ts`], `refactor: rows\n\nTest-Note: rows became a table`);

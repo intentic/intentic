@@ -79,7 +79,9 @@ export const errands = () =>
             detail: t(`chat.errands.sentBySandboxHeld`),
             kinds: [`land-held`],
         },
-        // The attempt at what the push checks found (push-fix.ts), and its nudge when an earlier turn ended unfixed.
+        // The attempt at what the push checks found, and its nudge when an earlier turn ended unfixed. Retired like the
+        // `land-*` ones: nothing sends it since the push checks and the refused push's hand-over went; kept so the
+        // transcripts that hold one still read it as the sandbox's words.
         pushFix: {
             icon: `wrench`,
             label: t(`chat.errands.fixingPushFindings`),

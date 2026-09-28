@@ -135,7 +135,7 @@ const trackedBranch = async (dir: string, git: GitRunner): Promise<{ branch: str
 
 // Push plan: the branch's own remote (not the first configured one) and `-u` only when it has no upstream yet. Shared
 // with the terminal push so remote/branch/publish is decided once.
-export type PushPlan = { readonly ok: true; readonly args: readonly string[]; readonly remote: string; readonly branch: string } | { readonly ok: false; readonly reason: string };
+export type PushPlan = { readonly ok: true; readonly args: readonly string[] } | { readonly ok: false; readonly reason: string };
 
 export const pushPlan = async (dir: string, options: { readonly branch?: string }, git: GitRunner = defaultGit): Promise<PushPlan> => {
     const state = await remoteState(dir, {}, git);
@@ -157,7 +157,7 @@ export const pushPlan = async (dir: string, options: { readonly branch?: string 
         return { ok: false, reason: "no remote configured" };
     }
     const publish = tracking.upstream === undefined;
-    return { ok: true, args: ["push", ...(publish ? ["-u"] : []), remote, branch], remote, branch };
+    return { ok: true, args: ["push", ...(publish ? ["-u"] : []), remote, branch] };
 };
 
 export const pushBranch = async (dir: string, options: { readonly branch?: string }, git: GitRunner = defaultGit): Promise<ActionResult> => {

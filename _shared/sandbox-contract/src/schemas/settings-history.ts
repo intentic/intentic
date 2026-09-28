@@ -107,4 +107,6 @@ export const SETTINGS_HISTORY = [
     keepWarmObject,
     // Where the check after landing ran (2026-09-27): nothing checks work after it lands any more, CI does.
     at("offload", drop("landCheck")),
+    // The model list for the fix a refused push offered (2026-09-28): a refused push now says why and offers nothing.
+    at("modelRoles", drop("pre-push-fix")),
 ] as const;

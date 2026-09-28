@@ -14,10 +14,4 @@ export const depsSliceFake = () =>
             subscribe: () => () => {},
             subscribeFailures: () => () => {},
         }),
-        // Nothing pushed yet: GET /workspace/push-checks serves an empty record.
-        pushChecks: unstubbed<DepsSlice["pushChecks"]>("pushChecks", {
-            store: unstubbed<DepsSlice["pushChecks"]["store"]>("pushChecks.store", {
-                read: async () => ({ pushes: [], reds: {}, ended: {}, seen: [] }),
-            }),
-        }),
     }) satisfies Partial<DepsSlice>;

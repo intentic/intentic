@@ -23,7 +23,7 @@ describe(`which built-in stands at which moment`, () => {
         expect(rule(`agent.landed`, { kind: `command`, command: `pnpm test` }).success).toBe(false);
     });
 
-    test(`there is no push moment: the repository's own pre-push hook gates a push`, () => {
+    test(`there is no push moment: nothing runs on the way to a push, CI checks what was pushed`, () => {
         expect(rule(`push.starting`, { kind: `command`, command: `pnpm test` }).success).toBe(false);
     });
 });
@@ -109,5 +109,23 @@ describe(`the folded keep-warm settings`, () => {
     test(`leave a file already in the new shape alone`, () => {
         const current = { keepWarm: { auto: true, hours: 2 } };
         expect(convertDocument(SETTINGS_HISTORY, `object`, current, true).changes).toEqual([]);
+    });
+});
+
+// The pre-push fix's model list went with the fix a refused push used to offer (2026-09-28). A settings file that still
+// names it must read, since an unknown role refuses the whole file, and every other job's list stays as its owner set it.
+describe(`the retired pre-push fix role`, () => {
+    const pin = { provider: `claude`, model: `claude-opus-5-5` };
+
+    test(`is dropped from a stored file, leaving every other job's list, and the file reads`, () => {
+        const stored = { modelRoles: { "pipeline-fix": [pin], "pre-push-fix": [pin] } };
+        expect(SandboxSettingsSchema.safeParse(stored).success).toBe(false);
+        const converted = convertDocument(SETTINGS_HISTORY, `object`, stored, true);
+        expect(converted.value).toEqual({ modelRoles: { "pipeline-fix": [pin] } });
+        expect(SandboxSettingsSchema.parse(converted.value).modelRoles).toEqual({ "pipeline-fix": [pin] });
+    });
+
+    test(`leaves a file without it alone`, () => {
+        expect(convertDocument(SETTINGS_HISTORY, `object`, { modelRoles: { "pipeline-fix": [pin] } }, true).changes).toEqual([]);
     });
 });

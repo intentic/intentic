@@ -18,10 +18,10 @@ const asJson = args.includes("--json");
 const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
 
 
-// Reach says whether a local gate could ever catch a failure: `local` if `verify-push.mjs` runs that job, `partial` if
-// only part of it (rustfmt, not clippy), else `ci-only`. Grouped by job: steps are the commands the push gate shells
-// out to.
-const GATE_REACHES = /^(verify-core|verify-site|verify-platform|preflight)\b/;
+// Reach says whether a run by hand could ever catch a failure before CI does: `local` if `pnpm verify` or
+// `pnpm verify:push` runs what that job runs, `partial` if only part of it (rustfmt, not clippy), else `ci-only`.
+// Grouped by job: steps are the commands those two shell out to.
+const GATE_REACHES = /^(verify-core|verify-site|verify-platform|preflight|quick)\b/;
 const GATE_PARTLY = /^(ic-check|desktop-check)\b/;
 const reachOf = (job) => (GATE_REACHES.test(job) ? "local" : GATE_PARTLY.test(job) ? "partial" : "ci-only");
 const ERROR_LINE = /error TS\d+|\bFAIL\b|✗|✘|Error:|error\[E\d+\]|rustfmt|Diff in|ERR_PNPM|exit code \d+/;
@@ -140,8 +140,8 @@ if (table.length > 0) {
     const all = local + partial + ciOnly;
     console.log("");
     console.log(
-        `Of ${all} job-failures: **${local}** in jobs \`pnpm verify:push\` reproduces, ${partial} it half-reproduces (rustfmt only), ` +
-            `**${ciOnly} (${all === 0 ? 0 : Math.round((100 * ciOnly) / all)}%)** in jobs no local gate can run.`,
+        `Of ${all} job-failures: **${local}** in jobs \`pnpm verify\` or \`pnpm verify:push\` reproduce by hand, ${partial} they half-reproduce (rustfmt only), ` +
+            `**${ciOnly} (${all === 0 ? 0 : Math.round((100 * ciOnly) / all)}%)** in jobs nothing run by hand can.`,
     );
     if (logs) {
         console.log("");
@@ -160,5 +160,5 @@ console.log(
     `The rule: a class visible to the 60-minute job gets a detector in the seconds-long one. ` +
         `The top code row whose reach is \`local\` is the next gate; an infra row is the fleet's; and a \`ci-only\` row is ` +
         `neither — no gate on a checkout can build an image or drive a Windows installer, so those are answered by making ` +
-        `the job itself sturdier, not by tightening the push.`,
+        `the job itself sturdier, not by adding a check to the push check.`,
 );

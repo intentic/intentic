@@ -1,6 +1,6 @@
 // Shared git helper for the scripts in this directory, so `maxBuffer` (git output can exceed node's 1 MiB default) is
-// fixed once rather than per copy. Imported by file, not package name: the pre-push hook runs on a clone that may not
-// have installed.
+// fixed once rather than per copy. Imported by file, not package name: a script may run on a clone that has not
+// installed.
 import { spawnSync } from "node:child_process";
 
 // Past node's 1 MiB default, a large diff or log otherwise reports as a failed spawn, not a truncated one.

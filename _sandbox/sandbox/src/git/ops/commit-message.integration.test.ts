@@ -394,7 +394,7 @@ test("a detected wire-contract shrink turns the breaking ask from a judgment cal
     expect(forced).toContain("REQUIRED, not optional");
     // Marker position is stated here too: a hook refusal on this path costs the whole declaration.
     expect(forced).toContain(`never "feat!(scope):"`);
-    // Forced even with no changelog: the declaration is what the push gate reads, not a changelog courtesy.
+    // Forced even with no changelog: the declaration is what CI's contract check reads, not a changelog courtesy.
     expect(forced).toContain("Breaking-Note:");
     // The judgment-call spelling is gone: the prompt never says both "omit" and "required".
     expect(forced).not.toContain("when in doubt, omit it");

@@ -1,6 +1,6 @@
-// Pins how a change's findings are read: oxlint's lines keyed without their positions (a finding that moves with its
-// line number reads as new after any edit above it), the range's `Allow:` trailers, what an edit added to a rule with a
-// backlog (_tools/oxlint/added.mjs), and git's own error when a range cannot be listed.
+// Pins how a change's findings are read: oxlint's lines, one finding each with the file it names, the range's `Allow:`
+// trailers, what an edit added to a rule with a backlog (_tools/oxlint/added.mjs), and git's own error when a range
+// cannot be listed.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -21,8 +21,6 @@ const repo = () => {
     return { root, head: run("rev-parse", "HEAD") };
 };
 
-const lintKeys = (output) => lintFindings(output).map(({ key }) => key);
-
 test("a base git can answer lists every changed path, untracked included", () => {
     const { root, head } = repo();
     try {
@@ -34,34 +32,22 @@ test("a base git can answer lists every changed path, untracked included", () =>
     }
 });
 
-test("oxlint's unix lines become findings keyed without positions, and its summary is not one", () => {
+test("oxlint's unix lines become findings as printed, each naming its file, and its summary is not one", () => {
     const output = [
         "_site/site/src/Footer.astro:3:1: Duplicate import of `x`. [Error/import(no-duplicates)]",
         "_tools/a.ts:12:21: Prefer `.at()` over `[index]`. [Error/unicorn(prefer-at)]",
         "",
         "2 problems",
     ].join("\n");
-    assert.deepEqual(lintKeys(output), [
-        "lint _site/site/src/Footer.astro: import(no-duplicates) Duplicate import of `x`.",
-        "lint _tools/a.ts: unicorn(prefer-at) Prefer `.at()` over `[index]`.",
+    assert.deepEqual(lintFindings(output), [
+        { text: "_site/site/src/Footer.astro:3:1: Duplicate import of `x`. [Error/import(no-duplicates)]", path: "_site/site/src/Footer.astro" },
+        { text: "_tools/a.ts:12:21: Prefer `.at()` over `[index]`. [Error/unicorn(prefer-at)]", path: "_tools/a.ts" },
     ]);
 });
 
 test("a file oxlint could not parse is a finding too, not a linter that did not run", () => {
-    assert.deepEqual(lintKeys("_tools/a.ts:1:11: Unexpected token [Error]\n\n1 problem"), ["lint _tools/a.ts: parse Unexpected token"]);
-});
-
-test("a lint finding keeps the line as printed, keyed without its position, and names its file", () => {
-    assert.deepEqual(lintFindings("_tools/a.ts:12:21: Prefer `.at()` over `[index]`. [Error/unicorn(prefer-at)]"), [
-        {
-            kind: "lint",
-            source: "lint",
-            recheckable: true,
-            text: "_tools/a.ts:12:21: Prefer `.at()` over `[index]`. [Error/unicorn(prefer-at)]",
-            key: "lint _tools/a.ts: unicorn(prefer-at) Prefer `.at()` over `[index]`.",
-            path: "_tools/a.ts",
-            command: "pnpm lint",
-        },
+    assert.deepEqual(lintFindings("_tools/a.ts:1:11: Unexpected token [Error]\n\n1 problem"), [
+        { text: "_tools/a.ts:1:11: Unexpected token [Error]", path: "_tools/a.ts" },
     ]);
 });
 

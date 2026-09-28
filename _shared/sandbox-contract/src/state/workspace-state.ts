@@ -383,12 +383,6 @@ const STATE_FILES = [
         portability: "derived",
         note: "The target stamps its own daemon version on first boot.",
     },
-    {
-        path: ".intentic/records/push-checks.json",
-        invalidates: [],
-        why: "What each push check found and let through, per project, and what became of every finding: still open, measured gone, or dismissed. Filed from the report the pre-push hook leaves in the repository's git dir; read through GET /workspace/push-checks, which the daemon pushes itself (the `pushes` runtime domain).",
-        portability: "carry",
-    },
     // What an update converted before it booted all the way (the sandbox daemon's state-journal.ts): a copy of every
     // file the new version changed, kept until it commits and for a grace window after. `secret` whatever the source
     // was, since a vault's copy is a vault; locked below for the same reason.

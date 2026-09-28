@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 // Runs the whole repo the way CI's verify groups measure it, once each, since typecheck and test would otherwise both
 // pay for the declarations emit. Run by hand: nothing runs it unasked, and it applies no fixer (fixers.mjs runs before
-// a land, in the conversation's own worktree). The checks' runner is asked once, and that one answer serves the
-// checkout gates and the measurement of every check it leaves where the sandbox files push findings (push-report.mjs).
-// Records its verdict per tree, green or red (lib/tree-verdict.mjs), for the push check to replay.
+// a land, in the conversation's own worktree).
 // node _tools/checks/run.mjs the checkout gates (once, as data)
 // node _tools/scripts/build/emit-declarations.mjs every emitted package's dist
 // turbo run typecheck
@@ -12,13 +10,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repoRoot } from "../../constants/src/node.mjs";
-import { git } from "../lib/git.mjs";
 import { createSteps } from "../lib/steps.mjs";
 import { runInHeavySlot } from "../lib/heavy-slot.mjs";
-import { treeHash, writeVerdict } from "../lib/tree-verdict.mjs";
 import { checkVerdicts } from "./check-snapshot.mjs";
-import { brokenFindings, measureEntry, writeReport } from "./push-report.mjs";
-import { failedTasks, takeSummary, taskOf, unitsOf, verdictUnits } from "./failure-units.mjs";
+import { failedTasks, takeSummary, unitsOf } from "./failure-units.mjs";
 import { recordFlakes, rerunFailures } from "./flakes.mjs";
 import { testConcurrency, testWorkers, typecheckConcurrency } from "./test-workers.mjs";
 
@@ -26,14 +21,12 @@ import { testConcurrency, testWorkers, typecheckConcurrency } from "./test-worke
 runInHeavySlot("verify");
 
 const root = repoRoot(import.meta.url);
-const { say, step, skip, fail, failing, failedSteps, finish } = createSteps("verify", root);
-const head = git(root, "rev-parse", "HEAD")?.trim();
+const { say, step, skip, fail, finish } = createSteps("verify", root);
 const verdicts = checkVerdicts(root);
 
-// Only a `code` failure fails the gates: a tidy rule red for an unrelated directory shouldn't fail the tree's verdict
-// and cost the next push ten minutes replaying typecheck and tests (what a tidy failure means: _tools/checks/manifest.mjs);
-// the push judges tidiness against its own range. Each broken check's lines become units of a red verdict.
-const checkoutUnits = [];
+// Only a `code` failure fails the gates: a tidy rule red for an unrelated directory says nothing about whether the tree
+// works (what a tidy failure means: _tools/checks/manifest.mjs), and the push check judges tidiness against its own
+// range (verify-push.mjs).
 if (verdicts === undefined) {
     fail("checkout gates", "could not be measured", [], { spelling: "node _tools/checks/run.mjs" });
 } else {
@@ -41,7 +34,6 @@ if (verdicts === undefined) {
     const untidy = verdicts.filter((verdict) => !verdict.ok && verdict.gate === "tidy");
     for (const verdict of broken) {
         process.stderr.write(`\n✗ ${verdict.id} (${verdict.file})\n${`${verdict.stderr}${verdict.stdout}`.trimEnd()}\n`);
-        checkoutUnits.push(...brokenFindings(verdict).map(({ text }) => `check ${verdict.id}: ${text.replace(/:\d+/g, ":#")}`));
     }
     if (untidy.length > 0) {
         say(`tidy, reported and not failed: ${untidy.map(({ id }) => id).join(", ")}`);
@@ -65,9 +57,7 @@ const junitDir = mkdtempSync(join(tmpdir(), "verify-junit-"));
 // this script did; INDEXNOW_ENABLED=0 stops the site build from polling live.
 const suiteEnv = () => ({ TEST_WORKERS: testWorkers(), INDEXNOW_ENABLED: "0", SUITES_JUNIT_DIR: junitDir });
 
-// Tasks that failed and their units, less what passed when re-run alone (logged as a flake, never a red verdict).
-const measured = [];
-const units = [];
+// A failed task's units are re-run alone first: what passes then is logged as a flake and fails nothing.
 const turbo = (label, args, env) => {
     const since = Date.now();
     step(label, "pnpm", ["turbo", "run", ...args, "--continue=dependencies-successful", "--summarize"], {
@@ -76,8 +66,6 @@ const turbo = (label, args, env) => {
             const tasks = failedTasks(takeSummary(root, since));
             const { flaky, still } = rerunFailures(root, tasks, unitsOf(root, tasks, junitDir));
             recordFlakes(root, flaky);
-            measured.push(...tasks.filter(({ taskId }) => still.some((unit) => taskOf(unit) === taskId)));
-            units.push(...still);
             return still.length === 0 && flaky.length > 0 ? { ok: true, note: `${flaky.length} failure(s) passed when re-run alone: flaky, logged` } : { ok: false };
         },
     });
@@ -98,25 +86,4 @@ if (step("emit declarations", process.execPath, [join(root, "_tools/scripts/buil
 
 rmSync(junitDir, { recursive: true, force: true });
 
-// A step that failed without naming units (the checkout gates, the script self-tests, the declarations emit) is still a
-// failure: it becomes one unit named after the step, or a red verdict would read as nothing broke.
-const unitless = failedSteps().filter(({ label }) => !["typecheck", "test"].includes(label) && !(label === "checkout gates" && checkoutUnits.length > 0));
-const kept = verdictUnits([...unitless.map(({ label, why }) => `verify ${label}: ${why}`), ...checkoutUnits, ...units], measured);
-if (failing()) {
-    writeVerdict(root, treeHash(root), "failed", "verify", { head, ...kept });
-}
-
-// What the checks measured of the tree, with the one answer the gates were judged by, left where the sandbox files push
-// findings (push-report.mjs): a finding an earlier push left that this tree no longer prints is resolved by it. The
-// linter is not measured here, so a lint finding waits for a later push or a recheck (push-report.mjs --recheck).
-if (verdicts !== undefined) {
-    const written = writeReport(root, measureEntry(verdicts, undefined));
-    if (!written.ok) {
-        say(`the push findings' measurement could not be kept: ${written.why}`);
-    }
-}
-
-finish(() => {
-    const recorded = writeVerdict(root, treeHash(root), "passed", "verify", { head });
-    return `checkout gates, declarations, typecheck and tests${recorded ? " (recorded for the push check)" : ""}`;
-});
+finish(() => "checkout gates, declarations, typecheck and tests");

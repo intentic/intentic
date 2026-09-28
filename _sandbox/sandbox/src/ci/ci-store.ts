@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { RedSchema } from "@intentic/sandbox-contract";
+import { RedDecisionSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { at, drop, mapValue } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
@@ -19,11 +19,25 @@ const ANNOUNCED_KEPT = 60;
 
 const ConclusionSchema = z.object({ status: z.enum(["success", "failed"]), at: z.number() });
 
-// Main's CI red on one branch, as its one fix agent's streak keeps it (main-fixer.ts): the Red (contract, RedSchema: the
-// jobs failing now are its findings, each under the workflow it is a job of as its `source`; the fix agent put on it and
-// every hand-over are its decisions), with what the streak counts besides. Kept here rather than in memory, so a restart
-// neither forgets a streak nor starts a second fix agent on it.
-const CiRedSchema = RedSchema.omit({ source: true, scope: true }).extend({
+// One job failing on main's red: its name, under the workflow it is a job of as its `source`, and an id derived from
+// both (main-fixer.ts, findingOf), so the same job failing again in a later run is the same finding.
+const CiFindingSchema = z.object({
+    id: z.string(),
+    source: z.string(),
+    text: z.string(),
+});
+export type CiFinding = z.infer<typeof CiFindingSchema>;
+
+// Main's CI red on one branch, as its one fix agent's streak keeps it (main-fixer.ts): the jobs failing now are its
+// findings, and the fix agent put on it and every hand-over are its decisions (contract, RedDecisionSchema), with what
+// the streak counts besides. Kept here rather than in memory, so a restart neither forgets a streak nor starts a second
+// fix agent on it.
+const CiRedSchema = z.object({
+    // When its first job failed, which began the streak.
+    since: z.number(),
+    findings: z.array(CiFindingSchema).default([]),
+    // Oldest first.
+    decisions: z.array(RedDecisionSchema).default([]),
     // The run the streak began in, which names its fix agent (ciFixConversationId), and the newest run failing on it.
     firstRunId: z.number(),
     runId: z.number(),
@@ -61,6 +75,10 @@ type CiState = z.infer<typeof CiStateSchema>;
 // read as the nearest that remain.
 const RETIRED_DECISIONS = { waiting: "reported", held: "reported", original: "fix-up" } as const;
 
+// Decision kinds only a push red made (a later measurement found its findings gone, a person set them aside), retired
+// with the push checks on 2026-09-28; a CI red never held one either, and would read as the nearest that remains.
+const PUSH_DECISIONS = { resolved: "reported", dismissed: "reported" } as const;
+
 export const ciDocument = defineDocument({
     path: stateRelPath(".intentic/secrets/ci.json"),
     schema: CiStateSchema,
@@ -71,6 +89,16 @@ export const ciDocument = defineDocument({
         at("reds.*", drop("named")),
         at("reds.*", drop("seenAt")),
         at("reds.*.decisions.*", mapValue("kind", RETIRED_DECISIONS)),
+        // Until 2026-09-28 main's red shared one record with a push's: what a push check printed about each finding, and
+        // the findings a decision was about. With the push checks gone, main's red keeps its own: a finding for each
+        // failed job, and every decision about the whole red.
+        at("reds.*.findings.*", drop("path")),
+        at("reds.*.findings.*", drop("command")),
+        at("reds.*.findings.*", drop("recheckable")),
+        at("reds.*.findings.*", drop("gate")),
+        at("reds.*.findings.*", drop("commit")),
+        at("reds.*.decisions.*", drop("findings")),
+        at("reds.*.decisions.*", mapValue("kind", PUSH_DECISIONS)),
     ],
 });
 

@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileCiStore } from "./ci-store.js";
@@ -34,4 +34,50 @@ test("conclusions prune oldest-touched past the cap so the file cannot grow fore
     expect(await store.lastConclusion("web", "branch-204")).toBe("failed");
     const state = JSON.parse(await readFile(join(root, "ci.json"), "utf8")) as { conclusions: Record<string, unknown> };
     expect(Object.keys(state.conclusions)).toHaveLength(200);
+});
+
+// Until the push checks went (2026-09-28), main's red was kept in the one shape it shared with a push's: a finding with
+// what a push check printed about it, decisions naming the findings they were about, and two kinds only a push red made.
+test("a red kept in the shape it shared with a push's red reads back as main's red", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "ci-red-")), "ci.json");
+    const finding = { id: "f", source: "CI", text: "verify-core" };
+    await writeFile(
+        path,
+        JSON.stringify({
+            secret: "s",
+            conclusions: {},
+            reds: {
+                "web\nmain": {
+                    since: 1,
+                    findings: [{ ...finding, path: "src/a.ts", command: "pnpm test", recheckable: true, gate: "code", commit: { sha: "c1", subject: "Fix" } }],
+                    decisions: [
+                        { kind: "fix-up", conversationId: "ci-fix-web-40", at: 2 },
+                        { kind: "resolved", at: 3, findings: ["f"], detail: "A later measurement no longer printed them." },
+                        { kind: "dismissed", at: 4, findings: ["f"] },
+                    ],
+                    firstRunId: 40,
+                    runId: 41,
+                    count: 2,
+                },
+            },
+        }),
+    );
+    expect(await fileCiStore(path).reds()).toEqual({
+        "web\nmain": {
+            since: 1,
+            findings: [finding],
+            decisions: [
+                { kind: "fix-up", conversationId: "ci-fix-web-40", at: 2 },
+                { kind: "reported", at: 3, detail: "A later measurement no longer printed them." },
+                { kind: "reported", at: 4 },
+            ],
+            firstRunId: 40,
+            runId: 41,
+            count: 2,
+            workflows: {},
+            heard: [],
+            turns: 0,
+            changed: false,
+        },
+    });
 });

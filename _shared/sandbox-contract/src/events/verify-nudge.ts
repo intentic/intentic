@@ -1,7 +1,7 @@
 // The follow-up the daemon USED to send when a turn ended with work it could not confirm. Nothing sends it any more:
-// nothing checks inside a conversation, CI checks what the owner pushes (schemas/workspace/push-checks.ts). It stays on
-// the wire because records already hold it, and the chat has to go on recognising it: a prompt nobody typed must not
-// reach a reader as their own words.
+// nothing checks inside a conversation, CI checks what the owner pushes (schemas/ci.ts). It stays on the wire because
+// records already hold it, and the chat has to go on recognising it: a prompt nobody typed must not reach a reader as
+// their own words.
 
 // Anchored on by the reader, so it must stay unique and stable across releases — a reworded opening un-recognises every
 // nudge already in a record, and they read as the user's own typing again.

@@ -3784,8 +3784,6 @@
             "reAllowInBrowsers": "Vuelve a permitirlas en los ajustes de sitios de tu navegador"
         },
         "pushQuestionBody": {
-            "fixAgentOpenConversation": "Arreglar el agente: {toLowerCase} — abre la conversación",
-            "setAttemptAsideStart": "Apartar este intento y empezar uno nuevo: primero abre el selector",
             "showTerminal": "Mostrar el terminal"
         },
         "quickOpen": {
@@ -4518,9 +4516,7 @@
             "unstaged": "Sin preparar",
             "untrackedLeave": "{count} archivo sin seguimiento sale del disco: nunca se le hizo commit, así que git no tiene copia: | {count} archivos sin seguimiento salen del disco: nunca se les hizo commit, así que git no tiene copia:",
             "watchRun": "Verlo ejecutarse",
-            "leftAtPush": "{count} pendiente del push | {count} pendientes del push",
-            "you": "tú",
-            "pushOutdated": "actualiza el sandbox para ver lo que dejó"
+            "you": "tú"
         },
         "rowActions": {
             "openManagementPanel": "Abrir el panel de gestión"
@@ -4586,8 +4582,7 @@
         },
         "usePushFlow": {
             "failed": "{verb} falló",
-            "reposRefusedEachRow": "{count} repos lo rechazaron; cada fila dice por qué.",
-            "handFailed": "No se pudo entregar a un agente"
+            "reposRefusedEachRow": "{count} repos lo rechazaron; cada fila dice por qué."
         },
         "usePushRun": {
             "pushing": "Haciendo push de {repo}"

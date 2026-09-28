@@ -139,7 +139,6 @@ export * from "./state/history-state.js";
 export * from "./state/fix-stance.js";
 export * from "./state/landed-commit.js";
 export * from "./state/fix-attempt-plan.js";
-export * from "./state/red-streak.js";
 // Provider vocabulary bottom-up: agent-runtimes, provider-specs, agent-catalog; three modules since the dependency
 // points one way.
 export * from "./models/agent-runtimes.js";
@@ -239,7 +238,6 @@ export * from "./schemas/webext.js";
 export * from "./schemas/workflows.js";
 export * from "./schemas/workspace/workspace-repos.js";
 export * from "./schemas/workspace/workspace-search.js";
-export * from "./schemas/workspace/push-checks.js";
 export * from "./schemas/workspace/workspace-setup.js";
 export * from "./schemas/workspace/workspace-tree.js";
 export * from "./state/arrival.js";

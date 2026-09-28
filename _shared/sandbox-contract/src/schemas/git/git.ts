@@ -86,7 +86,7 @@ export const PushSchema = RepoParamSchema.extend({
 });
 // Who said no to a push, read off git's own words (`pushRefusal`); the three answers ask three different things of the
 // owner.
-// hook: this repo's own pre-push hook refused it; the code is known wrong, worth a fix.
+// hook: this repo's own pre-push hook refused it; what it printed is about the code, and the terminal holds all of it.
 // remote: the server rejected the refs (non-fast-forward, protected branch); pull first or push elsewhere.
 // transport: it never got there (credentials, unreachable host); a retry is the only useful button.
 export const PushRefusalSchema = z.enum(["hook", "remote", "transport"]);
@@ -100,7 +100,7 @@ export const PushRunSchema = CommandRunSchema.extend({
         .optional()
         .describe("Why not, in git's own words: the last verdict line, for a row that has room for one line. The whole tail is `output`."),
     refusedBy: PushRefusalSchema.optional().describe(
-        "Who refused a failed push: this repository's pre-push hook (the code is wrong, a fix is worth proposing), the remote (pull first), or the transport (credentials, network: retry). Absent while it runs and for a push that went.",
+        "Who refused a failed push: this repository's own pre-push hook (what it printed is about the code), the remote (pull first), or the transport (credentials, network: retry). Absent while it runs and for a push that went.",
     ),
 });
 export type PushRun = z.infer<typeof PushRunSchema>;

@@ -30,7 +30,6 @@ import { demoDevices, forgetDemoLinks, removeDemoSandbox, setDemoSandboxRunning,
 import { demoMetrics } from "./fixture/metrics";
 import { demoStorageClean, demoStorageReport, demoStorageScan } from "./fixture/storage";
 import { demoLoops } from "./fixture/loops";
-import { demoPushChecks, demoPushDismiss, demoPushRecheck } from "./fixture/push-checks";
 import { demoRuns, demoWorkflows } from "./fixture/workflows";
 import { choresReport, writeLedger } from "./fixture/chores";
 import { ciJobs, ciRunsResponse } from "./fixture/ci";
@@ -499,10 +498,6 @@ const DEMO_CONNECT_STATE = `demo-connect-state`;
 // One version of the document as the text a daemon's fileq would render from it (the diff's Text reading).
 const derivedSide = (content: string) => ({ present: true as const, content, deriver: `docx v2`, notes: [], truncated: false });
 
-// Whether this recording has pushed anything (fixture/push-checks.ts): the whole and the curated boards have, the minimal
-// one the marketing shots are taken of has not, and a desk pushes nothing.
-const pushesRecorded = (): boolean => !deskEdition && (demoMode.id === `full` || demoMode.id === `default`);
-
 // Every procedure the fixture serves; an empty-but-real area answers its contract's empty shape, not a 404.
 export const procedures = {
     system: {
@@ -550,8 +545,6 @@ export const procedures = {
         // A card that is not mid-turn reads its transcript instead of attaching.
         transcript: ({ id }) => transcriptFor(id),
         systemPrompt: () => DEMO_SYSTEM_PROMPT,
-        // Refused like commit and push: the findings name a tree the demo does not have, so no agent could work on them.
-        pushFix: () => refuse(`This is the demo workspace: there is no repository to hand these findings over in.`),
         fileDiff: ({ repo, path }) => fileDiff(repo, path),
         rename: ({ id, title }) => agentAnswer(patchAgent(id, { title })),
         seen: ({ id }) => agentAnswer(patchAgent(id, { seenAt: Date.now() })),
@@ -608,10 +601,6 @@ export const procedures = {
         repos: () => ({ repos: [...REPOS] }),
         search: ({ query, mode, literal, word, caseSensitive, include = ``, dir = `` }) =>
             searchWorkspace(query, { smart: mode === `q`, literal: literal === true, word: word === true, caseSensitive: caseSensitive === true, include, dir }),
-        // What a push left behind: dismissing holds until the tab reloads, and measuring again finds the same.
-        pushChecks: () => demoPushChecks(STARTED_AT, pushesRecorded()),
-        pushDismiss: (input) => demoPushDismiss(input),
-        pushRecheck: () => demoPushRecheck(),
     },
     git: {
         repos: () => ({ repos: [...REPOS] }),

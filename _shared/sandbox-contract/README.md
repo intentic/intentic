@@ -8,7 +8,7 @@ flowchart LR
     ext["Extensions<br/>api.sandbox.rpc"] --> contract
     contract --> daemon["Sandbox daemon<br/>route factories"]
     daemon -- "device · webext<br/>runner contracts" --> peers["Machines · browser extension<br/>runners"]
-    contract -. "contract.lock.json" .-> shrink["contract-shrink<br/>push check"]
+    contract -. "contract.lock.json" .-> shrink["contract-shrink<br/>CI check"]
     contract -. "generated from" .-> openapi["sandbox-openapi"]
 ```
 
@@ -51,8 +51,8 @@ flowchart LR
   that moved. Rewrite it by hand with `pnpm --filter @intentic/sandbox-contract lock`. A conversation that changed the
   contract has it rewritten in its own worktree before it lands (the repository's fixers,
   `_tools/scripts/verify/fixers.mjs`), so the lock rides the land that moved it. `src/state/contract-lock.test.ts`
-  fails while the lock and the schemas disagree. `_tools/checks/contract-shrink.mjs` reports a push that shrinks it
-  with no commit declaring the break (`type!:` or `Breaking-Note:`), and the push goes on.
+  fails while the lock and the schemas disagree. `_tools/checks/contract-shrink.mjs` fails CI for a pushed branch
+  that shrinks it with no commit declaring the break (`type!:` or `Breaking-Note:`); nothing checks the push itself.
 
 ## Key files
 

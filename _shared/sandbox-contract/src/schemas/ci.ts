@@ -1,7 +1,6 @@
 // ci: pipeline runs on the workspace repos' github/gitlab remotes
 import { z } from "zod";
 import { AgentRunPickSchema } from "./agent.js";
-import { RedDecisionSchema } from "./workspace/push-checks.js";
 // The daemon maps each workspace repo to its CI project via a connected github/gitlab capability, registers a webhook
 // to fire `ci` listener automations instantly, and serves the Pipelines rail from a webhook-freshened, poll-backfilled
 // cache. `host` names which provider API serves a repo; the listener provider is always `ci`, since a trigger narrows
@@ -112,6 +111,26 @@ export type CiRepo = z.infer<typeof CiRepoSchema>;
 // Fallback poll interval when a repo's webhook couldn't register; lives here since both the poller and the automation
 // editor need it to tell the owner what a `hookWarning` actually costs (minutes' delay, not the feature).
 export const CI_POLL_INTERVAL_MS = 2 * 60_000;
+// What was decided about main's red, in the order it was decided (ci/main-fixer.ts).
+export const RedDecisionKindSchema = z.enum([
+    // Its one fix agent was put on it: by the sandbox at the first job that failed, or by a person's Fix press, which
+    // gives the agent its turns back.
+    "fix-up",
+    // Nobody was sent: repairs are switched off, or nothing could take it.
+    "reported",
+    // The fix agent had its turns, or stopped without a fix: it waits for a person.
+    "spent",
+]);
+export type RedDecisionKind = z.infer<typeof RedDecisionKindSchema>;
+
+export const RedDecisionSchema = z.object({
+    kind: RedDecisionKindSchema.describe("What was decided."),
+    conversationId: z.string().optional().describe("The conversation working on it, when one is."),
+    at: z.number().describe("When that was decided, in milliseconds."),
+    detail: z.string().optional().describe("One sentence on why, in the sandbox's words."),
+});
+export type RedDecision = z.infer<typeof RedDecisionSchema>;
+
 // Main's CI while it is red, as the daemon's one fix agent on it sees it (ci/main-fixer.ts): from the first job that
 // failed until a later run of every workflow that failed on it passes, whatever else failed along the way.
 export const CiMainRedSchema = z.object({

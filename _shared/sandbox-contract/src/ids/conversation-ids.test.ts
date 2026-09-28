@@ -7,8 +7,6 @@ import {
     latestFixAttempt,
     newConversationId,
     nextFixAttemptId,
-    PUSH_FIX_PREFIX,
-    pushFixConversationId,
 } from "./conversation-ids.js";
 import { ConversationIdSchema } from "../schemas/agent.js";
 
@@ -90,28 +88,6 @@ test("the prefix is carried by every fix id", () => {
     expect(ciFixConversationId(`ci-fix`, 7)).toBe(`ci-fix-ci-fix-7`);
 });
 
-test("a push fix id is the same string every time the same failure derives it", () => {
-    expect(pushFixConversationId(`intentic`, `checkout gates,lint`)).toBe(pushFixConversationId(`intentic`, `checkout gates,lint`));
-    expect(pushFixConversationId(`intentic`, `checkout gates,lint`)).toMatch(/^push-fix-intentic-[0-9a-z]{7}$/);
-});
-
-test("a push fix id separates failures and scopes", () => {
-    expect(pushFixConversationId(`intentic`, `lint`)).not.toBe(pushFixConversationId(`intentic`, `checkout gates`));
-    expect(pushFixConversationId(`web`, `lint`)).not.toBe(pushFixConversationId(`api`, `lint`));
-});
-
-// Signatures cover raw gate output: control characters, unicode, path-like strings, and pathological lengths.
-test("every derived push fix id passes the conversation-id guard", () => {
-    const signatures = [``, `checkout gates`, `✗ lint · pnpm lint`, `a`.repeat(4_000), `../../etc/passwd`, `a\nb\tc`, `résumé`];
-    for (const scope of [`root`, `apps/web`, `my repo`, `___`, `x`.repeat(80)]) {
-        for (const signature of signatures) {
-            const id = pushFixConversationId(scope, signature);
-            expect(ConversationIdSchema.safeParse(id).success).toBe(true);
-            expect(id.startsWith(PUSH_FIX_PREFIX)).toBe(true);
-        }
-    }
-});
-
 // Attempt 1 is the bare derived id, so every fix conversation minted before attempts existed reads as attempt 1.
 test("the first attempt wears the failure's own id, later ones carry their number", () => {
     const base = ciFixConversationId(`web`, 41);
@@ -136,8 +112,8 @@ test("another failure's id is not an attempt at this one", () => {
 });
 
 test("attempts are read off the roster, earliest first, and the newest is the live answer", () => {
-    const base = pushFixConversationId(`intentic`, `lint`);
-    const roster = [{ id: `swift-otter-k9m2` }, { id: fixAttemptId(base, 3) }, { id: base }, { id: pushFixConversationId(`intentic`, `typecheck`) }];
+    const base = ciFixConversationId(`intentic`, 7);
+    const roster = [{ id: `swift-otter-k9m2` }, { id: fixAttemptId(base, 3) }, { id: base }, { id: ciFixConversationId(`intentic`, 8) }];
     expect(fixAttemptsOf(base, roster).map((entry) => entry.attempt)).toEqual([1, 3]);
     expect(latestFixAttempt(base, roster)?.agent.id).toBe(fixAttemptId(base, 3));
     expect(latestFixAttempt(base, [])).toBeUndefined();

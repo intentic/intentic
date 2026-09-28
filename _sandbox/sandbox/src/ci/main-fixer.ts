@@ -5,7 +5,6 @@ import {
     CI_FIX_PREFIX,
     ciFixConversationId,
     type CiMainRed,
-    type Finding,
     fixStance,
     fnvDigest,
     isPipelineInFlight,
@@ -17,7 +16,7 @@ import type { Services } from "../composition.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
 import { opt } from "../opt.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
-import type { CiRed } from "./ci-store.js";
+import type { CiFinding, CiRed } from "./ci-store.js";
 import { FIX_LOG_BYTES, infraLog, startCiFix } from "./ci-fix.js";
 import { ciProjects, type CiProject } from "./projects.js";
 import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
@@ -82,11 +81,10 @@ const rerunOnce = new Set<string>();
 const keyOf = (repo: string, branch: string): string => `${repo}\n${branch}`;
 const heardOf = (job: Pick<FailedJob, "runId" | "jobId">): string => `${job.runId}/${job.jobId}`;
 const workflowOf = (workflow: string | undefined): string => (workflow === undefined || workflow === "" ? ONE_PIPELINE : workflow);
-const findingOf = (workflow: string, job: string): Finding => ({
+const findingOf = (workflow: string, job: string): CiFinding => ({
     id: fnvDigest(`${workflow}\n${job}`),
     source: workflow,
     text: job,
-    recheckable: true,
 });
 
 const serially = <T>(key: string, work: () => Promise<T>): Promise<T> => {

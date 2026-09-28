@@ -19,7 +19,7 @@ import { throttleTrailing } from "../../../lib/throttleTrailing";
 import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 import { useRole } from "../../sandbox/secrets/useRole";
-import { refusalSummary } from "../health/fixProposal";
+import { refusalSummary } from "../push/refusalSummary";
 import { outgoingWork } from "../push/outgoingWork";
 import { landingLine, landingNow } from "./landing";
 import { spliceRepoChanges } from "./spliceRepoChanges";

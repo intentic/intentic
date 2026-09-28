@@ -160,13 +160,9 @@ const repoSlug = (repo: string): string =>
         .replace(/^-+|-+$/g, "") || "repo";
 export const ciFixConversationId = (repo: string, runId: number): string => `${CI_FIX_PREFIX}${repoSlug(repo)}-${runId}`;
 
-// Keyed by when the project's push red began (pushFixBase, `red:<since>`), not a run id (a push has none): a refused push
-// is owed by that red too (push-checks-store.ts). Hashed rather than spelled into the branch name; the fix agent's first
-// message names what it is for.
-export const PUSH_FIX_PREFIX = "push-fix-";
-
 // FNV-1a, not a cryptographic hash: nothing here is secret, the only requirement is the same failure yields the same
-// seven characters in every browser and in node. The one spelling: a push finding's id (push-checks-store.ts) is this too.
+// seven characters in every browser and in node. The one spelling: what main's red owes is named by it too (a failed
+// job's id, ci/main-fixer.ts).
 const FNV_OFFSET = 0x811c_9dc5;
 const FNV_PRIME = 0x0100_0193;
 export const fnvDigest = (text: string): string => {
@@ -176,8 +172,6 @@ export const fnvDigest = (text: string): string => {
     }
     return (hash >>> 0).toString(36).padStart(7, "0");
 };
-
-export const pushFixConversationId = (scope: string, signature: string): string => `${PUSH_FIX_PREFIX}${repoSlug(scope)}-${fnvDigest(signature)}`;
 
 // A red main-line check that no conversation still holding the work could take: keyed by the project and the moment its
 // red streak began, so every attempt at one streak shares a base and a later streak in the same project starts over.

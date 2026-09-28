@@ -189,8 +189,8 @@ rebuild, a daemon restart from the host). Say plainly that nothing was changed.
   branches whose last commit is red): the workspace repositories' CI runs, each run's jobs drawn as a graph,
   with rerun, cancel and Fix. A red main-line branch shows above the runs with the one fix agent on it and what
   was last decided about it: the agent has it, it waits for you, or it is only reported because the Agent tab's
-  Repair switch is off. Beside it, **Left at push** holds what the pre-push check found in your pushes and let
-  through, until a later push or a recheck no longer finds it, or you dismiss it or hand it to an agent.
+  Repair switch is off. Nothing checks a push on its way out: what a push broke is CI's to say, and on main the
+  fix agent takes it.
 - **Capabilities** (`/capabilities`): the connections; each card is a connector, account, device or service.
 - **Sandbox** (`/sandbox/<tab>`): Overview, Status (running turns), Usage, Environment, Secrets, Agent (the
   settings above), Extensions, Discover, Access, Personas, Devices.

@@ -5,10 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
-    againstBaseline,
     failedTasks,
     failureLines,
-    judgeUnits,
     junitFailures,
     junitFile,
     logTail,
@@ -17,7 +15,6 @@ import {
     typeDiagnostics,
     unhandledErrors,
     unitsOf,
-    verdictUnits,
 } from "./failure-units.mjs";
 
 const JUNIT = `<?xml version="1.0" encoding="UTF-8"?>
@@ -100,12 +97,6 @@ test("units read the same from two checkouts of one tree, and a task with no rea
     }
 });
 
-test("one more copy of a standing failure is new, and the standing copies are not", () => {
-    const known = ["t a", "t a", "t b"];
-    assert.deepEqual(judgeUnits(["t a", "t a", "t a", "t c"], known), { mine: ["t a", "t c"], standing: ["t a", "t a"] });
-    assert.deepEqual(judgeUnits(["t b"], []), { mine: ["t b"], standing: [] });
-});
-
 test("a summary is the newest one written since the run began, and it is gone once read", () => {
     const root = mkdtempSync(join(tmpdir(), "summary-"));
     try {
@@ -126,26 +117,6 @@ test("a summary is the newest one written since the run began, and it is gone on
     } finally {
         rmSync(root, { recursive: true, force: true });
     }
-});
-
-test("against a red base a turn answers only for what main did not already fail, and a green base spares nothing", () => {
-    const red = { status: "failed", failures: ["w#test a › x", "w#typecheck b: TS1 m"], failedTasks: ["w#test", "w#typecheck"], truncated: false };
-    assert.deepEqual(againstBaseline(["w#test a › x", "w#test a › y"], red), { held: ["w#test a › y"], standing: ["w#test a › x"], unsure: [] });
-    assert.deepEqual(againstBaseline(["w#test a › x"], { status: "passed" }), { held: ["w#test a › x"], standing: [], unsure: [] });
-    assert.deepEqual(againstBaseline(["w#test a › x"], undefined), { held: ["w#test a › x"], standing: [], unsure: [] });
-});
-
-test("a unit in a task the base verdict cut short is reported, not held", () => {
-    const cut = { status: "failed", failures: ["w#test a › x"], failedTasks: ["w#test", "v#test"], truncated: true };
-    assert.deepEqual(againstBaseline(["v#test q › z", "u#test r › s"], cut), { held: ["u#test r › s"], standing: [], unsure: ["v#test q › z"] });
-});
-
-test("a verdict keeps a capped list and says when it cut one", () => {
-    const units = Array.from({ length: 401 }, (_, index) => `t#test f › ${index}`);
-    const kept = verdictUnits(units, [{ taskId: "t#test" }, { taskId: "t#test" }]);
-    assert.equal(kept.failures.length, 400);
-    assert.equal(kept.truncated, true);
-    assert.deepEqual(kept.failedTasks, ["t#test"]);
 });
 
 test("a log tail keeps the last lines that say anything, escape codes dropped", () => {

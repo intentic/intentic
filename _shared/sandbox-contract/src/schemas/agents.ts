@@ -98,7 +98,7 @@ export const UnfinishedWorkSchema = z.object({
 });
 export type UnfinishedWork = z.infer<typeof UnfinishedWorkSchema>;
 // What the last turn showed of its own work, read off its tool calls and never asked of the model: the record a card
-// badges instead of sending the turn back to prove anything. CI checks what the owner pushes (push-checks.ts).
+// badges instead of sending the turn back to prove anything. CI checks what the owner pushes (schemas/ci.ts).
 export const TurnProofSchema = z.object({
     at: z.number().describe("When the turn that left this ended, in milliseconds."),
     verification: z

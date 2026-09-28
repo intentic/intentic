@@ -36,8 +36,8 @@ const spell = (command, args, root) => {
 };
 
 // Runner for one gate's steps; `name` prefixes every printed line, `root` is the commands' cwd and the digest's path
-// base. `advisory` prints the same digest and returns instead of exiting 1: a finding is reported, never a refusal.
-export const createSteps = (name, root, { advisory = false } = {}) => {
+// base.
+export const createSteps = (name, root) => {
     const say = (line) => console.error(`${name}: ${line}`);
     const results = [];
     const started = Date.now();
@@ -73,13 +73,6 @@ export const createSteps = (name, root, { advisory = false } = {}) => {
         return false;
     };
 
-    // Whether any step so far failed.
-    const failing = () => results.some((result) => result.status === "failed");
-    // The steps that failed, with why and the command that shows it again where there is one, for a caller that reports
-    // them as data.
-    const failedSteps = () =>
-        results.filter((result) => result.status === "failed").map(({ label, why, spelling }) => ({ label, why, ...(spelling === undefined ? {} : { spelling }) }));
-
     // Records a step skipped because a real dependency already failed, so the digest can say that part of the tree is
     // unmeasured.
     const skip = (label, why) => {
@@ -93,12 +86,9 @@ export const createSteps = (name, root, { advisory = false } = {}) => {
         results.push({ label, spelling, status: "failed", why, details });
     };
 
-
-    // Prints every step's verdict once at the end and, unless advisory, exits 1 if anything failed. `summarize` runs
-    // only on a clean tree, so recording a passing verdict is not a caller's side effect on a failed run; failed steps
-    // print before skipped ones. `closing` is a failed run's last line, from a caller that knows what becomes of the
-    // failures after it (verify-push keeps them for later); advisory, it replaces the plain "reported, not refused".
-    const finish = (summarize, { closing } = {}) => {
+    // Prints every step's verdict once at the end and exits 1 if anything failed. `summarize` runs only on a clean tree,
+    // so what it says is never a caller's side effect on a failed run; failed steps print before skipped ones.
+    const finish = (summarize) => {
         const failed = results.filter((result) => result.status === "failed");
         const skipped = results.filter((result) => result.status === "skipped");
         const seconds = Math.round((Date.now() - started) / 1000);
@@ -133,15 +123,8 @@ export const createSteps = (name, root, { advisory = false } = {}) => {
                 ? "every step that could still say something about this tree ran; fix these together, and the skipped ones are unmeasured until they do"
                 : "every step ran; fix these together rather than one per run",
         );
-        const last = closing ?? (advisory ? "reported, not refused: nothing a check finds holds this back" : undefined);
-        if (last !== undefined) {
-            say(last);
-        }
-        if (advisory) {
-            return;
-        }
         process.exit(1);
     };
 
-    return { say, step, skip, fail, failing, failedSteps, finish };
+    return { say, step, skip, fail, finish };
 };

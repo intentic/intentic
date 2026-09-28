@@ -114,7 +114,7 @@ test("a pressed Fix on a run of a red main continues the streak's one fix agent,
     const { routes, started, services } = await harness();
     await services.ciStore.red("web", "main", () => ({
         since: 1,
-        findings: [{ id: "f", source: "CI", text: "onboarding", recheckable: true }],
+        findings: [{ id: "f", source: "CI", text: "onboarding" }],
         decisions: [
             {
                 kind: "spent",

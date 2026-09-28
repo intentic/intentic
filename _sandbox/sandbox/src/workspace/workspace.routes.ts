@@ -29,7 +29,6 @@ import {
     pathExists,
 } from "./files/download/workspace-download.js";
 import { TrashMissError } from "./files/trash/workspace-trash.js";
-import { publicPushes, publicPushReds } from "./deps/push-checks-store.js";
 import { childrenForRead, containedForRead, containedIn, insideArchive, scopedTarget, workspaceRootFor } from "./layout/workspace-scope.js";
 import {
     fencedChildren,
@@ -388,26 +387,6 @@ export const createWorkspaceRoutes = (services: Services) => {
                 ),
             ),
         })),
-        // What each push check let through and what each project still owes, as the Pipelines view reads it; a fenced
-        // caller sees its own projects.
-        pushChecks: i.pushChecks.handler(async ({ context }) => {
-            const inFence = fencedTo(await fenceFor(context), (project: string) => project);
-            const { pushes, reds } = await services.pushChecks.store.read();
-            return {
-                pushed: publicPushes(pushes).filter((push) => inFence(push.project)),
-                // A push's red is scoped to its project's folder.
-                reds: publicPushReds(reds).filter((red) => inFence(red.scope)),
-            };
-        }),
-        // What a push check let through waits until measured gone or set aside; a fenced caller acts on its own projects.
-        pushDismiss: i.pushDismiss.handler(async ({ input, context }) => {
-            refuseFenced(await fenceFor(context), input.project);
-            return { changed: await services.pushChecks.dismiss(input.project, input.ids, input.restore === true) };
-        }),
-        pushRecheck: i.pushRecheck.handler(async ({ input, context }) => {
-            refuseFenced(await fenceFor(context), input.project);
-            return services.pushChecks.recheck(input.project);
-        }),
         // Queues the named projects on the coordinator an agent's install also uses, so two package managers never run
         // over one tree; an already-ready project is a no-op.
         install: i.install.handler(async ({ input, context }) => {

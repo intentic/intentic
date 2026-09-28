@@ -252,7 +252,7 @@ console.log(
     [
         "unproven: turns that edited code and ended with nothing having checked it, over turns that edited at all.",
         "continued: turn.ending rules that sent a turn back, and follow-ups acted on: those answered with an edit, a look or a command. Both are retired (nothing runs at a turn's end since 2026-09-25) and read zero from then on.",
-        `pushes refused: the app's push check and the git hook together. fix-shaped: subjects of ${FIX_SUBJECT_CHARS} characters or fewer.`,
+        `pushes refused: every push that did not go, whatever said no (a repository's own hook, the remote, the transport; older rows also count the app's retired push rules). fix-shaped: subjects of ${FIX_SUBJECT_CHARS} characters or fewer.`,
         "CI repairs: fix agents started on main's CI red, one per red streak. handed back: streaks the fix agent left to the owner. streaks ended: main's red streaks a passing run ended. fleet re-runs: CI runs re-run because they died on the runners.",
         ...(ciNote === "" ? [] : [ciNote]),
     ].join("\n"),
