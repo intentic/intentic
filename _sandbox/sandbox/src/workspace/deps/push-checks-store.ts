@@ -206,11 +206,11 @@ export const owedIn = (state: PushChecksState, project: string): readonly Stored
 
 export const openCount = (state: PushChecksState, project: string): number => owedIn(state, project).length;
 
-// THE ONE STREAK RULE (contract, nextStreak) over a project's push red: after an observation at `at` that leaves
+// THE ONE STREAK RULE (contract, nextStreak) over a project's push red: after an observation at `now` that leaves
 // `findings` owed, anything owed continues the red (or begins one), nothing owed ends it. `decided` joins its decisions.
-const observed = (state: PushChecksState, project: string, findings: readonly StoredFinding[], at: number, decided: readonly RedDecision[] = []): PushChecksState => {
+const observed = (state: PushChecksState, project: string, findings: readonly StoredFinding[], now: number, decided: readonly RedDecision[] = []): PushChecksState => {
     const previous = state.reds[project];
-    const streak = nextStreak(previous === undefined ? undefined : { since: previous.since, count: 1 }, findings.length > 0, at);
+    const streak = nextStreak(previous === undefined ? undefined : { since: previous.since, count: 1 }, findings.length > 0, now);
     const { [project]: _red, ...reds } = state.reds;
     const { [project]: _ended, ...ended } = state.ended;
     if (streak === undefined) {
@@ -280,20 +280,20 @@ export const applyMeasured = (
     state: PushChecksState,
     project: string,
     measured: PushMeasured | undefined,
-    at: number,
+    now: number,
 ): Measured => {
     const owed = owedIn(state, project);
     if (measured === undefined || owed.length === 0) {
         return { state, resolved: 0 };
     }
     const found = foundAtIn(state.pushes, project);
-    const gone = owed.filter((finding) => (found.get(finding.id) ?? Number.NEGATIVE_INFINITY) <= at && verdictOf(finding, measured) === "gone");
+    const gone = owed.filter((finding) => (found.get(finding.id) ?? Number.NEGATIVE_INFINITY) <= now && verdictOf(finding, measured) === "gone");
     if (gone.length === 0) {
         return { state, resolved: 0 };
     }
     const ids = gone.map((finding) => finding.id);
-    const decision: RedDecision = { kind: "resolved", at, findings: ids, detail: "A later measurement no longer printed them." };
-    return { state: observed(state, project, owed.filter((finding) => !ids.includes(finding.id)), at, [decision]), resolved: gone.length };
+    const decision: RedDecision = { kind: "resolved", at: now, findings: ids, detail: "A later measurement no longer printed them." };
+    return { state: observed(state, project, owed.filter((finding) => !ids.includes(finding.id)), now, [decision]), resolved: gone.length };
 };
 
 // The newest pushes, plus any older one that brought in a finding still owed, up to the cap.
@@ -378,7 +378,7 @@ export interface PushRefusal {
 
 // What every refused push in the project left owed, settled: a later push answered for the same work, passing or refused
 // again. Returns the state unchanged (by reference) when nothing was.
-export const settleRefusals = (state: PushChecksState, project: string, at: number): PushChecksState => {
+export const settleRefusals = (state: PushChecksState, project: string, now: number): PushChecksState => {
     const refused = new Set(
         state.pushes.filter((push) => push.project === project && push.refused === true).flatMap((push) => push.findings.map((finding) => finding.id)),
     );
@@ -387,8 +387,8 @@ export const settleRefusals = (state: PushChecksState, project: string, at: numb
     if (settled.length === 0) {
         return state;
     }
-    const decision: RedDecision = { kind: "resolved", at, findings: settled, detail: "A later push of the same work answered the refusal." };
-    return observed(state, project, owed.filter((finding) => !settled.includes(finding.id)), at, [decision]);
+    const decision: RedDecision = { kind: "resolved", at: now, findings: settled, detail: "A later push of the same work answered the refusal." };
+    return observed(state, project, owed.filter((finding) => !settled.includes(finding.id)), now, [decision]);
 };
 
 // Files one refusal, settling any the project had before it.
@@ -546,8 +546,8 @@ export const filePushChecksStore = (path: string): PushChecksStore => {
         refuse: async (project, refusal) => {
             await file.update((current) => fileRefusal(current, project, refusal));
         },
-        pushed: async (project, at) => {
-            await file.update((current) => settleRefusals(current, project, at));
+        pushed: async (project, now) => {
+            await file.update((current) => settleRefusals(current, project, now));
         },
         decide: async (project, decision) => {
             await file.update((current) => decidedIn(current, project, decision));

@@ -120,7 +120,7 @@ const harness = async (autoRepair = true) => {
                 started.push(turn);
                 agents.set(turn.conversationId, summary(turn.conversationId));
                 running.add(turn.conversationId);
-                return { id: `run-${started.length}`, frames: async function* () {} };
+                return { id: `run-${started.length}`, async *frames() {} };
             },
             say: async (words) => {
                 said.push(words);

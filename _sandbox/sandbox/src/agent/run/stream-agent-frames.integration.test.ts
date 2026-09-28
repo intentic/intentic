@@ -260,7 +260,8 @@ test("a spent allowance naming its reset is held whole, filed as a limit, and re
     expect(writes.providerRefusals).toStrictEqual([
         {
             provider: "claude",
-            refusal: { at: expect.any(Number), kind: "limit", message: "Claude usage limit reached.", ...stamp, model: "opus" },
+            // The provider's own "try again at" rides on the refusal, so a listing reads the pool as spent until then.
+            refusal: { at: expect.any(Number), kind: "limit", message: "Claude usage limit reached.", ...stamp, model: "opus", resetsAt: 1_900_000_000 },
         },
     ]);
     expect(writes.headroomRefreshes).toStrictEqual([{ scope: { providers: ["claude"], account: "default" }, maxAgeMs: 0 }]);
