@@ -8,12 +8,17 @@ import { z } from "zod";
 import { accountFiles } from "../../agent/providers/accounts/account-files.js";
 
 // Claude subscription OAuth (PKCE) against the public Claude Code client; the sandbox owns these credentials, not the
-// platform. The constants mirror claude setup-token and are unofficial. Anthropic's redirect page returns code#state;
-// the caller pastes it back to exchangeCode.
+// platform. The constants mirror claude setup-token and are unofficial. Two redirects, the two Claude Code itself uses:
+// Anthropic's own page, which shows code#state for the caller to paste back to exchangeCode, and a loopback address
+// (`http://localhost:<port>/callback`, any port) where the CLI would be listening. The sandbox is not on the browser's
+// machine, so the loopback one is offered only when a device or browser of the owner's watches it there
+// (loopback-bridge.ts), and the landing it catches is exchanged here like a paste.
 const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const AUTHORIZE_URL = "https://claude.ai/oauth/authorize";
 const TOKEN_URL = "https://console.anthropic.com/v1/oauth/token";
 const REDIRECT_URI = "https://console.anthropic.com/oauth/code/callback";
+export const CLAUDE_LOOPBACK_PATH = "/callback";
+export const claudeLoopbackRedirect = (port: number): string => `http://localhost:${port}${CLAUDE_LOOPBACK_PATH}`;
 const SCOPES = "org:create_api_key user:profile user:inference";
 // Who the sandbox says it is when it asks Anthropic directly as Claude Code does: the limit-reset reads
 // (usage/claude-limit-reset.ts) and the seat probe (claude-seat-check.ts).
@@ -73,25 +78,36 @@ export interface AuthorizeChallenge {
     readonly authorizeUrl: string;
     readonly verifier: string;
     readonly state: string;
+    // Where Anthropic sends the browser, which the exchange must name identically.
+    readonly redirectUri: string;
 }
 
-// Builds the authorize URL plus the PKCE verifier/state round-tripped to exchangeCode. The verifier travels to the
-// browser, which is normal for a public client and needs no server-side pending-auth store.
-export const buildAuthorizeUrl = (): AuthorizeChallenge => {
+// Builds the authorize URL plus the PKCE verifier/state round-tripped to exchangeCode. Only the challenge travels to
+// the browser; the verifier stays with the caller (the account door's pending attempts), never on the wire. Anthropic's
+// paste page unless a redirect is named.
+export const buildAuthorizeUrl = (redirectUri: string = REDIRECT_URI): AuthorizeChallenge => {
     const verifier = base64url(randomBytes(32));
     const challenge = base64url(createHash("sha256").update(verifier).digest());
     const state = base64url(randomBytes(32));
+    return { authorizeUrl: authorizeUrlFor({ verifier, state }, redirectUri), verifier, state, redirectUri };
+};
+
+// The same challenge, addressed to another redirect: the door arms the loopback watch before it knows whether anyone
+// is watching, and falls back to the paste page on the challenge it already holds.
+export const authorizeUrlFor = (challenge: Pick<AuthorizeChallenge, "verifier" | "state">, redirectUri: string): string => {
     const url = new URL(AUTHORIZE_URL);
     url.searchParams.set("code", "true");
     url.searchParams.set("client_id", CLIENT_ID);
     url.searchParams.set("response_type", "code");
-    url.searchParams.set("redirect_uri", REDIRECT_URI);
+    url.searchParams.set("redirect_uri", redirectUri);
     url.searchParams.set("scope", SCOPES);
-    url.searchParams.set("code_challenge", challenge);
+    url.searchParams.set("code_challenge", base64url(createHash("sha256").update(challenge.verifier).digest()));
     url.searchParams.set("code_challenge_method", "S256");
-    url.searchParams.set("state", state);
-    return { authorizeUrl: url.toString(), verifier, state };
+    url.searchParams.set("state", challenge.state);
+    return url.toString();
 };
+
+export const CLAUDE_PASTE_REDIRECT = REDIRECT_URI;
 
 // Token set from an exchange/refresh: tokens, an epoch-ms expiry, and the identity that tells two connections of the
 // same provider apart. Both identity fields are optional; without them the user names the account by hand.
@@ -192,16 +208,45 @@ const requestTokens = async (body: Record<string, string>): Promise<TokenSet> =>
     };
 };
 
-// Accepts Anthropic's pasted `code#state` or a bare code. Returns the raw token set; the caller tags it with an account
-// identity before store.write.
-export const exchangeCode = (pastedCode: string, verifier: string, fallbackState: string): Promise<TokenSet> => {
-    const [code = "", state = fallbackState] = pastedCode.trim().split("#");
+// What came back from the browser, whichever redirect it took: Anthropic's page shows `code#state` (or a bare code), a
+// loopback landing is an address whose query holds both. Blank fields where the text carried none; `error` only where
+// the provider sent one instead of a grant.
+export interface ClaudeGrant {
+    readonly code: string;
+    readonly state: string;
+    readonly error?: string;
+}
+
+const grantFromQuery = (query: URLSearchParams): ClaudeGrant => {
+    const grant = { code: (query.get("code") ?? "").trim(), state: (query.get("state") ?? "").trim() };
+    const error = query.get("error_description")?.trim() || query.get("error")?.trim() || "";
+    return error === "" ? grant : { ...grant, error };
+};
+
+export const parseClaudeGrant = (text: string): ClaudeGrant => {
+    const trimmed = text.trim();
+    if (/^https?:\/\//i.test(trimmed) || trimmed.includes("?")) {
+        try {
+            return grantFromQuery(new URL(trimmed).searchParams);
+        } catch {
+            return grantFromQuery(new URLSearchParams(trimmed.slice(trimmed.indexOf("?") + 1)));
+        }
+    }
+    const [code = "", state = ""] = trimmed.split("#");
+    return { code: code.trim(), state: state.trim() };
+};
+
+// Accepts Anthropic's pasted `code#state`, a bare code, or a loopback landing address. `redirectUri` is the one the
+// attempt's authorize URL named, which Anthropic requires again here. Returns the raw token set; the caller tags it
+// with an account identity before store.write.
+export const exchangeCode = (pastedCode: string, verifier: string, fallbackState: string, redirectUri: string = REDIRECT_URI): Promise<TokenSet> => {
+    const parsed = parseClaudeGrant(pastedCode);
     return requestTokens({
         grant_type: "authorization_code",
-        code,
-        state,
+        code: parsed.code,
+        state: parsed.state === "" ? fallbackState : parsed.state,
         client_id: CLIENT_ID,
-        redirect_uri: REDIRECT_URI,
+        redirect_uri: redirectUri,
         code_verifier: verifier,
     });
 };

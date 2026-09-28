@@ -44,6 +44,9 @@ export const WebExtFactsSchema = object({
     grants: array(WebExtGrantSchema),
     // Kill switch from the extension's popup; true means every tool refuses and reports why.
     paused: boolean(),
+    // The optional procedures this build answers (`loopback-catch`); strings, so a newer build's never fails a read.
+    // Absent from a build older than the field, which answers none of them.
+    features: array(string()).optional(),
 });
 export type WebExtFacts = z.infer<typeof WebExtFactsSchema>;
 export const WebExtSummarySchema = object({

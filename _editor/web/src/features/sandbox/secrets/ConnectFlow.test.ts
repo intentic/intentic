@@ -13,6 +13,7 @@ interface Flow {
     flow?: `device` | `redirect`;
     handshake?: string;
     redeemed?: boolean;
+    catchers?: { kind: `device` | `browser`; label: string }[];
 }
 
 const nativeConnectFlow = ref<Flow | undefined>(undefined);
@@ -215,4 +216,49 @@ it(`keeps a refused address in the field, so the retry is a second press`, async
 
     expect(completeTranslator).toHaveBeenCalledWith(GOOGLE_ADDRESS);
     expect(host.querySelector<HTMLInputElement>(`input[name="connectCode"]`)?.value).toBe(GOOGLE_ADDRESS);
+});
+
+// Watched on the owner's own PC, a sign-in finishes with nothing brought back: the panel sends them to the page, says
+// where it will land, and keeps the paste folded behind "somewhere else" for a browser nothing watches.
+const WATCHED_CLAUDE = {
+    provider: `claude`,
+    url: `https://claude.ai/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A54321%2Fcallback&state=st-c`,
+    code: ``,
+    state: `st-c`,
+    flow: `redirect`,
+    handshake: `st-c`,
+    catchers: [{ kind: `device`, label: `rog` }],
+} as const;
+
+it(`a sign-in watched on the owner's machine asks for nothing back, and says where it finishes`, async () => {
+    const host = await mount({ ...WATCHED_CLAUDE, catchers: [...WATCHED_CLAUDE.catchers] });
+    expect(host.textContent).toContain(`it finishes by itself on rog`);
+    expect(host.querySelector(`input[name="connectCode"]`), `asked for a paste a device is already catching`).toBeNull();
+    host.querySelector(`a`)!.click();
+    await nextTick();
+    expect(host.textContent).toContain(`Waiting for the sign-in to land on rog`);
+    expect(host.querySelector(`input[name="connectCode"]`), `the trip alone opened the paste field`).toBeNull();
+});
+
+it(`a watched sign-in still takes the address back from a browser nothing watches`, async () => {
+    const host = await mount({ ...WATCHED_CLAUDE, catchers: [...WATCHED_CLAUDE.catchers] });
+    const elsewhere = [...host.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`somewhere other than rog`))!;
+    elsewhere.click();
+    await nextTick();
+    const field = host.querySelector<HTMLInputElement>(`input[name="connectCode"]`)!;
+    expect(field.placeholder).toContain(`address`);
+    field.value = `http://localhost:54321/callback?code=abc&state=st-c`;
+    field.dispatchEvent(new Event(`input`));
+    await nextTick();
+    await nextTick();
+    expect(completeConnect).toHaveBeenCalledWith(`http://localhost:54321/callback?code=abc&state=st-c`);
+});
+
+it(`draws the dead-end page at the address the provider was really sent to`, async () => {
+    const host = await mount({ ...WATCHED_CLAUDE, catchers: [...WATCHED_CLAUDE.catchers] });
+    [...host.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`somewhere other than rog`))!.click();
+    await nextTick();
+    [...host.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`What that page looks like`))!.click();
+    await nextTick();
+    expect(host.querySelector(`[aria-hidden="true"]`)?.textContent).toContain(`localhost:54321/callback?code=4/0AX4…`);
 });

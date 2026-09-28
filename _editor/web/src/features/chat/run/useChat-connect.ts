@@ -1,6 +1,14 @@
 import { sandboxRef, sandboxScopeGuard, sandboxValue } from "@intentic/extension-api";
 import { errorMessage } from "@intentic/ui/async";
-import { type AgentProvider, type KeyedProvider, type LoginFlow, type NativeProvider, providerLabel, providerSpec } from "@intentic/sandbox-contract";
+import {
+    type AgentProvider,
+    type KeyedProvider,
+    type LoginFlow,
+    type NativeProvider,
+    providerLabel,
+    providerSpec,
+    type SignInCatcher,
+} from "@intentic/sandbox-contract";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { hasSignIn } from "../session/access";
 import { active } from "../tabs/useChat-tabs";
@@ -11,8 +19,11 @@ import { orRefusal, SandboxHttpError } from "../../sandbox/client/sandboxHttpErr
 import { type ProcedureOutput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
 
 // In-flight subscription login, identified by the translator's own attempt state.
+// `catchers` are the owner's devices and browsers watching where a redirect lands, so it finishes without the paste;
+// empty for a sandbox (or an older daemon) with nobody watching.
 export const translatorConnectFlow = sandboxRef<
-    { provider: KeyedProvider; url: string; code: string; state: string; flow: "device" | "redirect" } | undefined
+    | { provider: KeyedProvider; url: string; code: string; state: string; flow: "device" | "redirect"; catchers: readonly SignInCatcher[] }
+    | undefined
 >(() => undefined);
 
 // Whether the reader has actually been handed to the provider's page this handshake. A paste sign-in is two
@@ -95,7 +106,7 @@ export const connectTranslator = async (target: KeyedProvider): Promise<void> =>
         if (!current()) {
             return;
         }
-        translatorConnectFlow.value = { provider: target, ...started };
+        translatorConnectFlow.value = { provider: target, ...started, catchers: started.catchers ?? [] };
         translatorPollTimer.value = setTimeout(() => void pollTranslatorOnce(target, Date.now() + CODEX_POLL_DEADLINE_MS), 3_000);
     } catch (caught) {
         error.value = errorMessage(caught, `Could not start the subscription connection: is your sandbox online?`);
@@ -167,6 +178,8 @@ interface NativeConnectFlow {
     readonly flow: LoginFlow;
     readonly variant: string;
     readonly handshake: string;
+    // The owner's devices and browsers watching where this sign-in's redirect lands; empty when nobody is.
+    readonly catchers: readonly SignInCatcher[];
     // The grant came back and was accepted, but the credential behind it is still being minted: there is nothing
     // left to ask the user for, and nothing to show yet either.
     readonly redeemed: boolean;
@@ -239,6 +252,50 @@ const pollNativeOnce = async (target: AgentProvider, deadline: number): Promise<
     nativePollTimer.value = setTimeout(() => void pollNativeOnce(target, deadline), 3000);
 };
 
+// One poll tick for a sign-in the daemon keeps a record of (every one somebody of the owner's is watching the landing
+// for): reads the attempt itself, so adding a second account is not mistaken for done because the first exists.
+const pollNativeStatusOnce = async (target: AgentProvider, deadline: number): Promise<void> => {
+    const flow = nativeConnectFlow.value;
+    if (flow?.provider !== target) {
+        return;
+    }
+    if (Date.now() > deadline) {
+        error.value = `The ${providerLabel(target)} sign-in expired: start the connection again.`;
+        cancelConnect();
+        return;
+    }
+    try {
+        // SAFETY: a native flow is only ever started by startConnect, through the accounts door, for a native provider.
+        const result = await sandboxRpc.accounts.status({ provider: target as NativeProvider, handshake: flow.handshake });
+        if (nativeConnectFlow.value?.handshake !== flow.handshake) {
+            return;
+        }
+        if (result.status === `ok`) {
+            if (result.account !== undefined) {
+                addAccount(target, result.account);
+            }
+            await refreshAccounts(target);
+            if (nativeConnectFlow.value?.handshake === flow.handshake) {
+                settleConnect();
+                error.value = null;
+            }
+            void loadProviderModels(target);
+            return;
+        }
+        if (result.status === `error`) {
+            settleConnect();
+            error.value = `The ${providerLabel(target)} sign-in failed: ${result.error}`;
+            return;
+        }
+    } catch {
+        // Transient (sandbox blip); keep polling until the deadline.
+    }
+    if (nativeConnectFlow.value?.handshake !== flow.handshake) {
+        return;
+    }
+    nativePollTimer.value = setTimeout(() => void pollNativeStatusOnce(target, deadline), 3000);
+};
+
 // Step 1 of a native connect: Claude mints an authorize URL + PKCE challenge; Grok mints a device code and
 // starts its own poll. Routed subscriptions (including Kimi Code) use connectTranslator above.
 
@@ -280,11 +337,15 @@ export const startConnect = async (variant?: string): Promise<void> => {
             flow: body.flow,
             variant: body.variant,
             handshake: body.handshake,
+            catchers: body.catchers ?? [],
             redeemed: false,
         };
-        // Paste-back never polls; every other shape polls until the daemon's own `expiresAt`, not a local deadline,
-        // since that's the attempt that actually expires.
-        if (body.flow !== `paste`) {
+        // A watched sign-in can finish with nobody touching this tab, so it polls the attempt itself. Otherwise
+        // paste-back never polls, and every other shape watches the account list. Both until the daemon's own
+        // `expiresAt`, not a local deadline, since that's the attempt that actually expires.
+        if ((body.catchers ?? []).length > 0) {
+            nativePollTimer.value = setTimeout(() => void pollNativeStatusOnce(target, body.expiresAt), 3000);
+        } else if (body.flow !== `paste`) {
             nativePollTimer.value = setTimeout(() => void pollNativeOnce(target, body.expiresAt), 3000);
         }
     } finally {

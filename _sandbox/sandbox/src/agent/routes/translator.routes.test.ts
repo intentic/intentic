@@ -1,5 +1,6 @@
 import { waitFor } from "@intentic/testing/bun";
 import { createApp } from "../../app.js";
+import { CATCHING_DEVICE, catchingServicesHubs, fakeCatcher } from "../providers/accounts/loopback-bridge.testing.js";
 import { clientFor, postJson } from "../../harness/route-client.testing.js";
 import { services, withTranslator } from "../../harness/route-services.testing.js";
 import { TRANSLATOR_BINARY_MISSING } from "../providers/translator.js";
@@ -101,4 +102,60 @@ test("a listing failure says so rather than claiming the sandbox has no subscrip
     const client = clientFor(createApp(services({ config: withTranslator, cliProxy: failing(new Error("could not read the credential store")) })));
 
     await expect(client.translator.accounts()).rejects.toThrow(/credential store/);
+});
+
+// Google's redirect lands on a loopback address nothing here binds. With a device of the owner's watching it, the
+// landing is caught on that machine and handed to the translator exactly as a paste would be; nobody pastes.
+test("a Google sign-in watched on the owner's device finishes from the caught landing", async () => {
+    const completed: { provider: string; redirectUrl: string; state: string }[] = [];
+    const rog = fakeCatcher();
+    const client = clientFor(
+        createApp(
+            services({
+                config: withTranslator,
+                ...catchingServicesHubs({ rog: { facts: CATCHING_DEVICE, catcher: rog } }),
+                cliProxy: {
+                    connect: async () => ({
+                        url: "https://accounts.google.com/o/oauth2/v2/auth?redirect_uri=http%3A%2F%2Flocalhost%3A51121%2Foauth-callback&state=g-1",
+                        code: "",
+                        state: "g-1",
+                        flow: "redirect" as const,
+                    }),
+                    complete: async (input) => {
+                        completed.push(input);
+                    },
+                },
+            }),
+        ),
+    );
+
+    const started = await client.translator.connect({ provider: "gemini" });
+    expect(started.catchers).toEqual([{ kind: "device", label: "rog" }]);
+    expect(rog.asked).toMatchObject([{ host: "localhost", port: 51121, path: "/oauth-callback" }]);
+    rog.push({ type: "landed", url: "http://localhost:51121/oauth-callback?code=google-code&state=g-1" });
+    await waitFor(() =>
+        expect(completed).toEqual([{ provider: "gemini", redirectUrl: "http://localhost:51121/oauth-callback?code=google-code&state=g-1", state: "g-1" }]),
+    );
+});
+
+// Codex has a device code and a loopback redirect; with a device of the owner's watching, the redirect is one click.
+test("a Codex sign-in takes the redirect only when a device of the owner's watches loopback", async () => {
+    const asked: (Record<string, unknown> | undefined)[] = [];
+    const cliProxy = {
+        connect: async (_provider: string, options?: { readonly redirect?: boolean }) => {
+            asked.push(options);
+            return options?.redirect === true
+                ? { url: "https://auth.openai.com/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback", code: "", state: "c-1", flow: "redirect" as const }
+                : { url: "https://auth.openai.com/codex/device", code: "ABCD-1234", state: "codex-2", flow: "device" as const };
+        },
+    };
+    const nobody = clientFor(createApp(services({ config: withTranslator, cliProxy })));
+    await expect(nobody.translator.connect({ provider: "codex" })).resolves.toMatchObject({ flow: "device", code: "ABCD-1234" });
+
+    const watched = clientFor(
+        createApp(services({ config: withTranslator, cliProxy, ...catchingServicesHubs({ rog: { facts: CATCHING_DEVICE, catcher: fakeCatcher() } }) })),
+    );
+    const started = await watched.translator.connect({ provider: "codex" });
+    expect(started).toMatchObject({ flow: "redirect", state: "c-1", catchers: [{ kind: "device", label: "rog" }] });
+    expect(asked).toEqual([undefined, { redirect: true }]);
 });

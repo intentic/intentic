@@ -70,11 +70,14 @@ export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 //   Both features ride that verb, so an agent advertises both or neither.
 // - `rollback-to`: the `rollback` op's `to`, going back to an older version kept on the machine rather than the
 //   previous one; advertised only when the agent's `ic sandbox rollback` takes `--to`.
-export const DeviceFeatureSchema = z.enum(["reshape-later", "set-shape", "rollback-to"]);
+// - `loopback-catch`: the `catchLoopback` procedure, a sign-in's loopback redirect caught on this machine
+//   (loopback-catch.ts); an agent without it rejects the call as an unknown procedure.
+export const DeviceFeatureSchema = z.enum(["reshape-later", "set-shape", "rollback-to", "loopback-catch"]);
 export type DeviceFeature = z.infer<typeof DeviceFeatureSchema>;
 export const DEVICE_FEATURE_RESHAPE_LATER: DeviceFeature = "reshape-later";
 export const DEVICE_FEATURE_SET_SHAPE: DeviceFeature = "set-shape";
 export const DEVICE_FEATURE_ROLLBACK_TO: DeviceFeature = "rollback-to";
+export const DEVICE_FEATURE_LOOPBACK_CATCH: DeviceFeature = "loopback-catch";
 // The features an agent advertised that this build knows; an unknown one is a newer agent's and means nothing here.
 export const deviceFeatures = (facts: Pick<DeviceFacts, "features"> | undefined): DeviceFeature[] =>
     (facts?.features ?? []).flatMap((feature) => {

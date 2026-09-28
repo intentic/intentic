@@ -244,7 +244,10 @@ export interface CliProxyClient {
     readonly turnLimit: (provider: KeyedProvider, model: string) => Promise<TurnLimit>;
     // Takes every credential that can serve no turn out of the proxy's rotation, answering with the names it benched.
     readonly benchUnusable: () => Promise<string[]>;
-    readonly connect: (provider: KeyedProvider) => Promise<TranslatorLogin>;
+    // `redirect` asks for the loopback-redirect sign-in where a provider has both (Codex): the caller passes it only when
+    // someone of the owner's is watching that loopback address (loopback-bridge.ts), since anywhere else the page
+    // dead-ends and a device code is the easier thing to carry.
+    readonly connect: (provider: KeyedProvider, options?: { readonly redirect?: boolean }) => Promise<TranslatorLogin>;
     readonly status: (provider: KeyedProvider, state: string) => Promise<TranslatorStatus>;
     readonly complete: (input: { provider: KeyedProvider; redirectUrl: string; state: string }) => Promise<void>;
     readonly disconnect: (provider: KeyedProvider, name: string) => Promise<void>;
@@ -323,18 +326,20 @@ export const createCliProxyClient = (params: {
         return { url: body.url, code: body.user_code ?? "", state: body.state, flow: "device" };
     };
 
-    // Google's redirect lands on a loopback port inside this container the user's browser can't reach, so it dead-ends
-    // in their address bar; they paste that URL, and `complete` posts it back. No device flow exists for Google.
-    const connectGemini = async (): Promise<TranslatorLogin> => {
-        const response = await fetchFn(`${managementUrl}/antigravity-auth-url`, { headers: auth }).catch(async (err: unknown) => {
+    // The proxy's own redirect sign-ins, Google's and Codex's: the browser is sent to a loopback port nothing here binds.
+    // The route arms a watch for it on the owner's own machines (translator.routes.ts, loopback-bridge.ts); anywhere else
+    // it dead-ends in the address bar and the user pastes that URL. Either way `complete` posts it back, and the proxy
+    // reports the attempt on get-auth-status. No device flow exists for Google.
+    const connectRedirect = async (path: "antigravity-auth-url" | "codex-auth-url", label: string): Promise<TranslatorLogin> => {
+        const response = await fetchFn(`${managementUrl}/${path}`, { headers: auth }).catch(async (err: unknown) => {
             throw await unreachable(err);
         });
         if (!response.ok) {
-            throw new Error(`Google sign-in failed to start (${response.status})`);
+            throw new Error(`${label} sign-in failed to start (${response.status})`);
         }
         const body = (await response.json()) as { url?: string; state?: string };
         if (body.url === undefined || body.state === undefined || body.state === "") {
-            throw new Error("Google sign-in returned no authorization URL");
+            throw new Error(`${label} sign-in returned no authorization URL`);
         }
         return { url: body.url, code: "", state: body.state, flow: "redirect" };
     };
@@ -393,18 +398,24 @@ export const createCliProxyClient = (params: {
         }
     };
 
-    // Codex's Management API login can't complete remotely (browser redirect), so this drives `--codex-device-login` as
-    // a subprocess, parsing its URL and code. A new connect kills the prior child.
     let codexChild: ChildProcess | undefined;
     let codexLogin: { state: string; status: TranslatorStatus } | undefined;
-    const connectCodex = async (): Promise<TranslatorLogin> => {
+    // Codex has two sign-ins. The redirect one sends the browser to http://localhost:1455/auth/callback and is asked for
+    // only where someone of the owner's watches that address (the route decides); it is the proxy's, like Google's.
+    // Otherwise the device login, which finishes remotely: `--codex-device-login` as a subprocess, parsing its URL and
+    // code. Either way a new connect retires the prior device child.
+    const connectCodex = async (redirect: boolean): Promise<TranslatorLogin> => {
+        if (codexLogin?.status.status === "wait") {
+            codexLogin.status = { status: "error", error: "This sign-in was replaced by a newer attempt." };
+        }
+        codexChild?.kill("SIGTERM");
+        codexChild = undefined;
+        if (redirect) {
+            return await connectRedirect("codex-auth-url", "ChatGPT");
+        }
         // Resolved before the executor so the login drives the same binary the supervised proxy does.
         const binary = (await engineBinary("translator")) ?? "cli-proxy-api";
         return new Promise((resolve, reject) => {
-            if (codexLogin?.status.status === "wait") {
-                codexLogin.status = { status: "error", error: "This sign-in was replaced by a newer attempt." };
-            }
-            codexChild?.kill("SIGTERM");
             const login = { state: `codex-${randomUUID()}`, status: { status: "wait" } as TranslatorStatus };
             codexLogin = login;
             const child = spawnFn(binary, ["--codex-device-login", "--no-browser", "--config", configPath], {
@@ -459,10 +470,9 @@ export const createCliProxyClient = (params: {
     };
 
     const status = async (provider: KeyedProvider, state: string): Promise<TranslatorStatus> => {
-        if (provider === "codex") {
-            return codexLogin?.state === state
-                ? codexLogin.status
-                : { status: "error", error: "This ChatGPT sign-in attempt is unknown or expired." };
+        // The device login is this daemon's own subprocess; a redirect one is the proxy's, read like any other below.
+        if (provider === "codex" && codexLogin?.state === state) {
+            return codexLogin.status;
         }
         const response = await fetchFn(`${managementUrl}/get-auth-status?state=${encodeURIComponent(state)}`, { headers: auth }).catch(
             async (err: unknown) => {
@@ -588,8 +598,12 @@ export const createCliProxyClient = (params: {
         },
         turnLimit,
         benchUnusable,
-        connect: (provider) =>
-            provider === "grok" || provider === "kimi" ? connectDevice(provider) : provider === "gemini" ? connectGemini() : connectCodex(),
+        connect: (provider, options) =>
+            provider === "grok" || provider === "kimi"
+                ? connectDevice(provider)
+                : provider === "gemini"
+                  ? connectRedirect("antigravity-auth-url", "Google")
+                  : connectCodex(options?.redirect === true),
         status,
         complete,
         disconnect,

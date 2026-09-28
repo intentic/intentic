@@ -1,5 +1,6 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { WebExtFacts } from "@intentic/sandbox-contract/webext";
+import { loopbackFeatures } from "../loopback-catch.js";
 import { declinedMessage, originPattern, RefusedError, siteOf } from "../policy.js";
 import { DECLINE_HOLD_MS, store } from "../store.js";
 import { currentGrants } from "./tab-access.js";
@@ -52,8 +53,14 @@ export const openPanel = async (force = false): Promise<void> => {
 
 // A browser's own account of itself, the answer to `describe` on the socket and the substance of its card.
 export const browserFacts = async (): Promise<WebExtFacts> => {
-    const [tabs, grants, paused, browser] = await Promise.all([chrome.tabs.query({}), currentGrants(), store.paused(), browserName()]);
-    return { browser, tabs: tabs.length, grants, paused };
+    const [tabs, grants, paused, browser, features] = await Promise.all([
+        chrome.tabs.query({}),
+        currentGrants(),
+        store.paused(),
+        browserName(),
+        loopbackFeatures(),
+    ]);
+    return { browser, tabs: tabs.length, grants, paused, features };
 };
 
 // Brave ships Chrome's user agent on purpose, so asking it is the only way to tell; any browser without the hook reads

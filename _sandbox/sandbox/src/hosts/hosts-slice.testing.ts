@@ -1,3 +1,4 @@
+import { unstubbed } from "@intentic/testing";
 import type { SliceFakeContext } from "../harness/slice-fake.testing.js";
 import { pairings } from "../peers/enrollment.js";
 import { enrolledFleet, syncPairBurns, type SyncMode } from "./desktop-sync.js";
@@ -15,4 +16,6 @@ export const hostsSliceFake = ({ historyRoot }: SliceFakeContext) =>
         // Composed exactly as composition.ts composes it, over this harness's own history root, so a suite exercises
         // the real reader rather than a second description of it.
         syncFleet: () => enrolledFleet(historyRoot),
+        // No device holds a socket, which a sign-in asks before offering the loopback catch (loopback-bridge.ts).
+        hostHub: unstubbed<HostsSlice["hostHub"]>("hostHub", { connected: () => [] }),
     }) satisfies Partial<HostsSlice>;

@@ -28,10 +28,13 @@ export const ZAI_LOGIN_HOSTS: ZaiLoginHosts = {
     bigModelLogin: "https://bigmodel.cn/login",
 };
 
-// BigModel's redirect_uri needs to be the same string at authorize and exchange, nothing more; nobody binds this port,
-// so the page dead-ends and the grant comes back as a paste. Fixed, not allocated, since allocating would imply
-// something is listening.
-const LOOPBACK_REDIRECT = "http://127.0.0.1:8317/callback";
+// BigModel's redirect_uri needs to be the same string at authorize and exchange, nothing more. Nothing in the sandbox
+// binds it: a device agent or browser of the owner's watches it on their own machine where one can (loopback-bridge.ts),
+// and anywhere else the page dead-ends and the grant comes back as a paste. Fixed, not allocated: ZCode's app id is
+// registered against this one address.
+const LOOPBACK_PORT = 8317;
+const LOOPBACK_PATH = "/callback";
+const LOOPBACK_REDIRECT = `http://127.0.0.1:${LOOPBACK_PORT}${LOOPBACK_PATH}`;
 // ZCode's own app id: the mainland login only issues a grant to a client it recognizes.
 const BIGMODEL_APP_ID = "zcode";
 
@@ -268,7 +271,14 @@ const startBigModel = async (context: MintedLoginContext, hosts: ZaiLoginHosts):
         });
     };
 
-    return { url, code: "", state, expiresAt: Date.now() + REDIRECT_WINDOW_MS, settle };
+    return {
+        url,
+        code: "",
+        state,
+        expiresAt: Date.now() + REDIRECT_WINDOW_MS,
+        loopback: { host: "127.0.0.1", port: LOOPBACK_PORT, path: LOOPBACK_PATH },
+        settle,
+    };
 };
 
 // Swaps a pasted mainland grant for the estate's access token; retried, since this endpoint can answer with its own

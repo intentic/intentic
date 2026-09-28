@@ -33,6 +33,7 @@ jest.mock("../../sandbox/client/sandboxRpc", () => ({
             start: procedureOf(`accounts.start`),
             complete: procedureOf(`accounts.complete`),
             cancel: procedureOf(`accounts.cancel`),
+            status: procedureOf(`accounts.status`),
             rename: procedureOf(`accounts.rename`),
             disconnect: procedureOf(`accounts.disconnect`),
         },
@@ -294,6 +295,53 @@ describe(`useChat provider reconciliation`, () => {
         await advanceTimersByTimeAsync(3_000);
         expect(chat.nativeConnectFlow.value).toBeUndefined();
         expect(chat.managedAccounts.value).toEqual([minted]);
+    });
+
+    // A device of the owner's catches the landing, so nothing ever comes back through this tab: the attempt itself is
+    // polled, and an account already on file is not mistaken for the new one arriving.
+    it(`settles a sign-in caught on the owner's device when its attempt says so, not when any account exists`, async () => {
+        jest.useFakeTimers();
+        resetSandboxScope();
+        const chat = useChat();
+        chat.setManagedProvider(`claude`);
+        const existing = { id: `claude-1`, label: `Work`, connectedAt: 1 };
+        const added = { id: `claude-2`, label: `Home`, connectedAt: 2 };
+        let accounts: unknown[] = [existing];
+        let landed = false;
+        daemonAnswers((procedure, input) => {
+            if (procedure === `accounts.start` && field(input, `provider`) === `claude`) {
+                return Promise.resolve({
+                    url: `https://claude.ai/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A54321%2Fcallback`,
+                    code: ``,
+                    state: `st-c`,
+                    flow: `redirect`,
+                    variant: ``,
+                    handshake: `st-c`,
+                    expiresAt: Date.now() + 900_000,
+                    catchers: [{ kind: `device`, label: `rog` }],
+                });
+            }
+            if (procedure === `accounts.status` && field(input, `handshake`) === `st-c`) {
+                return Promise.resolve(landed ? { status: `ok`, account: added } : { status: `wait` });
+            }
+            return undefined;
+        });
+        mockConnections({ accounts: (provider) => (provider === `claude` ? accounts : []) });
+
+        await chat.startConnect();
+        expect(chat.nativeConnectFlow.value?.catchers).toEqual([{ kind: `device`, label: `rog` }]);
+        await advanceTimersByTimeAsync(3_000);
+        expect(chat.nativeConnectFlow.value?.handshake, `settled on the account that was already there`).toBe(`st-c`);
+
+        landed = true;
+        accounts = [existing, added];
+        await advanceTimersByTimeAsync(3_000);
+        expect(chat.nativeConnectFlow.value).toBeUndefined();
+        expect(chat.managedAccounts.value).toEqual([existing, added]);
+        expect(daemon.mock.calls.filter(([procedure]) => procedure === `accounts.status`)).toEqual([
+            [`accounts.status`, { provider: `claude`, handshake: `st-c` }],
+            [`accounts.status`, { provider: `claude`, handshake: `st-c` }],
+        ]);
     });
 
     it(`leaves the Google sign-in up when the account read that should show the new row didn't answer`, async () => {

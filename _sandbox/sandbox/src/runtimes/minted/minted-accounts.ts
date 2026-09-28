@@ -2,7 +2,7 @@ import type { MintedProvider } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { forgetAccountState, signInIdentity } from "../../agent/providers/accounts/account-identity.js";
 import type { AccountDoor } from "../../agent/providers/provider-module.js";
-import { cancelMintedLogin, cancelMintedLoginsFor, completeMintedLogin, startMintedLogin } from "./minted-login.js";
+import { cancelMintedLogin, cancelMintedLoginsFor, completeMintedLogin, mintedLoginStatus, startMintedLogin } from "./minted-login.js";
 
 // A minted provider's account door (agent/provider-module.ts): sign-in ends with the daemon minting the vendor's own
 // key, by device poll (Meta) or address-bar redirect (Z.ai). The catalog is forgotten on every write, since it's cached
@@ -10,7 +10,9 @@ import { cancelMintedLogin, cancelMintedLoginsFor, completeMintedLogin, startMin
 // and a turn could resolve against it, for the rest of the TTL.
 export const mintedAccountDoor =
     (provider: MintedProvider) =>
-    (services: Pick<Services, "minted" | "logger" | "headroom" | "observedLimits" | "providerRefusals">): AccountDoor => {
+    (
+        services: Pick<Services, "minted" | "logger" | "headroom" | "observedLimits" | "providerRefusals" | "hostHub" | "webextHub">,
+    ): AccountDoor => {
         const slice = services.minted[provider];
         return {
             start: (variant) =>
@@ -21,6 +23,7 @@ export const mintedAccountDoor =
                     store: slice.store,
                     logger: services.logger,
                     onConnected: () => slice.catalog.forget(),
+                    bridge: services,
                 }),
             // Only the redirect shape brings anything back; the mint that follows lands as a row in the list on its
             // own.
@@ -31,6 +34,7 @@ export const mintedAccountDoor =
                 completeMintedLogin({ provider, handshake, redirectUrl });
                 return undefined;
             },
+            status: (handshake) => mintedLoginStatus(provider, handshake),
             cancel: (handshake) => cancelMintedLogin(provider, handshake),
             list: () => slice.store.list(),
             rename: (id, label) => slice.store.rename(id, label),

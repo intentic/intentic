@@ -2,6 +2,8 @@ import { oc } from "@orpc/contract";
 // Named imports rather than the `z` namespace: this module is bundled into the browser extension, where the
 // namespace keeps zod's 60 locales (~250 kB) that esbuild can otherwise drop. _devices/webext/scripts/size-budget.mjs holds the ceiling.
 import { unknown } from "zod";
+import { streamOf } from "../protocol/stream-of.js";
+import { LoopbackCatchEventSchema, LoopbackCatchSchema } from "../schemas/loopback-catch.js";
 import { OkSchema } from "../schemas/shared.js";
 import { WebExtFactsSchema, WebExtScopesSchema } from "../schemas/webext.js";
 
@@ -9,7 +11,8 @@ import { WebExtFactsSchema, WebExtScopesSchema } from "../schemas/webext.js";
 // inverted from device.contract.ts, since a browser cannot be dialled.
 // `mcp` stays one opaque procedure so a browser can gain a tool without a matching daemon release; the payload is
 // validated in the extension against the tool's own schema.
-// No `runSandboxFlow` twin: every browser operation is a click or read that either happened or did not.
+// No `runSandboxFlow` twin: every browser operation is a click or read that either happened or did not. The one stream
+// is `catchLoopback`, the device agent's own procedure answered the same way, so the daemon drives both alike.
 export const webextContract = {
     // Refetched on connect and each card read, never cached: the grant list changes in the browser, not here.
     describe: oc.output(WebExtFactsSchema),
@@ -19,4 +22,7 @@ export const webextContract = {
     ping: oc.output(OkSchema),
     // One MCP JSON-RPC message forwarded verbatim in both directions; kept opaque, not typed per tool.
     mcp: oc.input(unknown()).output(unknown()),
+    // Watches for a tab reaching one loopback address, a sign-in's redirect (schemas/loopback-catch.ts); armed by the
+    // daemon only, and sent only to a browser whose facts list `loopback-catch`.
+    catchLoopback: oc.input(LoopbackCatchSchema).output(streamOf(LoopbackCatchEventSchema)),
 };

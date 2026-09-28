@@ -200,6 +200,7 @@ export * from "./schemas/git/git.js";
 export * from "./schemas/git/git-history.js";
 export * from "./schemas/history.js";
 export * from "./schemas/hosts.js";
+export * from "./schemas/loopback-catch.js";
 export * from "./schemas/intentic.js";
 export * from "./schemas/inventory.js";
 export * from "./schemas/issues.js";

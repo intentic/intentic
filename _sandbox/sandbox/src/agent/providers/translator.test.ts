@@ -155,6 +155,35 @@ test("starts Google's redirect login through CLIProxyAPI Antigravity auth URL", 
     });
 });
 
+// Asked for only where someone of the owner's watches loopback: the proxy's own redirect login, whose attempt the proxy
+// reports like Google's rather than a subprocess of this daemon's.
+test("starts Codex's redirect login through the proxy when asked, and reads that attempt from the proxy", async () => {
+    const fetchMock = jest.fn(async (input: string | URL | Request) =>
+        String(input).endsWith("/codex-auth-url")
+            ? Response.json({ url: "https://auth.openai.com/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback", state: "cdx-1" })
+            : Response.json({ status: "wait" }),
+    );
+    stubGlobal("fetch", fetchMock);
+    const client = createCliProxyClient({
+        managementUrl: "http://127.0.0.1:8789/v0/management",
+        token: "local",
+        configPath: "/tmp/config.yaml",
+        authDir: "/tmp/does-not-exist-authdir",
+        usageStore: memoryStore().store,
+    });
+
+    await expect(client.connect("codex", { redirect: true })).resolves.toEqual({
+        url: "https://auth.openai.com/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback",
+        code: "",
+        state: "cdx-1",
+        flow: "redirect",
+    });
+    await expect(client.status("codex", "cdx-1")).resolves.toEqual({ status: "wait" });
+    expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8789/v0/management/get-auth-status?state=cdx-1", {
+        headers: { authorization: "Bearer local" },
+    });
+});
+
 // Builds a client whose proxy never answers, with or without the binary present; the two cases need different advice to
 // the user.
 const unreachableClient = (binaryPresent: boolean) => {

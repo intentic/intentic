@@ -1,6 +1,8 @@
 import { unstubbed } from "@intentic/testing";
+import pino from "pino";
 import { mergeSupersededAccounts } from "../../agent/providers/accounts/account-identity.js";
 import type { Services } from "../../composition.js";
+import { CATCHING_DEVICE, catchingServicesHubs, fakeCatcher } from "../../agent/providers/accounts/loopback-bridge.testing.js";
 import { type ClaudeAccountDeps, claudeAccountDoor } from "./claude-accounts.js";
 import { displayLabel, type StoredAccount } from "./claude-credentials.js";
 import type { SeatRefusal } from "./claude-seats.js";
@@ -23,6 +25,8 @@ const door = (
     rechecks: [string, { readonly force?: boolean } | undefined][] = [],
     // How many times the door dropped the cached model list; the catalog itself is claude-models' suite.
     catalog = { forgets: 0 },
+    // The owner's devices; none by default, so a sign-in is the paste.
+    hostHub: ClaudeAccountDeps["hostHub"] = catchingServicesHubs({}).hostHub,
 ) =>
     claudeAccountDoor(
         unstubbed<ClaudeAccountDeps>("claude deps", {
@@ -64,6 +68,10 @@ const door = (
             },
             providerRefusals: NO_REFUSALS,
             observedLimits: NO_OBSERVED,
+            // Nothing of the owner's is connected: every sign-in here is the paste (the bridge has its own suite).
+            hostHub,
+            logger: pino({ level: "silent" }),
+            webextHub: catchingServicesHubs({}).webextHub,
         }),
     );
 
@@ -122,7 +130,7 @@ test("Claude: connecting an account, and disconnecting one, drops the cached mod
         .mockResolvedValue(new Response(JSON.stringify({ access_token: "tok-new", refresh_token: "refresh-new", expires_in: 3600 })));
     try {
         const started = await claude.start(undefined);
-        await claude.complete!({ handshake: started.handshake, code: "abc#def" });
+        await claude.complete!({ handshake: started.handshake, code: `abc#${started.handshake}` });
     } finally {
         exchange.mockRestore();
     }
@@ -246,7 +254,7 @@ test("Claude: signing in as an account already on file reconnects it in place in
             Response.json({ access_token: `tok-${email}-${organization}`, refresh_token: "fresh", expires_in: 3600, account: { email_address: email }, organization: { name: organization } })) as unknown as typeof fetch;
         try {
             const started = await claude.start(undefined);
-            return await claude.complete!({ handshake: started.handshake, code: "abc#def" });
+            return await claude.complete!({ handshake: started.handshake, code: `abc#${started.handshake}` });
         } finally {
             globalThis.fetch = realFetch;
         }
@@ -291,4 +299,44 @@ test("Claude: a revoked account the same person has since reconnected under a ne
     expect(merged).toEqual([{ provider: "claude", from: "old", to: "new" }]);
     expect(moved).toEqual(["old->new"]);
     expect([...accounts.keys()]).toEqual(["new", "lone"]);
+});
+
+// A device of the owner's that watches loopback turns the sign-in into Claude Code's own: Anthropic sends the browser to
+// localhost on that machine, the landing comes back up the device's stream, and the door finishes it with nobody
+// pasting, naming the same redirect in the exchange as in the authorize URL.
+test("Claude: with a device watching, the sign-in redirects to loopback and finishes from the caught landing", async () => {
+    const accounts = new Map<string, StoredAccount>();
+    const rog = fakeCatcher();
+    const claude = door(memoryStore(accounts), [], new Map(), [], { forgets: 0 }, catchingServicesHubs({ rog: { facts: CATCHING_DEVICE, catcher: rog } }).hostHub);
+    const exchange = jest
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(new Response(JSON.stringify({ access_token: "tok-caught", refresh_token: "r", expires_in: 3600 })));
+    try {
+        const started = await claude.start(undefined);
+        expect(started.flow).toBe("redirect");
+        expect(started.state).toBe(started.handshake);
+        expect(started.catchers).toEqual([{ kind: "device", label: "rog" }]);
+        const redirect = new URL(started.url).searchParams.get("redirect_uri");
+        expect(redirect).toBe(`http://localhost:${rog.asked[0]?.port}/callback`);
+        expect(rog.asked[0]?.port).toBeGreaterThanOrEqual(49_152);
+        expect(claude.status!(started.handshake)).toEqual({ status: "wait" });
+        // A pasted address from some other attempt is refused before it reaches Anthropic.
+        await expect(claude.complete!({ handshake: started.handshake, redirectUrl: `${redirect}?code=x&state=other` })).rejects.toThrow(/different sign-in/);
+
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        rog.push({ type: "landed", url: `${redirect}?code=caught-code&state=${started.handshake}` });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        expect(exchange.mock.calls.map(([, init]) => JSON.parse(String(init?.body)))).toEqual([
+            expect.objectContaining({ grant_type: "authorization_code", code: "caught-code", state: started.handshake, redirect_uri: redirect }),
+        ]);
+        expect(accounts.size).toBe(1);
+        expect(claude.status!(started.handshake)).toMatchObject({ status: "ok", account: { id: [...accounts.keys()][0] } });
+        // The same grant pasted afterwards finds the attempt gone rather than redeeming it twice.
+        await expect(claude.complete!({ handshake: started.handshake, redirectUrl: `${redirect}?code=caught-code&state=${started.handshake}` })).rejects.toThrow(
+            /start the connection again/,
+        );
+    } finally {
+        exchange.mockRestore();
+    }
 });

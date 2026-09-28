@@ -2,7 +2,9 @@ import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createLogger } from "../../logger.js";
 import { memoryMintedStore } from "./minted-provider.testing.js";
 import { metaLoginDriver } from "./meta-login.js";
-import { cancelAllMintedLogins, cancelMintedLogin, completeMintedLogin, startMintedLogin } from "./minted-login.js";
+import type { WebExtFacts } from "@intentic/sandbox-contract";
+import { CATCHING_DEVICE, catchingHub, fakeCatcher } from "../../agent/providers/accounts/loopback-bridge.testing.js";
+import { cancelAllMintedLogins, cancelMintedLogin, completeMintedLogin, mintedLoginStatus, startMintedLogin } from "./minted-login.js";
 import { zaiLoginDriver } from "./zai-login.js";
 
 // All three sign-ins end to end against a fake vendor `fetch` that routes on URL and records every call, since nobody
@@ -362,6 +364,36 @@ test("the pasted address finishes a mainland sign-in and provisions its key", as
     // prefix.
     expect(vendor.calls.some((call) => call.url.endsWith("/api/auth/z/login"))).toBe(false);
     expect(vendor.calls.find((call) => call.url.endsWith(KEYS_PATH))?.headers.get("authorization")).toBe("bm-access");
+});
+
+// The owner's PC watches 127.0.0.1:8317 for it, so the landing comes back without anybody copying the address bar, and
+// through the paste's own door: the state is checked here, not on the PC.
+test("a mainland sign-in watched on the owner's device finishes from the caught landing", async () => {
+    const vendor = bigModelVendor();
+    const store = memoryMintedStore("Z.ai");
+    const rog = fakeCatcher();
+    const bridge = { hostHub: catchingHub({ rog: { facts: CATCHING_DEVICE, catcher: rog } }), webextHub: catchingHub<WebExtFacts>({}), logger };
+    const started = await startMintedLogin({
+        provider: "zai",
+        variant: "bigmodel",
+        driver: zaiLoginDriver(ZAI_HOSTS),
+        store,
+        logger,
+        onConnected: () => {},
+        fetchImpl: vendor.fetchImpl,
+        bridge,
+    });
+    expect(started.catchers).toEqual([{ kind: "device", label: "rog" }]);
+    expect(rog.asked).toMatchObject([{ host: "127.0.0.1", port: 8317, path: "/callback" }]);
+    expect(mintedLoginStatus("zai", started.handshake)).toEqual({ status: "wait" });
+
+    rog.push({ type: "landed", url: `http://127.0.0.1:8317/callback?authCode=caught&state=${started.state}` });
+    await advanceTimersByTimeAsync(100);
+
+    expect((await connected(store))[0]?.apiKey).toBe("ak-made.sk-secret");
+    const exchanged = vendor.calls.find((call) => call.url === `${ZAI_HOSTS.oauthBase}/oauth/token`);
+    expect(JSON.parse(exchanged?.body ?? "{}")).toMatchObject({ code: "caught", state: started.state });
+    expect(mintedLoginStatus("zai", started.handshake)).toEqual({ status: "ok" });
 });
 
 // Checked against our own copy: a second tab or old paste carries somebody else's grant.

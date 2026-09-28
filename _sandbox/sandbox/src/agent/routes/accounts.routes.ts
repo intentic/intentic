@@ -7,7 +7,8 @@ import { withAccountStates } from "../../usage/serviceability/serviceability.js"
 import type { AccountDoor } from "../providers/provider-module.js";
 
 // One route family for every account this sandbox holds itself, provider in the path. `start` answers once there's a
-// page to open; anything after surfaces only as a later account-list change.
+// page to open; anything after surfaces as the attempt's `status` where the door keeps one, else as a later
+// account-list change.
 export type AccountDoors = Partial<Record<NativeProvider, AccountDoor>>;
 
 // Built once per module: a door holds attempts still open, so a second one would split handshakes.
@@ -45,6 +46,14 @@ export const createAccountsRoutes = (services: Services, doors: AccountDoors = a
                 door.complete!({ handshake: input.handshake, code: input.code, redirectUrl: input.redirectUrl, label: input.label }),
             );
             return account === undefined ? {} : { account };
+        }),
+        // A door that keeps no record of its attempts answers from the account list's side: the card goes on watching it.
+        status: i.status.handler(({ input }) => {
+            const door = doorOf(input.provider);
+            if (door.status === undefined) {
+                throw new ORPCError("PRECONDITION_FAILED", { message: `A ${input.provider} sign-in is watched through its account list.` });
+            }
+            return door.status(input.handshake);
         }),
         cancel: i.cancel.handler(({ input }) => {
             doorOf(input.provider).cancel(input.handshake);

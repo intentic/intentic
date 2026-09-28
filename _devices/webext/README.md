@@ -22,6 +22,11 @@ flowchart LR
   site's read-only or read-and-act mode. The sandbox's own origin is never a target, and the popup's pause stops everything.
 - `connect_site` hands a site's session to the sandbox and `lend_site` borrows one back; both need the sessions
   switch and a confirmation in the page every time.
+- A sandbox's sign-in can finish here without a paste ([`src/background/loopback-catch.ts`](src/background/loopback-catch.ts),
+  the device agent's `catchLoopback` answered from the browser): a tab reaching the provider's
+  `http://localhost:<port>/…` redirect is handed back to the sandbox, which checks it, and the dead-end tab closes. It
+  needs no new permission, so it works only where the owner allowed this extension on `http://localhost` like any
+  other site, and `describe` advertises `loopback-catch` only then.
 - Chrome kills an idle MV3 worker, so the worker holds no state: everything lives in `chrome.storage.local`, and an
   alarm redials a dropped link.
 - `scripts/size-budget.mjs` fails a build whose bundles outgrow their ceilings; import zod by name and the contract

@@ -7,3 +7,4 @@ export { webextContract } from "../contracts/webext.contract.js";
 export * from "../protocol/webext-links.js";
 export * from "../protocol/webext-protocol.js";
 export * from "../schemas/webext.js";
+export * from "../schemas/loopback-catch.js";

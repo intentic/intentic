@@ -12,7 +12,8 @@ import { OkSchema } from "../schemas/shared.js";
 //
 // Two login shapes ride one pair of routes. Codex, Grok and Kimi use device authorization: the translator polls
 // to completion in the background, so the UI polls the attempt. Google redirects the browser to a loopback
-// URL this sandbox can't receive, so `complete` hands the landing URL to the translator. `connect.flow` tells the
+// URL this sandbox can't receive: a device or browser of the owner's catches it where one can (`connect.catchers`),
+// otherwise `complete` takes the landing URL pasted back; either way it reaches the translator the same way. `connect.flow` tells the
 // card which mechanic it received without inferring it from whether an optional device code happened to exist.
 export const translatorContract = {
     accounts: procedure

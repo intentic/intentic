@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { type MintedProvider, type MintedVariant, mintedVariant } from "@intentic/sandbox-contract";
+import { type LoginStatus, type MintedProvider, type MintedVariant, mintedVariant, type SignInCatcher } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
+import { armLoopbackCatch, type LoopbackBridgeDeps, type LoopbackTarget } from "../../agent/providers/accounts/loopback-bridge.js";
 import type { MintedStore } from "./minted-credentials.js";
 
 // Sign-in flow shared by every minted provider: the vendor's token isn't an inference credential, so a driver's real
@@ -27,6 +28,9 @@ export interface MintedLoginAttempt {
     // The vendor's own deadline where published, so a card stops waiting when the flow actually died, not when a local
     // constant runs out.
     readonly expiresAt: number;
+    // For a redirect flow, where the vendor sends the browser: watched on the owner's own machines where they can
+    // (loopback-bridge.ts), so the sign-in finishes without the paste. Absent for a device flow.
+    readonly loopback?: Pick<LoopbackTarget, "host" | "port" | "path">;
     readonly settle: () => Promise<MintedCredential>;
 }
 
@@ -63,6 +67,20 @@ interface PendingLogin {
 // in flight, since its poll died with the process.
 const pending = new Map<string, PendingLogin>();
 
+// How each attempt ended, kept a while after it left `pending` so a card polling the attempt reads the outcome rather
+// than "no longer waiting"; bounded by time, since nothing else ever reads it.
+const OUTCOME_KEPT_MS = 15 * 60_000;
+const outcomes = new Map<string, { readonly provider: MintedProvider; readonly status: LoginStatus; readonly at: number }>();
+const settleOutcome = (handshake: string, provider: MintedProvider, status: LoginStatus): void => {
+    const now = Date.now();
+    for (const [id, outcome] of outcomes) {
+        if (now - outcome.at > OUTCOME_KEPT_MS) {
+            outcomes.delete(id);
+        }
+    }
+    outcomes.set(handshake, { provider, status, at: now });
+};
+
 export interface StartedMintedLogin {
     readonly url: string;
     readonly code: string;
@@ -71,6 +89,7 @@ export interface StartedMintedLogin {
     readonly variant: string;
     readonly handshake: string;
     readonly expiresAt: number;
+    readonly catchers: SignInCatcher[];
 }
 
 export interface MintedLoginDeps {
@@ -85,6 +104,8 @@ export interface MintedLoginDeps {
     // instead of serving the seed for the rest of the TTL.
     readonly onConnected: () => void;
     readonly fetchImpl?: typeof fetch;
+    // The owner's devices and browsers, to watch a redirect's loopback landing on; absent watches nothing.
+    readonly bridge?: LoopbackBridgeDeps;
 }
 
 // Begins a sign-in; resolves once the vendor hands back a page to open, while the rest continues in the background and
@@ -117,6 +138,14 @@ export const startMintedLogin = async (deps: MintedLoginDeps): Promise<StartedMi
     pending.set(handshake, { provider: deps.provider, variant, state: attempt.state, abort, expiresAt, deliver, fail });
     const timer = setTimeout(() => abort.abort(), Math.max(1_000, expiresAt - Date.now()));
     timer.unref();
+    // The landing, caught on the owner's machine, goes through exactly the paste's own door (state check included).
+    const caught =
+        attempt.loopback === undefined || deps.bridge === undefined || attempt.state === ""
+            ? undefined
+            : armLoopbackCatch(deps.bridge, { id: handshake, ...attempt.loopback, state: attempt.state, expiresAt, title: variant.label }, async (url) =>
+                  completeMintedLogin({ provider: deps.provider, handshake, redirectUrl: url }),
+              );
+    abort.signal.addEventListener("abort", () => caught?.disarm(), { once: true });
 
     void attempt
         .settle()
@@ -127,17 +156,21 @@ export const startMintedLogin = async (deps: MintedLoginDeps): Promise<StartedMi
                 ...(credential.email !== undefined ? { email: credential.email } : {}),
             });
             deps.onConnected();
+            settleOutcome(handshake, deps.provider, { status: "ok" });
             deps.logger.info({ provider: deps.provider, variant: variant.id, account: account.id }, "minted provider: sign-in completed");
         })
         .catch((error: unknown) => {
             if (abort.signal.aborted) {
+                settleOutcome(handshake, deps.provider, { status: "error", error: "The sign-in was stopped or ran out of time: start it again." });
                 deps.logger.info({ provider: deps.provider, handshake }, "minted provider: sign-in abandoned");
                 return;
             }
+            settleOutcome(handshake, deps.provider, { status: "error", error: error instanceof Error && error.message !== "" ? error.message : "The sign-in failed." });
             deps.logger.warn({ err: error, provider: deps.provider, variant: variant.id }, "minted provider: sign-in failed");
         })
         .finally(() => {
             clearTimeout(timer);
+            caught?.disarm();
             pending.delete(handshake);
         });
 
@@ -149,7 +182,20 @@ export const startMintedLogin = async (deps: MintedLoginDeps): Promise<StartedMi
         variant: variant.id,
         handshake,
         expiresAt,
+        catchers: [...(caught?.catchers ?? [])],
     };
+};
+
+// Where one attempt stands, for a card watching it: waiting while it is pending, then how it ended.
+export const mintedLoginStatus = (provider: MintedProvider, handshake: string): LoginStatus => {
+    const entry = pending.get(handshake);
+    if (entry !== undefined && entry.provider === provider) {
+        return { status: "wait" };
+    }
+    const outcome = outcomes.get(handshake);
+    return outcome !== undefined && outcome.provider === provider
+        ? outcome.status
+        : { status: "error", error: "That sign-in is no longer waiting: start it again." };
 };
 
 // Parses the grant out of a pasted address (or bare query string); `authCode` is checked before `code`, since BigModel

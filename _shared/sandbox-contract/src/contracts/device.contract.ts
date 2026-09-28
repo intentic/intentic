@@ -4,6 +4,7 @@ import { z } from "zod";
 import { DeviceAgentFlowSchema, DeviceFlowLineSchema, DeviceReportSchema, DeviceSandboxFlowSchema } from "../schemas/devices.js";
 import { DeviceScopesSchema } from "../schemas/capabilities.js";
 import { DeviceFactsSchema } from "../schemas/hosts.js";
+import { LoopbackCatchEventSchema, LoopbackCatchSchema } from "../schemas/loopback-catch.js";
 import { OkSchema } from "../schemas/shared.js";
 
 // What a connected device can be asked, over the socket it opened; the machine is the oRPC server, the daemon the
@@ -26,4 +27,8 @@ export const deviceContract = {
     runSandboxFlow: oc.input(DeviceSandboxFlowSchema).output(streamOf(DeviceFlowLineSchema)),
     // Spawns the work detached from the socket, so restarting the agent process cannot brick a swap in progress.
     runAgentFlow: oc.input(DeviceAgentFlowSchema).output(streamOf(DeviceFlowLineSchema)),
+    // Watches one loopback address on this machine for a sign-in's redirect (schemas/loopback-catch.ts); only the
+    // daemon arms it, never a tool, and aborting the stream is how it stops. Sent only to an agent advertising
+    // `loopback-catch`.
+    catchLoopback: oc.input(LoopbackCatchSchema).output(streamOf(LoopbackCatchEventSchema)),
 };

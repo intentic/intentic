@@ -9,6 +9,8 @@ import {
     LoginCompleteSchema,
     LoginRequestSchema,
     LoginStartSchema,
+    LoginStatusQuerySchema,
+    LoginStatusSchema,
     OauthAccountListSchema,
     OauthAccountSchema,
 } from "../schemas/providers/provider-oauth.js";
@@ -38,6 +40,16 @@ export const accountsContract = {
         })
         .input(NativeProviderParamSchema.extend(LoginCompleteSchema.shape))
         .output(LoginCompletedSchema),
+    status: procedure
+        .route({
+            method: "GET",
+            path: "/accounts/{provider}/login/status",
+            summary: "Read a sign-in attempt",
+            description:
+                "Whether this exact attempt is still waiting, has connected an account, or failed. Tied to the attempt, not to the account list, so adding a second account is told apart from the first already being there. An attempt that finishes by itself on a device or browser of yours ends here.",
+        })
+        .input(NativeProviderParamSchema.extend(LoginStatusQuerySchema.shape))
+        .output(LoginStatusSchema),
     cancel: procedure
         .route({
             method: "POST",

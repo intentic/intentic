@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AccountStateSchema, AccountUsageSchema } from "./plan-limits.js";
+import { SignInCatcherSchema } from "../loopback-catch.js";
 import { KeyedProviderSchema } from "./provider-subscriptions.js";
 // Claude uses PKCE paste-back (start → exchange); Codex uses OpenAI's device-code flow (start → poll). A sandbox can
 // hold several accounts per provider; `id` is the store key, `label` the display name. Tokens never ride this shape —
@@ -91,6 +92,12 @@ export const LoginStartSchema = z.object({
             "This attempt's id, for finishing or abandoning it. Not a credential and not redeemable: the proof that completes the sign-in never leaves the sandbox.",
         ),
     expiresAt: z.number().describe("When this attempt stops being answerable, in milliseconds, so a card can stop waiting instead of spinning."),
+    catchers: z
+        .array(SignInCatcherSchema)
+        .optional()
+        .describe(
+            "Who is watching for where the browser lands, on the machine it is on: a device or a browser of yours. Listed means the sign-in finishes by itself once the page is approved there; the paste stays open for a browser anywhere else. Empty or absent means nothing is watching.",
+        ),
 });
 export type LoginStart = z.infer<typeof LoginStartSchema>;
 // e.g. Z.ai's international vs. mainland plans.
@@ -111,6 +118,18 @@ export const LoginCompletedSchema = z.object({
         "The account it connected, where the sign-in ends here. Absent means keep watching the account list.",
     ),
 });
+// One attempt's standing, for a card to watch the attempt itself rather than the account list: a list that already
+// held an account says nothing about whether this sign-in, adding another, has landed.
+export const LoginStatusSchema = z.discriminatedUnion("status", [
+    z.object({ status: z.literal("wait") }),
+    z.object({
+        status: z.literal("ok"),
+        account: OauthAccountSchema.optional().describe("The account it connected. Absent where the row lands in the account list a little later."),
+    }),
+    z.object({ status: z.literal("error"), error: z.string().min(1).describe("Why it failed, to show as it is.") }),
+]);
+export type LoginStatus = z.infer<typeof LoginStatusSchema>;
+export const LoginStatusQuerySchema = z.object({ handshake: z.string().min(1).describe("Which attempt.") });
 // Tidiness, not a security boundary: an unanswered attempt also times out on its own (`expiresAt`).
 export const LoginCancelSchema = z.object({ handshake: z.string().min(1).describe("Which attempt to stop waiting on.") });
 // codex/grok/kimi/gemini via CLIProxyAPI; `flow` is explicit even when a provider's URL already embeds an optional
@@ -123,6 +142,12 @@ export const TranslatorStartSchema = z.object({
         .enum(["device", "redirect"])
         .describe(
             "Which shape this is. A device sign-in finishes by itself and you poll the attempt; a redirect needs the address it landed on handed back. Said outright rather than guessed at from whether a code happens to exist.",
+        ),
+    catchers: z
+        .array(SignInCatcherSchema)
+        .optional()
+        .describe(
+            "Who is watching for where the browser lands, on the machine it is on: a device or a browser of yours. Listed means the sign-in finishes by itself once the page is approved there; the paste stays open for a browser anywhere else. Empty or absent means nothing is watching.",
         ),
 });
 export const TranslatorStatusSchema = z.discriminatedUnion("status", [

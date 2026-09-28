@@ -67,9 +67,33 @@ const hint = computed<string | undefined>(() => {
 const grantNoun = computed(() => (redirectFlow.value ? `the address ${destination.value} lands on` : `the code`));
 const pastePlaceholder = computed(() => (redirectFlow.value ? `Paste the address…` : `Paste the code…`));
 
-// Fake dead-end address per flow, for the user to recognize against the real error page. Google's grant param is
-// `code`, BigModel's is `authCode`; truncated like a real one since only the shape matters.
-const deadEndAddress = computed(() => (kind === `routed` ? `localhost:8317/?code=4/0AX4…` : `127.0.0.1:8317/callback?authCode=eyJhb…`));
+// Fake dead-end address per flow, for the user to recognize against the real error page: the redirect the page was
+// actually sent to (`redirect_uri`, or BigModel's `redirect`), then a grant truncated like a real one since only the
+// shape matters. BigModel names its grant `authCode`, everyone else `code`.
+const redirectTarget = computed(() => {
+    try {
+        const query = new URL(flow.value?.url ?? ``).searchParams;
+        return (query.get(`redirect_uri`) ?? query.get(`redirect`) ?? ``).replace(/^https?:\/\//, ``);
+    } catch {
+        return ``;
+    }
+});
+const deadEndAddress = computed(() => {
+    const grant = provider === `zai` ? `authCode=eyJhb…` : `code=4/0AX4…`;
+    return `${redirectTarget.value === `` ? `localhost` : redirectTarget.value}?${grant}`;
+});
+
+// Who of the owner's is watching where the redirect lands (a device agent, a browser extension): with anyone, the
+// sign-in finishes by itself once approved on that machine, and the paste is the way in from anywhere else.
+const catchers = computed(() => flow.value?.catchers ?? []);
+const watching = computed(() => !deviceFlow.value && catchers.value.length > 0);
+const watchedOn = computed(() => new Intl.ListFormat(undefined, { type: `disjunction` }).format(catchers.value.map((catcher) => catcher.label)));
+// Asked for by the reader signing in somewhere nothing watches; until then the paste field stays out of the way.
+const pasteInstead = ref(false);
+const bringItBack = (): void => {
+    pasteInstead.value = true;
+    connectSent.value = true;
+};
 
 // The picture of the dead-end page is reference, not an instruction, so it stays folded until asked for: at full
 // size it outweighs the real button ten to one and wears the emphasis ring, which is why it got clicked. On a roomy
@@ -221,6 +245,7 @@ const namingAccount = ref(false);
 watch(flow, (live) => {
     if (live === undefined) {
         namingAccount.value = false;
+        pasteInstead.value = false;
         pasted.value = ``;
         wentToProvider.value = false;
         showDeadEnd.value = roomy;
@@ -256,6 +281,28 @@ watch(flow, (live) => {
             <p v-else class="flex items-center gap-1.5 text-2xs text-subtle">
                 <Icon name="spinner" spin />{{ t(`sandbox.connectFlow.waitingApproval`) }}
             </p>
+        </template>
+
+        <!-- Watched on the owner's own machine: going is the whole of it, and the paste is folded behind "somewhere else". -->
+        <template v-else-if="watching && !pasteInstead && pasted.trim() === ``">
+            <p :class="[bodyText, `text-muted`]">{{ t(`sandbox.connectFlow.finishesOn`, { where: watchedOn }) }}</p>
+            <Button
+                as="a"
+                class="self-start touch-target"
+                :size="controlSize"
+                :href="flow.url"
+                target="_blank"
+                rel="noopener"
+                @click="openedProvider"
+            >
+                <ProviderLogo :provider="provider" />{{ t(`ui.action.open`) }} {{ destination }}<Icon name="external-link" />
+            </Button>
+            <p v-if="connectSent" class="flex items-center gap-1.5 text-2xs text-subtle">
+                <Icon name="spinner" spin />{{ t(`sandbox.connectFlow.waitingOn`, { where: watchedOn }) }}
+            </p>
+            <button type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="bringItBack">
+                {{ t(`sandbox.connectFlow.notThere`, { where: watchedOn }) }}
+            </button>
         </template>
 
         <!-- Step one, and the only thing on the panel: what to come back with is said BEFORE the trip, since afterwards there are two tabs between the reader and this sentence. -->

@@ -63,6 +63,13 @@ declare namespace chrome {
         // Needed after a session is written into this browser's cookie store: a page already open is still
         // showing the old one, and nothing about setting a cookie tells it otherwise (tools/lend.ts).
         function reload(tabId: number): Promise<void>;
+        // A sign-in's dead-end tab, closed once its address is caught (background/loopback-catch.ts).
+        function remove(tabId: number): Promise<void>;
+        // Where a sign-in's redirect is watched for; `url` rides on the change only for a tab this extension may read.
+        const onUpdated: {
+            addListener: (callback: (tabId: number, change: { url?: string; status?: string }, tab: Tab) => void) => void;
+            removeListener: (callback: (tabId: number, change: { url?: string; status?: string }, tab: Tab) => void) => void;
+        };
     }
 
     namespace scripting {

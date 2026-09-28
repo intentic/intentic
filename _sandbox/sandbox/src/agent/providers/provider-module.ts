@@ -3,6 +3,7 @@ import type {
     AgentEvent,
     EngineId,
     LoginStart,
+    LoginStatus,
     Model,
     NativeProvider,
     OauthAccount,
@@ -55,6 +56,9 @@ export interface AccountDoor {
         readonly redirectUrl?: string | undefined;
         readonly label?: string | undefined;
     }) => Promise<OauthAccount | undefined>;
+    // Where one attempt stands, for the doors whose attempts end somewhere a card cannot see (a mint in the background,
+    // a landing caught on the owner's machine). Absent: the card watches the account list instead.
+    readonly status?: (handshake: string) => LoginStatus;
     readonly cancel: (handshake: string) => void;
     // `force` re-measures the plan limits before answering, for the doors that have any to measure.
     readonly list: (force: boolean) => Promise<OauthAccount[]>;

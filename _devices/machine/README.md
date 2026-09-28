@@ -70,7 +70,12 @@ flowchart LR
   Files stay inside the configured roots, writes need their own switch, and every call is appended to
   `~/.intentic/machine/audit.jsonl`. While an agent drives input on Windows, a notice shows on screen and
   `PAUSE_HOTKEY` pauses every link.
-- Every connection dials out; the only listeners are on loopback.
+- Every connection dials out; the only listeners are on loopback. One of them is short-lived: while a sandbox's
+  sign-in is open, [`device/loopback-catch.ts`](src/device/loopback-catch.ts) listens on the
+  `http://localhost:<port>/…` address the provider redirects to, the one a CLI running here would have held, and
+  streams each landing back (`catchLoopback`, advertised as the `loopback-catch` feature). It checks nothing: the state
+  and the PKCE verifier stay in the sandbox, which alone can tell the sign-in from anything else that hits the port. A
+  taken port answers `busy`, and the sandbox leaves the paste to the person.
 - On Windows the Windows side is the root of the PC (`src/environments/`): it holds one `wsl.exe` session per
   distro with an agent, and `upgrade` brings every environment to the same release. The root also updates itself
   on a timer and pre-downloads sandbox updates with `ic sandbox prepare --auto`.

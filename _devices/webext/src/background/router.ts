@@ -1,5 +1,6 @@
 import { webextContract } from "@intentic/sandbox-contract/webext";
 import { implement } from "@orpc/server";
+import { catchLoopback } from "./loopback-catch.js";
 import { handleMcpMessage } from "./mcp.js";
 import { store } from "./store.js";
 import { browserFacts, refreshBadge } from "./tools/access.js";
@@ -23,5 +24,14 @@ export const createWebExtRouter = () => {
         // deliberately
         // not by the daemon in between.
         mcp: os.mcp.handler(async ({ input }) => await handleMcpMessage(input, undefined)),
+        // A sign-in's loopback redirect, watched for in this browser's tabs (loopback-catch.ts); armed by the sandbox
+        // only, never a tool, so it is no page read the agent can reach for. Paused means paused for this too.
+        catchLoopback: os.catchLoopback.handler(async function* ({ input, signal }) {
+            if (await store.paused()) {
+                yield { type: "busy" as const, reason: "this browser is paused" };
+                return;
+            }
+            yield* catchLoopback(input, signal);
+        }),
     });
 };

@@ -3,6 +3,7 @@ import type { DeviceScopes, DeviceFlowLine, DeviceSandboxFlow, DeviceSandboxOp }
 import { implement, ORPCError } from "@orpc/server";
 import { readGrant, tolerantDeviceContract } from "./grant.js";
 import { calling } from "./indicator.js";
+import { catchLoopback } from "./loopback-catch.js";
 import { handleMcpMessage } from "./mcp.js";
 import { hostFacts } from "./tools/describe.js";
 import { machineReport } from "../sync/report.js";
@@ -178,5 +179,11 @@ export const createHostRouter = (runtime: HostRuntime) => {
         // both ops kill the process serving this socket. The work is detached first (tools/agent.ts); the reader
         // confirms by the version.
         runAgentFlow: os.runAgentFlow.handler(({ input }) => streamFlow((onLine) => runAgentOp(input.op, runtime.scopes(), onLine))),
+        // A sign-in's loopback redirect, caught here for the sandbox that started it (loopback-catch.ts). Behind no
+        // switch: only the sandbox's own sign-in arms it, never a tool, it binds loopback alone, and what it catches is
+        // worthless without the verifier the sandbox keeps.
+        catchLoopback: os.catchLoopback.handler(({ input, signal }) =>
+            catchLoopback(input, signal, (message) => runtime.log(`${runtime.sandboxUrl}: ${message}`)),
+        ),
     });
 };

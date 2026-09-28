@@ -223,6 +223,7 @@ export const UNSERVED = {
     "accounts.disconnect": UNSIMULATED_WRITE,
     "accounts.rename": UNSIMULATED_WRITE,
     "accounts.start": UNSIMULATED_WRITE,
+    "accounts.status": UNFILLED_VIEW,
     "agent.queueEdit": UNSIMULATED_WRITE,
     "agent.queueRemove": UNSIMULATED_WRITE,
     "agent.queueResume": UNSIMULATED_WRITE,
