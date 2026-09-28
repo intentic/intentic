@@ -3,8 +3,9 @@ import { SearchBar, useDevice, vAction, ui } from "@intentic/ui";
 import { computed, nextTick, type Ref, ref, toRef } from "vue";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
 import UsageMeter from "../../../components/UsageMeter.vue";
-import { ACCOUNT_LIST_LIMIT, matchAccounts, usePickerAccounts } from "./pickerAccounts";
+import { ACCOUNT_LIST_LIMIT, matchAccounts, pickerOrder, usePickerAccounts } from "./pickerAccounts";
 import { providerDisplayLabel } from "./providerCatalog";
+import { servingAccount } from "./servingAccount";
 import { formatAge } from "../session/usageStatus";
 import ProviderLogo from "./ProviderLogo.vue";
 import SandboxOutdatedNotice from "../../sandbox/overview/version/SandboxOutdatedNotice.vue";
@@ -18,13 +19,25 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const emit = defineEmits<{ selectAccount: [string]; selectHarness: [AgentHarness] }>();
-const { provider, harness, model, account, accountsLocked, harnessLocked } = defineProps<{
+const {
+    provider,
+    harness,
+    model,
+    account,
+    named = true,
+    accountsLocked,
+    harnessLocked,
+} = defineProps<{
     provider: AgentProvider;
     harness: AgentHarness;
     // Model the headroom rings measure against; absent means the account's tightest pool.
     model?: string | undefined;
-    // The explicitly pinned account, if there is one. Absent ⇒ the provider's first, the daemon's own default.
+    // The account the selection holds: a pick, or the conversation's own as the daemon records it. Absent ⇒ auto, the
+    // account the runtime places a turn naming none on (servingAccount), which is the row ticked, never the first one.
     account?: string | undefined;
+    // Whether the next turn names `account` (turnRequest.ts accountIntent); false leaves it to the daemon's record,
+    // which moves a turn off a seat an organisation took. A pick handed in by a caller is always named.
+    named?: boolean;
     // The two axes lock independently: the account may switch mid-turn (an allowance refusal is answered
     // by switching), the harness only between turns. Disabled styling always follows these props via
     // `.ui-off`.
@@ -52,11 +65,11 @@ const {
 
 const { mobile } = useDevice();
 
-// An unheld pin falls back to the first row; the highlight must always name something.
-const activeAccountId = computed(() => {
-    const pinned = accountRows.value.find((row) => row.id === account);
-    return (pinned ?? accountRows.value[0])?.id;
-});
+// The row ticked is the one the next turn runs on, by the rule the daemon places it with, read off the provider's own
+// order. None where it runs on none (an account gone from the list, whose turn is refused), rather than a guess.
+const serving = computed(() => servingAccount(provider, accountRows.value, { account, named }));
+const activeAccountId = computed(() => serving.value?.id);
+const autoPickedId = computed(() => (serving.value?.byAllowance === true ? serving.value.id : undefined));
 
 // Two folds, one behaviour, written separately: the choosable list keeps its active row visible while
 // folded, the routed list keeps none.
@@ -64,13 +77,14 @@ const activeAccountId = computed(() => {
 const accountsOpen = ref(false);
 const accountsQuery = ref(``);
 const accountsLong = computed(() => accountRows.value.length > ACCOUNT_LIST_LIMIT);
+const accountsOrdered = computed(() => pickerOrder(provider, accountRows.value));
 const accountsShown = computed(() => {
     if (!accountsLong.value) {
-        return accountRows.value;
+        return accountsOrdered.value;
     }
     return accountsOpen.value
-        ? matchAccounts(accountRows.value, accountsQuery.value)
-        : accountRows.value.filter((row) => row.id === activeAccountId.value);
+        ? matchAccounts(accountsOrdered.value, accountsQuery.value)
+        : accountsOrdered.value.filter((row) => row.id === activeAccountId.value);
 });
 
 const routedOpen = ref(false);
@@ -211,18 +225,31 @@ const pickAccount = (id: string): void => {
                 :disabled="accountsLocked"
                 @click="pickAccount(a.id)"
             >
-                <!-- Row grows a line only when there's a refusal or subtitle to show; a refusal takes that second line over the subtitle. -->
+                <!-- Row grows a line only when there's a refusal, a spent pool or a subtitle to show; the condition takes that second line over the subtitle. -->
                 <span class="flex min-w-0 flex-col items-start leading-tight">
-                    <span class="max-w-full truncate text-content">{{ a.label }}</span>
+                    <span class="flex max-w-full items-baseline gap-1.5">
+                        <!-- A row that can take no turn dims its name and ring, never the line saying why. -->
+                        <span class="truncate text-content" :class="{ 'opacity-50': a.demoted }">{{ a.label }}</span>
+                        <!-- The tick nobody chose says who chose it: the runtime, by allowance left. -->
+                        <span
+                            v-if="autoPickedId === a.id"
+                            class="shrink-0 text-2xs text-subtle"
+                            v-tooltip.top="t(`chat.pickerAccounts.autoPicked`)"
+                            >{{ t(`chat.words.autoLabel`) }}</span
+                        >
+                    </span>
                     <!-- Truncated on the row, full text on hover; leads with the condition that decides the click. -->
                     <span v-if="a.refused" class="flex max-w-full items-center gap-1 text-2xs text-warning" v-tooltip.top="a.refused">
                         <Icon name="exclamation-triangle" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
                         <span class="truncate">{{ a.refused }}</span>
                     </span>
-                    <span v-else-if="a.subtitle" class="max-w-full truncate text-2xs text-subtle">{{ a.subtitle }}</span>
+                    <span v-else-if="a.waiting" class="max-w-full truncate text-2xs text-subtle">{{ a.waiting }}</span>
+                    <span v-else-if="a.subtitle" class="max-w-full truncate text-2xs text-subtle" :class="{ 'opacity-50': a.demoted }">{{
+                        a.subtitle
+                    }}</span>
                 </span>
                 <!-- Spend against this account's tightest limit; absent means unmeasured or unavailable, distinct from a measured zero. -->
-                <UsageMeter v-if="a.headroom" :headroom="a.headroom" class="ml-auto" />
+                <UsageMeter v-if="a.headroom" :headroom="a.headroom" class="ml-auto" :class="{ 'opacity-50': a.demoted }" />
                 <Icon
                     v-if="a.needsReauth"
                     name="exclamation-triangle"

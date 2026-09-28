@@ -1,7 +1,8 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { ContextUsage, TurnFact } from "@intentic/sandbox-contract";
+import type { AccountState, ContextUsage, OauthAccount, TurnFact } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { computed, reactive, ref } from "vue";
+import { providerAccounts } from "../accounts/providerAccounts";
 import { modelLabelFor, providerTabs } from "../accounts/providerCatalog";
 import { AUTO_PROVIDER } from "../models/modelPickerState";
 import { turnDefaults } from "../run/turnDefaults";
@@ -28,6 +29,7 @@ const selectionOf = () => {
     const transcript = new TranscriptView(() => undefined, unstubbed<TranscriptHost>(`transcriptHost`, {}));
     const host = {
         session: ref<SessionRef | undefined>(),
+        registered: ref(false),
         activeModel: ref<string | null>(`reported-model`),
         contextUsage: ref<ContextUsage | undefined>({ tokens: 10, contextWindow: 100 }),
         fastMode: ref<Extract<TurnFact, { kind: `fast_mode` }> | undefined>({ kind: `fast_mode`, state: `on` }),
@@ -223,5 +225,47 @@ describe(`ComposerSelection`, () => {
 
         expect(selection.fast.value).toBe(true);
         expect(host.fastMode.value).toBeUndefined();
+    });
+});
+
+// Which account the next turn runs on, as the picker ticks it: the account the daemon will place the turn on, never the
+// first row by position (the reported bug: an org-disabled account ticked, the turn run on another).
+describe(`the account the next turn runs on`, () => {
+    const account = (id: string, state: AccountState): OauthAccount => ({ id, label: id, connectedAt: 0, state });
+    const SEATLESS: AccountState = { kind: `blocked`, fix: `admin`, reason: `Your organization has disabled Claude subscription access.` };
+
+    beforeEach(() => {
+        providerAccounts.value = {
+            ...providerAccounts.value,
+            claude: [account(`work`, SEATLESS), account(`personal`, { kind: `ready`, room: 40 }), account(`spare`, { kind: `ready`, room: 70 })],
+        };
+    });
+
+    it(`is the daemon's own pick on a fresh chat, and says it was placed by allowance`, () => {
+        const { selection } = selectionOf();
+
+        expect(selection.account.value).toBeUndefined();
+        expect(selection.servingAccount.value).toEqual({ id: `spare`, byAllowance: true });
+    });
+
+    it(`is a hand pick whatever its state, since the turn names it and is an attempt on it`, () => {
+        const { selection } = selectionOf();
+        selection.apply({ kind: `selectAccount`, account: `work` });
+
+        expect(selection.accountNamed.value).toBe(true);
+        expect(selection.servingAccount.value).toEqual({ id: `work`, byAllowance: false });
+    });
+
+    it(`follows the daemon's record once the chat has run, and the move it makes off a seat an organisation took`, () => {
+        const { selection, host } = selectionOf();
+        host.registered.value = true;
+        selection.apply({ kind: `bindSession`, session: { ...CLAUDE_SESSION, account: `personal` } });
+
+        expect(selection.accountNamed.value).toBe(false);
+        expect(selection.servingAccount.value).toEqual({ id: `personal`, byAllowance: false });
+
+        // The record's account lost its seat: the daemon moves the next turn (blocked-account.ts), so the tick moves too.
+        selection.apply({ kind: `bindSession`, session: { ...CLAUDE_SESSION, account: `work` } });
+        expect(selection.servingAccount.value).toEqual({ id: `spare`, byAllowance: true });
     });
 });

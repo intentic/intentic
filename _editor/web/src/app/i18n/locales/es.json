@@ -1417,6 +1417,9 @@
         },
         "pickerAccounts": {
             "allAccounts": "Las {count} cuentas",
+            "allowanceUsedUp": "Cuota agotada",
+            "allowanceUsedUpReopens": "Cuota agotada, se reabre {when}",
+            "autoPicked": "Elegida automáticamente según la cuota restante. Elige otra cuenta para usarla en su lugar.",
             "filterSubscriptionAccounts": "Filtrar cuentas de suscripción",
             "noAccountsMatch": "Ninguna cuenta coincide.",
             "outdatedMissing": "Hasta que se actualice, las cuentas de abajo no pueden indicar si pueden atender un turno (un inicio de sesión o puesto perdido, un cupo agotado o en pausa), y elegir una solo surte efecto en el siguiente mensaje.",

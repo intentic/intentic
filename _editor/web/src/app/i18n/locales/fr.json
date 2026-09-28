@@ -1409,6 +1409,9 @@
         },
         "pickerAccounts": {
             "allAccounts": "Les {count} comptes",
+            "allowanceUsedUp": "Quota épuisé",
+            "allowanceUsedUpReopens": "Quota épuisé, rouvre {when}",
+            "autoPicked": "Choisi automatiquement selon le quota restant. Choisissez un autre compte pour l’utiliser à la place.",
             "filterSubscriptionAccounts": "Filtrer les comptes d'abonnement",
             "noAccountsMatch": "Aucun compte ne correspond.",
             "outdatedMissing": "Tant qu'il n'est pas mis à jour, les comptes ci-dessous ne peuvent pas dire s'ils peuvent prendre un tour (connexion ou siège perdu, quota épuisé ou suspendu), et en choisir un ne prend effet qu'au message suivant.",

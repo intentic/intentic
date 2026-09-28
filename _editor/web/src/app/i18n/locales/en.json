@@ -1490,6 +1490,9 @@
         },
         "pickerAccounts": {
             "allAccounts": "All {count} accounts",
+            "allowanceUsedUp": "Allowance used up",
+            "allowanceUsedUpReopens": "Allowance used up, reopens {when}",
+            "autoPicked": "Picked automatically, by allowance left. Pick another account to use it instead.",
             "filterSubscriptionAccounts": "Filter subscription accounts",
             "noAccountsMatch": "No accounts match.",
             "outdatedMissing": "Until it updates, the accounts below can't say whether they can take a turn (a lost sign-in or seat, a spent or benched pool), and picking one only takes effect on the next message.",

@@ -1,14 +1,16 @@
 import { capabilitiesOf, clampMode, fastAllowed, type PermissionMode, providerLabel, SPENT_UTILIZATION } from "@intentic/sandbox-contract";
 import { computed, shallowRef } from "vue";
+import { providerAccounts } from "../accounts/providerAccounts";
 import { modelLabelFor, providerModels, providerTabs } from "../accounts/providerCatalog";
+import { servingAccount } from "../accounts/servingAccount";
 import { clampEffort } from "../models/run-settings/effortScale";
 import { rememberedModelFor, rememberedProviderFor, rememberPick, turnDefaults } from "../run/turnDefaults";
-import { readsAsContinuing, type TurnSettings } from "../run/turnRequest";
+import { accountIntent, readsAsContinuing, type TurnSettings } from "../run/turnRequest";
 import type { Conversation } from "./conversation";
 import { type PickAction, type PickEffects, type PickWorld, reduceSelection, type Selection, UNPICKED } from "./selectionReducer";
 import type { TranscriptView } from "./transcriptView";
 import type { TurnClient } from "./turnClient";
-import { formatRemaining, formatReset, isStale, modelAllowance, usageStatusFor } from "./usageStatus";
+import { accountFacts, accountState, formatRemaining, formatReset, isStale, modelAllowance, usageStatusFor } from "./usageStatus";
 
 // A conversation's selection as the composer binds it: the value `reduceSelection` moves, read one pick at a time, and
 // the one "switched" divider a change of it owes the transcript. Which picks a switch retires is the reducer's rule;
@@ -52,7 +54,7 @@ export const midTurnSwitchText = (point: SwitchPoint, switchedMidTurn: boolean):
     (switchedMidTurn ? segmentSwitchText(point) : undefined) ?? modelSwitchText(point);
 
 // What a selection reads and writes of the conversation around it.
-type SelectionHost = Pick<Conversation, "session" | "activeModel" | "contextUsage" | "fastMode" | "box" | "peek"> & {
+type SelectionHost = Pick<Conversation, "session" | "registered" | "activeModel" | "contextUsage" | "fastMode" | "box" | "peek"> & {
     readonly transcript: Pick<TranscriptView, "messages" | "notice" | "rewordNotice" | "write">;
     readonly turn: Pick<TurnClient, "streaming" | "generating" | "moveAccount">;
 };
@@ -97,6 +99,29 @@ export class ComposerSelection {
 
     // Posture the next turn starts in: the pick clamped to what this conversation's runtime can hold.
     readonly mode = computed<PermissionMode>(() => clampMode(this.modePick.value, this.capabilities.value));
+
+    // Whether the next turn names `account`, by the very rule its request is built with (accountIntent), or leaves it to
+    // the daemon's record of where the conversation runs.
+    readonly accountNamed = computed(
+        () =>
+            accountIntent(
+                { agent: this.provider.value, account: this.account.value, accountPicked: this.state.value.accountPicked },
+                { registered: this.host.registered.value, session: this.host.session.value },
+            ) !== undefined,
+    );
+
+    // The account the next turn runs on (servingAccount), judged for this selection's model, for a surface that names it
+    // without drawing the list (the pane's reconnect notice). The picker ticks the same row by the same rule over the same
+    // rows, fed `account` and `accountNamed`, so neither can name an account the turn then does not run on.
+    readonly servingAccount = computed(() => {
+        const provider = this.provider.value;
+        const model = this.model.value === `` ? undefined : { id: this.model.value };
+        const rows = (providerAccounts.value[provider] ?? []).map((entry) => ({
+            id: entry.id,
+            state: accountState(provider, accountFacts(entry), model),
+        }));
+        return servingAccount(provider, rows, { account: this.account.value, named: this.accountNamed.value });
+    });
 
     // The one unsent "switched" divider notice, upserted/removed as settings toggle, frozen by the next send.
     private pendingSwitchNoticeId: number | undefined;

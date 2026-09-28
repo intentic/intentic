@@ -15,6 +15,7 @@ import {
     accountFacts,
     accountState,
     formatAge,
+    formatReset,
     liveUsage,
     oldestMovableReading,
     PLAN_LIMIT_BANDS,
@@ -62,6 +63,28 @@ export const capacityCounts = (
         const count = counts.get(band) ?? 0;
         return count === 0 || band === `none` ? [] : [{ band, count, label: planLimitBandLabel(band), tone: planLimitBandTone(band) }];
     });
+};
+
+// Where a row stands in the list: the accounts that can take a turn, then the ones waiting on a clock (a spent pool, a
+// bench that lifts by itself), then the ones a person has to fix (a sign-in, a seat). Three tiers rather than a sort by
+// room, so rows don't trade places as readings stream in under the pointer; within a tier the provider's own order
+// stands. Display only: which account a turn runs on is read off the provider's order (servingAccount), never this one.
+const PICKER_TIER = { room: 0, tight: 0, unread: 0, none: 0, spent: 1, blocked: 2 } as const satisfies Record<PlanLimitBand, number>;
+
+export const pickerOrder = <T extends { readonly state: AccountState }>(provider: AgentProvider, rows: readonly T[]): T[] => {
+    const readable = reportsPlanLimits(provider);
+    const tier = (row: T): number => PICKER_TIER[planLimitBand({ state: row.state, readable })];
+    return rows.toSorted((left, right) => tier(left) - tier(right));
+};
+
+// Why a spent row is dimmed, and until when: a dimmed name with nothing beside it reads as broken, not as waiting.
+const spentLine = (state: AccountState): string | undefined => {
+    if (state.kind !== `spent`) {
+        return undefined;
+    }
+    return state.reopensAt === undefined
+        ? t(`chat.pickerAccounts.allowanceUsedUp`)
+        : t(`chat.pickerAccounts.allowanceUsedUpReopens`, { when: formatReset(state.reopensAt) });
 };
 
 // Filters a folded list against everything a row shows (label and subtitle), since a pool of
@@ -132,15 +155,18 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
         return new Set([...seen].filter(([, count]) => count > 1).map(([label]) => label));
     });
 
-    // Rows decorated with a subtitle (identity or connect date), ring headroom, and any refusal on that account.
+    // Rows decorated with a subtitle (identity or connect date), ring headroom, and any refusal on that account. In the
+    // provider's own order, which is what a turn's placement breaks ties by; the list draws them in pickerOrder.
     const accountRows = computed(() => {
         const refusal = providerRefusals.value[provider.value];
         const note = providerRefusalNote.value;
+        const readable = reportsPlanLimits(provider.value);
         return accounts.value.map((entry) => {
             const identity = [entry.email, entry.organization].filter((part) => part !== undefined && part !== entry.label);
             const subtitle =
                 identity.length > 0 ? identity.join(` · `) : ambiguousLabels.value.has(entry.label) ? `connected ${relativeTime(entry.connectedAt)}` : undefined;
             const state = accountState(provider.value, accountFacts(entry), modelRef.value);
+            const band = planLimitBand({ state, readable });
             return Object.assign({}, entry, {
                 subtitle,
                 // liveUsage, not the streamed map alone: the row's own reading is usually the newer of the two.
@@ -154,6 +180,10 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
                         : note?.current === true && refusal?.account === entry.id
                           ? note.line
                           : undefined,
+                waiting: spentLine(state),
+                // Can take no turn now: a spent pool, a bench, a sign-in or seat to give back. Dimmed, never disabled, since
+                // picking one is an attempt on it; its reason stays legible, since that is what says why it is dimmed.
+                demoted: band === `spent` || band === `blocked`,
             });
         });
     });

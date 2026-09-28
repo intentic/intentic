@@ -22,7 +22,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { conversation, provider, account, accounts, streaming } = usePaneView();
+const { conversation, provider, accounts, streaming } = usePaneView();
 const { reachable, active } = useSandbox();
 
 // The last free hours, above the composer, to the person spending them: only on a hosted sandbox, only its owner
@@ -100,9 +100,11 @@ const retryTrial = async (): Promise<void> => {
     await conversation.value.turn.resume();
 };
 
-// This account's credential can no longer refresh; surfaced pre-send, before an opaque mid-turn failure.
+// The credential the next turn runs on can no longer refresh; surfaced pre-send, before an opaque mid-turn failure.
+// Asked of the account the turn will actually run on (servingAccount), never the first listed: on auto, an expired
+// first account is one the turn skips.
 const activeAccountReauth = computed(() => {
-    const id = account.value ?? accounts.value[0]?.id;
+    const id = conversation.value.selection.servingAccount.value?.id;
     return accounts.value.find((entry) => entry.id === id && entry.needsReauth === true);
 });
 </script>

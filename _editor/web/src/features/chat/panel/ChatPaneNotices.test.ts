@@ -2,26 +2,31 @@
 // Retry); `degraded` isn't (the pool answered after failing over). Both used to share one sentence and button,
 // wrongly telling a working answer's reader their message had failed.
 import "@intentic/testing/dom";
-import { type AgentProvider, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type AgentProvider, type OauthAccount, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
+import { type App, createApp, defineComponent, h, nextTick, ref, shallowRef } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as vueRouterOriginal from "vue-router";
 import { RouterLinkStub } from "../../../testing/routerLinkStub";
+import type { ServingAccount } from "../accounts/servingAccount";
 
 const provider = ref<AgentProvider>(TRIAL_PROVIDER);
 const reachable = ref(true);
 const streaming = ref(false);
 const resume = jest.fn(async () => {});
 const loadTrialStatus = jest.fn(async () => {});
+// The provider's accounts, and the one the next turn runs on as the selection resolves it (servingAccount).
+const accounts = ref<OauthAccount[]>([]);
+const servingAccount = ref<ServingAccount | undefined>(undefined);
 
 // The pane's own view, injected as the real strip would from ChatPane, mounted here directly.
 jest.mock(`../models/useChat-catalog`, () => ({ loadTrialStatus }));
 jest.mock(`./useChat-view`, () => ({
     usePaneView: () => ({
-        conversation: ref({ conversationId: `agent-1`, turn: { resume } }),
+        // Shallow, as the conversation list holds them (sandboxShallowRef): a deep ref would unwrap the selection's refs.
+        conversation: shallowRef({ conversationId: `agent-1`, turn: { resume }, selection: { servingAccount } }),
         provider,
         account: ref(undefined),
-        accounts: ref([]),
+        accounts,
         streaming,
         harness: ref(`claude-code`),
         model: ref(`gemini-flash-latest`),
@@ -83,6 +88,8 @@ beforeEach(() => {
     hostedMeter.value = undefined;
     lowOnHours.value = false;
     trialStatus.value = { available: true, allowance: 10, used: 6, remaining: 4, health: `healthy` };
+    accounts.value = [];
+    servingAccount.value = undefined;
     resume.mockClear();
     loadTrialStatus.mockClear();
 });
@@ -215,4 +222,22 @@ it(`warns a hosted sandbox's owner about the last free hours, and nobody else`, 
     lowOnHours.value = false;
     await nextTick();
     expect(root.textContent).not.toContain(`left this month`);
+});
+
+// The reconnect strip is about the credential the next turn runs on (servingAccount). On auto that is the daemon's own
+// pick, which skips an expired first account, so a chat that will run fine is not told to reconnect.
+it(`asks for a reconnect only when the account the next turn runs on has lost its sign-in`, async () => {
+    provider.value = `claude`;
+    accounts.value = [
+        { id: `expired`, label: `Work`, connectedAt: 0, needsReauth: true, detail: `Work's sign-in expired.` },
+        { id: `fine`, label: `Personal`, connectedAt: 0 },
+    ];
+    servingAccount.value = { id: `fine`, byAllowance: true };
+    const root = mount();
+    await nextTick();
+    expect(root.textContent).not.toContain(`Work's sign-in expired.`);
+
+    servingAccount.value = { id: `expired`, byAllowance: false };
+    await nextTick();
+    expect(named(root, `Reconnect`)?.textContent).toContain(`Work's sign-in expired.`);
 });

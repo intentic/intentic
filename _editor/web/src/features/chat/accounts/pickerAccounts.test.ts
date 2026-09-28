@@ -1,5 +1,5 @@
 import { type AccountState, headroomState } from "@intentic/sandbox-contract";
-import { capacityCounts, matchAccounts } from "./pickerAccounts";
+import { capacityCounts, matchAccounts, pickerOrder } from "./pickerAccounts";
 import type { PlanHeadroom } from "../session/usageStatus";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
@@ -70,4 +70,19 @@ test("an empty or blank query is not a filter: the whole list comes back", () =>
     const rows = [row(`a`, 10), row(`b`, 10)];
     expect(matchAccounts(rows, ``)).toBe(rows);
     expect(matchAccounts(rows, `   `)).toBe(rows);
+});
+
+test("draws what can take a turn first, then what waits on a clock, then what a person must fix, keeping the provider's order in each", () => {
+    // Tiers, not a sort by room: rows must not trade places as readings stream in under the pointer.
+    const bench: AccountState = { kind: `blocked`, fix: `wait`, reason: `Cooling down.`, until: 1 };
+    const seatless: AccountState = { kind: `blocked`, fix: `admin`, reason: `No seat.` };
+    const listed = [
+        row(`seatless`, undefined, undefined, seatless),
+        row(`spent`, 100),
+        row(`room`, 12),
+        row(`bench`, undefined, undefined, bench),
+        row(`tight`, 90),
+        row(`unread`),
+    ];
+    expect(pickerOrder(`claude`, listed).map((entry) => entry.label)).toEqual([`room`, `tight`, `unread`, `spent`, `bench`, `seatless`]);
 });

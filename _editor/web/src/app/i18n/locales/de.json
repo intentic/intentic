@@ -1408,6 +1408,9 @@
         },
         "pickerAccounts": {
             "allAccounts": "Alle {count} Konten",
+            "allowanceUsedUp": "Kontingent aufgebraucht",
+            "allowanceUsedUpReopens": "Kontingent aufgebraucht, wieder frei {when}",
+            "autoPicked": "Automatisch gewählt, nach verbleibendem Kontingent. Wähle ein anderes Konto, um stattdessen dieses zu nutzen.",
             "filterSubscriptionAccounts": "Abo-Konten filtern",
             "noAccountsMatch": "Keine Konten passen.",
             "outdatedMissing": "Bis zur Aktualisierung können die Konten unten nicht anzeigen, ob sie einen Zug übernehmen können (verlorene Anmeldung oder Lizenz, aufgebrauchtes oder gesperrtes Kontingent), und eine Auswahl wirkt erst ab der nächsten Nachricht.",

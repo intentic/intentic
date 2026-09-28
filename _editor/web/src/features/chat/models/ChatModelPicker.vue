@@ -21,7 +21,7 @@ const emit = defineEmits<{ selected: [] }>();
 const { conversation } = defineProps<{ conversation: Conversation }>();
 
 // Destructured once; every host remounts this component (v-if) rather than swapping the prop in place.
-const { provider, harness, model, thinking, fast, effort, account, capabilities, auto } = conversation.selection;
+const { provider, harness, model, thinking, fast, effort, account, accountNamed, capabilities, auto } = conversation.selection;
 const { fastMode, box } = conversation;
 const { streaming, generating } = conversation.turn;
 const { messages } = conversation.transcript;
@@ -136,13 +136,14 @@ const footerVisible = computed(() => (auto.value ? true : accountsShown.value ||
                     </RouterLink>
                 </div>
 
-                <!-- Account list and harness axis, shared with the shell's own picker. -->
+                <!-- Account list and harness axis, shared with the shell's own picker. Ticks the account the next turn runs on, as the selection's servingAccount does. -->
                 <PickerAccounts
                     v-if="accountsShown"
                     :provider="provider"
                     :harness="harness"
                     :model="model"
                     :account="account"
+                    :named="accountNamed"
                     :accounts-locked="generating"
                     :harness-locked="streaming"
                     @select-account="conversation.selection.apply({ kind: `selectAccount`, account: $event })"

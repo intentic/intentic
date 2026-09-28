@@ -1417,6 +1417,9 @@
         },
         "pickerAccounts": {
             "allAccounts": "Wszystkie konta ({count})",
+            "allowanceUsedUp": "Limit wyczerpany",
+            "allowanceUsedUpReopens": "Limit wyczerpany, odnawia się {when}",
+            "autoPicked": "Wybrane automatycznie według pozostałego limitu. Wybierz inne konto, aby z niego skorzystać.",
             "filterSubscriptionAccounts": "Filtruj konta subskrypcyjne",
             "noAccountsMatch": "Żadne konto nie pasuje.",
             "outdatedMissing": "Do czasu aktualizacji konta poniżej nie pokażą, czy mogą przyjąć turę (utracone logowanie lub miejsce, wyczerpana lub wstrzymana pula), a wybór konta zadziała dopiero od następnej wiadomości.",
