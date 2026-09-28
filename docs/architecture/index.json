@@ -3112,11 +3112,11 @@
           "what": ": the orientation line, counts plus pass rate, in the one shape"
         },
         {
-          "path": "_extensions/pipelines/src/pipelineDag.ts",
+          "path": "_extensions/pipelines/src/graph/pipelineDag.ts",
           "what": ": jobs and their dependencies as a drawable graph, and the grouping of"
         },
         {
-          "path": "_extensions/pipelines/src/PipelineDagGraph.vue",
+          "path": "_extensions/pipelines/src/graph/PipelineDagGraph.vue",
           "what": ": that graph on a canvas, with the hover that traces one"
         },
         {
@@ -3132,15 +3132,15 @@
           "what": ": one mapping from status to appearance."
         },
         {
-          "path": "_extensions/pipelines/src/useCiFixes.ts",
+          "path": "_extensions/pipelines/src/fixes/useCiFixes.ts",
           "what": ": the fix agents, read off the fleet roster, quickly while one is moving"
         },
         {
-          "path": "_extensions/pipelines/src/ciFixes.ts",
+          "path": "_extensions/pipelines/src/fixes/ciFixes.ts",
           "what": ": which failure each of them belongs to, and which branch already has one."
         },
         {
-          "path": "_extensions/pipelines/src/ciFixes.ts",
+          "path": "_extensions/pipelines/src/fixes/ciFixes.ts",
           "what": ": joins a row to the agent on its failure by re-deriving the conversation id, latest"
         }
       ],

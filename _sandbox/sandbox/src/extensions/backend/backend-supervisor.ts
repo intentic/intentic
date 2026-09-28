@@ -17,7 +17,7 @@ import { invalidateContributions } from "../../capabilities/contributions.js";
 import type { ExtensionGrant } from "../../auth/grants.js";
 import { extensionRuntimeAbsent, RUNTIME_ABSENT_DETAIL } from "../extension-readiness.js";
 import { enabledExtensions, type ExtensionHost, type InstalledExtension } from "../installed-extensions.js";
-import { listenerOwnershipOf } from "../listener-state.js";
+import { listenerOwnershipOf } from "../listener/listener-state.js";
 import {
     BACKEND_CONFIG_ENV,
     BACKEND_HOST_HEADER,

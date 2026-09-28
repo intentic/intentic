@@ -7,7 +7,7 @@ import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import { fileLinkDecorator } from "../../../lib/markdown/renderMarkdown";
 import { resolveFile } from "../explorer/fileType";
 import { readFileWindow } from "../files/fileWindow";
-import { openFileRefFromEvent } from "../files/openFileRef";
+import { openFileRefFromEvent } from "../files/refs/openFileRef";
 import { workspaceAgent } from "../health/workspaceScope";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
 import { quickLookPlan } from "./quickLookContent";

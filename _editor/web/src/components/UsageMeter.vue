@@ -139,7 +139,7 @@ onBeforeUnmount(hide);
     <span ref="anchor" class="inline-flex items-center gap-1" @mouseenter="show" @mouseleave="hide" @pointerdown="hide">
         <!-- Drains like every allowance meter: the fill is what is left, and a spent pool tints its empty track. -->
         <span class="inline-flex w-4 shrink-0 flex-col gap-0.5" aria-hidden="true">
-            <span v-for="(bar, index) in bars" :key="index" class="block h-[3px] overflow-hidden rounded-full" :class="meterTrack(bar.percent)">
+            <span v-for="(bar, index) in bars" :key="index" class="block h-0.75 overflow-hidden rounded-full" :class="meterTrack(bar.percent)">
                 <span
                     class="ui-meter-fill block h-full rounded-full"
                     :class="bar.capped ? `text-subtle` : usageTone(bar.percent)"

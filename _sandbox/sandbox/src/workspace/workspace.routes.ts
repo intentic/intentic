@@ -19,7 +19,7 @@ import { behindCount } from "./layout/workspace-setup.js";
 import { syncWorkspaceRepos } from "./layout/sync-repos.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "./layout/templates-config.js";
 import { isControlPlanePath, resolveWithin } from "./files/workspace-files-paths.js";
-import { UnknownArchiveError } from "./files/workspace-extract.js";
+import { UnknownArchiveError } from "./files/archive/workspace-extract.js";
 import {
     DOWNLOAD_TICKET_TTL_MS,
     type DownloadItem,
@@ -27,7 +27,7 @@ import {
     downloadBinding,
     nameSelection,
     pathExists,
-} from "./files/workspace-download.js";
+} from "./files/download/workspace-download.js";
 import { TrashMissError } from "./files/trash/workspace-trash.js";
 import { publicPushes, publicPushReds } from "./deps/push-checks-store.js";
 import { childrenForRead, containedForRead, containedIn, insideArchive, scopedTarget, workspaceRootFor } from "./layout/workspace-scope.js";

@@ -22,11 +22,11 @@ import type {
     WireTool,
 } from "./cursor-runtime-protocol.js";
 
-// Where a Cursor turn's SDK agent lives. An unanchored turn (the main tree, or a container that cannot build a mount
-// namespace) runs it in this process, as it always has. An anchored one runs it in a Node process born in the turn's
-// namespace (cursor-agent-runtime.ts), the way the Claude CLI and the Codex app-server are: @cursor/sdk spawns its shell
-// and edits files in the process that loads it, so in the daemon an absolute /work path named the owner's checkout.
-// The adapter sees one narrow session either way.
+// Where a Cursor turn's SDK agent lives. A turn with no namespace of its own (the main tree, or a container that cannot
+// build a mount namespace) runs it in this process, as it always has. A namespaced one runs it in a Node process born in
+// the turn's namespace (cursor-agent-runtime.ts), the way the Claude CLI and the Codex app-server are: @cursor/sdk
+// spawns its shell and edits files in the process that loads it, so in the daemon an absolute /work path named the
+// owner's checkout. The adapter sees one narrow session either way.
 
 type Sdk = typeof CursorSdk;
 // All of the SDK the daemon's side of the channel needs: the classes an error is rebuilt as.
@@ -205,7 +205,7 @@ const runtimeChannel = (child: RuntimeProcess, tools: Record<string, SDKCustomTo
         // is for a runtime that does not.
         close: () => {
             void call({ method: "close" })
-                .catch(() => undefined)
+                .catch((error) => logger.debug({ err: error }, "cursor runtime: the agent did not close, disconnecting it anyway"))
                 .finally(() => {
                     if (child.connected) {
                         child.disconnect();

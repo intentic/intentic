@@ -40,7 +40,7 @@ import { createBackendProxyRoute } from "./extensions/backend/backend-proxy.rout
 import { createExtensionMcpEndpoint, createExtensionToolsEndpoint } from "./extensions/backend/extension-mcp.js";
 import { createTurnMountRoute } from "./agent/tools/turn-mounts.routes.js";
 import { createExtensionBundleRoute } from "./extensions/extension-bundle.routes.js";
-import { createListenerRoutes } from "./extensions/listener.routes.js";
+import { createListenerRoutes } from "./extensions/listener/listener.routes.js";
 import { createBrowserProfileRoute } from "./browser/sessions/browser-profile.js";
 import { HOST_PEER, hostPeerRoutes } from "./hosts/host-peer.js";
 import { mountPeerRoutes } from "./peers/peer-routes.js";

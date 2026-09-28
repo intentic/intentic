@@ -1504,6 +1504,9 @@
             "tight": "tight",
             "unread": "unread"
         },
+        "usageStatus": {
+            "percentLeft": "{percent} left"
+        },
         "subagents": {
             "agentsStartedFinishedAged": "The agents {focusTitle} started have finished and aged out of this list. Its own transcript is the record of what they reported back.",
             "itsConversation": "Its conversation",
@@ -2819,6 +2822,11 @@
         },
         "passkeysSection": {
             "browserCantCreatePasskeys": "This browser can't create passkeys; add one from a browser that can.",
+            "couldntAddPasskey": "Couldn't add the passkey.",
+            "couldntChangeRule": "Couldn't change the passkey rule.",
+            "couldntMintCodes": "Couldn't mint new recovery codes.",
+            "couldntReadPasskeys": "Couldn't read this sandbox's passkeys.",
+            "couldntRemovePasskey": "Couldn't remove that passkey.",
             "newCodes": "New codes",
             "passkeys": "Passkeys",
             "recoveryCodes": "Recovery codes",
@@ -4098,7 +4106,6 @@
         "name": "Name",
         "needs": "Needs you",
         "other": "Other",
-        "percentLeft": "{percent} left",
         "personas": "Personas",
         "planLimits": "Plan limits",
         "preview": "Preview",

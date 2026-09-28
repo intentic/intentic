@@ -97,6 +97,7 @@ const answer = async (seq: number, call: HostCall): Promise<void> => {
     try {
         post({ kind: "reply", seq, ok: true, value: await handle(call) });
     } catch (error) {
+        // allow(silent-catch): an SDK that failed to load has no classes to match, and its failure already went back as the open call's own error.
         const sdk = await sdkReady.catch(() => undefined);
         const coded = sdk === undefined ? undefined : CODED_ERRORS.find((name) => error instanceof sdk[name]);
         post({ kind: "reply", seq, ok: false, error: { message: errorMessage(error), ...opt("coded", coded) } });

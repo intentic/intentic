@@ -1,6 +1,7 @@
 import "@intentic/testing/dom";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { packageRoot } from "@intentic/constants/node";
 import { effectScope } from "vue";
 import { stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { raiseOwnWindow, widenOwnWindow } from "../../app/environments/desktop";
@@ -701,7 +702,7 @@ describe(`where the window comes back`, () => {
 // note it speaks. This runs that very script at the addresses a window can boot at, and hands what it says to this
 // module the way the channel would.
 describe(`the first script of a window booting at a panel's address`, () => {
-    const html = readFileSync(join(import.meta.dirname, `../../../index.html`), `utf8`);
+    const html = readFileSync(join(packageRoot(import.meta.url), `index.html`), `utf8`);
     const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/gu)].map((found) => found[1] ?? ``).find((body) => body.includes(`booting`));
 
     // What the script posts, and on which channel, run by a window at `pathname`.

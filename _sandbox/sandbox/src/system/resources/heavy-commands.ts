@@ -16,7 +16,7 @@ import { z } from "zod";
 import { drop, isJsonObject, transform } from "../../store/evolution/conversions.js";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { openDocument } from "../../store/open-document.js";
-import type { ManifestProblem } from "../../store/manifest-problems.js";
+import type { ManifestProblem } from "../../store/manifest/manifest-problems.js";
 import { stateRelPath } from "../../state-paths.js";
 import { priorityOf } from "../../workload/workload-class.js";
 

@@ -8,7 +8,7 @@ import { statePath } from "../state-paths.js";
 import { createCodeSearchEngine } from "./code-search.js";
 import { heldDirReads } from "./files/dir-reads.js";
 import { createWorkspaceTrash, type WorkspaceTrash } from "./files/trash/workspace-trash.js";
-import { extractArchive } from "./files/workspace-extract.js";
+import { extractArchive } from "./files/archive/workspace-extract.js";
 import {
     copyWorkspacePath,
     makeWorkspaceDir,

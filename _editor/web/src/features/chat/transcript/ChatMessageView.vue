@@ -14,7 +14,7 @@ import { chatRouteWait } from "../routing/chatRoute";
 import { changedNothing, type ChatMessage, type ChecklistView, foldsIntoTurn } from "./transcript";
 import { type CardAnswer, requestIdOf } from "../session/cardReplies";
 import { useMarkdown } from "../../../lib/markdown/useMarkdown";
-import { openFileRefFromEvent } from "../../workspace/files/openFileRef";
+import { openFileRefFromEvent } from "../../workspace/files/refs/openFileRef";
 import { usePaneView } from "../panel/useChat-view";
 import ChatAttachmentStrip from "../composer/ChatAttachmentStrip.vue";
 import ChatBrowserHelpCard from "./cards/ChatBrowserHelpCard.vue";

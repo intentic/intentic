@@ -5,8 +5,8 @@ import { failureStreaks, streakTooltip } from "./ciStreaks";
 import { ciRunsQuery } from "./ciRunsQuery";
 import { host } from "./host";
 import { t } from "./i18n.js";
-import { owedFindings, pushDebtOf } from "./pushChecks";
-import { pushChecksQuery } from "./pushChecksQuery";
+import { owedFindings, pushDebtOf } from "./push/pushChecks";
+import { pushChecksQuery } from "./push/pushChecksQuery";
 
 // Module state owned by activate(), not the view, so the badge updates without Pipelines being open; reads through the
 // host's cache, doubling as the board's first paint. A timer, not a file watch: nothing local observes the CI provider,

@@ -3,7 +3,7 @@ import { Button, DisclosureRow, Notice, RowGroup, StatusBadge } from "@intentic/
 import { useAsyncAction } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { useManifestProblems } from "../../extensions/useManifestProblems";
-import { openWorkspaceRef } from "../../../workspace/files/openFileRef";
+import { openWorkspaceRef } from "../../../workspace/files/refs/openFileRef";
 import { type ManifestRepairAction, manifestNotices } from "./manifestNotice";
 import { useT } from "@intentic/ui/i18n";
 

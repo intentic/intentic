@@ -19,7 +19,7 @@ import { resolveTurnJobs } from "../../tools/jobs/job-fates.js";
 // 5. settle: the placement's books, then the conversation's actor.
 // 6. publish, once: the placement announces how the turn ended (TurnEnding).
 // The run registry announces `run.settled` after all of it; its listeners are independent of each other and of this
-// order (docs/subsystems.md).
+// order (_sandbox/sandbox/docs/subsystems.md).
 
 // How a turn ended, as its close decided it: an error, a stop, waiting on a wake it armed, or finished.
 export type TurnEnding = "failed" | "stopped" | "awaiting-wake" | "finished";

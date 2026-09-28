@@ -5,8 +5,8 @@ import { queueOnFile, writeFileAtomic } from "@intentic/base/fs";
 import { type DocumentParse, readDocument } from "@intentic/sandbox-contract/documents";
 import { CHECK_SETTLES } from "./evolution/conversions.js";
 import type { DocumentSpec } from "./evolution/documents.js";
-import { type ManifestProblem, recordManifestProblems } from "./manifest-problems.js";
-import { type ManifestEdit, registerManifestEditor } from "./manifest-repair.js";
+import { type ManifestProblem, recordManifestProblems } from "./manifest/manifest-problems.js";
+import { type ManifestEdit, registerManifestEditor } from "./manifest/manifest-repair.js";
 import { newerBuildRan } from "./newest-run.js";
 import type { IdKeys } from "./evolution/passthrough.js";
 

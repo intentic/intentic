@@ -5,7 +5,7 @@ import { type IdListStore, idListFile } from "./id-list-file.js";
 import { type JsonDir, jsonDir } from "./json-dir.js";
 import { type JsonEntriesOptions, type JsonFile, type JsonFileOptions, jsonEntries, jsonFile } from "./json-file.js";
 import type { IdKeys } from "./evolution/passthrough.js";
-import { objectParse } from "./unknown-keys.js";
+import { objectParse } from "./manifest/unknown-keys.js";
 
 // Every store opens its file through the document that describes it: the parse is the document's own schema, laid out
 // by its granularity (the whole file, one entry of a list, one value of a record keyed by id, one file of a directory),

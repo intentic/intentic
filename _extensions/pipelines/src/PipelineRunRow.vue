@@ -26,11 +26,11 @@ import {
     useAgentRunPick,
 } from "@intentic/extension-ui";
 import { type ComponentPublicInstance, computed, ref } from "vue";
-import type { CiFix } from "./ciFixes";
+import type { CiFix } from "./fixes/ciFixes";
 import { host } from "./host";
-import PipelineDagGraph from "./PipelineDagGraph.vue";
-import PipelineGraph from "./PipelineGraph.vue";
-import { pipelineStages } from "./pipelineDag";
+import PipelineDagGraph from "./graph/PipelineDagGraph.vue";
+import PipelineGraph from "./graph/PipelineGraph.vue";
+import { pipelineStages } from "./graph/pipelineDag";
 import { formatDuration, STATUS_TONE, triggerLabel } from "./statusVisual";
 import { useRunJobs } from "./useRunJobs";
 import { t } from "./i18n.js";

@@ -8,11 +8,11 @@ import { EventQueue } from "../../agent/run/event-queue.js";
 import { splitAttachments, withFileNote } from "../../agent/prompt/attachment-note.js";
 import { EXECUTE_PROMPT, PLAN_PREAMBLE, planMode } from "../decorators/plan-mode.js";
 import { vendorTurnGate } from "../decorators/vendor-gate.js";
-import type { CursorCatalog } from "./cursor-catalog.js";
+import type { CursorCatalog } from "./models/cursor-catalog.js";
 import { createCursorEventMapper } from "./cursor-events.js";
 import { type CursorRunHandle, type CursorSession, inProcessHost, namespacedHost, type NamespacedHostInput } from "./cursor-host.js";
 import type { CursorHookService } from "./cursor-hooks.js";
-import { selectionFor } from "./cursor-models.js";
+import { selectionFor } from "./models/cursor-models.js";
 import { CURSOR_SDK_MISSING, cursorSdk, cursorSdkEntry } from "./cursor-sdk.js";
 import { cursorCustomTools, cursorMcpServers, TOOLS_WITHHELD } from "./cursor-tools.js";
 

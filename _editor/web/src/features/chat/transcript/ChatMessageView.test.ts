@@ -161,7 +161,7 @@ jest.mock("./transcript", () => ({ foldsIntoTurn: (message: ChatMessage) => erra
 jest.mock("../../../lib/markdown/useMarkdown", () => {
     return { useMarkdown: () => computed(() => markdown.parts) };
 });
-jest.mock("../../workspace/files/openFileRef", () => ({ openFileRefFromEvent: jest.fn(), openWorkspaceRef: jest.fn() }));
+jest.mock("../../workspace/files/refs/openFileRef", () => ({ openFileRefFromEvent: jest.fn(), openWorkspaceRef: jest.fn() }));
 jest.mock("../../workspace/changes/history/useHistory", () => ({ restoreSnapshot: jest.fn(), invalidateWorkspace: jest.fn() }));
 jest.mock("../tools/toolGrouping", () => ({ groupConsecutiveTools: () => [] }));
 jest.mock("../composer/ChatAttachmentStrip.vue", () => ({ default: { render: () => undefined } }));

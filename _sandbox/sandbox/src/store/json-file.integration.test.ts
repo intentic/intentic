@@ -7,7 +7,7 @@ import { rename, retireEntries, retype } from "./evolution/conversions.js";
 import { defineDocument, type DocumentSpec } from "./evolution/documents.js";
 import { boundedLog, type JsonFile, jsonEntries, jsonFile, ManifestUnreadableError, writeJsonFile } from "./json-file.js";
 import { openApprovalLedger } from "./open-document.js";
-import { recordedProblems } from "./manifest-problems.js";
+import { recordedProblems } from "./manifest/manifest-problems.js";
 import { clearNewestRun, recordNewestRun } from "./newest-run.js";
 
 const dirs: string[] = [];

@@ -5,7 +5,7 @@ import { useRoute, useRouter } from "vue-router";
 import { watchAgentsScope } from "../features/agents/board/agentsTile";
 import { useExtensionHost } from "../extension-host/useExtensionHost";
 import { useMainWindow } from "./window/mainWindow";
-import { openWorkspaceRef } from "../features/workspace/files/openFileRef";
+import { openWorkspaceRef } from "../features/workspace/files/refs/openFileRef";
 import { prefetchViewsAtIdle } from "../router/prefetch";
 import { useChat } from "../features/chat/run/useChat";
 import { mobileChatPath } from "./tabRoots";

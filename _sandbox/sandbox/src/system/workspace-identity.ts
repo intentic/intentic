@@ -6,7 +6,7 @@ import { stateRelPath } from "../state-paths.js";
 import { readDocument } from "@intentic/sandbox-contract/documents";
 import { CHECK_SETTLES } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
-import { recordManifestProblems } from "../store/manifest-problems.js";
+import { recordManifestProblems } from "../store/manifest/manifest-problems.js";
 
 // The workspace's stable identity at <workspace>/.intentic/identity/workspace.json, minted at the first boot of an
 // empty /work and surviving with the volume. Streamed as the /events hello frame so the browser can tell a

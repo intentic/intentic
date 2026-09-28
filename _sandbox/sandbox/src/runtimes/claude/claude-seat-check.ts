@@ -58,7 +58,10 @@ export type SeatProbeFetch = (url: string, init: RequestInit) => Promise<Respons
 export const claudeSeatProbe =
     (store: ClaudeStore, fetchFn: SeatProbeFetch = fetch) =>
     async (id: string): Promise<SeatProbe> => {
-        const token = await ensureFreshToken(store, id).catch(() => undefined);
+        const token = await ensureFreshToken(store, id).catch((error) => {
+            store.logger.warn({ err: error, account: id }, "claude seat probe: the sign-in could not be refreshed, the next recheck tries again");
+            return undefined;
+        });
         if (token === undefined || PROBE_MODEL === undefined) {
             return { kind: "unknown", why: token === undefined ? "the sign-in could not be refreshed" : "no model to ask" };
         }
@@ -103,7 +106,7 @@ export interface ClaudeSeatCheckDeps {
     // Read per call: the refusal store is composed in another slice, after this one.
     readonly refusals: () => ProviderRefusalStore;
     readonly probe: (id: string) => Promise<SeatProbe>;
-    readonly logger: Pick<Logger, "info" | "debug">;
+    readonly logger: Pick<Logger, "info" | "debug" | "warn">;
     readonly now?: () => number;
 }
 
@@ -166,7 +169,10 @@ export const createClaudeSeatCheck = (deps: ClaudeSeatCheckDeps): ClaudeSeatChec
     return {
         recheck: async (id, options = {}) => {
             // Unreadable marks: nothing to go on, so the turn is routed as the marks last said (blocked-account.ts).
-            const since = await markedAt(id).catch(() => null);
+            const since = await markedAt(id).catch((error) => {
+                deps.logger.warn({ err: error, account: id }, "claude account: the seat marks could not be read, routing as they last said");
+                return null;
+            });
             if (since === null) {
                 return false;
             }

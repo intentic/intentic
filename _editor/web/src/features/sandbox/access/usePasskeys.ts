@@ -1,5 +1,6 @@
 import { type PasskeysList, PasskeysListSchema, type RegistrationOptionsJSON } from "@intentic/sandbox-contract";
 import { type NoticeModel, noticeFrom, useAsyncAction } from "@intentic/ui/async";
+import { t } from "@intentic/ui/i18n";
 import { ref, watch } from "vue";
 import { jsonBody } from "../client/jsonBody";
 import { browserSupportsPasskeys, createPasskey, type PasskeyRegistered } from "../session/passkeySignIn";
@@ -33,7 +34,7 @@ export function usePasskeys() {
             body = await sandboxJson<unknown>(`/system/passkeys`);
         } catch (caught) {
             list.value = EMPTY;
-            unread.value = noticeFrom(caught, `Couldn't read this sandbox's passkeys.`);
+            unread.value = noticeFrom(caught, t(`sandbox.passkeysSection.couldntReadPasskeys`));
             return;
         }
         unread.value = undefined;
@@ -64,14 +65,14 @@ export function usePasskeys() {
                 adoptSession(active.value.id, registered.session);
             }
             await refresh();
-        }, `Couldn't add the passkey.`);
+        }, t(`sandbox.passkeysSection.couldntAddPasskey`));
 
     // Not routed through `run`: removing must not flash the add button's busy state.
     const remove = async (id: string): Promise<void> => {
         try {
             await sandboxJson(`/system/passkeys/${encodeURIComponent(id)}`, { method: `DELETE` });
         } catch (caught) {
-            notice.value = noticeFrom(caught, `Couldn't remove that passkey.`);
+            notice.value = noticeFrom(caught, t(`sandbox.passkeysSection.couldntRemovePasskey`));
         }
         await refresh();
     };
@@ -81,13 +82,13 @@ export function usePasskeys() {
             const result = await sandboxJson<{ required: boolean; codes?: string[] }>(`/system/passkeys/policy`, jsonBody(`POST`, { required }));
             codes.value = result.codes;
             await refresh();
-        }, `Couldn't change the passkey rule.`);
+        }, t(`sandbox.passkeysSection.couldntChangeRule`));
 
     const regenerateCodes = (): Promise<void> =>
         run(async () => {
             codes.value = (await sandboxJson<{ codes: string[] }>(`/system/passkeys/recovery`, jsonBody(`POST`, {}))).codes;
             await refresh();
-        }, `Couldn't mint new recovery codes.`);
+        }, t(`sandbox.passkeysSection.couldntMintCodes`));
 
     return { list, unread, codes, busy, notice, supported, add, remove, setRequired, regenerateCodes, refresh };
 }

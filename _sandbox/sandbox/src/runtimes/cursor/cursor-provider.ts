@@ -21,12 +21,12 @@ import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js
 import type { Services } from "../../composition.js";
 import { mayDelegate, turnPersona } from "../../personas/personas.js";
 import { createCursorAgent } from "./cursor-agent.js";
-import { type CursorCatalog, createCursorCatalog } from "./cursor-catalog.js";
-import { type CursorStore, fileCursorStore, readCursorCredentials } from "./cursor-credentials.js";
+import { type CursorCatalog, createCursorCatalog } from "./models/cursor-catalog.js";
+import { type CursorStore, fileCursorStore, readCursorCredentials } from "./accounts/cursor-credentials.js";
 import { createCursorHookService, type CursorHookService } from "./cursor-hooks.js";
 import { cursorReadiness } from "./cursor-readiness.js";
 import { cursorSdk } from "./cursor-sdk.js";
-import { type CursorAccountDeps, cursorAccountDoor } from "./cursor-accounts.js";
+import { type CursorAccountDeps, cursorAccountDoor } from "./accounts/cursor-accounts.js";
 import { type CursorOneShotDeps, cursorOneShot } from "./cursor-one-shot.js";
 import { cursorAccountForTurn, cursorTurnLimit } from "./cursor-usage.js";
 

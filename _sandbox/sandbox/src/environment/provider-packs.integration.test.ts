@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { unstubbed } from "@intentic/testing";
 import { codexConnected } from "../runtimes/codex/codex-provider.js";
 import type { Services } from "../composition.js";
-import { fileCursorStore } from "../runtimes/cursor/cursor-credentials.js";
+import { fileCursorStore } from "../runtimes/cursor/accounts/cursor-credentials.js";
 import { createLogger } from "../logger.js";
 import { packFragment } from "./packs.js";
 import { providerPackFragments } from "./provider-packs.js";

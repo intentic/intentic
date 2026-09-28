@@ -1,7 +1,7 @@
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import type { Terminal } from "@xterm/xterm";
-import { FILE_REF, parseRef, toWorkspacePath } from "../workspace/files/fileRefs";
-import { openWorkspaceRef } from "../workspace/files/openFileRef";
+import { FILE_REF, parseRef, toWorkspacePath } from "../workspace/files/refs/fileRefs";
+import { openWorkspaceRef } from "../workspace/files/refs/openFileRef";
 
 /* Ctrl/Cmd+click a file reference in terminal output → open it in the workspace editor at the referenced line. */
 

@@ -8,7 +8,8 @@ export interface DomainEventMap {
     // A worktree turn settled, a land reached the tree, the dependency check moved: what chores fire on.
     readonly workspace: WorkspaceEvent;
     // A detached run ended, however it ended: every run, whoever started it. Announced after the turn's close ran in its
-    // order (agent/run/placement/turn-close.ts); its listeners are independent of each other (docs/subsystems.md).
+    // order (agent/run/placement/turn-close.ts); its listeners are independent of each other
+    // (_sandbox/sandbox/docs/subsystems.md).
     readonly "run.settled": {
         readonly conversationId: string;
         // Who asked for the turn (seams/turn-starter.ts); undefined for one the daemon started itself.

@@ -29,7 +29,7 @@ import {
 } from "./extension-updates.js";
 import { readExtensionUsage, recordExtensionUsage } from "./extension-usage.js";
 import { ESSENTIAL_EXTENSIONS, extensionInventory, type InstalledExtension, installedExtensions, type PendingExtension } from "./installed-extensions.js";
-import { listenerOwnership } from "./listener-state.js";
+import { listenerOwnership } from "./listener/listener-state.js";
 import { writeWorkspaceExtension } from "./workspace-extension-scaffold.js";
 import { publicAddressOf } from "../env.config.js";
 import { opt } from "../opt.js";

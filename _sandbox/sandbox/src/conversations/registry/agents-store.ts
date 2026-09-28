@@ -18,7 +18,7 @@ import type { ConversationsDb } from "../../store/conversations-db.js";
 import { readDocument } from "@intentic/sandbox-contract/documents";
 import { CHECK_SETTLES } from "../../store/evolution/conversions.js";
 import { defineDocument } from "../../store/evolution/documents.js";
-import { type ManifestProblem, recordManifestProblems } from "../../store/manifest-problems.js";
+import { type ManifestProblem, recordManifestProblems } from "../../store/manifest/manifest-problems.js";
 import { TurnQueueSchema } from "../actor/conversation-queue.js";
 
 // The persisted half of the fleet registry: one record per conversation, what must survive a restart, as nested records

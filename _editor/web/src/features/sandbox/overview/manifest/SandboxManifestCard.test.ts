@@ -13,7 +13,7 @@ jest.mock(`../../extensions/useManifestProblems`, () => ({
 }));
 
 const opened = jest.fn();
-jest.mock(`../../../workspace/files/openFileRef`, () => ({ openWorkspaceRef: (path: string) => opened(path) }));
+jest.mock(`../../../workspace/files/refs/openFileRef`, () => ({ openWorkspaceRef: (path: string) => opened(path) }));
 
 const { default: SandboxManifestCard } = await import("./SandboxManifestCard.vue");
 

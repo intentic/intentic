@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { errorMessage } from "@intentic/base/errors";
 import type { CiRepo, FixResume, PipelineRun } from "@intentic/sandbox-contract";
-import type { CiFix } from "./ciFixes";
+import type { CiFix } from "./fixes/ciFixes";
 import {
     Icon,
     Notice,
@@ -19,21 +19,21 @@ import {
     ProjectChip,
 } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
-import { branchFixes, branchKey, fixesByRun } from "./ciFixes";
+import { branchFixes, branchKey, fixesByRun } from "./fixes/ciFixes";
 import { arrivesOpen, openFailures, supersededBy } from "./ciStreaks";
-import { useCiFixes } from "./useCiFixes";
+import { useCiFixes } from "./fixes/useCiFixes";
 import { useFailureHistory } from "./useFailureHistory";
-import LeftAtPush from "./LeftAtPush.vue";
-import MainRedCallout from "./MainRedCallout.vue";
-import { mainRedsOf } from "./mainReds";
+import LeftAtPush from "./push/LeftAtPush.vue";
+import MainRedCallout from "./fixes/MainRedCallout.vue";
+import { mainRedsOf } from "./fixes/mainReds";
 import PipelineRunRow from "./PipelineRunRow.vue";
 import PipelinesSkeleton from "./PipelinesSkeleton.vue";
 import PipelinesTally from "./PipelinesTally.vue";
-import { pushDebtOf, pushProjectOf, pushRecordOf } from "./pushChecks";
+import { pushDebtOf, pushProjectOf, pushRecordOf } from "./push/pushChecks";
 import { type RepoStanding, repoStandings, standingNote } from "./repoStandings";
 import { host } from "./host";
 import { usePipelines } from "./usePipelines";
-import { usePushChecks } from "./usePushChecks";
+import { usePushChecks } from "./push/usePushChecks";
 import { t } from "./i18n.js";
 
 // A DevOps-grade CI dashboard: a top-bar picker scopes the board to one repository or all of them, counts ride the

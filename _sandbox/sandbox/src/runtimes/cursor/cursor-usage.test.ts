@@ -1,7 +1,7 @@
 import { unstubbed } from "@intentic/testing";
 import type { ObservedLimitStore, ObservedSpend } from "../../usage/observed-limits.js";
-import type { CursorCatalog } from "./cursor-catalog.js";
-import type { CursorStore, StoredCursorAccount } from "./cursor-credentials.js";
+import type { CursorCatalog } from "./models/cursor-catalog.js";
+import type { CursorStore, StoredCursorAccount } from "./accounts/cursor-credentials.js";
 import { cursorAccountForTurn, cursorHeadroomSource, cursorTurnLimit } from "./cursor-usage.js";
 
 /* Cursor publishes no allowance, so every answer here comes from what it has already refused. What this suite pins is

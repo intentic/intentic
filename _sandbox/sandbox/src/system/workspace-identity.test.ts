@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { fakeFiles } from "../workspace/workspace-slice.testing.js";
-import { clearManifestProblems, recordedProblems } from "../store/manifest-problems.js";
+import { clearManifestProblems, recordedProblems } from "../store/manifest/manifest-problems.js";
 import { type IdentitySeams, workspaceIdentity, workspaceIdentityDocument } from "./workspace-identity.js";
 
 // The id is minted once, for an absent file; a file this build cannot read keeps its bytes and costs nothing but a

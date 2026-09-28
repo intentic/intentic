@@ -2,8 +2,8 @@ import type { AgentOptions, InteractionUpdate, ModelSelection, Run, SDKAgent, To
 import { whenAborted } from "@intentic/base/async";
 import { type OneShotAsk, oneShotDeadline } from "../../agent/providers/adapter.js";
 import type { Services } from "../../composition.js";
-import type { StoredCursorAccount } from "./cursor-credentials.js";
-import { selectionFor } from "./cursor-models.js";
+import type { StoredCursorAccount } from "./accounts/cursor-credentials.js";
+import { selectionFor } from "./models/cursor-models.js";
 import { cursorReadiness } from "./cursor-readiness.js";
 import { CURSOR_SDK_MISSING, cursorSdk } from "./cursor-sdk.js";
 import { cursorAccountForTurn, fileCursorLimit } from "./cursor-usage.js";

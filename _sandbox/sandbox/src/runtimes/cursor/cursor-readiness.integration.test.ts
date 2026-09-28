@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createLogger } from "../../logger.js";
-import { fileCursorStore } from "./cursor-credentials.js";
+import { fileCursorStore } from "./accounts/cursor-credentials.js";
 import { cursorReadiness } from "./cursor-readiness.js";
 
 // Cursor's three failure reasons look alike from outside; these tests pin the sentence, not just the boolean. The

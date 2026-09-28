@@ -36,7 +36,7 @@ flowchart LR
 - Extension code never runs in the daemon process; it runs in a supervised backend host and in declared processes.
   Both reach the daemon on one token per extension, held to its manifest's `permissions.daemon` (`auth/grants.ts`).
   The panel token that repo operator panels hold reaches no route that returns a stored secret. A listener provider
-  belongs to one extension (`extensions/listener-state.ts`: the declarer owning the provider's card, else the first
+  belongs to one extension (`extensions/listener/listener-state.ts`: the declarer owning the provider's card, else the first
   installed); a second declaration is refused at load and named on its Extensions row, and the listener routes answer
   the owner alone.
 - Every MCP server the daemon hosts for a turn (its browser routers, the machines and browsers it was granted, its

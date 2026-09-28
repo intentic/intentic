@@ -41,8 +41,8 @@ import { breakingNotes, MAX_UPDATE_NOTES, updateNotes } from "./boot/release-not
 import { stagedUpdate } from "./boot/staged-update.js";
 import { runtimeHealth } from "../agent/providers/adapter-health.js";
 import { buildId } from "../version.js";
-import { manifestProblems } from "../store/manifest-problems.js";
-import { repairManifest } from "../store/manifest-repair.js";
+import { manifestProblems } from "../store/manifest/manifest-problems.js";
+import { repairManifest } from "../store/manifest/manifest-repair.js";
 import { workspaceIdentity } from "./workspace-identity.js";
 import { framedEvent, framedMetrics } from "../auth/fleet-scope.js";
 import { frameBacklog } from "../seams/frame-backlog.js";

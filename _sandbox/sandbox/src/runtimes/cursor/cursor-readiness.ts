@@ -1,5 +1,5 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import type { CursorStore } from "./cursor-credentials.js";
+import type { CursorStore } from "./accounts/cursor-credentials.js";
 import { CURSOR_SDK_MISSING, cursorSdk } from "./cursor-sdk.js";
 
 // Single answer to whether Cursor can serve a turn, read by both planCursorTurn's refusal and the health probe's

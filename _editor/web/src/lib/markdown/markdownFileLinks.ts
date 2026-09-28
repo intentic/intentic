@@ -1,4 +1,4 @@
-import { FILE_REF, parseRef, resolveInTree, toWorkspacePath } from "../../features/workspace/files/fileRefs";
+import { FILE_REF, parseRef, resolveInTree, toWorkspacePath } from "../../features/workspace/files/refs/fileRefs";
 
 // File mentions in rendered markdown become clickable: a path is matched against the workspace tree and shown by
 // filename. Runs on the sanitized DOM, not the source or an HTML string, via a text-node walk, since a regex cannot

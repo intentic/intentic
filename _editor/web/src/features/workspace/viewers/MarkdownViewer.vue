@@ -4,7 +4,7 @@ import { type MarkdownDecorator, offsetOfLine } from "@intentic/ui/markdown";
 import { computed, inject, ref, watch } from "vue";
 import { fileLinkDecorator } from "../../../lib/markdown/renderMarkdown";
 import { useLayout } from "../../../shell/window/useLayout";
-import { openFileRefFromEvent } from "../files/openFileRef";
+import { openFileRefFromEvent } from "../files/refs/openFileRef";
 import { workspaceAgent } from "../health/workspaceScope";
 import type { LineJump } from "../tabs/workspaceTabs";
 import CodeView from "./CodeView.vue";

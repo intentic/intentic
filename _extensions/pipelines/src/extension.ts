@@ -3,7 +3,7 @@ import { ciBadge, pushesRecorded, startCiAttention } from "./ciAttention";
 import { ciRunsQuery } from "./ciRunsQuery";
 import { bindHost } from "./host";
 import { t } from "./i18n.js";
-import { pushChecksQuery } from "./pushChecksQuery";
+import { pushChecksQuery } from "./push/pushChecksQuery";
 
 const forgeConnected = (capabilities: readonly CapabilityFacts[]): boolean =>
     capabilities.some(

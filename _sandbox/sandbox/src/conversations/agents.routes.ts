@@ -10,7 +10,7 @@ import { backgroundJobOf } from "../agent/tools/jobs/background-jobs.js";
 import { stopJob } from "../agent/tools/jobs/job-fates.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
-import { deliverToListenerChannel } from "../extensions/listener-deliver.js";
+import { deliverToListenerChannel } from "../extensions/listener/listener-deliver.js";
 import { conversationLines, matchLines } from "../sessions/transcript-search.js";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import { pruneEmptiedDirs } from "../git/changes/changes-index.js";

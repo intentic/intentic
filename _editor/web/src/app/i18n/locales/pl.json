@@ -1437,6 +1437,9 @@
             "tight": "na granicy",
             "unread": "bez odczytu"
         },
+        "usageStatus": {
+            "percentLeft": "zostało {percent}"
+        },
         "subagents": {
             "agentsStartedFinishedAged": "Agenty uruchomione przez {focusTitle} skończyły i wypadły z tej listy. Jego własny zapis rozmowy jest świadectwem tego, co zameldowały.",
             "itsConversation": "Jego rozmowa",
@@ -2509,6 +2512,11 @@
         },
         "passkeysSection": {
             "browserCantCreatePasskeys": "Ta przeglądarka nie potrafi tworzyć kluczy dostępu; dodaj jeden z przeglądarki, która potrafi.",
+            "couldntAddPasskey": "Nie udało się dodać klucza dostępu.",
+            "couldntChangeRule": "Nie udało się zmienić reguły kluczy dostępu.",
+            "couldntMintCodes": "Nie udało się wygenerować nowych kodów odzyskiwania.",
+            "couldntReadPasskeys": "Nie udało się odczytać kluczy dostępu tego sandboxa.",
+            "couldntRemovePasskey": "Nie udało się usunąć tego klucza dostępu.",
             "newCodes": "Nowe kody",
             "passkeys": "Klucze dostępu",
             "recoveryCodes": "Kody odzyskiwania",
@@ -3705,7 +3713,6 @@
         "name": "Nazwa",
         "needs": "Potrzebuje Cię",
         "other": "Inne",
-        "percentLeft": "zostało {percent}",
         "personas": "Persony",
         "planLimits": "Limity planu",
         "preview": "Podgląd",

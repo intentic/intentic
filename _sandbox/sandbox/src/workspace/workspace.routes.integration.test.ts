@@ -23,7 +23,7 @@ import { unstubbed } from "@intentic/testing";
 
 import { workspacePaths } from "./workspace.js";
 import { MAX_RAW_BYTES } from "./files/workspace-files-download.js";
-import { UnknownArchiveError } from "./files/workspace-extract.js";
+import { UnknownArchiveError } from "./files/archive/workspace-extract.js";
 import { UploadTooLargeError } from "./files/workspace-files-upload.js";
 import { sha256Text, statWorkspaceFileSize } from "./files/workspace-files.js";
 import { createWorkspaceTrash } from "./files/trash/workspace-trash.js";

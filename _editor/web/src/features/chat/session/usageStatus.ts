@@ -355,7 +355,7 @@ export const remainingPercent = (percent: number): number => Math.min(100, Math.
 // "Left"; everywhere else the word rides with the number, since a bare percentage of an allowance reads either way.
 export const remainingFigure = (percent: number, stale: boolean): string =>
     `${stale && percent < SPENT_UTILIZATION ? `≤` : ``}${remainingPercent(percent)}%`;
-export const formatRemaining = (percent: number, stale: boolean): string => t(`shared.percentLeft`, { percent: remainingFigure(percent, stale) });
+export const formatRemaining = (percent: number, stale: boolean): string => t(`chat.usageStatus.percentLeft`, { percent: remainingFigure(percent, stale) });
 
 // A meter's fill: what is left, with a sliver kept for a pool on its last percent so it still reads as "a little",
 // not "none". A spent pool draws no fill at all; its track takes the danger tint instead (meterTrack), since an empty

@@ -31,7 +31,7 @@ const lastRequest = (credential: AgentRequest["credential"] = { kind: "claude-oa
     spec: {
         prompt: "the last turn's words",
         notes: [{ title: "Open in the editor", text: "a.ts" }],
-        attachments: ["/work/shot.png"],
+        attachments: [`${WORKSPACE_ROOT}/shot.png`],
         cwd: WORKSPACE_ROOT,
         conversationId: ID,
         model: "claude-opus-5-5",

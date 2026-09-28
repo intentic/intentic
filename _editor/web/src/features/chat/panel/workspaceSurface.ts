@@ -3,7 +3,7 @@ import { agentToolChildren } from "../transcript/agentTranscript";
 import { picture } from "../../workspace/home/thumbnails";
 import { fileLinkDecorator } from "../../../lib/markdown/renderMarkdown";
 import { openWorkTerminal } from "../../terminal/useWorkTerminals";
-import { openWorkspaceRef } from "../../workspace/files/openFileRef";
+import { openWorkspaceRef } from "../../workspace/files/refs/openFileRef";
 import type { ChatSurface } from "../tools/chatToolSurface";
 
 // The app's own ChatSurface for tool cards with a real workspace behind them: shared between chat panes (live

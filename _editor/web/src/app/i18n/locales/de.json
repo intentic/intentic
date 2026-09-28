@@ -1428,6 +1428,9 @@
             "tight": "knapp",
             "unread": "ungelesen"
         },
+        "usageStatus": {
+            "percentLeft": "{percent} übrig"
+        },
         "subagents": {
             "agentsStartedFinishedAged": "Die Agenten, die {focusTitle} gestartet hat, sind fertig und aus dieser Liste gealtert. Sein eigenes Transkript ist das Protokoll dessen, was sie zurückgemeldet haben.",
             "itsConversation": "Seine Unterhaltung",
@@ -2498,6 +2501,11 @@
         },
         "passkeysSection": {
             "browserCantCreatePasskeys": "Dieser Browser kann keine Passkeys anlegen; fügen Sie einen aus einem Browser hinzu, der das kann.",
+            "couldntAddPasskey": "Der Passkey ließ sich nicht hinzufügen.",
+            "couldntChangeRule": "Die Passkey-Regel ließ sich nicht ändern.",
+            "couldntMintCodes": "Neue Wiederherstellungscodes ließen sich nicht erzeugen.",
+            "couldntReadPasskeys": "Die Passkeys dieser Sandbox ließen sich nicht lesen.",
+            "couldntRemovePasskey": "Dieser Passkey ließ sich nicht entfernen.",
             "newCodes": "Neue Codes",
             "recoveryCodes": "Wiederherstellungscodes",
             "requirePasskey": "Einen Passkey verlangen",
@@ -3682,7 +3690,6 @@
         "models": "Modelle",
         "needs": "Braucht Sie",
         "other": "Sonstiges",
-        "percentLeft": "{percent} übrig",
         "planLimits": "Tarifgrenzen",
         "preview": "Vorschau",
         "removed": "entfernt",

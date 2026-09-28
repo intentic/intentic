@@ -2,7 +2,7 @@ import { access } from "node:fs/promises";
 import { type ArchivePath, archivePrefixOf, archiveRootOf, ConversationIdSchema, type WorkspaceChildren } from "@intentic/sandbox-contract";
 import { ORPCError } from "@orpc/server";
 import type { PersistedAgent } from "../../conversations/registry/agents-store.js";
-import { archiveChildrenOf, archiveMemberPath, isBrowsableArchiveFile } from "../files/workspace-archive-browse.js";
+import { archiveChildrenOf, archiveMemberPath, isBrowsableArchiveFile } from "../files/archive/workspace-archive-browse.js";
 import { isControlPlanePath, realWithin, resolveWithin } from "../files/workspace-files-paths.js";
 
 // Resolves where a read really lands, for every file-serving route; downstream just takes the answer. Two questions in

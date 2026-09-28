@@ -11,7 +11,7 @@ import { Conversation } from "../../session/conversation";
 const openWorkspaceRef = jest.fn<(path: string, line?: number, asked?: { readonly agent: string | undefined }) => Promise<void>>(
     async () => undefined,
 );
-jest.mock("../../../workspace/files/openFileRef", () => ({ openWorkspaceRef, openFileRefFromEvent: jest.fn() }));
+jest.mock("../../../workspace/files/refs/openFileRef", () => ({ openWorkspaceRef, openFileRefFromEvent: jest.fn() }));
 const { paneSurface, viewingIn } = await import("./paneSurface");
 
 const push = jest.fn<(to: string) => Promise<undefined>>(async () => undefined);

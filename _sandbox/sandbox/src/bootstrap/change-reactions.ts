@@ -3,7 +3,7 @@ import { startVanishedRepoSweep } from "../conversations/registry/vanished-repos
 import { startSidecarService } from "../derived/sidecar-service.js";
 import { invalidateContributions } from "../capabilities/contributions.js";
 import { stopPendingExtensionProcesses } from "../extensions/extension-processes.js";
-import { onListenerStatusMoved } from "../extensions/listener-status.js";
+import { onListenerStatusMoved } from "../extensions/listener/listener-status.js";
 import { startRefWatch, subscribeRefChanges } from "../git/remote/ref-watch.js";
 import { ignoreFileMode } from "../git/remote/repo-git-dirs.js";
 import { stateRelPath } from "../state-paths.js";

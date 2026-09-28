@@ -1,6 +1,6 @@
 import { IN_MEMORY } from "@intentic/base/sqlite";
 import { openConversationsDb } from "../../store/conversations-db.js";
-import { recordedProblems } from "../../store/manifest-problems.js";
+import { recordedProblems } from "../../store/manifest/manifest-problems.js";
 import { conversationEntry, isolatedAgent } from "../../testing.js";
 import { type PersistedAgent, sqliteAgentsStore } from "./agents-store.js";
 

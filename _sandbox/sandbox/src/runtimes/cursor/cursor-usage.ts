@@ -9,8 +9,8 @@ import {
     pickObservedAccount,
 } from "../../usage/observed-limits.js";
 import type { TurnLimit } from "../../usage/serviceability/fleet-limit.js";
-import type { CursorCatalog } from "./cursor-catalog.js";
-import { type CursorStore, liveCursorAccounts, type StoredCursorAccount } from "./cursor-credentials.js";
+import type { CursorCatalog } from "./models/cursor-catalog.js";
+import { type CursorStore, liveCursorAccounts, type StoredCursorAccount } from "./accounts/cursor-credentials.js";
 
 // Cursor's half of headroom, the counterpart to claude-usage.ts — except that nothing is fetched. Cursor's API answers
 // /me, /models, /agents and /repositories and has no allowance surface at all, so the reading is the ledger of what it

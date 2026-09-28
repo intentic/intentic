@@ -1429,6 +1429,9 @@
             "tight": "à la limite",
             "unread": "sans relevé"
         },
+        "usageStatus": {
+            "percentLeft": "{percent} restant"
+        },
         "subagents": {
             "agentsStartedFinishedAged": "Les agents lancés par {focusTitle} ont terminé et ont quitté cette liste avec le temps. Sa propre transcription est le compte rendu de ce qu'ils ont rapporté.",
             "itsConversation": "Sa conversation",
@@ -2499,6 +2502,11 @@
         },
         "passkeysSection": {
             "browserCantCreatePasskeys": "Ce navigateur ne peut pas créer de passkeys ; ajoutez-en une depuis un navigateur qui le peut.",
+            "couldntAddPasskey": "Impossible d'ajouter la passkey.",
+            "couldntChangeRule": "Impossible de modifier la règle des passkeys.",
+            "couldntMintCodes": "Impossible de générer de nouveaux codes de récupération.",
+            "couldntReadPasskeys": "Impossible de lire les passkeys de ce sandbox.",
+            "couldntRemovePasskey": "Impossible de retirer cette passkey.",
             "newCodes": "Nouveaux codes",
             "recoveryCodes": "Codes de récupération",
             "requirePasskey": "Exiger une passkey",
@@ -3677,7 +3685,6 @@
         "name": "Nom",
         "needs": "A besoin de vous",
         "other": "Autre",
-        "percentLeft": "{percent} restant",
         "planLimits": "Limites de l'offre",
         "preview": "Aperçu",
         "removed": "supprimé",

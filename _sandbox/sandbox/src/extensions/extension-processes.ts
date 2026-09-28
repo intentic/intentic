@@ -3,7 +3,7 @@ import type { ProcessContribution } from "@intentic/extension-manifest";
 import type { Services } from "../composition.js";
 import { extensionRuntimeAbsent } from "./extension-readiness.js";
 import { enabledExtensions, type ExtensionHost, extensionInventory, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
-import { listenerOwnership, listenerProcessesDesired, listenerState } from "./listener-state.js";
+import { listenerOwnership, listenerProcessesDesired, listenerState } from "./listener/listener-state.js";
 
 // Service key for a declared extension process (`svc-ext-<id>-<name>`); dots in the id are sanitized.
 // Extension processes run under the service supervisor, never tmux; the prefix marks it apart from a dev panel.
