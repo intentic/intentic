@@ -7,7 +7,8 @@ import { type EmulatedPlan, EXECUTE_PROMPT, planMode } from "../decorators/plan-
 import { isRateLimited, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";
 import { isContextOverflowText } from "../../agent/providers/failure-sentences.js";
 import { transientUpstream } from "../../agent/providers/routed-refusal.js";
-import { resultContent, toolCategoryOf, workspacePath } from "../../agent/tools/tool-calls.js";
+import { toolCategoryOf } from "@intentic/agent-context/tool-calls";
+import { resultContent, workspacePath } from "../../agent/tools/tool-calls.js";
 import { openBrowserSession } from "../../browser/sessions/browser-sessions.js";
 import { workloadStamp } from "../../seams/workload-stamp.js";
 import { ROUTED_BROWSER_SERVER } from "../../browser/tools/browser-tools.js";

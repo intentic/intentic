@@ -227,6 +227,24 @@ describe("a turn's frames", () => {
         });
     });
 
+    // The call ledger is runtime-neutral; what the fold decides is which frames are calls and which report a failure.
+    test("count a call once however many updates follow it, and a failure once however often it is reported", () => {
+        const frames = createTurnFrames(WORKSPACE_ROOT, undefined);
+        const listing: AgentEvent = { kind: "tool_call", id: "l", name: "Bash", category: "execute", status: "pending", target: "ls" };
+        const build: AgentEvent = { kind: "tool_call", id: "b", name: "Bash", category: "execute", status: "pending", target: "pnpm build" };
+        for (const event of [
+            listing,
+            { kind: "tool_call_update", id: "l", status: "completed" },
+            build,
+            { kind: "tool_call_update", id: "b", status: "failed" },
+            { kind: "tool_call_update", id: "b", status: "failed" },
+        ] satisfies AgentEvent[]) {
+            frames.note(event);
+        }
+        expect(frames.metrics.calls()).toBe(2);
+        expect(frames.metrics.reading([])).toStrictEqual({ searchCalls: 1, openingSearches: 1, openingListings: 1, failedCalls: 1 });
+    });
+
     test("take the last classification's hold, which a later answer then rides out", () => {
         const frames = createTurnFrames(WORKSPACE_ROOT, undefined);
         frames.hold(heldAs("stopped"));

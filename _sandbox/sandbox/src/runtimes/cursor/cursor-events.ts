@@ -1,7 +1,8 @@
 import type { InteractionUpdate, NestedTaskUpdate, TodoItem as CursorTodo, ToolCall } from "@cursor/sdk";
 import type { AgentEvent, TodoItem, ToolCallContent } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { diffContent, displayNameOf, toolLocations, toolTarget, workspacePath } from "../../agent/tools/tool-calls.js";
+import { displayNameOf, toolTarget } from "@intentic/agent-context/tool-calls";
+import { diffContent, toolLocations, workspacePath } from "../../agent/tools/tool-calls.js";
 import { toolCallOpened, type TurnCapture, usageTotals, type VendorEventMapper } from "../decorators/vendor-events.js";
 import { opt } from "../../opt.js";
 

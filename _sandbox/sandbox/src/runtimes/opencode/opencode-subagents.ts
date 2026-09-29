@@ -1,7 +1,7 @@
 import type { Event, ToolPart } from "@opencode-ai/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { displayNameOf } from "../../agent/tools/tool-calls.js";
+import { displayNameOf } from "@intentic/agent-context/tool-calls";
 import type { UsageTotals } from "../decorators/vendor-events.js";
 import { opt } from "../../opt.js";
 

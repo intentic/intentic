@@ -1,0 +1,3 @@
+[test]
+preload = ["../../_tools/testing/src/bun-preload.ts"]
+pathIgnorePatterns = ["**/dist/**", "**/deploy/**", "**/.cache/**", "**/.turbo/**", "**/out-tsc/**"]

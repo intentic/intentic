@@ -30,7 +30,9 @@
                 "@intentic/src": "./src/index.ts",
                 "default": "./dist/index.js"
             }
-        }
+        },
+        "./skill": "./plugin/skills/iq/SKILL.md",
+        "./nudge": "./plugin/hooks/nudge.txt"
     },
     "scripts": {
         "build": "tsgo",

@@ -4,7 +4,7 @@ import { SETUP_NOTICE_TITLE, STALE_NOTICE_TITLE } from "../../workspace/layout/w
 import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
 import { HANDOFF_STATE_NOTE_TITLE } from "./handoff-state.js";
 import { BRIEFING_NOTE_TITLES, briefingLabelMismatches, briefingOf } from "./turn-briefing.js";
-import { WORKSPACE_MAP_NOTE_TITLE } from "./workspace-map.js";
+import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
 
 // The card's deny list is matched against note titles, so the two claims this file holds are the ones types cannot:
 // that the editor's words are the transcript's words, and that a note nobody may drop stays put.

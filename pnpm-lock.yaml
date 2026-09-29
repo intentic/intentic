@@ -2360,6 +2360,64 @@ importers:
         specifier: 'catalog:'
         version: 7.0.0-dev.20260707.2
 
+  _sandbox/agent-context:
+    dependencies:
+      '@intentic/workspace-ignore':
+        specifier: workspace:*
+        version: link:../../_shared/workspace-ignore
+      tslib:
+        specifier: 'catalog:'
+        version: 2.8.1
+    devDependencies:
+      '@intentic/testing':
+        specifier: workspace:*
+        version: link:../../_tools/testing
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../../_tools/tsconfig
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.2
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.6
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
+
+  _sandbox/claude-plugin:
+    devDependencies:
+      '@intentic/agent-context':
+        specifier: workspace:*
+        version: link:../agent-context
+      '@intentic/fileq':
+        specifier: workspace:*
+        version: link:../fileq
+      '@intentic/iq':
+        specifier: workspace:*
+        version: link:../../_search/iq
+      '@intentic/output-cleaners':
+        specifier: workspace:*
+        version: link:../output-cleaners
+      '@intentic/testing':
+        specifier: workspace:*
+        version: link:../../_tools/testing
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../../_tools/tsconfig
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.2
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.6
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
+      esbuild:
+        specifier: 'catalog:'
+        version: 0.28.2
+
   _sandbox/fileq:
     dependencies:
       '@intentic/agent-cli':
@@ -2507,6 +2565,24 @@ importers:
         specifier: 'catalog:'
         version: 8.3.1(@types/node@24.13.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
 
+  _sandbox/output-cleaners:
+    devDependencies:
+      '@intentic/testing':
+        specifier: workspace:*
+        version: link:../../_tools/testing
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../../_tools/tsconfig
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.2
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.6
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260707.2
+
   _sandbox/sandbox:
     dependencies:
       '@agentclientprotocol/sdk':
@@ -2524,6 +2600,9 @@ importers:
       '@huggingface/hub':
         specifier: 'catalog:'
         version: 2.17.5
+      '@intentic/agent-context':
+        specifier: workspace:*
+        version: link:../agent-context
       '@intentic/base':
         specifier: workspace:*
         version: link:../../_tools/base
@@ -2560,6 +2639,9 @@ importers:
       '@intentic/lsp':
         specifier: workspace:*
         version: link:../../_search/lsp
+      '@intentic/output-cleaners':
+        specifier: workspace:*
+        version: link:../output-cleaners
       '@intentic/registry':
         specifier: workspace:*
         version: link:../../_shared/registry

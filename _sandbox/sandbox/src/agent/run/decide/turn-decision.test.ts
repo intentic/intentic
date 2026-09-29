@@ -4,14 +4,14 @@ import type { MemoryReading } from "@intentic/constants/memory-room";
 import type { Admission } from "../../../workload/resource-budget.js";
 import { createCredentialGrants } from "../../../secrets/credential-grants.js";
 import { GATED_CREDENTIALS_TITLE } from "../../../secrets/credential-gating.js";
-import type { FieldNotes } from "../../prompt/field-notes.js";
+import type { FieldNotes } from "@intentic/agent-context/field-notes";
 import { GUIDANCE_REVISION } from "../../prompt/guidance.js";
 import { IQ_SEARCH_INSTRUCTION_TITLE } from "../../prompt/iq-search-instruction.js";
-import { WORKSPACE_MAP_NOTE_TITLE } from "../../prompt/workspace-map.js";
+import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
 import type { ChildSupervisor } from "../../subagents/children.js";
 import { SPAWN_NOTE_TITLE } from "../../subagents/spawn-note.js";
 import type { TurnContext } from "../../providers/adapter.js";
-import { conversationExperimentArm } from "./experiments.js";
+import { experimentArm } from "@intentic/agent-context/experiments";
 import { conversationAfter } from "../../../testing.js";
 import { LANDING_CHECKS_NOTE_TITLE, LANDING_CHECKS_NOTE } from "../../prompt/checks-note.js";
 import { base, budgetOn, context, memoryReading, ROOT, turn } from "../turn/turn-plan.testing.js";
@@ -60,7 +60,7 @@ const titles = (decision: TurnDecision): string[] => (decision.context.base.spec
 
 // The first of a run of ids whose arm under `salt` is `arm`, so a fixture names its arm rather than a lucky id.
 const conversationIn = (salt: string, arm: boolean): string => {
-    const id = Array.from({ length: 64 }, (_, index) => `conversation-${index}`).find((each) => conversationExperimentArm(salt, each, 0.5) === arm);
+    const id = Array.from({ length: 64 }, (_, index) => `conversation-${index}`).find((each) => experimentArm(salt, each, 0.5) === arm);
     if (id === undefined) {
         throw new Error(`no conversation draws ${String(arm)} under ${salt}`);
     }
@@ -390,9 +390,9 @@ const ALL_MEASURED = SandboxSettingsSchema.parse({
 const MEASURED_FACTS: AdmittedTurnFacts = { ...FACTS, settings: ALL_MEASURED, iqTeaching: TEACHING, mapNote: MAP, fieldNotes: BRIEF };
 
 test.each(Array.from({ length: 8 }, (_, index) => `conversation-${index}`))("%s draws one arm per salt, the same on every turn", (conversationId) => {
-    const search = conversationExperimentArm("iq-search", conversationId, 0.5);
-    const map = conversationExperimentArm("workspace-map", conversationId, 0.5);
-    const notes = conversationExperimentArm("field-notes", conversationId, 0.5);
+    const search = experimentArm("iq-search", conversationId, 0.5);
+    const map = experimentArm("workspace-map", conversationId, 0.5);
+    const notes = experimentArm("field-notes", conversationId, 0.5);
 
     const first = decided(MEASURED_FACTS, turn({ conversationId }));
 

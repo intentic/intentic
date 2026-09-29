@@ -4,7 +4,31 @@ The marketplace wedge that needs no sandbox, no Docker, no account: plugins that
 session cheaper and sharper, installed by name, working on the very next session. Two plugins, one repo
 marketplace, one promise. This is the scope for getting both submittable; the companion analysis of *why*
 this wedge over the sandbox-shaped ones is in the conversation that produced this doc, and the mechanics it
-ports live in [`_sandbox/sandbox/bin/`](../../_sandbox/sandbox/bin).
+ports live in [`_sandbox/output-cleaners`](../../_sandbox/output-cleaners).
+
+## Status, 2026-09-29
+
+Built as one plugin rather than two. [`_sandbox/claude-plugin`](../../_sandbox/claude-plugin) is the `intentic`
+plugin: the `trim` port below, plus the project map, field notes, the iq teaching, fileq, document shadows and a
+`/intentic:stats` report, each behind a `/config` switch. Its README says what it does and how it measures.
+
+- The cleaners moved out of `_sandbox/sandbox/bin/` into their own package,
+  [`_sandbox/output-cleaners`](../../_sandbox/output-cleaners). The sandbox image copies the same files it copied
+  before, and the plugin bundles them, so the placement question in the `trim` section is settled that way.
+- The project map, the reader for field notes and the brief their writer gets, how a session draws its arm, what each
+  turn is scored on, and the comparison between arms moved from the daemon into
+  [`_sandbox/agent-context`](../../_sandbox/agent-context), which the daemon and the plugin both import.
+- The open question about exit codes is answered: Claude Code runs `PostToolUse` only for a command that succeeded,
+  and a failure reaches Claude unchanged. A real `claude` 2.1.284 run accepted the hook's `updatedToolOutput`.
+- The marketplace entry named `intentic` pointed at `./_platform/claude-plugin`, which the pricing change removed.
+  It now installs `@intentic/claude-plugin` from npm.
+- `@intentic/webq`, `@intentic/fileq` and `@intentic/claude-plugin` were published at 1.317.0 by hand, each has
+  `npm-publish.yml` as its trusted publisher, and they close `PUB` in `_tools/scripts/lib/packages.sh`, so every
+  release publishes them. A real `claude` 2.1.284 installed `intentic@intentic` from the published package and ran
+  its hooks.
+
+Still to do: submit the plugin to the community list. The sections below are the plan as it was written before the
+build.
 
 ## What already exists (more than expected)
 
@@ -14,9 +38,9 @@ ports live in [`_sandbox/sandbox/bin/`](../../_sandbox/sandbox/bin).
   listing it, and the iq README documents `/plugin marketplace add intentic/intentic`. The binary is on npm
   (`@intentic/iq`, currently 1.176.x).
 - **The output cleaner is plugin-shaped by accident.** The whole pipeline is dependency-free `.mjs` on node
-  builtins only: [`cleaners.mjs`](../../_sandbox/sandbox/bin/cleaners.mjs) (692 lines, the registry),
-  [`agent-output-filter.mjs`](../../_sandbox/sandbox/bin/agent-output-filter.mjs) (189 lines, exports
-  `filterOutput`), [`retrieve-output.mjs`](../../_sandbox/sandbox/bin/retrieve-output.mjs) (44 lines), each
+  builtins only: [`cleaners.mjs`](../../_sandbox/output-cleaners/src/cleaners.mjs) (692 lines, the registry),
+  [`agent-output-filter.mjs`](../../_sandbox/output-cleaners/src/agent-output-filter.mjs) (189 lines, exports
+  `filterOutput`), [`retrieve-output.mjs`](../../_sandbox/output-cleaners/src/retrieve-output.mjs) (44 lines), each
   with tests beside it. Only the *plumbing* is sandbox-specific (`tmux-run` tees pane logs; the daemon's
   PreToolUse rewrite threads env). Claude Code's hook API now supports exactly the missing piece:
   a PostToolUse hook may **replace a tool's output** (`updatedToolOutput`) before the model sees it.

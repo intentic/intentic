@@ -1,0 +1,82 @@
+{
+    "name": "intentic",
+    "displayName": "Intentic",
+    "version": "0.0.0",
+    "description": "Cheaper, sharper Claude Code sessions: Bash output trimmed before Claude reads it, a project map and this project's field notes at session start, iq code search and fileq document reading taught, document shadows kept fresh, and /intentic:stats to show what each one saved. Every mechanism is a switch in /config.",
+    "author": {
+        "name": "intentic"
+    },
+    "homepage": "https://github.com/intentic/intentic/tree/main/_sandbox/claude-plugin",
+    "repository": "https://github.com/intentic/intentic",
+    "license": "MIT",
+    "keywords": [
+        "context",
+        "token-savings",
+        "output-filter",
+        "code-search",
+        "documents",
+        "measurement"
+    ],
+    "skills": "./generated/skills",
+    "outputStyles": "./generated/output-styles",
+    "userConfig": {
+        "output_cleaners": {
+            "type": "boolean",
+            "title": "Trim Bash output",
+            "description": "Clean what a successful command printed before Claude reads it (progress bars, install chatter, repeated lines, the middle of huge logs), keep the full text retrievable with `retrieve-output`, and ledger what each cleaner saved.",
+            "default": true
+        },
+        "cleaners": {
+            "type": "string",
+            "title": "Cleaners",
+            "description": "Which cleaners run, as the sandbox spells it: empty for all, `-cap,-wide` to switch some off, `git,pnpm` to allow only those. `/intentic:stats` lists them by what they saved.",
+            "default": ""
+        },
+        "output_holdout": {
+            "type": "number",
+            "title": "Untrimmed share",
+            "description": "Share of commands left untrimmed, so the saving can be measured against a real comparison and not only computed. 0 turns the comparison off; the exact per-command saving is reported either way.",
+            "default": 0,
+            "min": 0,
+            "max": 0.5
+        },
+        "project_map": {
+            "type": "boolean",
+            "title": "Project map",
+            "description": "Open each session with a map of the project it starts in: its areas, what each is for, and where Claude is standing. Worked out from the tree every time, never stored, so it cannot go stale.",
+            "default": true
+        },
+        "field_notes": {
+            "type": "boolean",
+            "title": "Field notes",
+            "description": "Open each session with this project's field notes: the traps past sessions hit and the commands that really verify. Written by `/intentic:field-notes` from your own sessions here; nothing is sent until you run it once.",
+            "default": true
+        },
+        "iq": {
+            "type": "boolean",
+            "title": "iq search",
+            "description": "Teach Claude the `iq` code search CLI and recall past sessions on a matching prompt. Needs `npm i -g @intentic/iq`; without it this switch does nothing and says so once.",
+            "default": true
+        },
+        "fileq": {
+            "type": "boolean",
+            "title": "fileq",
+            "description": "Let Claude read documents, PDFs, spreadsheets, slides, notebooks, images, audio and archives as markdown with the bundled `fileq` CLI. Off makes the command refuse; its one-line skill description stays listed, since a plugin cannot hide its own skills.",
+            "default": true
+        },
+        "shadows": {
+            "type": "boolean",
+            "title": "Document shadows",
+            "description": "Keep a markdown rendering of every document in the project up to date in the background (a sweep at session start and every ten minutes, and each binary file Claude writes), so a read finds one ready. Costs background CPU on a document-heavy project.",
+            "default": false
+        },
+        "holdout": {
+            "type": "number",
+            "title": "Measured share",
+            "description": "Share of sessions opened without the map, the field notes and the iq teaching, so `/intentic:stats` can show what each changed. 0 sends them to every session and measures nothing.",
+            "default": 0.1,
+            "min": 0,
+            "max": 0.5
+        }
+    }
+}

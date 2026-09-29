@@ -6,7 +6,8 @@ import type {
     ToolKind as AcpToolKind,
 } from "@agentclientprotocol/sdk";
 import { type AgentEvent, type ToolCallContent, type ToolCallLocation, type ToolKind, ToolKindSchema } from "@intentic/sandbox-contract";
-import { diffContent, toolCategoryOf, toolTarget, workspacePath } from "../../agent/tools/tool-calls.js";
+import { toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
+import { diffContent, workspacePath } from "../../agent/tools/tool-calls.js";
 import { toolCallOpened } from "../decorators/vendor-events.js";
 
 // Maps ACP session/update notifications onto AgentEvent frames; an update with no UI mapping returns undefined. ACP's

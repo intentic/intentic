@@ -1,3 +1,5 @@
+import { join } from "node:path";
+import { FIELD_NOTES_FILE } from "@intentic/constants";
 import type { Area, Capability, ConversationGrant, CredentialGate, Persona, Rule, SandboxSettings, TurnNote } from "@intentic/sandbox-contract";
 import type { Services } from "../../../composition.js";
 import { readPersonaPrompt } from "../../../personas/persona-kit.js";
@@ -12,10 +14,10 @@ import type { ProjectSetupStatus } from "../../../workspace/layout/workspace-set
 import { contextNoteIfDue } from "../../context/conversation-context.js";
 import { type AccountRoute, offBlockedAccount } from "../../providers/accounts/blocked-account.js";
 import { routingFor } from "../../providers/accounts/routing.js";
-import { type FieldNotes, fieldNotes } from "../../prompt/field-notes.js";
+import { type FieldNotes, fieldNotes } from "@intentic/agent-context/field-notes";
 import { type IqSearchTeaching, iqSearchInstruction } from "../../prompt/iq-search-instruction.js";
 import { type DeclaredWindow, declaredWindow } from "../../prompt/window/context-budget.js";
-import { workspaceMapNote } from "../../prompt/workspace-map.js";
+import { workspaceMapNote } from "@intentic/agent-context/workspace-map";
 import { workspaceMemoryNote } from "../../prompt/workspace-memory.js";
 import type { RoutedTurn, TurnInput } from "../../../seams/turn-starter.js";
 import { retrieveTurnContext, type TurnContextOutcome } from "../turn/turn-context.js";
@@ -146,7 +148,7 @@ const iqTeachingFor = (deps: Pick<Services, "config" | "logger">, premise: TurnP
 const fieldNotesFor = (deps: Pick<Services, "logger">, context: TurnContext, settings: SandboxSettings): FieldNotes | undefined =>
     EXPERIMENTS.fieldNotes.on(settings)
         ? fieldNotes({
-              root: context.localCwd,
+              file: join(context.localCwd, FIELD_NOTES_FILE),
               budget: settings.fieldNotesBudget,
               onUnreadable: (why) => deps.logger.warn({ why }, "field notes: the file is there but cannot be sent"),
           })

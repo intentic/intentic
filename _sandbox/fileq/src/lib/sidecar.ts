@@ -126,8 +126,23 @@ export const writeSidecar = async (workspaceRoot: string, input: WriteSidecarInp
         "",
     ].join("\n");
     await mkdir(dirname(path), { recursive: true });
+    await ignoreShadowsInGit(workspaceRoot);
     await writeFile(path, `${frontMatter}${body === "" ? "" : `${body}\n`}`);
     return { path, body, tokens: estimateTokens(body) };
+};
+
+// The shadow tree ignores itself: outside the sandbox (fileq from npm, the Claude Code plugin) it lands inside somebody's
+// repository, where a `git add -A` would sweep derived text of every document into a commit. `wx` leaves an existing
+// file alone, so an owner's own edit to it wins; any other failure costs only the ignore, never the shadow.
+const ignoreShadowsInGit = async (workspaceRoot: string): Promise<void> => {
+    try {
+        await writeFile(join(workspaceRoot, DERIVED_DIR, ".gitignore"), "# fileq's derived shadows; regenerated on demand.\n*\n", { flag: "wx" });
+    } catch (error) {
+        if ((error as { code?: unknown }).code !== "EEXIST") {
+            // allow(silent-catch): an unwritable ignore file leaves the shadow exactly as useful; git noise is the only cost.
+            return;
+        }
+    }
 };
 
 /** A source that vanished takes its shadow with it; answers whether there was one to remove. */

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { workspaceMapNote } from "../src/agent/prompt/workspace-map.js";
+import { workspaceMapNote } from "@intentic/agent-context/workspace-map";
 import { mapStats, parseMapNote } from "./map-corpus.js";
 
 // Workspace fixtures are produced by workspace-map.ts itself, not hand-typed, so a renderer change that breaks parsing

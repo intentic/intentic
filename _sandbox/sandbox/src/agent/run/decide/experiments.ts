@@ -1,24 +1,16 @@
-import { createHash } from "node:crypto";
+import { experimentArm } from "@intentic/agent-context/experiments";
 import type { SandboxSettings, TurnNote } from "@intentic/sandbox-contract";
-import type { FieldNotes } from "../../prompt/field-notes.js";
+import type { FieldNotes } from "@intentic/agent-context/field-notes";
 import { GUIDANCE_REVISION } from "../../prompt/guidance.js";
-import { WORKSPACE_MAP_NOTE_TITLE } from "../../prompt/workspace-map.js";
+import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
 import { opt } from "../../../opt.js";
 import type { TurnContextOutcome, TurnContextSkip } from "../turn/turn-context.js";
 import type { TurnExperimentStamps } from "../turn/turn-plan.js";
 
 // The per-turn A/B experiments, one declaration each: the salt a conversation's arm is drawn with, the settings that
 // switch it on and hold conversations out of it, and the ledger fields it stamps. usage/turn-experiments.ts reads them.
-
-// Deterministic per conversation id, with no state stored. `experiment` salts the hash so two experiments draw
-// independent buckets for the same conversation instead of always agreeing.
-export const conversationExperimentArm = (experiment: string, conversationId: string | undefined, holdout: number): boolean => {
-    if (conversationId === undefined) {
-        return Math.random() >= holdout;
-    }
-    const bucket = createHash("sha256").update(`${experiment}:${conversationId}`).digest().readUInt32BE(0) / 0x1_0000_0000;
-    return bucket >= holdout;
-};
+// The draw itself (experimentArm) is @intentic/agent-context's, the same one the Claude Code plugin draws its sessions
+// with.
 
 // The field notes as one turn sees them: the arm it drew, the brief it read, and what (if anything) it was sent. Read on
 // both arms, so a control turn can name the revision it was withheld from.
@@ -107,7 +99,7 @@ export const armOf = <Reading>(
 ): boolean | undefined => {
     const holdout = experiment.holdout(settings);
     return experiment.on(settings) && holdout > 0 && conversationId !== undefined
-        ? conversationExperimentArm(experiment.salt, conversationId, holdout)
+        ? experimentArm(experiment.salt, conversationId, holdout)
         : undefined;
 };
 

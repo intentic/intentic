@@ -11,7 +11,8 @@ import { beforeDeadline, DEFAULT_TURN_TIMEOUTS, EXPIRED, type TurnTimeouts, turn
 import { isRateLimited, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";
 import { isContextOverflowText } from "../../agent/providers/failure-sentences.js";
 import { contextOverflowFrame } from "../../agent/run/error-frames.js";
-import { displayNameOf, editDiffContent, toolLocations, toolTarget } from "../../agent/tools/tool-calls.js";
+import { displayNameOf, toolTarget } from "@intentic/agent-context/tool-calls";
+import { editDiffContent, toolLocations } from "../../agent/tools/tool-calls.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import { planPhaseOf, toolCallOpened, type TurnCapture, usageTotals } from "../decorators/vendor-events.js";
 import { vendorTurnGate } from "../decorators/vendor-gate.js";

@@ -1,6 +1,7 @@
-// Aggregates agent-output-filter's telemetry (filter-stats.jsonl) for the savings report; mirrors
-// src/logs/filter-stats.ts. Row shape: { rawBytes, emittedBytes, matched: string[], heldOut: boolean, command,
-// stageBytes: { [id]: bytesRemoved } }; tokens are ~4 chars/token, matching iq-engine's estimateTokens.
+// Aggregates agent-output-filter's telemetry (filter-stats.jsonl) into the savings report: the one implementation, read by
+// the sandbox daemon's savings route, the cleaner bench and the Claude Code plugin's stats command alike. Row shape:
+// { rawBytes, emittedBytes, matched: string[], heldOut: boolean, command, stageBytes: { [id]: bytesRemoved } }; tokens
+// are ~4 chars/token, matching iq-engine's estimateTokens.
 
 const sum = (rows, key) => rows.reduce((total, row) => total + (row[key] ?? 0), 0);
 const tokens = (bytes) => Math.round(bytes / 4);
@@ -15,7 +16,8 @@ const READ_VERBS = new Set(["cat", "bat", "sed", "awk", "head", "tail", "less", 
 const isPrefixWord = (word, previous) =>
     /^[A-Za-z_]\w*=/.test(word) || word === "sudo" || word === "timeout" || (previous === "timeout" && /^\d+[smhd]?$/.test(word));
 // Verbs that are never the point of the command; the signature moves on to the next pipeline segment.
-const SHELL_NOISE = new Set(["cd", "echo", "true", "set", "export", "source", "time", "for", "do", "while", "if", "then"]);
+// A loop's or a conditional's closing word ends a segment of its own (`…; done; seq 1 9`), so it is noise like its opener.
+const SHELL_NOISE = new Set(["cd", "echo", "true", "set", "export", "source", "time", "for", "do", "done", "while", "until", "if", "then", "else", "elif", "fi", "case", "esac"]);
 // Only these keep their second word. For anything else it is an argument — `rg displayName` and `rg fastModel` are one
 // gap in `rg`, and folding the argument in would scatter it over as many one-run groups as the agent had questions.
 const SUBCOMMAND_VERBS = new Set(["git", "pnpm", "npm", "npx", "yarn", "docker", "cargo", "go", "gh", "kubectl", "systemctl", "apt", "apt-get", "pip", "poetry"]);
@@ -51,7 +53,7 @@ export const commandSignature = (command) => {
 const sortedBytes = (rows, key) => rows.map((row) => row[key] ?? 0).toSorted((a, b) => a - b);
 const median = (sorted) => sorted[sorted.length >> 1] ?? 0;
 
-// Mann-Whitney U as a tie-corrected z-score over two already-sorted arms; mirrors src/logs/filter-stats.ts.
+// Mann-Whitney U as a tie-corrected z-score over two already-sorted arms.
 const mannWhitneyZ = (first, second) => {
     const n1 = first.length;
     const n2 = second.length;
@@ -144,7 +146,7 @@ export const summarizeStats = (rows) => {
         .toSorted((a, b) => b.savedTokens - a.savedTokens);
 
     // The only estimate here (`savedPct` above is each command's own exact raw vs emitted): median ratio (means are
-    // skewed by heavy-tailed sizes), gated by Mann-Whitney, mirrors src/logs/filter-stats.ts.
+    // skewed by heavy-tailed sizes), gated by Mann-Whitney.
     const heldRaw = sortedBytes(held, "rawBytes");
     const cleanedEmittedSorted = sortedBytes(cleaned, "emittedBytes");
     const measurable = held.length >= MIN_HELD_COMMANDS && median(heldRaw) > 0 && Math.abs(mannWhitneyZ(cleanedEmittedSorted, heldRaw)) > Z_95;

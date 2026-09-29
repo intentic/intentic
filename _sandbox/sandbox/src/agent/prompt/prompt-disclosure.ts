@@ -8,7 +8,7 @@ import type {
 } from "@intentic/sandbox-contract";
 import { PERSONA_NOTE_HEADER, PERSONA_NOTE_TITLE } from "../../personas/personas.js";
 import { tmuxRunEnabled } from "../tools/agent-terminals.js";
-import { FIELD_NOTES_NOTE_HEADER, FIELD_NOTES_NOTE_TITLE } from "./field-notes.js";
+import { FIELD_NOTES_NOTE_HEADER, FIELD_NOTES_NOTE_TITLE } from "@intentic/agent-context/field-notes";
 import { intenticSystemPrompt } from "./intentic-prompt.js";
 import { presetSystemPrompt } from "./preset-prompt.js";
 import { GUIDANCE_HEADER, GUIDANCE_TITLE } from "./guidance.js";

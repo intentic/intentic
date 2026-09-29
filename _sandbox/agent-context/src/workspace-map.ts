@@ -289,6 +289,9 @@ export interface WorkspaceMapInput {
     readonly root: string;
     // Where this run actually starts, a persona's start folder, an isolated worktree, or the root.
     readonly cwd: string;
+    // How the reader should find an exact path, as the note names it; the sandbox has iq on every PATH, a plain Claude
+    // Code install may not.
+    readonly exactPaths?: string;
 }
 
 // The map, or undefined when there's nothing worth saying: a project with one area or none fits in a single listing
@@ -365,7 +368,7 @@ const areaBlock = (area: MapArea, width: number, silent: ReadonlySet<string>): s
 
 // Rendered to fit: purpose lines of the smallest areas shed first (a name and size still locate one), then whole small
 // areas; what's dropped is always counted, never silent.
-const render = (map: WorkspaceMap): string => {
+const render = (map: WorkspaceMap, exactPaths: string): string => {
     const project = map.project === "" ? "the workspace" : `\`${map.project}\``;
     const all = map.areas.flatMap((area) => [area, ...area.children]);
     // Size column starts past the longest name at its own indent; an expanded package's extra 4-space indent counts
@@ -377,7 +380,7 @@ const render = (map: WorkspaceMap): string => {
     const head = [
         WORKSPACE_MAP_NOTE_HEADER,
         "",
-        "This is current filesystem context. It maps project areas, not file locations; use `iq files` or Read for exact paths.",
+        `This is current filesystem context. It maps project areas, not file locations; use ${exactPaths} for exact paths.`,
         "Do not `ls` or `tree` the workspace root to orient yourself — the map above is that orientation.",
         "",
         map.cwd === map.project ? `You are at the top of ${project}.` : `You are here: \`${map.cwd}\``,
@@ -422,7 +425,8 @@ const cache = new Map<string, { at: number; note: string | undefined }>();
 // Swallows its own failures: this is unsolicited help, so an unreadable directory or a filesystem that moved mid-walk
 // should cost the note, never the turn.
 export const workspaceMapNote = (input: WorkspaceMapInput): string | undefined => {
-    const key = `${input.root}\u0000${input.cwd}`;
+    const exactPaths = input.exactPaths ?? "`iq files` or Read";
+    const key = `${input.root}\u0000${input.cwd}\u0000${exactPaths}`;
     const hit = cache.get(key);
     if (hit !== undefined && Date.now() - hit.at < TTL_MS) {
         return hit.note;
@@ -430,7 +434,7 @@ export const workspaceMapNote = (input: WorkspaceMapInput): string | undefined =
     let note: string | undefined;
     try {
         const map = workspaceMapOf(input);
-        note = map === undefined ? undefined : render(map);
+        note = map === undefined ? undefined : render(map, exactPaths);
     } catch {
         note = undefined;
     }

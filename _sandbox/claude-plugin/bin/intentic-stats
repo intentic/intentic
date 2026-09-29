@@ -1,0 +1,3 @@
+#!/bin/sh
+# /intentic:stats's report, from the plugin's ledgers and the session transcripts.
+exec node "$(dirname "$0")/../dist/stats.mjs" "$@"

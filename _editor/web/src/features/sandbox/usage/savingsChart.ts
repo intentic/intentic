@@ -10,8 +10,8 @@ import { t } from "@intentic/ui/i18n";
 
 // mechanism identity
 
-// Every toggleable cleaner id and label, in bin/cleaners.mjs CLEANERS' order (keep in sync). Shared by the Agent
-// tab's switches and this chart's labels, so a mechanism is never named differently on two screens.
+// Every toggleable cleaner id and label, in the order of @intentic/output-cleaners' CLEANERS (keep in sync). Shared by
+// the Agent tab's switches and this chart's labels, so a mechanism is never named differently on two screens.
 export const cleanerOptions = () =>
     [
         { id: `pnpm`, label: `pnpm` },

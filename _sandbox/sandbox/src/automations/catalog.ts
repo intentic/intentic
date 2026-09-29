@@ -1,3 +1,4 @@
+import { fieldNotesPrompt } from "@intentic/agent-context/field-notes-prompt";
 import { FIELD_NOTES_FILE, HISTORY_ROOT } from "@intentic/constants";
 import { CHORES, choreAutomationPrompt } from "@intentic/sandbox-contract/chores";
 import { type AutomationCatalog, type AutomationTemplate, TriggerSchema, type TriggerSource } from "@intentic/sandbox-contract";
@@ -172,31 +173,21 @@ export const FIELD_NOTES_AUTOMATION_ID = "field-notes";
 // and run it during the working day for everybody else.
 const FIELD_NOTES_CRON = "0 4 1 * *";
 
-const FIELD_NOTES_PROMPT =
-    `Rewrite this sandbox's field notes: \`${FIELD_NOTES_FILE}\`, the brief every turn opens with.\n\n` +
-    `It exists because the project map cannot carry this. The map is recomputed from the TREE each conversation, so it ` +
-    `already says what a scan can see — which directories exist, what each is for. Yours is the other half, drawn from ` +
-    `what has actually HAPPENED here: which commands really verify in this workspace and which lie about their exit ` +
-    `code, what the machine can take, where sessions lost calls to a trap the code does not mention, and how the owner ` +
-    `asks for things. If a fact could be found by reading the repository, it belongs in the map and not in your file.\n\n` +
-    `The evidence is the session corpus. \`agents ls\` and \`agents show <id> --transcript\` read conversations back, ` +
-    `\`agents find '<text>'\` finds the ones that said a thing, and the transcripts themselves are under ` +
-    `\`${HISTORY_ROOT}/transcripts\` (one JSON object per line: role, text, and a tools array carrying each call's name, ` +
-    `status, target and output). Work from counts, not impressions: how MANY sessions hit a thing is what decides its ` +
-    `rank, and one bad afternoon is not a standing problem.\n\n` +
-    `Rank by what it costs a turn NOT to know: how often sessions hit it, how much it costs when they do, and whether ` +
-    `they could have found it out cheaply themselves. Rank 1 is the costliest gap.\n\n` +
-    `VERIFY EVERY FACT AGAINST THIS SANDBOX BEFORE YOU WRITE IT DOWN. A transcript from six weeks ago is a hypothesis: ` +
-    `run the command, list the directory, check the port. A brief that is confidently wrong is worse than no brief, ` +
-    `because every turn reads it and none of them will doubt it.\n\n` +
-    `The file is TOON. Keep its shape, because the daemon reads it by rank and sends as much as the owner's budget ` +
-    `allows: a \`meta\` block, a \`priority\` table whose columns begin \`rank,id\` and whose every id is also a ` +
-    `top-level key in the file, then one block per id. Ranks are integers and ids are kebab-case words.\n\n` +
-    `This is a REWRITE, not a fresh start. Read the existing file first: carry forward what still holds, drop what the ` +
-    `sandbox has outgrown, re-rank on this month's evidence. Finish with a short note saying what changed rank and why, ` +
-    `what you added, and what you removed as no longer true — the next one of these should not have to rediscover your ` +
-    `reasoning. If a month's sessions genuinely showed nothing worth changing, say so in one line and leave the file ` +
-    `alone: a rewrite that says the same thing in new words costs the measurement its baseline for nothing.`;
+// The brief is @intentic/agent-context's, shared with the Claude Code plugin's /intentic:field-notes so both writers
+// produce the shape field-notes.ts reads; what is said here is only where this sandbox keeps its sessions.
+const FIELD_NOTES_PROMPT = fieldNotesPrompt({
+    owner: "this sandbox's",
+    place: "this sandbox",
+    file: FIELD_NOTES_FILE,
+    reader: "the daemon",
+    evidence:
+        `The evidence is the session corpus. \`agents ls\` and \`agents show <id> --transcript\` read conversations back, ` +
+        `\`agents find '<text>'\` finds the ones that said a thing, and the transcripts themselves are under ` +
+        `\`${HISTORY_ROOT}/transcripts\` (one JSON object per line: role, text, and a tools array carrying each call's name, ` +
+        `status, target and output).`,
+    period: "this month's",
+    quietSpan: "a month's sessions",
+});
 
 export const CORE_AUTOMATION_TEMPLATES: readonly AutomationTemplate[] = [
     {

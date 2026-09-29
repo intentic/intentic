@@ -709,10 +709,10 @@ export const sessionKeyFromLog = (logPath) => {
     return match !== null && match[1] !== "" ? match[1] : undefined;
 };
 
-// File-backed store of commandHash → bodyHash under <terminalsDir>/../output-cache/<sessionKey>.json, read once and
-// rewritten on each miss. Fail-open on I/O error.
-export const openCacheStore = (terminalsDir, sessionKey) => {
-    const file = join(terminalsDir, "..", "output-cache", `${sessionKey}.json`);
+// File-backed store of commandHash → bodyHash under <logsDir>/output-cache/<sessionKey>.json, read once and rewritten
+// on each miss. Fail-open on I/O error.
+export const openCacheStore = (logsDir, sessionKey) => {
+    const file = join(logsDir, "output-cache", `${sessionKey}.json`);
     let map;
     try {
         map = new Map(Object.entries(JSON.parse(readFileSync(file, "utf8"))));

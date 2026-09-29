@@ -1,4 +1,5 @@
 import type { HookInput, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
+import { surfaceForms as terminalForms } from "@intentic/output-cleaners/cleaners";
 import { type NamedSecret, surfaceForms,SecretStoreUnreadableError } from "../../secrets/secret-registry.js";
 import { WITHHELD, maskDeep, maskTargets, redactionHooks, unmaskableSecrets } from "./agent-redaction.js";
 
@@ -112,12 +113,9 @@ test("an alphanumeric token registers no extra forms: encoding it changes nothin
     expect(maskTargets([named("a/token", "cf_live_0011223344ff")])).toEqual([{ target: "cf_live_0011223344ff", replacement: "{{secret:a/token}}" }]);
 });
 
-test("the terminal lane derives the same surface forms as this one", async () => {
-    // The terminal filter is a standalone script with no daemon behind it, so it carries its own copy of surfaceForms;
-    // what matters is that the two never disagree.
-    // Imported by URL: the filter is plain JS with no declarations a literal specifier would need.
-    const cleaners = new URL("../../../bin/cleaners.mjs", import.meta.url).href;
-    const { surfaceForms: terminalForms } = (await import(cleaners)) as { surfaceForms: (value: string) => string[] };
+test("the terminal lane derives the same surface forms as this one", () => {
+    // The terminal filter (@intentic/output-cleaners, which the Claude Code plugin runs too) is plain node with no daemon
+    // behind it, so it carries its own copy of surfaceForms; what matters is that the two never disagree.
     for (const value of [
         'pa"ss\\word-1234567890',
         "Xk4!mQ2pRt7@wZ9aBc1_",

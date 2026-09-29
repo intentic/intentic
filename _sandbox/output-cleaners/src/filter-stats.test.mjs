@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { parseStatsFile, summarizeStats } from "./filter-stats.mjs";
+import { commandSignature, parseStatsFile, summarizeStats } from "./filter-stats.mjs";
 
 test("summarizeStats: saved-% and tokens come from the cleaned population only", () => {
     const rows = [
@@ -102,4 +102,20 @@ test("summarizeStats: a deliberate file read is never a gap, but a computed repo
 
 test("parseStatsFile: skips blank and corrupt lines", () => {
     expect(parseStatsFile('{"rawBytes":1}\n\nnot json\n{"rawBytes":2}\n')).toEqual([{ rawBytes: 1 }, { rawBytes: 2 }]);
+});
+
+// The signature is the command a handler is written against, so it has to survive the shapes agents actually type.
+test("commandSignature: reads the signature through wrappers, pipelines and subcommands", () => {
+    expect(commandSignature("cd /work/intentic && rg -n displayName _editor | head -30")).toBe("rg");
+    expect(commandSignature("cd /work/intentic && git diff contract.lock.json | head -40")).toBe("git diff");
+    expect(commandSignature("B=/history/engines/codex/bin/codex; strings -n 6 $B | sort -u")).toBe("strings");
+    expect(commandSignature("sudo timeout 600 pnpm --filter @intentic/sandbox build")).toBe("pnpm");
+    // `run` is `npx vitest`'s argument, not a second subcommand; the verb is what a cleaner matches.
+    expect(commandSignature("npx vitest run src/agent")).toBe("npx vitest");
+    // Not a subcommand verb: the second word is this run's question, and folding it in would make every run its own gap.
+    expect(commandSignature("rg autoPicked --glob '!*.test.ts'")).toBe("rg");
+    expect(commandSignature("/usr/local/bin/node -e 'console.log(1)'")).toBe("node");
+    // A loop's closing keyword is a segment of its own; the command is what runs after it.
+    expect(commandSignature('for i in $(seq 1 40); do echo "line $i"; done; seq 1 3000')).toBe("seq");
+    expect(commandSignature("if [ -f x ]; then echo y; fi; pnpm test")).toBe("pnpm test");
 });

@@ -1,4 +1,4 @@
-import { toolCategoryOf } from "../../agent/tools/tool-calls.js";
+import { toolCategoryOf } from "@intentic/agent-context/tool-calls";
 import { planPhaseOf, toolCallOpened, usageTotals } from "./vendor-events.js";
 
 const TOKENS = { inputTokens: 100, outputTokens: 20, cacheReadTokens: 5, cacheCreationTokens: 1 };

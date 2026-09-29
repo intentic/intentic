@@ -1,4 +1,5 @@
 import { rm } from "node:fs/promises";
+import { fileqSkill } from "@intentic/fileq/skill";
 import { join } from "node:path";
 import { statePath } from "../state-paths.js";
 import type { Services } from "../composition.js";
@@ -34,68 +35,9 @@ Both verbs refuse rather than guess: when a file's tsconfig or type foundations 
 Notes: TypeScript/JavaScript only. Pass workspace paths.
 `;
 
-export const FILEQ_SKILL = `---
-name: fileq
-description: Read binary workspace files (docx, odt, xlsx, pptx, pdf, epub, ipynb, images, audio, zip and tar archives, V8 CPU and heap profiles) as clean budgeted markdown with the \`fileq\` CLI, and read big text-shaped files (csv, json, logs) without flooding your context. Use whenever a task needs the contents of a document, the text layer of a PDF, the metadata of an image or recording, what is inside an archive, or a look inside a file too large to cat — instead of guessing from the filename or shelling out to ad-hoc converters.
----
-
-# fileq: binary files as markdown
-
-The \`fileq\` CLI (on PATH) turns the workspace files you cannot open as text into markdown, and keeps a
-sidecar copy fresh so reading twice derives once.
-
-## Read a file
-\`fileq <file>\` (or \`fileq read <file> --budget 8000\`)
-- Prints a capsule (format, token cost), the content up to the budget, and \`saved:\` — the sidecar path
-  carrying the whole thing. Over budget, the cut is announced with that exact path to Read.
-- Formats: docx and odt (headings, lists, tables), xlsx (capped tables), pptx (slides + speaker notes),
-  pdf (text layer; a scan is OCR'd when the image carries tesseract, and the note says the words are
-  recognised, not exact), epub (chapters in reading order), ipynb (cells, fenced code, capped outputs),
-  png/jpg/gif/webp (dimensions + EXIF), mp3/wav/flac/mp4/… (duration + tags), html, and V8 profiles
-  (\`.cpuprofile\` from \`node --cpu-prof\`, \`.heapprofile\` from \`--heap-prof\`) as functions ranked by self and total cost.
-- Archives (zip, jar, whl, tar, tgz, and what tar can open: xz, bzip2, zstd) derive to a MEMBER LISTING —
-  paths and sizes, capped — never their contents: unpack one if you need what is inside. A single
-  compressed file (\`server.log.gz\`) is the exception and derives to its text, since there the archive is
-  the document. 7z and rar answer that nothing here opens them.
-
-## Check the sidecar first
-A file may already have a shadow at \`.intentic/local/cache/derived/<path>.md\` — front matter says which
-source hash it was derived from. \`fileq read\` checks freshness for you, so prefer it over trusting a
-shadow's age by eye.
-
-## What it refuses, and why
-- A scanned PDF on an image without tesseract answers "no usable text layer … OCR is not part of this tier"
-  rather than an empty page; images say "no visual description". Treat those notes as "not generated",
-  never as "nothing there". An extension that ships tesseract (office) turns the first into OCR.
-- Plain text (md, csv, txt, code) is not fileq's business: Read it directly — but see below for the big ones.
-- Web pages belong to \`webq\`; images for a vision model belong to the Read tool, which shows the pixels.
-
-## What changed in a document
-\`git diff\`, \`git show\` and \`git log -p\` on a .docx, .xlsx, .pptx, .pdf or .ipynb print the change to its
-text, not "Binary files differ": every derivable extension is routed through fileq as git's textconv. Read the
-diff; do not convert both versions by hand.
-
-Exit codes: 0 content, 1 nothing derivable, 2 broken invocation or install.
-
-## Text-shaped files that are too big to cat
-The commonest way to lose a context window is \`cat\` on a file you have not sized. Stat first, then read
-the shape, then only what the question needs:
-- **Size first**: \`wc -c <file>\`. Under ~20 KB, Read it whole. Over, \`head -100\` and \`tail -100\` to
-  orient, \`rg\` for what the task actually asks about, the whole file only if you genuinely need all of it.
-- **CSV / TSV**: never \`head -n 5\` blindly — a 50 KB quoted cell in row 1 wrecks it. \`head -c 4000\` for
-  a glance; for the shape, python with \`csv\` and a row cap, or \`fileq\` after converting to xlsx is
-  overkill: \`python3 -c 'import csv,sys; r=csv.reader(open(sys.argv[1])); print(next(r)); print(sum(1 for _ in r))' <file>\`
-  gives header and row count without loading it all.
-- **JSON**: structure before content — \`jq 'type' <file>\`, then \`jq 'if type=="array" then length elif type=="object" then keys else . end'\`
-  (guarded: \`keys\` errors on a scalar root). Drill only into what was asked. **JSONL**: never \`jq\` the
-  whole file; \`head -3 <file> | jq .\` and \`wc -l\`.
-- **Logs**: the end is what matters — \`tail -200\`, then \`rg\` for the error text.
-- **Archives (zip, tar.*)**: list, never auto-extract — \`unzip -l\`, \`tar -tf\` (auto-detects compression).
-  Extract one member with \`unzip -p <zip> <path>\` or \`tar -xOf <tar> <path>\`. A single \`.gz\` has no
-  listing: \`zcat <file> | head -50\`.
-- **Unknown extension**: \`file <path>\` then \`xxd <path> | head -5\`; if the bytes mean nothing to you,
-  ask rather than guess.
-`;
+// fileq's teaching is fileq's own (@intentic/fileq/skill), the same text the Claude Code plugin ships; the sandbox host
+// adds what its image carries (tesseract through an extension, fileq wired as git's textconv).
+export const FILEQ_SKILL = fileqSkill({ host: "sandbox" });
 
 // skill name → SKILL.md body; the settings `skills` array selects which are written to disk.
 const SKILLS: Record<string, string> = {

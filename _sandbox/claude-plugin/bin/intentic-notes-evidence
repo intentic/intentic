@@ -1,0 +1,3 @@
+#!/bin/sh
+# /intentic:field-notes's evidence: this project's Claude Code sessions, read back and counted.
+exec node "$(dirname "$0")/../dist/notes-evidence.mjs" "$@"

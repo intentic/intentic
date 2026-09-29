@@ -9,6 +9,7 @@ import { captureCli, type CliOutcome } from "@intentic/agent-cli/testing";
 import { app } from "./app.js";
 import { deriverStamp } from "./lib/derivers/deriver.js";
 import { docxDeriver } from "./lib/derivers/docx.js";
+import { DERIVED_DIR } from "./lib/sidecar.js";
 import { docxBytes, pngBytes } from "./testing.js";
 
 let root: string;
@@ -24,7 +25,7 @@ afterAll(() => {
 
 const fileq = (...args: string[]): Promise<CliOutcome> => captureCli(app, args);
 
-const sidecarOf = (relPath: string): string => join(root, ".intentic/local/cache/derived", `${relPath}.md`);
+const sidecarOf = (relPath: string): string => join(root, DERIVED_DIR, `${relPath}.md`);
 
 describe("derive", () => {
     it("derives a fresh sidecar, then reports fresh on the unchanged file", async () => {
@@ -38,6 +39,16 @@ describe("derive", () => {
         expect(sidecar).toContain("# Plan");
         const second = await fileq("derive", "plan.docx");
         expect(second.out).toContain("fresh plan.docx");
+    });
+
+    // Outside the sandbox the shadow tree sits inside somebody's repository; it must never reach a `git add -A`.
+    it("the shadow tree ignores itself in git, and keeps an owner's own ignore file", async () => {
+        const ignore = join(root, DERIVED_DIR, ".gitignore");
+        expect(readFileSync(ignore, "utf8")).toBe("# fileq's derived shadows; regenerated on demand.\n*\n");
+        writeFileSync(ignore, "*.md\n");
+        writeFileSync(join(root, "memo.docx"), docxBytes("Memo", ["A line."]));
+        expect((await fileq("derive", "memo.docx")).out).toContain("derived memo.docx");
+        expect(readFileSync(ignore, "utf8")).toBe("*.md\n");
     });
 
     it("an edited source re-derives; a deleted source takes its shadow with it", async () => {
@@ -158,15 +169,15 @@ describe("sweep", () => {
         mkdirSync(join(root, "docs"), { recursive: true });
         writeFileSync(join(root, "docs/photo.png"), pngBytes());
         // An orphan: a shadow whose source never existed in this workspace.
-        mkdirSync(join(root, ".intentic/local/cache/derived/gone"), { recursive: true });
-        writeFileSync(join(root, ".intentic/local/cache/derived/gone/old.pdf.md"), "---\nsource: gone/old.pdf\n---\n");
+        mkdirSync(join(root, DERIVED_DIR, "gone"), { recursive: true });
+        writeFileSync(join(root, DERIVED_DIR, "gone/old.pdf.md"), "---\nsource: gone/old.pdf\n---\n");
         const { out, exitCode } = await fileq("sweep");
         expect(exitCode).toBe(0);
         expect(out).toContain("derived docs/photo.png");
         expect(out).toContain("pruned gone/old.pdf");
         expect(out).not.toContain("node_modules");
         expect(existsSync(sidecarOf("docs/photo.png"))).toBe(true);
-        expect(existsSync(join(root, ".intentic/local/cache/derived/gone/old.pdf.md"))).toBe(false);
+        expect(existsSync(join(root, DERIVED_DIR, "gone/old.pdf.md"))).toBe(false);
     });
 
     it("--json answers counts a program can read", async () => {

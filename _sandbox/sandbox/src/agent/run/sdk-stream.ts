@@ -26,16 +26,8 @@ import { noteSubagentSpawn, noteSubagentTask, type SubagentTaskMessage, type Sub
 import { noteJobNotice, noteJobShell, noteModelRequest } from "../tools/jobs/background-jobs.js";
 import { TaskChecklist } from "./task-checklist.js";
 import type { ChecklistSeed } from "./task-store.js";
-import {
-    type CalledTool,
-    displayNameOf,
-    editDiffContent,
-    mayShowPicture,
-    resultContent,
-    toolCategoryOf,
-    toolLocations,
-    toolTarget,
-} from "../tools/tool-calls.js";
+import { displayNameOf, toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
+import { type CalledTool, editDiffContent, mayShowPicture, resultContent, toolLocations } from "../tools/tool-calls.js";
 
 // What a turn needs from the SDK: the message stream and the session's slash-command list. `supportedCommands` is
 // optional since a fake stream used in tests has none.

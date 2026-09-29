@@ -11,7 +11,7 @@ import { HANDOFF_STATE_NOTE_TITLE } from "./handoff-state.js";
 import { IQ_SEARCH_INSTRUCTION_TITLE } from "./iq-search-instruction.js";
 import { LITERAL_SLASH_NOTE, WORKTREE_NOTE_TITLE } from "./turn-preamble.js";
 import { MEMORY_NOTE_TITLE } from "./workspace-memory.js";
-import { WORKSPACE_MAP_NOTE_TITLE } from "./workspace-map.js";
+import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
 
 // Which of the sandbox's own preamble notes a card still wants. The card names ids; the notes themselves are titled
 // prose written at a dozen sites, so this is the one place the two meet.

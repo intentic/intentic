@@ -1,0 +1,41 @@
+{
+    "name": "@intentic/output-cleaners",
+    "version": "0.0.0",
+    "private": true,
+    "description": "Trims a coding agent's Bash output before the model reads it, keeps the raw text retrievable, and ledgers what each cleaner saved",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_sandbox/output-cleaners"
+    },
+    "exports": {
+        "./cleaners": {
+            "types": "./src/cleaners.d.mts",
+            "default": "./src/cleaners.mjs"
+        },
+        "./filter": {
+            "types": "./src/agent-output-filter.d.mts",
+            "default": "./src/agent-output-filter.mjs"
+        },
+        "./stats": {
+            "types": "./src/filter-stats.d.mts",
+            "default": "./src/filter-stats.mjs"
+        },
+        "./retrieve-output": "./src/retrieve-output.mjs"
+    },
+    "scripts": {
+        "bench": "node bench/cleaner-bench.mjs",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "test": "suites",
+        "test:watch": "suites --watch"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:"
+    }
+}

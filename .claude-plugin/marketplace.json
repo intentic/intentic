@@ -1,6 +1,10 @@
 {
     "name": "intentic",
-    "owner": { "name": "intentic", "email": "radarsu@gmail.com" },
+    "owner": {
+        "name": "intentic",
+        "email": "radarsu@gmail.com"
+    },
+    "description": "intentic's Claude Code plugins: the intentic bundle (trimmed output, session context, iq, fileq, measured savings) and iq on its own.",
     "plugins": [
         {
             "name": "iq",
@@ -9,8 +13,18 @@
         },
         {
             "name": "intentic",
-            "description": "Run intentic's paid services (research, data, heavy compute) from Claude Code. Priced in membership credits; every run is approved by you on a page intentic renders, and refunded if the service doesn't answer. No sandbox needed — sign in with /mcp.",
-            "source": "./_platform/claude-plugin"
+            "description": "Cheaper, sharper Claude Code sessions: Bash output trimmed before Claude reads it, a project map and this project's field notes at session start, iq code search and fileq document reading taught, document shadows kept fresh, and /intentic:stats to show what each one saved. Every mechanism is a switch in /config.",
+            "source": {
+                "source": "npm",
+                "package": "@intentic/claude-plugin"
+            },
+            "category": "productivity",
+            "tags": [
+                "context",
+                "token-savings",
+                "code-search",
+                "documents"
+            ]
         }
     ]
 }

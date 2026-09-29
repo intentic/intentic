@@ -13,6 +13,10 @@
         "dist",
         "src"
     ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
     "bin": {
         "fileq": "./dist/cli.js"
     },
@@ -37,6 +41,17 @@
             "require": {
                 "@intentic/src": "./src/lib/sidecar.ts",
                 "default": "./dist/lib/sidecar.js"
+            }
+        },
+        "./skill": {
+            "types": "./dist/skill.d.ts",
+            "import": {
+                "@intentic/src": "./src/skill.ts",
+                "default": "./dist/skill.js"
+            },
+            "require": {
+                "@intentic/src": "./src/skill.ts",
+                "default": "./dist/skill.js"
             }
         }
     },

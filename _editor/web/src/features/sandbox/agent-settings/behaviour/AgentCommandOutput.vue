@@ -24,7 +24,7 @@ const cleaningOn = computed(() => (settings.value?.outputCleaners ?? ``) !== `of
 // Cleaner ids/labels live in savingsChart.ts, shared with the Usage tab's segments; names must match. Checklist
 // round-trips through the same `outputCleaners` spec string the daemon reads.
 
-// Mirrors bin/cleaners.mjs's parseCleaners: `` = all on, an allow-list ("git,pnpm") = only those, `-cap` = all
+// Mirrors @intentic/output-cleaners' parseCleaners: `` = all on, an allow-list ("git,pnpm") = only those, `-cap` = all
 // except those, `off` = none.
 const enabledCleaners = computed<Set<string>>(() => {
     const spec = settings.value?.outputCleaners ?? ``;

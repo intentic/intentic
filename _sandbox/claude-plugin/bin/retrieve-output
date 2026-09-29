@@ -1,0 +1,3 @@
+#!/bin/sh
+# The reversible half of the intentic plugin's output cleaners: reads back what a trimmed command's footer said was cut.
+exec node "$(dirname "$0")/../dist/retrieve-output.mjs" "$@"

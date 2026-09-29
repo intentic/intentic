@@ -1,10 +1,13 @@
-import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
+import exifr from "exifr";
 import { imageSize } from "image-size";
 import type { DerivedDoc, Deriver } from "./deriver.js";
 
-// exifr is CommonJS despite its ESM build; import { parse } type-checks but throws at load, so require it.
-const { parse: parseExif } = createRequire(import.meta.url)("exifr") as typeof import("exifr");
+// exifr is CommonJS behind a `main` field with no exports map, so a named `import { parse }` type-checks but throws at
+// load; the default import is its module.exports under Node and under a bundler alike (the Claude Code plugin bundles
+// fileq, and a `createRequire` call is the one form a bundle cannot follow).
+// oxlint-disable-next-line import/no-named-as-default-member -- the named import this rule asks for is the one that throws at load.
+const { parse: parseExif } = exifr;
 
 // Deterministic tier: dimensions, format, and EXIF facts left behind; no caption, since describing pixels needs a
 // vision model.

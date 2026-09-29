@@ -1,7 +1,9 @@
 import { asZone, cronOptions, type FieldNotesStatus, UTC, type Zone } from "@intentic/sandbox-contract";
 import { Cron } from "croner";
 import { zoneOf } from "../automations/schedule-zone.js";
-import { fieldNotes } from "../agent/prompt/field-notes.js";
+import { join } from "node:path";
+import { fieldNotes } from "@intentic/agent-context/field-notes";
+import { FIELD_NOTES_FILE } from "@intentic/constants";
 import { FIELD_NOTES_AUTOMATION_ID } from "../automations/catalog.js";
 import type { Services } from "../composition.js";
 
@@ -32,7 +34,7 @@ export const fieldNotesStatus = async (services: FieldNotesDeps): Promise<FieldN
     const settings = await services.sandboxSettings.get();
     let unreadable: string | undefined;
     const brief = fieldNotes({
-        root: services.workspace.root,
+        file: join(services.workspace.root, FIELD_NOTES_FILE),
         budget: settings.fieldNotesBudget,
         onUnreadable: (why) => {
             unreadable = why;

@@ -34,6 +34,8 @@ const IMAGE_ONLY_PATHS = [
     join(REPO_ROOT, "_sandbox/sandbox/image-packs"),
     // Copied to /usr/local/bin and /root/.claude/skills, outside any mounted dist.
     join(REPO_ROOT, "_sandbox/sandbox/bin"),
+    // The output filter and cleaners, copied from their own package into /usr/local/bin.
+    join(REPO_ROOT, "_sandbox/output-cleaners/src"),
     join(REPO_ROOT, "_sandbox/sandbox/seed-skills"),
     // Laid over the baked starter at /opt/starter.
     join(REPO_ROOT, "_sandbox/sandbox/starter-site"),

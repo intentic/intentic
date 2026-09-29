@@ -1,0 +1,60 @@
+{
+    "name": "@intentic/claude-plugin",
+    "version": "0.0.0",
+    "description": "The intentic Claude Code plugin: trimmed Bash output, a project map and field notes at session start, iq search and fileq teaching, background document shadows, and a /intentic:stats report of what each saved",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_sandbox/claude-plugin"
+    },
+    "homepage": "https://github.com/intentic/intentic/tree/main/_sandbox/claude-plugin",
+    "keywords": [
+        "claude-code",
+        "claude-code-plugin",
+        "agent",
+        "context",
+        "token-savings"
+    ],
+    "files": [
+        ".claude-plugin",
+        "hooks",
+        "bin",
+        "generated",
+        "dist",
+        "README.md"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/",
+        "executableFiles": [
+            "./bin/fileq",
+            "./bin/intentic-notes-evidence",
+            "./bin/intentic-stats",
+            "./bin/retrieve-output"
+        ]
+    },
+    "engines": {
+        "node": ">=20.11"
+    },
+    "scripts": {
+        "build": "tsgo --noEmit && node build.mjs",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "test": "suites",
+        "test:watch": "suites --watch",
+        "validate": "node build.mjs --validate"
+    },
+    "devDependencies": {
+        "@intentic/agent-context": "workspace:*",
+        "@intentic/fileq": "workspace:*",
+        "@intentic/iq": "workspace:*",
+        "@intentic/output-cleaners": "workspace:*",
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "esbuild": "catalog:"
+    }
+}

@@ -1,0 +1,10 @@
+/* Type-checks this package's TESTS along with its source. */
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "types": ["node", "bun", "@intentic/testing/globals"],
+        "tsBuildInfoFile": "./.cache/tsbuildinfo-typecheck"
+    },
+    "include": ["./src/**/*"],
+    "exclude": []
+}

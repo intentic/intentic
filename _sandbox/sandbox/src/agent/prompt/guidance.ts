@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { BATCHING_GUIDANCE, CONTEXT_REUSE_GUIDANCE } from "@intentic/agent-context/guidance";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { windowsPathOf, wslPathOf } from "@intentic/sandbox-contract";
 import type { EnvironmentReach, HostDeviceReach, MachineReach } from "../../hosts/self-host.js";
@@ -223,11 +224,8 @@ const ENTRIES: readonly GuidanceEntry[] = [
     {
         id: "batching",
         reach: "loop",
-        full:
-            "While you are ORIENTING, locating code, checking what exists, reading the files around a change, put every " +
-            "probe you can already name into ONE response rather than one per response. Their results do not depend on " +
-            "each other, and what a search costs here is the round trip, not the search. Order calls one-per-response " +
-            "only when a later one genuinely needs an earlier one's output.",
+        // Shared word for word with the Claude Code plugin's output style.
+        full: BATCHING_GUIDANCE,
         // The base prompt already asks for independent calls in one response.
         lean: false,
     },
@@ -255,11 +253,7 @@ const ENTRIES: readonly GuidanceEntry[] = [
     {
         id: "context-reuse",
         reach: "loop",
-        full:
-            "A file you have already read this session is still in your context, and so is the output of a command you " +
-            "already ran. Re-reading either to check it costs a round trip and tells you nothing you do not have. Read a " +
-            "path a second time only when you have reason to think it CHANGED: something you wrote, something a command " +
-            "you ran wrote. An Edit's result already states what the file became, so it never needs confirming by re-Read.",
+        full: CONTEXT_REUSE_GUIDANCE,
         // The Read tool's own description already says it.
         lean: false,
     },

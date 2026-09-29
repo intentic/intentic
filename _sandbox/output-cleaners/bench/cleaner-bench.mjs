@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 // Offline benchmark: replay captured outputs through named cleaner configs and report the token delta per config.
 // Fixtures only prove a cleaner still fires; only `corpus` shows what it actually saves.
-//   pnpm --filter @intentic/sandbox bench:cleaners # sweep configs over fixtures
-//   pnpm --filter @intentic/sandbox bench:cleaners corpus [~/.claude/projects] # sweep over real transcripts
-//   pnpm --filter @intentic/sandbox bench:cleaners discover <filter-stats.jsonl> # live-run savings + gaps
+//   pnpm --filter @intentic/output-cleaners bench # sweep configs over fixtures
+//   pnpm --filter @intentic/output-cleaners bench corpus [~/.claude/projects] # sweep over real transcripts
+//   pnpm --filter @intentic/output-cleaners bench discover <filter-stats.jsonl> # live-run savings + gaps
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { filterOutput } from "../bin/agent-output-filter.mjs";
-import { parseCleaners } from "../bin/cleaners.mjs";
-import { parseStatsFile, summarizeStats } from "../bin/filter-stats.mjs";
+import { filterOutput } from "../src/agent-output-filter.mjs";
+import { parseCleaners } from "../src/cleaners.mjs";
+import { parseStatsFile, summarizeStats } from "../src/filter-stats.mjs";
 
 // ~4 chars/token, the same heuristic as iq-engine's estimateTokens.
 const estimateTokens = (text) => Math.ceil(text.length / 4);

@@ -2,6 +2,8 @@
 // agent-output-filter <command> <exit-code> <duration-s> [pane-log-path] [pipeline-statuses]: filters an agent's Bash
 // output before the model sees it, running ./cleaners.mjs on success, passing through non-ANSI content on failure.
 // Fails open; copied into the image as /usr/local/bin/agent-output-filter with ./cleaners.mjs alongside it.
+// `filterRun` is the whole pass with its inputs resolved; this file's `main` is the sandbox's adapter onto it (argv and
+// the daemon's env), and the Claude Code plugin's PostToolUse hook is the other.
 
 import { appendFileSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -140,52 +142,58 @@ const retainIn = (dir, name, values) => (text) => {
     }
 };
 
-const main = async () => {
-    const [command = "", exitCode = "0", durationS = "0", logPath = "", pipeline = ""] = process.argv.slice(2);
-    const chunks = [];
-    for await (const chunk of process.stdin) {
-        chunks.push(chunk);
-    }
-    const raw = Buffer.concat(chunks).toString("utf8");
+// One command's whole pass, every input already resolved by the runtime calling it. `logsDir` holds what a pass keeps:
+// `raw-output/` (the unfiltered text a footer points at), `output-cache/` (the per-session repeat detector) and
+// `filter-stats.jsonl` (the savings ledger); undefined keeps none of them. `runName` names this run's raw-output file
+// and must be unique per command; `sessionKey` scopes the cache; `tags` ride on the ledger row as they are (the plugin
+// files each row under its project and session). Never throws: any failure answers with the raw text, and redaction
+// runs on every path.
+export const filterRun = (
+    raw,
+    {
+        command = "",
+        exitCode = "0",
+        durationS = "0",
+        pipeline = "",
+        enabled = new Set(CLEANERS),
+        holdout = 0,
+        logsDir,
+        runName,
+        sessionKey,
+        values = [],
+        tags = {},
+        random = Math.random,
+        now = Date.now,
+    } = {},
+) => {
     let out = raw;
     // Per-mechanism attribution for the stat line; empty on the held-out and fail-open paths.
     let stages = [];
-    // Loaded before the pipeline so the redaction at the end of this function can mask a held-out or thrown result too.
-    // Own try: an unreadable vault falls back to name patterns, never fails the command.
-    let values = [];
+    let heldOut = false;
     try {
-        values = secretValues();
-    } catch {
-        values = [];
-    }
-    try {
-        const enabled = parseCleaners(process.env["INTENTIC_OUTPUT_CLEANERS"]);
-        const terminalsDir = process.env["INTENTIC_TERMINAL_LOGS_DIR"];
-        const logsDir = terminalsDir !== undefined && terminalsDir !== "" ? join(terminalsDir, "..") : undefined;
         // Holdout: a random fraction of commands skip cleaning, giving the savings report a real raw baseline.
-        const holdout = Number(process.env["INTENTIC_OUTPUT_HOLDOUT"] ?? "0");
-        const heldOut = holdout > 0 && Math.random() < holdout;
-        // Cache store is per-session (keyed from the pane-log path); held-out commands never open it.
-        let cacheStore;
-        if (!heldOut && enabled.has("cache") && logsDir !== undefined) {
-            const sessionKey = sessionKeyFromLog(logPath);
-            if (sessionKey !== undefined) {
-                cacheStore = openCacheStore(terminalsDir, sessionKey);
-            }
-        }
+        heldOut = holdout > 0 && random() < holdout;
+        // Held-out commands never open the cache: they must not teach it a body the model never saw collapsed.
+        const cacheStore =
+            !heldOut && enabled.has("cache") && logsDir !== undefined && sessionKey !== undefined ? openCacheStore(logsDir, sessionKey) : undefined;
         if (!heldOut) {
-            // Named after the pane log, which is unique per command: one window, one pane id.
-            const retain = logsDir !== undefined && logPath !== "" ? retainIn(join(logsDir, "raw-output"), basename(logPath), values) : undefined;
+            const retain = logsDir !== undefined && runName !== undefined && runName !== "" ? retainIn(join(logsDir, "raw-output"), runName, values) : undefined;
             const filtered = filterOutput(raw, { command, exitCode, durationS, retain, enabled, cacheStore, values, pipeline });
             out = filtered.out;
             stages = filtered.stages;
         }
-        // One NDJSON telemetry line per command; cleaners/matched/heldOut attribute the saving to the active config,
-        // stageBytes to the mechanism. Best-effort: must never break the tool result.
-        if (logsDir !== undefined) {
+    } catch {
+        out = raw;
+        stages = [];
+    }
+    // One NDJSON telemetry line per command; cleaners/matched/heldOut attribute the saving to the active config,
+    // stageBytes to the mechanism. Own try: a ledger that cannot be written costs the ledger, never the trim.
+    if (logsDir !== undefined) {
+        try {
             const matched = matchedCleaners(command, enabled);
             const stat = {
-                ts: Date.now(),
+                ...tags,
+                ts: now(),
                 command: command.slice(0, 200),
                 exit: exitCode,
                 durationS: Number(durationS),
@@ -196,10 +204,13 @@ const main = async () => {
                 heldOut,
                 stageBytes: Object.fromEntries(stages.map((stage) => [stage.id, stage.saved])),
             };
+            mkdirSync(logsDir, { recursive: true });
             appendFileSync(join(logsDir, "filter-stats.jsonl"), `${JSON.stringify(stat)}\n`);
+            // allow(silent-catch): the tool result below is the product and the ledger only accounts for it, so a
+            // full disk or a read-only data dir must cost the row, never the command's answer.
+        } catch {
+            // Best-effort by design, see above.
         }
-    } catch {
-        out = raw;
     }
     // Runs outside every branch above: the holdout and fail-open paths both emit raw, and redaction is the one step
     // neither can skip. Guarded: if this throws too, the command still answers.
@@ -208,6 +219,39 @@ const main = async () => {
     } catch {
         // Keep `out` as it stands: a tool result must always come back.
     }
+    return { out, heldOut, stages };
+};
+
+const main = async () => {
+    const [command = "", exitCode = "0", durationS = "0", logPath = "", pipeline = ""] = process.argv.slice(2);
+    const chunks = [];
+    for await (const chunk of process.stdin) {
+        chunks.push(chunk);
+    }
+    const raw = Buffer.concat(chunks).toString("utf8");
+    // Loaded before the pass so its redaction can mask a held-out or thrown result too. Own try: an unreadable vault
+    // falls back to name patterns, never fails the command.
+    let values = [];
+    try {
+        values = secretValues();
+    } catch {
+        values = [];
+    }
+    const terminalsDir = process.env["INTENTIC_TERMINAL_LOGS_DIR"];
+    const { out } = filterRun(raw, {
+        command,
+        exitCode,
+        durationS,
+        pipeline,
+        enabled: parseCleaners(process.env["INTENTIC_OUTPUT_CLEANERS"]),
+        holdout: Number(process.env["INTENTIC_OUTPUT_HOLDOUT"] ?? "0"),
+        logsDir: terminalsDir !== undefined && terminalsDir !== "" ? join(terminalsDir, "..") : undefined,
+        // Named after the pane log, which is unique per command: one window, one pane id.
+        runName: logPath === "" ? undefined : basename(logPath),
+        // Every command of a session runs in a new pane, so the session is the pane log's name minus the pane.
+        sessionKey: sessionKeyFromLog(logPath),
+        values,
+    });
     process.stdout.write(out);
 };
 

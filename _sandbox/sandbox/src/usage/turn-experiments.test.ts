@@ -1,5 +1,6 @@
 import type { UsageTurn } from "@intentic/sandbox-contract";
-import { MIN_ARM_TURNS, readTurnExperiments } from "./turn-experiments.js";
+import { MIN_ARM_TURNS } from "@intentic/agent-context/arm-stats";
+import { readTurnExperiments } from "./turn-experiments.js";
 import type { UsageStore } from "./usage-store.js";
 
 const turn = (overrides: Partial<UsageTurn>): UsageTurn => ({

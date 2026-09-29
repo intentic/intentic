@@ -3,11 +3,11 @@
 // Predicates are the production ones, so figures cannot drift from the daemon's; scope is Claude Code transcripts only.
 
 import { readFileSync } from "node:fs";
+import { readClaudeTranscript, type TranscriptCall } from "@intentic/agent-context/claude-transcript";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { AgentEvent } from "@intentic/sandbox-contract";
-import { displayNameOf, toolCategoryOf, toolLocations, toolTarget } from "../src/agent/tools/tool-calls.js";
-import { createTurnMetrics, type TurnMetricsReading } from "../src/agent/run/turn/turn-metrics.js";
-import { WORKSPACE_MAP_NOTE_HEADER } from "../src/agent/prompt/workspace-map.js";
+import { toolLocations } from "../src/agent/tools/tool-calls.js";
+import { createTurnMetrics, type TurnMetricsReading } from "@intentic/agent-context/turn-metrics";
+import { WORKSPACE_MAP_NOTE_HEADER } from "@intentic/agent-context/workspace-map";
 import { transcriptFiles } from "./transcripts.js";
 
 // Workspace root as the agent saw it; transcript paths are written against this root.
@@ -112,16 +112,6 @@ export const parseMapNote = (message: string): MapNote | undefined => {
 
 /* ---- the corpus ------------------------------------------------------------------------------------------ */
 
-// Tool-call frame shape rebuilt to match what the daemon's ledger and predicates read.
-type CallFrame = Extract<AgentEvent, { kind: "tool_call" }>;
-
-interface TranscriptLine {
-    readonly type?: string;
-    readonly isSidechain?: boolean;
-    readonly timestamp?: string;
-    readonly message?: { readonly content?: readonly Record<string, unknown>[] | string };
-}
-
 export interface Session {
     readonly day: string;
     readonly note: MapNote | undefined;
@@ -139,66 +129,7 @@ export interface Session {
     };
 }
 
-const textOf = (content: readonly Record<string, unknown>[] | string | undefined): string => {
-    if (typeof content === "string") {
-        return content;
-    }
-    return (content ?? [])
-        .filter((block) => block["type"] === "text")
-        .map((block) => (typeof block["text"] === "string" ? block["text"] : ""))
-        .join("\n");
-};
-
-// Parses only lines that could hold a user message or a tool_use call; skipping the rest avoids JSON.parse over most of
-// a transcript.
-const eventOf = (line: string): TranscriptLine | undefined => {
-    if (!line.includes(`"tool_use"`) && !line.includes(`"type":"user"`)) {
-        return undefined;
-    }
-    try {
-        return JSON.parse(line) as TranscriptLine;
-    } catch {
-        return undefined;
-    }
-};
-
-// A real prompt, not a user line carrying tool results — the only turn boundary this format has.
-const promptOf = (event: TranscriptLine): string | undefined => {
-    const blocks = event.message?.content;
-    const list = Array.isArray(blocks) ? blocks : [];
-    return event.type === "user" && !list.some((block) => block["type"] === "tool_result") ? textOf(blocks) : undefined;
-};
-
-// Rebuilds one assistant line's calls as tool_call frames, so createTurnMetrics can score them directly, without a
-// duplicate implementation.
-const callsOf = (event: TranscriptLine, agentRoot: string): CallFrame[] => {
-    const blocks = event.message?.content;
-    if (event.type !== "assistant" || !Array.isArray(blocks)) {
-        return [];
-    }
-    return blocks.flatMap((block, index) => {
-        const raw = block["name"];
-        if (block["type"] !== "tool_use" || typeof raw !== "string") {
-            return [];
-        }
-        const name = displayNameOf(raw);
-        const target = toolTarget(block["input"]);
-        const locations = toolLocations(block["input"], agentRoot);
-        return [
-            {
-                kind: "tool_call",
-                id: String(block["id"] ?? index),
-                name,
-                category: toolCategoryOf(name),
-                status: "completed",
-                ...(target !== undefined ? { target } : {}),
-                ...(locations !== undefined ? { locations } : {}),
-            } satisfies CallFrame,
-        ];
-    });
-};
-
-const firstActionOf = (call: CallFrame): string =>
+const firstActionOf = (call: TranscriptCall): string =>
     call.name === "Bash" && call.target !== undefined ? `bash:${(call.target.trim().split(/\s+/)[0] ?? "").split("/").pop()}` : call.name;
 
 // Opening turn (behaviour) ends at the second real prompt; coverage reads to end of file. Scored by createTurnMetrics,
@@ -223,52 +154,41 @@ const coverageOf = (note: MapNote | undefined, paths: readonly string[], files: 
     };
 };
 
+const pathsOf = (call: TranscriptCall): string[] => (call.locations ?? []).map((location) => location.path);
+
+// The transcript is read by @intentic/agent-context's reader, the one the Claude Code plugin's stats read with, and
+// located with the daemon's own toolLocations so a path under a linked state directory resolves as it does live.
 export const readSession = (file: string, agentRoot: string): Session | undefined => {
-    const metrics = createTurnMetrics(agentRoot);
-    let note: MapNote | undefined;
-    let day: string | undefined;
-    let prompts = 0;
-    let firstAction: string | undefined;
-    const edited: string[] = [];
-    const paths: string[] = [];
-    // Paths a call opened, not searched under; the destinations, in the order reached.
-    const files: string[] = [];
-    // The opening turn's calls go to the ledger; every turn's paths go to the coverage reading.
-    const noteCall = (call: CallFrame): void => {
-        const touched = (call.locations ?? []).map((location) => location.path);
-        paths.push(...touched);
-        files.push(...(call.category === "read" || call.category === "edit" ? touched : []));
-        if (prompts !== 1) {
-            return;
-        }
-        firstAction ??= firstActionOf(call);
-        edited.push(...(call.category === "edit" ? touched : []));
-        metrics.note(call);
-    };
-    for (const line of readFileSync(file, "utf8").split("\n")) {
-        // A subagent's transcript is not a session: never sent a map.
-        if (line.includes(`"isSidechain":true`)) {
-            return undefined;
-        }
-        const event = eventOf(line);
-        if (event === undefined) {
-            continue;
-        }
-        const prompt = promptOf(event);
-        if (prompt !== undefined) {
-            prompts += 1;
-            day ??= (event.timestamp ?? "").slice(0, 10);
-            note ??= parseMapNote(prompt);
-            continue;
-        }
-        for (const call of callsOf(event, agentRoot)) {
-            noteCall(call);
-        }
-    }
-    if (day === undefined) {
+    const text = readFileSync(file, "utf8");
+    // A subagent's transcript is not a session: never sent a map.
+    if (text.includes(`"isSidechain":true`)) {
         return undefined;
     }
-    return { day, note, opening: { ...metrics.reading(edited), firstAction }, touched: coverageOf(note, paths, files) };
+    const { turns } = readClaudeTranscript(text, { root: agentRoot, locate: toolLocations });
+    const opening = turns[0];
+    if (opening === undefined) {
+        return undefined;
+    }
+    const metrics = createTurnMetrics(agentRoot);
+    for (const call of opening.calls) {
+        metrics.call(call);
+    }
+    for (const failure of opening.failures) {
+        metrics.failed(failure.id);
+    }
+    const edited = opening.calls.flatMap((call) => (call.category === "edit" ? pathsOf(call) : []));
+    const calls = turns.flatMap((turn) => turn.calls);
+    // Paths a call opened, not searched under; the destinations, in the order reached.
+    const files = calls.flatMap((call) => (call.category === "read" || call.category === "edit" ? pathsOf(call) : []));
+    const note = turns.map((turn) => parseMapNote(turn.prompt)).find((each) => each !== undefined);
+    const first = opening.calls[0];
+    return {
+        // The opening's UTC day: map-stats buckets sessions by it, and the corpus spans machines in several zones.
+        day: new Date(opening.at).toISOString().slice(0, 10),
+        note,
+        opening: { ...metrics.reading(edited), firstAction: first === undefined ? undefined : firstActionOf(first) },
+        touched: coverageOf(note, calls.flatMap(pathsOf), files),
+    };
 };
 
 /* ---- the readings ---------------------------------------------------------------------------------------- */

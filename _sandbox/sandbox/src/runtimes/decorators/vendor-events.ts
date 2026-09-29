@@ -1,5 +1,5 @@
 import type { AgentEvent, ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind } from "@intentic/sandbox-contract";
-import { toolCategoryOf } from "../../agent/tools/tool-calls.js";
+import { toolCategoryOf } from "@intentic/agent-context/tool-calls";
 import { opt } from "../../opt.js";
 import type { PlanPhaseResult } from "./plan-mode.js";
 

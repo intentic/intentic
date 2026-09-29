@@ -1,0 +1,132 @@
+{
+    "name": "@intentic/agent-context",
+    "version": "0.0.0",
+    "private": true,
+    "description": "What a coding agent is told as a session opens, and the per-session readings that show whether it helped, shared by the sandbox daemon and the Claude Code plugin",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_sandbox/agent-context"
+    },
+    "exports": {
+        "./workspace-map": {
+            "types": "./dist/workspace-map.d.ts",
+            "import": {
+                "@intentic/src": "./src/workspace-map.ts",
+                "default": "./dist/workspace-map.js"
+            },
+            "require": {
+                "@intentic/src": "./src/workspace-map.ts",
+                "default": "./dist/workspace-map.js"
+            }
+        },
+        "./field-notes": {
+            "types": "./dist/field-notes.d.ts",
+            "import": {
+                "@intentic/src": "./src/field-notes.ts",
+                "default": "./dist/field-notes.js"
+            },
+            "require": {
+                "@intentic/src": "./src/field-notes.ts",
+                "default": "./dist/field-notes.js"
+            }
+        },
+        "./field-notes-prompt": {
+            "types": "./dist/field-notes-prompt.d.ts",
+            "import": {
+                "@intentic/src": "./src/field-notes-prompt.ts",
+                "default": "./dist/field-notes-prompt.js"
+            },
+            "require": {
+                "@intentic/src": "./src/field-notes-prompt.ts",
+                "default": "./dist/field-notes-prompt.js"
+            }
+        },
+        "./experiments": {
+            "types": "./dist/experiments.d.ts",
+            "import": {
+                "@intentic/src": "./src/experiments.ts",
+                "default": "./dist/experiments.js"
+            },
+            "require": {
+                "@intentic/src": "./src/experiments.ts",
+                "default": "./dist/experiments.js"
+            }
+        },
+        "./tool-calls": {
+            "types": "./dist/tool-calls.d.ts",
+            "import": {
+                "@intentic/src": "./src/tool-calls.ts",
+                "default": "./dist/tool-calls.js"
+            },
+            "require": {
+                "@intentic/src": "./src/tool-calls.ts",
+                "default": "./dist/tool-calls.js"
+            }
+        },
+        "./turn-metrics": {
+            "types": "./dist/turn-metrics.d.ts",
+            "import": {
+                "@intentic/src": "./src/turn-metrics.ts",
+                "default": "./dist/turn-metrics.js"
+            },
+            "require": {
+                "@intentic/src": "./src/turn-metrics.ts",
+                "default": "./dist/turn-metrics.js"
+            }
+        },
+        "./arm-stats": {
+            "types": "./dist/arm-stats.d.ts",
+            "import": {
+                "@intentic/src": "./src/arm-stats.ts",
+                "default": "./dist/arm-stats.js"
+            },
+            "require": {
+                "@intentic/src": "./src/arm-stats.ts",
+                "default": "./dist/arm-stats.js"
+            }
+        },
+        "./guidance": {
+            "types": "./dist/guidance.d.ts",
+            "import": {
+                "@intentic/src": "./src/guidance.ts",
+                "default": "./dist/guidance.js"
+            },
+            "require": {
+                "@intentic/src": "./src/guidance.ts",
+                "default": "./dist/guidance.js"
+            }
+        },
+        "./claude-transcript": {
+            "types": "./dist/claude-transcript.d.ts",
+            "import": {
+                "@intentic/src": "./src/claude-transcript.ts",
+                "default": "./dist/claude-transcript.js"
+            },
+            "require": {
+                "@intentic/src": "./src/claude-transcript.ts",
+                "default": "./dist/claude-transcript.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "watch": "tsgo --build --watch",
+        "test": "suites",
+        "test:watch": "suites --watch"
+    },
+    "dependencies": {
+        "@intentic/workspace-ignore": "workspace:*",
+        "tslib": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:"
+    }
+}

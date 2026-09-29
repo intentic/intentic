@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
-import { FIELD_NOTES_FILE } from "@intentic/constants";
 
-// The sandbox's own field notes: what past sessions here had to learn the hard way, ranked, and carried on the system
-// append beside the owner's standing instructions. The counterpart of the project map, and the division between them is
-// the whole reason this exists: the map is recomputed from the TREE every conversation, so it can only ever say what a
-// scan can see. This is written from the session CORPUS by a monthly automation (automations/catalog.ts), so it carries
-// what no scan can — which commands really verify here, what the box can take, how the owner asks for things.
+// Field notes: what past sessions in one place had to learn the hard way, ranked, and carried into every new one. The
+// counterpart of the project map, and the division between them is the whole reason this exists: the map is recomputed
+// from the TREE every conversation, so it can only ever say what a scan can see. This is written from the session
+// CORPUS (the sandbox's monthly automation, the Claude Code plugin's /intentic:field-notes; field-notes-prompt.ts is
+// the brief both hand the writer), so it carries what no scan can — which commands really verify here, what the machine
+// can take, how the owner asks for things. Where the file lives is the caller's business: the sandbox keeps one per
+// workspace, the plugin one per project.
 //
 // A TOON file, opened by rank rather than parsed whole: the payload is SLICED out of the source text, never re-encoded,
 // so the owner's own bytes, ordering and wording survive a round trip through this module unchanged.
@@ -105,18 +105,20 @@ const withinBudget = (sections: readonly Section[], spent: number, budget: numbe
     return kept;
 };
 
-const readFieldNotesFile = (root: string): { readonly text: string; readonly writtenAt: number } | undefined => {
-    const path = join(root, FIELD_NOTES_FILE);
+const readFieldNotesFile = (file: string): { readonly text: string; readonly writtenAt: number } | undefined => {
     try {
-        const text = readFileSync(path, "utf8");
-        return text.trim() === "" ? undefined : { text, writtenAt: statSync(path).mtimeMs };
+        const text = readFileSync(file, "utf8");
+        return text.trim() === "" ? undefined : { text, writtenAt: statSync(file).mtimeMs };
     } catch {
         return undefined;
     }
 };
 
 export interface FieldNotesInput {
-    readonly root: string;
+    // The notes file itself; its path is also what the brief names when it tells a turn where the rest is.
+    readonly file: string;
+    // The brief's heading, naming the place the notes are about; the sandbox's own by default.
+    readonly title?: string;
     readonly budget: number;
     // Said out loud rather than swallowed: a file that exists and cannot be read is a broken automation, and the only
     // place that shows is here.
@@ -125,8 +127,8 @@ export interface FieldNotesInput {
 
 // Absent file ⇒ undefined and silence: that is the ordinary state before the automation has run once. A file that
 // exists but cannot be indexed ⇒ undefined and a complaint, since nothing downstream can tell the two apart.
-export const fieldNotes = ({ root, budget, onUnreadable }: FieldNotesInput): FieldNotes | undefined => {
-    const file = readFieldNotesFile(root);
+export const fieldNotes = ({ file: path, budget, onUnreadable, title = FIELD_NOTES_NOTE_TITLE }: FieldNotesInput): FieldNotes | undefined => {
+    const file = readFieldNotesFile(path);
     if (file === undefined) {
         return undefined;
     }
@@ -152,18 +154,19 @@ export const fieldNotes = ({ root, budget, onUnreadable }: FieldNotesInput): Fie
     });
     // The header and the disclosure line are the note's own overhead and come out of the budget, so the number in the
     // setting is what the turn actually pays.
-    const spent = FIELD_NOTES_NOTE_HEADER.length + head.reduce((sum, block) => sum + block.length + 1, 0);
+    const header = `## ${title}`;
+    const spent = header.length + head.reduce((sum, block) => sum + block.length + 1, 0);
     const kept = withinBudget(ranked, spent, budget);
     const dropped = ranked.filter((section) => !kept.includes(section));
     // What is NOT here, named. Without it a turn cannot tell "this sandbox has no such trap" from "that section did not
     // fit", and the first reading is the dangerous one.
     const disclosure =
         dropped.length === 0
-            ? `# every section of ${join(root, FIELD_NOTES_FILE)} is below.`
-            : `# ranks ${kept.length + 1}-${ranked.length} of ${join(root, FIELD_NOTES_FILE)} are NOT below (${dropped
+            ? `# every section of ${path} is below.`
+            : `# ranks ${kept.length + 1}-${ranked.length} of ${path} are NOT below (${dropped
                   .map((section) => section.id)
                   .join(", ")}); read the file itself if a turn needs them.`;
-    const text = [FIELD_NOTES_NOTE_HEADER, "", disclosure, ...head, ...kept.map((section) => section.text)].join("\n");
+    const text = [header, "", disclosure, ...head, ...kept.map((section) => section.text)].join("\n");
     return {
         text,
         chars: text.length,

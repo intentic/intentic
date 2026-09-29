@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { commandSignature, readInputSavings } from "./filter-stats.js";
+import { readInputSavings } from "./filter-stats.js";
 
 // Savings report read off the ledger agent-output-filter appends to. Pins: stages summing to the whole saving, the
 // window against the ledger's own calendar, and un-cleaned commands grouped by the verb a handler would match on.
@@ -113,17 +113,4 @@ test("groups un-cleaned commands by verb, ranking them by what still reaches the
 test("leaves held-out commands out of the gaps", async () => {
     const root = await ledgerRoot([{ ts: 1000, command: "rg needle src", rawBytes: 20_000, emittedBytes: 20_000, matched: [], heldOut: true }]);
     expect((await readInputSavings(root, {})).gaps).toEqual([]);
-});
-
-// The signature is the command a handler is written against, so it has to survive the shapes agents actually type.
-test("reads the signature through wrappers, pipelines and subcommands", () => {
-    expect(commandSignature("cd /work/intentic && rg -n displayName _editor | head -30")).toBe("rg");
-    expect(commandSignature("cd /work/intentic && git diff contract.lock.json | head -40")).toBe("git diff");
-    expect(commandSignature("B=/history/engines/codex/bin/codex; strings -n 6 $B | sort -u")).toBe("strings");
-    expect(commandSignature("sudo timeout 600 pnpm --filter @intentic/sandbox build")).toBe("pnpm");
-    // `run` is `npx vitest`'s argument, not a second subcommand; the verb is what a cleaner matches.
-    expect(commandSignature("npx vitest run src/agent")).toBe("npx vitest");
-    // Not a subcommand verb: the second word is this run's question, and folding it in would make every run its own gap.
-    expect(commandSignature("rg autoPicked --glob '!*.test.ts'")).toBe("rg");
-    expect(commandSignature("/usr/local/bin/node -e 'console.log(1)'")).toBe("node");
 });

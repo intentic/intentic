@@ -1,0 +1,3 @@
+# Build output: the bundles, and the files whose words other packages own (build.mjs, src/emit.ts).
+dist/
+generated/

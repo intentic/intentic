@@ -15,17 +15,8 @@ import { z } from "zod";
 import { COMPACTED_NOTICE } from "@intentic/sandbox-contract/transcript-fold";
 import { ASK_TOOL_NAMES, parseAnswers } from "../agent/tools/question-answers.js";
 import { TaskChecklist } from "../agent/run/task-checklist.js";
-import {
-    type CalledTool,
-    displayNameOf,
-    editDiffContent,
-    mayShowPicture,
-    resultContent,
-    resultText,
-    toolCategoryOf,
-    toolLocations,
-    toolTarget,
-} from "../agent/tools/tool-calls.js";
+import { displayNameOf, toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
+import { type CalledTool, editDiffContent, mayShowPicture, resultContent, resultText, toolLocations } from "../agent/tools/tool-calls.js";
 import { browserOutputDir } from "../browser/cast/browser-artifacts.js";
 import { parsePromptEnvelope } from "../agent/prompt/turn-preamble.js";
 import { rootRelative } from "./turn-transcript.js";

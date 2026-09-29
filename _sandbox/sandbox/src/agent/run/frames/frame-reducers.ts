@@ -1,7 +1,7 @@
 import type { AgentEvent, TodoItem } from "@intentic/sandbox-contract";
 import { createFrameLedger, type FrameLedger } from "../../verification/agent-verification.js";
 import { createViewFrameLedger, type ViewFrameLedger } from "../../verification/agent-viewing.js";
-import { createTurnMetrics, type TurnMetrics } from "../turn/turn-metrics.js";
+import { createTurnMetrics, type TurnMetrics } from "@intentic/agent-context/turn-metrics";
 import type { HeldReason, HeldTurn } from "../turn/turn-resume.js";
 import { sumUsage, type UsageFrame } from "../turn/turn-usage.js";
 
@@ -124,6 +124,18 @@ export const createTurnFrames = (root: string, resumed: string | undefined): Tur
     const verification = createFrameLedger();
     const viewing = createViewFrameLedger();
     const metrics = createTurnMetrics(root);
+    // The call ledger is runtime-neutral (it also scores Claude Code transcripts for the plugin); this is its fold over
+    // frames. Only `tool_call` is a call: `tool_call_update` is a later SNAPSHOT of one already counted, and the one
+    // reading taken off it is whether the call failed, which is not known when it starts.
+    const callMetrics = {
+        note: (event: AgentEvent): void => {
+            if (event.kind === "tool_call") {
+                metrics.call(event);
+            } else if (event.kind === "tool_call_update" && event.status === "failed") {
+                metrics.failed(event.id);
+            }
+        },
+    };
     const folds: readonly { readonly note: (event: AgentEvent) => void }[] = [
         sessionId,
         usage,
@@ -135,7 +147,7 @@ export const createTurnFrames = (root: string, resumed: string | undefined): Tur
         limitReset,
         verification,
         viewing,
-        metrics,
+        callMetrics,
     ];
     // Moved from both sides, by frames and by classifications, so one state both fold into.
     let held: HeldTurn | undefined;

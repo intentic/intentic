@@ -1,5 +1,5 @@
 import { type AgentCapabilities, type ContextTrim, LOCAL_MODEL_WINDOW_DEFAULT, LOCAL_MODEL_WINDOWS, type TurnNote } from "@intentic/sandbox-contract";
-import { FIELD_NOTES_NOTE_TITLE } from "../field-notes.js";
+import { FIELD_NOTES_NOTE_TITLE } from "@intentic/agent-context/field-notes";
 import { GUIDANCE_TITLE } from "../guidance.js";
 import type { PromptTrim } from "../system-prompt.js";
 import { BRIEFING_NOTE_TITLES } from "../turn-briefing.js";

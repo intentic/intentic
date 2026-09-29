@@ -14,7 +14,7 @@ import type { TurnContext } from "../providers/adapter.js";
 import { planTurn } from "../run/turn/turn-plan.js";
 import { budgetOn } from "../run/turn/turn-plan.testing.js";
 import { composeWirePrompt, preambleNotes, stripTurnPreamble } from "./turn-preamble.js";
-import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";
+import { WORKSPACE_MAP_NOTE_HEADER } from "@intentic/agent-context/workspace-map";
 import { RUNTIME_ADAPTERS } from "../../runtimes/runtime-table.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 

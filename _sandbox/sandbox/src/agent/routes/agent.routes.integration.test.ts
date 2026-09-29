@@ -6,7 +6,7 @@ import { waitFor, SETTLES } from "@intentic/testing/bun";
 import { createApp } from "../../app.js";
 
 import { type TranscriptRow, SandboxSettingsSchema } from "@intentic/sandbox-contract";
-import { conversationExperimentArm } from "../run/decide/experiments.js";
+import { experimentArm } from "@intentic/agent-context/experiments";
 import { clientFor, collect, errorCode } from "../../harness/route-client.testing.js";
 import { gitOut, realCheckout } from "../../harness/route-fakes.testing.js";
 import { codexConnectedProxy, services, withTranslator } from "../../harness/route-services.testing.js";
@@ -1136,7 +1136,7 @@ test("an arm planning drew rides the ledger row without the append naming the fi
     await waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
     // The arm this id draws, from the same function planning draws it with: a transcribed `true` would also pass
     // against a row carrying the opposite arm.
-    expect(ledger[0]).toMatchObject({ notesArm: conversationExperimentArm("field-notes", "conv-notes", 0.5), turnIndex: 0 });
+    expect(ledger[0]).toMatchObject({ notesArm: experimentArm("field-notes", "conv-notes", 0.5), turnIndex: 0 });
 });
 
 // Whether the work was checked, folded off the generic frame stream, so a Codex or Cursor turn is judged the same way a

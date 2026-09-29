@@ -24,7 +24,7 @@ import { IQ_SEARCH_INSTRUCTION_TITLE } from "../../prompt/iq-search-instruction.
 import { turnPromptPlacement } from "../../prompt/system-prompt.js";
 import { worktreeNote, worktreeReminder } from "../../prompt/turn-preamble.js";
 import { promptTrim } from "../../prompt/window/context-trim.js";
-import { WORKSPACE_MAP_NOTE_TITLE } from "../../prompt/workspace-map.js";
+import { WORKSPACE_MAP_NOTE_TITLE } from "@intentic/agent-context/workspace-map";
 import { SPAWN_NOTE_TITLE } from "../../subagents/spawn-note.js";
 import type { TurnBase, TurnPolicy, TurnSpec, TurnTools } from "../../providers/agent-request.js";
 import { opt } from "../../../opt.js";

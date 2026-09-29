@@ -13,7 +13,7 @@ import { LANDING_CHECKS_NOTE_HEADER, LANDING_CHECKS_NOTE } from "../../prompt/ch
 import type { AgentRequest, TurnPolicy, TurnSpec } from "../../providers/agent-request.js";
 import { composeWirePrompt } from "../../prompt/turn-preamble.js";
 import type { TurnContext } from "../../providers/adapter.js";
-import { conversationExperimentArm } from "../decide/experiments.js";
+import { experimentArm } from "@intentic/agent-context/experiments";
 import { ruleCommandIn } from "../harness/harness-hooks.js";
 import { planTurn } from "./turn-plan.js";
 import { base, budgetOn, codexServices, context, harnessServices, memoryReading, ROOT, servicesWith, turn, wire } from "./turn-plan.testing.js";
@@ -567,9 +567,9 @@ test("a conversation that has never run leaves the account to the resolver's own
 test("a holdout assigns one balanced arm deterministically per conversation", () => {
     for (let index = 0; index < 20; index += 1) {
         const id = `conversation-${index}`;
-        expect(conversationExperimentArm("iq-search", id, 0.5)).toBe(conversationExperimentArm("iq-search", id, 0.5));
+        expect(experimentArm("iq-search", id, 0.5)).toBe(experimentArm("iq-search", id, 0.5));
     }
-    const arms = new Set(Array.from({ length: 100 }, (_, index) => conversationExperimentArm("iq-search", `conversation-${index}`, 0.5)));
+    const arms = new Set(Array.from({ length: 100 }, (_, index) => experimentArm("iq-search", `conversation-${index}`, 0.5)));
     expect(arms).toEqual(new Set([true, false]));
 });
 
@@ -578,7 +578,7 @@ test("a holdout assigns one balanced arm deterministically per conversation", ()
 test("two experiments draw independent arms for the same conversation", () => {
     const together = Array.from({ length: 200 }, (_, index) => {
         const id = `conversation-${index}`;
-        return conversationExperimentArm("iq-search", id, 0.5) === conversationExperimentArm("workspace-map", id, 0.5);
+        return experimentArm("iq-search", id, 0.5) === experimentArm("workspace-map", id, 0.5);
     }).filter(Boolean).length;
     // Independent draws agree about half the time. Perfect agreement is the bug this guards.
     expect(together).toBeGreaterThan(60);

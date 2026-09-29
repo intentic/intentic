@@ -1,5 +1,6 @@
 import type { AgentEvent, ToolCallContent } from "@intentic/sandbox-contract";
-import { diffContent, displayNameOf, resultText, toolLocations, toolTarget, workspacePath } from "../../agent/tools/tool-calls.js";
+import { displayNameOf, toolTarget } from "@intentic/agent-context/tool-calls";
+import { diffContent, resultText, toolLocations, workspacePath } from "../../agent/tools/tool-calls.js";
 import { toolCallOpened, type TurnCapture, usageTotals, type VendorEventMapper } from "../decorators/vendor-events.js";
 
 // Pure mapping of Pi RPC events onto AgentEvent frames (the opencode-agent streamTurn shape, rebuilt for a pull-per-event

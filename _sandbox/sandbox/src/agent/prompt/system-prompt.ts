@@ -3,7 +3,7 @@ import type { AgentCapabilities, SystemPromptMode, TurnNote } from "@intentic/sa
 import type { HostDeviceReach } from "../../hosts/self-host.js";
 import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
-import { FIELD_NOTES_NOTE_TITLE } from "./field-notes.js";
+import { FIELD_NOTES_NOTE_TITLE } from "@intentic/agent-context/field-notes";
 import { guidanceBlock, type GuidanceVariant } from "./guidance.js";
 import { intenticSystemPrompt } from "./intentic-prompt.js";
 import { MEMORY_NOTE_TITLE } from "./workspace-memory.js";

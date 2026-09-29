@@ -1,0 +1,15 @@
+{
+    "compilerOptions": {
+        "types": ["node"],
+        "noEmit": true,
+        "composite": false,
+        "declaration": false,
+        "declarationMap": false,
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "skipLibCheck": true
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts"],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

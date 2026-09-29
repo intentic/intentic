@@ -1,5 +1,6 @@
 // Strips terminal-only escapes and control bytes from captured output before it becomes prose (a log tail, a test
-// failure), since a prompt cannot render them. Lossless, unlike the line-dropping noise cleaners in bin/cleaners.mjs.
+// failure), since a prompt cannot render them. Lossless, unlike the line-dropping noise cleaners of
+// @intentic/output-cleaners.
 // Lives in base since both the daemon and the deployments extension need it.
 
 // CSI sequences, OSC sequences (title sets, hyperlinks), and lone two-byte escapes.
