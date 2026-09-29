@@ -140,3 +140,62 @@ it(`stops observing when the panel unmounts`, async () => {
     expect((observers[0] as FakeObserver).disconnected).toBe(true);
     expect(remove).toHaveBeenCalledWith(`scroll`, expect.any(Function));
 });
+
+// A soft wheel notch up from the bottom lands inside the parked threshold; the next layout change (a row realizing as it
+// scrolls into view, a streamed token) must not drag the reader back down.
+it(`leaves a reader who scrolled up a little alone`, async () => {
+    const observers = installObserver(window);
+    const { scroller } = mountPanel();
+    const box = geometry(scroller, 1000, 400);
+    await nextTick();
+    const observed = observers.at(-1) as FakeObserver;
+    observed.fire();
+    expect(scroller.scrollTop).toBe(600);
+
+    scroller.scrollTop = 560;
+    scroller.dispatchEvent(new Event(`scroll`));
+    box.scrollHeight = 1010;
+    observed.fire();
+    expect(scroller.scrollTop).toBe(560);
+
+    // Back down to the bottom re-parks it.
+    scroller.scrollTop = 610;
+    scroller.dispatchEvent(new Event(`scroll`));
+    box.scrollHeight = 1100;
+    observed.fire();
+    expect(scroller.scrollTop).toBe(700);
+});
+
+// Content shrinking under a parked reader clamps scrollTop upward; that is layout, not the reader leaving.
+it(`stays parked when the content shrinks under it`, async () => {
+    const observers = installObserver(window);
+    const { scroller } = mountPanel();
+    const box = geometry(scroller, 1000, 400);
+    await nextTick();
+    const observed = observers.at(-1) as FakeObserver;
+    observed.fire();
+
+    box.scrollHeight = 800;
+    scroller.scrollTop = scroller.scrollTop;
+    scroller.dispatchEvent(new Event(`scroll`));
+    box.scrollHeight = 1200;
+    observed.fire();
+    expect(scroller.scrollTop).toBe(800);
+});
+
+// Wheel intent unpins even when the same frame's reflow reshaped the content.
+it(`leaves a reader who wheeled up while the content reflowed`, async () => {
+    const observers = installObserver(window);
+    const { scroller } = mountPanel();
+    const box = geometry(scroller, 1000, 400);
+    await nextTick();
+    const observed = observers.at(-1) as FakeObserver;
+    observed.fire();
+
+    scroller.dispatchEvent(new WheelEvent(`wheel`, { deltaY: -30 }));
+    scroller.scrollTop = 570;
+    box.scrollHeight = 1020;
+    scroller.dispatchEvent(new Event(`scroll`));
+    observed.fire();
+    expect(scroller.scrollTop).toBe(570);
+});
