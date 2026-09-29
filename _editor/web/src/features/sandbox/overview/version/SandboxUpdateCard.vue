@@ -412,8 +412,9 @@ const troubleBesideRebuild = computed(
 
                 <!-- The way back, tucked away: a quiet "Having trouble?" at the foot of the card that opens it, so it is
                      there for whoever comes looking and never pitched to whoever doesn't. A withdrawn release opens the
-                     same panel from its notice instead. -->
-                <div v-if="canRollBack" class="flex flex-col gap-2">
+                     same panel from its notice instead. When "Having trouble?" already sits beside the checkout rebuild,
+                     skip this shell while closed — an empty flex child still earns a gap-4 above the block's foot. -->
+                <div v-if="canRollBack && ((!plan.rollbackWhy && !troubleBesideRebuild) || rollbackOpen)" class="flex flex-col gap-2">
                     <button
                         v-if="!plan.rollbackWhy && !troubleBesideRebuild"
                         type="button"
