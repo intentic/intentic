@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -7,12 +8,18 @@ import { join } from "node:path";
 import { packageRoot } from "@intentic/constants/node";
 import {
     CapabilityConnectableSchema,
+    type CredentialGate,
+    CredentialGatesSchema,
     type NeedRaised,
     NeedRaiseSchema,
     NeedsListSchema,
     NeedSchema,
     SecretGeneratedSchema,
     SecretGenerateSchema,
+    type SecretHostGuard,
+    SecretHostGuardsSchema,
+    SecretHostGuardSetResultSchema,
+    SecretHostGuardSetSchema,
     sandboxRequestFor,
 } from "@intentic/sandbox-contract";
 
@@ -229,6 +236,36 @@ describe("the asking commands speak the needs contract", () => {
         ]);
     });
 
+    // An opt-in feature pack by name: its fragment is the proposal, read from the packs this package ships, and an
+    // image that already bakes it (its stamp holds the pack's content hash) answers at once without asking anyone.
+    it("environment propose --pack proposes the pack's own fragment, and answers met when the image bakes it", async () => {
+        const packs = join(packageRoot(import.meta.url), "image-packs");
+        const stamps = mkdtempSync(join(tmpdir(), "needs-cli-stamps-"));
+        const office = readFileSync(join(packs, "office.Dockerfile"), "utf8").trim();
+        process.env["INTENTIC_PACKS_DIR"] = packs;
+        process.env["INTENTIC_PACK_STAMPS_DIR"] = stamps;
+        try {
+            server.answer = raised({ state: "open", message: "Asked.", need: OPEN_NEED });
+            const asked = await run(server.port, "environment", ["propose", "office", "--pack", "--why", "draw the deck to check it"]);
+            expect(asked.code).toBe(3);
+            expect(NeedRaiseSchema.parse(server.seen[0]?.body)).toEqual({
+                ask: { kind: "environment", tool: "office", steps: `${office}\n` },
+                why: "draw the deck to check it",
+            });
+            server.seen.length = 0;
+            writeFileSync(join(stamps, "office"), createHash("sha256").update(office).digest("hex"));
+            const baked = await run(server.port, "environment", ["propose", "office", "--pack"]);
+            expect(baked).toEqual({ code: 0, stdout: "The office pack is already in this image: nothing to propose, use it now.\n", stderr: "" });
+            expect(server.seen).toEqual([]);
+            const unknown = await run(server.port, "environment", ["propose", "no-such-pack", "--pack"]);
+            expect(unknown.code).toBe(1);
+            expect(unknown.stderr).toContain("environment: no feature pack named no-such-pack: the packs are ");
+        } finally {
+            delete process.env["INTENTIC_PACKS_DIR"];
+            delete process.env["INTENTIC_PACK_STAMPS_DIR"];
+        }
+    });
+
     it("secrets generate asks the route the contract declares and prints the reference, never a value", async () => {
         const body = { key: "SESSION_SECRET", bytes: 48, format: "alnum" as const };
         server.answer = (seen) =>
@@ -257,6 +294,135 @@ describe("the asking commands speak the needs contract", () => {
         const taken = await run(server.port, "secrets", ["generate", "SESSION_SECRET"]);
         expect(taken).toMatchObject({ code: 1, stdout: "", stderr: 'secrets: "SESSION_SECRET" is already stored: use it as it is, or pick a name nothing here holds.\n' });
         expect(server.seen.map((seen) => `${seen.method} ${seen.path}`)).toEqual([declared(["secrets", "generate"], { key: "SESSION_SECRET" })]);
+    });
+
+    // A daemon holding these guards and approver gates: the reads answer them, a PUT answers the setting it was sent, with
+    // `approvedBy` when given.
+    const hostsDaemon =
+        (guards: readonly SecretHostGuard[], approvedBy?: string, gates: readonly CredentialGate[] = []): Daemon["answer"] =>
+        (seen) => {
+            if (`${seen.method} ${seen.path}` === declared(["secrets", "hosts"], undefined)) {
+                return { status: 200, body: SecretHostGuardsSchema.parse({ guards }) };
+            }
+            if (`${seen.method} ${seen.path}` === declared(["secrets", "gates"], undefined)) {
+                return { status: 200, body: CredentialGatesSchema.parse({ gates }) };
+            }
+            if (`${seen.method} ${seen.path}` === declared(["secrets", "setHosts"], seen.body)) {
+                const { guard, hosts } = SecretHostGuardSetSchema.parse(seen.body);
+                // An absent `approvedBy` parses to undefined and leaves the answer's JSON without it.
+                return { status: 200, body: SecretHostGuardSetResultSchema.parse({ guard, hosts, approvedBy }) };
+            }
+            return { status: 404, body: { message: `nothing at ${seen.method} ${seen.path}` } };
+        };
+    const GITHUB: SecretHostGuard = { subject: "GITHUB_TOKEN", kind: "secret", guard: true, hosts: ["api.github.com"], source: "owner" };
+    const CONNECTOR: SecretHostGuard = { subject: "github", kind: "capability", guard: true, hosts: ["api.github.com", "github.com"], source: "connector" };
+    const STRIPE_OFF: SecretHostGuard = { subject: "STRIPE_KEY", kind: "secret", guard: false, hosts: ["api.stripe.com"], source: "owner" };
+    const DATABASE: CredentialGate = { subject: "DATABASE_URL", kind: "secret", approvers: ["bob@corp.com"], scope: "use" };
+
+    it("secrets gates shows each secret's approver and host guard on one line", async () => {
+        server.answer = hostsDaemon([GITHUB, CONNECTOR, STRIPE_OFF], undefined, [DATABASE]);
+        const result = await run(server.port, "secrets", ["gates"]);
+        expect(result).toMatchObject({
+            code: 0,
+            stdout:
+                "DATABASE_URL (secret) — bob@corp.com must release it, again on every use; host guard off: never asks where it goes\n" +
+                "GITHUB_TOKEN (secret) — no named approver; host guard on: goes unasked only to api.github.com, anywhere else asks a person\n" +
+                "github (connected account) — no named approver; host guard on, its connector's hosts: goes unasked only to api.github.com, github.com, anywhere else asks a person\n" +
+                "STRIPE_KEY (secret) — no named approver; host guard off: never asks where it goes (keeps api.stripe.com for when it is turned back on)\n",
+        });
+    });
+
+    it("secrets gates says nothing needs approval when every guard is off and nobody is named", async () => {
+        server.answer = hostsDaemon([STRIPE_OFF]);
+        const result = await run(server.port, "secrets", ["gates"]);
+        expect(result.stdout.split("\n")[0]).toBe("Nothing here needs a person's approval.");
+    });
+
+    it("secrets hosts lists every guard, and a name with none as off", async () => {
+        server.answer = hostsDaemon([GITHUB, CONNECTOR]);
+        const all = await run(server.port, "secrets", ["hosts"]);
+        expect(all).toMatchObject({
+            code: 0,
+            stdout:
+                "GITHUB_TOKEN (secret) — host guard on: goes unasked only to api.github.com, anywhere else asks a person\n" +
+                "github (connected account) — host guard on, its connector's hosts: goes unasked only to api.github.com, github.com, anywhere else asks a person\n",
+        });
+        const vaulted = await run(server.port, "secrets", ["hosts", "github/token"]);
+        expect(vaulted.stdout).toBe(
+            "github (connected account) — host guard on, its connector's hosts: goes unasked only to api.github.com, github.com, anywhere else asks a person\n",
+        );
+        const open = await run(server.port, "secrets", ["hosts", "STRIPE_KEY"]);
+        expect(open.stdout).toBe("STRIPE_KEY — host guard off: never asks where it goes\n");
+    });
+
+    it("secrets hosts add turns a guard on with the hosts given, at the route the contract declares, a pasted URL read as its host", async () => {
+        server.answer = hostsDaemon([]);
+        const result = await run(server.port, "secrets", ["hosts", "STRIPE_KEY", "add", "https://API.Stripe.com/v1/charges", "files.stripe.com"]);
+        expect(result).toMatchObject({
+            code: 0,
+            stdout: "STRIPE_KEY — host guard on: goes unasked only to api.stripe.com, files.stripe.com, anywhere else asks a person.\n",
+        });
+        expect(server.seen.map((seen) => `${seen.method} ${seen.path}`)).toEqual([
+            declared(["secrets", "hosts"], undefined),
+            declared(["secrets", "setHosts"], { subject: "STRIPE_KEY", guard: true, hosts: [] }),
+        ]);
+        expect(SecretHostGuardSetSchema.parse(server.seen[1]?.body)).toEqual({
+            subject: "STRIPE_KEY",
+            guard: true,
+            hosts: ["api.stripe.com", "files.stripe.com"],
+            conversationId: "conv-cli",
+        });
+    });
+
+    it("secrets hosts add to a guard that is on sends the whole wider list, and names who approved it", async () => {
+        server.answer = hostsDaemon([GITHUB], "owner@corp.com");
+        const result = await run(server.port, "secrets", ["hosts", "GITHUB_TOKEN", "add", "uploads.github.com"]);
+        expect(result.stdout).toBe(
+            "GITHUB_TOKEN — host guard on: goes unasked only to api.github.com, uploads.github.com, anywhere else asks a person (approved by owner@corp.com).\n",
+        );
+        expect(SecretHostGuardSetSchema.parse(server.seen[1]?.body).hosts).toEqual(["api.github.com", "uploads.github.com"]);
+    });
+
+    it("secrets hosts off and on turn a connector's guard off and back on with its hosts, through a vault name", async () => {
+        server.answer = hostsDaemon([CONNECTOR], "owner@corp.com");
+        const off = await run(server.port, "secrets", ["hosts", "github/token", "off"]);
+        expect(off.stdout).toBe(
+            "github/token — host guard off: never asks where it goes (keeps api.github.com, github.com for when it is turned back on) (approved by owner@corp.com).\n",
+        );
+        expect(server.seen[1]?.path).toBe("/secrets/hosts/github");
+        expect(SecretHostGuardSetSchema.parse(server.seen[1]?.body)).toEqual({
+            subject: "github",
+            kind: "capability",
+            guard: false,
+            hosts: ["api.github.com", "github.com"],
+            conversationId: "conv-cli",
+        });
+        server.answer = hostsDaemon([{ ...CONNECTOR, guard: false, source: "owner" }]);
+        const on = await run(server.port, "secrets", ["hosts", "github", "on"]);
+        expect(on.stdout).toBe("github — host guard on: goes unasked only to api.github.com, github.com, anywhere else asks a person.\n");
+    });
+
+    it("secrets hosts remove down to none leaves the guard on, where every use asks", async () => {
+        server.answer = hostsDaemon([GITHUB]);
+        const result = await run(server.port, "secrets", ["hosts", "GITHUB_TOKEN", "remove", "api.github.com"]);
+        expect(result.stdout).toBe("GITHUB_TOKEN — host guard on: every use asks a person.\n");
+        expect(SecretHostGuardSetSchema.parse(server.seen[1]?.body)).toMatchObject({ guard: true, hosts: [] });
+    });
+
+    it("secrets hosts remove refuses a host the guard does not hold, without asking the daemon to change anything", async () => {
+        server.answer = hostsDaemon([GITHUB]);
+        const result = await run(server.port, "secrets", ["hosts", "GITHUB_TOKEN", "remove", "evil.example"]);
+        expect(result).toMatchObject({ code: 1, stderr: "secrets: evil.example is not on GITHUB_TOKEN's guard (api.github.com)\n" });
+        expect(server.seen.map((seen) => seen.method)).toEqual(["GET"]);
+    });
+
+    it("secrets hosts hands back the daemon's refusal of a loosening, and exits 1", async () => {
+        server.answer = (seen) =>
+            seen.method === "GET"
+                ? hostsDaemon([GITHUB])(seen)
+                : { status: 403, body: { message: "The owner kept GITHUB_TOKEN's host guard on: nothing changed." } };
+        const result = await run(server.port, "secrets", ["hosts", "GITHUB_TOKEN", "off"]);
+        expect(result).toMatchObject({ code: 1, stdout: "", stderr: "secrets: The owner kept GITHUB_TOKEN's host guard on: nothing changed.\n" });
     });
 
     it("needs lists this conversation's needs and cancel withdraws one, at the routes the contract declares", async () => {

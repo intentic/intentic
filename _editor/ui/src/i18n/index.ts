@@ -41,6 +41,7 @@ export {
     registerCatalog,
     setLocale,
     startI18n,
+    staticCopy,
     t,
     type TypedT,
     useT,

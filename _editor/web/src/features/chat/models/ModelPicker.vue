@@ -30,7 +30,14 @@ const t = useT();
 
 /* `submit` is the keyboard's way to the `commit` slot, and it is deliberately NOT plain Enter. */
 const emit = defineEmits<{ pick: [PickerEntry]; submit: []; close: [] }>();
-const { provider, model, unpickable, leadRows, leadSelected } = defineProps<{
+const {
+    provider,
+    model,
+    unpickable,
+    leadRows,
+    leadSelected,
+    helperJobs = false,
+} = defineProps<{
     // The pair the list checkmarks; both, since a model id is only meaningful under the provider that vends it.
     provider: AgentProvider;
     model: string;
@@ -41,6 +48,9 @@ const { provider, model, unpickable, leadRows, leadSelected } = defineProps<{
     // Which lead row is the current selection, by key. Set, it is the only checkmark in the list: a mode and a model
     // cannot both be what the next turn runs, and two ticks would say they could.
     leadSelected?: string;
+    // True where the pick is for one-shot helper jobs (a commit message, a title), the one place a helper-only model
+    // may be picked. Everywhere else such a row is listed and refused, saying why.
+    helperJobs?: boolean;
 }>();
 
 const { mobile } = useDevice();
@@ -187,7 +197,16 @@ const { activeIndex, activeRow, move, setRowEl } = useListNavigation(flat, (entr
 // it would fall back to would claim a decision nobody has made yet.
 const isSelected = (entry: PickerEntry): boolean =>
     leadSelected === undefined ? entry.provider === provider && entry.value === model : entry.key === leadSelected;
-const isDisabled = (entry: PickerEntry): boolean => unpickable?.(entry) === true;
+// A model that can only write one-shot jobs, on a list picking for a turn: listed, so a connected model does not seem to
+// vanish, and refused with its reason where its description would be (the daemon refuses a turn on it too).
+const isHelperOnly = (entry: PickerEntry): boolean => !helperJobs && entry.helperOnly !== undefined;
+const helperOnlyWhy = (entry: PickerEntry): string | undefined => {
+    if (!isHelperOnly(entry)) {
+        return undefined;
+    }
+    return entry.helperOnly === `no-tool-calls` ? t(`chat.modelPicker.helperOnlyNoTools`) : t(`chat.modelPicker.helperOnlyQuickJobs`);
+};
+const isDisabled = (entry: PickerEntry): boolean => unpickable?.(entry) === true || isHelperOnly(entry);
 // A row whose provider has no credential yet; dimmed and lock-marked, never disabled. A lead row has no provider to
 // hold a credential, so asking would lock a mode that is always available and make it read as refused.
 const isLocked = (entry: PickerEntry): boolean => !isLead(entry) && !providerReady(entry.provider);
@@ -254,9 +273,11 @@ const coolingBadge = (entry: PickerEntry): string | undefined =>
 
 const rowAriaLabel = (entry: PickerEntry): string => {
     const cooling = coolingBadge(entry);
+    const helperOnly = helperOnlyWhy(entry);
     return (
         `${entry.label}${isSelected(entry) ? `, current model` : ``}` +
-        `${isLocked(entry) ? `, ${accessBadge(entry.provider) ?? `not connected`}` : ``}${cooling === undefined ? `` : `, ${cooling}`}`
+        `${isLocked(entry) ? `, ${accessBadge(entry.provider) ?? `not connected`}` : ``}${cooling === undefined ? `` : `, ${cooling}`}` +
+        `${helperOnly === undefined ? `` : `, ${helperOnly}`}`
     );
 };
 
@@ -469,7 +490,7 @@ onMounted(() => {
                             class="ui-row-select ui-off flex w-full items-center gap-2 px-3 py-1.5 text-left max-md:min-h-11"
                             :class="{
                                 'ui-row-select-on': row.index === activeIndex,
-                                'opacity-60': isLocked(row.entry) || isCooling(row.entry),
+                                'opacity-60': isLocked(row.entry) || isCooling(row.entry) || isHelperOnly(row.entry),
                             }"
                             :disabled="isDisabled(row.entry)"
                             @click="pick(row.entry)"
@@ -486,7 +507,7 @@ onMounted(() => {
                             >
                                 {{ row.entry.label }}
                             </span>
-                            <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ row.entry.description }}</span>
+                            <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ helperOnlyWhy(row.entry) ?? row.entry.description }}</span>
                             <!-- Every credential for this model is refused until then; the instant, not a dot, since the wait is the decision. -->
                             <span v-if="isCooling(row.entry)" class="shrink-0 whitespace-nowrap text-2xs text-warning">
                                 {{ coolingBadge(row.entry) }}

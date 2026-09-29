@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { requires } from "@intentic/testing/requires";
-import { createEngine } from "../index.js";
+import { createEngine, WEAK_FLOOR } from "../index.js";
 import { makeFixtureWorkspace } from "../testing.js";
 import type { QueryRequest } from "../types.js";
 
@@ -46,6 +46,24 @@ test.skipIf(!models.runs)(
         expect(tags).toContain("sem");
         expect(tags).toContain("rerank");
         expect(outcome.text).toContain("reranked");
+    },
+    120_000,
+);
+
+// The weak floor end to end: the fixture holds widgets and nothing about payments, so a refund question must read weak
+// and tell the reader what to do, while a question the registry answers must not. Both sit far from the floor
+// (measured 2026-09-29: 0.998 and 0.00002), so neither flips when the floor is recalibrated.
+test.skipIf(!models.runs)(
+    models.title("a question nothing in the workspace answers reads weak, and one the workspace answers does not"),
+    async () => {
+        const engine = createEngine({ root, modelDir: MODEL_DIR });
+        const answered = await engine.run(request("q", "how are widgets built for the registry?"));
+        expect(answered.verdict?.confidence).toBe("confident");
+        const absent = await engine.run(request("q", "how are payments refunded through Stripe?"));
+        expect(absent.verdict?.confidence).toBe("weak");
+        expect(absent.verdict?.relevance).toBeLessThan(WEAK_FLOOR);
+        expect(absent.text).toMatch(/^answer: .* · weak · /m);
+        expect(absent.result.hint).toMatch(/^weak match: /);
     },
     120_000,
 );

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { errnoCode, errorMessage, isMissing } from "@intentic/base/errors";
-import { MODEL_ID } from "../embed/embedder.js";
+import { VECTOR_SPACE } from "../embed/embedder.js";
 import type { SqliteDb } from "@intentic/base/sqlite";
 import {
     bumpGeneration,
@@ -40,14 +40,15 @@ export interface RevalidateResult {
 
 const isBinary = (buf: Buffer): boolean => buf.includes(0);
 
-// Invalidate stored vectors on model changes while preserving chunks.
+// Invalidate stored vectors when the vector space (VECTOR_SPACE: model, pooling, normalisation) changes, while preserving
+// chunks. The meta key keeps its name, so any two releases whose spaces differ each see a mismatch and clear.
 export const syncModel = (db: SqliteDb, modelDir: string | undefined): void => {
     if (modelDir === undefined) {
         return;
     }
-    if (getMeta(db, "model_id") !== MODEL_ID) {
+    if (getMeta(db, "model_id") !== VECTOR_SPACE) {
         clearVectors(db);
-        setMeta(db, "model_id", MODEL_ID);
+        setMeta(db, "model_id", VECTOR_SPACE);
     }
 };
 

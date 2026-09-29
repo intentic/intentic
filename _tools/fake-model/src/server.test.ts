@@ -208,6 +208,19 @@ test("a chat-completions shell step arrives as a tool_calls delta, and a failWit
     }
 });
 
+// OpenCode's MCP tools are function tools like any other on the chat surface, named by OpenCode's own key.
+test("a chat-completions call step arrives as a tool_calls delta naming that function and its arguments", async () => {
+    const model = await startFakeModel({ script: [{ call: { name: "intentic_0123abcd_echo_say", args: { text: "hi" } } }] });
+    try {
+        const call = await post(model.baseUrl, "/v1/chat/completions", { model: "m", messages: [] });
+        expect(call.text).toContain('"finish_reason":"tool_calls"');
+        expect(call.text).toContain('"name":"intentic_0123abcd_echo_say"');
+        expect(call.text).toContain(JSON.stringify(JSON.stringify({ text: "hi" })));
+    } finally {
+        await model.close();
+    }
+});
+
 test("a model listing is answered rather than 404'd", async () => {
     const model = await startFakeModel();
     try {

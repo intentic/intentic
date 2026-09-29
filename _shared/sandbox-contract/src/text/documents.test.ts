@@ -1,4 +1,4 @@
-import { documentOf, documentTitle, isDocumentPath, isPlanDocumentPath } from "./documents.js";
+import { deliverableKindOf, documentOf, documentTitle, isDocumentPath, isPlanDocumentPath } from "./documents.js";
 import { PLAN_DOCUMENTS_DIR } from "../state/workspace-state.js";
 
 const write = (path: string, newText: string, extra: { oldText?: string; truncated?: boolean } = {}) => [
@@ -62,5 +62,29 @@ describe("paths", () => {
     test("a plan is one by where it lives, not by what it is called", () => {
         expect(isPlanDocumentPath(`${PLAN_DOCUMENTS_DIR}/anything.md`)).toBe(true);
         expect(isPlanDocumentPath("docs/plans/anything.md")).toBe(false);
+    });
+});
+
+describe("deliverableKindOf", () => {
+    test("names each kind by its extension, in any case, `.htm` a web page too", () => {
+        expect(["q3/report.docx", "deck.PPTX", "numbers.xlsx", "scan.pdf", "site/index.html", "old/page.HTM"].map(deliverableKindOf)).toEqual([
+            "docx",
+            "pptx",
+            "xlsx",
+            "pdf",
+            "html",
+            "html",
+        ]);
+    });
+
+    test("anything else is none: source, markdown, the old binary formats, a dotfile, a directory's dot", () => {
+        expect(["src/app.ts", "notes.md", "letter.doc", ".pdf", "release.v2/README", "docx"].map(deliverableKindOf)).toEqual([
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+        ]);
     });
 });

@@ -9,6 +9,7 @@ import type { SecretRow } from "../../sandbox/secrets/secretRows";
 import { reveal, useCredentialGates, useSecrets } from "./useSecrets";
 import ToggleSwitch from "primevue/toggleswitch";
 import SecretField from "./SecretField.vue";
+import SecretHostsEditor from "./SecretHostsEditor.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // One secret, one line, until asked otherwise: a mark, a name, what tells it apart, and (only when owed) a due
@@ -315,10 +316,13 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                     <span v-else class="font-mono text-subtle">{{ row.entry.lastUse.detail }}</span>
                 </template>
             </p>
-            <!-- Who has to release this: off for nearly everything by design, since gating is for the few credentials where one wrong use is the incident. -->
+            <!-- The two ways a secret needs a person, as one section: who has to release it, and (below) where it may go before
+                 anybody is asked. Both off for nearly everything by design: they are for the few credentials where one wrong use
+                 is the incident. -->
             <div v-if="row.gateSubject !== undefined" class="mt-3 border-t border-line pt-2">
-                <div class="flex items-center justify-between gap-2">
-                    <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`capabilities.secretEntryRow.needsApproval`) }}</span>
+                <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`capabilities.secretEntryRow.needsApproval`) }}</span>
+                <div class="flex items-center justify-between gap-2 pt-1.5">
+                    <span class="text-xs text-content">{{ t(`capabilities.secretEntryRow.fromNamedPerson`) }}</span>
                     <ToggleSwitch
                         v-if="isOwner"
                         :model-value="gateOn"
@@ -327,7 +331,7 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                                 ? { title: t(`capabilities.secretEntryRow.dropApproval`), note: t(`capabilities.secretEntryRow.agentUsesFreely`) }
                                 : { title: t(`capabilities.secretEntryRow.requireApproval`), note: t(`capabilities.secretEntryRow.namedPersonReleases`) }
                         "
-                        :aria-label="t(`capabilities.secretEntryRow.needsApproval`)"
+                        :aria-label="t(`capabilities.secretEntryRow.fromNamedPerson`)"
                         @update:model-value="toggleGate"
                     />
                 </div>
@@ -345,7 +349,7 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                             })
                         }}
                     </template>
-                    <template v-else>{{ t(`capabilities.secretEntryRow.nobodyToApproveOnly`) }}</template>
+                    <template v-else>{{ t(`capabilities.secretEntryRow.noNamedApproverOwnerOnly`) }}</template>
                 </p>
 
                 <template v-else-if="gateOn">
@@ -396,8 +400,11 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                         }}</span>
                     </div>
                 </template>
-                <p v-else class="pt-0.5 text-2xs text-muted">{{ t(`capabilities.secretEntryRow.agentUseWithoutAsking`) }}</p>
+                <p v-else class="pt-0.5 text-2xs text-muted">{{ t(`capabilities.secretEntryRow.noNamedApprover`) }}</p>
                 <Notice v-if="gateError" :of="gateError" class="mt-2" />
+
+                <!-- The host guard: a stored value's, or a connector's credential's, never a mounted account's, which no command carries. -->
+                <SecretHostsEditor v-if="!row.sessionShaped" :row="row" :expanded="expanded" />
             </div>
 
             <Notice v-if="error" :of="error" class="mt-2" />

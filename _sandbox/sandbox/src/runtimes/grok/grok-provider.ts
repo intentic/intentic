@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentTurn } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentTurn, Capability } from "@intentic/sandbox-contract";
 import {
     attemptProbe,
     armPlan,
@@ -11,6 +11,8 @@ import {
 } from "../../agent/providers/adapter.js";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
+import { releasingMounts } from "../../agent/tools/turn-mounts.js";
+import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";
 import {
     authStateRelPath,
     engineMissing,
@@ -28,12 +30,18 @@ export interface GrokSlice {
     readonly grokAgent: (request: AgentRequest<ContainerCredential>) => AsyncGenerator<AgentEvent>;
 }
 
-// Grok rides OpenCode with xAI subscription OAuth; gated on OpenCode's own connection view. Claude-only fields
-// (plugins, MCP tools, thinking) don't apply.
-// What a Grok turn is planned from, and all its adapter reads: OpenCode holds the credential, the catalog and sessions.
-export type GrokAdapterDeps = Pick<Services, "grokAgent" | "openCode">;
+// Grok rides OpenCode with xAI subscription OAuth; gated on OpenCode's own connection view. The turn's remote MCP servers
+// ride along as Codex's do; Claude-only fields (plugins, the daemon's in-process servers, thinking) don't apply.
+// What a Grok turn is planned from, and all its adapter reads: OpenCode holds the credential, the catalog and sessions,
+// and the turn's mounts are leased from the daemon's MCP door.
+export type GrokAdapterDeps = TurnToolsDeps & Pick<Services, "grokAgent" | "openCode">;
 
-export const planGrokTurn = async (services: GrokAdapterDeps, input: AgentTurn, context: TurnContext): Promise<TurnArmPlan> => {
+export const planGrokTurn = async (
+    services: GrokAdapterDeps,
+    input: AgentTurn,
+    context: TurnContext,
+    granted: readonly Capability[],
+): Promise<TurnArmPlan> => {
     if (!(await services.openCode.connected("xai"))) {
         return {
             ok: false,
@@ -46,18 +54,32 @@ export const planGrokTurn = async (services: GrokAdapterDeps, input: AgentTurn, 
     const catalog = await services.openCode.xaiModels();
     const valid = new Set(catalog.models.map((entry) => entry.id));
     const model = input.model !== undefined && valid.has(input.model) ? input.model : catalog.default;
+    // Leased last, once nothing can refuse the turn: only the loop it arms releases it.
+    const mounted = await turnToolsOf(services, granted, {
+        conversationId: input.conversationId,
+        anonymousBrowser: context.persona?.powers.browser ?? true,
+        extensions: context.persona?.powers.extensions,
+    });
     // Overrides base's input.model with the validated id; the adapter folds attachment paths into the prompt. OpenCode
     // holds one xAI auth, so the single Grok account is "xai" (see grok-accounts.ts).
     return armPlan(
-        services.grokAgent,
-        withAttachments({ ...context.base, spec: { ...context.base.spec, model }, credential: { kind: "container" } }, context.attachmentPaths),
+        releasingMounts(services.grokAgent, mounted),
+        withAttachments(
+            {
+                ...context.base,
+                spec: { ...context.base.spec, model },
+                tools: mounted.tools.length > 0 ? { ...context.base.tools, remote: mounted.tools } : context.base.tools,
+                credential: { kind: "container" },
+            },
+            context.attachmentPaths,
+        ),
         "xai",
     );
 };
 
 const OPENCODE_ADAPTER: AgentAdapter<"opencode", GrokAdapterDeps> = {
     runtime: "opencode",
-    preflight: (services, input, context) => planGrokTurn(services, input, context),
+    preflight: (services, input, context, granted) => planGrokTurn(services, input, context, granted),
     health: async (services) => {
         const connected = await attemptProbe(() => services.openCode.connected("xai"));
         if (connected === undefined) {

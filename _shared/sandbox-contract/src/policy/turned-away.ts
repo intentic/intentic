@@ -10,6 +10,7 @@ const TURNED_AWAY: ReadonlySet<string> = new Set([
     "claude-not-entitled",
     "unknown-command",
     "context-window-too-small",
+    "model-helper-only",
     "sandbox-memory-low",
     "trial-unavailable",
     "trial-model-unavailable",

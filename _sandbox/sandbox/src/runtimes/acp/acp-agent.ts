@@ -13,6 +13,7 @@ import {
     type IdleWait,
     SETTLED,
     type TurnTimeouts,
+    type TurnWatchdog,
     turnWatchdog,
     watchedPull,
 } from "../decorators/turn-watchdog.js";
@@ -102,7 +103,9 @@ async function* sessionFor(
 }
 
 // A phase's live half: what the agent sends lands in `queue` (or, while planning, in `text`), and every landing wakes
-// the loop. The gate's sink is repointed here, since the gate outlives a phase and the queue does not.
+// the loop. The gate's sink is repointed here, since the gate outlives a phase and the queue does not. `clock` is the
+// phase's watchdog, held while a permission is decided: the agent is waiting on the daemon then, and a card open on a
+// person is not a stalled agent.
 const bindPhase = (
     connection: AcpConnection,
     request: AgentRequest,
@@ -114,6 +117,7 @@ const bindPhase = (
         readonly sink: { push: (event: AgentEvent) => void };
     },
     wait: IdleWait,
+    clock: Pick<TurnWatchdog, "hold">,
 ) => {
     const queue: AgentEvent[] = [];
     const held = { text: "" };
@@ -140,8 +144,14 @@ const bindPhase = (
     let terminalSurfaced = false;
     const unbind = connection.bindTurn(session, {
         onUpdate,
-        permission: (permissionRequest) =>
-            decidePermission(permissionRequest, turn.phase, request.signal.aborted, turn.gate, (event) => turn.sink.push(event)),
+        permission: async (permissionRequest) => {
+            const release = clock.hold();
+            try {
+                return await decidePermission(permissionRequest, turn.phase, request.signal.aborted, turn.gate, (event) => turn.sink.push(event));
+            } finally {
+                release();
+            }
+        },
         ...(tmuxSession !== undefined
             ? {
                   terminal: {
@@ -195,7 +205,9 @@ async function* runAcpTurn(
         return { sessionId: undefined, planText: "", errored: true };
     }
     const wait = idleWait();
-    const { queue, held, unbind } = bindPhase(connection, request, session, turn, wait);
+    // Started before the phase binds, since a permission the agent asks for holds it.
+    const clock = turnWatchdog(turn.timeouts);
+    const { queue, held, unbind } = bindPhase(connection, request, session, turn, wait, clock);
     const cancel = (): void => void connection.agent.notify(methods.agent.session.cancel, { sessionId: session }).catch(() => {});
     // A Stop before the session exists reaches an already-aborted signal a bare listener would miss.
     const unwatchAbort = whenAborted(request.signal, cancel);
@@ -216,7 +228,6 @@ async function* runAcpTurn(
             wait.wake();
         });
 
-    const clock = turnWatchdog(turn.timeouts);
     const pull = watchedPull({ take: () => queue.shift(), settled: () => settled, clock, wait });
     try {
         for (let next = await pull(); next !== SETTLED; next = await pull()) {

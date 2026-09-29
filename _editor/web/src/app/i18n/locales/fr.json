@@ -842,7 +842,6 @@
         "secretEntryRow": {
             "accessTab": "Onglet Accès",
             "agentUsesFreely": "L’agent l’utilise librement",
-            "agentUseWithoutAsking": "L'agent peut l'utiliser sans demander à personne.",
             "cancelRemove": "Annuler le retrait",
             "ciOutOfDate": "CI obsolète",
             "ciSynced": "CI synchronisée",
@@ -861,7 +860,6 @@
             "namedPersonReleases": "Une personne désignée le libère",
             "needsApproval": "Nécessite une approbation",
             "nobodyNamedYetGive": "Personne ne peut encore être nommé. Donnez l'accès à quelqu'un dans l'",
-            "nobodyToApproveOnly": "Personne n'a à approuver ceci. Seul le propriétaire peut changer cela.",
             "once": "Cette fois seulement",
             "oneClickCoversEvery": "Un clic couvre chaque usage pour le reste de cette conversation.",
             "oneClickReleasesExactly": "Un clic libère exactement un usage. Le suivant redemande.",
@@ -1471,6 +1469,15 @@
         "chatTurnAsides": {
             "showSteps": "Voir les étapes",
             "thinking": "Réflexion"
+        },
+        "chatTurnDeliverables": {
+            "open": "Ouvrir {name}, {kind}",
+            "page": "Page web",
+            "pdf": "PDF",
+            "region": "Documents de ce tour",
+            "sheet": "Tableur",
+            "slides": "Présentation",
+            "word": "Document Word"
         },
         "chatTurnShots": {
             "open": "Ouvrir {name}",
@@ -4690,6 +4697,17 @@
         "fileBreadcrumb": {
             "alsoViewingFile": "consulte aussi ce fichier"
         },
+        "fileRefPeek": {
+            "lines": "{count} ligne | {count} lignes",
+            "items": "{count} élément | {count} éléments",
+            "more": "et {count} de plus",
+            "notFound": "Rien à cet emplacement.",
+            "empty": "Fichier vide.",
+            "binary": "Fichier binaire : ouvrez-le pour le voir.",
+            "beyond": "La ligne {line} est plus loin que ce qu'un aperçu lit. Ouvrez le fichier pour la voir.",
+            "past": "Le fichier s'arrête à la ligne {total} : la ligne {line} n'y figure pas.",
+            "failed": "Impossible de lire ce fichier."
+        },
         "fileLocked": {
             "holdsCantOpenedEdited": "Il contient {holds}. Il ne peut être ni ouvert, ni modifié, ni téléchargé ici.",
             "keptPrivateBySandbox": "est gardé privé par ce sandbox."
@@ -4702,6 +4720,8 @@
             "insideArchive": "Dans une archive",
             "notInItsCopy": "Absent de sa copie",
             "noWriteAccess": "Pas d'accès en écriture",
+            "pageSealed": "Isolée : ni réseau ni session",
+            "preview": "Aperçu",
             "readAsText": "Lire en texte",
             "reloadDisk": "Recharger depuis le disque",
             "saveChanges": "Enregistrer",
@@ -4709,7 +4729,9 @@
             "saveFile": "Enregistrer le fichier",
             "sharedVersion": "Version partagée",
             "showComments": "Afficher les commentaires",
-            "showFile": "Voir le fichier"
+            "showFile": "Voir le fichier",
+            "showPage": "Voir la page",
+            "showSource": "Voir la source"
         },
         "healthCodebaseHealth": {
             "all": "Tout",
@@ -4751,6 +4773,15 @@
             "nothingHere": "Rien ici.",
             "nothingMatchesIn": "Rien ne correspond à « {trim} » dans {here}.",
             "toolingHidden": "{count} fichier d'outillage masqué | {count} fichiers d'outillage masqués"
+        },
+        "htmlPreview": {
+            "failed": "Impossible de préparer cette page pour l'aperçu.",
+            "missing": "{count} fichier à côté de cette page n'a pas pu être chargé | {count} fichiers à côté de cette page n'ont pas pu être chargés",
+            "remote": "{count} élément d'internet n'a pas été chargé | {count} éléments d'internet n'ont pas été chargés",
+            "remoteWhy": "L'aperçu n'a pas de réseau : les scripts, polices ou images que la page cherche sur internet restent dehors.",
+            "scriptsOff": "La page cherchait sans cesse à aller ailleurs, ses scripts sont donc désactivés.",
+            "strayed": "La page a tenté d'aller à une autre adresse et a été ramenée ici.",
+            "title": "Aperçu de {name}"
         },
         "imageCompareView": {
             "fadeBetweenPictures": "Fondre entre l'image avant et l'image après",

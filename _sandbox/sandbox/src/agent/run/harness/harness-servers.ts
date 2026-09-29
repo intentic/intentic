@@ -32,6 +32,7 @@ export type HarnessServersDeps = Pick<
     | "config"
     | "conversations"
     | "credentialGate"
+    | "hostGuardGate"
     | "dependencies"
     | "logger"
     | "openBrowserAccount"
@@ -58,7 +59,8 @@ const subjectsOf = (names: readonly string[]): Map<string, { readonly kind: Cred
 };
 
 // The one object behind every secret seam this turn gets: the named registry, the use ledger its exits feed (a write
-// that must never fail or slow the tool call that spent the secret), and the approval gate bound to this turn.
+// that must never fail or slow the tool call that spent the secret), and the two gates bound to this turn: where the
+// values may go, asked first since a use sent nowhere needs nobody's release, then who must release them.
 export const turnSecretAccess = (deps: HarnessServersDeps, input: AgentTurn, signal: AbortSignal): SecretAccess => ({
     list: deps.secretRegistry,
     used: (use) => {
@@ -66,11 +68,27 @@ export const turnSecretAccess = (deps: HarnessServersDeps, input: AgentTurn, sig
             .record({ ...use, at: Date.now() })
             .catch((error: unknown) => deps.logger.warn({ err: error, secret: use.name }, "secret use record failed"));
     },
-    release: async (names, lane, detail) => {
+    release: async (names, lane, detail, target) => {
         if (names.length === 0) {
             return { ok: true };
         }
+        const sent = await deps.hostGuardGate.check({
+            names,
+            target,
+            conversationId: input.conversationId,
+            unattended: input.unattended === true,
+            signal,
+        });
+        if (!sent.allow) {
+            return { refusal: sent.reason };
+        }
         const approvedBy: Record<string, string> = {};
+        // Whoever let it go off its list answers for the use, unless a named approver releases it below.
+        if (sent.approvedBy !== undefined) {
+            for (const name of names) {
+                approvedBy[name] = sent.approvedBy;
+            }
+        }
         for (const [subject, { kind, names: covered }] of subjectsOf(names)) {
             const verdict = await deps.credentialGate.check({
                 subject,

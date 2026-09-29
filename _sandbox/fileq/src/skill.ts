@@ -1,4 +1,5 @@
 import { DERIVED_DIR } from "./lib/sidecar.js";
+import { AUTHORING_RULES } from "./skill-authoring.js";
 
 // fileq's own teaching: the SKILL.md every agent that has fileq on its PATH is given. It lives with the CLI it describes
 // so a new flag and its sentence land together, and so the two hosts that ship it cannot drift: the sandbox writes it
@@ -25,6 +26,17 @@ const OCR_REFUSAL: Record<FileqSkillHost["host"], string> = {
   never as "nothing there". Installing tesseract turns the first into OCR.`,
 };
 
+// `fileq render` shells out to LibreOffice and a PDF rasterizer. The sandbox image does not bake them (LibreOffice is
+// hundreds of megabytes): they are the opt-in `office` pack, asked for by name, an image change the owner approves
+// rather than an ad-hoc install the next rebuild loses.
+const RENDER_TOOLS = {
+    sandbox: `It needs LibreOffice (\`soffice\`) for office formats and \`pdftoppm\` for every format, both in the opt-in
+\`office\` image pack. If it exits 2 naming one, run the \`environment propose office --pack\` it prints (the owner
+approves, a rebuild brings it), say the document was checked but not seen, and do not claim it looks right.`,
+    standalone: `It needs LibreOffice (\`soffice\`) for office formats and \`pdftoppm\` (poppler-utils) or \`mutool\` for
+every format. If it exits 2 naming one, install it or tell the user the document was checked but not seen.`,
+} satisfies Record<FileqSkillHost["host"], string>;
+
 // Only where `fileq git-attributes` has wired it, which the sandbox image does and a plain install does not.
 const TEXTCONV = `## What changed in a document
 \`git diff\`, \`git show\` and \`git log -p\` on a .docx, .xlsx, .pptx, .pdf or .ipynb print the change to its
@@ -35,7 +47,7 @@ diff; do not convert both versions by hand.
 
 export const fileqSkill = ({ host }: FileqSkillHost): string => `---
 name: fileq
-description: Read binary workspace files (docx, odt, xlsx, pptx, pdf, epub, ipynb, images, audio, zip and tar archives, V8 CPU and heap profiles) as clean budgeted markdown with the \`fileq\` CLI, and read big text-shaped files (csv, json, logs) without flooding your context. Use whenever a task needs the contents of a document, the text layer of a PDF, the metadata of an image or recording, what is inside an archive, or a look inside a file too large to cat — instead of guessing from the filename or shelling out to ad-hoc converters.
+description: Read binary files (docx, xlsx, pptx, pdf, odt, epub, ipynb, images, audio, archives, V8 profiles) as budgeted markdown with \`fileq\`, size up csv, json or logs too big to cat, and check and render a docx, pptx, xlsx or pdf you made. Use instead of guessing from a filename, ad-hoc converters, or delivering it unseen.
 ---
 
 # fileq: binary files as markdown
@@ -68,6 +80,21 @@ ${OCR_REFUSAL[host]}
 - Web pages belong to \`webq\`; images for a vision model belong to the Read tool, which shows the pixels.
 
 ${host === "sandbox" ? TEXTCONV : ""}Exit codes: 0 content, 1 nothing derivable, 2 broken invocation or install.
+
+## After you produce a document
+A deck, report, spreadsheet or PDF made for someone is not finished until you have checked it and looked at it.
+1. \`fileq check <file>\` (docx, pptx, xlsx, pdf) lists what a reader would meet, each with where it is:
+   \`slide 3 · "Title 1"\`, \`'Q3 plan'!C4\`, \`page 7\`, \`paragraph 12 · "…"\`. Exit 1 means an error (a missing
+   image, a #REF!, a broken link, leftover "Click to add title"): fix every one and check again. Warnings are
+   judgement calls (a TODO, a hidden slide) or estimates (text overflowing its box): settle those by looking.
+2. \`fileq render <file> [--pages 1-3]\` draws the pages or slides as PNGs (the first 20 unless you say) and
+   prints one path per line; Read them. An unchanged file answers from its last render. Office formats are laid
+   out by LibreOffice, so a font the machine lacks is substituted: judge overflow and spacing, not the typeface.
+   ${RENDER_TOOLS[host].replaceAll("\n", "\n   ")}
+Fix what you find in whatever generated the file, regenerate, and check again; after two rounds, stop and tell
+the user what is left rather than looping.
+
+${AUTHORING_RULES}
 
 ## Text-shaped files that are too big to cat
 The commonest way to lose a context window is \`cat\` on a file you have not sized. Stat first, then read

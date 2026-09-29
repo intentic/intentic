@@ -5,6 +5,20 @@ import { testConfig } from "../../testing.js";
 import { planGeminiTurn } from "./gemini-provider.js";
 import type { GeminiModel } from "./gemini-models.js";
 
+// The browser stack reads the machine to find its runtime; planning asks it for servers and nothing more here.
+const browserServers = jest.fn();
+jest.mock("../../browser/tools/browser-tools.js", () => ({
+    ROUTED_BROWSER_SERVER: "browser",
+    ANONYMOUS_BROWSER_SERVER: "web",
+    browserServersOf: (...args: unknown[]) => browserServers(...args),
+    prepareBrowserOwner: jest.fn(),
+}));
+
+beforeEach(() => {
+    browserServers.mockReset();
+    browserServers.mockResolvedValue({ servers: [], accounts: {}, ports: {}, passkeys: {} });
+});
+
 // What the Google channel does with the model a turn names. The channel vends one row per model AND per thinking level
 // (Claude Opus beside Gemini Pro), each metered on its own allowance, so which id is sent is not a detail: substituting
 // spends a different allowance than the one the user chose.
@@ -32,7 +46,7 @@ const geminiServices = (
     });
 
 test("sends the pinned model the channel offers", async () => {
-    const plan = await planGeminiTurn(geminiServices(), turn({ model: "gemini-3.1-pro-low" }), context);
+    const plan = await planGeminiTurn(geminiServices(), turn({ model: "gemini-3.1-pro-low" }), context, []);
 
     expect(plan).toMatchObject({ ok: true, request: { spec: { model: "gemini-3.1-pro-low" } } });
 });
@@ -40,7 +54,7 @@ test("sends the pinned model the channel offers", async () => {
 test("opens on the catalog default when the turn names no model, empty id included", async () => {
     // The wire allows `model: ""` and means the same as absent; both are "whatever this channel leads with".
     for (const model of [undefined, ""]) {
-        const plan = await planGeminiTurn(geminiServices(), turn({ model }), context);
+        const plan = await planGeminiTurn(geminiServices(), turn({ model }), context, []);
 
         expect(plan).toMatchObject({ ok: true, request: { spec: { model: "claude-opus-4-6-thinking" } } });
     }
@@ -49,7 +63,7 @@ test("opens on the catalog default when the turn names no model, empty id includ
 test("refuses a pin the channel has stopped offering instead of running on the catalog default", async () => {
     // Opus de-listed, as the channel does while it is out of capacity for it; the catalog's own grace window has run
     // out by the time a plan sees a list without it.
-    const plan = await planGeminiTurn(geminiServices([OFFERED[1]!]), turn({ model: "claude-opus-4-6-thinking" }), context);
+    const plan = await planGeminiTurn(geminiServices([OFFERED[1]!]), turn({ model: "claude-opus-4-6-thinking" }), context, []);
 
     expect(plan).toEqual({
         ok: false,
@@ -62,7 +76,7 @@ test("refuses a pin the channel has stopped offering instead of running on the c
 
 test("refuses a turn the translator has no Google model to serve, instead of sending it to fail as unknown", async () => {
     // A connected account the translator cannot use (not loaded, or switched off): the picker still shows the seed.
-    const plan = await planGeminiTurn(geminiServices(OFFERED, { live: undefined }), turn({ model: "claude-opus-4-6-thinking" }), context);
+    const plan = await planGeminiTurn(geminiServices(OFFERED, { live: undefined }), turn({ model: "claude-opus-4-6-thinking" }), context, []);
 
     expect(plan).toEqual({
         ok: false,
@@ -70,4 +84,18 @@ test("refuses a turn the translator has no Google model to serve, instead of sen
             "Google is connected, but the model translator isn't serving any Google model to this sandbox, so nothing can run on it. " +
             "Send again in a minute; if it keeps happening, reconnect Google in Sandbox ▸ Agent.",
     });
+});
+
+// Gemini rides OpenCode, which now takes the turn's remote MCP servers as Codex does: the browser the persona may drive
+// is one of them.
+test("hands the turn its remote MCP servers, the browser among them", async () => {
+    const web = { name: "web", url: "http://127.0.0.1:1/mcp/web", token: "turn-bearer", timeoutMs: 120_000 };
+    browserServers.mockResolvedValue({ servers: [web], accounts: {}, ports: { web: 41_000 }, passkeys: {} });
+
+    const plan = await planGeminiTurn(geminiServices(), turn({ model: "gemini-3.1-pro-low", conversationId: "chat-1" }), context, []);
+    if (!plan.ok) {
+        throw new Error(`planning refused the turn: ${plan.message}`);
+    }
+
+    expect(plan.request.tools.remote).toEqual([web]);
 });

@@ -4,7 +4,7 @@ import { otherBoxes } from "../../../sandbox/live/fleetAcross";
 import { modelLabelFor } from "../../accounts/providerCatalog";
 import type { QuickPick, QuickPickSources } from "../../composer/composerQuickPick";
 import { drillMention, fileMention, mentionQueryAt, replaceMention } from "../../composer/useMentions";
-import { pickerEntries } from "../../models/modelPickerState";
+import { chatPickable, pickerEntries } from "../../models/modelPickerState";
 import { effortsFor } from "../../models/run-settings/effortScale";
 import { ensureProviderCommands } from "../../models/useChat-catalog";
 import { providerReady } from "../../session/access";
@@ -59,7 +59,8 @@ const quickSourcesOf = (chat: Conversation, host: PopoversHost): QuickPickSource
         model: steered
             ? undefined
             : {
-                  entries: host.view.streaming.value ? pickerEntries.value.filter((entry) => entry.provider === provider) : pickerEntries.value,
+                  // A keyboard list has no use for a row that refuses the pick: helper-only models are left out here.
+                  entries: pickerEntries.value.filter((entry) => chatPickable(entry) && (!host.view.streaming.value || entry.provider === provider)),
                   provider,
                   model: selection.model.value,
                   label: modelLabelFor(provider, selection.model.value),

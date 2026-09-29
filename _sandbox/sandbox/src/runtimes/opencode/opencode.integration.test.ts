@@ -6,17 +6,25 @@ import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createTurnGate } from "../../guard/turn-gate.js";
 import { humanizeModelId } from "@intentic/sandbox-contract";
 import { SEED_XAI_MODELS } from "./xai-models.js";
-import { createOpenCodeService, geminiProviderConfig, registerSessionGate, releaseSessionGate } from "./opencode.js";
+import type { AgentEvent } from "@intentic/sandbox-contract";
+import { unstubbed } from "@intentic/testing";
+import type { CommandGuard } from "../../guard/command-guard.js";
+import { createOpenCodeService, geminiProviderConfig, type SessionJudge } from "./opencode.js";
+import { mcpServersOf, openCodeMounts } from "./opencode-mcp.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../testing.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);
 
-// Captures server-spawn options instead of booting a real `opencode serve`; the client double also feeds an event
-// stream and records every permission answered.
+// Captures server-spawn options instead of booting a real `opencode serve`; the client doubles also feed an event
+// stream and record every permission answered, on whichever route answered it, and every MCP server mounted.
 const serverSpawns = [] as { config?: unknown }[];
-const permissionReplies = [] as { id: string; permissionID: string; directory: string | undefined; response: string | undefined }[];
+// The per-session route an older ask is answered on, which carries no reason.
+const legacyReplies: { sessionID: string; permissionID: string; directory: string | undefined; response: string | undefined }[] = [];
+// The current route, whose refusal carries the reason back to the model.
+const permissionReplies: { requestID: string; directory: string | undefined; reply: string | undefined; message?: string }[] = [];
+const mcpCalls: ({ call: "add"; name: string; directory: string | undefined; config: unknown } | { call: "disconnect"; name: string; directory: string | undefined })[] = [];
 const streamEvents = [] as unknown[];
 // Every event subscription asked for, by directory; `refused` makes each one fail the way a dead server's does.
 const subscriptions = { refused: false, asked: [] as (string | undefined)[] };
@@ -44,13 +52,33 @@ jest.mock("@opencode-ai/sdk", () => ({
                 };
             },
         },
-        postSessionIdPermissionsPermissionId: async (options: {
-            path: { id: string; permissionID: string };
-            query?: { directory?: string };
-            body?: { response?: string };
-        }) => {
-            permissionReplies.push({ ...options.path, directory: options.query?.directory, response: options.body?.response });
-            return {};
+        mcp: {
+            add: async (options: { body?: { name: string; config: unknown }; query?: { directory?: string } }) => {
+                mcpCalls.push({ call: "add", name: options.body?.name ?? "", directory: options.query?.directory, config: options.body?.config });
+                return {};
+            },
+            disconnect: async (options: { path: { name: string }; query?: { directory?: string } }) => {
+                mcpCalls.push({ call: "disconnect", name: options.path.name, directory: options.query?.directory });
+                return {};
+            },
+        },
+    }),
+}));
+jest.mock("@opencode-ai/sdk/v2/client", () => ({
+    createOpencodeClient: () => ({
+        permission: {
+            respond: async (parameters: { sessionID: string; permissionID: string; directory?: string; response?: string }) => {
+                legacyReplies.push({ sessionID: parameters.sessionID, permissionID: parameters.permissionID, directory: parameters.directory, response: parameters.response });
+                return {};
+            },
+            reply: async (parameters: { requestID: string; directory?: string; reply?: string; message?: string }) => {
+                const answered: (typeof permissionReplies)[number] = { requestID: parameters.requestID, directory: parameters.directory, reply: parameters.reply };
+                if (parameters.message !== undefined) {
+                    answered.message = parameters.message;
+                }
+                permissionReplies.push(answered);
+                return {};
+            },
         },
     }),
 }));
@@ -85,6 +113,8 @@ afterEach(async () => {
     // The three doubles are module-level; reset so one test's stream/permissions don't leak into the next.
     streamEvents.length = 0;
     permissionReplies.length = 0;
+    legacyReplies.length = 0;
+    mcpCalls.length = 0;
     serverSpawns.length = 0;
     subscriptions.refused = false;
     subscriptions.asked.length = 0;
@@ -226,7 +256,7 @@ test("a permission ask on a watched directory is answered with a standing yes", 
     await createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: WORKSPACE_ROOT }).client();
     // The watcher reads its stream detached from the boot that started it, so let its first read land.
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(permissionReplies).toEqual([{ id: "ses_1", permissionID: "per_1", directory: "/work", response: "always" }]);
+    expect(legacyReplies).toEqual([{ sessionID: "ses_1", permissionID: "per_1", directory: "/work", response: "always" }]);
 });
 
 // A watcher that exhausted its retries answers nothing more; a directory still marked watched would leave every later
@@ -247,55 +277,80 @@ test("a permission watcher that gave up is reopened by the next turn in its dire
     expect(subscriptions.asked).toHaveLength(4);
 });
 
+interface RecordedJudge {
+    readonly judge: SessionJudge;
+    readonly frames: AgentEvent[];
+    readonly holds: string[];
+}
+
+// What a turn registers for its sessions: the gate its rulebook built, a sink for the frames the card raises, and a hold
+// on its watchdog, recorded here so a test can see the clock held for exactly the consult.
+const judgeOf = (gate: CommandGuard): RecordedJudge => {
+    const frames: AgentEvent[] = [];
+    const holds: string[] = [];
+    return {
+        frames,
+        holds,
+        judge: {
+            gate,
+            push: (frame) => void frames.push(frame),
+            hold: () => {
+                holds.push("held");
+                return () => void holds.push("released");
+            },
+        },
+    };
+};
+
+// What capabilitiesOf("grok", …) declares: a hold parks on a card like Codex's.
+const approvalGate = (judge: () => Promise<{ decision: "allow" | "ask" | "refuse"; sentence: string }>) =>
+    createTurnGate({ cards, judge, rulebook: "approval", signal: new AbortController().signal });
+
 // A registered session's permission goes through the same pipeline every other runtime uses; unregistered keeps the
 // standing yes. The judge is a stub: the channel is under test, not the model.
 test("a registered session's permission is judged by the policy, and a refused command is rejected", async () => {
     const xdg = await scratch();
-    const { gate, release } = createTurnGate({
-        cards,
-        judge: async () => ({ decision: "refuse", sentence: "Discards commits the remote has." }),
-        // What capabilitiesOf("grok", …) declares: this runtime cannot park on a card, so an ask refuses too.
-        rulebook: "refuse-only",
-        signal: new AbortController().signal,
-    });
-    registerSessionGate("ses_gated", gate);
+    const { gate, release } = approvalGate(async () => ({ decision: "refuse", sentence: "Discards commits the remote has." }));
     streamEvents.push({
         type: "permission.updated",
         properties: { id: "per_2", sessionID: "ses_gated", type: "bash", metadata: { command: "git push --force origin main" }, title: "bash" },
     });
-    await createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: WORKSPACE_ROOT }).client();
+    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: WORKSPACE_ROOT });
+    service.judges.register("ses_gated", judgeOf(gate).judge);
+    await service.client();
     await new Promise((resolve) => setTimeout(resolve, 20));
 
-    expect(permissionReplies).toEqual([{ id: "ses_gated", permissionID: "per_2", directory: "/work", response: "reject" }]);
-    releaseSessionGate("ses_gated");
+    // The older route has no field for the reason; OpenCode releases that serve it stop the session instead.
+    expect(legacyReplies).toEqual([{ sessionID: "ses_gated", permissionID: "per_2", directory: "/work", response: "reject" }]);
     release();
 });
 
 // OpenCode 1.18 renamed the ask and reshaped it (`permission.asked`, with `permission` and `patterns`); a watcher
 // listening only for the old name answered nothing, and every ask the config raises waited on the turn's watchdog.
-test("OpenCode 1.18's ask is judged by the same policy, command first, then its patterns", async () => {
+test("OpenCode 1.18's ask is judged by the same policy, and a refusal goes back with its reason", async () => {
     const xdg = await scratch();
-    const { gate, release } = createTurnGate({
-        cards,
-        judge: async () => ({ decision: "refuse", sentence: "Discards commits the remote has." }),
-        rulebook: "refuse-only",
-        signal: new AbortController().signal,
-    });
-    registerSessionGate("ses_asked", gate);
+    const { gate, release } = approvalGate(async () => ({ decision: "refuse", sentence: "Discards commits the remote has." }));
     streamEvents.push({
         type: "permission.asked",
         properties: { id: "per_5", sessionID: "ses_asked", permission: "bash", patterns: ["git push --force*"], metadata: { command: "git push --force origin main" }, always: [] },
     });
     streamEvents.push({ type: "permission.asked", properties: { id: "per_6", sessionID: "ses_open", permission: "bash", patterns: ["rm -rf dist"], metadata: {}, always: [] } });
-    await createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: WORKSPACE_ROOT }).client();
+    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: WORKSPACE_ROOT });
+    service.judges.register("ses_asked", judgeOf(gate).judge);
+    await service.client();
     await new Promise((resolve) => setTimeout(resolve, 20));
 
-    // Answered concurrently, so in either order; what each got is the contract.
-    expect(permissionReplies.toSorted((left, right) => left.permissionID.localeCompare(right.permissionID))).toEqual([
-        { id: "ses_asked", permissionID: "per_5", directory: "/work", response: "reject" },
-        { id: "ses_open", permissionID: "per_6", directory: "/work", response: "always" },
+    // Answered concurrently, so in either order; what each got is the contract. The reason is what OpenCode hands the
+    // model as the call's feedback, and a reply with one keeps the session going where a bare reject would stop it.
+    expect(permissionReplies.toSorted((left, right) => left.requestID.localeCompare(right.requestID))).toEqual([
+        {
+            requestID: "per_5",
+            directory: "/work",
+            reply: "reject",
+            message: "Discards commits the remote has. Refused by your owner's safety policy. Do not retry.",
+        },
+        { requestID: "per_6", directory: "/work", reply: "always" },
     ]);
-    releaseSessionGate("ses_asked");
     release();
 });
 
@@ -303,24 +358,127 @@ test("OpenCode 1.18's ask is judged by the same policy, command first, then its 
 // the policy would refuse.
 test("a command the policy allows is approved for this call only", async () => {
     const xdg = await scratch();
-    const { gate, release } = createTurnGate({
-        cards,
-        judge: async () => ({ decision: "allow", sentence: "Pushes a feature branch." }),
-        // What capabilitiesOf("grok", …) declares: this runtime cannot park on a card, so an ask refuses too.
-        rulebook: "refuse-only",
-        signal: new AbortController().signal,
-    });
-    registerSessionGate("ses_ok", gate);
+    const { gate, release } = approvalGate(async () => ({ decision: "allow", sentence: "Pushes a feature branch." }));
+    const { judge, holds } = judgeOf(gate);
     streamEvents.push({
         type: "permission.updated",
         properties: { id: "per_3", sessionID: "ses_ok", type: "bash", metadata: { command: "git push origin feature" }, title: "bash" },
     });
-    await createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: WORKSPACE_ROOT }).client();
+    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: WORKSPACE_ROOT });
+    service.judges.register("ses_ok", judge);
+    await service.client();
     await new Promise((resolve) => setTimeout(resolve, 20));
 
-    expect(permissionReplies).toEqual([{ id: "ses_ok", permissionID: "per_3", directory: "/work", response: "once" }]);
-    releaseSessionGate("ses_ok");
+    expect(legacyReplies).toEqual([{ sessionID: "ses_ok", permissionID: "per_3", directory: "/work", response: "once" }]);
+    // The judge's own call is a wait on the daemon too, so the clock is held across it.
+    expect(holds).toEqual(["held", "released"]);
     release();
+});
+
+// The whole reason this runtime was refuse-only: a card waits on a person far past the two-minute silence limit. The
+// turn's clock is held from the ask until the answer, the card reaches the turn's stream through its judge, and the
+// person's answer goes back to OpenCode.
+test("a hold parks on a card: the turn's clock is held until the person answers, and their yes lets the call run once", async () => {
+    const xdg = await scratch();
+    const { gate, release } = approvalGate(async () => ({ decision: "ask", sentence: "Pushes straight to the shared main branch." }));
+    const { judge, frames, holds } = judgeOf(gate);
+    streamEvents.push({
+        type: "permission.asked",
+        properties: {
+            id: "per_7",
+            sessionID: "ses_card",
+            permission: "bash",
+            patterns: ["git push --force*"],
+            metadata: { command: "git push --force origin main" },
+            always: [],
+        },
+    });
+    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: WORKSPACE_ROOT });
+    service.judges.register("ses_card", judge);
+    await service.client();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    // Parked: the card is out, the clock held, and OpenCode not yet answered.
+    expect(frames).toMatchObject([{ kind: "permission", toolName: "Bash", displayName: "Run command", program: { text: "git push --force origin main" } }]);
+    expect(holds).toEqual(["held"]);
+    expect(permissionReplies).toEqual([]);
+
+    const card = frames[0];
+    if (card?.kind !== "permission") {
+        throw new Error("no card was raised");
+    }
+    expect(cards.resolve({ kind: "permission", requestId: card.requestId, decision: "once" })).toBe("settled");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(frames.map((frame) => frame.kind)).toEqual(["permission", "resolved"]);
+    expect(holds).toEqual(["held", "released"]);
+    expect(permissionReplies).toEqual([{ requestID: "per_7", directory: "/work", reply: "once" }]);
+    release();
+});
+
+// A person's no with words goes back as the model's feedback: the turn carries on told why, as a Claude turn's does.
+test("a person's no goes back to OpenCode with their words", async () => {
+    const xdg = await scratch();
+    const { gate, release } = approvalGate(async () => ({ decision: "ask", sentence: "Pushes straight to the shared main branch." }));
+    const { judge, frames } = judgeOf(gate);
+    streamEvents.push({
+        type: "permission.asked",
+        properties: {
+            id: "per_8",
+            sessionID: "ses_no",
+            permission: "bash",
+            patterns: ["git push --force*"],
+            metadata: { command: "git push --force origin main" },
+            always: [],
+        },
+    });
+    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: WORKSPACE_ROOT });
+    service.judges.register("ses_no", judge);
+    await service.client();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const card = frames[0];
+    if (card?.kind !== "permission") {
+        throw new Error("no card was raised");
+    }
+    cards.resolve({ kind: "permission", requestId: card.requestId, decision: "deny", feedback: "Open a pull request instead." });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(permissionReplies).toEqual([{ requestID: "per_8", directory: "/work", reply: "reject", message: "Open a pull request instead." }]);
+    release();
+});
+
+// An ask left unanswered stalls the turn until its watchdog kills it; a consult with no verdict refuses instead.
+test("a consult that fails is answered as a refusal rather than left unanswered", async () => {
+    const xdg = await scratch();
+    const broken = unstubbed<CommandGuard>("gate", {
+        enforcing: true,
+        // Fails before it has anything to say.
+        consult: () => {
+            throw new Error("the card store is gone");
+        },
+    });
+    const { judge, holds } = judgeOf(broken);
+    streamEvents.push({
+        type: "permission.asked",
+        properties: { id: "per_9", sessionID: "ses_broken", permission: "bash", patterns: ["git push*"], metadata: { command: "git push origin main" }, always: [] },
+    });
+    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: WORKSPACE_ROOT });
+    service.judges.register("ses_broken", judge);
+    await service.client();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(permissionReplies).toEqual([
+        {
+            requestID: "per_9",
+            directory: "/work",
+            reply: "reject",
+            message:
+                "This could not be checked against your owner's safety policy, so it was refused. " +
+                "Do not retry: carry on with what you can do without it, and say plainly what you left undone.",
+        },
+    ]);
+    expect(holds).toEqual(["held", "released"]);
 });
 
 // A session whose turn has settled, or a delegation nobody registered, is where it always was: the standing yes.
@@ -333,7 +491,49 @@ test("an unregistered session keeps the standing yes", async () => {
     await createOpenCodeService(xdg, { fetchImpl: forbiddenFetch, workspaceRoot: WORKSPACE_ROOT }).client();
     await new Promise((resolve) => setTimeout(resolve, 20));
 
-    expect(permissionReplies).toEqual([{ id: "ses_unknown", permissionID: "per_4", directory: "/work", response: "always" }]);
+    expect(legacyReplies).toEqual([{ sessionID: "ses_unknown", permissionID: "per_4", directory: "/work", response: "always" }]);
+});
+
+// Every conversation shares the one server, and OpenCode keeps MCP servers per directory: a turn's servers go on in its
+// directory under its conversation's names, and come off once nothing holds them.
+test("a turn's servers are added in its directory and disconnected once it lets go", async () => {
+    const xdg = await scratch();
+    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch });
+    const servers = mcpServersOf(openCodeMounts("chat-1", [{ name: "web", url: "http://127.0.0.1:7000/mcp/web", token: "turn-1" }]));
+    const name = servers[0]?.name ?? "";
+
+    const unmount = await service.mount(WORKSPACE_ROOT, servers);
+    expect(mcpCalls).toEqual([{ call: "add", name, directory: "/work", config: servers[0]?.config }]);
+
+    await unmount();
+    await unmount();
+    expect(mcpCalls).toEqual([
+        { call: "add", name, directory: "/work", config: servers[0]?.config },
+        { call: "disconnect", name, directory: "/work" },
+    ]);
+});
+
+// Two turns of one conversation hold the same names; the one client each name gets must carry a bearer a live turn
+// still holds, whichever of them ends first.
+test("a server two turns hold carries the newer turn's bearer, and the older one's again once the newer lets go", async () => {
+    const xdg = await scratch();
+    const service = createOpenCodeService(xdg, { fetchImpl: forbiddenFetch });
+    const serversOf = (token: string) => mcpServersOf(openCodeMounts("chat-1", [{ name: "web", url: "http://127.0.0.1:7000/mcp/web", token }]));
+    const older = serversOf("turn-1");
+    const newer = serversOf("turn-2");
+    const name = older[0]?.name ?? "";
+
+    const releaseOlder = await service.mount(WORKSPACE_ROOT, older);
+    const releaseNewer = await service.mount(WORKSPACE_ROOT, newer);
+    await releaseNewer();
+    await releaseOlder();
+
+    expect(mcpCalls).toEqual([
+        { call: "add", name, directory: "/work", config: older[0]?.config },
+        { call: "add", name, directory: "/work", config: newer[0]?.config },
+        { call: "add", name, directory: "/work", config: older[0]?.config },
+        { call: "disconnect", name, directory: "/work" },
+    ]);
 });
 
 test("recordModels is a no-op for an empty or media-only list (keeps the seed floor)", async () => {

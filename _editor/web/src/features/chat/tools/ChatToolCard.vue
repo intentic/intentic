@@ -69,8 +69,10 @@ const toggleOpen = (): void => {
     outputOverride.value = !isOpen.value;
 };
 
-// The card's clickable location chip: the first workspace file this call touches.
-const location = computed(() => props.tool.locations?.[0]);
+// The card's clickable location chip: the first workspace file this call touches. Not a command's: the files the daemon
+// found it wrote (produced-documents.ts) are the turn's documents, listed under its answer, and the header is the
+// command, which a press should not swap for one of its outputs.
+const location = computed(() => (props.tool.category === `execute` ? undefined : props.tool.locations?.[0]));
 
 // Everything this card can lead to, from whoever is showing it. In the app, each card offers its own chat's
 // shell/browser; on a published conversation, nothing.

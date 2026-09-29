@@ -140,3 +140,47 @@ test("plan mode runs the two-phase emulation: captured plan → approval → exe
     expect(events).toContainEqual({ kind: "delta", text: "executed" });
     expect(events.at(-1)).toEqual({ kind: "done" });
 });
+
+// A turn whose owner's rules hold a command for a person: the policy the planner gives an ACP agent's turn, and a judge
+// that asks.
+const heldRequest = (prompt: string): AgentRequest<ContainerCredential> => ({
+    ...request(prompt),
+    policy: { judging: "on", rulebook: "approval" },
+    hooks: { cards, judge: async () => ({ decision: "ask", sentence: "Rewrites the shared history of main." }) },
+});
+
+// The agent waits on the daemon while a card is open, not the other way round: the phase's silence limit is held for
+// as long as the person takes, and runs again once they answer.
+test("an approval card holds the watchdog: the agent waits past the silence limit, and the person's yes reaches it", async () => {
+    const connection = fakeAcpConnection(fakeAcpAgentApp());
+    const agent = createAcpAgent(connectionsOf(connection), { inactivityMs: 100, maxTurnMs: 60_000 });
+    const events: AgentEvent[] = [];
+    for await (const event of agent("fake", CONFIG, heldRequest("ask-to-force-push"))) {
+        events.push(event);
+        if (event.kind === "permission") {
+            // Four silence windows on the card before anyone answers.
+            await new Promise((resolve) => setTimeout(resolve, 400));
+            expect(cards.resolve({ kind: "permission", requestId: event.requestId, decision: "once" })).toBe("settled");
+        }
+    }
+
+    expect(events.map((event) => event.kind).filter((kind) => kind !== "session")).toEqual(["permission", "resolved", "delta", "done"]);
+    expect(events).toContainEqual({ kind: "delta", text: "permission:allow" });
+    expect(connection.alive()).toBe(true);
+});
+
+// An agent can end its turn with an ask unanswered (its process died, or it moved on); the card is settled as the turn
+// ends, and the agent is told no, rather than the card staying open on nobody.
+test("an ask the agent left unanswered is refused when its turn ends", async () => {
+    let answer: (outcome: string) => void = () => {};
+    const answered = new Promise<string>((resolve) => {
+        answer = resolve;
+    });
+    const agent = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp({ answered: answer }))), TIMEOUTS);
+
+    const events = await collect(agent, heldRequest("ask-and-leave"));
+
+    expect(events.at(-1)).toEqual({ kind: "done" });
+    // A hang bound, not a timing: without the turn's end settling it, the card waits for ever.
+    expect(await Promise.race([answered, new Promise((resolve) => setTimeout(() => resolve("never answered"), 5_000))])).toBe("deny");
+});

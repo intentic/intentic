@@ -1,5 +1,6 @@
 import { useLoadingReveal } from "@intentic/ui/loading-reveal";
 import { computed, type Ref } from "vue";
+import { type ChatDeliverable, deliverablesByTurn } from "../../transcript/deliverables/deliverables";
 import { attachedPaths, type ChatShot, shotsByTurn } from "../../transcript/shots/shots";
 import {
     type ChatMessage,
@@ -13,7 +14,8 @@ import {
     turnsOf,
 } from "../../transcript/transcript";
 
-// The transcript as one pane draws it: turns, the live bubble, each turn's pictures, fork cuts, day marks, the skeleton.
+// The transcript as one pane draws it: turns, the live bubble, each turn's pictures and documents, fork cuts, day marks,
+// the skeleton.
 
 // What the pane reads of its conversation to draw it.
 export interface PaneTranscriptHost {
@@ -38,6 +40,8 @@ export const usePaneTranscript = (pane: PaneTranscriptHost) => {
     // A turn whose pictures didn't change keeps its array (shotsByTurn), so a settled strip isn't redrawn per paint.
     const attached = computed(() => attachedPaths(messages.value));
     const turnShots = computed<ReadonlyMap<number, readonly ChatShot[]>>((previous) => shotsByTurn(turns.value, attached.value, previous));
+    // Same reuse for each turn's documents (deliverablesByTurn).
+    const turnDeliverables = computed<ReadonlyMap<number, readonly ChatDeliverable[]>>((previous) => deliverablesByTurn(turns.value, previous));
     // The turn still being written, if any; a card it parked on is the reader's move, so that turn's pictures show.
     const writingTurn = computed(() => (streaming.value && ending.value === undefined && !awaitingDecision.value ? turns.value.at(-1)?.id : undefined));
     const repeatedChecklists = computed(() => repeatedChecklistIds(messages.value));
@@ -57,6 +61,12 @@ export const usePaneTranscript = (pane: PaneTranscriptHost) => {
         stripOf: (turn: ChatTurn): readonly ChatShot[] | undefined => {
             const shots = turnShots.value.get(turn.id);
             return pane.showToolCalls.value || turn.id === writingTurn.value || shots === undefined || shots.length === 0 ? undefined : shots;
+        },
+        // A turn's documents, once it has stopped writing them: a file still being written is not one to open yet. Drawn
+        // folded or unfolded, since a card names a file where it was written and this is the turn's whole list.
+        deliverablesOf: (turn: ChatTurn): readonly ChatDeliverable[] | undefined => {
+            const deliverables = turnDeliverables.value.get(turn.id);
+            return turn.id === writingTurn.value || deliverables === undefined || deliverables.length === 0 ? undefined : deliverables;
         },
         // How each surviving checklist snapshot draws: the list once per turn, then only what moved.
         checklistViews: computed(() => checklistViewsOf(turns.value, repeatedChecklists.value)),

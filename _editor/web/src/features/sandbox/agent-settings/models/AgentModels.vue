@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import { MODEL_ROLE_BLOCKS, type ModelPin, type ModelRole, type ModelRoleBlockId, type ModelRoleSpec, modelPinKey } from "@intentic/sandbox-contract";
+import {
+    MODEL_ROLE_BLOCKS,
+    MODEL_ROLES,
+    type ModelPin,
+    type ModelRole,
+    type ModelRoleBlockId,
+    type ModelRoleSpec,
+    modelPinKey,
+} from "@intentic/sandbox-contract";
 import { Button, MarkdownDocument, Modal, RowGroup, SegmentedControl } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
 import { computed, ref, shallowRef, watch } from "vue";
@@ -50,6 +58,9 @@ const writeRoles = (next: Partial<Record<ModelRole, ModelPin[]>>): void => patch
 
 const listOf = (role: ModelRole): readonly ModelPin[] => settings.value?.modelRoles[role] ?? [];
 
+// A one-shot helper job is the only kind a model that cannot run a turn may be pinned to; a run job is a turn.
+const helperJob = (role: ModelRole): boolean => MODEL_ROLES.some((spec) => spec.id === role && spec.kind === `helper`);
+
 // Built from the catalog: every role stores the same shape (an ordered pin list), so a new role gets a working row for
 // free.
 const editorFor = (role: ModelRole): PinnedList =>
@@ -60,6 +71,7 @@ const editorFor = (role: ModelRole): PinnedList =>
         encode: (pin) => pin,
         detail: pinKnobSummary,
         knobs: true,
+        helperJobs: helperJob(role),
     });
 
 // Writes a whole set of roles in one patch, avoiding the top-level-merge race of separate writes; used by both the
@@ -112,6 +124,7 @@ const groupList = (ids: readonly ModelRole[]): PinnedList =>
         encode: (pin) => pin,
         detail: pinKnobSummary,
         knobs: true,
+        helperJobs: ids.every(helperJob),
     });
 
 // Built once: editors close over the settings ref and stay live; block membership is the catalog's answer.
@@ -213,6 +226,8 @@ interface PickerTarget {
     readonly anchor: HTMLElement;
     readonly header: string;
     readonly knobs: boolean;
+    // Whether every job the pick lands on is a one-shot helper, where a helper-only model may be picked.
+    readonly helperJobs: boolean;
     readonly pin: () => ModelPin | undefined;
     readonly taken: () => readonly string[];
     // Answers the panel's question: a model row picked from the list.
@@ -232,6 +247,7 @@ const openRowPicker = (list: PinnedList, index: number | undefined, anchor: HTML
         anchor,
         header: index === undefined ? `Add a model` : `Model`,
         knobs: list.knobs,
+        helperJobs: list.helperJobs,
         pin: () => (index === undefined ? undefined : list.entries.value[index]?.pin),
         taken: () => list.taken.value,
         apply: (pin) => list.apply(index, pin),
@@ -254,6 +270,7 @@ const openBulkPicker = (anchor: HTMLElement, ids: readonly ModelRole[]): void =>
         // The safeguard against this panel's one mistake: it looks like a single row's, but spends across every job.
         header: `Model for ${roles.length} ${roles.length === 1 ? `job` : `jobs`}`,
         knobs: true,
+        helperJobs: roles.every(helperJob),
         pin: () => bulkPin.value,
         taken: () => sharedTaken(roles),
         apply: (pin) => applyToRoles(roles, pin),
@@ -442,6 +459,7 @@ const setPickerOpen = (open: boolean): void => {
         :header="editing?.header"
         :pin="editingPin"
         :knobs="editing?.knobs === true"
+        :helper-jobs="editing?.helperJobs === true"
         :taken="editingTaken"
         @update:open="setPickerOpen"
         @pick="pick"

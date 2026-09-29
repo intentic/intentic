@@ -1,4 +1,5 @@
-import { type Capability, type EndpointConfig, LOCAL_MODEL_WINDOW_DEFAULT, type LocalModelConfig } from "@intentic/sandbox-contract";
+import { type Capability, type EndpointConfig, LOCAL_MODEL_WINDOW_DEFAULT, type LocalModelConfig, localModelChoice } from "@intentic/sandbox-contract";
+import { opt } from "../opt.js";
 import { statePath } from "../state-paths.js";
 
 // A local model expressed as the endpoint it is: the catalog probe, translator reconciler and credential resolution all
@@ -42,6 +43,10 @@ export interface LocalModelSource {
     // A direct GGUF link (the "custom" escape hatch), fetched plainly.
     readonly url?: string;
     readonly file: string;
+    // A curated pick's pinned commit and the file's digest at it. A path typed by hand or a custom URL has neither: there
+    // is nothing to pin it against, so it downloads from the repo's default branch and is served as fetched.
+    readonly revision?: string;
+    readonly sha256?: string;
 }
 
 export const localModelSource = (config: LocalModelConfig): LocalModelSource | undefined => {
@@ -56,7 +61,8 @@ export const localModelSource = (config: LocalModelConfig): LocalModelSource | u
     }
     const repo = segments.slice(0, 2).join("/");
     const path = segments.slice(2).join("/");
-    return { repo, path, file: segments.at(-1) ?? "" };
+    const curated = localModelChoice(config.model);
+    return { repo, path, file: segments.at(-1) ?? "", ...opt("revision", curated?.revision), ...opt("sha256", curated?.sha256) };
 };
 
 // Cached by file name, shared across entries on purpose: two cards naming the same model download it once, and the

@@ -38,9 +38,12 @@ const providers = [
 const others = [
     {
         name: `A local model`,
-        detail: `The sandbox downloads the weights and serves them itself: pick a model on the Local model card and it appears in the picker. Nothing to install, nothing leaves the machine; an NVIDIA GPU is one switch and one rebuild away. Small models shine on the one-shot jobs (free commit messages, free session titles) and on work that must stay local.`,
+        detail: `The sandbox downloads the weights at a pinned revision, checks them against the published checksum, and serves them itself: pick a model on the Local model card and it appears in the picker. Nothing to install, nothing leaves the machine; an NVIDIA GPU is one switch and one rebuild away. The connect page offers the largest model that fits whole in the free memory of one device, the GPU when there is one, so it never recommends a model that would run mostly on the CPU; if a model's layers do not all reach the GPU, its card says so. Small models shine on the one-shot jobs (free commit messages, free session titles) and on work that must stay local. The smallest, the one ready in a minute, is kept for those jobs and is not offered for chat.`,
     },
-    { name: `A model endpoint`, detail: `Point the sandbox at any OpenAI-compatible API you already run: Ollama on this machine, vLLM on the GPU box, a gateway. Its catalog is read from the server itself, so the picker offers what that server actually serves.` },
+    {
+        name: `A model endpoint`,
+        detail: `Point the sandbox at any OpenAI-compatible API you already run: Ollama on this machine, vLLM on the GPU box, a gateway. Its catalog is read from the server itself, so the picker offers what that server actually serves. A model whose server says its chat template cannot call tools (llama.cpp reports this) is kept for one-shot jobs and is not offered for chat, because an agent turn is made of tool calls.`,
+    },
     { name: `An ACP agent`, detail: `Any agent speaking the Agent Client Protocol, added as a capability. Adding one needs no update to intentic.` },
 ];
 ---
@@ -159,7 +162,8 @@ const others = [
             <strong>One-shot helpers</strong> — a commit message, a session title, a verdict — default to <strong>Auto</strong>: the
             cheapest rung of every connected provider, best first, resolved at the moment it's read. So it can never name a provider you
             have no credential for, and it improves by itself when you connect one. Nothing stops you pinning a frontier model to your
-            commit subjects instead; that's a preference, and it's yours to have.
+            commit subjects instead; that's a preference, and it's yours to have. A model kept for one-shot jobs, one that cannot call
+            tools or the small local one, can be pinned here and nowhere else.
         </li>
         <li>
             <strong>Whole sessions</strong> — an automation's wake, a chore, an acceptance run, the fix a refused push proposes —

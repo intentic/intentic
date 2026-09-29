@@ -71,9 +71,11 @@ export class TurnFailures {
                 this.applyAuthRefusedError(error);
                 return;
             // Nothing ran, and the daemon holds the message in the queue: an unrecognized command until it is reworded, a
-            // turn too big for the model until a bigger one is picked, low memory until the person says go ahead.
+            // turn too big for the model (or a model that can only write one-shot jobs) until another is picked, low
+            // memory until the person says go ahead.
             case `unknown-command`:
             case `context-window-too-small`:
+            case `model-helper-only`:
             case `sandbox-memory-low`:
                 return;
             case `session-not-found`:

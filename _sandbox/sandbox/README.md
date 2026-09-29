@@ -44,7 +44,12 @@ flowchart LR
   turn holds a bearer of its own, leased the names it mounted and forgotten when the turn ends, and the door refuses
   any name that turn's lease does not hold, so two turns of one conversation running at once never reach each other's
   mounts. An ACP agent's warm session keeps the MCP config it was opened with, so its turns share the conversation's
-  bearer, one live turn at a time, and between turns it reaches nothing. An extension's card-less tool server and its
+  bearer, one live turn at a time, and between turns it reaches nothing. OpenCode (Grok, Gemini) keeps MCP servers per
+  directory, not per session, on the one `opencode serve` every conversation shares, so a turn mounts its servers there
+  under its conversation's own names and each prompt shows its session those and hides every other conversation's
+  (`runtimes/opencode/opencode-mcp.ts`). (2026-09-29: rejected the spawn config, which is fixed at boot and cannot carry
+  a turn's bearer, and per-turn names, which change the tool list every turn and throw away the provider's prompt
+  cache.) An extension's card-less tool server and its
   agent plugin reach a turn only when the persona's `extensions` list grants that extension (absent: every one). `agent/tools/turn-tools.ts` composes these mounts
   with the mcp-kind cards into one `remote` list, which every runtime projects the same way. An extension's tools are
   answered by the backend host from `api.tools.serve` on a route of its own (`extensions/backend/backend-tools.ts`),

@@ -1,4 +1,4 @@
-import type { CredentialGate, SecretInventoryEntry } from "@intentic/sandbox-contract";
+import type { CredentialGate, CredentialGateKind, SecretInventoryEntry } from "@intentic/sandbox-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { devFillSet } from "../../setup/devFill";
@@ -115,6 +115,17 @@ export function useCredentialGates() {
         setGate,
         removeGate,
     };
+}
+
+// Each secret's host guard. The row reads it off the inventory, so an edit writes and refreshes that; the daemon decides
+// whether the caller may make it (the owner loosens, anybody tightens).
+export function useSecretHosts() {
+    const queryClient = useQueryClient();
+    const setHosts = useMutation({
+        mutationFn: (input: { subject: string; kind: CredentialGateKind; guard: boolean; hosts: string[] }) => sandboxRpc.secrets.setHosts(input),
+        onSuccess: () => void queryClient.invalidateQueries({ queryKey: rpcKey(`secrets.inventory`) }),
+    });
+    return { setHosts };
 }
 
 export function useSecrets() {

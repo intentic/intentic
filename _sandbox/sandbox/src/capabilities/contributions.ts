@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { type CapabilityContribution, contributionDiscriminator, fieldApplies } from "@intentic/extension-manifest";
-import type { CapabilityKind } from "@intentic/sandbox-contract";
+import { type CapabilityKind, normalizeHostPattern } from "@intentic/sandbox-contract";
 import { enabledExtensions, type ExtensionHost, type InstalledExtension } from "../extensions/installed-extensions.js";
 import type { CapabilityCtx } from "./capability.js";
 import { extensionRead } from "./extension-dirs.js";
@@ -134,6 +134,18 @@ export const contributionEnv = (spec: CapabilityContribution, config: Record<str
         });
     }
     return env;
+};
+
+// Expands a cli connector's `hosts` the way `env` is expanded, each read as a host pattern (a URL as its host); one that
+// comes out empty or malformed (an unanswered field) is left out rather than guessed at.
+export const contributionHosts = (spec: CapabilityContribution, config: Record<string, string>): string[] => {
+    if (spec.kind !== "cli" || spec.hosts === undefined) {
+        return [];
+    }
+    const expanded = spec.hosts.map((template) =>
+        template.replace(/\$\{([a-zA-Z][a-zA-Z0-9]*)(:uri)?\}/g, (_match, field: string) => config[field] ?? ""),
+    );
+    return [...new Set(expanded.flatMap((host) => normalizeHostPattern(host) ?? []))];
 };
 
 // Fields a entry marks `secret`; must never be echoed back to the browser. A entry may declare more than one (Slack needs

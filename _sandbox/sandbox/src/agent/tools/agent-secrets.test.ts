@@ -27,9 +27,9 @@ const access = (secrets: NamedSecret[] = [{ name: "CLOUDFLARE_API_TOKEN", value:
             return secrets;
         },
         used: (use) => uses.push(use),
-        release: async (names, lane, detail) => {
+        release: async (names, lane, detail, target) => {
             asked.push({ names, lane, detail });
-            return release(names, lane, detail);
+            return release(names, lane, detail, target);
         },
     };
     return { bundle, uses, reads, asked };

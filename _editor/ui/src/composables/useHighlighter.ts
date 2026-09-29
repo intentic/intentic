@@ -163,6 +163,13 @@ const highlightSliced = async (code: string, lang: string, options: SlicedHighli
 const tokenizeLine = async (line: string, lang: string): Promise<readonly CodeToken[] | undefined> =>
     (await ensureLang(lang))?.codeToTokens(line, { lang, themes: { light: THEME_LIGHT, dark: THEME_DARK } }).tokens[0];
 
+// A few lines' colour tokens, one list per line, the grammar state carried from each line into the next: for a surface
+// that draws its own rows around the code (a gutter, a marked line) rather than taking Shiki's `<pre>`. Unbudgeted and
+// unsliced, so it is for a snippet, never a file.
+const tokenizeLines = async (code: string, lang: string): Promise<readonly (readonly CodeToken[])[] | undefined> =>
+    (await ensureLang(lang))?.codeToTokens(code, { lang, themes: { light: THEME_LIGHT, dark: THEME_DARK }, tokenizeMaxLineLength: MAX_LINE_CHARS })
+        .tokens;
+
 export function useHighlighter() {
-    return { highlight, highlightSliced, tokenizeLine, ensureCore, ensureLang };
+    return { highlight, highlightSliced, tokenizeLine, tokenizeLines, ensureCore, ensureLang };
 }

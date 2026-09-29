@@ -1,4 +1,4 @@
-import { type Capability, LOCAL_MODEL_WINDOW_DEFAULT } from "@intentic/sandbox-contract";
+import { type Capability, LOCAL_MODEL_WINDOW_DEFAULT, LOCAL_MODELS, localModelChoice } from "@intentic/sandbox-contract";
 import { translatedEndpoints } from "./endpoint-translator.js";
 import {
     endpointConfigOf,
@@ -44,17 +44,30 @@ test("endpointConfigOf answers for both endpoint-minting kinds and nothing else"
     expect(mintsEndpointProvider("mcp")).toBe(false);
 });
 
+// A curated pick carries its pinned commit and digest; a path typed by hand has nothing to be pinned against.
 test("a Hugging Face path splits into repo + path for hub's downloadFile, cached by file name", () => {
-    expect(localModelSource({ model: "unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf", gpu: "off", context: "65536" })).toEqual({
+    const curated = localModelChoice("unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf")!;
+    expect(localModelSource({ model: curated.id, gpu: "off", context: "65536" })).toEqual({
         repo: "unsloth/Qwen3.5-9B-GGUF",
         path: "Qwen3.5-9B-Q4_K_M.gguf",
         file: "Qwen3.5-9B-Q4_K_M.gguf",
+        revision: curated.revision,
+        sha256: curated.sha256,
     });
     expect(localModelSource({ model: "owner/repo/sub/dir/model.gguf", gpu: "off", context: "65536" })).toEqual({
         repo: "owner/repo",
         path: "sub/dir/model.gguf",
         file: "model.gguf",
     });
+});
+
+// A branch moves under a card that did not; a digest that is not a sha256 would refuse every download of its file.
+test("every curated pin is a commit and a sha256, never a branch", () => {
+    for (const choice of LOCAL_MODELS) {
+        const source = localModelSource({ model: choice.id, gpu: "off", context: "65536" });
+        expect(source?.revision).toMatch(/^[0-9a-f]{40}$/);
+        expect(source?.sha256).toMatch(/^[0-9a-f]{64}$/);
+    }
 });
 
 test("the custom escape hatch takes the URL verbatim and keys the cache by its basename, query stripped", () => {

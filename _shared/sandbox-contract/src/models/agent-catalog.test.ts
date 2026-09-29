@@ -126,6 +126,9 @@ test("the ceiling has nothing to disclose; a floor names what it lacks", () => {
     expect(grokCaps.steering).toBe(false);
     expect(grokCaps.isolation).toBe("cwd");
     expect(limitationsOf(grokCaps).length).toBeGreaterThan(0);
+    // The turn's remote servers, as Codex takes them: mounted on the shared OpenCode server per conversation.
+    expect(grokCaps.mcp).toBe("http");
+    expect(limitationsOf(grokCaps)).toContain("MCP servers only, none of the daemon's own tools, no plugins");
 
     const acpCaps = capabilitiesOf("some-installed-agent", "native");
     expect(acpCaps.mcp).toBe("http");
@@ -178,7 +181,10 @@ test("the safety axes disclose the middle answer differently from the floor", ()
 
     expect(codexCaps.rulebook).toBe("approval");
     expect(piCaps.rulebook).toBe("none");
-    expect(grokCaps.rulebook).toBe("refuse-only");
+    expect(grokCaps.rulebook).toBe("approval");
+    // A hold parks on a card now that the turn's watchdog is held while it waits, so nothing says it cannot hold.
+    expect(limitationsOf(grokCaps)).toContain("command rules apply only to calls this agent raises");
+    expect(limitationsOf(grokCaps)).not.toContain("command rules can refuse but not hold");
 
     expect(limitationsOf(claudeCaps).join(" ")).not.toContain("command rules");
     expect(limitationsOf(claudeCaps).join(" ")).not.toContain("stored secrets");

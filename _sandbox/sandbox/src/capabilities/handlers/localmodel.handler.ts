@@ -1,11 +1,21 @@
 import { existsSync } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { errorMessage } from "@intentic/base/errors";
 import type { Capability, CapabilityStatus, LocalModelConfig } from "@intentic/sandbox-contract";
 import { packFragment } from "../../environment/packs.js";
 import { estimatedModelMemory, fitsBudget, llamaServerMissing, localModelBudget, localModelGpu } from "../../endpoints/local-model-fit.js";
-import { abortWeights, ensureWeights, fileSize, weightsGb as gb, weightsProgress, weightsReady } from "../../endpoints/local-model-weights.js";
+import { llamaServerProcesses, localModelLogPath, type LoadReport, offloadShortfall, readLoadReport } from "../../endpoints/local-model-load.js";
+import {
+    abortWeights,
+    ensureWeights,
+    fileSize,
+    verifyWeights,
+    weightsGb as gb,
+    weightsProgress,
+    weightsReady,
+    weightsTrusted,
+} from "../../endpoints/local-model-weights.js";
 import {
     fitsAgentTurn,
     localModelLabel,
@@ -42,6 +52,9 @@ const weightsPath = (ctx: CapabilityCtx, source: LocalModelSource): string => lo
 // download can be what several entries are waiting on, while a job, a failure and the GPU's one owner belong to a entry.
 const jobs = new Map<string, { readonly promise: Promise<void>; readonly abort: AbortController }>();
 const failures = new Map<string, string>();
+// Where each serving entry's layers went, read once its server answers: the log it wrote while loading is complete by
+// then. Only kept where a GPU was granted, the one case where "on the CPU" is news; cleared when the server stops.
+const loads = new Map<string, LoadReport>();
 let selectedModelId: string | undefined;
 let serverSwitch = Promise.resolve();
 
@@ -50,19 +63,21 @@ let serverSwitch = Promise.resolve();
 //   --parallel 1 llama.cpp defaults to 4 slots, each reserving the full window again
 //   --cache-type q8_0 halves the reservation at negligible quality cost
 //   --jinja curated models carry their own chat/tool template in the GGUF
+//   --log-file where the load says how many layers reached the GPU, which no HTTP route of the pinned build does
 export const serverCommand = (path: string, port: number, window: number): string => {
     const gpuFit = localModelGpu() === "granted" ? " --gpu-layers auto --fit on" : "";
-    return `llama-server -m '${path}' --host 127.0.0.1 --port ${port} --ctx-size ${window} --parallel 1 --cache-type-k q8_0 --cache-type-v q8_0 --jinja${gpuFit}`;
+    return `llama-server -m '${path}' --host 127.0.0.1 --port ${port} --ctx-size ${window} --parallel 1 --cache-type-k q8_0 --cache-type-v q8_0 --jinja --log-file '${localModelLogPath(port)}'${gpuFit}`;
 };
 
-// The same budget the connect view sizes its recommendation against (local-model-fit.ts): a view reading one number and
-// this check refusing on another is how a entry recommends a model it then will not start.
+// Fits at all, the one figure a start is refused on (local-model-fit.ts): GPU and memory together, since llama.cpp splits
+// a model that fits nowhere whole. The connect view's offers are held to full speed as well, so it never offers what
+// this refuses; a model that fits only this way starts, and its row says where its layers went.
 const admitModel = async (path: string, window: number): Promise<void> => {
     const [weightsBytes, budget] = await Promise.all([fileSize(path), localModelBudget()]);
     const estimated = estimatedModelMemory(weightsBytes, window);
     if (!fitsBudget(budget.budgetBytes, weightsBytes, window)) {
         throw new Error(
-            `model start refused before it could exhaust the sandbox: ${gb(estimated)} estimated for weights + ${localModelWindowLabel(window)} KV cache, but the safe GPU/container budget is ${gb(budget.budgetBytes)}. Reduce the conversation window or choose smaller weights.`,
+            `model start refused before it could exhaust the sandbox: ${gb(estimated)} estimated for weights + ${localModelWindowLabel(window)} KV cache, but GPU and memory together allow ${gb(budget.budgetBytes)}. Reduce the conversation window or choose smaller weights.`,
         );
     }
 };
@@ -85,6 +100,7 @@ const stopOtherServers = async (ctx: CapabilityCtx, id: string): Promise<void> =
     const others = (await ctx.capabilities.list()).filter((capability) => capability.kind === "localmodel" && capability.id !== id);
     for (const other of others) {
         stopWatching(other.id);
+        loads.delete(other.id);
         // oxlint-disable-next-line eslint/no-await-in-loop -- one GPU owner at a time is the invariant this loop establishes
         await ctx.panels.stop(localModelPanelKey(other.id));
         // A stopped endpoint must not stay routable just because its last catalog survived on disk.
@@ -131,13 +147,28 @@ const waitUntilServing = async (ctx: CapabilityCtx, id: string, signal: AbortSig
 // Held outside `jobs` on purpose: folding it in would block a second Update on the whole load via `jobs.has`.
 const servings = new Map<string, AbortController>();
 
+const recordLoad = async (id: string): Promise<void> => {
+    const report = localModelGpu() === "granted" ? await readLoadReport(localModelPort(id)) : undefined;
+    if (report === undefined) {
+        loads.delete(id);
+        return;
+    }
+    loads.set(id, report);
+};
+
 const syncWhenServing = (ctx: CapabilityCtx, id: string): void => {
     servings.get(id)?.abort();
+    loads.delete(id);
     const abort = new AbortController();
     servings.set(id, abort);
     void waitUntilServing(ctx, id, abort.signal)
         .then(async (serving) => {
             if (serving && !abort.signal.aborted) {
+                await recordLoad(id);
+                const shortfall = offloadShortfall(loads.get(id));
+                if (shortfall !== undefined) {
+                    ctx.logger.warn(`localmodel ${id}: ${shortfall.detail}`);
+                }
                 await ctx.syncEndpoints();
             }
         })
@@ -172,6 +203,9 @@ const startInBackground = (ctx: CapabilityCtx, id: string, source: LocalModelSou
         if (!(await weightsReady(destination))) {
             await ensureWeights(source, destination);
         }
+        // Before a start, never after: free for weights this cache hashed as they arrived, one read for weights fetched
+        // before the pin, and a mismatch deletes them rather than serving them.
+        await verifyWeights(source, destination);
         if (abort.signal.aborted) {
             return;
         }
@@ -209,6 +243,20 @@ const windowAdvice = (window: number): string =>
     fitsAgentTurn(window)
         ? ""
         : " — enough for the one-shot helper jobs (titles, commit messages), not for a full agent turn, whose tools and instructions fill a window this size on their own. Raise it on the entry to chat with this model.";
+
+// Where a granted GPU is not doing the work, said on the serving row: a model that fits only across GPU and memory
+// together runs at the CPU's pace, and nothing else would tell the owner why it is slow. The advice follows the cause.
+const offloadStatus = (id: string, askedForGpu: boolean, running: string): CapabilityStatus | undefined => {
+    const shortfall = offloadShortfall(loads.get(id));
+    if (shortfall === undefined) {
+        return undefined;
+    }
+    const advice =
+        shortfall.code === "gpu-partial" || askedForGpu
+            ? "; smaller weights or a smaller window would fit it whole"
+            : "; turn on GPU on this entry and rebuild to use one";
+    return { state: "active", code: shortfall.code, detail: `${running} · ${shortfall.detail}${advice}` };
+};
 
 // Same GPU sentences as the docker entry, minus the toolkit clause (no nested runtime here): pending, error, or silent
 // once the flag rode.
@@ -322,12 +370,8 @@ export const localModelHandler: CapabilityHandler = {
         if (await serverHealthy(localModelPort(id))) {
             // Window joins the model name: two rows on the same weights can be a working agent or a helper-only rung.
             const window = localModelWindow(model);
-            return (
-                gpuStatus(config) ?? {
-                    state: "active",
-                    detail: `${localModelLabel(model)} · ${localModelWindowLabel(window)} window${windowNote(window)}`,
-                }
-            );
+            const running = `${localModelLabel(model)} · ${localModelWindowLabel(window)} window${windowNote(window)}`;
+            return gpuStatus(config) ?? offloadStatus(id, gpuAsked(config), running) ?? { state: "active", detail: running };
         }
         const held = await weightsReady(path);
         // No progress yet means the connection hasn't opened; `held` says whether this is loading or still fetching.
@@ -351,6 +395,7 @@ export const localModelHandler: CapabilityHandler = {
         jobs.get(id)?.abort.abort();
         stopWatching(id);
         failures.delete(id);
+        loads.delete(id);
         await ctx.panels.stop(localModelPanelKey(id));
         await ctx.endpointModels.forget(id);
         const source = localModelSource(config as LocalModelConfig);
@@ -369,6 +414,7 @@ export const localModelHandler: CapabilityHandler = {
             jobs.get(from)?.abort.abort();
             stopWatching(from);
             failures.delete(from);
+            loads.delete(from);
             await ctx.panels.stop(localModelPanelKey(from));
             await ctx.endpointModels.forget(from);
         },
@@ -377,24 +423,8 @@ export const localModelHandler: CapabilityHandler = {
 
 // The llama-server for one entry, found by the port it was told to bind. The panel manager knows a tmux session, not
 // a pid, and the port is the one thing the command line is guaranteed to carry.
-const PROC_PID = /^\d+$/u;
-
-const serverPidOf = async (port: number): Promise<number | undefined> => {
-    const entries = await readdir("/proc").catch(() => [] as string[]);
-    const found = await Promise.all(
-        entries
-            .filter((entry) => PROC_PID.test(entry))
-            .map(async (entry) => {
-                const argv = (await readFile(`/proc/${entry}/cmdline`, "utf8").catch(() => "")).split("\0");
-                // `--port` and its VALUE as separate argv words, never a substring of the line: port 4048 would
-                // otherwise match the server on 40481 and unload the wrong model.
-                const flag = argv.indexOf("--port");
-                const isServer = argv[0]?.includes("llama-server") === true;
-                return isServer && flag >= 0 && argv[flag + 1] === String(port) ? Number(entry) : undefined;
-            }),
-    );
-    return found.find((pid) => pid !== undefined);
-};
+const serverPidOf = async (port: number): Promise<number | undefined> =>
+    (await llamaServerProcesses()).find((server) => server.port === port)?.pid;
 
 const cpuTicksOf = async (pid: number): Promise<number | undefined> =>
     readFile(`/proc/${pid}/stat`, "utf8")
@@ -427,6 +457,7 @@ export const unloadIdleLocalModels = async (ctx: CapabilityCtx, idleMs: number):
         idle.map(async (id) => {
             // The watcher first: it polls /health, and a stop it did not expect reads to it as a load that failed.
             stopWatching(id);
+            loads.delete(id);
             await ctx.panels.stop(localModelPanelKey(id));
             ctx.logger.info(`localmodel ${id}: unloaded after ${Math.round(idleMs / 60_000)} idle minutes, it reloads on the next turn that asks`);
         }),
@@ -454,10 +485,19 @@ export const wakeLocalModel = async (ctx: CapabilityCtx, id: string, timeoutMs: 
         if (!(await weightsReady(path)) || (await llamaServerMissing())) {
             return false;
         }
-        if (!ctx.panels.running(localModelPanelKey(id))) {
-            await startServer(ctx, id, path, localModelWindow(capability.config as LocalModelConfig));
+        const window = localModelWindow(capability.config as LocalModelConfig);
+        if (!(await weightsTrusted(source, path))) {
+            // Weights fetched before the pin are read once before they serve. The full start does that in the
+            // background, and this turn waits on it no longer than a wake may: hashing gigabytes is not a turn's to hold.
+            startInBackground(ctx, id, source, path, window);
+        } else if (!ctx.panels.running(localModelPanelKey(id))) {
+            await startServer(ctx, id, path, window);
         }
-        return await waitUntilServing(ctx, id, AbortSignal.timeout(timeoutMs));
+        const serving = await waitUntilServing(ctx, id, AbortSignal.timeout(timeoutMs));
+        if (serving) {
+            await recordLoad(id);
+        }
+        return serving;
     } catch (error) {
         ctx.logger.warn(`localmodel ${id}: wake failed, ${errorMessage(error)}`);
         return false;

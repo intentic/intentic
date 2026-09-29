@@ -44,7 +44,8 @@ flowchart LR
   fallback when no worker runs or one dies. A caller whose work is sometimes cheap checks that first and runs it
   inline, as `tableDiffClient.ts` in the editor does.
 - **Translations.** `@intentic/ui/i18n` is the only i18n import path. It registers the kit's own words and loads one
-  chunk per language.
+  chunk per language. `staticCopy()` lists every loaded message that renders as written, which is how session replay
+  tells the app's wording from workspace text (`_editor/web/src/app/replayPrivacy.ts`).
 - **Tests and preview.** The kit's suites live in `_editor/web/src/design-system`. The editor's dev server shows
   every component variant at `/kit`.
 

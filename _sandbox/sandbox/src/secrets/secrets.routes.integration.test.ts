@@ -124,6 +124,42 @@ test("secrets.inventory joins the use ledger: env keys by name, a capability by 
     expect(byKey.get("HOST_SSH_KEY")?.lastUse).toBeUndefined();
 });
 
+test("secrets.inventory joins each entry's host guard: the owner's by name, on or off, a connector's own by capability", async () => {
+    const github: Capability = { id: "github", kind: "cli", config: { provider: "github", token: "gh-token" } };
+    const svc = services({
+        workspace: secretsWorkspace(),
+        capabilities: memoryCapabilitiesStore([github]),
+        hostGuards: async () => [
+            { subject: "EXTRA_TOKEN", kind: "secret", guard: true, hosts: ["api.example.com"], source: "owner" },
+            { subject: "HOST_SSH_KEY", kind: "secret", guard: false, hosts: ["ssh.example.com"], source: "owner" },
+            { subject: "github", kind: "capability", guard: true, hosts: ["api.github.com", "github.com"], source: "connector" },
+        ],
+    });
+    const { entries } = await clientFor(createApp(svc)).secrets.inventory();
+    const byKey = new Map(entries.map((entry) => [entry.key, entry]));
+    expect(byKey.get("EXTRA_TOKEN")?.hosts).toEqual({ guard: true, list: ["api.example.com"], source: "owner" });
+    expect(byKey.get("HOST_SSH_KEY")?.hosts).toEqual({ guard: false, list: ["ssh.example.com"], source: "owner" });
+    expect(byKey.get("github")?.hosts).toEqual({ guard: true, list: ["api.github.com", "github.com"], source: "connector" });
+    expect(byKey.get("FORGEJO_ADMIN_PASSWORD")?.hosts).toBeUndefined();
+});
+
+// The request `secrets hosts … add` sends, raw: the subject in the path and again in the body, as the CLI writes it.
+test("secrets.setHosts takes the body the secrets CLI sends, and hosts answers the guard it stored", async () => {
+    const svc = services();
+    const app = createApp(svc);
+    await clientFor(app).secrets.set({ key: "GITHUB_TOKEN", value: "ghp_value" });
+    const response = await app.request("/secrets/hosts/GITHUB_TOKEN", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ subject: "GITHUB_TOKEN", guard: true, hosts: ["api.github.com"], conversationId: "conv-cli" }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ guard: true, hosts: ["api.github.com"] });
+    expect(await clientFor(app).secrets.hosts()).toEqual({
+        guards: [{ subject: "GITHUB_TOKEN", kind: "secret", guard: true, hosts: ["api.github.com"], source: "owner" }],
+    });
+});
+
 test("secrets.inventory answers pre-scaffold with capability/provider entries only", async () => {
     const client = clientFor(createApp(services()));
     const { entries } = await client.secrets.inventory();

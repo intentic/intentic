@@ -69,8 +69,12 @@ export const secretsServer = (deps: SecretsToolsDeps): McpSdkServerConfigWithIns
                         }
                     })();
                     // Approval gate before the keystrokes, since a typed value can't be undone; asked with the host as
-                    // destination.
-                    const released = await deps.secrets.release([name], "browser", host);
+                    // destination, which a host-limited secret's list is checked against.
+                    const released = await deps.secrets.release([name], "browser", host, {
+                        kind: "page",
+                        url: page.url(),
+                        tool: "mcp__secrets__type_secret",
+                    });
                     if ("refusal" in released) {
                         return fail(released.refusal);
                     }

@@ -55,6 +55,12 @@
                 "env": {
                     "GITHUB_TOKEN": "${token}"
                 },
+                "hosts": [
+                    "api.github.com",
+                    "github.com",
+                    "uploads.github.com",
+                    "*.githubusercontent.com"
+                ],
                 "skill": "skills/github/SKILL.md",
                 "probe": {
                     "url": "https://api.github.com/user",
@@ -118,6 +124,9 @@
                     "GITLAB_TOKEN": "${token}",
                     "GITLAB_URL": "${url}"
                 },
+                "hosts": [
+                    "${url}"
+                ],
                 "skill": "skills/gitlab/SKILL.md",
                 "probe": {
                     "url": "${url}/api/v4/user",
@@ -167,6 +176,9 @@
                 "env": {
                     "NPM_TOKEN": "${token}"
                 },
+                "hosts": [
+                    "registry.npmjs.org"
+                ],
                 "skill": "skills/npm/SKILL.md"
             },
             {
@@ -223,6 +235,9 @@
                     "FIRECRAWL_API_KEY": "${apiKey}",
                     "FIRECRAWL_API_URL": "${url}"
                 },
+                "hosts": [
+                    "${url}"
+                ],
                 "skill": "skills/firecrawl/SKILL.md",
                 "probe": {
                     "url": "${url}/v1/team/credit-usage",
@@ -307,6 +322,9 @@
                     "SENTRY_URL": "${url}",
                     "SENTRY_ORG": "${org}"
                 },
+                "hosts": [
+                    "${url}"
+                ],
                 "skill": "skills/sentry/SKILL.md",
                 "probe": {
                     "url": "${url}/api/0/organizations/",
@@ -353,6 +371,9 @@
                     "REDMINE_URL": "${url}",
                     "REDMINE_API_KEY": "${apiKey}"
                 },
+                "hosts": [
+                    "${url}"
+                ],
                 "skill": "skills/redmine/SKILL.md",
                 "probe": {
                     "url": "${url}/users/current.json",
@@ -399,6 +420,9 @@
                     "OUTLINE_URL": "${url}",
                     "OUTLINE_API_KEY": "${apiKey}"
                 },
+                "hosts": [
+                    "${url}"
+                ],
                 "skill": "skills/outline/SKILL.md",
                 "probe": {
                     "url": "${url}/api/auth.info",
@@ -440,6 +464,9 @@
                 "env": {
                     "NOTION_TOKEN": "${token}"
                 },
+                "hosts": [
+                    "api.notion.com"
+                ],
                 "skill": "skills/notion/SKILL.md",
                 "probe": {
                     "url": "https://api.notion.com/v1/users/me",
@@ -482,6 +509,10 @@
                 "env": {
                     "STRIPE_API_KEY": "${apiKey}"
                 },
+                "hosts": [
+                    "api.stripe.com",
+                    "files.stripe.com"
+                ],
                 "skill": "skills/stripe/SKILL.md",
                 "probe": {
                     "url": "https://api.stripe.com/v1/account",
@@ -541,6 +572,11 @@
                     "SHAREPOINT_CLIENT_SECRET": "${clientSecret}",
                     "SHAREPOINT_HOSTNAME": "${hostname}"
                 },
+                "hosts": [
+                    "login.microsoftonline.com",
+                    "graph.microsoft.com",
+                    "${hostname}"
+                ],
                 "skill": "skills/sharepoint/SKILL.md"
             },
             {
@@ -579,6 +615,9 @@
                     "SIGNOZ_URL": "${url}",
                     "SIGNOZ_API_KEY": "${apiKey}"
                 },
+                "hosts": [
+                    "${url}"
+                ],
                 "skill": "skills/signoz/SKILL.md",
                 "probe": {
                     "url": "${url}/api/v1/orgs",
@@ -635,6 +674,9 @@
                     "POSTHOG_PROJECT_ID": "${projectId}",
                     "POSTHOG_API_KEY": "${apiKey}"
                 },
+                "hosts": [
+                    "${host}"
+                ],
                 "skill": "skills/posthog/SKILL.md",
                 "probe": {
                     "url": "${host}/api/projects/${projectId}/",
@@ -688,6 +730,9 @@
                     "KOMODO_API_KEY": "${apiKey}",
                     "KOMODO_API_SECRET": "${apiSecret}"
                 },
+                "hosts": [
+                    "${url}"
+                ],
                 "skill": "skills/komodo/SKILL.md",
                 "probe": {
                     "url": "${url}/auth",
@@ -736,6 +781,9 @@
                     "CLOUDFLARE_API_TOKEN": "${token}",
                     "CLOUDFLARE_ACCOUNT_ID": "${accountId}"
                 },
+                "hosts": [
+                    "api.cloudflare.com"
+                ],
                 "skill": "skills/cloudflare/SKILL.md",
                 "probe": {
                     "url": "https://api.cloudflare.com/client/v4/user/tokens/verify",
@@ -785,6 +833,10 @@
                     "FLY_API_TOKEN": "${token}",
                     "FLY_ORG": "${org}"
                 },
+                "hosts": [
+                    "api.machines.dev",
+                    "api.fly.io"
+                ],
                 "skill": "skills/fly/SKILL.md",
                 "probe": {
                     "url": "https://api.machines.dev/v1/tokens/current",
@@ -841,6 +893,9 @@
                 "env": {
                     "POSTGRES_URL": "postgresql://${user:uri}:${password:uri}@${host}:${port}/${database:uri}"
                 },
+                "hosts": [
+                    "${host}"
+                ],
                 "skill": "skills/postgres/SKILL.md",
                 "fragment": "env/postgres.Dockerfile"
             },
@@ -895,6 +950,9 @@
                     "MYSQL_PASSWORD": "${password}",
                     "MYSQL_DATABASE": "${database}"
                 },
+                "hosts": [
+                    "${host}"
+                ],
                 "skill": "skills/mysql/SKILL.md",
                 "fragment": "env/mysql.Dockerfile"
             }

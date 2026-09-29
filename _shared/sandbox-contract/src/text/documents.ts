@@ -14,6 +14,30 @@ export const isDocumentPath = (path: string): boolean => {
     return DOCUMENT_EXTENSIONS.some((extension) => lower.endsWith(extension));
 };
 
+// A deliverable is a file a turn hands a person to open rather than read as code: an office document, a PDF, a web
+// page. The daemon names the ones a command wrote on its card (agent/tools/produced-documents.ts) and the chat lists a
+// turn's under its answer, so the two ask this one table. Markdown stays out: the chat already draws it as a document.
+export type DeliverableKind = "docx" | "pptx" | "xlsx" | "pdf" | "html";
+
+const DELIVERABLE_BY_EXTENSION = new Map<string, DeliverableKind>([
+    ["docx", "docx"],
+    ["pptx", "pptx"],
+    ["xlsx", "xlsx"],
+    ["pdf", "pdf"],
+    ["html", "html"],
+    ["htm", "html"],
+]);
+
+// The kind of deliverable a path names by its extension, or undefined for any other file (a dotfile included).
+export const deliverableKindOf = (path: string): DeliverableKind | undefined => {
+    const name = path.slice(path.lastIndexOf("/") + 1).toLowerCase();
+    const dot = name.lastIndexOf(".");
+    return dot > 0 ? DELIVERABLE_BY_EXTENSION.get(name.slice(dot + 1)) : undefined;
+};
+
+// Every extension a deliverable is written with, for a reader that has to find the names in free text.
+export const DELIVERABLE_EXTENSIONS = [...DELIVERABLE_BY_EXTENSION.keys()];
+
 // Matched by directory, not name (a mint-fresh phrase like `map-of-this-wiggly-spring.md` carries no signal). The
 // directory is declared in workspace-state.ts, the one exception to its lock.
 export const isPlanDocumentPath = (path: string): boolean => path.startsWith(`${PLAN_DOCUMENTS_DIR}/`);

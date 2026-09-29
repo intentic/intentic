@@ -13,6 +13,7 @@ import { reloadOnHotUpdate } from "../../../app/hotReload";
 import {
     acpProviders,
     endpointProviders,
+    type ModelOption,
     nativeReady,
     endpointsLoaded,
     providerCommands,
@@ -103,14 +104,17 @@ const loadProviderModelsOnce = async (target: AgentProvider): Promise<void> => {
     }
     providerModels.value = {
         ...providerModels.value,
-        [target]: body.models.map((entry) => ({
-            label: entry.label,
-            value: entry.id,
-            ...(entry.efforts !== undefined ? { efforts: entry.efforts } : {}),
-            ...(entry.description !== undefined ? { description: entry.description } : {}),
-            ...(entry.badges !== undefined ? { badges: entry.badges } : {}),
-            ...(entry.availableAt !== undefined ? { availableAt: entry.availableAt } : {}),
-        })),
+        [target]: body.models.map((entry) => {
+            const option: ModelOption = {
+                label: entry.label,
+                value: entry.id,
+                ...(entry.efforts !== undefined ? { efforts: entry.efforts } : {}),
+                ...(entry.description !== undefined ? { description: entry.description } : {}),
+                ...(entry.badges !== undefined ? { badges: entry.badges } : {}),
+                ...(entry.availableAt !== undefined ? { availableAt: entry.availableAt } : {}),
+            };
+            return entry.helperOnly === undefined ? option : { ...option, helperOnly: entry.helperOnly };
+        }),
     };
     providerDefaultModel.value = { ...providerDefaultModel.value, [target]: body.default };
     // Moves an open chat off a model this catalog no longer offers (renamed, retired, or a rung the provider has

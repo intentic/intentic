@@ -19,6 +19,7 @@ The hooks and the bundled commands run on Node.js 20.11 or later, which has to b
 | A prompt is sent | `iq` points a prompt that matches earlier work at the session that did it. | `iq` |
 | A Bash command succeeds | The output is cleaned before Claude reads it: progress bars, install chatter, repeated lines, the middle of huge logs. A footer names the command that reads the full text back. | `output_cleaners`, `cleaners` |
 | Claude reads a document | `fileq` turns docx, pdf, xlsx, pptx, epub, ipynb, images, audio and archives into markdown. | `fileq` |
+| Claude makes a document | `fileq check` lists what is wrong with a docx, pptx, xlsx or pdf by slide, page or cell, and `fileq render` draws its pages as PNGs for Claude to look at (with LibreOffice and poppler installed). The fileq skill says to run both before handing the file over. | `fileq` |
 | In the background | Every document in the project keeps a markdown shadow that a read finds ready. A sweep runs when a session opens and at most every ten minutes as prompts arrive, and each document Claude writes is rendered at once. Off by default. | `shadows` |
 
 A failed command reaches Claude unchanged. Outside an Intentic sandbox there is no secret store to mask values from, so the cleaners mask only text that looks like a credential: an assignment to a name like `API_KEY` or `TOKEN` whose value looks generated, bearer tokens, AWS access keys, and passwords in URLs.
@@ -89,7 +90,7 @@ The plugin is built from the packages that own each mechanism, so the sandbox an
 
 - [@intentic/output-cleaners](../output-cleaners): the cleaners, `filterRun`, and `summarizeStats`.
 - [@intentic/agent-context](../agent-context): the project map, the reader for field notes and the brief their writer gets, how a session draws its arm, what each turn is scored on, the comparison between the arms, and the transcript reader.
-- [@intentic/fileq](../fileq): the CLI, bundled as `dist/fileq.mjs`, and the text of its skill.
+- [@intentic/fileq](../fileq): the CLI, bundled as `dist/fileq.mjs`, the text of its skill, and its NOTICE (rules adapted from SurfSense under Apache-2.0), copied to `generated/fileq-NOTICE`.
 - [@intentic/iq](../../_search/iq): the iq skill and the hint a session opens with. The build rewords the hint's two sandbox phrases for a plain install and fails if they change upstream.
 
 The build writes `dist/` (one esbuild bundle per hook and command, so an install needs no `node_modules`) and `generated/` (the skills and the output style, from the texts those packages own). Both are ignored by git.

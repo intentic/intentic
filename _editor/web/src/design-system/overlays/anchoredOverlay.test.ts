@@ -28,7 +28,7 @@ const open = ref(false);
 const anchor = ref<HTMLElement>();
 let app: ReturnType<typeof createApp> | undefined;
 
-const mountPicker = (): void => {
+const mountPicker = (props: { restoreFocus?: boolean } = {}): void => {
     jest.spyOn(HTMLElement.prototype, `getBoundingClientRect`).mockReturnValue(rect(PANEL));
     app = createApp(
         defineComponent({
@@ -38,6 +38,7 @@ const mountPicker = (): void => {
                     h(
                         AnchoredOverlay,
                         {
+                            ...props,
                             anchor: anchor.value,
                             modelValue: open.value,
                             "onUpdate:modelValue": (value: boolean) => {
@@ -97,4 +98,24 @@ it(`places it again on every open, not only the first`, async () => {
     await settle();
 
     expect(boxStyle().top).toBe(`252px`);
+});
+
+// A panel a press opened hands focus back to what was pressed, so Tab carries on from there. One the pointer raised
+// (a hover preview) says not to: its anchor never had focus, and taking it on a mouse's say-so moves the keyboard's place.
+it(`hands focus back to its anchor on close, unless told not to`, async () => {
+    mountPicker();
+    open.value = true;
+    await settle();
+    open.value = false;
+    await settle();
+    expect(document.activeElement).toBe(anchor.value ?? null);
+
+    app?.unmount();
+    document.body.replaceChildren();
+    mountPicker({ restoreFocus: false });
+    open.value = true;
+    await settle();
+    open.value = false;
+    await settle();
+    expect(document.activeElement).toBe(document.body);
 });

@@ -222,3 +222,87 @@ test("a stream read that lands in time is its own answer; one that doesn't is EX
     await advanceTimersByTimeAsync(50);
     expect(await raced).toBe(EXPIRED);
 });
+
+test("a held clock runs neither deadline, and its release restarts the silence and moves the cap out by the time held", () => {
+    jest.setSystemTime(START);
+    const clock = turnWatchdog({ inactivityMs: 100, maxTurnMs: 1_000 });
+
+    jest.setSystemTime(START + 50);
+    const release = clock.hold();
+    // An hour on a card is past both deadlines, and neither has passed.
+    jest.setSystemTime(START + 3_600_050);
+    expect(clock.remaining()).toBe(Number.POSITIVE_INFINITY);
+
+    release();
+    expect(clock.remaining()).toBe(100);
+    // The cap is what it was when the hold began, 950ms of turn left, however long the answer took.
+    jest.setSystemTime(START + 3_600_050 + 900);
+    clock.touch();
+    expect(clock.remaining()).toBe(50);
+});
+
+test("holds nest: the clock runs again only once the last one is released, and a release counts once", () => {
+    jest.setSystemTime(START);
+    const clock = turnWatchdog({ inactivityMs: 100, maxTurnMs: 10_000 });
+    const first = clock.hold();
+    const second = clock.hold();
+
+    first();
+    first();
+    jest.setSystemTime(START + 500);
+    expect(clock.remaining()).toBe(Number.POSITIVE_INFINITY);
+
+    second();
+    expect(clock.remaining()).toBe(100);
+});
+
+test("a caller's own deadline still runs while the clock is held", () => {
+    jest.setSystemTime(START);
+    const clock = turnWatchdog({ inactivityMs: 100, maxTurnMs: 10_000 });
+    clock.hold();
+
+    expect(clock.remaining(START + 30)).toBe(30);
+});
+
+test("a read held on a person outlasts the silence window, which runs again in full from the answer", async () => {
+    jest.useFakeTimers();
+    // A window longer than a held wait's look, as the real one is, so the release is noticed before the window ends.
+    const clock = turnWatchdog({ inactivityMs: 5_000, maxTurnMs: 600_000 });
+    const answers: (string | typeof EXPIRED)[] = [];
+    void beforeDeadline(new Promise<string>(() => {}), clock).then((value) => {
+        answers.push(value);
+    });
+
+    // Taken while the read is already waiting, as a permission ask lands mid-stream.
+    await advanceTimersByTimeAsync(20);
+    const release = clock.hold();
+    await advanceTimersByTimeAsync(60_000);
+    expect(answers).toEqual([]);
+
+    release();
+    await advanceTimersByTimeAsync(4_999);
+    expect(answers).toEqual([]);
+    await advanceTimersByTimeAsync(1);
+    expect(answers).toEqual([EXPIRED]);
+});
+
+test("a pull on a held clock parks without expiring, and expires a whole window after the release", async () => {
+    jest.useFakeTimers();
+    const clock = turnWatchdog({ inactivityMs: 5_000, maxTurnMs: 600_000 });
+    const release = clock.hold();
+    const pull = watchedPull({ take: (): string | undefined => undefined, settled: () => false, clock, wait: idleWait() });
+
+    const answers: (string | typeof EXPIRED | typeof SETTLED)[] = [];
+    const pulled = pull().then((value) => {
+        answers.push(value);
+    });
+    await advanceTimersByTimeAsync(30_000);
+    expect(answers).toEqual([]);
+
+    release();
+    await advanceTimersByTimeAsync(4_999);
+    expect(answers).toEqual([]);
+    await advanceTimersByTimeAsync(1);
+    await pulled;
+    expect(answers).toEqual([EXPIRED]);
+});

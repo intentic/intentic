@@ -1,4 +1,5 @@
 import { packFragment, readPack } from "../../environment/packs.js";
+import { localModelLogPath } from "../../endpoints/local-model-load.js";
 import { serverCommand } from "./localmodel.handler.js";
 import { registry } from "../registry.js";
 
@@ -46,6 +47,12 @@ test("llama-server leaves GPU layers on auto-fit instead of forcing every layer 
             process.env["SANDBOX_GPU"] = before;
         }
     }
+});
+
+// Where the layers went is said only in the load's log (no HTTP route of the pinned build carries it), so every start
+// writes one, per port, to the path the offload check reads.
+test("llama-server writes its load to the log the offload check reads", () => {
+    expect(serverCommand("/models/m.gguf", 12_345, 65_536)).toContain(`--log-file '${localModelLogPath(12_345)}'`);
 });
 
 // Every field must echo, `url` included: nothing here is a credential, and an incomplete echo would vault a field into

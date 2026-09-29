@@ -849,7 +849,6 @@
         "secretEntryRow": {
             "accessTab": "Zakładka Dostęp",
             "agentUsesFreely": "Agent używa swobodnie",
-            "agentUseWithoutAsking": "Agent może tego używać, nikogo nie pytając.",
             "cancelRemove": "Anuluj usuwanie",
             "ciOutOfDate": "CI nieaktualne",
             "ciSynced": "CI zsynchronizowane",
@@ -868,7 +867,6 @@
             "namedPersonReleases": "Zwalnia wskazana osoba",
             "needsApproval": "Wymaga zgody",
             "nobodyNamedYetGive": "Nie można jeszcze nikogo wskazać. Daj komuś dostęp w",
-            "nobodyToApproveOnly": "Nikt nie musi tego zatwierdzać. Tylko właściciel może to zmienić.",
             "once": "Ten jeden raz",
             "oneClickCoversEvery": "Jedno kliknięcie obejmuje każde użycie przez resztę tej rozmowy.",
             "oneClickReleasesExactly": "Jedno kliknięcie zwalnia dokładnie jedno użycie. Następne pyta znowu.",
@@ -1482,6 +1480,15 @@
         "chatTurnAsides": {
             "showSteps": "Pokaż kroki",
             "thinking": "Myśli"
+        },
+        "chatTurnDeliverables": {
+            "open": "Otwórz {name}, {kind}",
+            "page": "Strona internetowa",
+            "pdf": "PDF",
+            "region": "Dokumenty z tej tury",
+            "sheet": "Arkusz kalkulacyjny",
+            "slides": "Prezentacja",
+            "word": "Dokument Word"
         },
         "chatTurnShots": {
             "open": "Otwórz {name}",
@@ -4731,6 +4738,17 @@
         "fileBreadcrumb": {
             "alsoViewingFile": "też ogląda ten plik"
         },
+        "fileRefPeek": {
+            "lines": "{count} wiersz | {count} wiersze | {count} wierszy",
+            "items": "{count} element | {count} elementy | {count} elementów",
+            "more": "i {count} więcej",
+            "notFound": "Pod tą ścieżką nic nie ma.",
+            "empty": "Pusty plik.",
+            "binary": "Plik binarny: otwórz go, aby zobaczyć.",
+            "beyond": "Wiersz {line} jest dalej, niż sięga podgląd. Otwórz plik, aby go zobaczyć.",
+            "past": "Plik kończy się na wierszu {total}, więc nie ma w nim wiersza {line}.",
+            "failed": "Nie udało się odczytać tego pliku."
+        },
         "fileLocked": {
             "holdsCantOpenedEdited": "Zawiera {holds}. Nie da się go tutaj otworzyć, edytować ani pobrać.",
             "keptPrivateBySandbox": "jest trzymane prywatnie przez ten sandbox."
@@ -4743,6 +4761,8 @@
             "insideArchive": "W archiwum",
             "notInItsCopy": "Brak w jego kopii",
             "noWriteAccess": "Brak prawa zapisu",
+            "pageSealed": "Odizolowana: bez sieci i logowań",
+            "preview": "Podgląd",
             "readAsText": "Czytaj jako tekst",
             "reloadDisk": "Wczytaj ponownie z dysku",
             "saveChanges": "Zapisz zmiany",
@@ -4750,7 +4770,9 @@
             "saveFile": "Zapisz plik",
             "sharedVersion": "Wersja wspólna",
             "showComments": "Pokaż komentarze",
-            "showFile": "Pokaż plik"
+            "showFile": "Pokaż plik",
+            "showPage": "Pokaż stronę",
+            "showSource": "Pokaż kod"
         },
         "healthCodebaseHealth": {
             "all": "Wszystko",
@@ -4795,6 +4817,15 @@
             "nothingHere": "Nic tu nie ma.",
             "nothingMatchesIn": "Nic nie pasuje do „{trim}” w {here}.",
             "toolingHidden": "Ukryto {count} plik narzędziowy | Ukryto {count} pliki narzędziowe | Ukryto {count} plików narzędziowych"
+        },
+        "htmlPreview": {
+            "failed": "Nie udało się przygotować tej strony do podglądu.",
+            "missing": "Nie udało się wczytać {count} pliku obok tej strony | Nie udało się wczytać {count} plików obok tej strony | Nie udało się wczytać {count} plików obok tej strony",
+            "remote": "Nie wczytano {count} elementu z internetu | Nie wczytano {count} elementów z internetu | Nie wczytano {count} elementów z internetu",
+            "remoteWhy": "Podgląd nie ma dostępu do sieci, więc skrypty, czcionki i obrazy z internetu, które wskazuje strona, zostają na zewnątrz.",
+            "scriptsOff": "Strona wciąż próbowała przejść pod inne adresy, więc jej skrypty są wyłączone.",
+            "strayed": "Strona próbowała przejść pod inny adres i została przywrócona.",
+            "title": "Podgląd: {name}"
         },
         "imageCompareView": {
             "fadeBetweenPictures": "Przenikanie między obrazem przed i po",

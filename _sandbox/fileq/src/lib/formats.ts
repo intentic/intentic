@@ -126,6 +126,12 @@ export const detectFormat = async (absPath: string): Promise<Format | undefined>
     return byExtension;
 };
 
+/**
+ * detectFormat, then the extension when magic names something fileq does not read: a password-protected docx is an
+ * encrypted container, not a zip, and a command that checks or draws documents still owes it its format's answer.
+ */
+export const claimedFormat = async (absPath: string): Promise<Format | undefined> => (await detectFormat(absPath)) ?? EXTENSION_FORMAT[extname(absPath).toLowerCase()];
+
 // Formats whose text diff is already the better reading: a textconv over them would replace a line diff with a
 // rendering of the same text.
 const TEXT_UNDERNEATH: ReadonlySet<Format> = new Set(["html"]);

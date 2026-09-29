@@ -3,7 +3,6 @@ import type { AgentTurn, ModelPin, Rule, SandboxSettings } from "@intentic/sandb
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { fromWorktree, inWorktree, type IsolationAnchor, nsenterPrefix } from "../../../conversations/worktrees/isolation.js";
 import type { Services } from "../../../composition.js";
-import { dirtyPathsAcross } from "../../../git/changes/changes.js";
 import type { CommandGuardOptions } from "../../../guard/command-guard.js";
 import { editBytesReviewer } from "../../../rules/edit-bytes.js";
 import { fileEditedReviewer, spawnEditCommand } from "../../../rules/file-edited.js";
@@ -11,6 +10,7 @@ import { repoCwd } from "../../../rules/rule-cwd.js";
 import { workspaceRelative } from "../../../rules/workspace-relative.js";
 import { discoverRepos } from "../../../workspace/layout/repo-discovery.js";
 import type { TurnContext } from "../../providers/adapter.js";
+import { checkoutDirtyPaths } from "../../tools/agent-shell-edits.js";
 import type { TurnHooks } from "../../providers/agent-request.js";
 import { opt } from "../../../opt.js";
 
@@ -86,22 +86,14 @@ const safetyHooksOf = (deps: HarnessHooksDeps, settings: SandboxSettings, safety
     rememberSafety: (line) => deps.safetyPolicy.append(line),
 });
 
-// Milliseconds a turn reuses its checkout's repo list: discovery walks up to 10k dirs, and every shell command asks.
-const REPOS_REUSED_MS = 60_000;
-
-// The turn's dirty files for shell-edit attribution, with the repo list walked at most once per REPOS_REUSED_MS.
+// The turn's dirty files for shell-edit attribution, by both names (checkoutDirtyPaths reuses the repo list).
 const dirtyFilesOf = (context: TurnContext): (() => Promise<readonly { readonly onDisk: string; readonly path: string }[]>) => {
-    let repos: { readonly at: number; readonly list: Promise<string[]> } | undefined;
-    return async () => {
-        const now = Date.now();
-        if (repos === undefined || now - repos.at > REPOS_REUSED_MS) {
-            repos = { at: now, list: discoverRepos(context.localCwd) };
-        }
-        return (await dirtyPathsAcross(context.localCwd, await repos.list)).map((path) => {
+    const dirty = checkoutDirtyPaths(context.localCwd);
+    return async () =>
+        (await dirty()).map((path) => {
             const onDisk = join(context.localCwd, path);
             return { onDisk, path: fromWorktree(onDisk, context.base.spec.isolation?.plan) };
         });
-    };
 };
 
 // Every hook a harness turn is planned with, on top of the ones the route and the planner already bound.

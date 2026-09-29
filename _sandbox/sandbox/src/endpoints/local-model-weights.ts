@@ -1,10 +1,12 @@
-import { createWriteStream } from "node:fs";
-import { mkdir, rename, rm, stat } from "node:fs/promises";
+import { createHash, type Hash } from "node:crypto";
+import { createReadStream, createWriteStream } from "node:fs";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { once } from "node:events";
-import { dirname } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { downloadFile } from "@huggingface/hub";
 import { errorMessage } from "@intentic/base/errors";
 import { type Capability, LOCAL_MODEL_INSTANT, LOCAL_MODEL_WINDOW_DEFAULT, type LocalModelPrefetch } from "@intentic/sandbox-contract";
+import { opt } from "../opt.js";
 import { type LocalModelSource, localModelSource, localModelWeightsPath } from "./local-model.js";
 
 // The weights cache: fetching a GGUF into it, resuming an interrupted fetch, and reporting what is in flight. Lives
@@ -29,6 +31,88 @@ export const weightsReady = async (path: string): Promise<boolean> =>
         () => false,
     );
 
+// A pinned file's verified digest, recorded beside the cache rather than in it so the weights list shows only weights.
+// Bound to the file's size and mtime as well as its name: a same-named file from a custom URL, or a curated file
+// deleted and fetched again, must not inherit a verdict about other bytes.
+const digestRecordPath = (destination: string): string => join(dirname(dirname(destination)), "model-digests", `${basename(destination)}.sha256`);
+
+const digestRecord = (sha256: string, info: { readonly size: number; readonly mtimeMs: number }): string =>
+    `${sha256} ${info.size} ${Math.round(info.mtimeMs)}\n`;
+
+const recordVerified = async (destination: string, sha256: string): Promise<void> => {
+    const info = await stat(destination);
+    await mkdir(dirname(digestRecordPath(destination)), { recursive: true });
+    await writeFile(digestRecordPath(destination), digestRecord(sha256, info));
+};
+
+/** Whether these weights are known to be the pinned bytes without reading them: always when nothing is pinned. */
+export const weightsTrusted = async (source: LocalModelSource, destination: string): Promise<boolean> => {
+    if (source.sha256 === undefined) {
+        return true;
+    }
+    const [record, info] = await Promise.all([
+        readFile(digestRecordPath(destination), "utf8").catch(() => ""),
+        stat(destination).catch(() => undefined),
+    ]);
+    return info !== undefined && record === digestRecord(source.sha256, info);
+};
+
+const hashOf = async (path: string): Promise<Hash> => {
+    const hash = createHash("sha256");
+    for await (const chunk of createReadStream(path)) {
+        hash.update(chunk as Buffer);
+    }
+    return hash;
+};
+
+// Bytes that do not hash to the pinned digest are not these weights, whatever the name says: the file goes and is
+// never served.
+const mismatch = async (path: string, source: LocalModelSource): Promise<Error> => {
+    await rm(path, { force: true });
+    return new Error(
+        `${source.file} did not match the checksum published for it, so it was deleted rather than served; press Update to download it again.`,
+    );
+};
+
+// Keyed by destination like the fetches: two cards starting on one file read it once.
+const verifications = new Map<string, Promise<void>>();
+
+/**
+ * Holds weights already on disk to the pinned digest before a start: free for a file this cache verified, one full read
+ * for a file fetched before pinning. A mismatch deletes the file and throws.
+ */
+export const verifyWeights = (source: LocalModelSource, destination: string): Promise<void> => {
+    const running = verifications.get(destination);
+    if (running !== undefined) {
+        return running;
+    }
+    const promise = (async () => {
+        const expected = source.sha256;
+        if (expected === undefined || (await weightsTrusted(source, destination))) {
+            return;
+        }
+        if ((await hashOf(destination)).digest("hex") !== expected) {
+            throw await mismatch(destination, source);
+        }
+        await recordVerified(destination, expected);
+    })().finally(() => {
+        verifications.delete(destination);
+    });
+    verifications.set(destination, promise);
+    return promise;
+};
+
+// The one door into the cache: a pinned file is renamed into place only once what arrived hashes to its digest.
+const settle = async (staged: string, destination: string, source: LocalModelSource, hash: Hash | undefined): Promise<void> => {
+    if (source.sha256 !== undefined && hash?.digest("hex") !== source.sha256) {
+        throw await mismatch(staged, source);
+    }
+    await rename(staged, destination);
+    if (source.sha256 !== undefined) {
+        await recordVerified(destination, source.sha256);
+    }
+};
+
 // Both keyed by destination path, not by whoever asked: two cards naming the same model, and the prefetch that ran
 // before either existed, are one transfer.
 const downloads = new Map<string, { received: number; total: number }>();
@@ -45,29 +129,40 @@ export const abortWeights = (destination: string): void => {
     fetches.get(destination)?.abort.abort();
 };
 
+interface OpenedStream {
+    readonly body: ReadableStream<Uint8Array>;
+    readonly total: number;
+    readonly appending: boolean;
+}
+
+// A Hugging Face file through hub's downloadFile, which slices its own blob for a resume.
+const openHubStream = async (repo: string, path: string, source: LocalModelSource, from: number, signal: AbortSignal): Promise<OpenedStream> => {
+    const blob = await downloadFile({
+        repo,
+        path,
+        // A curated pick's commit, never the moving `main`; a path typed by hand has none and takes the default branch.
+        ...opt("revision", source.revision),
+        // bun-types' `fetch` carries `preconnect`, which a request wrapper has no use for.
+        fetch: ((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => fetch(input, { ...init, signal })) as typeof fetch,
+    });
+    if (blob === null) {
+        const at = source.revision === undefined ? "" : ` at ${source.revision.slice(0, 12)}`;
+        throw new Error(`${repo} has no ${path}${at}, check the model path on the card.`);
+    }
+    const resuming = from > 0 && from < blob.size;
+    return {
+        // SAFETY: hub's Blob streams bytes; the DOM and Node typings name the same web ReadableStream differently.
+        body: (resuming ? blob.slice(from) : blob).stream() as unknown as ReadableStream<Uint8Array>,
+        total: blob.size,
+        appending: resuming,
+    };
+};
+
 // Both sources answer a range (hub's blob slices itself; a custom URL sends a Range header); a server that ignores it
 // answers 200 with the whole file, and `appending: false` says truncate rather than double-write.
-const openStream = async (
-    source: LocalModelSource,
-    from: number,
-    signal: AbortSignal,
-): Promise<{ body: ReadableStream<Uint8Array>; total: number; appending: boolean }> => {
+const openStream = async (source: LocalModelSource, from: number, signal: AbortSignal): Promise<OpenedStream> => {
     if (source.repo !== undefined && source.path !== undefined) {
-        const blob = await downloadFile({
-            repo: source.repo,
-            path: source.path,
-            // bun-types' `fetch` carries `preconnect`, which a request wrapper has no use for.
-            fetch: ((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => fetch(input, { ...init, signal })) as typeof fetch,
-        });
-        if (blob === null) {
-            throw new Error(`${source.repo} has no ${source.path}, check the model path on the card.`);
-        }
-        const resuming = from > 0 && from < blob.size;
-        return {
-            body: (resuming ? blob.slice(from) : blob).stream() as unknown as ReadableStream<Uint8Array>,
-            total: blob.size,
-            appending: resuming,
-        };
+        return openHubStream(source.repo, source.path, source, from, signal);
     }
     const response = await fetch(source.url ?? "", { signal, ...(from > 0 ? { headers: { range: `bytes=${from}-` } } : {}) });
     if (!response.ok || response.body === null) {
@@ -80,7 +175,8 @@ const openStream = async (
 };
 
 // Streamed to disk, renamed into place whole, so readiness is a stat. A full-size part finished but didn't rename; a
-// larger one isn't this file and is discarded; anything else resumes.
+// larger one isn't this file and is discarded; anything else resumes. A pinned file is hashed as it streams, so the
+// check costs no second read of gigabytes; a resumed one feeds the part already on disk through the hash first.
 const downloadWeights = async (source: LocalModelSource, destination: string, signal: AbortSignal): Promise<void> => {
     await mkdir(dirname(destination), { recursive: true });
     const staged = stagedPath(destination);
@@ -93,9 +189,10 @@ const downloadWeights = async (source: LocalModelSource, destination: string, si
     }
     if (stream.total > 0 && have === stream.total) {
         await stream.body.cancel().catch(() => undefined);
-        await rename(staged, destination);
+        await settle(staged, destination, source, source.sha256 === undefined ? undefined : await hashOf(staged));
         return;
     }
+    const hash = source.sha256 === undefined ? undefined : stream.appending ? await hashOf(staged) : createHash("sha256");
     const file = createWriteStream(staged, stream.appending ? { flags: "a" } : {});
     const reader = stream.body.getReader();
     let received = stream.appending ? have : 0;
@@ -108,13 +205,14 @@ const downloadWeights = async (source: LocalModelSource, destination: string, si
             }
             received += chunk.value.byteLength;
             downloads.set(destination, { received, total: stream.total });
+            hash?.update(chunk.value);
             if (!file.write(chunk.value)) {
                 await once(file, "drain");
             }
         }
         file.end();
         await once(file, "close");
-        await rename(staged, destination);
+        await settle(staged, destination, source, hash);
     } catch (error) {
         file.destroy();
         throw error;

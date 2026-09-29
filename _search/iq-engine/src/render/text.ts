@@ -1,5 +1,5 @@
 import type { WorkspaceSearchFreshness, WorkspaceSearchTag } from "@intentic/sandbox-contract";
-import type { RankedGroup, RankedHit } from "../types.js";
+import type { Confidence, RankedGroup, RankedHit } from "../types.js";
 import { estimateTokens } from "./budget.js";
 import { encodeCursor } from "./cursor.js";
 
@@ -25,8 +25,8 @@ export interface RenderRequest {
     readonly related?: readonly string[];
     // True if the capsule opens with an `answer:` anchor; false where the ranking itself is the answer.
     readonly lead?: boolean;
-    // Whether the top result clearly stands out, when a reranker was present to judge it.
-    readonly confidence?: "confident" | "ambiguous";
+    // Whether the top result clearly stands out, or nothing likely answers at all, when a reranker was present to judge it.
+    readonly confidence?: Confidence | undefined;
     // Spool id for continuation cursors; the caller persists the spool, this only formats it.
     readonly cursorId: string;
 }

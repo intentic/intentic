@@ -848,7 +848,6 @@
         "secretEntryRow": {
             "accessTab": "Pestaña Acceso",
             "agentUsesFreely": "El agente lo usa libremente",
-            "agentUseWithoutAsking": "El agente puede usar esto sin preguntar a nadie.",
             "cancelRemove": "Cancelar la eliminación",
             "ciOutOfDate": "CI desactualizado",
             "ciSynced": "CI sincronizado",
@@ -867,7 +866,6 @@
             "namedPersonReleases": "Lo libera una persona designada",
             "needsApproval": "Necesita aprobación",
             "nobodyNamedYetGive": "Todavía no se puede nombrar a nadie. Dale acceso a alguien en la",
-            "nobodyToApproveOnly": "Nadie tiene que aprobar esto. Solo el propietario puede cambiarlo.",
             "once": "Solo esta vez",
             "oneClickCoversEvery": "Un clic cubre todos los usos durante el resto de esa conversación.",
             "oneClickReleasesExactly": "Un clic libera exactamente un uso. El siguiente vuelve a preguntar.",
@@ -1478,6 +1476,15 @@
         "chatTurnAsides": {
             "showSteps": "Ver pasos",
             "thinking": "Pensando"
+        },
+        "chatTurnDeliverables": {
+            "open": "Abrir {name}, {kind}",
+            "page": "Página web",
+            "pdf": "PDF",
+            "region": "Documentos de este turno",
+            "sheet": "Hoja de cálculo",
+            "slides": "Presentación",
+            "word": "Documento de Word"
         },
         "chatTurnShots": {
             "open": "Abrir {name}",
@@ -4739,6 +4746,17 @@
         "fileBreadcrumb": {
             "alsoViewingFile": "también está viendo este archivo"
         },
+        "fileRefPeek": {
+            "lines": "{count} línea | {count} líneas",
+            "items": "{count} elemento | {count} elementos",
+            "more": "y {count} más",
+            "notFound": "No hay nada en esta ruta.",
+            "empty": "Archivo vacío.",
+            "binary": "Archivo binario: ábrelo para verlo.",
+            "beyond": "La línea {line} está más adentro de lo que lee una vista previa. Abre el archivo para verla.",
+            "past": "El archivo termina en la línea {total}, así que no tiene la línea {line}.",
+            "failed": "No se pudo leer este archivo."
+        },
         "fileLocked": {
             "holdsCantOpenedEdited": "Contiene {holds}. Aquí no se puede abrir, editar ni descargar.",
             "keptPrivateBySandbox": "lo mantiene privado este sandbox."
@@ -4751,6 +4769,8 @@
             "insideArchive": "Dentro de un archivo",
             "notInItsCopy": "No está en su copia",
             "noWriteAccess": "Sin acceso de escritura",
+            "pageSealed": "Aislada: sin red ni sesiones",
+            "preview": "Vista previa",
             "readAsText": "Leer como texto",
             "reloadDisk": "Recargar desde disco",
             "saveChanges": "Guardar cambios",
@@ -4758,7 +4778,9 @@
             "saveFile": "Guardar el archivo",
             "sharedVersion": "Versión compartida",
             "showComments": "Mostrar comentarios",
-            "showFile": "Ver archivo"
+            "showFile": "Ver archivo",
+            "showPage": "Ver página",
+            "showSource": "Ver código"
         },
         "healthCodebaseHealth": {
             "all": "Todo",
@@ -4803,6 +4825,15 @@
             "nothingHere": "Aquí no hay nada.",
             "nothingMatchesIn": "Nada coincide con «{trim}» en {here}.",
             "toolingHidden": "{count} archivo de herramientas oculto | {count} archivos de herramientas ocultos"
+        },
+        "htmlPreview": {
+            "failed": "No se pudo preparar esta página para la vista previa.",
+            "missing": "No se pudo cargar {count} archivo junto a esta página | No se pudieron cargar {count} archivos junto a esta página",
+            "remote": "No se cargó {count} elemento de internet | No se cargaron {count} elementos de internet",
+            "remoteWhy": "La vista previa no tiene red, así que los scripts, fuentes o imágenes de internet que nombra la página se quedan fuera.",
+            "scriptsOff": "La página intentaba ir a otras direcciones una y otra vez, así que sus scripts están desactivados.",
+            "strayed": "La página intentó ir a otra dirección y se la devolvió aquí.",
+            "title": "Vista previa de {name}"
         },
         "imageCompareView": {
             "fadeBetweenPictures": "Fundir entre la imagen anterior y la posterior",

@@ -279,12 +279,71 @@ export const SUPPLIER_LETTER_DOCX = buildDocx(`Re: order 2318, delivery date`, [
     `Ada Lovelace`,
 ]);
 
+/** September as the review chat's second turn left it (transcripts.ts): a Word copy for the counter and a web page. */
+export const SEPTEMBER_PRINT_PATH = `newsletter/september.docx`;
+export const SEPTEMBER_PRINT_DOCX = buildDocx(`Studio news · September`, [
+    `Hello everyone,`,
+    `The light in the workshop has gone golden in the afternoons, and the autumn things are arriving.`,
+    `The new ceramics. Bowls and tall jugs, in the blue and the oatmeal. The glaze took the whole of August to get right.`,
+    `Harbour Market. Thank you to everyone who came by the stall on the 6th and 7th. It was lovely to meet so many of you in person.`,
+    `Pottery evenings. Back from Tuesday the 30th, 7 until 9. Eight places, so book early.`,
+    `Thank you, as always, for reading. Ada`,
+]);
+
+export const SEPTEMBER_PAGE_PATH = `shop-site/september.html`;
+// The shop's own look, a picture beside the page, a web font the preview leaves out, and one line of script: what a
+// page drawn in the editor's sealed preview carries in, and what it says it left out.
+export const SEPTEMBER_PAGE = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Studio news · September</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+<img src="images/logo.svg" alt="Ada's Studio" width="56" height="56">
+<nav><a href="index.html">Shop</a> · <a href="about.html">About</a> · <a href="#evenings">Pottery evenings</a></nav>
+</header>
+<main>
+<h1>Studio news · September</h1>
+<p class="lede">The light in the workshop has gone golden in the afternoons, and the autumn things are arriving.</p>
+<h2>The new ceramics</h2>
+<p>Bowls and tall jugs, in the blue and the oatmeal. The glaze took the whole of August to get right.</p>
+<h2>Harbour Market</h2>
+<p>Thank you to everyone who came by the stall on the 6th and 7th. It was lovely to meet so many of you in person.</p>
+<h2 id="evenings">Pottery evenings</h2>
+<p>Back from Tuesday the 30th, 7 until 9. Eight places, so book early.</p>
+<p class="sign-off">Thank you, as always, for reading.<br>Ada</p>
+</main>
+<footer>© <span id="year"></span> Ada's Studio</footer>
+<script>document.getElementById("year").textContent = String(new Date().getFullYear());</script>
+</body>
+</html>
+`;
+
+const SHOP_STYLE = `body { margin: 0; background: #f6f1ea; color: #2b2622; font: 17px/1.6 Georgia, "Fraunces", serif; }
+header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 2rem; background: #2f4858; color: #f6f1ea; }
+header a { color: #f6f1ea; }
+main { max-width: 38rem; margin: 2.5rem auto; padding: 0 1.5rem; }
+h1 { font-size: 2.1rem; margin-bottom: 0.25rem; }
+h2 { color: #2f4858; margin-top: 2rem; }
+.lede { font-size: 1.15rem; font-style: italic; }
+.sign-off { margin-top: 2.5rem; }
+footer { text-align: center; padding: 2rem; color: #7a6f66; font-size: 0.85rem; }
+`;
+
+const SHOP_LOGO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 56"><circle cx="28" cy="28" r="27" fill="#d9a066"/><path d="M19 17h18l-3 24a6 6 0 0 1-6 5 6 6 0 0 1-6-5z" fill="#f6f1ea"/><path d="M21 22h14" stroke="#2f4858" stroke-width="2"/></svg>
+`;
+
 /** Every document on the desk, in the shape workspace.ts's table takes: a body, or a size for one it does not carry. */
 export const DESK_SOURCES: readonly [string, string | number][] = [
     [`README.md`, README],
 
     [`newsletter/october.md`, OCTOBER_BEFORE],
     [`newsletter/september.md`, SEPTEMBER_BEFORE],
+    [SEPTEMBER_PRINT_PATH, SEPTEMBER_PRINT_DOCX.length],
     [`newsletter/august.md`, 2_860],
     [`newsletter/template.md`, TEMPLATE],
     [`newsletter/subscribers.csv`, 41_200],
@@ -294,7 +353,9 @@ export const DESK_SOURCES: readonly [string, string | number][] = [
     [`shop-site/index.html`, 4_120],
     [`shop-site/about.html`, 2_480],
     [`shop-site/opening-hours.md`, HOURS_AFTER],
-    [`shop-site/style.css`, 3_910],
+    [`shop-site/style.css`, SHOP_STYLE],
+    [`shop-site/images/logo.svg`, SHOP_LOGO],
+    [SEPTEMBER_PAGE_PATH, SEPTEMBER_PAGE],
     [`shop-site/images/storefront.jpg`, 641_000],
     [`shop-site/images/workshop.jpg`, 588_200],
     // What a site is made of underneath, which is what a maker's tree leaves out: the chip counts these.

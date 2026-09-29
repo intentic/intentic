@@ -884,7 +884,6 @@
         "secretEntryRow": {
             "accessTab": "Access tab",
             "agentUsesFreely": "Agent uses it freely",
-            "agentUseWithoutAsking": "The agent can use this without asking anybody.",
             "cancelRemove": "Cancel remove",
             "ciOutOfDate": "CI out of date",
             "ciSynced": "CI synced",
@@ -892,6 +891,7 @@
             "copyValue": "Copy value",
             "dropApproval": "Drop approval",
             "first": "first.",
+            "fromNamedPerson": "From a named person",
             "gateExplained": "Only {approvers} can release this, and {scope}. Only the owner can change this.",
             "generated": "generated for you ·",
             "hide": "Hide",
@@ -903,7 +903,8 @@
             "namedPersonReleases": "A named person releases it",
             "needsApproval": "Needs approval",
             "nobodyNamedYetGive": "Nobody can be named yet. Give somebody access on the",
-            "nobodyToApproveOnly": "Nobody has to approve this. Only the owner can change that.",
+            "noNamedApprover": "No named person has to release it.",
+            "noNamedApproverOwnerOnly": "No named person has to release it. Only the owner can change that.",
             "once": "This once",
             "oneClickCoversEvery": "One click covers every use for the rest of that conversation.",
             "oneClickReleasesExactly": "One click releases exactly one use. The next use asks again.",
@@ -929,6 +930,26 @@
             "pasteValue": "Paste the value for {secretKey}",
             "showValue": "Show value",
             "storedInSandboxs": "Stored in your sandbox's"
+        },
+        "secretHosts": {
+            "addHost": "Add host",
+            "couldNotSave": "Could not save the host guard.",
+            "everyUseAsks": "No host is listed, so every use asks.",
+            "everyUseReadOnly": "On: every use asks first. Only the owner can change that.",
+            "explain": "It goes unasked only to these hosts. Anywhere else, or anywhere a command does not show plainly, waits for a click in the chat first, whatever the safety judge says.",
+            "fromConnector": "Its connector's own hosts for its service. Change them here, or turn the guard off to let it go anywhere.",
+            "keeps": "Turned back on, it goes unasked to {hosts} again.",
+            "notAHost": "That is not a host. Write one like api.example.com, or *.example.com for every host under it.",
+            "off": "Off: it is never held for where it goes, and the safety judge alone decides.",
+            "offReadOnly": "Off: it is never held for where it goes. Only the owner can change that.",
+            "onlyToReadOnly": "On: it goes unasked only to {hosts}, and anywhere else asks first. Only the owner can change that.",
+            "placeholder": "api.example.com or *.example.com",
+            "removeHost": "Remove {host}",
+            "title": "Host guard",
+            "turnOff": "Turn the host guard off",
+            "turnOffNote": "It will never ask where this goes",
+            "turnOn": "Turn on",
+            "turnOnNote": "Off its hosts, it asks first"
         },
         "sshKeyField": {
             "authorizeAs": "Authorize it: run this on the server, signed in as {user}",
@@ -1540,6 +1561,15 @@
             "showSteps": "Show steps",
             "thinking": "Thinking"
         },
+        "chatTurnDeliverables": {
+            "open": "Open {name}, {kind}",
+            "page": "Web page",
+            "pdf": "PDF",
+            "region": "Documents from this turn",
+            "sheet": "Spreadsheet",
+            "slides": "Slide deck",
+            "word": "Word document"
+        },
         "chatTurnShots": {
             "more": "+{count}",
             "open": "Open {name}",
@@ -1663,6 +1693,8 @@
             "backAt": "Back at {at}",
             "couldntLoadModels": "Couldn't load models.",
             "filterByProvider": "Filter by provider",
+            "helperOnlyNoTools": "Helper jobs only: its server says it can't call tools",
+            "helperOnlyQuickJobs": "Helper jobs only: too small to run a chat",
             "loadingModels": "Loading models…",
             "modelPicker": "Model picker",
             "models2": "{count} models",
@@ -1934,18 +1966,23 @@
             "gpuGranted": "Its NVIDIA GPU is reachable, with {vram} of VRAM.",
             "gpuOffered": "CPU only for now; the model's catalog entry can ask for an NVIDIA GPU.",
             "gpuUnsupported": "No GPU here: this host's Docker has no nvidia runtime.",
-            "instantPitch": "Ready in about a minute. Good for commit messages, titles and trying the app out; too small to drive a full agent turn.",
             "measuring": "Reading what this machine can run…",
             "memoryCapped": "This sandbox may use {memory}.",
             "memoryMachine": "This machine has {memory}.",
             "moreModels": "Other models, a custom GGUF, or the GPU switch",
             "needsRebuild": "This image does not carry llama-server yet. Rebuild the sandbox from Environment on the Sandbox page, then come back.",
             "nothingFits": "Nothing on the curated list fits in {memory}. Give the sandbox more memory, or connect an account instead.",
+            "nothingRunsWhole": "Nothing on the curated list runs at full speed in the {free} free here. Free some memory, give the sandbox more, or connect an account instead.",
             "quickJobsOnly": "quick jobs only",
+            "quickJobsPitch": "Ready in about a minute. Writes commit messages and session titles for free; too small to chat with or to run an agent turn.",
             "ready": "Ready",
+            "readyForQuickJobs": "Ready for quick jobs",
             "runIt": "Run it",
+            "sizedForGpu": "Offers are sized to run whole on the GPU, in the {free} a model can have there.",
+            "sizedForMemory": "Offers are sized to run at full speed in the {free} of memory free now.",
             "startNow": "Start now",
             "stop": "Stop",
+            "useForQuickJobs": "Choose it for commit messages and titles",
             "windowUnderFloor": "This window is under what one agent turn costs, so it is a quick-jobs rung too. More memory would raise it."
         },
         "providerTile": {
@@ -5310,6 +5347,17 @@
         "fileBreadcrumb": {
             "alsoViewingFile": "also viewing this file"
         },
+        "fileRefPeek": {
+            "lines": "{count} line | {count} lines",
+            "items": "{count} item | {count} items",
+            "more": "and {count} more",
+            "notFound": "Nothing at this path.",
+            "empty": "Empty file.",
+            "binary": "Binary file: open it to see it.",
+            "beyond": "Line {line} is further in than a preview reads. Open the file to see it.",
+            "past": "The file ends at line {total}, so line {line} isn't in it.",
+            "failed": "Couldn't read this file."
+        },
         "fileLocked": {
             "holdsCantOpenedEdited": "It holds {holds}. It can't be opened, edited or downloaded here.",
             "keptPrivateBySandbox": "is kept private by this sandbox."
@@ -5323,6 +5371,8 @@
             "notInItsCopy": "Not in its copy",
             "notUtf8ReadOnly": "This file isn't UTF-8 text, so it opens read-only here.",
             "noWriteAccess": "No write access",
+            "pageSealed": "Sealed: no network, no logins",
+            "preview": "Preview",
             "readAsText": "Read as text",
             "reloadDisk": "Reload from disk",
             "saveChanges": "Save changes",
@@ -5331,6 +5381,8 @@
             "sharedVersion": "Shared version",
             "showComments": "Show comments",
             "showFile": "Show file",
+            "showPage": "Show page",
+            "showSource": "Show source",
             "soleDocumentOnly": "This window was opened for {name} alone, so the other files in its folder open read-only."
         },
         "healthCodebaseHealth": {
@@ -5349,6 +5401,15 @@
             "filesRestored": "Files restored",
             "noFileChangesRecorded": "No file changes recorded.",
             "refresh": "Refresh {toLowerCase}"
+        },
+        "htmlPreview": {
+            "failed": "This page could not be prepared for the preview.",
+            "missing": "{count} file beside this page could not be loaded | {count} files beside this page could not be loaded",
+            "remote": "{count} item from the internet was not loaded | {count} items from the internet were not loaded",
+            "remoteWhy": "The preview has no network, so a script, font or picture the page names on the internet stays out.",
+            "scriptsOff": "The page kept going to other addresses, so its scripts are off.",
+            "strayed": "The page tried to go to another address and was put back.",
+            "title": "Preview of {name}"
         },
         "imageCompareView": {
             "fadeBetweenPictures": "Fade between the before and after pictures",

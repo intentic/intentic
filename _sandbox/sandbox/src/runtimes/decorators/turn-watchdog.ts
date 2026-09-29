@@ -19,7 +19,12 @@ export interface TurnWatchdog {
     readonly touch: () => void;
     // A wait the vendor announced (a retry's next attempt, epoch ms): silence until then plus a window is not a hang.
     readonly extendPast: (instant: number) => void;
+    // The turn is waiting on the daemon (an approval card open on a person), not on the vendor: neither deadline runs
+    // until every hold is released. The last release counts as activity and moves the hard cap out by the time held, so
+    // an answer that took an hour does not end the turn it answered. Returns the release, which counts once.
+    readonly hold: () => () => void;
     // Milliseconds until the nearer deadline, or `until` (epoch ms) if that comes first; zero or less means one passed.
+    // Infinite while the clock is held and no `until` is given.
     readonly remaining: (until?: number) => number;
     // Why the loop stopped waiting, read once it did: the sentence a timeout error is built around.
     readonly expiry: () => string;
@@ -31,12 +36,15 @@ const duration = (ms: number): string => {
     return seconds < 60 ? `${String(seconds)}s` : `${String(Math.floor(seconds / 60))}m ${String(seconds % 60)}s`;
 };
 
-// Both deadlines start now: the hard cap is fixed, the inactivity one moves with every touch.
+// Both deadlines start now: the hard cap moves only by time held, the inactivity one with every touch.
 export const turnWatchdog = (timeouts: TurnTimeouts): TurnWatchdog => {
     const startedAt = Date.now();
-    const turnDeadline = startedAt + timeouts.maxTurnMs;
+    let turnDeadline = startedAt + timeouts.maxTurnMs;
     let inactivityDeadline = startedAt + timeouts.inactivityMs;
     let lastActivity = startedAt;
+    // Holds open now, and when the first of them was taken.
+    let holds = 0;
+    let heldSince = startedAt;
     return {
         touch: () => {
             lastActivity = Date.now();
@@ -45,7 +53,28 @@ export const turnWatchdog = (timeouts: TurnTimeouts): TurnWatchdog => {
         extendPast: (instant) => {
             inactivityDeadline = Math.max(inactivityDeadline, instant + timeouts.inactivityMs);
         },
-        remaining: (until = Number.POSITIVE_INFINITY) => Math.min(inactivityDeadline, turnDeadline, until) - Date.now(),
+        hold: () => {
+            if (holds === 0) {
+                heldSince = Date.now();
+            }
+            holds += 1;
+            let released = false;
+            return () => {
+                if (released) {
+                    return;
+                }
+                released = true;
+                holds -= 1;
+                if (holds > 0) {
+                    return;
+                }
+                const now = Date.now();
+                turnDeadline += now - heldSince;
+                lastActivity = now;
+                inactivityDeadline = Math.max(inactivityDeadline, now + timeouts.inactivityMs);
+            };
+        },
+        remaining: (until = Number.POSITIVE_INFINITY) => (holds > 0 ? until : Math.min(inactivityDeadline, turnDeadline, until)) - Date.now(),
         expiry: () => {
             const now = Date.now();
             const silent = `the last event came ${duration(now - lastActivity)} ago`;
@@ -59,6 +88,13 @@ export const turnWatchdog = (timeouts: TurnTimeouts): TurnWatchdog => {
         },
     };
 };
+
+// How long a wait on a held clock sleeps before it looks again. A timer cannot be set for ever, and the release restarts
+// the silence window a whole window out, so a look this often re-arms well before the next deadline.
+const HELD_LOOK_MS = 1_000;
+
+// The timer for a wait of `ms`: a held clock's endless wait becomes a look again.
+const timerFor = (ms: number): number => (Number.isFinite(ms) ? Math.max(0, ms) : HELD_LOOK_MS);
 
 // A loop's idle wait: parked until a producer wakes it or the time runs out, whichever is first. A wake with nothing
 // parked is dropped, since the loop re-reads its queue before it parks again.
@@ -112,16 +148,20 @@ export const watchedPull =
             if (ms <= 0) {
                 return EXPIRED;
             }
-            await source.wait.park(ms);
+            await source.wait.park(timerFor(ms));
         }
     };
 
 // One pull from a vendor stream raced against the turn's nearer deadline; a pull that loses keeps running, so the caller
-// owns catching it.
+// owns catching it. The deadline is read again whenever the timer fires rather than trusted: a hold taken or released
+// while the pull waits moves it.
 export const beforeDeadline = async <T>(pending: Promise<T>, clock: TurnWatchdog): Promise<T | typeof EXPIRED> => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const expired = new Promise<typeof EXPIRED>((resolve) => {
-        timer = setTimeout(() => resolve(EXPIRED), Math.max(0, clock.remaining()));
+        const look = (): void => {
+            timer = setTimeout(() => (clock.remaining() <= 0 ? resolve(EXPIRED) : look()), timerFor(clock.remaining()));
+        };
+        look();
     });
     const result = await Promise.race([pending, expired]);
     clearTimeout(timer);

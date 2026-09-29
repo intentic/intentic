@@ -12,7 +12,7 @@ flowchart LR
 ```
 
 - A bare query picks its own strategy: a path, an identifier, a regex or natural language, falling back to semantic search when nothing matches exactly. There is no separate verb for questions.
-- Every answer opens with a capsule: `answer:` names the top anchor, its enclosing symbol and whether it is confident or ambiguous; `candidates:` and `more:` follow. Output fits `--budget` tokens, capsule included.
+- Every answer opens with a capsule: `answer:` names the top anchor, its enclosing symbol and a verdict, `confident`, `ambiguous`, or `weak` when nothing retrieved likely answers and the thing asked about may not exist; `candidates:` and `more:` follow. Output fits `--budget` tokens, capsule included.
 - Exit codes follow grep (0 hits, 1 none, 2 error). Common grep flags get a one-line redirect instead of a usage dump.
 - The index lives in `.intentic/local/cache/iq` and maintains itself; `iq index rebuild` is for a stale index only.
 - `plugin/` is a Claude Code plugin: the `iq` skill, a SessionStart nudge that ingests transcripts, and a prompt hook that suggests matching past sessions. The sandbox image bakes it and loads it for every agent.

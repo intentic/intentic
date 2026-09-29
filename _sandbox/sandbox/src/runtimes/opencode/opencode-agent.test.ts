@@ -1,11 +1,19 @@
 import { HISTORY_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Event } from "@opencode-ai/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { createOpenCodeAgent, createOpenCodeRunner, type OpenCodeRunner, type OpenCodeTurn, sessionFamily } from "./opencode-agent.js";
-import type { CommandGuard } from "../../guard/command-guard.js";
+import {
+    createOpenCodeAgent,
+    createOpenCodeRunner,
+    type OpenCodeRunner,
+    type OpenCodeTurn,
+    type OpenCodeTurnEvent,
+    sessionFamily,
+} from "./opencode-agent.js";
+import { type CommandGuard, consultWith, type GuardOutcome, vendorSubject } from "../../guard/command-guard.js";
 import { unstubbed } from "@intentic/testing";
 import { opt } from "../../opt.js";
-import type { OpenCodeService } from "./opencode.js";
+import type { OpenCodeService, SessionJudge } from "./opencode.js";
+import { mcpServersOf, type OpenCodeMcpServer, openCodeMounts } from "./opencode-mcp.js";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import { DEFAULT_TURN_TIMEOUTS } from "../decorators/turn-watchdog.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
@@ -232,10 +240,10 @@ test("a task that fails ends its subagent failed, with OpenCode's own words", as
 // A subagent's session names its parent; the family is the turn's own session and every session beneath it, and a
 // subagent answers to the rules its parent does, released with the turn.
 test("a turn's session family takes in its subagents' sessions, gates them as its own, and lets them go together", () => {
-    const gate = unstubbed<CommandGuard>("gate", {});
+    const judge: SessionJudge = { gate: unstubbed<CommandGuard>("gate", {}), push: () => {}, hold: () => () => {} };
     const registered: string[] = [];
     const released: string[] = [];
-    const family = sessionFamily("s1", gate, { register: (session) => void registered.push(session), release: (session) => void released.push(session) });
+    const family = sessionFamily("s1", judge, { register: (session) => void registered.push(session), release: (session) => void released.push(session) });
 
     expect([family.whose(sessionIdle("s1")), family.whose(sessionCreated("child-1", "s1")), family.whose(sessionIdle("child-1"))]).toEqual([
         "own",
@@ -261,7 +269,7 @@ test("createOpenCodeRunner lets its subagents' sessions through and ends only on
         sessionIdle("s1"),
     ]);
     // Which session each event the turn got was about.
-    const sessionOf = (event: Event): string => {
+    const sessionOf = (event: OpenCodeTurnEvent): string => {
         if (event.type === "session.created") {
             return event.properties.info.id;
         }
@@ -572,11 +580,17 @@ const fakeOpenCode = (
     recorded: string[][];
     prompts: (string | undefined)[];
     systems: (string | undefined)[];
+    // The `tools` map each message carried: which MCP servers its session was shown.
+    shown: (Record<string, boolean> | undefined)[];
     // Directories the turn subscribed and registered a watcher for; asserted because a mis-scoped subscription fails
     // silently.
     scopes: { subscribed: string[]; watched: string[] };
     // "read" / "create", in the order they happened.
     order: string[];
+    // What the turn mounted, where, and whether it let go; "mount" and "unmount" also land in `order`.
+    mounted: { directory: string; servers: readonly OpenCodeMcpServer[] }[];
+    // Who judges each session's asks while the turn runs, as the turn registered them.
+    judges: Map<string, SessionJudge>;
 } => {
     let aborted = false;
     let releaseHang: (() => void) | undefined;
@@ -584,6 +598,7 @@ const fakeOpenCode = (
     const prompts: (string | undefined)[] = [];
     // System instructions each message carried, proving `instructions: "append"` isn't dropped.
     const systems: (string | undefined)[] = [];
+    const shown: (Record<string, boolean> | undefined)[] = [];
     const recorded: string[][] = [];
     // Mimics the real stream's opening `server.connected`, which the runner awaits before creating a session.
     const withHello: Event[] = [{ type: "server.connected", properties: {} } as unknown as Event, ...events];
@@ -624,10 +639,11 @@ const fakeOpenCode = (
                 order.push("create");
                 return { data: { id: "s1" } };
             },
-            promptAsync: async (options: { body?: { model?: { modelID?: string }; system?: string } }) => {
+            promptAsync: async (options: { body?: { model?: { modelID?: string }; system?: string; tools?: Record<string, boolean> } }) => {
                 const modelID = options.body?.model?.modelID;
                 prompts.push(modelID);
                 systems.push(options.body?.system);
+                shown.push(options.body?.tools);
                 // Mimics xAI rejecting an unknown model id via a thrown error rather than a session.error event
                 // (initial-send path).
                 if (rejectModel !== undefined && modelID === rejectModel.id) {
@@ -644,6 +660,8 @@ const fakeOpenCode = (
     const scopes = { subscribed: [] as string[], watched: [] as string[] };
     // subscribe() opens the stream only on first read; reading after session creation misses `session.created`.
     const order: string[] = [];
+    const mounted: { directory: string; servers: readonly OpenCodeMcpServer[] }[] = [];
+    const judges = new Map<string, SessionJudge>();
     const openCode = {
         client: async () => client,
         events: async (directory: string) => {
@@ -652,8 +670,17 @@ const fakeOpenCode = (
         },
         watch: async (directory: string) => void scopes.watched.push(directory),
         recordModels: async (ids: string[]) => void recorded.push(ids),
+        mount: async (directory: string, servers: readonly OpenCodeMcpServer[]) => {
+            order.push("mount");
+            mounted.push({ directory, servers });
+            return async () => void order.push("unmount");
+        },
+        judges: {
+            register: (session: string, judge: SessionJudge) => void judges.set(session, judge),
+            release: (session: string) => void judges.delete(session),
+        },
     };
-    return { openCode: openCode as unknown as OpenCodeService, aborted: () => aborted, recorded, prompts, systems, scopes, order };
+    return { openCode: openCode as unknown as OpenCodeService, aborted: () => aborted, recorded, prompts, systems, shown, scopes, order, mounted, judges };
 };
 
 const runnerTurn: OpenCodeTurn = { prompt: "hi", cwd: WORKSPACE_ROOT, agent: "build", signal: new AbortController().signal };
@@ -685,7 +712,8 @@ test("createOpenCodeRunner opens the stream before the session it must not miss 
     for await (const event of createOpenCodeRunner(openCode)(runnerTurn)) {
         seen.push(event.type);
     }
-    expect(order).toEqual(["read", "create"]);
+    // The servers are mounted once the session exists and let go as the turn ends.
+    expect(order).toEqual(["read", "create", "mount", "unmount"]);
     expect(seen).toEqual(["session.created", "session.idle"]);
 });
 
@@ -977,4 +1005,148 @@ test("a planned turn carries the same instructions into its execute phase", asyn
     );
 
     expect(calls.map((call) => call.system)).toEqual(["House rules: be brief.", "House rules: be brief."]);
+});
+
+// Grok and Gemini reach the same remote MCP servers Codex does: the runner mounts them in the turn's directory, and the
+// prompt shows the session its own conversation's servers and hides every other conversation's.
+test("createOpenCodeRunner mounts the turn's servers where it runs, shows its session only those, and lets them go", async () => {
+    const { openCode, mounted, shown, order } = fakeOpenCode([sessionCreated("s1"), sessionIdle("s1")]);
+    const mounts = openCodeMounts("chat-1", [{ name: "web", url: "http://127.0.0.1:7000/mcp/web", token: "turn-bearer" }]);
+
+    for await (const event of createOpenCodeRunner(openCode)({ ...runnerTurn, mounts })) {
+        void event;
+    }
+
+    expect(mounted).toEqual([{ directory: WORKSPACE_ROOT, servers: mcpServersOf(mounts) }]);
+    expect(shown).toEqual([{ "intentic_*": false, [`${mounts.prefix}*`]: true }]);
+    expect(order).toEqual(["read", "create", "mount", "unmount"]);
+});
+
+test("a turn with no servers of its own is still shown no other conversation's", async () => {
+    const { openCode, shown } = fakeOpenCode([sessionCreated("s1"), sessionIdle("s1")]);
+
+    for await (const event of createOpenCodeRunner(openCode)(runnerTurn)) {
+        void event;
+    }
+
+    expect(shown).toEqual([{ "intentic_*": false }]);
+});
+
+// A prompt OpenCode refuses outright ends the turn before its loop starts; the servers and the judges go with it.
+test("a turn whose prompt is refused still lets go of its servers and its sessions' judges", async () => {
+    const { openCode, order, judges } = fakeOpenCode([sessionCreated("s1")], { id: "gemini-gone", message: "upstream unavailable" });
+    const gate = unstubbed<CommandGuard>("gate", { enforcing: true });
+
+    const drain = async (): Promise<void> => {
+        for await (const event of createOpenCodeRunner(openCode)({ ...runnerTurn, provider: "intentic-gemini", model: "gemini-gone", gate })) {
+            void event;
+        }
+    };
+
+    await expect(drain()).rejects.toThrow("upstream unavailable");
+    expect(order).toEqual(["read", "create", "mount", "unmount"]);
+    expect([...judges.keys()]).toEqual([]);
+});
+
+// The detached permission watcher answers asks, but the card it raises is this turn's: it goes out on the turn's own
+// stream, and while it waits on a person the turn's silence limit is held, then runs again from the answer.
+test("a card the turn's judge raises goes out in order, and the turn waits on it past the silence window", async () => {
+    const { openCode, judges } = fakeOpenCode([sessionCreated("s1")]);
+    const gate = unstubbed<CommandGuard>("gate", { enforcing: true });
+    const card: AgentEvent = { kind: "permission", requestId: "card-1", toolName: "Bash", title: "This command would push to main", displayName: "Run command" };
+    const answer: AgentEvent = { kind: "resolved", requestId: "card-1" };
+    const turn = createOpenCodeRunner(openCode, { ...DEFAULT_TURN_TIMEOUTS, inactivityMs: 50 })({ ...runnerTurn, gate })[Symbol.asyncIterator]();
+
+    expect((await turn.next()).value).toMatchObject({ type: "session.created" });
+    const judge = judges.get("s1");
+    if (judge === undefined) {
+        throw new Error("the turn registered no judge for its own session");
+    }
+    // As answerPermission does: the clock held for the whole consult, the card raised, then its resolution.
+    const release = judge.hold();
+    judge.push(card);
+    expect(await turn.next()).toEqual({ done: false, value: { type: "intentic.frame", frame: card } });
+
+    const waiting = turn.next();
+    // Six silence windows on a card, and the turn is still waiting rather than timed out.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    judge.push(answer);
+    release();
+    expect(await waiting).toEqual({ done: false, value: { type: "intentic.frame", frame: answer } });
+
+    // Answered, the turn is back on the clock: silence from here is a stall again.
+    await expect(turn.next()).rejects.toThrow(/timed out/);
+});
+
+test("a card raised mid-turn reaches the chat in order with the session's own frames", async () => {
+    const card: AgentEvent = { kind: "permission", requestId: "card-2", toolName: "Bash", title: "This command would push to main", displayName: "Run command" };
+    const { runner } = fakeRunner([
+        sessionCreated("s1"),
+        { type: "intentic.frame", frame: card },
+        { type: "intentic.frame", frame: { kind: "resolved", requestId: "card-2" } },
+        { type: "message.part.updated", properties: { part: { type: "text", id: "tx1", sessionID: "s1", messageID: "m1", text: "Pushed." } } },
+        sessionIdle("s1"),
+    ]);
+
+    const events = await collect(createOpenCodeAgent(runner), request);
+
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s1" },
+        card,
+        { kind: "resolved", requestId: "card-2" },
+        { kind: "delta", text: "Pushed." },
+        { kind: "done" },
+    ]);
+});
+
+// The turn hands its runner the same remote list Codex takes, under its conversation's names, and a call to one of them
+// reads as the MCP call it is rather than as the key OpenCode spells it with.
+test("an OpenCode turn mounts the turn's remote servers, and a call to one reads as that server's tool", async () => {
+    const web = { name: "web", url: "http://127.0.0.1:7000/mcp/web", token: "turn-bearer" };
+    const mounts = openCodeMounts("chat-1", [web]);
+    const { runner, calls } = fakeRunner([
+        sessionCreated("s1"),
+        {
+            type: "message.part.updated",
+            properties: {
+                part: {
+                    type: "tool",
+                    id: "tp1",
+                    sessionID: "s1",
+                    messageID: "m1",
+                    callID: "c1",
+                    tool: `${mounts.prefix}web_browser_navigate`,
+                    state: { status: "running", input: { url: "https://example.com" }, time: { start: 0 } },
+                },
+            },
+        },
+        sessionIdle("s1"),
+    ]);
+
+    const events = await collect(createOpenCodeAgent(runner), { ...request, spec: { ...request.spec, conversationId: "chat-1" }, tools: { remote: [web] } });
+
+    expect(calls.map((call) => call.mounts)).toEqual([mounts]);
+    expect(events.find((event) => event.kind === "tool_call")).toMatchObject({ id: "c1", name: "Browser navigate" });
+});
+
+// OpenCode can move on from an ask nobody answered (a refused sibling ask stops the session), so the turn's end settles
+// any card it left, rather than leaving it up with nobody waiting on the answer.
+test("a card still open when the turn ends is settled with it", async () => {
+    let consulted: Promise<GuardOutcome> | undefined;
+    const runner: OpenCodeRunner = async function* (turn) {
+        if (turn.gate === undefined) {
+            throw new Error("the adapter hands every turn its gate");
+        }
+        consulted = consultWith(turn.gate, "git push --force origin main", vendorSubject("Bash"), () => {});
+        yield sessionCreated("s1");
+        yield sessionIdle("s1");
+    };
+
+    await collect(createOpenCodeAgent(runner), {
+        ...request,
+        policy: { judging: "on", rulebook: "approval" },
+        hooks: { cards, judge: async () => ({ decision: "ask", sentence: "Rewrites the shared history." }) },
+    });
+
+    expect(await consulted).toEqual({ allow: false, reason: "The turn ended before you answered." });
 });

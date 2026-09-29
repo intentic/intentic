@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { LOCAL_MODEL_INSTANT, LOCAL_MODEL_WINDOW_DEFAULT, LOCAL_MODELS } from "@intentic/sandbox-contract";
-import { estimatedModelMemory, fitsBudget, localModelFit } from "./local-model-fit.js";
+import { estimatedModelMemory, fitsBudget, localModelFit, runsAtFullSpeed } from "./local-model-fit.js";
 
 // What the connect view sizes its offer against, read off a real workspace tree: which weights are already cached is a
 // stat, and the memory and GPU readings are this container's own. The arithmetic alone is the unit half.
@@ -20,6 +20,8 @@ test("every curated model is priced at every window, and held says what is alrea
         for (const window of option.windows) {
             expect(window.totalBytes).toBe(estimatedModelMemory(option.weightsBytes, window.tokens));
             expect(window.fits).toBe(fitsBudget(fit.budgetBytes, option.weightsBytes, window.tokens));
+            // A Linux container always states its free memory, so every rung is priced both ways.
+            expect(window.fullSpeed).toBe(runsAtFullSpeed({ device: fit.fullSpeedDevice!, bytes: fit.fullSpeedBytes! }, option.weightsBytes, window.tokens));
         }
     }
 
@@ -32,13 +34,16 @@ test("every curated model is priced at every window, and held says what is alrea
 });
 
 // The offer is the whole point of the route: a model plus the window it was priced at, addable verbatim.
-test("both offers name a window that fits, and never one above the turn-sized default", async () => {
+test("both offers name a window that runs at full speed, and never one above the turn-sized default", async () => {
     const root = await mkdtemp(join(tmpdir(), "fit-"));
     const fit = await localModelFit(root, IDLE);
+    // Without a granted GPU the one device is this container's own memory.
+    expect(fit.fullSpeedDevice).toBe(fit.gpu === "granted" && fit.gpuMemoryBytes > 0 ? "gpu" : "host");
     for (const offered of [fit.instant, fit.best].filter((entry) => entry !== undefined)) {
         const choice = LOCAL_MODELS.find((entry) => entry.id === offered.model)!;
         expect(Number(offered.context)).toBeLessThanOrEqual(Number(LOCAL_MODEL_WINDOW_DEFAULT));
         expect(fitsBudget(fit.budgetBytes, choice.weightsBytes, Number(offered.context))).toBe(true);
+        expect(fit.options.find((option) => option.model === offered.model)?.windows.find((window) => window.tokens === Number(offered.context))?.fullSpeed).toBe(true);
     }
     // Whatever this machine is, the instant rung is the one that is instant.
     expect(fit.instant?.model ?? LOCAL_MODEL_INSTANT.id).toBe(LOCAL_MODEL_INSTANT.id);

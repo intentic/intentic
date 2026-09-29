@@ -1,13 +1,13 @@
 import { basename } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
-import type { Event, FilePartInput, ToolPart } from "@opencode-ai/sdk";
+import type { Event, FilePartInput, OpencodeClient, SessionPromptAsyncData, ToolPart } from "@opencode-ai/sdk";
 import { type AgentEvent, OPENCODE } from "@intentic/sandbox-contract";
 import { whenAborted } from "@intentic/base/async";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import { withFileNote } from "../../agent/prompt/attachment-note.js";
 import { loadAttachments } from "../decorators/attachment-images.js";
 import { type EmulatedPlan, EXECUTE_PROMPT, PLAN_PREAMBLE, planMode } from "../decorators/plan-mode.js";
-import { beforeDeadline, DEFAULT_TURN_TIMEOUTS, EXPIRED, type TurnTimeouts, turnWatchdog } from "../decorators/turn-watchdog.js";
+import { beforeDeadline, DEFAULT_TURN_TIMEOUTS, EXPIRED, type TurnTimeouts, type TurnWatchdog, turnWatchdog } from "../decorators/turn-watchdog.js";
 import { isRateLimited, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";
 import { isContextOverflowText } from "../../agent/providers/failure-sentences.js";
 import { contextOverflowFrame } from "../../agent/run/error-frames.js";
@@ -16,9 +16,11 @@ import { editDiffContent, toolLocations } from "../../agent/tools/tool-calls.js"
 import type { CommandGuard } from "../../guard/command-guard.js";
 import { planPhaseOf, toolCallOpened, type TurnCapture, usageTotals } from "../decorators/vendor-events.js";
 import { vendorTurnGate } from "../decorators/vendor-gate.js";
+import { opt } from "../../opt.js";
 import { isChatModel, parseModelSuggestions } from "./xai-models.js";
-import { openCodeBackendLabel, type OpenCodeService, registerSessionGate, releaseSessionGate } from "./opencode.js";
-import { openCodeSubagents } from "./opencode-subagents.js";
+import { openCodeBackendLabel, type OpenCodeService, type SessionJudge, type SessionJudges } from "./opencode.js";
+import { mcpServersOf, mcpToolNameOf, openCodeMounts, type OpenCodeMounts, visibleToolsOf } from "./opencode-mcp.js";
+import { type OpenCodeSubagents, openCodeSubagents } from "./opencode-subagents.js";
 
 // The OpenCode loop Grok and Gemini both run on: AgentRequest in, AgentEvent frames out, over one shared `opencode serve`.
 
@@ -39,6 +41,9 @@ export interface OpenCodeTurn {
     // Command-rulebook gate for this turn, registered against the session id once it exists; absent means every
     // permission gets the standing yes.
     readonly gate?: CommandGuard;
+    // The turn's MCP servers, mounted for the turn under its conversation's own names (opencode-mcp.ts); absent mounts
+    // none, and the turn still sees no other conversation's.
+    readonly mounts?: OpenCodeMounts;
     // Standing instructions appended via OpenCode's `system` field (added to, not replacing, OpenCode's own prompt);
     // per message, not per session.
     readonly system?: string;
@@ -47,7 +52,42 @@ export interface OpenCodeTurn {
     readonly images?: readonly FilePartInput[];
     readonly signal: AbortSignal;
 }
-export type OpenCodeRunner = (turn: OpenCodeTurn) => AsyncIterable<Event>;
+
+// A frame the daemon raised for the turn itself (a permission card, then its resolution), carried in order with the
+// session's events; OpenCode sends no event of this type.
+export interface RaisedFrame {
+    readonly type: "intentic.frame";
+    readonly frame: AgentEvent;
+}
+export type OpenCodeTurnEvent = Event | RaisedFrame;
+export type OpenCodeRunner = (turn: OpenCodeTurn) => AsyncIterable<OpenCodeTurnEvent>;
+
+// What a race against the stream's next event answers when a raised frame is waiting instead.
+const RAISED: unique symbol = Symbol("raised");
+
+// The frames a turn's judge raises from the detached permission watcher, queued for the runner, which wakes on the next.
+interface RaisedFrames {
+    readonly push: (frame: AgentEvent) => void;
+    readonly take: () => AgentEvent | undefined;
+    readonly arrived: () => Promise<typeof RAISED>;
+}
+
+const raisedFrames = (): RaisedFrames => {
+    const queue: AgentEvent[] = [];
+    let wake = (): void => {};
+    return {
+        push: (frame: AgentEvent): void => {
+            queue.push(frame);
+            wake();
+        },
+        take: (): AgentEvent | undefined => queue.shift(),
+        // Settles once a frame is pushed; asked for only with the queue empty, so none is missed.
+        arrived: (): Promise<typeof RAISED> =>
+            new Promise((resolve) => {
+                wake = () => resolve(RAISED);
+            }),
+    };
+};
 
 // The session an event belongs to, for filtering the global stream down to this turn's session.
 const eventSessionId = (event: Event): string | undefined => {
@@ -84,12 +124,17 @@ const refuseEarlyClose = (turn: OpenCodeTurn): void => {
     throw new Error(`${openCodeBackendLabel(turn.provider ?? XAI)} stopped sending events before the turn ended.`);
 };
 
+// A turn's stream as the connect handshake left it: the iterator, the read in flight, and an event already read.
+interface OpenedStream {
+    readonly iterator: AsyncIterator<Event>;
+    readonly pending: Promise<IteratorResult<Event>>;
+    readonly buffered: Event | undefined;
+}
+
 // `subscribe()` is lazy: the HTTP request fires only on the first read, so it must happen before the session is created
 // or `session.created` is missed. The first read is awaited here, bounded by CONNECT_MS, and what it read is kept for
 // the loop rather than dropped; unread, the same promise is still what the loop first awaits.
-const openStream = async (
-    sse: { readonly stream: AsyncIterable<Event> },
-): Promise<{ readonly iterator: AsyncIterator<Event>; readonly pending: Promise<IteratorResult<Event>>; readonly buffered: Event | undefined }> => {
+const openStream = async (sse: { readonly stream: AsyncIterable<Event> }): Promise<OpenedStream> => {
     const iterator = sse.stream[Symbol.asyncIterator]();
     const first = iterator.next();
     const hello = await Promise.race([first, new Promise<"unopened">((resolve) => setTimeout(() => resolve("unopened"), CONNECT_MS).unref())]);
@@ -98,22 +143,120 @@ const openStream = async (
         : { iterator, pending: iterator.next(), buffered: hello.value };
 };
 
+// Reads one turn's stream: a frame the turn's judge raised first, then the event the handshake already read, then the
+// stream's next event raced against the watchdog and against the next raised frame. A read a frame or the deadline cut
+// short stays in flight for the next call; undefined is the stream ending.
+const turnReader = (opened: OpenedStream, clock: TurnWatchdog, raised: RaisedFrames) => {
+    let pending = opened.pending;
+    let held = opened.buffered;
+    return async (): Promise<Event | RaisedFrame | typeof EXPIRED | undefined> => {
+        for (;;) {
+            const frame = raised.take();
+            if (frame !== undefined) {
+                return { type: "intentic.frame", frame };
+            }
+            if (held !== undefined) {
+                const event = held;
+                held = undefined;
+                return event;
+            }
+            const next = pending;
+            const result = await beforeDeadline(Promise.race([next, raised.arrived()]), clock);
+            if (result === EXPIRED) {
+                next.catch(() => {}); // allow(silent-catch): the abandoned read lost to the deadline, whose error is the answer
+                return EXPIRED;
+            }
+            if (result !== RAISED) {
+                pending = result.done === true ? pending : opened.iterator.next();
+                return result.done === true ? undefined : result.value;
+            }
+        }
+    };
+};
+
+// The session a turn runs on: the one it resumes, else a new one, named on creation so OpenCode skips auto-titling (an
+// extra model call per unnamed session); the title string itself is unused.
+const sessionFor = async (c: OpencodeClient, turn: OpenCodeTurn): Promise<string> => {
+    if (turn.sessionId !== undefined) {
+        return turn.sessionId;
+    }
+    const created = await c.session.create({ query: { directory: turn.cwd }, body: { title: `intentic conversation` } });
+    const id = created.data?.id;
+    if (id === undefined) {
+        throw new Error("OpenCode did not return a session id");
+    }
+    return id;
+};
+
+// One message of the turn on a model id (empty means let OpenCode choose). `tools` shows the session its own
+// conversation's MCP servers and no one else's; OpenCode keeps it as the session's rules until the next prompt replaces
+// them.
+const promptBodyOf = (turn: OpenCodeTurn, mounts: OpenCodeMounts, modelId: string | undefined): NonNullable<SessionPromptAsyncData["body"]> => ({
+    agent: turn.agent,
+    ...opt("model", modelId === undefined || modelId === "" ? undefined : { providerID: turn.provider ?? XAI, modelID: modelId }),
+    ...opt("system", turn.system),
+    tools: visibleToolsOf(mounts),
+    // Images precede the text part.
+    parts: [...(turn.images ?? []), { type: "text", text: turn.prompt }],
+});
+
+// xAI's named alternatives in a model-not-found rejection, chat models only; none for any other failure.
+const modelSuggestions = (message: string): string[] => (MODEL_INVALID.test(message) ? parseModelSuggestions(message).filter(isChatModel) : []);
+
+// Sends the turn's first message. xAI rejects a stale/renamed model id by rejecting promptAsync (thrown), not via a
+// session.error event, so the in-loop self-heal never sees it; healed here the same way, once. Answers whether that one
+// attempt is spent. No events stream on rejection, so no stale idle to skip.
+const sendFirst = async (
+    send: (modelId: string | undefined) => ReturnType<OpencodeClient["session"]["promptAsync"]>,
+    model: string | undefined,
+    heal: ((suggestions: string[]) => Promise<void>) | undefined,
+): Promise<boolean> => {
+    try {
+        await send(model);
+        return false;
+    } catch (error) {
+        const suggestions = heal === undefined ? [] : modelSuggestions(errorMessage(error));
+        if (heal === undefined || suggestions[0] === undefined) {
+            throw error;
+        }
+        await heal(suggestions);
+        return true;
+    }
+};
+
+// The one mid-turn self-heal: xAI names the account's valid models when it rejects a stale/renamed id, so they are
+// recorded and the same session re-prompted once; nothing streams before that rejection, so nothing is duplicated, and a
+// second failure falls through as a real error. Until the corrected turn's first real event, a lingering idle from the
+// failed prompt is swallowed. Answers whether an event was the heal's own, kept from the turn.
+const modelSelfHeal = (spent: boolean, heal: (suggestions: string[]) => Promise<void>) => {
+    let retried = spent;
+    let awaitingRetryStart = false;
+    return async (event: Event): Promise<boolean> => {
+        const suggestions = event.type === "session.error" && !retried ? modelSuggestions(errorText(event.properties.error)) : [];
+        if (suggestions[0] !== undefined) {
+            retried = true;
+            awaitingRetryStart = true;
+            await heal(suggestions);
+            return true;
+        }
+        if (!awaitingRetryStart) {
+            return false;
+        }
+        // Any event but an idle means the corrected turn is under way.
+        awaitingRetryStart = event.type === "session.idle";
+        return awaitingRetryStart;
+    };
+};
+
 // A turn's session and the subagent sessions its task tool opens beneath it, each naming its parent, followed the way
 // OpenCode's own `run` follows them: a subagent's work reaches the turn instead of being dropped as another session's,
 // keeps the turn's watchdog fed, and answers to the rules its parent does, since its asks carry its own session id.
-export const sessionFamily = (
-    root: string,
-    gate: CommandGuard | undefined,
-    gates: { readonly register: typeof registerSessionGate; readonly release: typeof releaseSessionGate } = {
-        register: registerSessionGate,
-        release: releaseSessionGate,
-    },
-) => {
+export const sessionFamily = (root: string, judge: SessionJudge | undefined, judges: SessionJudges) => {
     const members = new Set<string>();
     const join = (session: string): void => {
         members.add(session);
-        if (gate !== undefined) {
-            gates.register(session, gate);
+        if (judge !== undefined) {
+            judges.register(session, judge);
         }
     };
     join(root);
@@ -129,11 +272,11 @@ export const sessionFamily = (
             }
             return session === root ? "own" : "subagent";
         },
-        // The gates die with their phase; a later permission belongs to no session judging it and gets the standing yes
+        // The judges die with their phase; a later permission belongs to no session judging it and gets the standing yes
         // (opencode.ts answerPermission).
         release: (): void => {
             for (const member of members) {
-                gates.release(member);
+                judges.release(member);
             }
         },
     };
@@ -152,89 +295,54 @@ export const createOpenCodeRunner = (openCode: OpenCodeService, timeouts: TurnTi
         // the boot doesn't know about.
         await openCode.watch(turn.cwd);
         const opened = await openStream(sse);
-        const iterator = opened.iterator;
-        let pending = opened.pending;
-        const buffered = opened.buffered;
-        let sessionId = turn.sessionId;
-        if (sessionId === undefined) {
-            // Named on creation so OpenCode skips auto-titling (an extra model call per unnamed session); the title
-            // string itself is unused.
-            const created = await c.session.create({ query: { directory: turn.cwd }, body: { title: `intentic conversation` } });
-            sessionId = created.data?.id;
-            if (sessionId === undefined) {
-                throw new Error("OpenCode did not return a session id");
-            }
-        }
+        const sessionId = await sessionFor(c, turn);
         // Registered only once the session id exists: a signal already aborted before this point never fires a listener
         // added later, so the session would run to completion while the UI shows it stopped.
         // allow(silent-catch): a stop OpenCode refuses leaves the turn to end on its own events or the watchdog
         whenAborted(turn.signal, () => void c.session.abort({ path: { id: sessionId } }).catch(() => {}));
-        const family = sessionFamily(sessionId, turn.gate);
-        // Fires the prompt on the resolved session for a model id (empty means let OpenCode choose); reused by the
-        // self-heal to re-prompt with a corrected model.
+        // Drives the iterator manually so each read can race the watchdog (`for await` can't); closed on exit since it's
+        // per-turn. Inactivity advances only on this session's events; the turn deadline is a hard backstop. Started
+        // before the prompt, since a permission ask can hold it before the session's first event arrives.
+        const clock = turnWatchdog(timeouts);
+        // What the turn's judge raises (a permission card, its resolution), read ahead of the stream's next event.
+        const raised = raisedFrames();
+        const read = turnReader(opened, clock, raised);
+        const family = sessionFamily(sessionId, turn.gate === undefined ? undefined : { gate: turn.gate, push: raised.push, hold: clock.hold }, openCode.judges);
+        const mounts = turn.mounts ?? openCodeMounts(undefined, []);
         const sendPrompt = (modelId: string | undefined): ReturnType<typeof c.session.promptAsync> =>
-            c.session.promptAsync({
-                path: { id: sessionId },
-                query: { directory: turn.cwd },
-                body: {
-                    agent: turn.agent,
-                    ...(modelId !== undefined && modelId !== "" ? { model: { providerID: turn.provider ?? XAI, modelID: modelId } } : {}),
-                    ...(turn.system !== undefined ? { system: turn.system } : {}),
-                    // Images precede the text part.
-                    parts: [...(turn.images ?? []), { type: "text", text: turn.prompt }],
-                },
-            });
-        // One self-heal attempt per turn: xAI names the account's valid models when it rejects a stale/renamed id.
-        let retried = false;
-        // After a self-heal re-prompt, a lingering idle from the failed prompt is ignored until the retry's first real
-        // event proves it started.
-        let awaitingRetryStart = false;
+            c.session.promptAsync({ path: { id: sessionId }, query: { directory: turn.cwd }, body: promptBodyOf(turn, mounts, modelId) });
+        const heal = async (suggestions: string[]): Promise<void> => {
+            await openCode.recordModels(suggestions);
+            await sendPrompt(suggestions[0]);
+        };
         // The self-heal is xAI-specific: the rejection wording and the corrected catalog both come from xAI. Gemini's
         // catalog comes off the translator and needs no rescue.
         const selfHeals = (turn.provider ?? XAI) === XAI;
-        // xAI rejects a stale/renamed model id by rejecting promptAsync (thrown), not via a session.error event, so the
-        // in-loop self-heal below never sees it; healed here the same way. No events stream on rejection, so no stale
-        // idle to skip.
+        // Replaced by the mount's own release once the servers are up; the finally owes it however the turn ends.
+        let unmount = async (): Promise<void> => {};
         try {
-            await sendPrompt(turn.model);
-        } catch (error) {
-            const message = errorMessage(error);
-            const suggestions = selfHeals && MODEL_INVALID.test(message) ? parseModelSuggestions(message).filter(isChatModel) : [];
-            if (suggestions[0] === undefined) {
-                throw error;
-            }
-            retried = true;
-            await openCode.recordModels(suggestions);
-            await sendPrompt(suggestions[0]);
-        }
-        // Drives the iterator manually so each read can race the watchdog (`for await` can't); closed on exit since it's
-        // per-turn. Inactivity advances only on this session's events; the turn deadline is a hard backstop.
-        const clock = turnWatchdog(timeouts);
-        // The event the connect handshake already pulled off the stream, replayed as this loop's first read.
-        let held = buffered;
-        try {
+            unmount = await openCode.mount(turn.cwd, mcpServersOf(mounts));
+            const healed = await sendFirst(sendPrompt, turn.model, selfHeals ? heal : undefined);
+            // Silence is counted from the prompt, not from however long the servers took to mount.
+            clock.touch();
+            const absorbed = modelSelfHeal(!selfHeals || healed, heal);
             for (;;) {
-                const next = pending;
-                let event: Event;
-                if (held !== undefined) {
-                    event = held;
-                    held = undefined;
-                } else {
-                    const result = await beforeDeadline(next, clock);
-                    if (result === EXPIRED) {
-                        next.catch(() => {}); // allow(silent-catch): the abandoned read lost to the deadline, whose error is the answer
-                        // allow(silent-catch): the turn already ends on the deadline; a session that will not abort changes nothing
-                        await c.session.abort({ path: { id: sessionId } }).catch(() => {});
-                        throw new Error(`${openCodeBackendLabel(turn.provider ?? XAI)} turn timed out waiting for OpenCode: ${clock.expiry()}.`);
-                    }
-                    if (result.done) {
-                        // Stream closed without the turn ending; refuseEarlyClose throws unless this turn's own abort
-                        // caused it.
-                        refuseEarlyClose(turn);
-                        return;
-                    }
-                    event = result.value;
-                    pending = iterator.next();
+                const event = await read();
+                if (event === EXPIRED) {
+                    // allow(silent-catch): the turn already ends on the deadline; a session that will not abort changes nothing
+                    await c.session.abort({ path: { id: sessionId } }).catch(() => {});
+                    throw new Error(`${openCodeBackendLabel(turn.provider ?? XAI)} turn timed out waiting for OpenCode: ${clock.expiry()}.`);
+                }
+                if (event === undefined) {
+                    // Stream closed without the turn ending; refuseEarlyClose throws unless this turn's own abort caused
+                    // it.
+                    refuseEarlyClose(turn);
+                    return;
+                }
+                // A card the judge raised goes out as it came; it is the daemon's own doing, not OpenCode's activity.
+                if (event.type === "intentic.frame") {
+                    yield event;
+                    continue;
                 }
                 const whose = family.whose(event);
                 if (whose === undefined) {
@@ -252,26 +360,8 @@ export const createOpenCodeRunner = (openCode: OpenCodeService, timeouts: TurnTi
                 if (event.type === "session.status" && event.properties.status.type === "retry") {
                     clock.extendPast(event.properties.status.next);
                 }
-                // Self-heals a stale/renamed model by recording xAI's named alternatives and re-prompting the same
-                // session once; nothing streams before a model-not-found rejection, so nothing is duplicated. A second
-                // failure falls through as a real error.
-                if (event.type === "session.error" && !retried && selfHeals) {
-                    const message = errorText(event.properties.error);
-                    const suggestions = MODEL_INVALID.test(message) ? parseModelSuggestions(message).filter(isChatModel) : [];
-                    if (suggestions[0] !== undefined) {
-                        retried = true;
-                        awaitingRetryStart = true;
-                        await openCode.recordModels(suggestions);
-                        await sendPrompt(suggestions[0]);
-                        continue;
-                    }
-                }
-                if (awaitingRetryStart) {
-                    // Drops a stale idle from the failed prompt; any other event means the corrected turn is under way.
-                    if (event.type === "session.idle") {
-                        continue;
-                    }
-                    awaitingRetryStart = false;
+                if (await absorbed(event)) {
+                    continue;
                 }
                 yield event;
                 if (event.type === "session.idle" || event.type === "session.error") {
@@ -280,8 +370,9 @@ export const createOpenCodeRunner = (openCode: OpenCodeService, timeouts: TurnTi
             }
         } finally {
             // allow(silent-catch): closing a stream that already failed has nothing left to report
-            await iterator.return?.().catch(() => {});
+            await opened.iterator.return?.().catch(() => {});
             family.release();
+            await unmount();
         }
     };
 
@@ -331,10 +422,18 @@ const finishedToolCall = (
         : { kind: "tool_call_update", id: part.callID, status, content };
 };
 
+// What a turn's frames are read against: where it runs, and how its tool keys are spelled for a reader (a mounted MCP
+// server's tool as `mcp__<server>__<tool>`, opencode-mcp.ts).
+interface TurnView {
+    readonly cwd: string;
+    readonly toolName: (raw: string) => string;
+}
+
 // Frames for one tool part, kept out of streamTurn's event walk. `started` is the set of callIDs that already opened a
 // card, telling a first announcement from a later update; `parent` is the task call whose subagent made this one.
-const toolPartFrames = (part: ToolPart, cwd: string, started: Set<string>, parent?: string): AgentEvent[] => {
-    const name = displayNameOf(part.tool);
+const toolPartFrames = (part: ToolPart, view: TurnView, started: Set<string>, parent?: string): AgentEvent[] => {
+    const { cwd } = view;
+    const name = displayNameOf(view.toolName(part.tool));
     const state = part.state;
     // `pending` is skipped: OpenCode is still streaming input args, so target/locations would read as partial.
     if (state.status === "pending") {
@@ -359,6 +458,16 @@ const subagentSession = (event: Event, own: string | undefined): string | undefi
     return session !== undefined && own !== undefined && session !== own ? session : undefined;
 };
 
+// What goes out without the turn's own reading: a card the turn's judge raised, as it came, wherever the stream is, or a
+// subagent's event, under its task. Undefined for the turn's own events.
+const passedThrough = (event: OpenCodeTurnEvent, own: string | undefined, subagents: OpenCodeSubagents): AgentEvent[] | undefined => {
+    if (event.type === "intentic.frame") {
+        return [event.frame];
+    }
+    const subagent = subagentSession(event, own);
+    return subagent === undefined ? undefined : subagents.child(event, subagent);
+};
+
 // OpenCode's checklist as the panel's; anything past in-progress and completed reads as still to do.
 const todoStatus = (status: string): "pending" | "in_progress" | "completed" => (status === "in_progress" || status === "completed" ? status : "pending");
 const todosFrame = (todos: Extract<Event, { type: "todo.updated" }>["properties"]["todos"]): AgentEvent => ({
@@ -379,8 +488,8 @@ const retryFrame = (status: { readonly attempt: number; readonly next: number; r
 // off `yield*`). `holdText` accumulates text into one `plan` frame instead of streaming deltas; ends on session.idle
 // without emitting the terminal `done`.
 async function* streamTurn(
-    events: AsyncIterable<Event>,
-    cwd: string,
+    events: AsyncIterable<OpenCodeTurnEvent>,
+    view: TurnView,
     holdText = false,
     resumedSessionId?: string,
 ): AsyncGenerator<AgentEvent, TurnCapture> {
@@ -397,12 +506,12 @@ async function* streamTurn(
     // same stream, so without this it would leak into planText/delta.
     const roleOf = new Map<string, "user" | "assistant">();
     // The subagents this turn's task calls start, and their sessions' events put under those calls.
-    const subagents = openCodeSubagents((part, parent) => toolPartFrames(part, cwd, started, parent), usage);
+    const subagents = openCodeSubagents((part, parent) => toolPartFrames(part, view, started, parent), usage);
 
     for await (const event of events) {
-        const subagent = subagentSession(event, capture.sessionId);
-        if (subagent !== undefined) {
-            yield* subagents.child(event, subagent);
+        const passed = passedThrough(event, capture.sessionId, subagents);
+        if (passed !== undefined) {
+            yield* passed;
             continue;
         }
         if (event.type === "session.created") {
@@ -432,7 +541,7 @@ async function* streamTurn(
                     emitted.set(part.id, part.text.length);
                 }
             } else if (part.type === "tool" && part.tool !== "todowrite") {
-                yield* toolPartFrames(part, cwd, started);
+                yield* toolPartFrames(part, view, started);
                 yield* subagents.task(part);
             }
         } else if (event.type === "todo.updated") {
@@ -475,7 +584,7 @@ async function* streamTurn(
 // The turn one OpenCode message runs as. Every message carries the same standing instructions, since a plan's two phases
 // are two messages of one turn and the execute phase must not drop them.
 const openCodeTurnOf =
-    (request: AgentRequest, provider: string, gate: CommandGuard) =>
+    (request: AgentRequest, provider: string, gate: CommandGuard, mounts: OpenCodeMounts) =>
     (message: {
         readonly prompt: string;
         readonly images: readonly FilePartInput[];
@@ -490,6 +599,7 @@ const openCodeTurnOf =
         provider,
         agent: message.agent,
         gate,
+        mounts,
         ...(request.spec.systemAppend !== undefined ? { system: request.spec.systemAppend } : {}),
         signal: request.signal,
     });
@@ -498,7 +608,7 @@ const openCodeTurnOf =
 // `build` resumed on the same session. Pictures ride the first planning message only; every later message resumes the
 // session whose history already holds them. No `question` frames: the capability row says `questions: false`.
 const openCodePlan = (
-    request: AgentRequest,
+    view: TurnView,
     runner: OpenCodeRunner,
     turnOf: ReturnType<typeof openCodeTurnOf>,
     prompt: string,
@@ -508,16 +618,11 @@ const openCodePlan = (
     return {
         prompt: PLAN_PREAMBLE + prompt,
         async *plan(phasePrompt, sessionId) {
-            const capture = yield* streamTurn(
-                runner(turnOf({ prompt: phasePrompt, images, sessionId, agent: "plan" })),
-                request.spec.cwd,
-                true,
-                sessionId,
-            );
+            const capture = yield* streamTurn(runner(turnOf({ prompt: phasePrompt, images, sessionId, agent: "plan" })), view, true, sessionId);
             images = [];
             return planPhaseOf(capture);
         },
-        execute: (sessionId) => streamTurn(runner(turnOf({ prompt: EXECUTE_PROMPT, images: [], sessionId, agent: "build" })), request.spec.cwd),
+        execute: (sessionId) => streamTurn(runner(turnOf({ prompt: EXECUTE_PROMPT, images: [], sessionId, agent: "build" })), view),
     };
 };
 
@@ -534,17 +639,21 @@ export const createOpenCodeAgent = (runner: OpenCodeRunner, provider: string = X
             url: `data:${image.mimeType};base64,${image.data}`,
         }));
         const prompt = withFileNote(request.spec.prompt, [...attached.files, ...attached.unread]);
-        // Turn's safety wiring (guard/turn-gate.ts): rulebook answered over OpenCode's permission channel. `canPark:
-        // false`: the watchdog aborts a turn with no session event in two minutes, so a paused permission would be read
-        // as a hang; a hold is delivered as a refusal instead, and the capability record says `rulebook:
-        // "refuse-only"`.
-        const { gate, release } = vendorTurnGate(request);
-        const turnOf = openCodeTurnOf(request, provider, gate);
+        // Turn's safety wiring (guard/turn-gate.ts): rulebook answered over OpenCode's permission channel, a hold parked
+        // on a card while the runner holds its watchdog (the capability record says `rulebook: "approval"`). The gate's
+        // signal also ends with the turn: OpenCode can move on from an ask nobody answered (a refused sibling ask stops
+        // its session), and the card it left must not stay open.
+        const ended = new AbortController();
+        const { gate, release } = vendorTurnGate({ ...request, signal: AbortSignal.any([request.signal, ended.signal]) });
+        // The turn's remote MCP servers, the same list Codex takes, mounted per phase by the runner.
+        const mounts = openCodeMounts(request.spec.conversationId, request.tools.remote ?? []);
+        const view: TurnView = { cwd: request.spec.cwd, toolName: mcpToolNameOf(mounts) };
+        const turnOf = openCodeTurnOf(request, provider, gate, mounts);
         const turn = planMode(
             OPENCODE,
             request,
-            () => openCodePlan(request, runner, turnOf, prompt, images),
-            () => streamTurn(runner(turnOf({ prompt, images, sessionId: request.spec.sessionId, agent: "build" })), request.spec.cwd),
+            () => openCodePlan(view, runner, turnOf, prompt, images),
+            () => streamTurn(runner(turnOf({ prompt, images, sessionId: request.spec.sessionId, agent: "build" })), view),
         );
         let surfacedError = false;
         try {
@@ -562,6 +671,7 @@ export const createOpenCodeAgent = (runner: OpenCodeRunner, provider: string = X
                 yield { kind: "error", message, ...(MODEL_INVALID.test(message) ? { code: "grok-model-invalid" as const } : {}) };
             }
         } finally {
+            ended.abort();
             // This turn's outside-content bit dies with the turn (guard/turn-taint.ts).
             release();
         }

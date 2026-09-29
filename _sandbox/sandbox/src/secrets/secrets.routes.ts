@@ -17,6 +17,8 @@ import type { OrpcContext } from "../app-env.js";
 import { stateRelPath } from "../state-paths.js";
 import { sandboxSecretsDocument } from "./sandbox-secrets.js";
 import { randomSecret } from "./random-secret.js";
+import { guardForEntry } from "./host-guards.js";
+import { createSecretHostRoutes } from "./secret-hosts.routes.js";
 import { type TextFile, textFile } from "../store/text-file.js";
 
 // One connected provider account as an inventory entry; provider tokens are never revealable.
@@ -142,6 +144,8 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
         })().catch((error: unknown) => services.logger.warn({ err: error }, "secrets push after set failed"));
     };
     return {
+        // Where each secret may be sent: its own module, since who may change a list turns on more than a role.
+        ...createSecretHostRoutes(services),
         // With DevOps, into desired-state/.env, which deploys and the CI copy read; without it, into the sandbox's own
         // store (sandbox-secrets.ts), so keeping a key for the agent never needs a deploy pipeline scaffolded first.
         set: i.set.handler(async ({ input }) => {
@@ -187,7 +191,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
             return { ok: true } as const;
         }),
         inventory: i.inventory.handler(async () => {
-            const [repoEntries, capabilities, connectors, providerEntries, uses, gates, kept] = await Promise.all([
+            const [repoEntries, capabilities, connectors, providerEntries, uses, gates, kept, hostGuards] = await Promise.all([
                 // A display surface: one unparseable repo file costs its own rows, said in the log, not the whole panel.
                 existsSync(desiredState())
                     ? collectSecretInventory(desiredState()).catch((error: unknown) => {
@@ -208,6 +212,8 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
                     services.logger.warn({ err: error }, "secrets inventory: the sandbox's own secret store could not be read");
                     return {};
                 }),
+                // Display only, like the gates: an unreadable file shows no guards here, while every exit still refuses.
+                services.hostGuards().catch(() => [] as const),
             ]);
             const capabilityEntries: SecretInventoryEntry[] = capabilities
                 .filter((capability) => secretField(capability, connectors) !== undefined)
@@ -235,7 +241,10 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
             const withUse = (entry: SecretInventoryEntry): SecretInventoryEntry => {
                 const use = lastUseFor(entry, lastByName);
                 const gate = gateFor(entry);
-                const withGate = gate === undefined ? entry : { ...entry, gate: { approvers: gate.approvers, scope: gate.scope } };
+                const hostGuard = guardForEntry(hostGuards, entry);
+                const withHosts =
+                    hostGuard === undefined ? entry : { ...entry, hosts: { guard: hostGuard.guard, list: hostGuard.hosts, source: hostGuard.source } };
+                const withGate = gate === undefined ? withHosts : { ...withHosts, gate: { approvers: gate.approvers, scope: gate.scope } };
                 return use === undefined
                     ? withGate
                     : {

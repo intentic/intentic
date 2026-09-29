@@ -271,7 +271,7 @@
     "_sandbox/sandbox/src/capabilities/handlers/docker.handler.ts": 2,
     "_sandbox/sandbox/src/capabilities/handlers/extension.handler.ts": 1,
     "_sandbox/sandbox/src/capabilities/handlers/fleet.handler.ts": 1,
-    "_sandbox/sandbox/src/capabilities/handlers/localmodel.handler.ts": 3,
+    "_sandbox/sandbox/src/capabilities/handlers/localmodel.handler.ts": 2,
     "_sandbox/sandbox/src/capabilities/handlers/mcp.handler.ts": 1,
     "_sandbox/sandbox/src/capabilities/handlers/ssh.handler.ts": 1,
     "_sandbox/sandbox/src/capabilities/offers/recommend.ts": 2,

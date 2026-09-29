@@ -6,8 +6,10 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { embedPending } from "../engines/semantic.js";
 import type { SqliteDb } from "@intentic/base/sqlite";
+import { syncModel } from "../indexer/indexer.js";
 import { openIndex } from "../store/db.js";
-import type { Embedder } from "./embedder.js";
+import { getMeta, setMeta } from "../store/index-store.js";
+import { type Embedder, MODEL_ID, VECTOR_SPACE } from "./embedder.js";
 import { openVectorCache, vectorCachePath } from "./vector-cache.js";
 
 let root: string;
@@ -125,6 +127,68 @@ test("a model swap clears the cache", () => {
     const swapped = openVectorCache(cachePath, "model-b");
     expect(swapped!.get(["h1"]).size).toBe(0);
     swapped!.close();
+});
+
+// What every released cache and index carries in `model_id`: the bare model id, from before the key named a vector space.
+const RELEASED_SPACE = "Xenova/bge-small-en-v1.5";
+// Any other space, e.g. the reference [CLS] pooling a later release might switch to.
+const OTHER_SPACE = `${MODEL_ID}#pooling=cls`;
+
+// Upgrading onto the current (mean-pooled) space must cost nobody a re-embed: both stores stay warm.
+test("the current vector space is the released key, so an existing index and cache stay warm", async () => {
+    expect(VECTOR_SPACE).toBe(RELEASED_SPACE);
+    const indexDir = join(root, "warm", "iq");
+    const cachePath = vectorCachePath(indexDir);
+    const texts = ["const widget = 1", "function other() {}"];
+    const db = openIndex(indexDir, "write");
+    insertChunks(db, texts);
+    setMeta(db, "model_id", RELEASED_SPACE);
+    const released = openVectorCache(cachePath, RELEASED_SPACE);
+    expect(await embedPending(db, countingEmbedder().embedder, released)).toBe(0);
+    released!.close();
+    const before = storedVectors(db);
+
+    syncModel(db, "/models");
+    expect(getMeta(db, "model_id")).toBe(RELEASED_SPACE);
+    expect(Number(db.get("SELECT COUNT(*) AS n FROM chunks WHERE embedded = 0")?.["n"])).toBe(0);
+    expect(storedVectors(db)).toEqual(before);
+    const current = openVectorCache(cachePath, VECTOR_SPACE);
+    expect([...current!.get([...before.keys()]).keys()].toSorted()).toEqual([...before.keys()].toSorted());
+    // Nothing is pending, so the model is never reached.
+    expect(await embedPending(db, refusingEmbedder, current)).toBe(0);
+    db.close();
+    current!.close();
+});
+
+// The change path end to end: an index and its sidecar both embedded under another space must refill from the model,
+// never from either store's old vectors, since those are well-formed but belong to the other space.
+test("a different vector space reopens empty and re-embeds every chunk instead of mixing old vectors in", async () => {
+    const indexDir = join(root, "change", "iq");
+    const cachePath = vectorCachePath(indexDir);
+    const texts = ["const widget = 1", "function other() {}"];
+    const db = openIndex(indexDir, "write");
+    insertChunks(db, texts);
+    setMeta(db, "model_id", OTHER_SPACE);
+    const old = openVectorCache(cachePath, OTHER_SPACE);
+    expect(await embedPending(db, countingEmbedder().embedder, old)).toBe(0);
+    old!.close();
+
+    syncModel(db, "/models");
+    expect(getMeta(db, "model_id")).toBe(VECTOR_SPACE);
+    expect(Number(db.get("SELECT COUNT(*) AS n FROM chunks WHERE embedded = 0")?.["n"])).toBe(2);
+    expect(storedVectors(db).size).toBe(0);
+    const reopened = openVectorCache(cachePath, VECTOR_SPACE);
+    expect(reopened!.get(texts.map(sha)).size).toBe(0);
+    const { embedder, embedded } = countingEmbedder();
+    expect(await embedPending(db, embedder, reopened)).toBe(0);
+    expect(embedded).toEqual(texts);
+    expect(storedVectors(db).size).toBe(2);
+    db.close();
+    reopened!.close();
+    // Reopening under the same space keeps what it wrote: the clear happens once per change, not per open.
+    const again = openVectorCache(cachePath, VECTOR_SPACE);
+    expect(again!.get(texts.map(sha)).size).toBe(2);
+    again!.close();
 });
 
 test("compaction evicts least-recently-used rows past the ceiling", async () => {

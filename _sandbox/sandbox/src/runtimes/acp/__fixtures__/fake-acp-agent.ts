@@ -1,12 +1,31 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { agent, type AgentApp, client, methods, type SessionUpdate, type AgentCapabilities } from "@agentclientprotocol/sdk";
+import {
+    agent,
+    type AgentApp,
+    type AgentCapabilities,
+    client,
+    methods,
+    type RequestPermissionRequest,
+    type SessionUpdate,
+} from "@agentclientprotocol/sdk";
 import { decidePermission } from "../acp-permissions.js";
 import type { AcpConnection, TurnHooks } from "../acp-connection.js";
 
 /* This fixture uses the ACP SDK in-process without transport. */
 
-// The fixture's session/prompt behaviours, keyed by a keyword in the prompt text.
-export const fakeAcpAgentApp = (): AgentApp => {
+// A permission request for a command the owner's rules hold (a force push), readable by the classifier.
+const forcePush = (sessionId: string): RequestPermissionRequest => ({
+    sessionId,
+    toolCall: { toolCallId: "p2", kind: "execute", title: "Run git push", rawInput: { command: "git push --force origin main" } },
+    options: [
+        { optionId: "allow", name: "Allow", kind: "allow_once" },
+        { optionId: "deny", name: "Deny", kind: "reject_once" },
+    ],
+});
+
+// The fixture's session/prompt behaviours, keyed by a keyword in the prompt text. `answered` hears how an ask the agent
+// left behind was finally answered, after its turn ended.
+export const fakeAcpAgentApp = (options: { readonly answered?: (outcome: string) => void } = {}): AgentApp => {
     let nextSession = 0;
     return agent({ name: "fake-acp" })
         .onRequest(methods.agent.initialize, () => ({
@@ -53,6 +72,19 @@ export const fakeAcpAgentApp = (): AgentApp => {
                 });
                 const outcome = response.outcome.outcome === "selected" ? response.outcome.optionId : "cancelled";
                 await push({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: `permission:${outcome}` } });
+                return { stopReason: "end_turn" };
+            }
+            if (text.includes("ask-to-force-push")) {
+                const response = await ctx.request(methods.client.session.requestPermission, forcePush(params.sessionId));
+                const outcome = response.outcome.outcome === "selected" ? response.outcome.optionId : "cancelled";
+                await push({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: `permission:${outcome}` } });
+                return { stopReason: "end_turn" };
+            }
+            if (text.includes("ask-and-leave")) {
+                // Asks, then ends its turn without waiting for the answer, as an agent whose process died would.
+                void ctx.request(methods.client.session.requestPermission, forcePush(params.sessionId)).then((response) => {
+                    options.answered?.(response.outcome.outcome === "selected" ? response.outcome.optionId : "cancelled");
+                });
                 return { stopReason: "end_turn" };
             }
             if (text.includes("plan the work")) {

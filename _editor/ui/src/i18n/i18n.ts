@@ -99,9 +99,48 @@ const nest = (namespace: string | undefined, tree: MessageTree): MessageTree =>
 // the function rather than written out, so the cast cannot drift from whatever signature the library actually has.
 type MergeableMessages = Parameters<typeof i18n.global.mergeLocaleMessage>[1];
 
+// The plain words of every message merged so far, for `staticCopy`. Collected on the way in, from the tree a catalog
+// hands over, so nothing has to read vue-i18n's store back out.
+const words = new Set<string>();
+
+// A message with a placeholder, a link to another message or an escape renders to something the catalog does not
+// spell out, so it is left out. A reader of `words` treats text it lacks as not ours, which is the safe direction.
+const RENDERS_DIFFERENTLY = /[{}@]/;
+
+const isMessage = (node: string | MessageTree): node is string => typeof node === `string`;
+
+// An extension's catalog is JSON from outside this repository, so a value that is neither a string nor an object
+// (a null, say) is skipped rather than allowed to break the registration.
+const isTree = (node: string | MessageTree): node is MessageTree => typeof node === `object` && node !== null;
+
+// `|` separates the forms of a plural message, and each form is a sentence a reader can be shown.
+const collect = (tree: MessageTree): void => {
+    for (const node of Object.values(tree)) {
+        if (isTree(node)) {
+            collect(node);
+        } else if (isMessage(node)) {
+            for (const form of node.split(`|`)) {
+                const plain = form.replace(/\s+/g, ` `).trim();
+                if (plain !== `` && !RENDERS_DIFFERENTLY.test(plain)) {
+                    words.add(plain);
+                }
+            }
+        }
+    }
+};
+
 const merge = (locale: Locale, catalog: Catalog, tree: MessageTree): void => {
     i18n.global.mergeLocaleMessage(locale, nest(catalog.namespace, tree) as MergeableMessages);
+    collect(tree);
 };
+
+/**
+ * Every message of every language loaded so far that renders as written, with its whitespace collapsed. It is for a
+ * reader that must tell the app's own wording from what a person, an agent or the workspace put on screen: text found
+ * here was written by us and reads the same for everyone, and text that is not could be anyone's. Session replay uses it
+ * to keep the interface legible while it masks the rest (web/src/app/replayPrivacy.ts).
+ */
+export const staticCopy = (): ReadonlySet<string> => words;
 
 const fetchInto = (locale: Locale, catalog: Catalog): Promise<void> => {
     const slot = slotOf(locale, catalog);

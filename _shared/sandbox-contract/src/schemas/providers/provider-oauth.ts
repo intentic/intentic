@@ -167,6 +167,13 @@ export const TranslatorCompleteSchema = z.object({
 // Order is meaningful: the provider's own preference order, never re-ranked.
 export const ModelBadgeSchema = z.enum(["reasoning", "fast"]);
 export type ModelBadge = z.infer<typeof ModelBadgeSchema>;
+// Why a model may run one-shot helper jobs (a commit message, a title) and never an agent turn. Only a positive answer
+// sets it, so a server that says nothing leaves a model usable:
+// no-tool-calls: its server reports a chat template that cannot call tools (llama.cpp's /props `chat_template_caps`),
+//   and llama.cpp drops a turn's tools without a word, so the turn would run and do nothing useful
+// instant-tier: the curated local model sold as too small to drive a turn (LOCAL_MODELS' `instant` rung)
+export const HelperOnlySchema = z.enum(["no-tool-calls", "instant-tier"]);
+export type HelperOnly = z.infer<typeof HelperOnlySchema>;
 export const ModelSchema = z.object({
     id: z.string().describe("What to name when asking for this model."),
     label: z.string().describe("What to call it on screen."),
@@ -181,6 +188,9 @@ export const ModelSchema = z.object({
     // The served window, not the training length — memory can clamp it lower. Turns are refused against this. Absent
     // means unknown, never unlimited.
     contextWindow: z.number().optional().describe("How many tokens this model will accept in one request, where the server publishes it."),
+    helperOnly: HelperOnlySchema.optional().describe(
+        "Set where this model may write commit messages, titles and other one-shot jobs but never run a chat turn, and why: its server says it cannot call tools, or it is the small local model kept for quick jobs. Absent means nothing has said it cannot.",
+    ),
     // Epoch seconds. A fact about the MODEL, not about any one account: a routed provider balances across credentials,
     // so a model every one of them is benched on is unrunnable however much headroom their rings show. Absent is the
     // ordinary case and means runnable, never "unknown".

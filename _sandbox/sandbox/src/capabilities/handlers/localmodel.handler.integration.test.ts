@@ -22,6 +22,8 @@ jest.mock("node:child_process", async () => {
 });
 
 const { localModelHandler } = await import("./localmodel.handler.js");
+const { localModelLogPath } = await import("../../endpoints/local-model-load.js");
+const { localModelPort } = await import("../../endpoints/local-model.js");
 
 const MODEL_URL = "https://models.test/weights/tiny.gguf";
 const CHUNK = 512 * 1024;
@@ -298,4 +300,37 @@ test("a window under the agent floor is served, and says what it is still good f
 
     unstubAllGlobals();
     await rm(root, { recursive: true, force: true });
+});
+
+// A granted GPU that holds only part of the model is the case the sizing cannot see after the fact: the server loads and
+// answers, only slower. The row says so, from the log the server wrote while loading.
+test("a serving model whose layers did not all reach the granted GPU says so on its row", async () => {
+    const gpuBefore = process.env["SANDBOX_GPU"];
+    process.env["SANDBOX_GPU"] = "all";
+    const root = await workspace();
+    const { ctx } = context(root, true);
+    const log = localModelLogPath(localModelPort("split"));
+    await writeFile(log, "load_tensors: offloaded 20/49 layers to GPU\nload_tensors:        CUDA0 model buffer size =  6000.00 MiB\n");
+    stubFetch(wholeFile, true);
+    try {
+        await drain("split", ctx);
+        await waitFor(async () => {
+            const status = await statusOf(ctx, "split");
+            expect(status).toEqual({
+                state: "active",
+                code: "gpu-partial",
+                detail: "tiny · 64k window · only 20 of 49 layers fit on the GPU, the rest run on the CPU and set its pace; smaller weights or a smaller window would fit it whole",
+            });
+        }, SETTLES);
+        await localModelHandler.remove?.(ctx, "split", { model: "custom", gpu: "off", url: MODEL_URL });
+    } finally {
+        if (gpuBefore === undefined) {
+            delete process.env["SANDBOX_GPU"];
+        } else {
+            process.env["SANDBOX_GPU"] = gpuBefore;
+        }
+        unstubAllGlobals();
+        await rm(log, { force: true });
+        await rm(root, { recursive: true, force: true });
+    }
 });

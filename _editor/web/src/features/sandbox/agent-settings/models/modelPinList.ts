@@ -20,6 +20,8 @@ export type PinnedEntry = DescribedPin & {
 export interface PinnedList {
     // Whether entries carry their own run settings, read by the picker to decide whether to draw knobs.
     readonly knobs: boolean;
+    // Whether every job this list feeds is a one-shot helper, the only kind a helper-only model may be pinned to.
+    readonly helperJobs: boolean;
     readonly entries: ComputedRef<readonly PinnedEntry[]>;
     // Every entry already in the list, so the picker can offer it without letting one be pinned twice.
     readonly taken: ComputedRef<readonly string[]>;
@@ -36,6 +38,7 @@ export function pinnedList<T>(list: {
     // What an entry says about how it runs, beside its name; only set fields are named, so defaults read as bare.
     readonly detail?: (pin: ModelPin) => string | undefined;
     readonly knobs?: boolean;
+    readonly helperJobs?: boolean;
 }): PinnedList {
     const entries = computed<readonly PinnedEntry[]>(() =>
         list.read().map((stored, index) => {
@@ -52,6 +55,7 @@ export function pinnedList<T>(list: {
     );
     return {
         knobs: list.knobs === true,
+        helperJobs: list.helperJobs === true,
         entries,
         taken: computed(() => entries.value.flatMap((entry) => (entry.choice === undefined ? [] : [modelPinKey(entry.choice)]))),
         // Adding appends; re-pointing replaces the entry in place, since its position is part of what was said.

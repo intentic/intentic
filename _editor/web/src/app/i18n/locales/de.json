@@ -838,7 +838,6 @@
         "secretEntryRow": {
             "accessTab": "Zugriffs-Tab",
             "agentUsesFreely": "Agent nutzt es frei",
-            "agentUseWithoutAsking": "Der Agent darf das benutzen, ohne jemanden zu fragen.",
             "cancelRemove": "Entfernen abbrechen",
             "ciOutOfDate": "CI veraltet",
             "ciSynced": "CI synchronisiert",
@@ -857,7 +856,6 @@
             "namedPersonReleases": "Eine benannte Person gibt frei",
             "needsApproval": "Braucht Genehmigung",
             "nobodyNamedYetGive": "Es kann noch niemand genannt werden. Geben Sie jemandem Zugriff im",
-            "nobodyToApproveOnly": "Niemand muss das genehmigen. Nur der Eigentümer kann das ändern.",
             "once": "Dieses eine Mal",
             "oneClickCoversEvery": "Ein Klick deckt jede Nutzung für den Rest dieser Unterhaltung ab.",
             "oneClickReleasesExactly": "Ein Klick gibt genau eine Nutzung frei. Die nächste fragt wieder.",
@@ -1469,6 +1467,15 @@
         "chatTurnAsides": {
             "showSteps": "Schritte zeigen",
             "thinking": "Denkt nach"
+        },
+        "chatTurnDeliverables": {
+            "open": "{name} öffnen, {kind}",
+            "page": "Webseite",
+            "pdf": "PDF",
+            "region": "Dokumente aus diesem Zug",
+            "sheet": "Tabelle",
+            "slides": "Präsentation",
+            "word": "Word-Dokument"
         },
         "chatTurnShots": {
             "open": "{name} öffnen",
@@ -4710,6 +4717,17 @@
         "fileBreadcrumb": {
             "alsoViewingFile": "sieht diese Datei ebenfalls an"
         },
+        "fileRefPeek": {
+            "lines": "{count} Zeile | {count} Zeilen",
+            "items": "{count} Eintrag | {count} Einträge",
+            "more": "und {count} weitere",
+            "notFound": "Unter diesem Pfad liegt nichts.",
+            "empty": "Leere Datei.",
+            "binary": "Binärdatei: zum Ansehen öffnen.",
+            "beyond": "Zeile {line} liegt weiter hinten, als eine Vorschau liest. Öffnen Sie die Datei, um sie zu sehen.",
+            "past": "Die Datei endet bei Zeile {total}, Zeile {line} gibt es darin nicht.",
+            "failed": "Diese Datei konnte nicht gelesen werden."
+        },
         "fileLocked": {
             "holdsCantOpenedEdited": "Sie enthält {holds}. Sie kann hier nicht geöffnet, bearbeitet oder heruntergeladen werden.",
             "keptPrivateBySandbox": "wird von dieser Sandbox privat gehalten."
@@ -4722,6 +4740,8 @@
             "insideArchive": "Im Archiv",
             "notInItsCopy": "Nicht in seiner Kopie",
             "noWriteAccess": "Kein Schreibzugriff",
+            "pageSealed": "Abgeschottet: kein Netz, keine Logins",
+            "preview": "Vorschau",
             "readAsText": "Als Text lesen",
             "reloadDisk": "Von der Platte neu laden",
             "saveChanges": "Änderungen speichern",
@@ -4729,7 +4749,9 @@
             "saveFile": "Datei speichern",
             "sharedVersion": "Geteilte Version",
             "showComments": "Kommentare zeigen",
-            "showFile": "Datei zeigen"
+            "showFile": "Datei zeigen",
+            "showPage": "Seite zeigen",
+            "showSource": "Quelltext zeigen"
         },
         "healthCodebaseHealth": {
             "all": "Alle",
@@ -4774,6 +4796,15 @@
             "nothingHere": "Nichts hier.",
             "nothingMatchesIn": "Nichts passt zu „{trim}“ in {here}.",
             "toolingHidden": "{count} Werkzeugdatei ausgeblendet | {count} Werkzeugdateien ausgeblendet"
+        },
+        "htmlPreview": {
+            "failed": "Diese Seite ließ sich nicht für die Vorschau vorbereiten.",
+            "missing": "{count} Datei neben dieser Seite ließ sich nicht laden | {count} Dateien neben dieser Seite ließen sich nicht laden",
+            "remote": "{count} Element aus dem Internet wurde nicht geladen | {count} Elemente aus dem Internet wurden nicht geladen",
+            "remoteWhy": "Die Vorschau hat kein Netzwerk, daher bleiben Skripte, Schriften und Bilder aus dem Internet draußen.",
+            "scriptsOff": "Die Seite wollte immer wieder zu anderen Adressen, daher sind ihre Skripte aus.",
+            "strayed": "Die Seite wollte zu einer anderen Adresse und wurde zurückgeholt.",
+            "title": "Vorschau von {name}"
         },
         "imageCompareView": {
             "fadeBetweenPictures": "Zwischen Vorher- und Nachher-Bild überblenden",

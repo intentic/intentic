@@ -62,6 +62,18 @@ flowchart LR
   in (`builtins.ts`); the rest arrive from the daemon as single-file ESM bundles imported from a Blob URL.
   `hostModules.ts` and `public/ext-shims/` hand every bundle the app's own `vue`, vue-query and
   [extension-ui](../../_shared/extension-ui) instances.
+- **Session replay and events.** `src/app/replayPrivacy.ts` decides what a PostHog recording may hold and
+  `src/app/eventPrivacy.ts` does the same for every event, through `before_send`. `analytics.ts` hands both to
+  `posthog.init`. In a replay every text node is masked unless it is wording from an i18n catalog (`staticCopy` in
+  `@intentic/ui/i18n`), the code editor, its diff, terminals, images and embedded pages are blocked, and canvas, console
+  output, request bodies, network timing and web vitals attribution are switched off by name, since the PostHog
+  project's own settings would otherwise decide. A label built around a value ("Delete 3 files") is masked whole. In an
+  event every address becomes the router's route pattern (`routePatternOf` in `router/routePattern.ts`, for example
+  `/workspace/:path*`), the text and attributes of a clicked element pass the same allowlist, and an exception's message
+  is masked while its stack stays. Decided 2026-09-29 as default-deny because workspace names show all over the app
+  (rail, tabs, board, search), not only in the editor and chat, so a list of content views would miss the next one.
+  Rejected: a marker on each content view, and one on each piece of chrome. The privacy policy
+  (`_site/site-content/src/legal.ts`) states what leaves the browser, so change both together.
 - **Gotcha.** The dev server must stay on `https://localhost:47145`: CORS, Better Auth and the Google OAuth client
   trust that exact origin. It serves with the local certificate from
   [localhost-https](../../_tools/localhost-https).

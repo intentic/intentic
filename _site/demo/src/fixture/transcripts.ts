@@ -1,6 +1,6 @@
 import type { AgentHarness, AgentProvider, SandboxHandlerOutput, TranscriptRow } from "@intentic/sandbox-contract";
 import { SUPPORT_SWEEP_PATH } from "./browserShots";
-import { DESK_REVIEW_ID, SEPTEMBER_AFTER, SEPTEMBER_BEFORE } from "./desk";
+import { DESK_REVIEW_ID, SEPTEMBER_AFTER, SEPTEMBER_BEFORE, SEPTEMBER_PAGE, SEPTEMBER_PAGE_PATH, SEPTEMBER_PRINT_PATH } from "./desk";
 import {
     API_MAIN_FIXER_ID,
     HELD_AGENT_ID,
@@ -299,6 +299,39 @@ const SEPTEMBER_TEMPLATE: AgentTranscript = {
                     content: [{ type: `diff`, path: `newsletter/september.md`, oldText: SEPTEMBER_BEFORE, newText: SEPTEMBER_AFTER }],
                 },
             ],
+        },
+        {
+            role: `user`,
+            text: `Can you make a Word copy I can print for the counter, and put it on the website as its own page?`,
+        },
+        {
+            role: `assistant`,
+            text: `Two copies of the same issue: a Word file for printing, and a page in the shop's own style.`,
+            tools: [
+                // The command's card names the file it wrote, as the sandbox records it for any command.
+                {
+                    id: `tc_desk_print`,
+                    name: `Bash`,
+                    category: `execute`,
+                    status: `completed`,
+                    target: `pandoc newsletter/september.md -o newsletter/september.docx`,
+                    locations: [{ path: SEPTEMBER_PRINT_PATH }],
+                    content: [{ type: `text`, text: `` }],
+                },
+                {
+                    id: `tc_desk_page`,
+                    name: `Write`,
+                    category: `edit`,
+                    status: `completed`,
+                    target: SEPTEMBER_PAGE_PATH,
+                    locations: [{ path: SEPTEMBER_PAGE_PATH }],
+                    content: [{ type: `diff`, path: SEPTEMBER_PAGE_PATH, newText: SEPTEMBER_PAGE }],
+                },
+            ],
+        },
+        {
+            role: `assistant`,
+            text: `Both are ready. The Word copy fits on one page, and the web page uses the shop's colours and links back to the About page.`,
         },
     ],
 };

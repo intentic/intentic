@@ -102,14 +102,15 @@ export const CODEX: AgentCapabilities = {
     secrets: "none",
 };
 
-// OpenCode (the Grok runtime): its own agentic loop, its own tools, allow-all permissions. Takes a model id, a prompt
-// and one system message of ours; no effort scale, no tools of ours, no command list.
+// OpenCode (the Grok runtime): its own agentic loop and tools, with the turn's remote MCP servers mounted on the shared
+// server per conversation. Takes a model id, a prompt and one system message of ours; no effort scale, no command list.
 export const OPENCODE: AgentCapabilities = {
     runtime: "opencode",
     steering: false,
     permissions: "plan",
     questions: false,
-    mcp: "none",
+    // Added at runtime under the conversation's own names, each prompt showing its session only its own (opencode-mcp.ts).
+    mcp: "http",
     execution: ["shell"],
     effort: false,
     fastMode: false,
@@ -121,8 +122,9 @@ export const OPENCODE: AgentCapabilities = {
     // `system` on the prompt body, per message; adds to OpenCode's own prompt, with no seam to replace it.
     instructions: "append",
     skillDiscovery: "prompt",
-    // refuse-only for its inactivity watchdog, not its protocol: a paused approval reads as a stalled turn.
-    rulebook: "refuse-only",
+    // OpenCode raises its permission asks for the commands its config names; the daemon answers from the rulebook, a
+    // hold parked on a card while the turn's inactivity watchdog is held.
+    rulebook: "approval",
     secrets: "none",
 };
 

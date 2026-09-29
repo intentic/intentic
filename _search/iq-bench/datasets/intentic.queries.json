@@ -80,6 +80,7 @@
             "id": "prf-expansion",
             "verb": "q",
             "query": "how does iq expand a query with related terms taken from the top results?",
+            "slices": ["paraphrase"],
             "expected": [{ "file": "_search/iq-engine/src/engines/bm25.ts", "line": 27, "tolerance": 30 }],
             "notes": "Synonym gap: 'expand with related terms' vs prfTerms/RM3 vocabulary."
         },
@@ -93,6 +94,7 @@
             "id": "symbol-extraction",
             "verb": "q",
             "query": "where are function and class symbols extracted from source files?",
+            "slices": ["near-duplicate"],
             "expected": [{ "file": "_search/iq-engine/src/indexer/symbols.ts" }]
         },
         {
@@ -105,6 +107,7 @@
             "id": "change-detection",
             "verb": "q",
             "query": "how does the index detect which files changed since the last run?",
+            "slices": ["paraphrase"],
             "expected": [{ "file": "_search/iq-engine/src/indexer/indexer.ts", "line": 28, "tolerance": 60 }],
             "notes": "Synonym gap: 'detect changed files' vs revalidate/mtime diff vocabulary."
         },
@@ -192,6 +195,62 @@
             "query": "renderText",
             "expected": [{ "file": "_search/iq-engine/src/render/text.ts", "line": 119, "tolerance": 5 }],
             "notes": "bare identifier through `q`: classified as an identifier, so the symbols engine joins the fusion, the only path where the def multiplier can reorder anything"
+        },
+        {
+            "id": "prose-estimate-tokens",
+            "verb": "q",
+            "query": "how does estimateTokens approximate a token count from the length of the text?",
+            "slices": ["identifier-in-prose"],
+            "expected": [{ "file": "_tools/base/src/format.ts" }],
+            "notes": "estimateTokens is declared in format.ts (ceil(length / 4)); iq-engine's render/budget.ts only re-exports it."
+        },
+        {
+            "id": "prose-bm25-search",
+            "verb": "q",
+            "query": "how does bm25Search turn sqlite's negative bm25 score into a number between 0 and 1?",
+            "slices": ["identifier-in-prose"],
+            "expected": [{ "file": "_search/iq-engine/src/engines/bm25.ts" }],
+            "notes": "bm25Search divides -bm25() by 10 and clamps at 1 where it tags each hit."
+        },
+        {
+            "id": "deprecated-autostart",
+            "verb": "q",
+            "query": "which login entry starts the machine agent when the user signs in?",
+            "slices": ["deprecated"],
+            "expected": [{ "file": "_devices/machine/src/autostart/autostart.ts" }],
+            "notes": "MACHINE_AUTOSTART is the live entry; legacy-autostart.ts beside it names the two retired agents' entries, kept only to remove them."
+        },
+        {
+            "id": "no-answer-kafka",
+            "verb": "q",
+            "query": "where are agent events published to a Kafka topic for downstream consumers?",
+            "slices": ["no-answer"],
+            "expected": [],
+            "notes": "Checked 2026-09-29: rg -i kafka matches nothing in the corpus (iq-bench is scoped out)."
+        },
+        {
+            "id": "no-answer-rabbitmq",
+            "verb": "q",
+            "query": "which RabbitMQ queue carries turn jobs between the daemon and its workers?",
+            "slices": ["no-answer"],
+            "expected": [],
+            "notes": "Checked 2026-09-29: rg -i 'rabbitmq|amqp' matches nothing in the corpus."
+        },
+        {
+            "id": "no-answer-webrtc",
+            "verb": "q",
+            "query": "where is the WebRTC peer connection for video calls negotiated?",
+            "slices": ["no-answer"],
+            "expected": [],
+            "notes": "Checked 2026-09-29: rg -i webrtc and 'video call' match nothing in the corpus."
+        },
+        {
+            "id": "no-answer-autoscaler",
+            "verb": "q",
+            "query": "how does the platform autoscale sandbox pods with a Kubernetes horizontal pod autoscaler?",
+            "slices": ["no-answer"],
+            "expected": [],
+            "notes": "Checked 2026-09-29: rg -i 'autoscal|horizontal pod' matches nothing; sandboxes are Fly machines, not pods."
         }
     ]
 }

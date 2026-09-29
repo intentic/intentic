@@ -13,6 +13,12 @@ export interface SecretUseReport {
     readonly approvedBy?: string;
 }
 
+// Where the values are about to go, for the host limit (host-guard-gate.ts): the reference-form program of a command or
+// script, or the page a value is typed into, each with the tool a card about it files under.
+export type SecretTarget =
+    | { readonly kind: "program"; readonly text: string; readonly language: "bash" | "javascript"; readonly tool: string }
+    | { readonly kind: "page"; readonly url: string; readonly tool: string };
+
 // `used` is fire-and-forget; `release` decides whether the exit happens, and takes the whole list so the owner is asked
 // once per credential (names sharing a subject), not once per token.
 export interface SecretAccess {
@@ -22,6 +28,7 @@ export interface SecretAccess {
         names: readonly string[],
         lane: "shell" | "code" | "browser",
         detail: string,
+        target: SecretTarget,
     ) => Promise<{ readonly ok: true; readonly approvedBy?: Readonly<Record<string, string>> } | { readonly refusal: string }>;
 }
 
@@ -35,9 +42,14 @@ const commandDetail = (command: string): string => {
 export type ResolvedCommand = { readonly command: string } | { readonly refusal: string };
 
 // Skips the registry read when the command has no reference at all. An unreadable registry refuses rather than passing
-// the token through. `lane` exists because the JS execution backend is a second caller, resolving into its own
+// the token through. `lane` and `tool` exist because the JS execution backend is a second caller, resolving into its own
 // subprocess.
-export const resolveCommandSecrets = async (command: string, secrets: SecretAccess, lane: "shell" | "code" = "shell"): Promise<ResolvedCommand> => {
+export const resolveCommandSecrets = async (
+    command: string,
+    secrets: SecretAccess,
+    lane: "shell" | "code" = "shell",
+    tool = "Bash",
+): Promise<ResolvedCommand> => {
     if (!hasSecretReferences(command)) {
         return { command };
     }
@@ -62,7 +74,12 @@ export const resolveCommandSecrets = async (command: string, secrets: SecretAcce
     // After the all-names-known check: a command with one gated and one nonexistent name shouldn't spend anyone's
     // attention. Before the audit rows: a refused resolution never left, so recording it would corrupt last-used.
     const detail = commandDetail(command);
-    const released = await secrets.release(used, lane, detail);
+    const released = await secrets.release(used, lane, detail, {
+        kind: "program",
+        text: command,
+        language: lane === "shell" ? "bash" : "javascript",
+        tool,
+    });
     if ("refusal" in released) {
         return { refusal: released.refusal };
     }

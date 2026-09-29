@@ -1,5 +1,5 @@
 import { type AdmissionPolicy, COMMAND_CLASS_LABELS } from "@intentic/sandbox-contract";
-import { childSpawn, commandRun, outboundSend, sessionStart, wakeSourceOf } from "./actions.js";
+import { childSpawn, commandRun, outboundSend, secretSend, sessionStart, wakeSourceOf } from "./actions.js";
 import { defineGuardedAction, guard, type GuardedAction, HOLD, isGuardedAction, listGuardedActions } from "./guard.js";
 
 // Spelled out, not from schema defaults: `issues` defaults to hold, which would test policy, not mechanism.
@@ -39,7 +39,7 @@ describe("guard mechanism", () => {
 
     test("the catalog carries the shipped actions", () => {
         const actions = listGuardedActions();
-        for (const expected of ["session.start", "outbound.send", "command.run", "credential.use"]) {
+        for (const expected of ["session.start", "outbound.send", "command.run", "credential.use", "secret.send"]) {
             expect(actions, `catalog is missing "${expected}"`).toContain(expected);
         }
     });
@@ -169,5 +169,41 @@ describe("agents.spawn", () => {
         expect(held.reason).toContain("webchat");
         expect(guard(childSpawn, { provider: "claude", rules: { "agents.spawn": "allow" }, outsideSource: "webchat" }).effect).toBe("allow");
         expect(guard(childSpawn, { provider: "claude", rules: { "agents.spawn": "deny" }, outsideSource: "webchat" }).effect).toBe("deny");
+    });
+});
+
+// The host guard's whole table. No judge in the input, so none can move a row: a judge that allowed, was off, or could
+// not be reached is the same row as no judge at all, for a guard that is on and one that is off.
+describe("secret.send", () => {
+    const attended = { unattended: false, canPark: true };
+
+    test("a secret whose guard is off, or a use whose every host is on the list, goes", () => {
+        expect(guard(secretSend, { guarded: false, destination: "outside", ...attended })).toEqual({ effect: "allow", reason: "no secret this spends has its host guard on" });
+        expect(guard(secretSend, { guarded: true, destination: "inside", ...attended })).toEqual({
+            effect: "allow",
+            reason: "every host this names is on the secret's list",
+        });
+    });
+
+    test("off the list, or unreadable, holds for a person", () => {
+        expect(guard(secretSend, { guarded: true, destination: "outside", ...attended })).toEqual({
+            effect: "hold",
+            reason: "this sends a host-guarded secret to a host off its list, so a person has to approve it",
+        });
+        expect(guard(secretSend, { guarded: true, destination: "unreadable", ...attended })).toEqual({
+            effect: "hold",
+            reason: "where this sends a host-guarded secret cannot be read from it, so a person has to approve it",
+        });
+    });
+
+    test("with nobody to ask it refuses, never lets it through", () => {
+        expect(guard(secretSend, { guarded: true, destination: "outside", unattended: true, canPark: true })).toEqual({
+            effect: "deny",
+            reason: "this sends a host-guarded secret to a host off its list, and this turn is running unattended, so nobody can approve it",
+        });
+        expect(guard(secretSend, { guarded: true, destination: "unreadable", unattended: false, canPark: false })).toEqual({
+            effect: "deny",
+            reason: "where this sends a host-guarded secret cannot be read from it, and there is no live conversation to ask in",
+        });
     });
 });

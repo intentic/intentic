@@ -58,6 +58,8 @@ export { choresContract } from "./contracts/chores.contract.js";
 export { ciContract } from "./contracts/ci.contract.js";
 export {
     endpointsContract,
+    type LocalModelDevice,
+    LocalModelDeviceSchema,
     LocalModelFitSchema,
     type LocalModelFitResponse,
     type LocalModelGpu,
@@ -151,6 +153,7 @@ export * from "./policy/safety-policy.js";
 export * from "./policy/reserved-servers.js";
 export * from "./policy/credential-material.js";
 export * from "./policy/capability-secrets.js";
+export * from "./policy/secret-hosts.js";
 export * from "./ids/conversation-ids.js";
 export * from "./text/documents.js";
 export * from "./protocol/host-protocol.js";

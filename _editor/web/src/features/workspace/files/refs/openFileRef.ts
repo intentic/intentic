@@ -7,7 +7,7 @@ import { setProjectScope, withinScope } from "../../../../app/projectScope";
 import { workspaceAgent } from "../../health/workspaceScope";
 
 // `.intentic` is bind-mounted into every isolated namespace, so a path under it is shared regardless of scope.
-const sharedStatePath = (path: string): boolean => path.startsWith(`${STATE_DIR}/`);
+export const sharedStatePath = (path: string): boolean => path.startsWith(`${STATE_DIR}/`);
 
 // The one navigation every clickable file reference (terminal link, prose mention, tool card chip) funnels
 // through. Split from fileRefs, which only defines what a reference looks like, so the markdown renderer avoids

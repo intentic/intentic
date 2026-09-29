@@ -3,6 +3,8 @@ import { watch } from "vue";
 import { desktopApp } from "./environments/desktop";
 import { environment } from "./environments/environment";
 import { useAuth } from "../features/auth/useAuth";
+import { addressRedactor, eventPrivacy, type RoutePatternOf } from "./eventPrivacy";
+import { replayPrivacy } from "./replayPrivacy";
 
 // PostHog instrumentation: autocapture, session replay, SPA pageviews, plus funnel milestones via `track()`.
 // `api_host` proxies through this origin's /wire (nginx.conf) since privacy blockers match PostHog's own hostnames;
@@ -12,18 +14,20 @@ import { useAuth } from "../features/auth/useAuth";
 // What this captures is what the privacy policy and sub-processor list (_site/site-content/src/legal.ts) say it
 // captures; a change here that alters what leaves the browser must move LEGAL_VERSION and both documents together.
 //
-// Replay is unscoped on purpose: `maskAllInputs` covers only typed values, so a recording reconstructs whatever the
-// workspace had on screen. Narrow it via `maskTextSelector` or `stopSessionRecording()`, not by changing this
-// default quietly.
+// Neither the replay nor an event carries the workspace: replayPrivacy.ts masks every piece of text that is not the
+// interface's own wording and blocks the editor, terminals and media, and eventPrivacy.ts gives the same treatment to
+// the addresses and clicked text of the events. Widen either there, not here, and only together with the policy.
 let enabled = false;
 
-export const initAnalytics = (): void => {
+// `routePatternOf` is the router's table as a question, so an address is reported as its route (`/workspace/:path*`).
+export const initAnalytics = (routePatternOf: RoutePatternOf): void => {
     const { posthogKey, posthogHost } = environment.analytics;
     // Empty in dev; a literal `$POSTHOG_KEY` when the deploy container's envsubst had no key to substitute.
     if (posthogKey === `` || posthogKey.startsWith(`$`)) {
         return;
     }
     enabled = true;
+    const redactAddress = addressRedactor(routePatternOf);
     posthog.init(posthogKey, {
         api_host: posthogHost,
         // Proxying makes `api_host` a host posthog-js can't map to a cloud region, so `ui_host` must be named outright
@@ -32,7 +36,8 @@ export const initAnalytics = (): void => {
         ui_host: `https://us.posthog.com`,
         defaults: `2026-06-25`,
         persistence: `sessionStorage`,
-        session_recording: { maskAllInputs: true },
+        ...replayPrivacy(redactAddress),
+        before_send: eventPrivacy(redactAddress),
         // Serving the SDK from our own origin isn't enough: blocker lists also match a bare filename on any host
         // (posthog-recorder.js, dead-clicks-autocapture.js). Prefixing every SDK script, not just those two, breaks the
         // match; nginx.conf strips the prefix back off.

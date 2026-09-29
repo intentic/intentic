@@ -19,16 +19,36 @@ const ScopeSchema = z.object({
 });
 export type CaseScope = z.infer<typeof ScopeSchema>;
 
-const QueryCaseSchema = z.object({
-    id: z.string().min(1),
-    verb: z.enum(SEARCH_VERBS),
-    query: z.string().min(2),
-    scope: ScopeSchema.optional(),
-    expected: z.array(AnchorSchema).min(1),
-    // Provenance: how the expected anchors were verified.
-    notes: z.string().optional(),
-});
+// What a case is here to measure, beyond the average: reported one slice at a time, so a regression in a small slice is
+// not averaged away by the rest. A case may carry several; one carrying none is "general".
+//   identifier-in-prose: a question that names a symbol inside a sentence ("how does bodyLimit reject …").
+//   paraphrase:          the question shares no vocabulary with the code that answers it.
+//   near-duplicate:      the answer has lookalike siblings (five `router.ts`, `termui.py` beside `_termui_impl.py`).
+//   deprecated:          a deprecated or retired copy exists; the live code is the answer.
+//   no-answer:           nothing in the corpus answers it; scored by whether iq said its match was weak.
+export const SLICES = ["identifier-in-prose", "paraphrase", "near-duplicate", "deprecated", "no-answer"] as const;
+export type Slice = (typeof SLICES)[number] | "general";
+
+const QueryCaseSchema = z
+    .object({
+        id: z.string().min(1),
+        verb: z.enum(SEARCH_VERBS),
+        query: z.string().min(2),
+        scope: ScopeSchema.optional(),
+        // Empty exactly when the case is a no-answer one: there is nothing to find.
+        expected: z.array(AnchorSchema),
+        slices: z.array(z.enum(SLICES)).min(1).optional(),
+        // Provenance: how the expected anchors were verified.
+        notes: z.string().optional(),
+    })
+    .refine((queryCase) => (queryCase.expected.length === 0) === (queryCase.slices?.includes("no-answer") ?? false), {
+        message: 'a case has no expected anchors exactly when it is sliced "no-answer"',
+        path: ["expected"],
+    });
 export type QueryCase = z.infer<typeof QueryCaseSchema>;
+
+export const slicesOf = (queryCase: QueryCase): readonly Slice[] => queryCase.slices ?? ["general"];
+export const isNoAnswer = (queryCase: QueryCase): boolean => queryCase.slices?.includes("no-answer") ?? false;
 
 export const QueryDatasetSchema = z.object({
     // Matches repos.lock.json id; "intentic" = this monorepo checkout, no clone step.
@@ -125,7 +145,14 @@ const CaseRowSchema = z.object({
     config: z.string(),
     caseId: z.string(),
     verb: z.enum(SEARCH_VERBS),
+    slices: z.array(z.enum([...SLICES, "general"])),
+    // Retrieval scores, for an answerable case that ran; a no-answer case has nothing to rank against.
     score: CaseScoreSchema.optional(),
+    // Whether iq told the reader nothing here likely answers: the answer line said "weak", or there were no hits at all.
+    // The whole score of a no-answer case, and a false alarm on an answerable one.
+    weak: z.boolean().optional(),
+    // The best cross-encoder probability iq saw, when a rerank ran: what the weak floor is calibrated against.
+    relevance: z.number().optional(),
     skipped: z.literal("models-missing").optional(),
 });
 export type CaseRow = z.infer<typeof CaseRowSchema>;

@@ -1,7 +1,7 @@
 import type { EngineHit } from "../types.js";
-import { fieldMargin } from "./dispatch.js";
+import { confidenceOf, fieldMargin, WEAK_FLOOR } from "./dispatch.js";
 
-// Below CONFIDENCE_MARGIN (0.05) the answer line says "ambiguous" instead of "confident".
+// Below CONFIDENCE_MARGIN (0.05) the answer line says "ambiguous" instead of "confident"; below WEAK_FLOOR, "weak".
 const MARGIN = 0.05;
 
 const hit = (path: string, line: number): EngineHit => ({ path, line, text: "code", tags: [] });
@@ -51,4 +51,24 @@ test("a runner-up that never reached the cross-encoder reads as the widest gap, 
 test("no reranked leader means no signal to report", () => {
     expect(fieldMargin([{ path: "src/a.ts" }], scored([["src/other.ts", 1, 1]]))).toBe(0);
     expect(fieldMargin([], scored([]))).toBe(0);
+});
+
+// The floor is absolute: the margin says which file leads, the floor whether any of them answers at all.
+describe("confidenceOf", () => {
+    test("a wide margin below the floor is weak: a clear gap between two non-answers is still no answer", () => {
+        expect(confidenceOf(0.9, WEAK_FLOOR - 0.001)).toBe("weak");
+    });
+
+    test("the floor itself clears: weak is strictly below it", () => {
+        expect(confidenceOf(0.9, WEAK_FLOOR)).toBe("confident");
+    });
+
+    test("above the floor the margin decides between confident and ambiguous", () => {
+        expect(confidenceOf(MARGIN, 0.9)).toBe("confident");
+        expect(confidenceOf(MARGIN - 0.001, 0.9)).toBe("ambiguous");
+    });
+
+    test("weak wins over ambiguous when both hold", () => {
+        expect(confidenceOf(0, 0)).toBe("weak");
+    });
 });

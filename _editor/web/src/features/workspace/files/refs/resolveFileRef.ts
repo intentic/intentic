@@ -7,13 +7,16 @@ import { workspaceAgent } from "../../health/workspaceScope";
 // which synchronous markdown rendering must not pull in.
 
 // Resolves to undefined both when nothing matches and when the request fails, so the caller falls back to the literal
-// path.
-export const resolveWorkspaceRef = async (path: string): Promise<string | undefined> => {
-    const local = resolveInTree(path);
+// path. `scope` names the tree to resolve in when it is not the one on screen (a hover over another conversation's
+// link); `{ agent: undefined }` is the shared tree.
+export const resolveWorkspaceRef = async (path: string, scope?: { readonly agent: string | undefined }): Promise<string | undefined> => {
+    const agent = scope === undefined ? workspaceAgent.value : scope.agent;
+    // The held tree is the on-screen scope's, so another scope's reference goes straight to the daemon.
+    const local = agent === workspaceAgent.value ? resolveInTree(path) : undefined;
     if (local !== undefined) {
         return local;
     }
     // Scoped, so a file that exists only in a conversation's checkout can resolve at all.
-    const resolved = await sandboxRpc.workspace.resolve({ path, agent: workspaceAgent.value }).catch(() => undefined);
+    const resolved = await sandboxRpc.workspace.resolve({ path, agent }).catch(() => undefined);
     return resolved?.path;
 };

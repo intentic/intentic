@@ -53,7 +53,8 @@ natural language semantically: there is no second verb for questions:
   iq sessions files "auth refresh"        files past sessions touched for a topic
 
 Read the first lines and stop: every answer opens with a capsule, \`answer:\` names the top
-path:line, its enclosing symbol and whether the top result is confident or ambiguous;
+path:line, its enclosing symbol and a verdict: confident (stop), ambiguous (compare the candidates),
+or weak (nothing here likely answers, it may not exist: stop, or rephrase once in the code's words);
 \`candidates:\` names the ranked paths that did not fit; \`more:\` gives the exact --after command.
 The code follows below it, so \`head\` never cuts the part that matters. Natural-language answers
 carry the top hits' full enclosing bodies: read those instead of re-opening the file.

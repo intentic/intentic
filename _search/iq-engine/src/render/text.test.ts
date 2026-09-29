@@ -137,3 +137,30 @@ test("without an enclosing symbol the answer still anchors at the hit, and says 
     expect(rendered.text).toContain("answer: alpha/src/constants.ts:7");
     expect(rendered.text).not.toContain("match :");
 });
+
+// "weak" rides the same slot as confident/ambiguous, before the scores that earned it, so the first line an agent reads
+// already says nothing here likely answers.
+test("a weak answer names its state on the answer line, ahead of the scores", () => {
+    const group: RankedGroup = {
+        path: "alpha/src/constants.ts",
+        score: 1,
+        hits: [
+            { path: "alpha/src/constants.ts", line: 7, text: "export const LIMIT = 40;", tags: [{ kind: "rerank" as const, score: 0.03 }], score: 1 },
+        ],
+    };
+    const rendered = renderText({
+        verb: "q",
+        echo: '"order refunds"',
+        unit: "hits",
+        style: "hits",
+        showTags: true,
+        groups: [group],
+        offset: 0,
+        freshness: { state: "fresh", ageMs: 120 },
+        budget: 1500,
+        cursorId: "abcd1234",
+        lead: true,
+        confidence: "weak",
+    });
+    expect(rendered.text.split("\n")[1]).toBe("answer: alpha/src/constants.ts:7 · weak · [rerank 0.03]");
+});

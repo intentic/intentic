@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { anchorsOf } from "./anchors.js";
 import { monorepoRoot, packageRoot } from "./repos.js";
@@ -32,5 +32,28 @@ describe("intentic golden anchors", () => {
                 }
             });
         expect(unresolved).toEqual([]);
+    });
+});
+
+// A no-answer case is scored by whether iq said "weak", an answerable one by where its anchors ranked; a case holding
+// both, or neither, would be scored by the wrong rule, so the schema refuses it rather than the report guessing.
+describe("every dataset", () => {
+    const datasets = readdirSync(join(packageRoot, "datasets")).filter((name) => name.endsWith(".queries.json"));
+
+    it("parses, with anchors on every answerable case and none on a no-answer one", () => {
+        const refused = datasets.flatMap((name) => {
+            const parsed = QueryDatasetSchema.safeParse(JSON.parse(readFileSync(join(packageRoot, "datasets", name), "utf8")));
+            return parsed.success ? [] : [`${name}: ${parsed.error.message}`];
+        });
+        expect(refused).toEqual([]);
+    });
+
+    it("refuses a no-answer case that names an anchor, and an answerable case that names none", () => {
+        const accepts = (queryCase: object): boolean =>
+            QueryDatasetSchema.safeParse({ repo: "r", cases: [{ id: "c", verb: "q", query: "anything", ...queryCase }] }).success;
+        expect(accepts({ slices: ["no-answer"], expected: [{ file: "a.ts" }] })).toBe(false);
+        expect(accepts({ expected: [] })).toBe(false);
+        expect(accepts({ slices: ["no-answer"], expected: [] })).toBe(true);
+        expect(accepts({ slices: ["paraphrase"], expected: [{ file: "a.ts" }] })).toBe(true);
     });
 });

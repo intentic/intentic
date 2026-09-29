@@ -21,7 +21,7 @@ import { cursorId, decodeCursor, readSpool, writeSpool } from "../render/cursor.
 import { renderList } from "../render/list.js";
 import { renderText, type Rendered } from "../render/text.js";
 import type { SqliteDb } from "@intentic/base/sqlite";
-import type { EngineHit, EngineResult, FileEntry, QueryOutcome, QueryRequest, RankedGroup, RankedHit, Verb } from "../types.js";
+import type { Confidence, EngineHit, EngineResult, FileEntry, QueryOutcome, QueryRequest, RankedGroup, RankedHit, Verb, Verdict } from "../types.js";
 import { classOf, filterScope, langOf, sweep } from "../workspace/scan.js";
 import { contextOf, outlineOf, parseAnchor, readOf } from "./context.js";
 
@@ -57,7 +57,8 @@ interface VerbPlan {
     readonly lead?: boolean;
     // True when the scan was cut short by its ceiling; reported via the same `partial` flag a per-file cap uses.
     readonly ceiling?: boolean;
-    readonly confidence?: "confident" | "ambiguous";
+    // How the cross-encoder judged the answer, whenever a rerank ran.
+    readonly verdict?: Verdict;
     // Whether the top groups are delivered as code rather than as anchors (the pack stage).
     readonly pack?: boolean;
 }
@@ -366,8 +367,41 @@ const RERANK_TOP = 32;
 const RERANK_RRF_K = 60;
 // Below this sigmoid gap between the best and second-best file, the field counts as flat/ambiguous.
 const CONFIDENCE_MARGIN = 0.05;
+// Below this cross-encoder probability for the best reranked passage, nothing retrieved likely answers and the answer
+// line says "weak". Every other signal is relative to the best hit (the margin, RRF ranks, bm25 normalised to the top),
+// so something is always "the answer"; ms-marco's sigmoid is the one score that means the same thing from one query to
+// the next. Low on purpose: on code this model scores some real answers near zero, and calling a real answer weak costs
+// more than missing a non-answer. Calibrated on iq-bench's no-answer slice (README there, "The weak floor").
+export const WEAK_FLOOR = 0.005;
+const WEAK_HINT =
+    "weak match: no result scored as a likely answer, so this may not exist here. Stop, or rephrase once in the code's own words; reading on through the candidates will not find it";
 
 const sigmoid = (x: number): number => 1 / (1 + Math.exp(-x));
+
+// Weak wins over the margin: a clear gap between two passages that both fail to answer is still no answer.
+export const confidenceOf = (margin: number, relevance: number): Confidence => {
+    if (relevance < WEAK_FLOOR) {
+        return "weak";
+    }
+    return margin < CONFIDENCE_MARGIN ? "ambiguous" : "confident";
+};
+
+// "confident" says stop reading; "ambiguous" points at the candidates rather than out to a grep spiral; "weak" says none
+// of it answers, so the agent stops instead of reading on for a feature that is not there. With the confidence stage off
+// the capsule says none of them, and the score is still measured.
+const verdictOf = (reranked: { readonly margin: number; readonly relevance: number }, judge: boolean): Verdict =>
+    judge ? { confidence: confidenceOf(reranked.margin, reranked.relevance), relevance: reranked.relevance } : { relevance: reranked.relevance };
+
+// A judged plan carries its verdict, and a weak one the hint saying what to do about it, in the capsule and the JSON
+// result alike.
+const judged = (plan: VerbPlan, verdict: Verdict): VerbPlan =>
+    verdict.confidence === "weak" ? { ...plan, verdict, hint: WEAK_HINT } : { ...plan, verdict };
+
+// The verdict rides beside the capsule for callers that score it; the text already says it.
+const outcomeOf = (result: WorkspaceSearchResult, rendered: Rendered, verdict: Verdict | undefined): QueryOutcome => {
+    const outcome = { result, text: rendered.text, exitCode: rendered.exitCode };
+    return verdict === undefined ? outcome : { ...outcome, verdict };
+};
 
 // Relative gap between the top two FILES of the order actually rendered (post-RRF blending), not raw passage scores,
 // since one file scoring well twice must not read as ambiguity.
@@ -398,7 +432,7 @@ const rerankGroups = async (
     scorer: QueryScorer,
     query: string,
     groups: RankedGroup[],
-): Promise<{ groups: RankedGroup[]; margin: number } | undefined> => {
+): Promise<{ groups: RankedGroup[]; margin: number; relevance: number } | undefined> => {
     const candidates: RankedHit[] = [];
     for (const group of groups) {
         for (const hit of group.hits) {
@@ -441,7 +475,10 @@ const rerankGroups = async (
         group.hits.sort((a, b) => a.line - b.line);
         return group;
     });
-    return { groups: regrouped, margin: fieldMargin(regrouped, scored) };
+    // The best passage anywhere in the pass, not the leading file's: "nothing here likely answers" is a claim about all
+    // of them, and the RRF blend can rank a stronger passage below a weaker one.
+    const relevance = sigmoid(scores.reduce((best, score) => Math.max(best, score), Number.NEGATIVE_INFINITY));
+    return { groups: regrouped, margin: fieldMargin(regrouped, scored), relevance };
 };
 
 // The full natural-language pipeline: BM25 with RM3 expansion, semantic vectors, cross-encoder rerank, and code-graph
@@ -476,15 +513,10 @@ const naturalPlan = async (
         }
     }
     let groups = toGroups(results, request.query, entries, context.features, on("srcfirst"));
-    let confidence: VerbPlan["confidence"];
     const reranked = on("rerank") && groups.length > 0 ? await rerankGroups(context.db, context.scorer, request.query, groups) : undefined;
     if (reranked !== undefined) {
         groups = reranked.groups;
         notes.push("reranked");
-        // "confident" says stop reading; "ambiguous" points at the candidates rather than out to a grep spiral.
-        if (on("confidence")) {
-            confidence = reranked.margin < CONFIDENCE_MARGIN ? "ambiguous" : "confident";
-        }
     }
     const rgBase = {
         root: context.root,
@@ -493,17 +525,17 @@ const naturalPlan = async (
         ...(context.rgPath !== undefined ? { rgPath: context.rgPath } : {}),
     };
     const related = on("graph") ? await relatedOf(context.db, groups, rgBase) : [];
-    return {
+    const plan: VerbPlan = {
         groups,
         unit: "hits",
         style: "hits",
         showTags: true,
         lead: true,
         pack: true,
-        ...(confidence !== undefined ? { confidence } : {}),
         ...(notes.length > 0 ? { provenance: notes.join(" · ") } : {}),
         ...(related.length > 0 ? { related } : {}),
     };
+    return reranked === undefined ? plan : judged(plan, verdictOf(reranked, on("confidence")));
 };
 
 const runVerb = async (context: DispatchContext, request: QueryRequest, entries: readonly FileEntry[]): Promise<VerbPlan> => {
@@ -950,7 +982,7 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
                   ...(hint !== undefined ? { hint } : {}),
                   ...(plan.related !== undefined && plan.related.length > 0 ? { related: plan.related } : {}),
                   ...(plan.lead === true ? { lead: true } : {}),
-                  ...(plan.confidence !== undefined ? { confidence: plan.confidence } : {}),
+                  confidence: plan.verdict?.confidence,
                   cursorId: id,
               });
 
@@ -968,9 +1000,6 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
         });
     }
 
-    return {
-        result: toResult(plan, rendered, request, offset, context.freshness, hint, note, context.features, unreadable.length > 0),
-        text: rendered.text,
-        exitCode: rendered.exitCode,
-    };
+    const result = toResult(plan, rendered, request, offset, context.freshness, hint, note, context.features, unreadable.length > 0);
+    return outcomeOf(result, rendered, plan.verdict);
 };

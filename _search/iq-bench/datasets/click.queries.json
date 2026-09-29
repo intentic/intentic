@@ -23,6 +23,7 @@
             "id": "progress-bar",
             "verb": "q",
             "query": "how does the progress bar render and update?",
+            "slices": ["near-duplicate"],
             "expected": [{ "file": "src/click/_termui_impl.py", "line": 57, "tolerance": 200 }]
         },
         {
@@ -65,6 +66,7 @@
             "id": "q-context-object",
             "verb": "q",
             "query": "Context object passed between commands",
+            "slices": ["identifier-in-prose"],
             "expected": [{ "file": "src/click/core.py", "line": 208, "tolerance": 200 }]
         },
         {
@@ -131,12 +133,14 @@
             "id": "external-editor",
             "verb": "q",
             "query": "how does click open an external editor for the user to type text?",
+            "slices": ["near-duplicate"],
             "expected": [{ "file": "src/click/_termui_impl.py", "line": 656, "tolerance": 80 }]
         },
         {
             "id": "pager-output",
             "verb": "q",
             "query": "where is long output piped through a pager?",
+            "slices": ["near-duplicate"],
             "expected": [{ "file": "src/click/termui.py", "line": 323, "tolerance": 60 }]
         },
         {
@@ -149,6 +153,7 @@
             "id": "tty-detection",
             "verb": "q",
             "query": "how does click detect whether a stream is attached to a terminal?",
+            "slices": ["paraphrase"],
             "expected": [{ "file": "src/click/_compat.py", "line": 540, "tolerance": 80 }],
             "notes": "Synonym gap: 'attached to a terminal' vs isatty vocabulary."
         },
@@ -194,6 +199,70 @@
             "query": "echo_via_pager",
             "expected": [{ "file": "src/click/termui.py", "line": 323, "tolerance": 5 }],
             "notes": "bare identifier through `q`: classified as an identifier, so the symbols engine joins the fusion, the only path where the def multiplier can reorder anything"
+        },
+        {
+            "id": "prose-echo-via-pager",
+            "verb": "q",
+            "query": "how does echo_via_pager decide which pager program to run?",
+            "slices": ["identifier-in-prose", "near-duplicate"],
+            "expected": [{ "file": "src/click/_termui_impl.py", "line": 400, "tolerance": 30 }],
+            "notes": "_pager_contextmanager reads $PAGER, then falls back to more or less; termui.py's echo_via_pager and get_pager_file are the lookalike wrappers."
+        },
+        {
+            "id": "prose-resolve-command",
+            "verb": "q",
+            "query": "how does resolve_command find the subcommand named by the first argument?",
+            "slices": ["identifier-in-prose"],
+            "expected": [{ "file": "src/click/core.py", "line": 2060, "tolerance": 40 }],
+            "notes": "Group.resolve_command at core.py:2060."
+        },
+        {
+            "id": "deprecated-split-arg-string",
+            "verb": "q",
+            "query": "where is a command line string split into arguments the way a shell would?",
+            "slices": ["deprecated"],
+            "expected": [{ "file": "src/click/shell_completion.py", "line": 506, "tolerance": 30 }],
+            "notes": "split_arg_string lives in shell_completion.py; importing it from parser.py goes through a deprecated __getattr__ re-export."
+        },
+        {
+            "id": "paraphrase-wipe-console",
+            "verb": "q",
+            "query": "wipe everything currently shown in the console window",
+            "slices": ["paraphrase"],
+            "expected": [{ "file": "src/click/termui.py", "line": 558, "tolerance": 40 }],
+            "notes": "termui.clear(); its body and docstring share no word with the question."
+        },
+        {
+            "id": "no-answer-cron",
+            "verb": "q",
+            "query": "how does click schedule a command to run periodically, like cron?",
+            "slices": ["no-answer"],
+            "expected": [],
+            "notes": "At the locked sha: rg -i 'cron|schedul' matches nothing under src/."
+        },
+        {
+            "id": "no-answer-yaml-config",
+            "verb": "q",
+            "query": "where does click load option defaults from a YAML configuration file?",
+            "slices": ["no-answer"],
+            "expected": [],
+            "notes": "At the locked sha: rg -i yaml matches nothing under src/; default_map is filled by the caller, never read from a file."
+        },
+        {
+            "id": "no-answer-encrypt-password",
+            "verb": "q",
+            "query": "how does click encrypt the passwords users type at a prompt?",
+            "slices": ["no-answer"],
+            "expected": [],
+            "notes": "At the locked sha: rg -i encrypt matches nothing; prompt(hide_input=True) only hides the echo, the near miss this case is for."
+        },
+        {
+            "id": "no-answer-sql-history",
+            "verb": "q",
+            "query": "where does click store command history in a SQL database?",
+            "slices": ["no-answer"],
+            "expected": [],
+            "notes": "At the locked sha: rg -i 'sql|history' finds no storage of either under src/."
         }
     ]
 }

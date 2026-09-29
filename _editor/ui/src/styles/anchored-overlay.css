@@ -19,12 +19,15 @@
         box-shadow: var(--ui-shadow-2);
     }
 
-/* The arrow: two stacked triangles, the back one a pixel behind the front, so it reads as the surface's own border turning a corner. */
+/* The arrow: two stacked triangles, the back one a pixel behind the front, so it reads as the surface's own border turning a corner.
+   It takes no pointer: its box is twice the triangle, so it reaches back over the anchor, and a panel the pointer raises
+   (a hover preview) would otherwise sit under the pointer by its arrow alone, pull it off the anchor and close. */
     .ui-anchored::before,
     .ui-anchored::after {
         content: "";
         position: absolute;
         border: 6px solid transparent;
+        pointer-events: none;
     }
 
     .ui-anchored-top::before,

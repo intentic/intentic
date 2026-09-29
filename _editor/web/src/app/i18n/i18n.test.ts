@@ -149,6 +149,32 @@ describe(`the language layer`, () => {
         expect(t(`title`)).toBe(`Root`);
     });
 
+    // Session replay keeps the words the app wrote and masks the rest (web/src/app/replayPrivacy.ts), so this list is
+    // what stands between a legible recording and one that shows a stranger's text. It errs by leaving words out: a
+    // message with a hole in it, or a link to another, is not something a reader can compare a text node against.
+    it(`lists the messages that render as written, in every language loaded, and none that are filled in`, async () => {
+        const { registerCatalog, setLocale, staticCopy } = await freshI18n();
+        await registerCatalog({
+            namespace: `probe`,
+            base: {
+                save: `Save`,
+                forms: `no file | one file`,
+                spaced: `Open   the\n menu`,
+                filled: `{count} changed`,
+                escaped: `{'@'}x`,
+                linked: `@:probe.save now`,
+                empty: ``,
+            },
+            load: () => Promise.resolve({ default: { save: `Zapisz` } }),
+        });
+
+        expect([...staticCopy()]).toEqual([`Save`, `no file`, `one file`, `Open the menu`]);
+
+        // The list was read once above; a language arriving must not be answered from that reading.
+        await setLocale(`pl`);
+        expect([...staticCopy()]).toEqual([`Save`, `no file`, `one file`, `Open the menu`, `Zapisz`]);
+    });
+
     // THE ONE THAT SHIPPED BROKEN. Every assertion above reads `t` after the switch and passed while the app on
     // screen did not change: the words were right the next time anything asked for them, and nothing asked. What a
     // render actually needs is a DEPENDENCY, so these drive the two halves through `watchEffect` — the same thing a

@@ -143,6 +143,45 @@ export const credentialUse = defineGuardedAction<CredentialUseInput>({
     },
 });
 
+export interface SecretSendInput {
+    // Whether any secret this use spends has its host guard on; false for most, so ALLOW is the common, cheap path. A
+    // secret whose guard is off never reaches the rest of this table, whatever a judge said or could not say.
+    readonly guarded: boolean;
+    // What the use's own text says of where it goes, read by secrets/secret-destinations.ts: every host it names is on
+    // every list, one is not, or the text cannot say.
+    readonly destination: "inside" | "outside" | "unreadable";
+    readonly unattended: boolean;
+    // Whether a card can be raised at all: there is a live conversation to draw it in.
+    readonly canPark: boolean;
+}
+
+// Consulted where a secret's reference becomes its value. No judge in the input on purpose: the guard is the owner's
+// per-secret rule, not an opinion, so a judge that allowed the command, was switched off, or could not be reached changes
+// nothing here either way. On, nothing here allows because a judge was missing; off, nothing here asks because one was.
+// The only DENY is nobody to ask.
+export const secretSend = defineGuardedAction<SecretSendInput>({
+    action: "secret.send",
+    decide: ({ guarded, destination, unattended, canPark }) => {
+        if (!guarded) {
+            return ALLOW("no secret this spends has its host guard on");
+        }
+        if (destination === "inside") {
+            return ALLOW("every host this names is on the secret's list");
+        }
+        const why =
+            destination === "outside"
+                ? "this sends a host-guarded secret to a host off its list"
+                : "where this sends a host-guarded secret cannot be read from it";
+        if (unattended) {
+            return DENY(`${why}, and this turn is running unattended, so nobody can approve it`);
+        }
+        if (!canPark) {
+            return DENY(`${why}, and there is no live conversation to ask in`);
+        }
+        return HOLD(`${why}, so a person has to approve it`);
+    },
+});
+
 export interface ChildSpawnInput {
     // Provider the child would run on; a specific rule wins over the general `agents.spawn` one.
     readonly provider: string;

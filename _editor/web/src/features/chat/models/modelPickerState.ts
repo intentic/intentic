@@ -1,6 +1,7 @@
 import {
     ACCESS_COST,
     type AgentProvider,
+    type HelperOnly,
     type ModelBadge,
     PROVIDERS,
     accessFor,
@@ -28,6 +29,9 @@ export interface PickerEntry extends TurnPick {
     // Epoch seconds; set only while every credential that serves this model is refused. Still pickable: the wait is
     // what a reader needs, and a row that disappeared for an hour would teach them to distrust the list.
     readonly availableAt?: number;
+    // Set where the model may run one-shot helper jobs only. Listed and not pickable for a chat, so the reader sees why
+    // a model they connected is not theirs to chat with; pickable for a helper job.
+    readonly helperOnly?: HelperOnly;
 }
 
 // The picker's own row for "let a model choose", in the list's grammar so it can be searched and arrowed to like any
@@ -40,15 +44,21 @@ export const autoEntry = (label: string, description: string): PickerEntry => ({
 
 export const isAutoPick = (pick: TurnPick): boolean => pick.provider === AUTO_PROVIDER;
 
-const entryFor = (provider: AgentProvider, option: ModelOption): PickerEntry => ({
-    key: `${provider}:${option.value}`,
-    provider,
-    value: option.value,
-    label: option.label,
-    ...(option.description !== undefined ? { description: option.description } : {}),
-    ...(option.badges !== undefined ? { badges: option.badges } : {}),
-    ...(option.availableAt !== undefined ? { availableAt: option.availableAt } : {}),
-});
+const entryFor = (provider: AgentProvider, option: ModelOption): PickerEntry => {
+    const entry: PickerEntry = {
+        key: `${provider}:${option.value}`,
+        provider,
+        value: option.value,
+        label: option.label,
+        ...(option.description !== undefined ? { description: option.description } : {}),
+        ...(option.badges !== undefined ? { badges: option.badges } : {}),
+        ...(option.availableAt !== undefined ? { availableAt: option.availableAt } : {}),
+    };
+    return option.helperOnly === undefined ? entry : { ...entry, helperOnly: option.helperOnly };
+};
+
+// Whether a chat may be put on this row: everything but a helper-only model, which the daemon refuses a turn on anyway.
+export const chatPickable = (entry: PickerEntry): boolean => entry.helperOnly === undefined;
 
 // Every pickable model across providers, in PROVIDERS order, then endpoint providers' full catalogs, then one row
 // per ACP agent (empty model id: the agent owns its own model).

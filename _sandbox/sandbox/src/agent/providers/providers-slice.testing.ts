@@ -71,6 +71,8 @@ const idleOpenCode = () =>
         xaiModels: async () => ({ models: [{ id: "grok-4", label: "Grok 4" }], default: "grok-4" }),
         recordModels: async () => {},
         disconnect: async () => {},
+        mount: async () => async () => {},
+        judges: { register: () => {}, release: () => {} },
     }) satisfies ProvidersSlice["openCode"];
 
 export const providersSliceFake = (context: SliceFakeContext, { usage, cliProxy }: ProvidersFakeOverrides) =>

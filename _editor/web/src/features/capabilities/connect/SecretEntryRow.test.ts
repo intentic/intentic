@@ -20,6 +20,7 @@ jest.mock(`vue-router`, () => ({ RouterLink: { template: `<a><slot /></a>` } }))
 jest.mock(`./useSecrets`, () => ({
     reveal: jest.fn(),
     useSecrets: () => ({ remove: { mutateAsync: jest.fn() } }),
+    useSecretHosts: () => ({ setHosts: { mutateAsync: jest.fn() } }),
     useCredentialGates: () => ({
         gates: ref([]),
         gateFor: (subject: string) => (stored.value?.subject === subject ? stored.value : undefined),
@@ -74,7 +75,7 @@ it("opens the picker when the owner flips the switch, with the owner already pic
     approverChoices.value = [`owner@x.com`, `bob@x.com`];
     stored.value = undefined;
     const { el, flip, done } = mount();
-    expect(el.innerHTML).toContain(`The agent can use this without asking anybody.`);
+    expect(el.innerHTML).toContain(`No named person has to release it.`);
     expect(el.innerHTML).not.toContain(`Who can release it`);
     await flip();
     expect(el.innerHTML).toContain(`Who can release it`);
@@ -109,7 +110,7 @@ it("still opens with nobody to name, and says so: the sentence that used to be u
     expect(el.innerHTML).toContain(`Name at least one person.`);
     // Flipping back off with only a draft is a change of mind, not a removal the daemon hears about.
     await flip();
-    expect(el.innerHTML).toContain(`The agent can use this without asking anybody.`);
+    expect(el.innerHTML).toContain(`No named person has to release it.`);
     expect(removeGate.mutateAsync).not.toHaveBeenCalled();
     done();
 });
@@ -122,6 +123,20 @@ it("flipping off a stored gate asks the daemon to remove it", async () => {
     expect(el.innerHTML).toContain(`Who can release it`);
     await flip();
     expect(removeGate.mutateAsync).toHaveBeenCalledWith(`DATABASE_URL`);
+    done();
+});
+
+// Who must release it and where it may go are one section to the owner, not two features: both switches sit under the one
+// "Needs approval" heading, the approver first.
+it("puts the host guard under the same approval heading as the named approver", () => {
+    approverChoices.value = [`owner@x.com`];
+    stored.value = undefined;
+    const { el, done } = mount();
+    const text = el.textContent ?? ``;
+    expect(text.indexOf(`Needs approval`)).toBeLessThan(text.indexOf(`From a named person`));
+    expect(text.indexOf(`From a named person`)).toBeLessThan(text.indexOf(`Host guard`));
+    expect([...el.querySelectorAll(`input[role="switch"]`)].map((input) => input.getAttribute(`aria-label`))).toEqual([`From a named person`, `Host guard`]);
+    expect(text).toContain(`Off: it is never held for where it goes, and the safety judge alone decides.`);
     done();
 });
 

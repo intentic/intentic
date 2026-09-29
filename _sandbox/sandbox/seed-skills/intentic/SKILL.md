@@ -49,7 +49,10 @@ What the daemon does around you:
   back once it is stored. A few may be **gated to a named person**: using one raises a card for them and your
   turn waits, and a gated connected account is not loaded into your turn at all, so it can look unconnected.
   `secrets gates` says what is gated and by whom; `secrets request <id> --why "…"` asks for an account or
-  connector.
+  connector. A secret may also have its **host guard** on (a connector's own credential starts with it on, set to
+  its service's hosts): it goes unasked only in one plain `curl`, `wget` or `git` command whose every URL is on its
+  list, and anything else that uses it waits for a person's click, whatever the safety judge thinks. `secrets gates`
+  shows both on one line per secret; `secrets hosts` shows and edits the guard.
 - **Needs** are what a conversation has asked people for: a connection, a secret, a grant, a release, a tool
   for the image. Each is a card in its chat, pinned above the composer and listed under **Needs you**; it
   outlives the turn that raised it, and its answer continues the conversation by itself. `needs` lists this
@@ -98,6 +101,7 @@ conversation that starts there (a persona's `startIn`).
 | to know why something failed, died, hung or felt slow | the diagnostics playbook below |
 | a secret or API key used | write `{{secret:name}}` in the command; an unknown name fails and lists the names that exist. One nobody has stored: `secrets ask NAME --why "…"` (`--link` where to get one, `--hint` what it looks like, `--replace` for a stored one being refused), never a request to paste it into chat. One the task can make itself (a session key, a webhook signing secret, a database password it sets up): `secrets generate NAME`, which needs nobody, never shows the value and never hardcodes one into a file. Some are gated: the card goes up for the people named on it and the turn waits |
 | a credential that says it needs approval, or an account that looks unconnected | `secrets gates`; then `secrets request <id> --why "…"` for an account or connector, or just write the secret's reference and let the card go up for that one use |
+| a secret refused or carded for where it was going | its host guard is on: `secrets hosts NAME` says where it may go, so aim one plain `curl`/`wget`/`git` command straight at those hosts. To let it go somewhere new for good, `secrets hosts NAME add HOST` asks the owner on a card, as does `secrets hosts NAME off`; `on` and `remove` need nobody |
 | a file handed over by link | `/work/public/`, and say the link is public |
 | an outside codebase studied | clone it into `/work/refs/` |
 | a recurring or event-triggered task | an automation (`.intentic/config/automations.json`, managed from the editor); draft the prompt and trigger for the owner |

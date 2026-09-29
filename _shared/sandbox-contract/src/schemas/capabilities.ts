@@ -244,7 +244,8 @@ export const LOCAL_MODEL_WINDOW_MAX = 1_048_576;
 // against.
 export const LOCAL_MODEL_KV_BYTES_PER_TOKEN = 65_536;
 // What a rung honestly serves. `instant` is the one the connect view prefetches — it downloads in under a minute and
-// cannot drive a full agent turn, so no surface may sell it as one; `work` is what that view recommends for real use.
+// cannot drive a full agent turn, so its catalog row is helper-only (Model.helperOnly): the chat picker does not offer
+// it and the daemon refuses a turn on it. `work` is what that view recommends for real use.
 export type LocalModelTier = "instant" | "work";
 export interface LocalModelChoice {
     // Hugging Face owner/repo/file.gguf, exactly as LocalModelConfig.model carries it.
@@ -254,21 +255,57 @@ export interface LocalModelChoice {
     // estimate all read this, so a model cannot be priced two ways.
     readonly weightsBytes: number;
     readonly tier: LocalModelTier;
+    // The repository commit the file is fetched at, a sha and never a branch: `main` moves, and a re-upload under the
+    // same name would change what a card promised without the card changing.
+    readonly revision: string;
+    // The file's own sha256 at that commit (its LFS oid). A download that does not hash to it is deleted, not served.
+    readonly sha256: string;
 }
-// The curated list, smallest first. ponytail: these bytes are the Hugging Face tree API's answer for each file — the
+// The curated list, smallest first. ponytail: sizes, revisions and digests are the Hugging Face API's answer for each
+// file (`/api/models/<repo>/revision/main` for the sha, `/tree/<sha>` for the size and LFS oid), read 2026-09-29 — the
 // hand-written labels that predated them overstated gemma-4 12B by 2x and Qwen3.8 27B by a third, which is the class of
-// drift a machine-readable size exists to end.
+// drift a machine-readable size exists to end. Bump a row's three together: each belongs to its revision.
 export const LOCAL_MODELS: readonly LocalModelChoice[] = [
-    { id: "unsloth/Qwen3.5-2B-GGUF/Qwen3.5-2B-Q4_K_M.gguf", label: "Qwen3.5 2B", weightsBytes: 1_280_835_840, tier: "instant" },
+    {
+        id: "unsloth/Qwen3.5-2B-GGUF/Qwen3.5-2B-Q4_K_M.gguf",
+        label: "Qwen3.5 2B",
+        weightsBytes: 1_280_835_840,
+        tier: "instant",
+        revision: "f6d5376be1edb4d416d56da11e5397a961aca8ae",
+        sha256: "aaf42c8b7c3cab2bf3d69c355048d4a0ee9973d48f16c731c0520ee914699223",
+    },
     {
         id: "unsloth/Phi-4-mini-instruct-GGUF/Phi-4-mini-instruct-Q4_K_M.gguf",
         label: "Phi-4-mini 3.8B",
         weightsBytes: 2_491_874_272,
         tier: "work",
+        revision: "78eb92a46fc37e6b524df991ed9aca9bc6aa7b80",
+        sha256: "88c00229914083cd112853aab84ed51b87bdf6b9ce42f532d8c85c7c63b1730a",
     },
-    { id: "unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf", label: "Qwen3.5 9B", weightsBytes: 5_680_522_464, tier: "work" },
-    { id: "unsloth/gemma-4-12b-it-GGUF/gemma-4-12b-it-Q4_K_M.gguf", label: "Gemma 4 12B", weightsBytes: 7_121_861_440, tier: "work" },
-    { id: "unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_M.gguf", label: "Qwen3.8 27B", weightsBytes: 16_464_440_224, tier: "work" },
+    {
+        id: "unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf",
+        label: "Qwen3.5 9B",
+        weightsBytes: 5_680_522_464,
+        tier: "work",
+        revision: "3885219b6810b007914f3a7950a8d1b469d598a5",
+        sha256: "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8",
+    },
+    {
+        id: "unsloth/gemma-4-12b-it-GGUF/gemma-4-12b-it-Q4_K_M.gguf",
+        label: "Gemma 4 12B",
+        weightsBytes: 7_121_861_440,
+        tier: "work",
+        revision: "fc034cfff751157913579611efad8462ac1be606",
+        sha256: "0a270ec9fe6b34f4a0d33992b6135117b484ebc4766ab76b51d4ae8c457e4c42",
+    },
+    {
+        id: "unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_M.gguf",
+        label: "Qwen3.8 27B",
+        weightsBytes: 16_464_440_224,
+        tier: "work",
+        revision: "4ca720788d1e01f1bff70c033e0d0028fd02e502",
+        sha256: "322e194ff79741c7baa497c240f677f54b201b0efab44ca8e50f122b39123482",
+    },
 ];
 export const localModelChoice = (id: string): LocalModelChoice | undefined => LOCAL_MODELS.find((choice) => choice.id === id);
 // Exactly one row carries the instant tier; the fit module and the prefetch route take it from here rather than

@@ -28,15 +28,16 @@ const { acpProviders, endpointProviders, perProvider, providerModels, trialStatu
 const { default: ModelPicker } = await import("./ModelPicker.vue");
 
 let app: App | undefined;
-const mount = (): HTMLElement => {
+const mountWith = (props: { readonly helperJobs?: boolean }): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
-    app = createApp({ render: () => h(ModelPicker, { provider: `claude`, model: `claude-opus-4-6` }) });
+    app = createApp({ render: () => h(ModelPicker, { provider: `claude`, model: `claude-opus-4-6`, ...props }) });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(element);
     return element;
 };
+const mount = (): HTMLElement => mountWith({});
 
 // Provider names in section order (the panel's own answer to what to look at first); read off the header's
 // first span, since it also carries the price chip.
@@ -138,4 +139,25 @@ it(`carries the way out to the connect view, and drops it while searching`, asyn
     search.dispatchEvent(new Event(`input`));
     await nextTick();
     expect(element.textContent).not.toContain(`Connect a model`);
+});
+
+// A model that can only write one-shot jobs is listed, so a connected one does not seem to vanish, and refused for a turn
+// with its reason where its description would be; a helper job's list may pick it.
+it(`lists a helper-only model as refused for a turn, and pickable for a helper job`, () => {
+    providerModels.value = {
+        ...providerModels.value,
+        claude: [...oneModel(`Claude Opus 4 6`), { value: `tiny`, label: `Tiny`, helperOnly: `no-tool-calls` }],
+    };
+    const row = (element: HTMLElement): HTMLButtonElement =>
+        [...element.querySelectorAll<HTMLButtonElement>(`[role="option"]`)].find((button) => button.textContent?.includes(`Tiny`))!;
+
+    const forChat = row(mount());
+    expect(forChat.disabled).toBe(true);
+    expect(forChat.textContent).toContain(`Helper jobs only: its server says it can't call tools`);
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    const forHelper = row(mountWith({ helperJobs: true }));
+    expect(forHelper.disabled).toBe(false);
+    expect(forHelper.textContent).not.toContain(`Helper jobs only`);
 });

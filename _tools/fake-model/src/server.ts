@@ -108,35 +108,31 @@ const framesFor = (step: ScriptedStep, index: number, request: ResponsesRequest)
     return responseFrames(id, assistantMessage(`msg_${index + 1}`, step.text ?? "ok"), step.usage ?? {});
 };
 
+// One chat tool call: the call as a delta.tool_calls fragment, then the finish that hands the turn to the tool.
+const chatToolCall = (head: { readonly id: string }, index: number, name: string, args: JsonValue): readonly JsonValue[] => [
+    {
+        ...head,
+        choices: [
+            {
+                index: 0,
+                delta: { role: "assistant", tool_calls: [{ index: 0, id: `call_${index + 1}`, type: "function", function: { name, arguments: JSON.stringify(args) } }] },
+                finish_reason: null,
+            },
+        ],
+    },
+    { ...head, choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] },
+];
+
 // OpenCode's dialect: tool calls arrive as delta.tool_calls fragments, and finish_reason ends the turn, not a typed
-// event. id/created are fixed so a fixture diffs cleanly across CLI versions.
+// event. id/created are fixed so a fixture diffs cleanly across CLI versions. A shell step is OpenCode's own `bash`.
 const chatChunks = (step: ScriptedStep, index: number): readonly JsonValue[] => {
     const id = `chatcmpl_${index + 1}`;
     const head = { id, object: "chat.completion.chunk", created: 0, model: "fake-model" };
     if (step.shell !== undefined) {
-        return [
-            {
-                ...head,
-                choices: [
-                    {
-                        index: 0,
-                        delta: {
-                            role: "assistant",
-                            tool_calls: [
-                                {
-                                    index: 0,
-                                    id: `call_${index + 1}`,
-                                    type: "function",
-                                    function: { name: "bash", arguments: JSON.stringify({ command: step.shell }) },
-                                },
-                            ],
-                        },
-                        finish_reason: null,
-                    },
-                ],
-            },
-            { ...head, choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] },
-        ];
+        return chatToolCall(head, index, "bash", { command: step.shell });
+    }
+    if (step.call !== undefined) {
+        return chatToolCall(head, index, step.call.name, step.call.args);
     }
     return [
         { ...head, choices: [{ index: 0, delta: { role: "assistant", content: step.text ?? "ok" }, finish_reason: null }] },

@@ -32,13 +32,17 @@ export async function* vendorTurn<S>(
         yield { kind: "done" };
         return;
     }
-    const { gate, release } = vendorTurnGate(request);
+    // The gate's signal also ends with the turn: an agent can end its turn with an ask still unanswered (its process
+    // died, or it moved on), and the card that ask raised must not stay open on nobody.
+    const ended = new AbortController();
+    const { gate, release } = vendorTurnGate({ ...request, signal: AbortSignal.any([request.signal, ended.signal]) });
     try {
         yield* turn.serve(handle, gate);
     } catch (error) {
         yield { kind: "error", message: turn.failure(error, handle) };
     } finally {
         turn.close?.(handle);
+        ended.abort();
         release();
     }
     yield { kind: "done" };

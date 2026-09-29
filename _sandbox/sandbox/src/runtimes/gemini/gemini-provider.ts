@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { type AgentEvent, type AgentTurn, PROVIDER_ACCESS } from "@intentic/sandbox-contract";
+import { type AgentEvent, type AgentTurn, type Capability, PROVIDER_ACCESS } from "@intentic/sandbox-contract";
 import {
     attemptProbe,
     armPlan,
@@ -12,6 +12,8 @@ import {
 } from "../../agent/providers/adapter.js";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
+import { releasingMounts } from "../../agent/tools/turn-mounts.js";
+import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";
 import {
     engineMissing,
     enginesReady,
@@ -47,10 +49,15 @@ export const createGeminiSlice = (input: {
 // Gemini on the same OpenCode loop Grok runs on, pointed at the translator instead of xAI; OpenCode holds no
 // credential, CLIProxyAPI does, the same as a routed turn. Exists because the Claude Code loop's baked-in identity line
 // gets every Google account refused as a false quota error.
-// What a Gemini turn is planned from: the translator's accounts and the Google catalog it serves.
-export type GeminiPlanDeps = Pick<Services, "cliProxy" | "config" | "geminiAgent" | "geminiModels">;
+// What a Gemini turn is planned from: the translator's accounts, the Google catalog it serves, and the turn's MCP mounts.
+export type GeminiPlanDeps = TurnToolsDeps & Pick<Services, "cliProxy" | "config" | "geminiAgent" | "geminiModels">;
 
-export const planGeminiTurn = async (services: GeminiPlanDeps, input: AgentTurn, context: TurnContext): Promise<TurnArmPlan> => {
+export const planGeminiTurn = async (
+    services: GeminiPlanDeps,
+    input: AgentTurn,
+    context: TurnContext,
+    granted: readonly Capability[],
+): Promise<TurnArmPlan> => {
     if (services.config.translator.url === "") {
         return {
             ok: false,
@@ -85,9 +92,24 @@ export const planGeminiTurn = async (services: GeminiPlanDeps, input: AgentTurn,
     }
     // Never empty, so this always resolves.
     const model = pinned ?? catalog.default;
+    // The turn's remote MCP servers, as Grok's and Codex's; leased last, once nothing can refuse the turn, since only the
+    // loop it arms releases it.
+    const mounted = await turnToolsOf(services, granted, {
+        conversationId: input.conversationId,
+        anonymousBrowser: context.persona?.powers.browser ?? true,
+        extensions: context.persona?.powers.extensions,
+    });
     return armPlan(
-        services.geminiAgent,
-        withAttachments({ ...context.base, spec: { ...context.base.spec, model }, credential: { kind: "container" } }, context.attachmentPaths),
+        releasingMounts(services.geminiAgent, mounted),
+        withAttachments(
+            {
+                ...context.base,
+                spec: { ...context.base.spec, model },
+                tools: mounted.tools.length > 0 ? { ...context.base.tools, remote: mounted.tools } : context.base.tools,
+                credential: { kind: "container" },
+            },
+            context.attachmentPaths,
+        ),
     );
 };
 
@@ -100,7 +122,7 @@ export type GeminiAdapterDeps = GeminiPlanDeps & Pick<Services, "openCode">;
 const OPENCODE_GEMINI_ADAPTER: AgentAdapter<"opencode-gemini", GeminiAdapterDeps> = {
     runtime: "opencode-gemini",
     oneShot: geminiOneShot,
-    preflight: (services, input, context) => planGeminiTurn(services, input, context),
+    preflight: (services, input, context, granted) => planGeminiTurn(services, input, context, granted),
     health: async (services) => {
         if (services.config.translator.url === "") {
             return healthUnavailable("This sandbox has no model translator: run one built from the published image to use Gemini.");

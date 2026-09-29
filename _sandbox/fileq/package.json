@@ -11,7 +11,8 @@
     },
     "files": [
         "dist",
-        "src"
+        "src",
+        "NOTICE"
     ],
     "publishConfig": {
         "access": "public",
@@ -21,6 +22,7 @@
         "fileq": "./dist/cli.js"
     },
     "exports": {
+        "./NOTICE": "./NOTICE",
         "./formats": {
             "types": "./dist/lib/formats.d.ts",
             "import": {

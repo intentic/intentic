@@ -80,10 +80,25 @@ export interface QueryRequest {
     readonly features?: ReadonlySet<Feature>;
 }
 
+// The answer line's verdict on a reranked prose answer. "weak" when no candidate clears the cross-encoder's absolute
+// floor, so nothing here likely answers; otherwise "ambiguous" or "confident" by the gap between the two leading files.
+export type Confidence = "confident" | "ambiguous" | "weak";
+
+// How the cross-encoder judged a prose answer. The capsule prints the word; this carries both to callers that score it
+// (iq-bench) without parsing the text.
+export interface Verdict {
+    // The answer line's word; absent with the confidence stage off, when the capsule prints none.
+    readonly confidence?: Confidence;
+    // The best cross-encoder probability among the reranked candidates, the absolute score "weak" is read against.
+    readonly relevance: number;
+}
+
 export interface QueryOutcome {
     readonly result: WorkspaceSearchResult;
     readonly text: string;
     readonly exitCode: 0 | 1;
+    // Present whenever a rerank judged the answer.
+    readonly verdict?: Verdict;
 }
 
 // One file the sweep admitted: root-relative, forward-slash path, plus the stat facts the index diffs on.

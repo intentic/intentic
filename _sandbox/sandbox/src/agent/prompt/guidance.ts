@@ -334,12 +334,18 @@ const ENTRIES: readonly GuidanceEntry[] = [
             "chat for those people and the turn waits; a refusal names who can release it, so carry on without it and " +
             "say plainly what you left undone rather than looking for another way in. A gated account is not loaded " +
             "into your turn at all, so it can look unconnected: `secrets gates` says what is gated and by whom, and " +
-            '`secrets request <id> --why "…"` asks for an account or connector for the rest of the conversation.',
+            '`secrets request <id> --why "…"` asks for an account or connector for the rest of the conversation. ' +
+            "A secret can also have its host guard on (`secrets gates` shows it beside any approver, `secrets hosts` " +
+            "lists the hosts). Such a secret goes by itself only in a single plain curl, wget or git command whose every " +
+            "URL is on its list; a pipe, a variable, a script, another program or another host puts a card in front of " +
+            "a person first, whatever the safety judge says, and an unattended turn is refused, so aim a guarded secret " +
+            "straight at its own hosts.",
         lean:
             "Stored secrets appear as `{{secret:name}}`. Use that token in commands, where it is substituted at execution, " +
             "and keep it as-is in files; never write a raw value or ask the user to paste one. `mcp__secrets__type_secret` " +
             "types one into a focused web field. A gated secret or account raises an approval card: if it is refused, " +
-            "carry on without it and say what you left undone (`secrets gates` lists what is gated).",
+            "carry on without it and say what you left undone (`secrets gates` lists what is gated). One whose host guard " +
+            "is on goes unasked only in one plain curl, wget or git command to its own hosts (`secrets hosts`).",
     },
     {
         id: "needs",

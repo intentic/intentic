@@ -1,15 +1,19 @@
 import { join } from "node:path";
+import type { SecretHostGuard } from "@intentic/sandbox-contract";
 import type { SecretVault } from "../capabilities/credentials/secret-vault.js";
 import type { CardDeps } from "../conversations/actor/card-offers.js";
+import { conversationUnattended } from "../guard/turn-taint.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
 import { createCredentialGate, type CredentialGate } from "./credential-gate.js";
 import { type CredentialGatesStore, fileCredentialGates } from "./credential-gates.js";
 import { createCredentialGrants, type CredentialGrants } from "./credential-grants.js";
+import { createHostGuardGate, type HostGuardGate } from "./host-guard-gate.js";
+import { effectiveHostGuards, fileSecretHostGuards, type SecretHostGuardsStore, secretHostGuardsDocument } from "./host-guards.js";
 import { type NamedSecret, secretRegistryOf } from "./secret-registry.js";
 import { fileSandboxSecrets, type SandboxSecrets, sandboxSecretsDocument } from "./sandbox-secrets.js";
 import { fileSecretUses, secretUsesDocument, type SecretUsesStore } from "./secret-uses.js";
 
-// Secret references, their uses, and the named-approver gates on spending them.
+// Secret references, their uses, the named-approver gates on spending them, and the hosts each may be sent to.
 export interface SecretsSlice {
     // Every credential under a stable name; read by the agent's masking and the exits resolving a reference back.
     readonly secretRegistry: () => Promise<readonly NamedSecret[]>;
@@ -21,6 +25,12 @@ export interface SecretsSlice {
     readonly credentialGate: CredentialGate;
     // Secrets a person keeps without DevOps: pasted into a need's card, or added on the Secrets view.
     readonly sandboxSecrets: SandboxSecrets;
+    // Each secret's host guard, the second half of its approval beside the named approvers: the owner's settings,
+    // stored beside the gate policy, and the guards in force once a connector's own hosts are laid under them.
+    readonly secretHostGuards: SecretHostGuardsStore;
+    readonly hostGuards: () => Promise<readonly SecretHostGuard[]>;
+    // The check every exit makes before a host-guarded value leaves, sharing the gate's card seams.
+    readonly hostGuardGate: HostGuardGate;
 }
 
 export interface SecretsDeps {
@@ -31,14 +41,27 @@ export interface SecretsDeps {
     readonly secretVault: SecretVault;
     // How a gate parks a turn on a release card and says so.
     readonly cards: CardDeps;
+    // The hosts each connected capability's connector declares for its credential (host-guards.ts connectorHostDefaults).
+    readonly connectorHosts: () => Promise<ReadonlyMap<string, readonly string[]>>;
+    // Who may loosen a guard on a card the agent raised.
+    readonly ownerEmail: () => Promise<string | undefined>;
 }
 
 // Builds the secrets slice.
-export const createSecretsSlice = ({ workspace, authRoot, secretVault, cards }: SecretsDeps): SecretsSlice => {
+export const createSecretsSlice = ({ workspace, authRoot, secretVault, cards, connectorHosts, ownerEmail }: SecretsDeps): SecretsSlice => {
     const credentialGates = fileCredentialGates(join(authRoot, "credential-gates.json"));
     const credentialGrants = createCredentialGrants();
     const sandboxSecrets = fileSandboxSecrets(join(authRoot, sandboxSecretsDocument.path));
+    const secretHostGuards = fileSecretHostGuards(join(authRoot, secretHostGuardsDocument.path));
+    // Read fresh each call, like the registry: a guard the owner tightens mid-turn holds from the very next use.
+    const hostGuards = async (): Promise<readonly SecretHostGuard[]> => {
+        const [stored, defaults] = await Promise.all([secretHostGuards.list(), connectorHosts()]);
+        return effectiveHostGuards(stored, defaults);
+    };
     return {
+        secretHostGuards,
+        hostGuards,
+        hostGuardGate: createHostGuardGate({ guards: hostGuards, ownerEmail, unattended: conversationUnattended, ...cards }),
         sandboxSecrets,
         secretRegistry: secretRegistryOf(secretVault, () => workspace.repos["desired-state"], sandboxSecrets),
         secretUses: fileSecretUses(join(workspace.root, secretUsesDocument.path)),

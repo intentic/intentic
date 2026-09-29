@@ -2,6 +2,7 @@ import { type AgentEvent, type PermissionMode, PI } from "@intentic/sandbox-cont
 import type { AgentRequest } from "../../agent/providers/agent-request.js";
 import { withFileNote } from "../../agent/prompt/attachment-note.js";
 import { parkedCards } from "../../conversations/actor/parked-cards.js";
+import { consultWith, type GuardOutcome, vendorSubject } from "../../guard/command-guard.js";
 import { conversationTainted } from "../../guard/turn-taint.js";
 import { memoryFleet } from "../../testing.js";
 import { EXECUTE_PROMPT, PLAN_PREAMBLE } from "./plan-mode.js";
@@ -112,6 +113,32 @@ test("a turn that throws surfaces the runtime's sentence for it, closes, and sti
 
     expect(frames).toEqual([{ kind: "thinking", text: "starting" }, { kind: "error", message: "connection reset: segfault" }, { kind: "done" }]);
     expect(closed).toEqual(["segfault"]);
+});
+
+// An agent can end its turn with an ask unanswered (its process died, or it moved on); the card that ask raised is settled
+// as the turn ends rather than left open on nobody.
+test("a card still open when the turn ends is settled with it", async () => {
+    let consulted: Promise<GuardOutcome> | undefined;
+    await drain(
+        vendorTurn(
+            {
+                ...request(),
+                policy: { judging: "on", rulebook: "approval" },
+                hooks: { cards, judge: async () => ({ decision: "ask", sentence: "Rewrites the shared history." }) },
+            },
+            {
+                open: () => "handle",
+                unopened: "unused",
+                async *serve(_handle, gate) {
+                    consulted = consultWith(gate, "git push --force origin main", vendorSubject("Bash"), () => {});
+                    yield { kind: "delta", text: "moved on" };
+                },
+                failure: () => "unused",
+            },
+        ),
+    );
+
+    expect(await consulted).toEqual({ allow: false, reason: "The turn ended before you answered." });
 });
 
 // A runtime that records each phase it is asked to run, planning "1. tidy" whenever it is planning.

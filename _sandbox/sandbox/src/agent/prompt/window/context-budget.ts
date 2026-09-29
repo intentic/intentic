@@ -1,4 +1,4 @@
-import { type AgentCapabilities, type AgentProvider, endpointIdOf, isTrialProvider } from "@intentic/sandbox-contract";
+import { type AgentCapabilities, type AgentProvider, endpointIdOf, isTrialProvider, type Model } from "@intentic/sandbox-contract";
 import type { Services } from "../../../composition.js";
 import { endpointConfigOf } from "../../../endpoints/local-model.js";
 import { routedModel } from "../../providers/harness-credentials.js";
@@ -67,18 +67,25 @@ export interface DeclaredWindow {
     readonly onACard: boolean;
 }
 
-// Declared window for endpoint providers only: a native subscription publishes none and is always huge, so the common
-// case is one string comparison. The catalog read is cached, so this costs nothing extra.
-// Resolved once per turn by the planner and handed to both readers of it — the trim that decides what to compose
-// (context-trim.ts) and the refusal below — since two reads could disagree across a catalog refresh mid-plan.
+// What an endpoint's catalog publishes for the model a turn resolves to, for endpoint providers only: a native
+// subscription publishes neither a window nor a helper-only mark, so the common case is one string comparison. The
+// catalog read is cached, so this costs nothing extra. Resolved once per turn by the planner and handed to every reader
+// of it — the trim that decides what to compose (context-trim.ts), the window refusal below and the helper-only one —
+// since two reads could disagree across a catalog refresh mid-plan.
 // Two seams: which capability serves the provider, and what its catalog publishes for the resolved model.
-export const declaredWindow = async (
+export interface ServedEndpointModel {
+    readonly row: Model;
+    // Whether this app's own card serves it (fixable here) rather than a user's server (fixable only there).
+    readonly onACard: boolean;
+}
+
+export const servedEndpointModel = async (
     services: Pick<Services, "capabilities" | "endpointModels">,
     provider: AgentProvider,
     model: string | undefined,
-): Promise<DeclaredWindow | undefined> => {
+): Promise<ServedEndpointModel | undefined> => {
     const id = endpointIdOf(provider);
-    // Trial publishes no window: its model id is synthetic, the real model is picked per message.
+    // Trial publishes nothing: its model id is synthetic, the real model is picked per message.
     if (id === undefined || isTrialProvider(provider)) {
         return undefined;
     }
@@ -90,9 +97,19 @@ export const declaredWindow = async (
     }
     const catalog = await services.endpointModels.models(id, config);
     const resolved = routedModel(catalog, model);
-    const window = catalog.models.find((entry) => entry.id === resolved)?.contextWindow;
-    return window === undefined ? undefined : { window, onACard: capability?.kind === "localmodel" };
+    const row = catalog.models.find((entry) => entry.id === resolved);
+    return row === undefined ? undefined : { row, onACard: capability?.kind === "localmodel" };
 };
+
+export const windowOf = (served: ServedEndpointModel | undefined): DeclaredWindow | undefined =>
+    served?.row.contextWindow === undefined ? undefined : { window: served.row.contextWindow, onACard: served.onACard };
+
+// The window alone, for a reader that needs nothing else of the row (a helper's rung, role-model.ts).
+export const declaredWindow = async (
+    services: Pick<Services, "capabilities" | "endpointModels">,
+    provider: AgentProvider,
+    model: string | undefined,
+): Promise<DeclaredWindow | undefined> => windowOf(await servedEndpointModel(services, provider, model));
 
 // Undefined means send it: either the window is unknown, or it fits the floor plus what was composed. `prompt` is
 // counted as sent, notes and all, not just the user's words.

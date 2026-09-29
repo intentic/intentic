@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
-import { computed, provide } from "vue";
+import { computed, provide, ref } from "vue";
 import { CHAT_SURFACE, useChatSurface } from "../../tools/chatToolSurface";
 import { useToolCalls } from "../../tools/useToolCalls";
 import ChatForkCut from "../../transcript/ChatForkCut.vue";
@@ -11,6 +11,7 @@ import ChatTurnStatus from "../../transcript/ChatTurnStatus.vue";
 import ChatSystemPrompt from "../../transcript/prompt/ChatSystemPrompt.vue";
 import ChatShotViewer from "../../transcript/shots/ChatShotViewer.vue";
 import ChatTurnShots from "../../transcript/shots/ChatTurnShots.vue";
+import ChatTurnDeliverables from "../../transcript/deliverables/ChatTurnDeliverables.vue";
 import ChatHeldMessages from "../../transcript/held/ChatHeldMessages.vue";
 import { useHeldQueue } from "../../transcript/held/heldQueue";
 import { unsaidError } from "../../transcript/transcript";
@@ -18,6 +19,7 @@ import { useShotViewer } from "../../transcript/shots/useShotViewer";
 import { usePaneTranscript } from "./paneTranscript";
 import { viewingIn } from "./paneSurface";
 import { usePaneView } from "../useChat-view";
+import FileRefPeek from "../../../workspace/files/refs/FileRefPeek.vue";
 
 // A pane's turns: rows grouped by prompt, the marks between them, each turn's pictures and the one viewer walking them.
 
@@ -31,16 +33,28 @@ const props = defineProps<{
 
 const { conversation, messages, streaming, ending, awaitingDecision } = usePaneView();
 const { showToolCalls } = useToolCalls();
-const { turns, turnShots, repeatedChecklists, isStreaming, showTurnStatus, stripOf, checklistViews, dayMarks, forkCuts, cutsAbove, skeleton } =
-    usePaneTranscript({
-        messages,
-        streaming,
-        ending,
-        awaitingDecision,
-        showToolCalls,
-        loading: computed(() => conversation.value.transcript.loading.value),
-        conversationId: computed(() => conversation.value.conversationId),
-    });
+const {
+    turns,
+    turnShots,
+    repeatedChecklists,
+    isStreaming,
+    showTurnStatus,
+    stripOf,
+    deliverablesOf,
+    checklistViews,
+    dayMarks,
+    forkCuts,
+    cutsAbove,
+    skeleton,
+} = usePaneTranscript({
+    messages,
+    streaming,
+    ending,
+    awaitingDecision,
+    showToolCalls,
+    loading: computed(() => conversation.value.transcript.loading.value),
+    conversationId: computed(() => conversation.value.conversationId),
+});
 const doomed = computed(() => conversation.value.transcript.doomed.value);
 // The error line only where it adds to the transcript: the daemon's notice already says a turn's failure.
 const error = computed(() => unsaidError(conversation.value.error.value, messages.value));
@@ -50,10 +64,14 @@ const { notice: heldNotice } = useHeldQueue();
 const heldRow = computed(() => heldNotice.value?.id);
 const viewer = useShotViewer(turns, turnShots);
 provide(CHAT_SURFACE, viewingIn(useChatSurface(), viewer));
+// The column whose `path:line` links raise a preview of the file (FileRefPeek).
+const column = ref<HTMLElement>();
 </script>
 
 <template>
-    <div class="chat-turns flex flex-1 flex-col pt-4">
+    <div ref="column" class="chat-turns flex flex-1 flex-col pt-4">
+        <!-- One preview for every file link in the column, hanging off whichever link the pointer or focus is on. -->
+        <FileRefPeek :host="column" />
         <!-- The rest of the conversation, above the window it opened on (a long chat starts mid-history); drawn only where more exists. -->
         <div v-if="conversation.transcript.historyMore.value" class="flex justify-center py-2">
             <!-- The press is the words, not the row — a full-width button would light up on any pointer crossing the top with no visible edges. -->
@@ -117,6 +135,8 @@ provide(CHAT_SURFACE, viewingIn(useChatSurface(), viewer));
                             :checklist-view="checklistViews.get(message.id)"
                         />
                     </div>
+                    <!-- The documents the turn made or changed, for a person to open (ChatTurnDeliverables). -->
+                    <ChatTurnDeliverables v-if="deliverablesOf(turn)" :deliverables="deliverablesOf(turn)!" />
                     <!-- The pictures the turn's tools showed the agent, where its answer is read (ChatTurnShots). -->
                     <ChatTurnShots v-if="stripOf(turn)" :shots="stripOf(turn)!" :agent="conversation.scope.value" @view="viewer.view" />
                     <!-- The fork point sits after the answer and inside its hover region. -->

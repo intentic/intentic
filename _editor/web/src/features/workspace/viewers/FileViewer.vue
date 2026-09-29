@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceFileWindow, WorkspaceTreeEntry } from "@intentic/api-contract";
+import { deliverableKindOf } from "@intentic/sandbox-contract";
 import { Button, CopyButton, type Tip, ui, useDevice } from "@intentic/ui";
 import { errorMessage, useLatest } from "@intentic/ui/async";
 import { extensionOf } from "@intentic/ui/file-format";
@@ -35,6 +36,10 @@ import { TEXT_EDIT_MAX_BYTES } from "../explorer/fileType";
 import type { LineJump } from "../tabs/workspaceTabs";
 import MarkdownViewer from "./MarkdownViewer.vue";
 import { resolveOpenFile, type OpenFile } from "./openFile";
+import HtmlPreview from "./html/HtmlPreview.vue";
+import { MAX_FILE_BYTES } from "./html/htmlDocument";
+import { htmlPreviewed, setHtmlPreviewed } from "./html/htmlPreviewed";
+import { openWorkspaceRef } from "../files/refs/openFileRef";
 import { type RegisteredViewer, viewerForExtension } from "../../../core-views/viewerRegistry";
 import { useT } from "@intentic/ui/i18n";
 
@@ -453,8 +458,26 @@ const markdownEditable = computed(() => !mobile.value && canEdit.value && markdo
 // Saves through whichever surface is showing, since each settles its own buffer first (markdown folds in,
 // code normalizes).
 const saveNow = (): void => (markdownHere.value ? markdownView.value?.save() : editorView.value?.save());
+// A web page is source first, rendered on the reader's word (the Preview chip) or where it was opened for reading
+// (htmlPreviewed.ts); the choice sticks to the path for the session. Its text is the editor's, unsaved edits included.
+const previewOffered = computed(() => open.value.kind === `code` && text.value !== null && deliverableKindOf(path) === `html`);
+const previewing = computed(() => previewOffered.value && htmlPreviewed(path));
+// A file beside the page, for the preview to carry in: read like the file itself, in the same scope, and not fetched
+// at all where the tree already says it is too large to carry. A read that fails is the preview's to report as a file
+// it could not load (htmlDocument.ts).
+const readAsset = async (target: string): Promise<Blob | undefined> => {
+    const size = entryAt(target)?.size;
+    return size !== undefined && size > MAX_FILE_BYTES ? undefined : readBlob(target);
+};
+// A link in the page to another file opens it where this one is open; a page it links to opens rendered too.
+const openLinked = (target: string): void => {
+    if (deliverableKindOf(target) === `html`) {
+        setHtmlPreviewed(target, true);
+    }
+    void openWorkspaceRef(target, undefined, { agent: workspaceAgent.value });
+};
 // Offered only while reading code with comments present.
-const canHideComments = computed(() => open.value.kind === `code` && text.value !== null);
+const canHideComments = computed(() => open.value.kind === `code` && text.value !== null && !previewing.value);
 // In a scope the file shown is disk, not a buffer: a dirty dot here would misattribute someone else's edit to
 // this agent's copy.
 const dirtyThis = computed(() => workspaceAgent.value === undefined && edit.isDirty(path));
@@ -514,6 +537,23 @@ const onEditorSave = (value: string): void =>
             >
                 <Icon :name="textWanted ? 'file' : 'align-left'" class="text-2xs" />
                 <span class="max-md:hidden">{{ t(`workspace.words.text`) }}</span>
+            </button>
+            <!-- A web page's rendered view and its source, one press apart, like the Text chip above. -->
+            <button
+                v-if="previewOffered"
+                type="button"
+                class="ui-chip shrink-0 gap-1 rounded-md px-1.5 py-0.5 font-medium"
+                :class="previewing ? `ui-chip-on` : ``"
+                :aria-pressed="previewing"
+                @click="setHtmlPreviewed(path, !previewing)"
+                v-tooltip.bottom="
+                    previewing
+                        ? t(`workspace.fileViewer.showSource`)
+                        : { title: t(`workspace.fileViewer.showPage`), note: t(`workspace.fileViewer.pageSealed`) }
+                "
+            >
+                <Icon :name="previewing ? 'code' : 'eye'" class="text-2xs" />
+                <span class="max-md:hidden">{{ t(`workspace.fileViewer.preview`) }}</span>
             </button>
             <!-- Tab row's chip says the view shows an agent's copy; this says this file specifically came from the shared workspace. -->
             <span
@@ -589,6 +629,8 @@ const onEditorSave = (value: string): void =>
             <div v-else-if="loading" class="flex h-full items-center justify-center text-muted">
                 <Icon name="spinner" class="text-xl" spin />
             </div>
+            <!-- The page rendered in a sealed frame, from the same text the editor below holds (HtmlPreview). -->
+            <HtmlPreview v-else-if="previewing" :path="path" :source="editorSeed" :load="readAsset" @open="openLinked" />
             <CodeView
                 v-else-if="open.kind === 'code' && text !== null"
                 ref="editorView"

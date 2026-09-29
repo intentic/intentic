@@ -90,7 +90,7 @@ export const runJsTool = async (deps: JsToolDeps, args: { code: string; timeoutS
     // two hooks order themselves, but a JS run has only this one pipeline, after the command gate has read the script.
     let code = args.code;
     if (deps.secrets !== undefined) {
-        const resolved = await resolveCommandSecrets(args.code, deps.secrets, "code");
+        const resolved = await resolveCommandSecrets(args.code, deps.secrets, "code", JS_TOOL_NAME);
         if ("refusal" in resolved) {
             return resolved.refusal;
         }

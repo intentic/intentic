@@ -9,6 +9,7 @@ const {
     cross = `start`,
     gap = 8,
     edge = 8,
+    restoreFocus = true,
 } = defineProps<{
     // The element the panel hangs off: also the window it opens in, and the click that never dismisses it.
     anchor: HTMLElement | undefined;
@@ -16,6 +17,10 @@ const {
     cross?: Cross;
     gap?: number;
     edge?: number;
+    // Whether closing hands focus back to the anchor. Off for a panel the pointer raised without a press (a hover
+    // preview), whose anchor never had focus to get back: focusing it would move the keyboard's place on a mouse's
+    // say-so.
+    restoreFocus?: boolean;
 }>();
 
 const open = defineModel<boolean>({ required: true });
@@ -127,7 +132,7 @@ watch(
             // document top.
             // Left alone if the user has already focused something else since.
             const doc = anchor?.ownerDocument;
-            if (doc !== undefined && doc.activeElement === doc.body) {
+            if (restoreFocus && doc !== undefined && doc.activeElement === doc.body) {
                 anchor?.focus();
             }
             return;

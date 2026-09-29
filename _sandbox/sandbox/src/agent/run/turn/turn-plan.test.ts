@@ -159,6 +159,30 @@ test("a local model whose served window cannot hold the loop is refused before a
     expect((plan as { message: string }).message).toContain("16,384 tokens");
 });
 
+// Refused at the door like the window check, before anything reads the prompt: an agent turn is tool calls, and a server
+// that cannot make them drops the tools and answers with words that do nothing.
+test("a model whose server cannot call tools is refused before anything is sent, and says where it still helps", async () => {
+    const gemma = { id: "gemma", kind: "endpoint" as const, config: { baseUrl: "http://127.0.0.1:8080/v1", protocol: "openai" as const } };
+    const services = servicesWith({
+        logger: unstubbed<Services["logger"]>("logger", { warn: () => {} }),
+        capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [gemma], get: async () => gemma }),
+        endpointModels: {
+            models: async () => ({
+                models: [{ id: "gemma-3-4b", label: "Gemma 3 4B", contextWindow: 131_072, helperOnly: "no-tool-calls" as const }],
+                default: "gemma-3-4b",
+            }),
+            forget: async () => {},
+        },
+    });
+
+    const plan = await planTurn(services, turn({ agent: "endpoint/gemma", model: "gemma-3-4b" }), context);
+
+    expect(plan).toMatchObject({ ok: false, code: "model-helper-only" });
+    expect((plan as { message: string }).message).toBe(
+        "Gemma 3 4B cannot call tools: its server reports a chat template with no tool calling, and an agent turn is made of tool calls, so nothing was sent. Pick a model that can for this chat. This one can still write commit messages, session titles and other one-shot jobs: set it for those in Sandbox ▸ Agent ▸ Models.",
+    );
+});
+
 test("the same endpoint serving a large window is planned normally", async () => {
     const big = { id: "gpu-box", kind: "endpoint" as const, config: { baseUrl: "http://gpu.local:8000/v1", protocol: "openai" as const } };
     const services = servicesWith({
@@ -333,6 +357,32 @@ test("Codex receives the connected browser granted to its persona, and no other 
     expect(request.tools.sdkServers).toBeUndefined();
     expect(request.tools.browserPorts).toEqual({ identity: 41_111 });
     expect(request.tools.browserPasskeys).toEqual({ identity: "/state/identity/passkeys.json" });
+});
+
+// OpenCode takes the same remote list now: the connected browser granted to the persona reaches a Grok turn as it
+// reaches Codex's, and no other account does.
+test("Grok receives the connected browser granted to its persona, and no other account", async () => {
+    const writer: Persona = { id: "reddit-writer", capabilities: ["reddit-radarsuspam"], powers: PersonaPowersSchema.parse({}) };
+    const reddit = { id: "reddit-radarsuspam", kind: "browser" as const, config: { platform: "reddit" } };
+    const other = { id: "reddit-other", kind: "browser" as const, config: { platform: "reddit" } };
+    const routed = { name: "browser", url: "http://127.0.0.1:1/mcp/browser", token: "conversation-bearer", timeoutMs: 120_000 };
+    browserServers.mockResolvedValue({ servers: [routed], accounts: { "reddit-radarsuspam": "identity" }, ports: { identity: 41_111 }, passkeys: {} });
+    const services = servicesWith({
+        capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [reddit, other] }),
+        personas: unstubbed<Services["personas"]>("personas", { list: async () => [writer] }),
+        agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
+        openCode: unstubbed<Services["openCode"]>("openCode", {
+            connected: async () => true,
+            xaiModels: async () => ({ default: "grok-4", models: [{ id: "grok-4", label: "Grok 4" }] }),
+        }),
+    });
+
+    const plan = await planTurn(services, turn({ agent: "grok", actsAs: "reddit-writer", conversationId: "reddit-conversation" }), context);
+    const request = (plan as { request: AgentRequest }).request;
+
+    expect(browserServers).toHaveBeenCalledWith([reddit], ROOT, expect.objectContaining({ routers: services.browserRouters }), true, "reddit-conversation");
+    expect(request.tools.remote).toEqual([routed]);
+    expect(request.tools.sdkServers).toBeUndefined();
 });
 
 test("Grok replaces a model its live catalog no longer offers, and keeps one it does", async () => {

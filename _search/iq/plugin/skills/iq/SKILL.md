@@ -33,6 +33,12 @@ iq "where do we enforce the secrets floor?"
 
 Every answer opens with a capsule (`answer:`, `candidates:`, `more:`). Read that and stop — do not pipe through `head`; `--budget` already caps output. Scope with `--in`, `--repo`, `--lang`, `--glob`. Wrong grep habits (`iq search`, `iq ask`) are rewritten to `q`; use canonical forms next time. Full verb list: `iq --help`.
 
+A question's `answer:` line ends with a verdict:
+
+- `confident` — the top result stands out. Read it and stop.
+- `ambiguous` — the top files scored close. The answer is probably among them and the `candidates:`; compare those rather than searching again.
+- `weak` — no result scored as a likely answer, so what you asked about probably does not exist in this workspace. Stop and say so, or rephrase once in the code's own words (the name you would expect it to have). A second `weak` means it is not here. Do not read on through the candidates or fall back to grep hunting for it.
+
 **Session recall:** `iq sessions grab "topic"` for ranked excerpts from past sessions; `iq sessions files "topic"` for files those sessions touched. Verify load-bearing hits against current code.
 
 **Another conversation**, rather than what past sessions touched, is the `agents` CLI: `agents show <handle>` answers one whole (its task, where it got to, branch, worktree, delta, record) from any spelling of its name — id, branch, id prefix, session id, or title words. `agents ls` is the fleet, `agents find '<text>'` is who said a phrase. Never search `/history` by hand for one.

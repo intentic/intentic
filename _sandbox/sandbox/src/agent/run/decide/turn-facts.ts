@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { FIELD_NOTES_FILE } from "@intentic/constants";
-import type { Area, Capability, ConversationGrant, CredentialGate, Persona, Rule, SandboxSettings, TurnNote } from "@intentic/sandbox-contract";
+import type { Area, Capability, ConversationGrant, CredentialGate, HelperOnly, Persona, Rule, SandboxSettings, TurnNote } from "@intentic/sandbox-contract";
 import type { Services } from "../../../composition.js";
 import { readPersonaPrompt } from "../../../personas/persona-kit.js";
 import type { ShortMemory } from "@intentic/constants/memory-room";
@@ -16,7 +16,7 @@ import { type AccountRoute, offBlockedAccount } from "../../providers/accounts/b
 import { routingFor } from "../../providers/accounts/routing.js";
 import { type FieldNotes, fieldNotes } from "@intentic/agent-context/field-notes";
 import { type IqSearchTeaching, iqSearchInstruction } from "../../prompt/iq-search-instruction.js";
-import { type DeclaredWindow, declaredWindow } from "../../prompt/window/context-budget.js";
+import { type DeclaredWindow, servedEndpointModel, windowOf } from "../../prompt/window/context-budget.js";
 import { workspaceMapNote } from "@intentic/agent-context/workspace-map";
 import { workspaceMemoryNote } from "../../prompt/workspace-memory.js";
 import type { RoutedTurn, TurnInput } from "../../../seams/turn-starter.js";
@@ -44,6 +44,9 @@ export interface AdmittedTurnFacts {
     readonly repoChecks: readonly Rule[];
     // What the model publishes as its window; undefined for every native provider and an unknown endpoint model.
     readonly declared: DeclaredWindow | undefined;
+    // Set where the endpoint's catalog marks the model as able to run one-shot jobs only, never a turn; absent for
+    // every native provider and every model nothing has said that of.
+    readonly helperOnly?: { readonly label: string; readonly reason: HelperOnly };
     // Everything the owner installed, before any persona or gate narrows it.
     readonly installed: readonly Capability[];
     // Dependency readiness of the main checkout; empty where the probe was skipped.
@@ -220,11 +223,14 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
     }
     const entry = input.conversationId === undefined ? undefined : services.agents.entry(input.conversationId);
     const runtime = turnRuntime(input, entry);
-    // One read of the declared window answers both what the turn may compose and whether what it composed fits.
-    const [settings, declared] = await Promise.all([
+    // One read of the served model answers what the turn may compose, whether what it composed fits, and whether the
+    // model may run a turn at all.
+    const [settings, served] = await Promise.all([
         context.settings ?? services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get()),
-        services.perf.track("turn.plan.window", { provider: runtime.provider }, () => declaredWindow(services, runtime.provider, input.model)),
+        services.perf.track("turn.plan.window", { provider: runtime.provider }, () => servedEndpointModel(services, runtime.provider, input.model)),
     ]);
+    const declared = windowOf(served);
+    const helperOnly = served?.row.helperOnly;
     const [installed, setup, personas, areas, skillCatalogNote, contextNote, repoChecks, turnContext] = await manifests(
         services,
         input,
@@ -250,6 +256,7 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
         settings,
         repoChecks,
         declared,
+        ...opt("helperOnly", helperOnly === undefined || served === undefined ? undefined : { label: served.row.label, reason: helperOnly }),
         installed,
         setup,
         personas,

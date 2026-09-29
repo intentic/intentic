@@ -3,8 +3,9 @@
 // report, never offer.
 import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
-import { createApp, h, ref } from "vue";
+import { createApp, h, nextTick, ref } from "vue";
 import type { CapabilitySummary } from "@intentic/api-contract";
+import { localModelGb } from "@intentic/capability-catalog";
 import type { LocalModelFitResponse } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -43,11 +44,11 @@ const FIT: LocalModelFitResponse = {
 const localModel = (id: string, model: string, status: CapabilitySummary[`status`]): CapabilitySummary =>
     ({ id, kind: `localmodel`, status, config: { model, context: `65536` }, secrets: [] }) as unknown as CapabilitySummary;
 
-const render = (installed: CapabilitySummary[]): string => {
+const renderWith = (fit: LocalModelFitResponse, installed: CapabilitySummary[]): string => {
     capabilities.value = installed;
     const el = document.createElement(`div`);
     document.body.append(el);
-    const app = createApp({ render: () => h(LocalModelLane, { fit: FIT }) });
+    const app = createApp({ render: () => h(LocalModelLane, { fit }) });
     app.use(PrimeVue);
     app.component(`Icon`, IconStub);
     app.mount(el);
@@ -56,6 +57,8 @@ const render = (installed: CapabilitySummary[]): string => {
     el.remove();
     return html;
 };
+
+const render = (installed: CapabilitySummary[]): string => renderWith(FIT, installed);
 
 it(`offers both rungs while nothing is installed`, () => {
     const html = render([]);
@@ -82,4 +85,52 @@ it(`shows what a failed start said, in place of the button that would repeat it`
     const html = render([localModel(`localmodel`, QUICK, { state: `error`, detail: `llama-server not running, press Update to start it` })]);
     expect(html).toContain(`llama-server not running`);
     expect(html).not.toContain(`Start now`);
+});
+
+// The quick-jobs model writes commit messages and titles and is refused a chat turn, so a served one is reported as what
+// it is and pointed at the list that uses it, never offered as the model to chat with.
+it(`says a served quick-jobs model is ready for quick jobs, and points at where it is used`, () => {
+    const html = render([localModel(`localmodel`, QUICK, { state: `active`, detail: `Qwen3.5 2B · 64k window` })]);
+    expect(html).toContain(`Ready for quick jobs`);
+    expect(html).toContain(`Choose it for commit messages and titles`);
+});
+
+// Ready and slow reads as broken without a reason: the daemon's words for where the layers went take the place of Ready.
+it(`shows why a serving model is marked instead of calling it ready`, () => {
+    const detail = `Qwen3.8 27B · 64k window · only 20 of 49 layers fit on the GPU, the rest run on the CPU and set its pace`;
+    const html = render([localModel(`localmodel`, WORK, { state: `active`, code: `gpu-partial`, detail })]);
+    expect(html).toContain(detail);
+    expect(html).not.toContain(`>Ready<`);
+});
+
+// Pressing a rung and waiting for it to serve is the whole errand; only a model that can run a chat ends it in one.
+it(`hands a served model on to chat only when it can run one`, async () => {
+    const started = async (model: string): Promise<string[]> => {
+        capabilities.value = [];
+        const ready: string[] = [];
+        const el = document.createElement(`div`);
+        document.body.append(el);
+        const app = createApp({ render: () => h(LocalModelLane, { fit: FIT, onReady: (provider: string) => ready.push(provider) }) });
+        app.use(PrimeVue);
+        app.component(`Icon`, IconStub);
+        app.mount(el);
+        const label = model === QUICK ? `Start now` : `Run it`;
+        [...el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(label))?.click();
+        await nextTick();
+        await Promise.resolve();
+        capabilities.value = [localModel(`served`, model, { state: `active`, detail: `serving` })];
+        await nextTick();
+        app.unmount();
+        el.remove();
+        return ready;
+    };
+    expect(await started(WORK)).toEqual([`endpoint/served`]);
+    expect(await started(QUICK)).toEqual([]);
+});
+
+it(`says what the offers were sized against: one device's free memory, not the sum`, () => {
+    const html = renderWith({ ...FIT, fullSpeedBytes: 6 * 1024 ** 3, fullSpeedDevice: `gpu` }, []);
+    expect(html).toContain(`Offers are sized to run whole on the GPU, in the ${localModelGb(6 * 1024 ** 3)} a model can have there.`);
+    const none = renderWith({ ...FIT, instant: undefined, best: undefined, fullSpeedBytes: 1024 ** 3, fullSpeedDevice: `host` }, []);
+    expect(none).toContain(`Nothing on the curated list runs at full speed in the ${localModelGb(1024 ** 3)} free here.`);
 });

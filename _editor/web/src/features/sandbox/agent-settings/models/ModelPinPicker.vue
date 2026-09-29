@@ -11,7 +11,7 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const emit = defineEmits<{ "update:open": [boolean]; pick: [ModelPin]; configure: [ModelPin] }>();
-const { open, anchor, header, pin, knobs, taken } = defineProps<{
+const { open, anchor, header, pin, knobs, taken, helperJobs } = defineProps<{
     open: boolean;
     // The trigger the panel hangs off: the row being edited, or the list's own Add button.
     anchor?: HTMLElement | undefined;
@@ -23,6 +23,8 @@ const { open, anchor, header, pin, knobs, taken } = defineProps<{
     knobs?: boolean;
     // `${provider}:${model}` of every entry already in the list.
     taken?: readonly string[];
+    // Whether the list feeds one-shot helper jobs only, where a helper-only model may be picked.
+    helperJobs?: boolean;
 }>();
 </script>
 
@@ -40,6 +42,7 @@ const { open, anchor, header, pin, knobs, taken } = defineProps<{
             :pin="pin"
             :knobs="knobs"
             :taken="taken"
+            :helper-jobs="helperJobs"
             @pick="emit(`pick`, $event)"
             @configure="emit(`configure`, $event)"
             @close="emit(`update:open`, false)"

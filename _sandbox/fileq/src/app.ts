@@ -1,8 +1,10 @@
 import { packageVersion } from "@intentic/agent-cli/version";
 import { buildApplication, buildRouteMap } from "@stricli/core";
+import { checkCommand } from "./commands/check.command.js";
 import { deriveCommand } from "./commands/derive.command.js";
 import { gitAttributesCommand } from "./commands/git-attributes.command.js";
 import { readCommand } from "./commands/read.command.js";
+import { renderCommand } from "./commands/render.command.js";
 import { sweepCommand } from "./commands/sweep.command.js";
 
 // The agent-facing contract, kept small — this is what `fileq --help` prints.
@@ -20,18 +22,30 @@ fresh by content hash — reading a file twice derives once.
   fileq read --plain <f>  the markdown alone, for a program; git's textconv driver
   fileq git-attributes    the gitattributes that route documents through it
 
+After producing a document, check it and look at it:
+
+  fileq check <file>      docx, pptx, xlsx, pdf: problems a reader would meet, each
+                          with its slide, page, cell or paragraph; exit 1 on an error
+  fileq render <file> [--pages 1-3] [--out <dir>]
+                          pages or slides as PNG files, one path per line, for an
+                          image reader (office formats need LibreOffice; all need
+                          pdftoppm or mutool)
+
 git diff, git show and git log -p on a document print its text, not "Binary
 files differ": the sandbox names every derivable extension diff=fileq.
 
 Not fileq's business: plain text (read it directly), the open web (webq),
 files needing OCR or transcription (later tiers say so in their sidecars).
 
-Exit codes: 0 content, 1 nothing derivable, 2 broken invocation or install.`;
+Exit codes: 0 content, 1 nothing derivable (check: an error found), 2 broken
+invocation or install (render: a tool it needs is missing).`;
 
 export const app = buildApplication(
     buildRouteMap({
         routes: {
             read: readCommand,
+            check: checkCommand,
+            render: renderCommand,
             derive: deriveCommand,
             sweep: sweepCommand,
             gitAttributes: gitAttributesCommand,

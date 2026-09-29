@@ -106,6 +106,7 @@ import type { HostsSlice } from "./hosts/hosts-slice.js";
 import { createWebextSlice, type WebextSlice } from "./webext/webext-slice.js";
 import { createRunnersSlice, type RunnersSlice } from "./runners/runners-slice.js";
 import { type AgentToolsMember, createCapabilitiesSlice, type CapabilitiesSlice } from "./capabilities/capabilities-slice.js";
+import { connectorHostDefaults } from "./secrets/host-guards.js";
 import { createSecretsSlice, type SecretsSlice } from "./secrets/secrets-slice.js";
 import { createNeedsSlice, type NeedsSlice } from "./needs/needs-slice.js";
 import { type ConversationGrants, conversationGrantsDocument, fileConversationGrants } from "./personas/conversation-grants.js";
@@ -489,7 +490,15 @@ export const createServices = (config: Config, logger: Logger): Services => {
         whole,
     });
     const { capabilities } = capabilitiesParts.slice;
-    const secretsSlice = createSecretsSlice({ workspace, authRoot, secretVault: capabilitiesParts.secretVault, cards: cardDeps({ conversations, cards, events }) });
+    const secretsSlice = createSecretsSlice({
+        workspace,
+        authRoot,
+        secretVault: capabilitiesParts.secretVault,
+        cards: cardDeps({ conversations, cards, events }),
+        // The same host the extension enumerators read, so a connector's hosts come from exactly the installed set.
+        connectorHosts: () => connectorHostDefaults({ workspace, files: workspaceSlice.files, capabilities, config }),
+        ownerEmail: authSlice.ownerEmail,
+    });
     const conversationGrants = fileConversationGrants(join(authRoot, conversationGrantsDocument.path));
     const extensionsSlice = createExtensionsSlice({
         config,

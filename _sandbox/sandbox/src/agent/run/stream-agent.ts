@@ -28,6 +28,8 @@ import { settleLandingInBackground, versionMainTree } from "../../conversations/
 import { handoffHistory, turnStartIndex } from "../../sessions/turn-transcript.js";
 import { type ChildSupervisor, childSupervisor, isSpawnedChild, spawnDepthOf } from "../subagents/children.js";
 import { withRuntimeSubagents } from "../subagents/runtime-subagents.js";
+import { checkoutDirtyPaths } from "../tools/agent-shell-edits.js";
+import { scanProducedDocuments, withProducedDocuments } from "../tools/produced-documents.js";
 import type { AgentRequest, TurnBase, TurnHooks, TurnSpec } from "../providers/agent-request.js";
 import { composeWirePrompt } from "../prompt/turn-preamble.js";
 import { applyTrim, trimFrame, type TurnTrimState } from "../prompt/window/context-trim.js";
@@ -72,6 +74,22 @@ const runtimeFrames = (services: Services, input: RoutedTurn, frames: AsyncItera
     input.conversationId === undefined || capabilitiesOf(input.agent, input.harness).runtime === "claude-code"
         ? frames
         : withRuntimeSubagents(frames, { conversationId: input.conversationId, conversations: services.conversations, subagentsDir: undefined });
+
+// The documents each command wrote, named on its card (produced-documents.ts), so the chat can list what a turn made
+// even when a script made it. Asked in the daemon's copy of the checkout, of names the agent gave from its own root. A
+// turn with no conversation keeps no record to put them in.
+const withDocuments = (
+    services: Services,
+    input: RoutedTurn,
+    place: { readonly worktree: WorktreeRun | undefined; readonly effectiveCwd: string },
+    frames: AsyncIterable<AgentEvent>,
+): AsyncIterable<AgentEvent> => {
+    if (input.conversationId === undefined) {
+        return frames;
+    }
+    const localCwd = place.worktree?.cwd ?? services.workspace.root;
+    return withProducedDocuments(frames, scanProducedDocuments({ localCwd, effectiveCwd: place.effectiveCwd }, checkoutDirtyPaths(localCwd)));
+};
 
 // What the turn was told before the user's own words, filed for the chat to show. The preamble's notes ride the
 // message and land in the transcript; the system prompt reaches the model and nothing else, so this file is the only
@@ -715,7 +733,7 @@ async function* runTurn(
     if (prepared === undefined) {
         return;
     }
-    const { plan, request, isolation, frames } = prepared;
+    const { plan, request, isolation, effectiveCwd, frames } = prepared;
     const provider = input.agent;
     const account = plan.account;
     const attribution = { ...opt("account", account), ...opt("actor", input.actor) };
@@ -732,7 +750,8 @@ async function* runTurn(
     // The prefix this turn's requests were built from, as the CLI announced it; what a cache refresh must match.
     let fingerprint: PromptFingerprint | undefined;
     try {
-        for await (const raw of withSilentEnding(runtimeFrames(services, input, plan.run(request.spec)), silent)) {
+        const runtime = runtimeFrames(services, input, plan.run(request.spec));
+        for await (const raw of withSilentEnding(withDocuments(services, input, { worktree, effectiveCwd }, runtime), silent)) {
             if (abortSuppresses(raw, aborted())) {
                 continue;
             }

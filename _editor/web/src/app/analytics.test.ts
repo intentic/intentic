@@ -21,6 +21,9 @@ const environment = {
 };
 jest.mock("./environments/environment", () => ({ environment }));
 
+// What the router answers, as main.ts hands it over: the workspace route, and nothing else.
+const routePatternOf = (path: string): string | undefined => (path.startsWith(`/workspace`) ? `/workspace/:path*` : undefined);
+
 // `desktop` stands in for the app's init script (windows.rs), the only signal that tells this SPA it's running in
 // the desktop app rather than a browser tab.
 const bootAnalytics = async (posthogKey: string, desktop?: { version: string; installId: string; update: string | null }) => {
@@ -31,7 +34,7 @@ const bootAnalytics = async (posthogKey: string, desktop?: { version: string; in
     });
     const { posthog } = await import(`posthog-js`);
     const analytics = await freshImport<typeof import("./analytics")>("./analytics", import.meta.url);
-    analytics.initAnalytics();
+    analytics.initAnalytics(routePatternOf);
     return { posthog, analytics };
 };
 
@@ -65,6 +68,42 @@ describe(`initAnalytics`, () => {
         user.value = null;
         await nextTick();
         expect(posthog.reset).toHaveBeenCalledTimes(1);
+    });
+
+    // Canvas, console, request bodies and network timing follow the PostHog project's own settings unless the client says
+    // no by name, so a recording of the workspace is one dashboard toggle away if this call ever loses them.
+    it(`hands posthog the replay privacy options, whatever the project's own recording settings say`, async () => {
+        const { posthog } = await bootAnalytics(`phc_test`);
+        expect(posthog.init).toHaveBeenCalledWith(
+            `phc_test`,
+            expect.objectContaining({
+                session_recording: expect.objectContaining({
+                    maskAllInputs: true,
+                    maskTextSelector: `*`,
+                    blockSelector: expect.stringContaining(`.monaco-editor`),
+                    captureCanvas: { recordCanvas: false },
+                    recordBody: false,
+                    recordHeaders: false,
+                }),
+                enable_recording_console_log: false,
+                capture_performance: { network_timing: false, web_vitals_attribution: false },
+            }),
+        );
+    });
+
+    // The router's answer is the only thing between a file path and PostHog, so both places an address leaves through
+    // (an event, and the page a replay records) have to be wired to it.
+    it(`reports an address as the route the router matched, in events and in the replay`, async () => {
+        const { posthog } = await bootAnalytics(`phc_test`);
+        stubGlobal(`location`, { host: `app.intentic.dev` });
+        const config = mocked(posthog.init).mock.calls[0]![1]!;
+
+        const [beforeSend] = [config.before_send].flat();
+        const sent = beforeSend!({ uuid: `u1`, event: `$pageview`, properties: { $current_url: `https://app.intentic.dev/workspace/web/src/a.ts`, $pathname: `/workspace/web/src/a.ts` } });
+        expect(sent?.properties).toEqual({ $current_url: `https://app.intentic.dev/workspace/:path*`, $pathname: `/workspace/:path*` });
+
+        const recorded = config.session_recording!.maskCapturedNetworkRequestFn!({ name: `https://app.intentic.dev/workspace/web/src/a.ts`, entryType: `navigation`, startTime: 0, duration: 0 });
+        expect(recorded?.name).toBe(`https://app.intentic.dev/workspace/:path*`);
     });
 
     // Without a client tag, the desktop app (which loads this SPA) and a browser tab look like the same row, broken

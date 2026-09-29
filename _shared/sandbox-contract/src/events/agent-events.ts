@@ -255,6 +255,9 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 // The model cannot hold a turn this size, refused before sending; retrying the same request never
                 // helps.
                 "context-window-too-small",
+                // The model can only write one-shot jobs (Model.helperOnly: its server says it cannot call tools, or
+                // it is the quick-jobs local model), refused before sending; the words wait for another model.
+                "model-helper-only",
                 // The session outgrew the model's context window mid-turn; resuming that session only overflows again,
                 // so the daemon re-runs the turn once in a fresh session carrying the hand-off.
                 "context-overflow",

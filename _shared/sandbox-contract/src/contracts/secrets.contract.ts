@@ -9,6 +9,9 @@ import {
     SecretKeyParamSchema,
     SecretGeneratedSchema,
     SecretGenerateSchema,
+    SecretHostGuardSetResultSchema,
+    SecretHostGuardSetSchema,
+    SecretHostGuardsSchema,
     SecretKeysSchema,
     SecretRevealSchema,
     SecretSetSchema,
@@ -113,6 +116,31 @@ export const secretsContract = {
         })
         .input(CredentialGuardSubjectParamSchema)
         .output(OkSchema),
+    // The host guard, the gate's second half: kept beside the gates, off the agent-editable config for the same reason. The
+    // agent reads it so a use can aim where it may go, and may tighten it; loosening waits for the owner's click.
+    hosts: secretRoute
+        .route({
+            method: "GET",
+            path: "/secrets/hosts",
+            summary: "Which secrets are host-guarded, and where they may go",
+            description:
+                "Every secret and connected account whose host guard is set, on or off, and its hosts. With the guard on, a use aimed off the list, or anywhere a command's text does not show, asks a person first, whatever the safety judge says. Names and hosts only, never values.",
+        })
+        // The `secrets gates` and `secrets hosts` CLI's read, on the agent token.
+        .meta({ agent: true })
+        .output(SecretHostGuardsSchema),
+    setHosts: secretRoute
+        .route({
+            method: "PUT",
+            path: "/secrets/hosts/{subject}",
+            summary: "Turn a secret's host guard on or off, and set its hosts",
+            description:
+                "Replaces one secret's host guard. Anybody who may use secrets can turn it on or take hosts away; turning it off or adding a host is the owner's: from the agent it raises a card for the owner in the live conversation and waits for their answer.",
+        })
+        // The `secrets hosts` CLI's edits, on the agent token; the route itself decides what needs the owner.
+        .meta({ agent: true })
+        .input(SecretHostGuardSetSchema)
+        .output(SecretHostGuardSetResultSchema),
     request: secretRoute
         .route({
             method: "POST",

@@ -37,7 +37,10 @@ The heavier features are FEATURE PACKS that ride the image profile: the standard
 them with ToolSearch; never install a browser yourself), a dormant Docker Engine, the provider CLIs
 (`codex`, `opencode`, `cli-proxy-api`) and semantic `iq ask`. On a minimal (core) image each arrives through
 its capability's own fragment on an owner rebuild: never propose an overlay for those; enabling the
-capability composes it automatically.
+capability composes it automatically. A few packs ride no profile and no capability because few sandboxes need
+them: `office` (LibreOffice and poppler, what `fileq render` draws documents with, ~335 MB). Ask for one by name
+with `environment propose office --pack --why "…"`: it files that pack's own steps (never hand-copy them), and
+answers at once when the image already bakes it.
 
 Check with `command -v <tool>` before assuming something is missing. If a staple that belongs in that list is
 genuinely absent, it is worth proposing below: the list above grew from exactly that.

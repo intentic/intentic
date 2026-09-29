@@ -5,6 +5,7 @@
             "id": "regexp-router",
             "verb": "q",
             "query": "how does the regexp router match incoming routes?",
+            "slices": ["near-duplicate"],
             "expected": [{ "file": "src/router/reg-exp-router/router.ts" }]
         },
         {
@@ -17,6 +18,7 @@
             "id": "jwt-verify",
             "verb": "q",
             "query": "how are JWT tokens verified?",
+            "slices": ["near-duplicate"],
             "expected": [{ "file": "src/utils/jwt/jwt.ts", "line": 96, "tolerance": 60 }]
         },
         {
@@ -29,6 +31,7 @@
             "id": "smart-router-choice",
             "verb": "q",
             "query": "how does the smart router pick which underlying router to use?",
+            "slices": ["near-duplicate"],
             "expected": [{ "file": "src/router/smart-router/router.ts" }]
         },
         {
@@ -96,6 +99,7 @@
             "id": "static-files",
             "verb": "q",
             "query": "how are static files served from disk?",
+            "slices": ["near-duplicate", "deprecated"],
             "expected": [{ "file": "src/middleware/serve-static/index.ts" }]
         },
         {
@@ -139,6 +143,7 @@
             "id": "not-found-handler",
             "verb": "q",
             "query": "what decides the 404 response when no route matches?",
+            "slices": ["paraphrase"],
             "expected": [{ "file": "src/hono-base.ts", "line": 31, "tolerance": 20 }],
             "notes": "Synonym gap: '404 when no route matches' vs notFoundHandler vocabulary."
         },
@@ -190,6 +195,78 @@
             "query": "bearerAuth",
             "expected": [{ "file": "src/middleware/bearer-auth/index.ts", "line": 104, "tolerance": 5 }],
             "notes": "bare identifier through `q`: classified as an identifier, so the symbols engine joins the fusion, the only path where the def multiplier can reorder anything"
+        },
+        {
+            "id": "prose-body-limit",
+            "verb": "q",
+            "query": "how does the bodyLimit middleware reject a request body that is too large?",
+            "slices": ["identifier-in-prose"],
+            "expected": [{ "file": "src/middleware/body-limit/index.ts" }],
+            "notes": "bodyLimit is declared in middleware/body-limit/index.ts."
+        },
+        {
+            "id": "prose-get-path",
+            "verb": "q",
+            "query": "where does getPath cut the query string off the request URL?",
+            "slices": ["identifier-in-prose"],
+            "expected": [{ "file": "src/utils/url.ts", "line": 106, "tolerance": 30 }],
+            "notes": "getPath at url.ts:106; its lookalike getPathNoStrict at 141 sits outside the window."
+        },
+        {
+            "id": "deprecated-matched-routes",
+            "verb": "q",
+            "query": "how can a handler list every route that matched the current request?",
+            "slices": ["deprecated"],
+            "expected": [{ "file": "src/helper/route/index.ts" }],
+            "notes": "The matchedRoutes helper (hono/route) is live; HonoRequest.matchedRoutes in src/request.ts is @deprecated in its favour."
+        },
+        {
+            "id": "deprecated-service-worker-fire",
+            "verb": "q",
+            "query": "how do I hook an app up to the global fetch event listener in a service worker?",
+            "slices": ["deprecated"],
+            "expected": [{ "file": "src/adapter/service-worker/index.ts" }],
+            "notes": "fire() from hono/service-worker is live; Hono#fire in src/hono-base.ts is @deprecated in its favour."
+        },
+        {
+            "id": "paraphrase-slow-endpoints",
+            "verb": "q",
+            "query": "which piece gives up on sluggish endpoints once a deadline passes?",
+            "slices": ["paraphrase"],
+            "expected": [{ "file": "src/middleware/timeout/index.ts" }],
+            "notes": "No word of the question (stopwords aside) appears in timeout/index.ts."
+        },
+        {
+            "id": "no-answer-postgres-pool",
+            "verb": "q",
+            "query": "how does hono open a connection pool to a PostgreSQL database?",
+            "slices": ["no-answer"],
+            "expected": [],
+            "notes": "At the locked sha: rg -i 'postgres|mysql|sqlite' matches nothing under src/."
+        },
+        {
+            "id": "no-answer-graphql",
+            "verb": "q",
+            "query": "where are GraphQL queries resolved against a schema?",
+            "slices": ["no-answer"],
+            "expected": [],
+            "notes": "At the locked sha: rg -i graphql matches nothing (the GraphQL server lives in honojs/middleware, not here)."
+        },
+        {
+            "id": "no-answer-thumbnails",
+            "verb": "q",
+            "query": "how are uploaded images resized into thumbnails?",
+            "slices": ["no-answer"],
+            "expected": [],
+            "notes": "At the locked sha: rg -i 'thumbnail|resize' matches nothing under src/."
+        },
+        {
+            "id": "no-answer-smtp",
+            "verb": "q",
+            "query": "how does hono send transactional email over SMTP?",
+            "slices": ["no-answer"],
+            "expected": [],
+            "notes": "At the locked sha: rg -i smtp matches nothing; 'email' appears only as an input type and in test fixtures."
         }
     ]
 }

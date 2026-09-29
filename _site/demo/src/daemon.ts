@@ -33,7 +33,16 @@ import { demoLoops } from "./fixture/loops";
 import { demoRuns, demoWorkflows } from "./fixture/workflows";
 import { choresReport, writeLedger } from "./fixture/chores";
 import { ciJobs, ciRunsResponse } from "./fixture/ci";
-import { DESK_AWAITING_ID, DESK_FEATURED_ID, DESK_SANDBOX_NAME, deskRoster, SUPPLIER_LETTER_DOCX, SUPPLIER_LETTER_PATH } from "./fixture/desk";
+import {
+    DESK_AWAITING_ID,
+    DESK_FEATURED_ID,
+    DESK_SANDBOX_NAME,
+    deskRoster,
+    SEPTEMBER_PRINT_DOCX,
+    SEPTEMBER_PRINT_PATH,
+    SUPPLIER_LETTER_DOCX,
+    SUPPLIER_LETTER_PATH,
+} from "./fixture/desk";
 import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, fleetRoster, inProcessSubagents } from "./fixture/fleet";
 import {
     deleteKnowledgeNote,
@@ -824,11 +833,14 @@ export const procedures = {
 const documentBytes = (bytes: Uint8Array<ArrayBuffer>): Response =>
     new Response(bytes, { status: 200, headers: { "content-type": `application/vnd.openxmlformats-officedocument.wordprocessingml.document` } });
 
-// Report screenshots (svg keeps them a few kilobytes and sharp at any size) and the one document, which is the only
-// path here whose bytes are bytes: a viewer parses it, so text would not do.
+// Report screenshots (svg keeps them a few kilobytes and sharp at any size) and the Word documents, the only paths here
+// whose bytes are bytes: a viewer parses them, so text would not do.
 const workspaceRaw = (path: string): Response => {
     if (path === SUPPLIER_LETTER_PATH) {
         return documentBytes(SUPPLIER_LETTER_DOCX);
+    }
+    if (path === SEPTEMBER_PRINT_PATH) {
+        return documentBytes(SEPTEMBER_PRINT_DOCX);
     }
     if (path === HANDOVER_PATH || path === HANDOVER_CHANGE_PATH) {
         return documentBytes(HANDOVER_DOCX);

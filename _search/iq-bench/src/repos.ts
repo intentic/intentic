@@ -8,7 +8,9 @@ import { type RepoLock, ReposLockSchema } from "./schema.js";
 export const packageRoot = findPackageRoot(import.meta.url);
 // The monorepo checkout doubles as the "intentic" benchmark repo, no clone step.
 export const monorepoRoot = findRepoRoot(import.meta.url);
-export const cacheDir = join(packageRoot, ".cache");
+// IQ_BENCH_CACHE moves the clones and indexes elsewhere, so two runs in one checkout (two agents, two engine builds)
+// never rebuild each other's index or share a vector cache written by another embedder.
+export const cacheDir = process.env["IQ_BENCH_CACHE"] ?? join(packageRoot, ".cache");
 
 const readReposLock = (): RepoLock[] => ReposLockSchema.parse(JSON.parse(readFileSync(join(packageRoot, "datasets/repos.lock.json"), "utf8")));
 

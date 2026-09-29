@@ -4,6 +4,7 @@ import {
     type AgentProvider,
     type CatalogOption,
     endpointIdOf,
+    type HelperOnly,
     humanizeModelId,
     isEndpointProvider,
     isTrialProvider,
@@ -30,6 +31,8 @@ export interface ModelOption extends CatalogOption {
     // Epoch seconds: every credential that serves this model is refused until then. A fact about the model, which is
     // why no account ring can show it — a routed provider picks the credential itself.
     readonly availableAt?: number;
+    // Set where the model may write one-shot jobs (commit messages, titles) and never run a chat turn, and why.
+    readonly helperOnly?: HelperOnly;
 }
 
 // Seeds one slot per native provider; a missing key would silently read as undefined since

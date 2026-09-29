@@ -1,5 +1,6 @@
 // secrets: user-supplied env-var secrets the daemon writes to desired-state/.env
 import { z } from "zod";
+import { SECRET_HOST_MAX, SECRET_HOST_PATTERN_RE, SECRET_HOSTS_MAX } from "../policy/secret-hosts.js";
 // Straight to the sandbox daemon, never through the platform; `apply` reloads .env with no restart. `list` returns keys
 // only; `reveal` is the one owner-only exception that returns a value.
 // An env var name, as a shell exports it. Exported so the browser validates against this rather than restating it:
@@ -104,6 +105,66 @@ export const CredentialGrantSchema = z.object({
     message: z.string().describe("What the grant means in practice, and what to do next."),
 });
 
+// The host guard: the second way a secret can need a person, beside a named approver. On, a use goes unasked only when
+// every host its text names is on the secret's list; one aimed anywhere else, or anywhere its text does not show, waits
+// for a person's click, whatever the safety judge says and whether or not it could be asked. Off, the guard never asks.
+// Keyed like a gate: a secret by its name, a connected capability by its id, covering every field of it.
+export const SecretHostSchema = z
+    .string()
+    .max(SECRET_HOST_MAX)
+    .regex(SECRET_HOST_PATTERN_RE)
+    .describe(
+        "One host, `api.github.com`, or every host under a domain, `*.github.com` (which does not include github.com itself). Lowercase, no scheme or port.",
+    );
+
+export const SecretHostSourceSchema = z
+    .enum(["owner", "connector"])
+    .describe(
+        "Who set it: the owner, or the connector the credential belongs to, whose guard is on with its own service's hosts until the owner changes it.",
+    );
+export type SecretHostSource = z.infer<typeof SecretHostSourceSchema>;
+
+export const SecretHostGuardSchema = z.object({
+    subject: z.string().min(1).describe("Which secret, by the name its reference carries, or which connected capability, by its id."),
+    kind: CredentialGateKindSchema,
+    guard: z.boolean().describe("On: a use off the list, or whose destination cannot be read, asks a person first. Off: it never asks."),
+    hosts: z
+        .array(SecretHostSchema)
+        .max(SECRET_HOSTS_MAX)
+        .describe("Where it goes without asking while the guard is on. Empty with the guard on: every use asks. Kept while it is off, for turning it back on."),
+    source: SecretHostSourceSchema,
+});
+export type SecretHostGuard = z.infer<typeof SecretHostGuardSchema>;
+
+export const SecretHostGuardsSchema = z.object({
+    guards: z
+        .array(SecretHostGuardSchema)
+        .describe("Every secret whose host guard has been set, or that a connector guards by default. One not listed has its guard off. Names and hosts only, never a value."),
+});
+
+export const SecretHostGuardSetSchema = z.object({
+    subject: z.string().min(1).describe("Which secret, by name, or which connected capability, by id."),
+    kind: CredentialGateKindSchema.optional().describe("Whether the subject is a secret or a capability. Worked out from the name when absent."),
+    guard: z.boolean().describe("Whether a use off the list, or whose destination cannot be read, must ask a person first."),
+    hosts: z
+        .array(SecretHostSchema)
+        .max(SECRET_HOSTS_MAX)
+        .describe(
+            "The whole new list. Turning the guard on or taking hosts away is open to anybody who may use secrets; turning it off or adding a host is the owner's to approve.",
+        ),
+    // Filled by the CLI itself, so the model cannot aim the owner's card at somebody else's conversation.
+    conversationId: z
+        .string()
+        .optional()
+        .describe("Which conversation to ask the owner in, when the change needs them. The CLI fills this from the running turn."),
+});
+
+export const SecretHostGuardSetResultSchema = z.object({
+    guard: z.boolean().describe("Whether the guard is on now."),
+    hosts: z.array(z.string()).describe("Where it goes without asking while the guard is on."),
+    approvedBy: z.string().optional().describe("Who approved the change, when it needed the owner's click. Absent when nobody had to."),
+});
+
 // Across every store: env/generated secrets, capability credentials, AI-provider accounts. Values never ride this
 // shape; `revealable` says whether `reveal` can return one (everything but provider accounts).
 export const SecretInventoryEntrySchema = z.object({
@@ -151,6 +212,15 @@ export const SecretInventoryEntrySchema = z.object({
         })
         .optional()
         .describe("Who has to release this before the agent can use it, and for how long one release lasts. Absent when it is not gated."),
+    // Joined from the host guards, the owner's and a connector's own, so the row can say where it may go.
+    hosts: z
+        .object({
+            guard: z.boolean().describe("Whether a use off the list, or whose destination cannot be read, asks a person first."),
+            list: z.array(z.string()).describe("The hosts it goes to unasked while the guard is on, each exact or `*.domain`."),
+            source: SecretHostSourceSchema,
+        })
+        .optional()
+        .describe("Its host guard. Absent when none was ever set and no connector sets one: the guard is off."),
 });
 export type SecretInventoryEntry = z.infer<typeof SecretInventoryEntrySchema>;
 export const SecretInventorySchema = z.object({

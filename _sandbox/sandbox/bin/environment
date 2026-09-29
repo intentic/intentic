@@ -7,7 +7,8 @@
 // In an isolated turn the draft this reads sits in the conversation's own checkout; once the daemon has filed it on the
 // main tree, the local copy is removed, or the land would carry the same file in a second time.
 
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { die, parseArgs, raise, WAIT_HELP } from "./needs-cli.mjs";
 
@@ -16,6 +17,10 @@ const COMMAND = "environment";
 // Where the main tree is mounted in an isolated turn; its presence is what says this shell is in a worktree.
 const MAIN_TREE = "/mnt/intentic-main";
 const DRAFTS = join(".intentic", "config", "environment.d");
+// The image's feature packs (image-packs/*.Dockerfile, shipped beside the daemon) and the content hash the base image
+// stamps for each one it bakes (src/environment/packs.ts reads the same two). Overridable so a suite can point elsewhere.
+const PACKS = process.env.INTENTIC_PACKS_DIR ?? "/opt/sandbox/image-packs";
+const PACK_STAMPS = process.env.INTENTIC_PACK_STAMPS_DIR ?? "/opt/packs";
 
 const USAGE = `environment — put a tool the task needs into the sandbox image
 
@@ -24,6 +29,10 @@ const USAGE = `environment — put a tool the task needs into the sandbox image
                           them. Reads ${DRAFTS}/<tool>.Dockerfile by default, another file with --file, or
                           stdin with --file -. Only RUN and ENV lines; mount the build caches (the environment skill
                           has the shapes).
+  environment propose <pack> --pack [--why "…"] [--wait <seconds>]
+                          the same, with the steps of the image's own feature pack of that name: an opt-in one no
+                          capability brings (office: LibreOffice and poppler, for \`fileq render\`). Answers at once
+                          when this image already bakes it.
 
 Approving and rebuilding are the owner's; the tool arrives when the container is rebuilt, and the conversation is
 continued then. Until then, say which parts wait on it rather than retrying.
@@ -31,6 +40,23 @@ continued then. Until then, say which parts wait on it rather than retrying.
 ${WAIT_HELP}`;
 
 const draftPath = (tool) => join(process.cwd(), DRAFTS, `${tool.toLowerCase().replace(/[^a-z0-9._@+-]+/g, "-")}.Dockerfile`);
+
+// A pack's fragment, trimmed the way the image stamps it; exits 0 when the base image already bakes this exact pack.
+const packSteps = (name) => {
+    const path = join(PACKS, `${name}.Dockerfile`);
+    if (!existsSync(path)) {
+        const known = existsSync(PACKS) ? readdirSync(PACKS).filter((entry) => entry.endsWith(".Dockerfile")).map((entry) => entry.slice(0, -".Dockerfile".length)) : [];
+        return die(COMMAND, `no feature pack named ${name}${known.length === 0 ? "" : `: the packs are ${known.join(", ")}`}`);
+    }
+    const content = readFileSync(path, "utf8").trim();
+    const stamp = join(PACK_STAMPS, name);
+    const baked = existsSync(stamp) ? readFileSync(stamp, "utf8").trim() : undefined;
+    if (baked === createHash("sha256").update(content).digest("hex")) {
+        process.stdout.write(`The ${name} pack is already in this image: nothing to propose, use it now.\n`);
+        process.exit(0);
+    }
+    return `${content}\n`;
+};
 
 const stepsFrom = (tool, file) => {
     if (file === "-") {
@@ -49,13 +75,16 @@ const main = async () => {
         process.stdout.write(`${USAGE}\n`);
         process.exit(command === undefined || command === "--help" || command === "-h" ? 0 : 1);
     }
-    const { flags, rest } = parseArgs(COMMAND, args, { values: ["why", "wait", "file"] });
+    const { flags, rest } = parseArgs(COMMAND, args, { values: ["why", "wait", "file"], switches: ["pack"] });
     const [tool] = rest;
     if (tool === undefined) {
         return die(COMMAND, USAGE);
     }
-    const steps = stepsFrom(tool, flags.file);
-    const local = flags.file === undefined ? draftPath(tool) : undefined;
+    if (flags.pack === true && flags.file !== undefined) {
+        return die(COMMAND, "--pack takes the steps from the image's pack, so it cannot take --file as well");
+    }
+    const steps = flags.pack === true ? packSteps(tool) : stepsFrom(tool, flags.file);
+    const local = flags.file === undefined && flags.pack !== true ? draftPath(tool) : undefined;
     // Removed before the call returns: `raise` exits the process with the answer. Filed on the main tree by the daemon
     // before it answers, so a worktree's copy is a duplicate by then; on the main tree it IS the filed draft.
     process.on("exit", (code) => {

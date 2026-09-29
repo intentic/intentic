@@ -37,8 +37,11 @@ const failed = computed(() => props.group.tools.some((tool) => tool.status === `
 
 const summary = computed(() => groupDiffSummary(props.group.tools));
 
-// The location for the clickable target chip: same as ChatToolCard, from the first tool.
-const location = computed(() => props.group.tools[0]?.locations?.[0]);
+// The location for the clickable target chip: same as ChatToolCard, from the first tool, and never a command's.
+const location = computed(() => {
+    const first = props.group.tools[0];
+    return first?.category === `execute` ? undefined : first?.locations?.[0];
+});
 </script>
 
 <template>

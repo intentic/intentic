@@ -18,6 +18,7 @@ import { gatedCapabilities } from "../../../secrets/credential-gating.js";
 import type { TurnBriefing } from "../../prompt/turn-briefing.js";
 import { composeWirePrompt } from "../../prompt/turn-preamble.js";
 import { contextShortfall } from "../../prompt/window/context-budget.js";
+import { helperOnlyRefusal } from "../../../endpoints/endpoint-catalog.js";
 import { applyTrim, promptTrim, trimState, type TurnTrim, type TurnTrimState, turnTrim } from "../../prompt/window/context-trim.js";
 import { spawnNote } from "../../subagents/spawn-note.js";
 import type { TurnBase } from "../../providers/agent-request.js";
@@ -191,6 +192,14 @@ export const decideTurn = (facts: TurnFacts, input: RoutedAgentTurn, context: Tu
         return { ok: false, code: "claude-not-entitled", message: heldForAccountMessage(input.agent, reason), account, warnings: [warning], spawn: false };
     }
     const runtime = turnRuntime(input, facts.entry);
+    // A model that can only write one-shot jobs is turned away at the door whatever the turn would carry: an agent turn
+    // is tool calls, and a server that drops tools answers one with words that do nothing. The picker does not offer
+    // such a model for chat; this holds every other way in (a restored tab, a pinned run role, a route).
+    if (facts.helperOnly !== undefined) {
+        const said = { provider: runtime.provider, model: input.model, reason: facts.helperOnly.reason };
+        const warning = { fields: said, message: "model: helper jobs only, a turn on it was refused before sending" };
+        return { ok: false, code: "model-helper-only", message: helperOnlyRefusal(facts.helperOnly.label, facts.helperOnly.reason), warnings: [warning], spawn: false };
+    }
     const { capabilities } = runtime;
     const premise = premiseOf(facts, input, runtime);
     const { persona } = premise;

@@ -29,6 +29,7 @@ const {
     pin,
     knobs = false,
     taken = [],
+    helperJobs = false,
 } = defineProps<{
     // Undefined while adding: nothing exists yet to configure until the entry's own row reopens this panel.
     pin?: ModelPin | undefined;
@@ -36,6 +37,9 @@ const {
     knobs?: boolean;
     // Already-taken entries stay visible but unpickable, so the list doesn't shift under you as you use it.
     taken?: readonly string[];
+    // Whether the list feeds one-shot helper jobs only (commit messages, titles): the one place a model that cannot run
+    // a turn may be picked. A run job or a persona is a turn.
+    helperJobs?: boolean;
 }>();
 
 // The model the owner's own chat is set to, so the picker anchors on a provider actually in use.
@@ -104,7 +108,14 @@ const unpickable = (entry: PickerEntry): boolean =>
 </script>
 
 <template>
-    <ModelPicker :provider="provider" :model="model" :unpickable="unpickable" @pick="pick" @close="emit(`close`)">
+    <ModelPicker
+        :provider="provider"
+        :model="model"
+        :unpickable="unpickable"
+        :helper-jobs="helperJobs"
+        @pick="pick"
+        @close="emit(`close`)"
+    >
         <template #footer>
             <!-- Composer footer's own spacing, so a reader can't tell whether this opened from a settings row or the composer. -->
             <div v-if="footerVisible" class="flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2">

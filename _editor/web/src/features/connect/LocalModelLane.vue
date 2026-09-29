@@ -53,6 +53,10 @@ const priceOf = (model: string, context: string): string => {
         : t(`connect.localModelLane.downloadNeeds`, { download: gb(option.weightsBytes), total });
 };
 
+// The instant rung writes commit messages and titles and never runs a chat: the daemon refuses a turn on it and the
+// picker does not offer it for one, so this lane never hands it on as the model to chat with.
+const quickJobsOnly = (model: string): boolean => optionOf(model)?.tier === `instant`;
+
 // The model this lane just started, watched until the daemon says it serves. Held here rather than announced on the
 // add's return because the add returns while llama-server is still loading its weights, and a chat opened then fails.
 const starting = ref<string | undefined>(undefined);
@@ -62,14 +66,24 @@ watch(
         if (entry === undefined || entry.status.state === `pending`) {
             return;
         }
+        const model = starting.value;
         starting.value = undefined;
         // The apply's last log line was about the wait; the rung's own status has taken that over by now.
         note.value = undefined;
-        if (entry.status.state === `active`) {
+        if (entry.status.state === `active` && model !== undefined && !quickJobsOnly(model)) {
             emit(`ready`, `endpoint/${entry.id}`);
         }
     },
 );
+
+// What a serving rung's row says: "ready", unless the daemon marked it (a granted GPU that holds only part of it, say),
+// in which case its own words, since a slow model with no reason given reads as a broken one.
+const readyLine = (entry: CapabilitySummary, model: string): string => {
+    if (entry.status.code !== undefined && entry.status.detail !== undefined) {
+        return entry.status.detail;
+    }
+    return quickJobsOnly(model) ? t(`connect.localModelLane.readyForQuickJobs`) : t(`connect.localModelLane.ready`);
+};
 
 const addModel = async (model: string, context: string): Promise<void> => {
     if (busy.value !== undefined || installedFor(model) !== undefined) {
@@ -113,6 +127,17 @@ const memoryLine = computed(() =>
           : t(`connect.localModelLane.memoryMachine`, { memory: gb(fit.memoryBytes) }),
 );
 
+// What the offers were sized against: one device's free memory, so a model offered here runs at that device's pace. An
+// older daemon sized against the sum and says nothing of it, so neither does this.
+const fullSpeedLine = computed(() => {
+    if (fit?.fullSpeedBytes === undefined) {
+        return undefined;
+    }
+    return fit.fullSpeedDevice === `gpu`
+        ? t(`connect.localModelLane.sizedForGpu`, { free: gb(fit.fullSpeedBytes) })
+        : t(`connect.localModelLane.sizedForMemory`, { free: gb(fit.fullSpeedBytes) });
+});
+
 const nothingFits = computed(() => fit !== undefined && fit.instant === undefined && fit.best === undefined);
 // Two offers that name the same model collapse into one: a small machine would otherwise be handed the same row twice.
 const bestIsInstant = computed(() => fit?.best !== undefined && fit.best.model === fit.instant?.model);
@@ -142,7 +167,7 @@ const rungs = computed(() => {
             badge: t(`connect.localModelLane.quickJobsOnly`),
             badgeClass: `bg-content/5 text-subtle`,
             action: t(`connect.localModelLane.startNow`),
-            pitch: t(`connect.localModelLane.instantPitch`),
+            pitch: t(`connect.localModelLane.quickJobsPitch`),
             warn: undefined,
         });
     }
@@ -169,7 +194,8 @@ const rungs = computed(() => {
 const STATE_ICON: Record<string, IconName> = { active: `check`, error: `exclamation-triangle` };
 const stateIcon = (state: string): IconName => STATE_ICON[state] ?? `spinner`;
 const STATE_TONE: Record<string, string> = { active: `text-success`, error: `text-danger` };
-const stateTone = (state: string): string => STATE_TONE[state] ?? `text-subtle`;
+const stateTone = (entry: CapabilitySummary): string =>
+    entry.status.state === `active` && entry.status.code !== undefined ? `text-warning` : (STATE_TONE[entry.status.state] ?? `text-subtle`);
 </script>
 
 <template>
@@ -182,13 +208,18 @@ const stateTone = (state: string): string => STATE_TONE[state] ?? `text-subtle`;
         <template v-else>
             <p class="text-xs text-muted">
                 {{ memoryLine }} <span class="text-subtle">{{ gpuLine }}</span>
+                <span v-if="fullSpeedLine" class="text-subtle">{{ fullSpeedLine }}</span>
             </p>
 
             <!-- llama-server is baked into the standard image, so this is the dev-run and core-image case, not the usual one. -->
             <p v-if="!fit.serverReady" :class="ui.emptyState(`text-left`)">{{ t(`connect.localModelLane.needsRebuild`) }}</p>
 
             <p v-else-if="nothingFits" :class="ui.emptyState(`text-left`)">
-                {{ t(`connect.localModelLane.nothingFits`, { memory: gb(fit.memoryBytes) }) }}
+                {{
+                    fit.fullSpeedBytes === undefined
+                        ? t(`connect.localModelLane.nothingFits`, { memory: gb(fit.memoryBytes) })
+                        : t(`connect.localModelLane.nothingRunsWhole`, { free: gb(fit.fullSpeedBytes) })
+                }}
             </p>
 
             <div v-for="rung in rungs" v-else :key="rung.key" class="flex flex-col gap-2 rounded-xl border border-line bg-card p-3">
@@ -199,11 +230,7 @@ const stateTone = (state: string): string => STATE_TONE[state] ?? `text-subtle`;
 
                     <!-- Taken: the daemon's own words for where it has got to, in place of a button whose second press
                          would write a second entry and leave this one without the machine's single server slot. -->
-                    <span
-                        v-if="rung.installed"
-                        class="ml-auto flex min-w-0 items-center gap-1.5 text-2xs"
-                        :class="stateTone(rung.installed.status.state)"
-                    >
+                    <span v-if="rung.installed" class="ml-auto flex min-w-0 items-center gap-1.5 text-2xs" :class="stateTone(rung.installed)">
                         <Icon
                             :name="stateIcon(rung.installed.status.state)"
                             :spin="stateIcon(rung.installed.status.state) === `spinner`"
@@ -211,7 +238,7 @@ const stateTone = (state: string): string => STATE_TONE[state] ?? `text-subtle`;
                         />
                         <span class="truncate">{{
                             rung.installed.status.state === `active`
-                                ? t(`connect.localModelLane.ready`)
+                                ? readyLine(rung.installed, rung.model)
                                 : (rung.installed.status.detail ?? t(`ui.status.starting`))
                         }}</span>
                     </span>
@@ -227,6 +254,14 @@ const stateTone = (state: string): string => STATE_TONE[state] ?? `text-subtle`;
                 </div>
                 <p class="text-2xs text-muted">{{ rung.pitch }} {{ priceOf(rung.model, rung.context) }}</p>
                 <p v-if="rung.warn" class="text-2xs text-warning">{{ rung.warn }}</p>
+                <!-- Served and helper-only: where it earns its keep is a settings list, not a chat, so that is where this points. -->
+                <RouterLink
+                    v-if="quickJobsOnly(rung.model) && rung.installed?.status.state === `active`"
+                    to="/sandbox/agent#models"
+                    :class="ui.linkButton(`self-start text-2xs`)"
+                >
+                    {{ t(`connect.localModelLane.useForQuickJobs`) }}<Icon name="arrow-right" class="text-2xs" />
+                </RouterLink>
 
                 <!-- The prefetch is why a rung can be instant; said as a fact, with its own stop, never as a silent
                      transfer. Gone once the rung is taken: the entry's own status reports the same bytes from then on. -->

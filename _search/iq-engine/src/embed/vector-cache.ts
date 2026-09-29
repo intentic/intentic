@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { isIndexBusy } from "../store/db.js";
 
-// Vectors outlive the index: a pure function of (model, chunk text), unlike the index itself. Dropped index dirs
+// Vectors outlive the index: a pure function of (vector space, chunk text), unlike the index itself. Dropped index dirs
 // rebuild from this sidecar, keyed by the same sha256-of-chunk-text the chunks table carries, so only new text reaches
 // the model. Same recovery rule as the index: corruption or a schema bump deletes the file and starts empty.
 
@@ -35,7 +35,7 @@ export interface VectorCache {
 /** The cache file for the index at `indexDir`, a sibling path, so dropping the index dir never touches it. */
 export const vectorCachePath = (indexDir: string): string => `${indexDir}-vectors.db`;
 
-const prepare = (db: DatabaseSync, modelId: string): void => {
+const prepare = (db: DatabaseSync, vectorSpace: string): void => {
     // Same open order as the index: busy_timeout, then auto_vacuum only while still empty, then WAL.
     db.exec("PRAGMA busy_timeout = 5000;");
     const pageCount = Number((db.prepare("PRAGMA page_count").get() as { page_count?: number | bigint } | undefined)?.page_count ?? 0);
@@ -54,18 +54,19 @@ const prepare = (db: DatabaseSync, modelId: string): void => {
         throw new Error(`iq vector cache schema ${version} != ${CACHE_SCHEMA}`);
     }
     setMeta("cache_version", CACHE_SCHEMA);
-    // A model swap makes every stored vector wrong, not stale; same rule syncModel applies to the index.
-    if (meta("model_id") !== modelId) {
+    // A vector-space change (`vectorSpace`, VECTOR_SPACE in production: model, pooling, normalisation) makes every
+    // stored vector wrong, not stale; same rule syncModel applies to the index.
+    if (meta("model_id") !== vectorSpace) {
         db.exec("DELETE FROM vectors");
-        setMeta("model_id", modelId);
+        setMeta("model_id", vectorSpace);
     }
 };
 
-const open = (path: string, modelId: string, maxRows: number): VectorCache => {
+const open = (path: string, vectorSpace: string, maxRows: number): VectorCache => {
     mkdirSync(dirname(path), { recursive: true });
     const db = new DatabaseSync(path);
     try {
-        prepare(db, modelId);
+        prepare(db, vectorSpace);
     } catch (error) {
         // Never returned, so nothing else would close it; a caller that carries on without the cache must not hold it.
         db.close();
@@ -123,9 +124,9 @@ const open = (path: string, modelId: string, maxRows: number): VectorCache => {
 
 // Treats an open failure as cache loss: deletes the file and retries once. Failing twice returns undefined; the
 // semantic tier still works, just re-embedding everything. A lock held by another process is not loss: undefined, kept.
-export const openVectorCache = (path: string, modelId: string, maxRows = MAX_ROWS): VectorCache | undefined => {
+export const openVectorCache = (path: string, vectorSpace: string, maxRows = MAX_ROWS): VectorCache | undefined => {
     try {
-        return open(path, modelId, maxRows);
+        return open(path, vectorSpace, maxRows);
     } catch (error) {
         if (isIndexBusy(error)) {
             return undefined;
@@ -136,7 +137,7 @@ export const openVectorCache = (path: string, modelId: string, maxRows = MAX_ROW
             }
         }
         try {
-            return open(path, modelId, maxRows);
+            return open(path, vectorSpace, maxRows);
         } catch {
             return undefined;
         }

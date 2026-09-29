@@ -2,7 +2,7 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { Worker } from "node:worker_threads";
 import type { WorkspaceSearchFreshness } from "@intentic/sandbox-contract";
-import { type Embedder, loadEmbedder, MODEL_ID } from "./embed/embedder.js";
+import { type Embedder, loadEmbedder, VECTOR_SPACE } from "./embed/embedder.js";
 import { loadReranker, type Reranker } from "./embed/reranker.js";
 import { openVectorCache, type VectorCache, vectorCachePath } from "./embed/vector-cache.js";
 import { type CodebaseHealth, codebaseHealth, type HealthRequest } from "./engines/health.js";
@@ -23,6 +23,7 @@ import { IQ_DIR } from "./workspace/floor.js";
 import { sweep } from "./workspace/scan.js";
 
 export type {
+    Confidence,
     EngineHit,
     EngineResult,
     FileClass,
@@ -36,6 +37,7 @@ export type {
     Scope,
     SymbolRow,
     Verb,
+    Verdict,
     VerbOptions,
 } from "./types.js";
 export type { CodebaseHealth, HealthRequest, HealthTotals, KeyModule } from "./engines/health.js";
@@ -46,6 +48,8 @@ export { loadImportGraph } from "./engines/import-graph.js";
 export type { ImportGraph } from "./engines/import-graph.js";
 export { disabledOf, type Feature, FEATURES, parseFeatures } from "./features.js";
 export { estimateTokens } from "./render/budget.js";
+// The cross-encoder floor under which an answer reads "weak"; iq-bench marks it on its calibration sweep.
+export { WEAK_FLOOR } from "./verbs/dispatch.js";
 export { isIqDenied, IQ_DIR } from "./workspace/floor.js";
 // The scope-filter glob dialect; exported so the daemon's rules and the search box narrow paths the same way.
 export { globToRegExp } from "./workspace/glob.js";
@@ -135,7 +139,7 @@ export const createEngine = (options: EngineOptions): Engine => {
     const getCache = (): VectorCache | undefined => {
         if (!cacheOpened) {
             cacheOpened = true;
-            cacheHandle = openVectorCache(vectorCachePath(indexDir), MODEL_ID);
+            cacheHandle = openVectorCache(vectorCachePath(indexDir), VECTOR_SPACE);
         }
         return cacheHandle;
     };

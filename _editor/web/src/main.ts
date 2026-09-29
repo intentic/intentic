@@ -19,6 +19,7 @@ import "./features/sandbox/client/sandboxScope";
 import "./features/sandbox/client/sandboxScreen";
 import "./extension-host/hostModules";
 import { router } from "./router";
+import { routePatternOf } from "./router/routePattern";
 import { installNotificationTaps } from "./shell/notifications/notificationTaps";
 import "./styles.css";
 
@@ -38,7 +39,7 @@ installDocumentAppearance();
 // because of this.
 installDesktopLinks();
 
-initAnalytics();
+initAnalytics((path) => routePatternOf(router, path));
 
 // Before mount, so a slow first paint's spans land in the ring buffer too (`__intenticPerf` in the console).
 installPerfConsole();

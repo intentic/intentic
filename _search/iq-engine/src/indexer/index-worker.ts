@@ -1,6 +1,6 @@
 import { parentPort, workerData } from "node:worker_threads";
 import type { Embedder } from "../embed/embedder.js";
-import { loadEmbedder, MODEL_ID } from "../embed/embedder.js";
+import { loadEmbedder, VECTOR_SPACE } from "../embed/embedder.js";
 import { openVectorCache, vectorCachePath } from "../embed/vector-cache.js";
 import { embedPending } from "../engines/semantic.js";
 import { compactIndex, openIndex } from "../store/db.js";
@@ -54,7 +54,7 @@ const post = (event: IndexWorkerEvent): void => {
 const db = openIndex(indexDir, "write");
 syncModel(db, modelDir);
 // Sidecar lives outside indexDir, which openIndex drops on drift; undefined here disables only the cache.
-const vectorCache = openVectorCache(vectorCachePath(indexDir), MODEL_ID);
+const vectorCache = openVectorCache(vectorCachePath(indexDir), VECTOR_SPACE);
 
 let embedderPromise: Promise<Embedder | undefined> | undefined;
 const getEmbedder = (): Promise<Embedder | undefined> => (embedderPromise ??= loadEmbedder(modelDir));

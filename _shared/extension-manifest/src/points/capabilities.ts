@@ -184,6 +184,13 @@ export const CapabilityContributionSchema = z
             probe: ProbeSchema.optional().describe(
                 "One authenticated request that tests this card's settings before they are saved, so a wrong token or an unreachable host is answered on the form rather than by a card that says 'not connected' afterwards.",
             ),
+            // Only narrows what the credential may do, so it carries no effect: nothing here grants the extension reach.
+            hosts: z
+                .array(z.string().min(1))
+                .optional()
+                .describe(
+                    "The hosts this card's credential is meant for, as templates over the fields like `env` (`api.github.com`, `*.githubusercontent.com`, `${url}`); a value that comes out as a URL counts as its host. The sandbox limits the credential's `{{secret:…}}` reference to them by default, so a use aimed anywhere else asks a person first. The owner can change or lift the list on the Secrets view.",
+                ),
             // The first way a card served tools, kept one release as an alias of `contributes.tools` with this card as
             // `perCard` and this value as `path` (points/tools.ts); a manifest declaring both is served by `tools`.
             mcp: z

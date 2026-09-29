@@ -267,6 +267,12 @@ free column is your machine, the other is ours.
   Less AI waste. Same subscriptions. Each one works in a sandbox, in its own git worktree.
   It keeps running when you close the browser. Reopen from any device, steer the same fleet, and read
   every diff before it lands. Free.`
+- GitHub repo description (github.com/intentic/intentic, set by hand in the repo's About box): the
+  README's opening sentence, then the brand line: `An open-source workspace for coding agents, running
+  on your own machine. More work. Less AI waste. Same subscriptions.` The repo page is often the
+  first search result for the name, and a description that opened with the brand line alone told a
+  stranger nothing about what the repo is. On GitHub, "open-source" and "your own machine" answer the
+  question a visitor there is already asking, so they come before the brand line.
 - Keywords to carry naturally: the title and subhead carry the category phrase; the tagline carries
   the economic promise; the rest are earned by body copy, which says "sandbox": persistent coding
   agent, self-hosted AI agent,

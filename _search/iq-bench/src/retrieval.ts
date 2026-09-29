@@ -4,7 +4,7 @@ import { createEngine, estimateTokens, type QueryRequest, type Scope } from "@in
 import { anchorsOf } from "./anchors.js";
 import { type BenchConfig, CONFIGS, needsModels } from "./configs.js";
 import { ensureIndex, ensureModels, headSha, indexDirFor, packageRoot, repoRoot } from "./repos.js";
-import { type CaseRow, type CaseScope, type QueryCase, type QueryDataset, QueryDatasetSchema } from "./schema.js";
+import { type CaseRow, type CaseScope, isNoAnswer, type QueryCase, type QueryDataset, QueryDatasetSchema, slicesOf } from "./schema.js";
 import { rankedAnchors, scoreCase } from "./score.js";
 
 export interface RepoMeta {
@@ -43,8 +43,14 @@ const loadDatasets = (): QueryDataset[] =>
 
 const runConfig = async (dataset: QueryDataset, root: string, config: BenchConfig, models: string | undefined): Promise<CaseRow[]> => {
     const base = { repo: dataset.repo, config: config.name };
+    const caseBase = (queryCase: QueryCase): Pick<CaseRow, "repo" | "config" | "caseId" | "verb" | "slices"> => ({
+        ...base,
+        caseId: queryCase.id,
+        verb: queryCase.verb,
+        slices: [...slicesOf(queryCase)],
+    });
     if (needsModels(config) && models === undefined) {
-        return dataset.cases.map((queryCase) => ({ ...base, caseId: queryCase.id, verb: queryCase.verb, skipped: "models-missing" as const }));
+        return dataset.cases.map((queryCase) => ({ ...caseBase(queryCase), skipped: "models-missing" as const }));
     }
     const engine = createEngine({
         root,
@@ -57,8 +63,16 @@ const runConfig = async (dataset: QueryDataset, root: string, config: BenchConfi
         const start = performance.now();
         const outcome = await engine.run(requestOf(dataset, queryCase));
         const latencyMs = performance.now() - start;
-        const score = scoreCase(anchorsOf(queryCase, root), rankedAnchors(outcome.result));
-        rows.push({ ...base, caseId: queryCase.id, verb: queryCase.verb, score: { ...score, tokens: estimateTokens(outcome.text), latencyMs } });
+        // A no-answer case has nothing to rank; it is scored by `weak` alone, which an answerable case reports too.
+        const score = isNoAnswer(queryCase) ? undefined : scoreCase(anchorsOf(queryCase, root), rankedAnchors(outcome.result));
+        const row: CaseRow = { ...caseBase(queryCase), weak: outcome.verdict?.confidence === "weak" || outcome.result.total === 0 };
+        if (score !== undefined) {
+            row.score = { ...score, tokens: estimateTokens(outcome.text), latencyMs };
+        }
+        if (outcome.verdict !== undefined) {
+            row.relevance = outcome.verdict.relevance;
+        }
+        rows.push(row);
     }
     return rows;
 };
