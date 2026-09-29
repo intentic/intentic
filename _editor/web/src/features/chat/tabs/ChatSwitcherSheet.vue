@@ -31,7 +31,7 @@ const isArchived = (conversationId: string): boolean => agentById(conversationId
 // A row whose title another open chat shares (the same prompt sent again on another provider) says what tells it
 // apart: the model it runs on, and when it last moved.
 const twinFact = (c: Conversation): string | undefined => {
-    if (c.title.value === undefined || !twinTitles().has(c.title.value)) {
+    if (c.title.value === null || !twinTitles().has(c.title.value)) {
         return undefined;
     }
     const agent = agentById(c.conversationId);

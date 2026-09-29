@@ -83,7 +83,7 @@ export const SCENARIOS: readonly Scenario[] = [
         about: `type "${TYPED}" into the composer of a titled chat with four chats open (the draft-as-dependency findings)`,
         prepare: async (session) => {
             await session.open("/demo/chat", SETTLE_MS);
-            const composer = session.page.getByRole("textbox", { name: /^Reply to revise the plan/u });
+            const composer = session.page.getByRole("textbox", { name: /^Write notes to keep planning/u });
             await composer.click();
             await session.quiesce();
         },

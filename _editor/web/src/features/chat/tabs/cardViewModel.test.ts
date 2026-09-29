@@ -53,7 +53,7 @@ test(`puts a working chat's start on the sandbox's clock once, whichever clock i
     const working = (onSandbox: boolean) => ({
         conversation: unstubbed<Conversation>(`conversation`, {
             turn: unstubbed<Conversation[`turn`]>(`turn`, {
-                ending: ref(undefined),
+                ending: computed(() => undefined),
                 streaming: computed(() => true),
                 turnStartedAt: computed(() => NOW - 1_000),
                 turnOnSandboxClock: computed(() => onSandbox),

@@ -280,7 +280,8 @@ describe(`what a box can do for the reader`, () => {
         expect(form.submitLabel.value).toBe(`Add anyway`);
 
         form.onFieldInput(field(custom, `url`));
-        expect([form.probeResult.value, form.submitLabel.value]).toEqual([undefined, `Add`]);
+        expect(form.probeResult.value).toBeUndefined();
+        expect(form.submitLabel.value).toBe(`Add`);
 
         // No test existing is not a failure, and it is not outdated by an edit either: it retires the Test button.
         form.probeResult.value = { checked: false, ok: false, message: `No test exists for this connection.` };

@@ -8,7 +8,7 @@ import { stateRelPath } from "../state-paths.js";
 /* The Safety page's two reads and its one write: the policy document, and the log of what it decided. */
 // The write is the Agent tab's own, so it is committed as it lands (settings-versions.ts): left uncommitted, a land
 // touching the policy was refused as the owner's edits. Not over edits already in it, which may be the owner's by hand.
-export const createSafetyRoutes = (services: Pick<Services, "safetyPolicy" | "safetyLog" | "agentWorktrees" | "logger">) => {
+export const createSafetyRoutes = (services: Pick<Services, "safetyPolicy" | "safetyLog" | "agentWorktrees" | "git" | "logger">) => {
     const i = implement(safetyContract).$context<OrpcContext>();
     return {
         policy: i.policy.handler(() => services.safetyPolicy.get()),

@@ -44,7 +44,7 @@ const props = defineProps<{
 
 // Another open chat has this one's title (the same prompt, sent again on another provider): the facts line then names
 // the model or at least the provider, which a chat with no model recorded would otherwise leave out.
-const twin = computed(() => props.conversation.title.value !== undefined && twinTitles().has(props.conversation.title.value));
+const twin = computed(() => props.conversation.title.value !== null && twinTitles().has(props.conversation.title.value));
 const twinFact = computed(() => (twin.value && props.view.model === undefined ? modelOrProvider({ conversation: props.conversation, agent: props.agent }) : undefined));
 
 // No rename on a double-click: it is two clicks, which open the chat as a board card's do, and a title turning into a

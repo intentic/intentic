@@ -198,7 +198,11 @@ it(`names the agents a restart stops, and says they wait to be continued`, async
         { id: `three`, title: `Done already`, status: `idle` },
     ];
     let dialog = ``;
-    await press({ beforeConfirm: () => (dialog = shown()) });
+    await press({
+        beforeConfirm: () => {
+            dialog = shown();
+        },
+    });
     expect(dialog).toContain(
         `This stops the 2 agents that are working now: Build the API, Fix the tests. Their work is kept, and each waits for you to continue it once the sandbox is back.`,
     );
@@ -208,7 +212,11 @@ it(`says the stopped agents pick up by themselves where the owner turned that on
     autoResume.value = true;
     fleet.value = [{ id: `one`, title: `Build the API`, status: `running` }];
     let dialog = ``;
-    await press({ beforeConfirm: () => (dialog = shown()) });
+    await press({
+        beforeConfirm: () => {
+            dialog = shown();
+        },
+    });
     expect(dialog).toContain(`This stops the agent that is working now: Build the API. It picks up again by itself once the sandbox is back.`);
 });
 
@@ -226,7 +234,11 @@ it(`asks the sandbox to pick the stopped agents up again once it is back, unless
     waitsForAgents.value = true;
     fleet.value = [{ id: `one`, title: `Build the API`, status: `running` }];
     let dialog = ``;
-    await press({ beforeConfirm: () => (dialog = shown()) });
+    await press({
+        beforeConfirm: () => {
+            dialog = shown();
+        },
+    });
     expect(dialog).toContain(`This stops the agent that is working now: Build the API. It picks up again by itself once the sandbox is back.`);
     expect(dialog).toContain(`Let it pick up again by itself once the sandbox is back`);
     expect(swapServingSandbox).toHaveBeenCalledWith(`host-1`, `work`, `update`, { resumeTurns: true, onLine: expect.any(Function) });
@@ -248,7 +260,12 @@ it(`asks the sandbox to pick the stopped agents up again once it is back, unless
 it(`offers a sandbox too old to wait or resume neither, and says the stopped agents wait`, async () => {
     fleet.value = [{ id: `one`, title: `Build the API`, status: `running` }];
     let dialog = ``;
-    await press({ hash: `approved`, beforeConfirm: () => (dialog = shown()) });
+    await press({
+        hash: `approved`,
+        beforeConfirm: () => {
+            dialog = shown();
+        },
+    });
     expect(dialog).not.toContain(`pick up again by itself`);
     expect(dialog).not.toContain(`Rebuild when`);
     expect(swapServingSandbox).toHaveBeenCalledWith(`host-1`, `work`, `rebuild`, { hash: `approved`, onLine: expect.any(Function) });

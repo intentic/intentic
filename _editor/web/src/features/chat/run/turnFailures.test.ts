@@ -133,7 +133,7 @@ describe(`a resume the sandbox promised`, () => {
                 notice: (text: string) => notices.push(text),
                 persist: () => undefined,
             }),
-            selection: unstubbed<FailureHost["selection"]>(`selection`, { provider: ref(`claude`) }),
+            selection: unstubbed<FailureHost["selection"]>(`selection`, { provider: computed(() => `claude`) }),
         };
         providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acct-1`, label: `Claude`, connectedAt: 0 }] };
         const failures = new TurnFailures(host);
@@ -154,7 +154,7 @@ describe(`a resume the sandbox promised`, () => {
     });
 
     it(`asks the sandbox again after a clean turn on a provider with an account marked for reconnecting`, async () => {
-        const host = { ...hostOf(), selection: unstubbed<FailureHost["selection"]>(`selection`, { provider: ref(`claude`) }) };
+        const host = { ...hostOf(), selection: unstubbed<FailureHost["selection"]>(`selection`, { provider: computed(() => `claude`) }) };
         const marked = { id: `acct-1`, label: `Claude`, connectedAt: 0, needsReauth: true };
         providerAccounts.value = { ...providerAccounts.value, claude: [marked] };
         const failures = new TurnFailures(host);

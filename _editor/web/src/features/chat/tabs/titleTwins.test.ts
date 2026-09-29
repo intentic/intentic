@@ -8,5 +8,5 @@ test(`a title two chats share is a twin, and one only one chat has is not`, () =
 });
 
 test(`untitled chats are never twins of each other`, () => {
-    expect(twinsOf([undefined, undefined, `Fix the build`]).size).toBe(0);
+    expect(twinsOf([null, null, undefined, `Fix the build`]).size).toBe(0);
 });
