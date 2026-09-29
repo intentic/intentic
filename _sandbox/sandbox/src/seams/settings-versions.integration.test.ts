@@ -9,9 +9,10 @@ import type { OrpcContext } from "../app-env.js";
 import type { Services } from "../composition.js";
 import { fileSafetyPolicyStore } from "../safety/safety-policy-store.js";
 import { createSafetyRoutes } from "../safety/safety.routes.js";
-import { createSettingsRoutes } from "./settings.routes.js";
-import { fileSandboxSettingsStore, settingsDocument } from "./settings-store.js";
+import { createSettingsRoutes } from "../settings/settings.routes.js";
+import { fileSandboxSettingsStore, settingsDocument } from "../settings/settings-store.js";
 import { versionedSettingsWrite, versionSettingsWrite } from "./settings-versions.js";
+import { commitOnly } from "../git/changes/changes-index.js";
 
 // A real repository: what matters is what git holds afterwards, a commit of exactly the settings page's write, with the
 // owner's own work around it left dirty and staged just as it was.
@@ -40,7 +41,7 @@ const workspace = (): string => {
 };
 
 const hostOn = (root: string, locked: string[] = []) =>
-    unstubbed<Pick<Services, "agentWorktrees" | "logger">>("services", {
+    unstubbed<Pick<Services, "agentWorktrees" | "git" | "logger">>("services", {
         agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", {
             mainDir: () => root,
             withRepoLock: async (repo, run) => {
@@ -48,6 +49,7 @@ const hostOn = (root: string, locked: string[] = []) =>
                 return run();
             },
         }),
+        git: unstubbed<Services["git"]>("git", { commitOnly }),
         logger: unstubbed<Services["logger"]>("logger", { debug: () => undefined }),
     });
 
@@ -113,6 +115,7 @@ test("an Agent tab save is committed on its own, as a settings page's write", as
     const host = hostOn(root);
     const services = unstubbed<Services>("services", {
         agentWorktrees: host.agentWorktrees,
+        git: host.git,
         sandboxSettings: fileSandboxSettingsStore(join(root, settingsDocument.path)),
         // The baked skills it converges afterwards only warn when they cannot be written.
         logger: unstubbed<Services["logger"]>("logger", { debug: () => undefined, warn: () => undefined }),

@@ -53,7 +53,7 @@ import { mcpServersOf } from "../tools/agent-tools.js";
 import { agentShellBusy, bashTmuxHooks, tmuxRunEnabled } from "../tools/agent-terminals.js";
 import { terminalHelpServer } from "../../terminal/terminal-help.js";
 import { EventQueue } from "./event-queue.js";
-import { planRevision } from "../../runtimes/decorators/plan-mode.js";
+import { planRevision } from "../prompt/plan-revision.js";
 import { trialUnavailableFrame } from "./error-frames.js";
 import type { AgentRequest, HarnessCredential } from "../providers/agent-request.js";
 import { harnessEnv } from "../providers/harness-credentials.js";

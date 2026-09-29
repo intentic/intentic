@@ -12,7 +12,7 @@ import { readTurnExperiments } from "../usage/turn-experiments.js";
 import { fieldNotesStatus } from "./field-notes-status.js";
 import { fileMemberAudiences, memberAudienceDocument, type MemberAudiences } from "./member-audience.js";
 import { settingsDocument } from "./settings-store.js";
-import { versionedSettingsWrite } from "./settings-versions.js";
+import { versionedSettingsWrite } from "../seams/settings-versions.js";
 import { reconcileBakedSkills } from "./skills.js";
 
 // `get` applies defaults when the manifest is absent, `set` overwrites it. `savings` reads whichever backend's ledger

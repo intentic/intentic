@@ -4,15 +4,11 @@ import {
     EnvironmentRemoveSchema,
     EnvironmentRuntimeDecisionSchema,
 } from "@intentic/sandbox-contract";
-import { sandboxSlugOf } from "@intentic/sandbox-run";
 import type { Context } from "hono";
-import { fileRestartResume } from "../agent/run/turn/restart-resume.js";
 import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
-import { manageDeviceSandbox } from "../hosts/device-reports.js";
-import { agentsMidTurn } from "../hosts/host-restart-guard.js";
-import { createRebuildWhenIdle } from "../hosts/rebuild-when-idle.js";
+import type { RebuildWhenIdle } from "../hosts/rebuild-when-idle.js";
 import { readEnvironmentContents } from "./contents.js";
 import { approveEnvironment, decideRuntimeInstall, readEnvironment, rejectEnvironment, removeFromEnvironment } from "./environment.js";
 import { clearVersionCache } from "./version-probe.js";
@@ -22,16 +18,10 @@ import { clearVersionCache } from "./version-probe.js";
 // container, pinned to the approved hash, so approval here never mutates the running sandbox. Plain Hono routes, ahead
 // of the oRPC catch-all.
 
-export const createEnvironmentRoutes = (services: Services) => {
-    // The one rebuild waiting for this sandbox's agents to be idle; every answer below carries it, so the card that
-    // asked, or any other page, sees it waiting, starting, or refused.
-    const waiter = createRebuildWhenIdle({
-        midTurn: () => agentsMidTurn(services),
-        relay: (host, flow) => manageDeviceSandbox(services, host, flow),
-        restartResume: fileRestartResume(services.config.historyRoot),
-        slug: () => sandboxSlugOf(services.config.sandbox.name),
-        logger: services.logger,
-    });
+// `waiter` is the one rebuild waiting for this sandbox's agents to be idle; every answer below carries it, so the card
+// that asked, or any other page, sees it waiting, starting, or refused. Built by app.ts from the hosts' own verbs, since
+// hosts reach environment and importing them here would close a cycle.
+export const createEnvironmentRoutes = (services: Services, waiter: RebuildWhenIdle) => {
     const environmentNow = async (): Promise<Environment> => {
         const environment: Environment = { ...(await readEnvironment(services)), waitsForAgents: true };
         const wait = waiter.state();

@@ -20,6 +20,14 @@ import type { ManifestProblem } from "../../store/manifest/manifest-problems.js"
 import { stateRelPath } from "../../state-paths.js";
 import { priorityOf } from "../../workload/workload-class.js";
 
+// The agent's Bash hook wrapper for heavy commands (heavy-commands.json); holds a slot so concurrent test fan-outs take
+// turns. Not used by terminal-run.ts's runner, which is single user-triggered ops, not repeated builds.
+export const QUEUE_RUN_BIN = "/usr/local/bin/queue-run";
+
+// Off when the wrapper isn't baked in or the operator opts out; the caller that builds the agent's hooks checks this,
+// same fail-open shape as tmuxRunEnabled.
+export const queueRunEnabled = (): boolean => process.env["INTENTIC_AGENT_QUEUE"] !== "0" && existsSync(QUEUE_RUN_BIN);
+
 // Which programs are heavy enough to take turns: the shipped table (@intentic/constants/heavy-rules, which the scripts
 // read too) with the owner's overrides on top. A program is judged as it starts, by what it is and the arguments it got
 // (heavy-hook.cjs for node programs, the wrappers in bin/heavy-shims for the rest), never by the words of the line that

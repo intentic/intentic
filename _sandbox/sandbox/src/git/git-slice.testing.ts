@@ -1,4 +1,5 @@
 import { unstubbed } from "@intentic/testing";
+import { commitOnly } from "./changes/changes-index.js";
 import type { GitSlice } from "./git-slice.js";
 
 // The git slice as route suites stand it up (harness/route-services.testing.ts). Not part of the build.
@@ -22,6 +23,9 @@ const cleanRepo = {
     scratchOf: async () => [],
     unstagePaths: async () => {},
     commitIndex: async () => false,
+    // The real one: a settings page commits its own write (seams/settings-versions.ts), and the suites that check it do
+    // so on a repo of their own; best-effort, so a suite with no repo only logs that its write stays uncommitted.
+    commitOnly,
     discardPaths: async () => {},
     deleteTag: async () => {},
     pushTag: async () => ({ ok: true as const }),

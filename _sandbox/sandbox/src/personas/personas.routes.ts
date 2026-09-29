@@ -3,7 +3,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { hasSession } from "../browser/sessions/session-store.js";
-import { versionedSettingsWrite } from "../settings/settings-versions.js";
+import { versionedSettingsWrite } from "../seams/settings-versions.js";
 import { stateRelPath } from "../state-paths.js";
 import { reachablePersonas } from "./persona-reach.js";
 import { personasDocument } from "./personas-store.js";

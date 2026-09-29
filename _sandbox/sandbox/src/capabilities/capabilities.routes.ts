@@ -27,9 +27,13 @@ import { capabilityRecommendations } from "./offers/recommend.js";
 import { registry } from "./registry.js";
 import { createStatusCache } from "./status/status-cache.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
-import { versionedSettingsWrite } from "../settings/settings-versions.js";
-import { personasDocument } from "../personas/personas-store.js";
+import { versionedSettingsWrite } from "../seams/settings-versions.js";
 import { capabilitiesDocument } from "./capabilities-store.js";
+import { stateRelPath } from "../state-paths.js";
+
+// personas-store.ts's document, named by its contract-checked state path rather than imported: personas reaches
+// capabilities through the browser, so importing it here would close a cycle.
+const PERSONAS_PATH = stateRelPath(".intentic/config/personas.json");
 
 // The capability pages' own writes to the connection manifest, each committed as it lands (settings-versions.ts): left
 // uncommitted, they read as the owner's edits and a land touching the same file is refused. A rename also repoints the
@@ -280,7 +284,7 @@ export const createCapabilitiesRoutes = (services: Services) => {
                     await services.capabilities.remove(capability.id);
                     await repointCapabilityReferences(services, ctx, capability.id, input.to);
                 },
-                [capabilitiesDocument.path, personasDocument.path],
+                [capabilitiesDocument.path, PERSONAS_PATH],
             );
             if (handler.rename.reapply !== false) {
                 for await (const line of handler.apply(ctx, renamed.id, renamed.config)) {
