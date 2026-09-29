@@ -1,5 +1,6 @@
 import { pollUntil } from "@intentic/base/async";
 import { ref } from "vue";
+import { reloadOnHotUpdate } from "../../app/hotReload";
 import { desktopVersion } from "../../app/environments/desktop";
 import { environment } from "../../app/environments/environment";
 import { removeStoredValue, storedValue, storeValue } from "../../lib/browserStorage";
@@ -403,3 +404,7 @@ const adoptIdToken = (credential: string): boolean => {
 export function useGoogleIdentity() {
     return { needsSignIn, signedInEmail, getIdToken, warmIdToken, adoptIdToken, clearCredential, renderButton, cancelSignIn };
 }
+
+// One Google credential per window: a hot-reloaded rerun would forget the minted token and raise the sign-in gate
+// for a session that still holds one (hotReload.ts).
+reloadOnHotUpdate(import.meta);

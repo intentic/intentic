@@ -1,6 +1,7 @@
 import type { SandboxSummary, User } from "@intentic/api-contract";
 import { createAuthClient } from "better-auth/client";
 import { ref } from "vue";
+import { reloadOnHotUpdate } from "../../app/hotReload";
 import { environment } from "../../app/environments/environment";
 import { clearPersistedQueries } from "../../lib/queryPersistence";
 import { useSandboxSession } from "../sandbox/session/sandboxSession";
@@ -115,3 +116,8 @@ globalThis.document?.addEventListener(`visibilitychange`, () => {
 export function useAuth() {
     return { user, refresh, signInWithGoogle, signInWithGoogleCredential, signOut, updateProfile, deleteAccount };
 }
+
+// One signed-in account per window: a hot update that re-ran this module (a change to anything it imports, such as
+// the environment files) would mint a fresh `user` of null that no route guard re-resolves, dropping the account
+// from every component re-run with it while the rest keep the old one (hotReload.ts).
+reloadOnHotUpdate(import.meta);
