@@ -272,7 +272,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(fly.calls).toEqual([]);
 
         const offered = await offer();
-        expect(offered.body).toEqual({ enabled: true, remaining: 0, hours: { allowance: MONTHLY_HOURS, remaining: 0 } });
+        expect(offered.body).toEqual({ enabled: true, projects: true, remaining: 0, hours: { allowance: MONTHLY_HOURS, remaining: 0 } });
     });
 
     it(`mints a checkout for the buyer with the price and both return addresses, and writes nothing yet`, async () => {
@@ -431,7 +431,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(body.hosted?.machines).toEqual([expect.objectContaining({ sandboxId, tier: ENTRY.id, hours: expect.objectContaining({ kind: `free` }) })]);
         // The free slot is empty and offered again: this account's one machine stands on the Standard rung it moved to
         // earlier, and the card offers a free machine.
-        expect((await offer()).body).toEqual({ enabled: true, remaining: 1, hours: { allowance: MONTHLY_HOURS, remaining: 0 } });
+        expect((await offer()).body).toEqual({ enabled: true, projects: true, remaining: 1, hours: { allowance: MONTHLY_HOURS, remaining: 0 } });
         // Those free hours were spent before the move, so the wake is refused until the card goes through.
         expect((await wake()).status).toBe(402);
     });
