@@ -1,4 +1,5 @@
-import { CHIME_GAP_MS, CHIMES, claimChime } from "./chimes";
+import { PEAK, PHRASES, renderPhrase } from "./chimeSound";
+import { CHIME_GAP_MS, claimChime } from "./chimes";
 
 const store = (): Pick<Storage, `getItem` | `setItem`> & { readonly held: Map<string, string> } => {
     const held = new Map<string, string>();
@@ -23,16 +24,32 @@ describe(`one chime across every tab`, () => {
     });
 });
 
-describe(`the two sounds`, () => {
+describe(`the roneat thung`, () => {
+    const { asks, finished } = PHRASES;
+
     // The doorbell falls and the finish rises: the direction is what tells them apart without looking.
-    it(`fall for an ask and rise for a finish`, () => {
-        const [askFirst, askSecond] = CHIMES.asks;
-        const [doneFirst, doneSecond] = CHIMES.finished;
-        expect(askSecond.hz).toBeLessThan(askFirst.hz);
-        expect(doneSecond.hz).toBeGreaterThan(doneFirst.hz);
+    it(`falls for an ask and rises for a finish`, () => {
+        expect(asks.at(-1)!.hz).toBeLessThan(asks[0]!.hz);
+        expect(finished.at(-1)!.hz).toBeGreaterThan(finished[0]!.hz);
     });
 
-    it(`keep the finish quieter than the ask`, () => {
-        expect(Math.max(...CHIMES.finished.map((note) => note.gain))).toBeLessThan(Math.min(...CHIMES.asks.map((note) => note.gain)));
+    // Nothing shrill: every fundamental stays low.
+    it(`stays low`, () => {
+        for (const note of [...asks, ...finished]) {
+            expect(note.hz).toBeGreaterThanOrEqual(150);
+            expect(note.hz).toBeLessThanOrEqual(600);
+        }
+    });
+
+    it(`renders finite sound at its phrase's peak, the finish quieter, the same every time`, () => {
+        const ask = renderPhrase(`asks`, 16_000);
+        const done = renderPhrase(`finished`, 16_000);
+        const peak = (samples: Float32Array): number => samples.reduce((top, sample) => Math.max(top, Math.abs(sample)), 0);
+        expect(ask.every(Number.isFinite)).toBe(true);
+        expect(peak(ask)).toBeCloseTo(PEAK.asks, 3);
+        expect(peak(done)).toBeCloseTo(PEAK.finished, 3);
+        expect(renderPhrase(`asks`, 16_000)).toEqual(ask);
+        // Silent at the end, so a cut tail never clicks.
+        expect(Math.abs(ask.at(-1)!)).toBeLessThan(1e-3);
     });
 });
