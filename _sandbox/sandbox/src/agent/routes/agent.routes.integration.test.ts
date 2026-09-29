@@ -275,7 +275,8 @@ describe("the conversation's queue", () => {
         expect(gates).toHaveLength(1);
 
         const resumed = await client.agent.queueResume({ conversationId: "conv-held" });
-        expect(resumed).toEqual({ run: expect.any(String) });
+        // Answered with the queue it left, so the pressing window need not wait on a roster frame to stop drawing the words.
+        expect(resumed).toEqual({ run: expect.any(String), queue: { items: [], revision: 4 } });
         await waitFor(() => expect(gates).toHaveLength(2), SETTLES);
         expect(prompts[1]).toContain("and the changelog");
         // Queued, held, let go, and taken out by the turn it started: every one of them a change another window saw.

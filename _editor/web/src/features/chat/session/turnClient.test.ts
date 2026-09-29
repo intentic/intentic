@@ -515,6 +515,23 @@ describe(`saying something`, () => {
         expect(attach).toHaveBeenCalledTimes(1);
     });
 
+    // A busy sandbox's roster frames can lag the turn's own stream by many seconds. The press's answer says what the queue
+    // left, so this window never draws the message it just sent as still held beneath the turn that is running it.
+    it(`takes the queue the press left from its answer, not from a roster that has not caught up`, async () => {
+        const { client, host } = clientOf();
+        host.queue.value = {
+            items: [{ id: `m-held`, text: `look at this`, voice: `person`, queuedAt: 1_000, revision: 1 }],
+            revision: 2,
+            paused: `refused`,
+        };
+        queueResume.mockImplementation(async () => ({ run: `r10`, queue: { items: [], revision: 4 } }));
+        attach.mockImplementation(async () => attached(`r10`, 7_000, `look at this`));
+
+        await client.resume();
+
+        expect(host.queue.value).toEqual({ items: [], revision: 4 });
+    });
+
     it(`lets the held queue go when nothing is typed, on the pick the composer holds now`, async () => {
         const { client, host } = clientOf();
         host.error.value = `The credential was revoked.`;

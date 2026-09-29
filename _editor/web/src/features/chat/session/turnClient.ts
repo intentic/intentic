@@ -587,6 +587,8 @@ export class TurnClient {
             host.error.value = released.message;
             return;
         }
+        // The queue the press left, ahead of a roster frame a busy sandbox may deliver long after the turn it started.
+        host.queue.value = newerQueue(host.queue.value, released.queue);
         if (released.run !== undefined) {
             await this.reattach();
         }

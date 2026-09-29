@@ -220,7 +220,10 @@ export const createAgentRoutes = (services: Services) => {
             own(context, input.conversationId);
             // A press on a held queue is a person's say-so, as their message would be.
             await services.agents.clearArchived([input.conversationId]);
-            return services.turns.release(input);
+            const released = await services.turns.release(input);
+            // Answered with the queue it left, since the roster's frame saying so can reach a busy browser long after the
+            // turn it started: without it the window draws the words it just sent as still held beneath that turn.
+            return { ...released, queue: queueView(services.conversations.queued(input.conversationId)) };
         }),
         // Rewinds a message, its files, transcript and session together. CONFLICT rather than queuing behind a running
         // turn: by the time it finished, the workspace would have moved on from what the user is looking at.

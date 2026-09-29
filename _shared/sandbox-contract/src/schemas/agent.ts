@@ -488,6 +488,9 @@ export type ConversationQueue = z.infer<typeof ConversationQueueSchema>;
 // What resuming a queue did: started a turn with what waited, when nothing else ran.
 export const QueueResumedSchema = z.object({
     run: z.string().optional().describe("The turn the waiting messages started. Absent when a turn was already running, and they go after it."),
+    queue: ConversationQueueSchema.optional().describe(
+        "The queue the release left: what still waits once the turn took what it could. Absent from sandboxes older than the field.",
+    ),
 });
 export type QueueResumed = z.infer<typeof QueueResumedSchema>;
 // Attaches to a conversation's newest run (live, or finished within retention); no cursor to resume from, the head
