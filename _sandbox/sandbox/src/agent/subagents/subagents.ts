@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
+import { createInterface } from "node:readline";
 import { basename, dirname, join } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import { isMissing } from "@intentic/base/errors";
 import type {
     AgentEvent,
     AgentProvider,
@@ -39,7 +42,13 @@ export interface SubagentRecord {
     readonly conversationId: string;
     agentType: string | undefined;
     description: string | undefined;
+    // What the spawning call named until the child's own record says what was served (servedOf): the exact id, where a
+    // call names an alias (`opus`) or nothing at all.
     model: string | undefined;
+    // The reasoning tier it ran at, read off the same record: its definition's, else the one it inherited from its parent.
+    effort: string | undefined;
+    // Its own record has been read for what it ran on, or never will say: a settled child that recorded no reply.
+    served?: true;
     // A spawned child's provider; an in-process one runs on its parent's.
     provider: AgentProvider | undefined;
     spawnDepth: number | undefined;
@@ -132,6 +141,7 @@ const wire = (record: SubagentRecord): SubagentSession => ({
     ...(record.agentType !== undefined ? { agentType: record.agentType } : {}),
     ...(record.description !== undefined ? { description: record.description } : {}),
     ...(record.model !== undefined ? { model: record.model } : {}),
+    ...(record.effort !== undefined ? { effort: record.effort } : {}),
     ...(record.provider !== undefined ? { provider: record.provider } : {}),
     ...(record.spawnDepth !== undefined ? { spawnDepth: record.spawnDepth } : {}),
     ...(record.background !== undefined ? { background: record.background } : {}),
@@ -192,7 +202,7 @@ const open = (turn: SubagentTurn, id: string, kind: SubagentKind, fields: Partia
     const now = Date.now();
     const actors = turn.conversations;
     sweep(actors);
-    // model and background are set only here, at birth; nothing updates them on the record later.
+    // background is set only here, at birth; model is the call's until the child's own record says what was served.
     const spawns = actors.holdings(SPAWNS);
     const spawn = spawns.get(id);
     spawns.drop(id);
@@ -203,6 +213,7 @@ const open = (turn: SubagentTurn, id: string, kind: SubagentKind, fields: Partia
         agentType: undefined,
         description: undefined,
         model: spawn?.model,
+        effort: undefined,
         provider: undefined,
         spawnDepth: undefined,
         background: spawn?.background,
@@ -548,7 +559,87 @@ export const subagentSource = async (actors: Actors, id: string): Promise<Subage
     };
 };
 
-/** Pairs only children still running; costs one directory read per session with an unpaired child. */
+// WHAT A CHILD RAN ON, off its own record: every assistant line the runtime writes there names the model the provider
+// served and the effort the reply was made at. The stream carries neither for a child (a task message names no model,
+// and the spawning call only an alias or nothing, the child's definition or its parent's turn deciding the rest), so
+// this is the one place the exact pair is written down. The first reply is enough: a child keeps its model and tier.
+interface SubagentServed {
+    readonly model: string;
+    readonly effort: string | undefined;
+}
+
+// Lines before the first reply: the ask and a few attachments. A record that has none by then says nothing more here.
+const SERVED_SCAN_LINES = 200;
+
+export const servedOf = async (transcriptPath: string): Promise<SubagentServed | undefined> => {
+    const stream = createReadStream(transcriptPath, { encoding: "utf8" });
+    const lines = createInterface({ input: stream, crlfDelay: Infinity });
+    let read = 0;
+    try {
+        for await (const line of lines) {
+            read += 1;
+            if (read > SERVED_SCAN_LINES) {
+                return undefined;
+            }
+            if (!line.includes(`"assistant"`)) {
+                continue;
+            }
+            const row = JSON.parse(line) as { type?: unknown; effort?: unknown; message?: { model?: unknown } };
+            const model = row.message?.model;
+            if (row.type === "assistant" && typeof model === "string" && model !== "" && !model.startsWith("<")) {
+                return { model, effort: typeof row.effort === "string" && row.effort !== "" ? row.effort : undefined };
+            }
+        }
+        return undefined;
+    } catch (error) {
+        // Not written yet, or its newest line cut mid-write: the next read of the roster asks again. Anything else (a
+        // permission, a bug) is a fault, and goes to the reader rather than reading as "nothing recorded".
+        if (isMissing(error) || error instanceof SyntaxError) {
+            return undefined;
+        }
+        throw error;
+    } finally {
+        lines.close();
+        stream.destroy();
+    }
+};
+
+// Files what the child ran on; true when that changed what the roster says. A settled child that recorded no reply is
+// not asked again.
+const serve = (record: SubagentRecord, served: SubagentServed | undefined): boolean => {
+    if (served === undefined) {
+        if (!subagentRunning(record)) {
+            record.served = true;
+        }
+        return false;
+    }
+    record.served = true;
+    const changed = record.model !== served.model || record.effort !== served.effort;
+    record.model = served.model;
+    record.effort = served.effort;
+    return changed;
+};
+
+// Reads it for every paired in-process child whose record has not said yet: one file's first lines each, and only
+// until it has.
+const readServed = async (actors: Actors): Promise<void> => {
+    const pending = actors
+        .holdings(ROSTER)
+        .entries()
+        .flatMap(([, record]) =>
+            record.kind === "subagent" && record.served === undefined && record.agentId !== undefined && record.turn.subagentsDir !== undefined
+                ? [{ record, path: join(record.turn.subagentsDir, `agent-${record.agentId}.jsonl`) }]
+                : [],
+        );
+    const changed = await Promise.all(pending.map(async ({ record, path }) => serve(record, await servedOf(path))));
+    if (changed.includes(true)) {
+        publishRuntimeChange("subagents");
+        notifyChanged(actors);
+    }
+};
+
+/** Pairs only children still running, then reads what each paired one ran on; costs one directory read per session with
+ * an unpaired child, and one record's first lines per child that has not said yet. */
 export const pairLiveSubagents = async (actors: Actors): Promise<void> => {
     const known = new Set<string>();
     // Each directory still to read, with the conversation whose records point at it.
@@ -570,6 +661,7 @@ export const pairLiveSubagents = async (actors: Actors): Promise<void> => {
         }
     }
     await Promise.all([...unpaired].map(([dir, holder]) => pair(actors, dir, holder)));
+    await readServed(actors);
 };
 
 /** Whether anything checked a child's work: the stamped verdict once it has ended. */
@@ -628,6 +720,11 @@ export const subagentHooks = (turn: SubagentTurn): Partial<Record<HookEvent, Hoo
                     const child = meta.toolUseId !== undefined ? turn.conversations.holdings(ROSTER).get(meta.toolUseId) : undefined;
                     if (child !== undefined && input.last_assistant_message !== undefined) {
                         patch(turn.conversations, child.id, ending(child, { summary: input.last_assistant_message, source: "report" }));
+                    }
+                    // Its record is whole now: what it ran on is read once more for a child no list asked about.
+                    if (child !== undefined && child.served === undefined && serve(child, await servedOf(transcriptPath))) {
+                        publishRuntimeChange("subagents");
+                        notifyChanged(turn.conversations);
                     }
                     return { continue: true };
                 },

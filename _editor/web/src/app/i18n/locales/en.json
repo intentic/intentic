@@ -1428,12 +1428,11 @@
             "chatWhatRun": "This chat and what you can run"
         },
         "chatSubagentBar": {
-            "back": "Back",
             "backTo": "Back to {title}",
-            "inProcessNote": "Part of its parent's turn, so it takes no messages of its own. To change its course, write to the parent.",
-            "parent": "Parent",
-            "spawnedNote": "Its parent directs it and reads its report. Write to it only to steer it yourself.",
-            "write": "Write to it"
+            "inProcessNote": "Runs inside its parent's turn and takes no messages of its own.",
+            "spawnedNote": "Its parent directs it and reads its report.",
+            "write": "Write to it",
+            "writeParent": "Write to parent"
         },
         "chatSubagentPane": {
             "readFailed": "Could not read this subagent's transcript.",

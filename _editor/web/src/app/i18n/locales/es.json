@@ -1370,12 +1370,11 @@
             "chatWhatRun": "Este chat y lo que puedes ejecutar"
         },
         "chatSubagentBar": {
-            "back": "Volver",
             "backTo": "Volver a {title}",
-            "inProcessNote": "Forma parte del turno de su agente principal, así que no recibe mensajes propios. Para cambiar su rumbo, escribe al principal.",
-            "parent": "Padre",
-            "spawnedNote": "Su agente principal lo dirige y lee su informe. Escríbele solo si quieres guiarlo tú.",
-            "write": "Escribirle"
+            "inProcessNote": "Se ejecuta dentro del turno de su agente principal y no recibe mensajes propios.",
+            "spawnedNote": "Su agente principal lo dirige y lee su informe.",
+            "write": "Escribirle",
+            "writeParent": "Escribir al principal"
         },
         "chatSubagentPane": {
             "readFailed": "No se pudo leer la transcripción de este subagente.",

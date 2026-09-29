@@ -43,6 +43,11 @@ export const clampEffort = (effort: string, provider: AgentProvider, modelId: st
     return ranked.findLast((value) => EFFORT_TIERS.indexOf(value) <= wanted) ?? ranked[0]!;
 };
 
+// How a lit rung is filled, one shade per step, the weakest at half the brand and the strongest near all of it: the
+// composer's meter and every picture of a tier (a child's run, EffortRungs) light the same ladder the same way.
+export const effortRungFill = (index: number, rungs: number): string =>
+    `color-mix(in oklab, var(--color-primary-500) ${50 + (index / Math.max(1, rungs - 1)) * 45}%, transparent)`;
+
 // Label for the tier a selection runs at: clamp first, then name the rung. Undefined for a pick with no tier pinned.
 // Shared since the settings row, every run button, and the extension API all name the same fact.
 export const effortLabelOf = (

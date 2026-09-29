@@ -1371,12 +1371,11 @@
             "chatWhatRun": "Ten czat i to, co możesz uruchomić"
         },
         "chatSubagentBar": {
-            "back": "Wstecz",
             "backTo": "Wróć do {title}",
-            "inProcessNote": "Jest częścią tury agenta nadrzędnego, więc sam nie przyjmuje wiadomości. Aby zmienić jego kurs, napisz do agenta nadrzędnego.",
-            "parent": "Nadrzędny",
-            "spawnedNote": "Kieruje nim agent nadrzędny, który czyta jego raport. Pisz do niego tylko, jeśli chcesz sam nim pokierować.",
-            "write": "Napisz do niego"
+            "inProcessNote": "Działa w turze agenta nadrzędnego i nie przyjmuje własnych wiadomości.",
+            "spawnedNote": "Kieruje nim agent nadrzędny, który czyta jego raport.",
+            "write": "Napisz do niego",
+            "writeParent": "Napisz do nadrzędnego"
         },
         "chatSubagentPane": {
             "readFailed": "Nie udało się odczytać zapisu tego subagenta.",

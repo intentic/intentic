@@ -1363,12 +1363,11 @@
             "chatWhatRun": "Ce chat et ce que vous pouvez lancer"
         },
         "chatSubagentBar": {
-            "back": "Retour",
             "backTo": "Revenir à {title}",
-            "inProcessNote": "Fait partie du tour de son agent parent, il ne reçoit donc pas de messages. Pour changer sa route, écrivez au parent.",
-            "parent": "Parent",
-            "spawnedNote": "Son parent le dirige et lit son rapport. Écrivez-lui seulement pour le guider vous-même.",
-            "write": "Lui écrire"
+            "inProcessNote": "S'exécute dans le tour de son parent et ne reçoit pas de messages.",
+            "spawnedNote": "Son parent le dirige et lit son rapport.",
+            "write": "Lui écrire",
+            "writeParent": "Écrire au parent"
         },
         "chatSubagentPane": {
             "readFailed": "Impossible de lire la transcription de ce sous-agent.",

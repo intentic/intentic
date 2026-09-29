@@ -131,6 +131,34 @@ describe("the SDK's own subagents", () => {
         expect(listSubagentSessions(actors)[0]).toMatchObject({ model: "sonnet" });
     });
 
+    // The call names an alias or nothing; the child's own record says what was served, exactly, and at which tier.
+    it("reads the exact model and the effort a child ran at off its own record, once it has replied", async () => {
+        const dir = await mkdtemp(join(tmpdir(), "subagents-served-"));
+        noteSubagentSpawn(actors, "call-1", { background: true, model: "opus" });
+        noteSubagentTask({ conversationId: "conv-1", conversations: actors, subagentsDir: dir }, started());
+        await writeFile(join(dir, "agent-live.meta.json"), JSON.stringify({ toolUseId: "call-1" }));
+        const ask = JSON.stringify({ type: "user", message: { role: "user", content: "Map the reads" } });
+        await writeFile(join(dir, "agent-live.jsonl"), `${ask}\n`);
+        await pairLiveSubagents(actors);
+        // No reply yet: the call's alias stands, and the record is asked again on the next read.
+        expect(listSubagentSessions(actors)[0]).toMatchObject({ model: "opus" });
+        expect(listSubagentSessions(actors)[0]).not.toHaveProperty("effort");
+        const synthetic = JSON.stringify({ type: "assistant", message: { model: "<synthetic>" } });
+        const reply = JSON.stringify({ type: "assistant", effort: "max", message: { model: "claude-opus-5-5", content: [] } });
+        await writeFile(join(dir, "agent-live.jsonl"), `${ask}\n${synthetic}\n${reply}\n`);
+        await pairLiveSubagents(actors);
+        expect(listSubagentSessions(actors)[0]).toMatchObject({ model: "claude-opus-5-5", effort: "max" });
+    });
+
+    it("reads it at SubagentStop for a child no list asked about", async () => {
+        const dir = await mkdtemp(join(tmpdir(), "subagents-served-stop-"));
+        noteSubagentTask(turn(), started());
+        await writeFile(join(dir, "agent-xyz.meta.json"), JSON.stringify({ toolUseId: "call-1" }));
+        await writeFile(join(dir, "agent-xyz.jsonl"), `${JSON.stringify({ type: "assistant", effort: "low", message: { model: "claude-haiku-5" } })}\n`);
+        await stopped(dir, "xyz");
+        expect(listSubagentSessions(actors)[0]).toMatchObject({ model: "claude-haiku-5", effort: "low" });
+    });
+
     it("skips a task with no tool_use id, and an ambient one", () => {
         expect(noteSubagentTask(turn(), started({ tool_use_id: undefined }))).toBeUndefined();
         expect(noteSubagentTask(turn(), started({ skip_transcript: true }))).toBeUndefined();

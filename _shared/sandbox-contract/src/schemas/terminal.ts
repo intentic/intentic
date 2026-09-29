@@ -178,7 +178,16 @@ export const SubagentSessionSchema = z.object({
     // Subagent type (Explore, general-purpose) or a child's provider label; description is the one-line ask.
     agentType: z.string().optional().describe("What kind of subagent it is."),
     description: z.string().optional().describe("What it was asked to do, in one line."),
-    model: z.string().optional().describe("Which model it runs on."),
+    model: z
+        .string()
+        .optional()
+        .describe(
+            "Which model it runs on: the exact id its provider served once its own record says so, where the call that started it named only an alias or nothing.",
+        ),
+    effort: z
+        .string()
+        .optional()
+        .describe("How hard it was told to think: its own definition's tier, else the one it inherited from its parent's turn."),
     // Which provider serves a spawned child; an SDK subagent implies its own (its parent's).
     provider: z.string().optional().describe("Which provider serves it, for a subagent spawned across providers."),
     // How deep in the spawn tree; 1 means the turn itself started it. A subagent can itself delegate further.

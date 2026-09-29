@@ -7,14 +7,15 @@ import { relativeTime } from "../../../chat/models/catalog";
 import { markSegments } from "../../review/markSegments";
 import { inProcess, type TrayChild } from "../view/childFold";
 import { childLook } from "./childLook";
+import RunFacts from "./RunFacts.vue";
 
-// One child riding under its parent's card (childFold): how it stands, what it is called, and how long it has worked
-// or when it settled. Everything else it has — the branch, the cost, the diff — is its own chat's to say, one press
-// away; a row carries only what tells the children apart at a glance. What it runs on is its title's hover, and a chip
-// on the bar of its chat (ChatSubagentBar). A child asking what only the reader can
-// give wears its ask, in the card's own pill, and the row's one press opens its chat, where the ask is answered. Either
-// kind of child draws here, from one reading (childLook): a subagent its parent's runtime ran in-process has no chat of
-// its own, so its press shows its transcript in its parent's, and it has no review or menu to offer.
+// One child riding under its parent's card (childFold), in two lines. The first says which child and how it stands: its
+// glyph, its title, and how long it has worked or when it settled, or its ask, in the card's own pill, when it asks what
+// only the reader can give (its one press opens its chat, where the ask is answered). The second, quieter, says what it
+// is: the kind or provider that tells it apart, and what it runs on (RunFacts), the model and tier a reader otherwise
+// could not tell from its parent's. Everything else — the branch, the cost, the diff — is its own chat's to say, one
+// press away. Either kind of child draws here, from one reading (childLook): a subagent its parent's runtime ran
+// in-process has no chat of its own, so its press shows its transcript in its parent's, and it has no review or menu.
 
 const props = defineProps<{
     child: TrayChild;
@@ -32,6 +33,8 @@ const emit = defineEmits<{ open: [event: MouseEvent]; review: []; menu: [event: 
 const look = computed(() => childLook(props.child, props.provider));
 // Ticks only while it works; a settled row shares the clock without re-ticking.
 const now = useNow(() => look.value.working);
+// The second line, only for a child with something to say on it.
+const facts = computed(() => look.value.tag !== undefined || look.value.run !== undefined);
 const titleRuns = computed(() => markSegments(look.value.title, props.matchCase ? props.needle : props.needle.toLowerCase(), props.matchCase));
 // A conversation's own presses; an in-process subagent's row leaves the browser's menu alone, having none of its own.
 const review = (): void => {
@@ -52,30 +55,38 @@ const menu = (event: MouseEvent): void => {
 <template>
     <button
         type="button"
-        class="ui-row-select flex min-h-7 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left max-md:min-h-10"
-        :class="{ 'ui-row-select-on': selected }"
+        class="ui-row-select flex min-h-7 w-full min-w-0 flex-col justify-center gap-px rounded-md px-2 text-left max-md:min-h-10"
+        :class="{ 'ui-row-select-on': selected, 'py-1': facts }"
         @click="emit(`open`, $event)"
         @dblclick="review"
         @contextmenu="menu"
     >
-        <Icon
-            :name="look.glyph.icon"
-            :spin="look.glyph.spin"
-            role="img"
-            :aria-label="look.glyph.label"
-            v-tooltip.top="look.hint"
-            class="shrink-0 text-xs"
-            :class="look.glyph.class"
-        />
-        <span class="min-w-0 flex-1 truncate text-xs" :class="look.quiet ? 'text-muted' : 'text-content'" v-tooltip.top="look.titleHint">
-            <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{ run.text }}</span>
+        <span class="flex w-full min-w-0 items-center gap-2">
+            <Icon
+                :name="look.glyph.icon"
+                :spin="look.glyph.spin"
+                role="img"
+                :aria-label="look.glyph.label"
+                v-tooltip.top="look.hint"
+                class="shrink-0 text-xs"
+                :class="look.glyph.class"
+            />
+            <span class="min-w-0 flex-1 truncate text-xs" :class="look.quiet ? 'text-muted' : 'text-content'" v-tooltip.top="look.titleHint">
+                <span v-for="(run, at) in titleRuns" :key="at" :class="run.hit ? 'rounded-sm bg-primary-600/30 text-content' : ''">{{ run.text }}</span>
+            </span>
+            <!-- The card's own pill and tone for an ask, so the reader meets the same word here as on any card that asks. -->
+            <span v-if="look.ask !== undefined" class="ui-status-pill shrink-0 bg-warning/15 text-2xs font-semibold text-warning">{{ look.ask }}</span>
+            <span v-if="look.working && look.since !== undefined" v-tooltip.top="look.doing" class="shrink-0 text-2xs font-medium tabular-nums text-link">{{
+                formatElapsed(look.since, now)
+            }}</span>
+            <span v-else-if="look.ask === undefined && look.at > 0" class="shrink-0 text-2xs text-subtle">{{ relativeTime(look.at) }}</span>
         </span>
-        <span v-if="look.tag !== undefined" class="shrink-0 text-2xs text-subtle">{{ look.tag }}</span>
-        <!-- The card's own pill and tone for an ask, so the reader meets the same word here as on any card that asks. -->
-        <span v-if="look.ask !== undefined" class="ui-status-pill shrink-0 bg-warning/15 text-2xs font-semibold text-warning">{{ look.ask }}</span>
-        <span v-if="look.working && look.since !== undefined" v-tooltip.top="look.doing" class="shrink-0 text-2xs font-medium tabular-nums text-link">{{
-            formatElapsed(look.since, now)
-        }}</span>
-        <span v-else-if="look.ask === undefined && look.at > 0" class="shrink-0 text-2xs text-subtle">{{ relativeTime(look.at) }}</span>
+        <!-- Under the title, not beside it: a tray row is narrow, and the title keeps the whole first line. Where the
+             line runs short the kind gives way before the model ("general-purpose" is long; which Opus it is matters more). -->
+        <span v-if="facts" class="flex w-full min-w-0 items-center gap-1.5 pl-5 text-2xs text-subtle">
+            <span v-if="look.tag !== undefined" class="min-w-0 truncate" :class="look.run === undefined ? '' : 'max-w-16 shrink-0'">{{ look.tag }}</span>
+            <span v-if="look.tag !== undefined && look.run !== undefined" class="shrink-0" aria-hidden="true">·</span>
+            <RunFacts v-if="look.run !== undefined" :run="look.run" />
+        </span>
     </button>
 </template>

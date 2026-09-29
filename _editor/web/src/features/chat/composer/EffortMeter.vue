@@ -4,6 +4,7 @@ import { computed, ref } from "vue";
 import type { CatalogOption } from "@intentic/sandbox-contract";
 import { ResponsiveOverlay, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
+import { effortRungFill } from "../models/run-settings/effortScale";
 
 const t = useT();
 
@@ -36,8 +37,7 @@ const fillStyle = (index: number, litUpTo: number): Record<string, string> | und
     if (index > litUpTo) {
         return undefined;
     }
-    const pct = 50 + (index / Math.max(1, efforts.length - 1)) * 45; // Low ≈ 50% brand → top level ≈ 95% brand
-    return { "--effort-rung-fill": `color-mix(in oklab, var(--color-primary-500) ${pct}%, transparent)` };
+    return { "--effort-rung-fill": effortRungFill(index, efforts.length) };
 };
 
 // `coarse`, not `mobile`: about the pointer, not the device, so a desktop tablet gets the same touch

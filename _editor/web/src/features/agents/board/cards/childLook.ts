@@ -15,7 +15,7 @@ import {
 } from "../../fleet/agentStatus";
 import { subagentLive } from "../../fleet/subagentRoster";
 import { modelLabelFor } from "../../../chat/accounts/providerCatalog";
-import { effortLabelOf } from "../../../chat/models/run-settings/effortScale";
+import { clampEffort, effortsFor } from "../../../chat/models/run-settings/effortScale";
 import { inProcess, subagentTitle, type TrayChild } from "../view/childFold";
 
 // What a row in a card's tray draws, read the same way off either kind of child: a conversation the card spawned, or a
@@ -24,9 +24,8 @@ import { inProcess, subagentTitle, type TrayChild } from "../view/childFold";
 
 export interface ChildLook {
     readonly title: string;
-    // The title's hover: what it runs on (run), and for the one row whose press does not open its own chat, where its
-    // work is instead: an in-process subagent has none, and its work is in its parent's, on the card of the call that
-    // started it. The row itself stays one line; the model is a hover away there, and on the bar of its chat.
+    // The title's hover, for the one row whose press does not open its own chat: an in-process subagent has none, and
+    // its work is in its parent's, on the card of the call that started it.
     readonly titleHint: Tip | undefined;
     // Its standing, in the card's own glyphs (agentStatusMeta, subagentStatusMeta); settled rows in the ledger's ink.
     readonly glyph: { readonly icon: IconName; readonly spin?: boolean; readonly label: string; readonly class: string };
@@ -47,15 +46,27 @@ export interface ChildLook {
     // The short word after the title that tells it apart: the provider a spawned child runs on when that is not its
     // parent's, or the kind of subagent an in-process one ran as.
     readonly tag: string | undefined;
-    // What it runs on, "Opus 4.7 · High", with the exact ids in its hover: the one fact a reader cannot guess from the
-    // parent, since a child may be pinned to any model and tier. Only what was recorded: an in-process subagent reports
-    // a model only when its call named one, and never a tier, so it says nothing it would have to guess.
+    // What it runs on, in words on the row and the bar alike, never behind a hover: the one fact a reader cannot guess
+    // from the parent, since a child may run on any model at any tier. Only what was recorded; absent says nothing.
     readonly run: RunLook | undefined;
 }
 
+// The model by its catalog name ("Opus 5.5", never the alias a call named), and the tier it ran at on that model's own
+// ladder, the rungs the composer draws, so a child's tier reads the way the reader set their own.
 export interface RunLook {
+    // Who serves it, whose mark the bar's model chip wears.
+    readonly provider: AgentProvider;
+    readonly model: string;
+    // The id itself, for the reader who needs the exact string (the chip's accessible name).
+    readonly modelId: string;
+    readonly effort: EffortLook | undefined;
+}
+
+export interface EffortLook {
     readonly label: string;
-    readonly tip: Tip;
+    // Its place on the ladder, from 0, and how many rungs the model offers.
+    readonly rung: number;
+    readonly rungs: number;
 }
 
 export const runLook = (
@@ -67,19 +78,18 @@ export const runLook = (
     if (model === undefined || model === ``) {
         return undefined;
     }
-    const tier = effortLabelOf(effort, provider, model, thinking);
-    const name = modelLabelFor(provider, model);
-    return {
-        label: tier === undefined ? name : `${name} · ${tier}`,
-        tip: {
-            title: name,
-            rows: [
-                { label: t(`agents.words.provider`), value: providerLabel(provider) },
-                { label: t(`shared.model`), value: model },
-                ...(tier === undefined ? [] : [{ label: t(`shared.effort`), value: tier }]),
-            ],
-        },
-    };
+    return { provider, model: modelLabelFor(provider, model), modelId: model, effort: effortLook(provider, model, effort, thinking) };
+};
+
+// A tier off the model's scale is drawn as the one it runs at (clampEffort); a provider with no ladder names it bare.
+const effortLook = (provider: AgentProvider, model: string, effort: string | undefined, thinking: boolean | undefined): EffortLook | undefined => {
+    if (effort === undefined || effort === ``) {
+        return undefined;
+    }
+    const ladder = effortsFor(provider, model, thinking);
+    const running = clampEffort(effort, provider, model, thinking);
+    const rung = ladder.findIndex((option) => option.value === running);
+    return rung < 0 ? { label: running, rung: 0, rungs: 0 } : { label: ladder[rung]!.label, rung, rungs: ladder.length };
 };
 
 export const childLook = (child: TrayChild, provider: AgentProvider): ChildLook => {
@@ -88,10 +98,9 @@ export const childLook = (child: TrayChild, provider: AgentProvider): ChildLook 
         const meta = subagentStatusMeta(child.status);
         const title = subagentTitle(child) ?? t(`shared.subagent`);
         const tag = child.agentType ?? t(`shared.subagent`);
-        const run = runLook(provider, child.model, undefined, undefined);
         return {
             title,
-            titleHint: { title: t(`agents.childRows.inProcess`), rows: run?.tip.rows, note: t(`agents.childRows.opensInThisChat`) },
+            titleHint: { title: t(`agents.childRows.inProcess`), note: t(`agents.childRows.opensInThisChat`) },
             glyph: live ? meta : { ...meta, class: `text-subtle` },
             hint: child.error ?? meta.label,
             ask: undefined,
@@ -101,7 +110,8 @@ export const childLook = (child: TrayChild, provider: AgentProvider): ChildLook 
             doing: child.lastTool ?? t(`ui.status.working`),
             at: child.endedAt ?? child.activityAt,
             tag: tag === title ? undefined : tag,
-            run,
+            // Its parent's provider: an in-process subagent runs inside the parent's own runtime.
+            run: runLook(provider, child.model, child.effort, undefined),
         };
     }
     const lane = laneOf(child);
@@ -119,10 +129,9 @@ export const childLook = (child: TrayChild, provider: AgentProvider): ChildLook 
         const meta = agentStatusMeta(child.status);
         return lane === `finished` ? { ...meta, class: `text-subtle` } : meta;
     })();
-    const run = runLook(child.provider, child.model, child.effort, child.thinking);
     return {
         title: agentDisplayTitle(child),
-        titleHint: run?.tip,
+        titleHint: undefined,
         glyph,
         hint: child.failure ?? glyph.label,
         ask,
@@ -132,6 +141,6 @@ export const childLook = (child: TrayChild, provider: AgentProvider): ChildLook 
         doing: activityLine(child) ?? t(`ui.status.working`),
         at: child.updatedAt,
         tag: child.provider === provider ? undefined : providerLabel(child.provider),
-        run,
+        run: runLook(child.provider, child.model, child.effort, child.thinking),
     };
 };

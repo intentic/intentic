@@ -1361,12 +1361,11 @@
             "chatWhatRun": "Dieser Chat und was Sie laufen lassen können"
         },
         "chatSubagentBar": {
-            "back": "Zurück",
             "backTo": "Zurück zu {title}",
-            "inProcessNote": "Teil des Zugs seines übergeordneten Agenten, daher nimmt er selbst keine Nachrichten an. Um seinen Kurs zu ändern, schreib dem übergeordneten Agenten.",
-            "parent": "Übergeordnet",
-            "spawnedNote": "Sein übergeordneter Agent lenkt ihn und liest seinen Bericht. Schreib ihm nur, wenn du ihn selbst lenken willst.",
-            "write": "Ihm schreiben"
+            "inProcessNote": "Läuft im Zug seines übergeordneten Agenten und nimmt keine eigenen Nachrichten an.",
+            "spawnedNote": "Sein übergeordneter Agent lenkt ihn und liest seinen Bericht.",
+            "write": "Ihm schreiben",
+            "writeParent": "Dem Übergeordneten schreiben"
         },
         "chatSubagentPane": {
             "readFailed": "Das Protokoll dieses Subagenten konnte nicht gelesen werden.",

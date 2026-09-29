@@ -165,7 +165,7 @@ it(`carries the subagents its runtime ran in-process in the same tray, and a spa
     expect(cards(board)).toEqual([`Focus agent: ship the release`]);
     expect(rows(board)).toEqual([
         expect.stringMatching(/^rotate the keys/),
-        expect.stringMatching(/^map the UIExplore/),
+        expect.stringMatching(/^map the UI.*Explore$/),
         expect.stringMatching(/^port the parser/),
     ]);
     expect(fold(board)?.textContent?.trim()).toBe(t(`agents.childRows.finished`, { count: 3 }));
@@ -173,7 +173,7 @@ it(`carries the subagents its runtime ran in-process in the same tray, and a spa
     fold(board)?.click();
     await settle();
     expect(rows(board).slice(3)).toEqual([
-        expect.stringMatching(/^scan the logsExplore/),
+        expect.stringMatching(/^scan the logs.*Explore$/),
         expect.stringMatching(/^write the notes/),
         expect.stringMatching(/^audit the deps/),
     ]);
@@ -183,10 +183,11 @@ it(`carries the subagents its runtime ran in-process in the same tray, and a spa
 // row wears the ring while it is on screen there.
 it(`shows an in-process subagent's transcript in its parent's chat from its row`, async () => {
     setAgents([lead], 100);
-    roster([inProcess(`call-map`, { description: `map the UI` })]);
+    roster([inProcess(`call-map`, { description: `map the UI`, model: `claude-opus-x`, effort: `low` })]);
     const board = await mountBoard();
 
-    expect(rows(board)).toEqual([expect.stringMatching(/^map the UIExplore/)]);
+    // Its kind and what it runs on, in words on the row's second line: the model it was served and the tier's word.
+    expect(rows(board)).toEqual([expect.stringMatching(/^map the UI.*Explore·Claude Opus XLow$/)]);
     const row = tray(board)?.querySelector<HTMLButtonElement>(`button`);
     row?.click();
     await settle();
